@@ -1,26 +1,41 @@
 {
-  "name": "modern-punk-scaffold",
+  "name": "modern-punk",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "pipeline": "node --experimental-vm-modules scripts/pipeline/index.mjs",
+    "pipeline:senator": "node --experimental-vm-modules scripts/pipeline/index.mjs --senator",
+    "pipeline:dry-run": "node --experimental-vm-modules scripts/pipeline/index.mjs --dry-run",
+    "pipeline:fetch-only": "node --experimental-vm-modules scripts/pipeline/index.mjs --fetch-only",
+    "pipeline:analyze-only": "node --experimental-vm-modules scripts/pipeline/index.mjs --skip-fetch",
+    "generate": "node scripts/generate-senators.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
+    "next": "14.2.35",
     "react": "^18",
-    "react-dom": "^18",
-    "next": "14.2.35"
+    "react-dom": "^18"
   },
   "devDependencies": {
-    "typescript": "^5",
+    "@anthropic-ai/sdk": "^0.74.0",
+    "@google/generative-ai": "^0.24.1",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
-    "postcss": "^8",
-    "tailwindcss": "^3.4.1",
+    "csv-parse": "^6.1.0",
+    "dotenv": "^17.2.4",
     "eslint": "^8",
-    "eslint-config-next": "14.2.35"
+    "eslint-config-next": "14.2.35",
+    "p-limit": "^7.3.0",
+    "p-retry": "^7.1.1",
+    "postcss": "^8",
+    "prettier": "^3.8.1",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5"
   }
 }

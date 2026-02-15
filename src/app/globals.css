@@ -3,23 +3,320 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0d0208;
+  --foreground: #00ff41;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* ===== BASE STYLES ===== */
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  overflow-x: hidden;
 }
 
+::selection {
+  background: #00ff41;
+  color: #000;
+}
+
+/* ===== CUSTOM SCROLLBAR ===== */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0d0208;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #00ff41;
+  border-radius: 0;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #00ffff;
+}
+
+/* ===== CRT SCANLINES ===== */
+.crt-overlay {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0) 0px,
+    rgba(0, 0, 0, 0) 1px,
+    rgba(0, 0, 0, 0.08) 1px,
+    rgba(0, 0, 0, 0.08) 2px
+  );
+}
+
+.crt-overlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(transparent 50%, rgba(0, 255, 65, 0.02) 50%);
+  background-size: 100% 4px;
+  animation: scanline 8s linear infinite;
+}
+
+/* ===== GLITCH TEXT ===== */
+.glitch {
+  position: relative;
+  display: inline-block;
+}
+
+.glitch::before,
+.glitch::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.glitch::before {
+  color: #ff00ff;
+  z-index: -1;
+  animation: glitch-clip-1 2s infinite linear alternate-reverse;
+}
+
+.glitch::after {
+  color: #00ffff;
+  z-index: -2;
+  animation: glitch-clip-2 2s infinite linear alternate-reverse;
+}
+
+@keyframes glitch-clip-1 {
+  0% {
+    clip-path: inset(20% 0 60% 0);
+    transform: translate(-3px, 0);
+  }
+  10% {
+    clip-path: inset(50% 0 20% 0);
+    transform: translate(3px, 0);
+  }
+  20% {
+    clip-path: inset(10% 0 70% 0);
+    transform: translate(-2px, 0);
+  }
+  30% {
+    clip-path: inset(60% 0 10% 0);
+    transform: translate(2px, 0);
+  }
+  40% {
+    clip-path: inset(30% 0 40% 0);
+    transform: translate(-3px, 0);
+  }
+  50% {
+    clip-path: inset(70% 0 5% 0);
+    transform: translate(1px, 0);
+  }
+  60% {
+    clip-path: inset(5% 0 80% 0);
+    transform: translate(-1px, 0);
+  }
+  70% {
+    clip-path: inset(40% 0 30% 0);
+    transform: translate(3px, 0);
+  }
+  80% {
+    clip-path: inset(80% 0 5% 0);
+    transform: translate(-2px, 0);
+  }
+  90% {
+    clip-path: inset(15% 0 55% 0);
+    transform: translate(2px, 0);
+  }
+  100% {
+    clip-path: inset(45% 0 25% 0);
+    transform: translate(-3px, 0);
+  }
+}
+
+@keyframes glitch-clip-2 {
+  0% {
+    clip-path: inset(65% 0 10% 0);
+    transform: translate(3px, 0);
+  }
+  10% {
+    clip-path: inset(15% 0 60% 0);
+    transform: translate(-3px, 0);
+  }
+  20% {
+    clip-path: inset(45% 0 25% 0);
+    transform: translate(2px, 0);
+  }
+  30% {
+    clip-path: inset(5% 0 75% 0);
+    transform: translate(-2px, 0);
+  }
+  40% {
+    clip-path: inset(55% 0 20% 0);
+    transform: translate(3px, 0);
+  }
+  50% {
+    clip-path: inset(25% 0 50% 0);
+    transform: translate(-1px, 0);
+  }
+  60% {
+    clip-path: inset(75% 0 5% 0);
+    transform: translate(1px, 0);
+  }
+  70% {
+    clip-path: inset(35% 0 35% 0);
+    transform: translate(-3px, 0);
+  }
+  80% {
+    clip-path: inset(10% 0 65% 0);
+    transform: translate(2px, 0);
+  }
+  90% {
+    clip-path: inset(50% 0 15% 0);
+    transform: translate(-2px, 0);
+  }
+  100% {
+    clip-path: inset(20% 0 55% 0);
+    transform: translate(3px, 0);
+  }
+}
+
+/* ===== TERMINAL WINDOW ===== */
+.terminal-window {
+  background: rgba(13, 2, 8, 0.95);
+  border: 1px solid #333;
+  border-radius: 0;
+  box-shadow:
+    0 0 10px rgba(0, 255, 65, 0.2),
+    inset 0 0 30px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.terminal-titlebar {
+  background: #1a1a1a;
+  border-bottom: 1px solid #333;
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.terminal-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.terminal-dot.red {
+  background: #ff5f56;
+}
+.terminal-dot.yellow {
+  background: #ffbd2e;
+}
+.terminal-dot.green {
+  background: #27c93f;
+}
+
+/* ===== RETRO BUTTONS ===== */
+.btn-retro {
+  background: #0d0208;
+  color: #00ff41;
+  border: 2px solid #00ff41;
+  padding: 12px 24px;
+  font-family: var(--font-vt323), monospace;
+  font-size: 1.25rem;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  transition: all 0.15s ease;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btn-retro:hover {
+  background: #00ff41;
+  color: #0d0208;
+  box-shadow:
+    0 0 20px rgba(0, 255, 65, 0.5),
+    0 0 40px rgba(0, 255, 65, 0.2);
+  text-shadow: none;
+}
+
+.btn-retro:active {
+  transform: translateY(2px);
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
+}
+
+.btn-retro-pink {
+  border-color: #ff00ff;
+  color: #ff00ff;
+}
+
+.btn-retro-pink:hover {
+  background: #ff00ff;
+  color: #0d0208;
+  box-shadow:
+    0 0 20px rgba(255, 0, 255, 0.5),
+    0 0 40px rgba(255, 0, 255, 0.2);
+}
+
+/* ===== NEON GLOW EFFECTS ===== */
+.neon-green {
+  text-shadow:
+    0 0 7px #00ff41,
+    0 0 10px #00ff41,
+    0 0 21px #00ff41;
+}
+
+.neon-cyan {
+  text-shadow:
+    0 0 7px #00ffff,
+    0 0 10px #00ffff,
+    0 0 21px #00ffff;
+}
+
+.neon-pink {
+  text-shadow:
+    0 0 7px #ff00ff,
+    0 0 10px #ff00ff,
+    0 0 21px #ff00ff;
+}
+
+/* ===== ASCII DIVIDER ===== */
+.ascii-divider {
+  text-align: center;
+  color: #333;
+  font-family: var(--font-vt323), monospace;
+  font-size: 0.75rem;
+  overflow: hidden;
+  white-space: nowrap;
+  letter-spacing: 2px;
+}
+
+/* ===== REDUCED MOTION ===== */
+@media (prefers-reduced-motion: reduce) {
+  .glitch::before,
+  .glitch::after {
+    animation: none !important;
+  }
+
+  .crt-overlay::after {
+    animation: none !important;
+  }
+
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ===== CUSTOM UTILITIES ===== */
 @layer utilities {
   .text-balance {
     text-wrap: balance;
