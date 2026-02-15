@@ -17,6 +17,9 @@ export default function MatrixRain() {
 
     let animationId: number;
     const fontSize = 14;
+    const targetFps = 24;
+    const frameInterval = 1000 / targetFps;
+    let lastFrameTime = 0;
     let columns: number[] = [];
 
     const resize = () => {
@@ -31,7 +34,13 @@ export default function MatrixRain() {
     resize();
     window.addEventListener("resize", resize);
 
-    const draw = () => {
+    const draw = (timestamp: number = 0) => {
+      const elapsed = timestamp - lastFrameTime;
+      if (elapsed < frameInterval) {
+        animationId = requestAnimationFrame(draw);
+        return;
+      }
+      lastFrameTime = timestamp - (elapsed % frameInterval);
       ctx.fillStyle = "rgba(13, 2, 8, 0.05)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = "#00ff41";
