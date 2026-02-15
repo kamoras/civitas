@@ -12,13 +12,12 @@ services:
   frontend:
     build:
       context: ./frontend
-      target: deps
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/public:/app/public
-    command: npx next dev
+    command: npx next dev --hostname 0.0.0.0
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000/api
+      - NEXT_PUBLIC_API_URL=/api
 
 volumes:
   app_data:
