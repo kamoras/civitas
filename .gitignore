@@ -1,20 +1,22 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
 # dependencies
-/node_modules
-/.pnp
+node_modules/
+__pycache__/
+*.pyc
+.pnp
 .pnp.js
 .yarn/install-state.gz
 
 # testing
-/coverage
+coverage/
+.pytest_cache/
 
 # next.js
-/.next/
-/out/
+.next/
+out/
 
 # production
-/build
+build/
+dist/
 
 # misc
 .DS_Store
@@ -47,3 +49,11 @@ next-env.d.ts
 *.swp
 *.swo
 *~
+
+# docker
+data/
+
+# python
+*.egg-info/
+.venv/
+venv/

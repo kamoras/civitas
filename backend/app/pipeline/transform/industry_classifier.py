@@ -1,0 +1,349 @@
+"""Classify an organization/employer name into one of the IndustryCode values.
+
+Uses a static lookup table for known organizations, with keyword fallbacks.
+For unknown organizations, this returns "OTHER". The LLM batch classifier
+can be used to reclassify unknowns.
+"""
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+INDUSTRY_KEYWORDS: dict[str, list[str]] = {
+    "PHARMA": [
+        "pharma",
+        "pfizer",
+        "merck",
+        "johnson & johnson",
+        "abbvie",
+        "eli lilly",
+        "bristol-myers",
+        "novartis",
+        "roche",
+        "sanofi",
+        "astrazeneca",
+        "amgen",
+        "gilead",
+        "biogen",
+        "regeneron",
+        "moderna",
+        "drug",
+        "biotech",
+        "pharmaceutical",
+        "medicine",
+        "health product",
+    ],
+    "INSURANCE": [
+        "insurance",
+        "anthem",
+        "cigna",
+        "humana",
+        "unitedhealth",
+        "aetna",
+        "blue cross",
+        "blue shield",
+        "metlife",
+        "aflac",
+        "progressive",
+        "allstate",
+        "state farm",
+        "underwriter",
+        "actuarial",
+    ],
+    "OIL_GAS": [
+        "oil",
+        "gas",
+        "petroleum",
+        "exxon",
+        "chevron",
+        "conocophillips",
+        "bp",
+        "shell",
+        "halliburton",
+        "schlumberger",
+        "marathon petroleum",
+        "valero",
+        "pipeline",
+        "drilling",
+        "fracking",
+        "fossil fuel",
+        "koch",
+    ],
+    "DEFENSE": [
+        "defense",
+        "lockheed",
+        "raytheon",
+        "boeing",
+        "northrop grumman",
+        "general dynamics",
+        "bae systems",
+        "l3harris",
+        "leidos",
+        "military",
+        "weapons",
+        "aerospace",
+        "missile",
+        "naval",
+        "army",
+        "air force",
+    ],
+    "FINANCE": [
+        "goldman sachs",
+        "morgan stanley",
+        "jpmorgan",
+        "jp morgan",
+        "citigroup",
+        "bank of america",
+        "wells fargo",
+        "blackrock",
+        "citadel",
+        "hedge fund",
+        "investment",
+        "securities",
+        "capital",
+        "financial",
+        "banking",
+        "credit suisse",
+        "deutsche bank",
+        "merrill lynch",
+        "fidelity",
+        "vanguard",
+        "private equity",
+        "venture capital",
+        "wall street",
+    ],
+    "REAL_ESTATE": [
+        "real estate",
+        "realtor",
+        "realty",
+        "property",
+        "housing",
+        "mortgage",
+        "homebuilder",
+        "construction developer",
+        "reit",
+        "national association of realtors",
+    ],
+    "TECH": [
+        "google",
+        "alphabet",
+        "meta",
+        "facebook",
+        "apple",
+        "microsoft",
+        "amazon",
+        "oracle",
+        "salesforce",
+        "adobe",
+        "intel",
+        "nvidia",
+        "qualcomm",
+        "ibm",
+        "cisco",
+        "software",
+        "internet",
+        "silicon valley",
+        "data",
+        "cloud",
+        "ai ",
+        "artificial intelligence",
+        "computing",
+    ],
+    "TELECOM": [
+        "at&t",
+        "verizon",
+        "t-mobile",
+        "comcast",
+        "charter",
+        "telecommunications",
+        "telecom",
+        "wireless",
+        "broadband",
+        "cable",
+        "dish network",
+        "sprint",
+    ],
+    "AGRIBUSINESS": [
+        "agribusiness",
+        "agriculture",
+        "farm",
+        "monsanto",
+        "bayer crop",
+        "cargill",
+        "archer daniels",
+        "deere",
+        "john deere",
+        "crop",
+        "cattle",
+        "dairy",
+        "grain",
+        "livestock",
+        "rancher",
+    ],
+    "ENERGY": [
+        "energy",
+        "utility",
+        "utilities",
+        "electric",
+        "power",
+        "duke energy",
+        "southern company",
+        "dominion",
+        "exelon",
+        "nextera",
+        "solar",
+        "wind",
+        "renewable",
+        "nuclear",
+        "coal",
+    ],
+    "CONSTRUCTION": [
+        "construction",
+        "building",
+        "contractor",
+        "engineering",
+        "cement",
+        "infrastructure",
+        "architect",
+    ],
+    "TRANSPORT": [
+        "transport",
+        "airline",
+        "aviation",
+        "railroad",
+        "shipping",
+        "trucking",
+        "logistics",
+        "ups",
+        "fedex",
+        "delta",
+        "united airlines",
+        "american airlines",
+        "southwest airlines",
+    ],
+    "LAWYERS": [
+        "law firm",
+        "attorney",
+        "lawyer",
+        "legal",
+        "litigation",
+        "skadden",
+        "jones day",
+        "kirkland",
+        "latham",
+        "sidley",
+        "sullivan & cromwell",
+        "davis polk",
+    ],
+    "LOBBYISTS": [
+        "lobbying",
+        "lobbyist",
+        "government relations",
+        "public affairs",
+        "advocacy",
+        "akin gump",
+        "brownstein",
+    ],
+    "GAMBLING": [
+        "casino",
+        "gambling",
+        "gaming",
+        "las vegas sands",
+        "mgm resorts",
+        "wynn",
+        "caesars",
+        "lottery",
+        "sports betting",
+    ],
+    "GUNS": [
+        "firearm",
+        "gun",
+        "rifle",
+        "nra",
+        "national rifle",
+        "smith & wesson",
+        "remington",
+        "ammunition",
+        "weapons manufacturer",
+    ],
+    "TOBACCO": [
+        "tobacco",
+        "cigarette",
+        "altria",
+        "philip morris",
+        "reynolds",
+        "vaping",
+        "juul",
+        "e-cigarette",
+    ],
+    "CRYPTO": [
+        "crypto",
+        "bitcoin",
+        "blockchain",
+        "coinbase",
+        "binance",
+        "digital currency",
+        "web3",
+        "defi",
+    ],
+    "PRIVATE_PRISON": [
+        "prison",
+        "corrections",
+        "corecivic",
+        "geo group",
+        "detention",
+        "incarceration",
+        "correctional",
+    ],
+}
+
+# Pre-compile lowercase keywords for faster matching
+_COMPILED_RULES: list[dict] = [
+    {"industry": industry, "keywords": [k.lower() for k in keywords]}
+    for industry, keywords in INDUSTRY_KEYWORDS.items()
+]
+
+
+def classify_industry(org_name: str | None) -> str:
+    """Classify an organization name into an IndustryCode.
+
+    Args:
+        org_name: Organization or employer name.
+
+    Returns:
+        IndustryCode enum value string, or "OTHER".
+    """
+    if not org_name:
+        return "OTHER"
+    lower = org_name.lower()
+
+    for rule in _COMPILED_RULES:
+        for keyword in rule["keywords"]:
+            if keyword in lower:
+                return rule["industry"]
+
+    return "OTHER"
+
+
+def classify_batch(org_names: list[str]) -> dict[str, str]:
+    """Batch classify organizations.
+
+    Returns a dict of orgName -> IndustryCode.
+    This is the static classifier; for unknown orgs, use the LLM batch classifier.
+    """
+    results: dict[str, str] = {}
+    unknowns: list[str] = []
+
+    for name in org_names:
+        industry = classify_industry(name)
+        results[name] = industry
+        if industry == "OTHER":
+            unknowns.append(name)
+
+    if unknowns:
+        logger.debug(
+            "Industry classifier: %d unknowns out of %d",
+            len(unknowns), len(org_names),
+        )
+
+    return results
