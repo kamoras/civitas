@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 def to_camel(string: str) -> str:
@@ -56,7 +56,7 @@ class KeyVoteSchema(CamelModel):
 
 class FundingSchema(CamelModel):
     total_raised: float
-    total_from_pacs: float
+    total_from_pacs: float = Field(alias="totalFromPACs", serialization_alias="totalFromPACs")
     small_donor_percentage: float
     top_donors: list[DonorSchema]
     industry_breakdown: list[IndustryDonationSchema]
