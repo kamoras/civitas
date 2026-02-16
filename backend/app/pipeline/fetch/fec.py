@@ -195,17 +195,40 @@ async def fetch_pac_receipts(
 async def fetch_aggregated_contributors(
     client: httpx.AsyncClient, db: Session, committee_id: str
 ) -> list[dict]:
-    """Fetch aggregated totals by contributor for a committee."""
+    """Fetch aggregated totals by contributor for a committee.
+
+    Uses best-effort fallbacks for FEC endpoints that don't support the
+    preferred `-total` sort field (some committees return 422). The
+    function will try a small set of alternative queries before giving up
+    and returning an empty list — the pipeline will continue.
+    """
     cache_key = f"aggregated-contributors-{committee_id}"
     cached = api_cache_get(db, "fec", cache_key)
     if cached is not None:
         return cached
 
-    data = await _fetch_with_retry(
-        client,
-        f"{FEC_API_BASE}/schedules/schedule_a/by_contributor/?committee_id={committee_id}"
-        f"&sort=-total&per_page=20",
-    )
+    # Try preferred query first, then fall back to alternatives when a
+    # 422/other failures are encountered.
+    urls = [
+        f"{FEC_API_BASE}/schedules/schedule_a/by_contributor/?committee_id={committee_id}&sort=-total&per_page=20",
+        f"{FEC_API_BASE}/schedules/schedule_a/by_contributor/?committee_id={committee_id}&sort=-contribution_receipt_amount&per_page=20",
+        f"{FEC_API_BASE}/schedules/schedule_a/by_contributor/?committee_id={committee_id}&per_page=20",
+    ]
+
+    data = None
+    for idx, url in enumerate(urls):
+        data = await _fetch_with_retry(client, url)
+        if data is not None:
+            if idx > 0:
+                logger.info("FEC fallback used for %s: %s", committee_id, url)
+            break
+
+    if data is None:
+        logger.warning(
+            "FEC aggregated contributors failed for %s — continuing with empty result",
+            committee_id,
+        )
+
     results = (data or {}).get("results", [])
     api_cache_set(db, "fec", cache_key, results)
     return results

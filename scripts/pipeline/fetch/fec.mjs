@@ -177,9 +177,25 @@ export async function fetchAggregatedContributors(committeeId) {
   const cached = cacheGet("fec", cacheKey);
   if (cached) return cached;
 
-  const data = await fetchWithRetry(
-    `${FEC_API_BASE}/schedules/schedule_a/by_contributor/?committee_id=${committeeId}&sort=-total&per_page=20`
-  );
+  const urls = [
+    `${FEC_API_BASE}/schedules/schedule_a/by_contributor/?committee_id=${committeeId}&sort=-total&per_page=20`,
+    `${FEC_API_BASE}/schedules/schedule_a/by_contributor/?committee_id=${committeeId}&sort=-contribution_receipt_amount&per_page=20`,
+    `${FEC_API_BASE}/schedules/schedule_a/by_contributor/?committee_id=${committeeId}&per_page=20`,
+  ];
+
+  let data = null;
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i];
+    data = await fetchWithRetry(url);
+    if (data && data.results) {
+      if (i > 0) log.info(`FEC fallback used for ${committeeId}: ${url}`);
+      break;
+    }
+  }
+
+  if (!data) {
+    log.warn(`FEC aggregated contributors failed for ${committeeId} — continuing with empty result`);
+  }
 
   const results = data?.results || [];
   cacheSet("fec", cacheKey, results);
