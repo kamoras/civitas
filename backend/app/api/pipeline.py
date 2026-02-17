@@ -1,7 +1,7 @@
 import asyncio
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -60,6 +60,8 @@ def pipeline_status(db: Session = Depends(get_db)) -> PipelineStatusSchema:
 @router.post("/pipeline/trigger")
 async def trigger_pipeline(
     authorization: str | None = Header(default=None),
+    senator: str | None = Query(default=None, description="Filter to a single senator by name"),
+    fetch_only: bool = Query(default=False, description="Stop after fetch phase (no LLM analysis)"),
 ) -> dict:
     """Trigger a pipeline run. Requires Bearer token matching PIPELINE_TRIGGER_TOKEN."""
     global _pipeline_running
@@ -78,11 +80,11 @@ async def trigger_pipeline(
         global _pipeline_running
         _pipeline_running = True
         try:
-            await run_full_pipeline()
+            await run_full_pipeline(senator_filter=senator, fetch_only=fetch_only)
         except Exception:
             logger.exception("Pipeline run failed")
         finally:
             _pipeline_running = False
 
     asyncio.create_task(_run())
-    return {"message": "Pipeline run triggered"}
+    return {"message": "Pipeline run triggered", "senator_filter": senator, "fetch_only": fetch_only}

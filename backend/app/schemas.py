@@ -23,6 +23,9 @@ class DonorSchema(CamelModel):
     name: str
     total: float
     type: Literal["PAC", "Individual", "SuperPAC", "Org/Employees", "Party/Ideological"]
+    pac_sponsor: str | None = None
+    pac_industry: str | None = None
+    pac_analysis: str | None = None
 
 
 class IndustryDonationSchema(CamelModel):
@@ -52,6 +55,10 @@ class KeyVoteSchema(CamelModel):
     public_impact: str
     relevant_donors: list[str]
     relevant_donor_total: float
+    party_leaning: Literal["R", "D", "bipartisan"] | None = None
+    voted_with_party: bool | None = None
+    vote_category: Literal["recent", "key"] = "key"
+    key_vote_reasoning: str | None = None
 
 
 class FundingSchema(CamelModel):
@@ -66,7 +73,12 @@ class VotingRecordSchema(CamelModel):
     total_votes: int
     pro_corporate_votes: int
     pro_consumer_votes: int
-    key_votes: list[KeyVoteSchema]
+    voted_with_party_count: int = 0
+    voted_against_party_count: int = 0
+    party_loyalty_pct: float = 0.0
+    voting_summary: str = ""
+    recent_votes: list[KeyVoteSchema] = []
+    key_votes: list[KeyVoteSchema] = []
 
 
 class LobbyingMatchSchema(CamelModel):
@@ -77,6 +89,14 @@ class LobbyingMatchSchema(CamelModel):
     bills_influenced: list[str]
     senator_vote_aligned: bool
     description: str
+
+
+class CampaignPromiseSchema(CamelModel):
+    promise_text: str
+    category: str
+    alignment: Literal["kept", "broken", "partial", "unclear"] = "unclear"
+    related_votes: list[str] = []
+    analysis: str = ""
 
 
 class SenatorSchema(CamelModel):
@@ -91,6 +111,8 @@ class SenatorSchema(CamelModel):
     funding: FundingSchema
     voting_record: VotingRecordSchema
     lobbying_matches: list[LobbyingMatchSchema]
+    campaign_promises: list[CampaignPromiseSchema] = []
+    platform_summary: str = ""
 
 
 # --- Pipeline / Health schemas ---

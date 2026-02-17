@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///data/modern-punk.db"
     DATA_GOV_API_KEY: str = ""
     OLLAMA_BASE_URL: str = "http://ollama:11434"
-    OLLAMA_MODEL: str = "gemma2:9b-instruct-q4_K_M"
+    OLLAMA_MODEL: str = "gemma2:2b"
     PIPELINE_CACHE_TTL_HOURS: int = 72
     PIPELINE_LOG_LEVEL: str = "info"
     PIPELINE_CRON_SCHEDULE: str = "0 3 * * *"

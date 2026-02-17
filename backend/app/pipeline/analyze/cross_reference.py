@@ -78,6 +78,8 @@ async def analyze_senator_batch(
                     "billName": v["billName"],
                     "vote": v["vote"],
                     "proBusinessVote": v.get("proBusinessVote", ""),
+                    "partyLeaning": v.get("partyLeaning", "bipartisan"),
+                    "votedWithParty": v.get("votedWithParty"),
                     "classification": v.get("classification", ""),
                     "corporateInterest": v.get("corporateInterest", ""),
                     "affectedIndustries": v.get("affectedIndustries", []),
@@ -147,7 +149,7 @@ Only use donors and bills from the data provided. Do not fabricate.""",
             "voteCounts": [len(b["keyVotes"]) for b in needs_analysis],
         },
         db_session=db_session,
-        max_tokens=min(len(needs_analysis) * 3000, 65536),
+        max_tokens=min(len(needs_analysis) * 3000, 16384),
     )
 
     if not result or not isinstance(result, list):

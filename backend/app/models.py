@@ -27,6 +27,8 @@ class Senator(Base):
     total_raised: Mapped[float] = mapped_column(Float, default=0.0)
     total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)
     small_donor_percentage: Mapped[float] = mapped_column(Float, default=0.0)
+    voting_summary: Mapped[str] = mapped_column(Text, default="")
+    platform_summary: Mapped[str] = mapped_column(Text, default="")
 
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -35,6 +37,7 @@ class Senator(Base):
     industry_donations: Mapped[list["IndustryDonation"]] = relationship(back_populates="senator", cascade="all, delete-orphan")
     key_votes: Mapped[list["KeyVote"]] = relationship(back_populates="senator", cascade="all, delete-orphan")
     lobbying_matches: Mapped[list["LobbyingMatch"]] = relationship(back_populates="senator", cascade="all, delete-orphan")
+    campaign_promises: Mapped[list["CampaignPromise"]] = relationship(back_populates="senator", cascade="all, delete-orphan")
 
 
 class Donor(Base):
@@ -46,6 +49,9 @@ class Donor(Base):
     total: Mapped[float] = mapped_column(Float, default=0.0)
     type: Mapped[str] = mapped_column(String, nullable=False)
     rank: Mapped[int] = mapped_column(Integer, default=0)
+    pac_sponsor: Mapped[str | None] = mapped_column(String, nullable=True)
+    pac_industry: Mapped[str | None] = mapped_column(String, nullable=True)
+    pac_analysis: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     senator: Mapped["Senator"] = relationship(back_populates="donors")
 
@@ -79,6 +85,10 @@ class KeyVote(Base):
     public_impact: Mapped[str] = mapped_column(Text, default="")
     relevant_donors: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
     relevant_donor_total: Mapped[float] = mapped_column(Float, default=0.0)
+    party_leaning: Mapped[str | None] = mapped_column(String, nullable=True)  # "R", "D", "bipartisan"
+    voted_with_party: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    vote_category: Mapped[str] = mapped_column(String, default="key")  # "recent" or "key"
+    key_vote_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     senator: Mapped["Senator"] = relationship(back_populates="key_votes")
 
@@ -97,6 +107,20 @@ class LobbyingMatch(Base):
     description: Mapped[str] = mapped_column(Text, default="")
 
     senator: Mapped["Senator"] = relationship(back_populates="lobbying_matches")
+
+
+class CampaignPromise(Base):
+    __tablename__ = "campaign_promises"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    senator_id: Mapped[str] = mapped_column(String, ForeignKey("senators.id", ondelete="CASCADE"), nullable=False)
+    promise_text: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[str] = mapped_column(String, nullable=False)  # e.g. "healthcare", "economy", "defense"
+    alignment: Mapped[str] = mapped_column(String, default="unclear")  # "kept", "broken", "partial", "unclear"
+    related_votes: Mapped[str] = mapped_column(Text, default="[]")  # JSON array of bill IDs
+    analysis: Mapped[str] = mapped_column(Text, default="")  # LLM explanation of alignment
+
+    senator: Mapped["Senator"] = relationship(back_populates="campaign_promises")
 
 
 class ApiCache(Base):

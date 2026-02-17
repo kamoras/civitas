@@ -1,9 +1,9 @@
 """
-Ollama LLM client -- replaces Gemini SDK with local Ollama HTTP API.
+Ollama LLM client -- local Ollama HTTP API.
 
 Uses httpx.AsyncClient to POST to Ollama's /api/generate endpoint.
-Serializes requests with asyncio.Semaphore(1) since the Pi 5 can only
-handle one inference at a time.
+Ollama runs locally with no quotas or rate limits, so we allow
+concurrent requests (limited only by available hardware).
 """
 
 import asyncio
@@ -22,7 +22,6 @@ from app.pipeline.cache import analysis_cache_get, analysis_cache_set
 logger = logging.getLogger(__name__)
 
 # --- Module-level state ---
-_semaphore = asyncio.Semaphore(1)
 _total_calls = 0
 _cache_hits = 0
 _cache_misses = 0
@@ -105,102 +104,103 @@ async def call_llm(
         _cache_misses += 1
 
     use_model = model or settings.OLLAMA_MODEL
-    max_attempts = _max_retries + 3  # Extra retries for transient failures
 
-    for attempt in range(1, max_attempts + 1):
-        # Serialize requests -- Pi 5 can only do one inference at a time
-        async with _semaphore:
-            try:
-                logger.debug(
-                    "Ollama call: %s (attempt %d, model: %s)",
+    for attempt in range(1, _max_retries + 1):
+        try:
+            logger.debug(
+                "Ollama call: %s (attempt %d, model: %s)",
+                prompt_version,
+                attempt,
+                use_model,
+            )
+
+            payload = {
+                "model": use_model,
+                "prompt": user_prompt,
+                "system": system_prompt,
+                "format": "json",
+                "stream": False,
+                "options": {"num_predict": max_tokens},
+            }
+
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(600.0, connect=30.0)
+            ) as client:
+                response = await client.post(
+                    f"{settings.OLLAMA_BASE_URL}/api/generate",
+                    json=payload,
+                )
+                response.raise_for_status()
+
+            result_data = response.json()
+            text = result_data.get("response", "")
+
+            _total_calls += 1
+
+            # Parse JSON from response
+            parsed = extract_json(text)
+            if parsed is None:
+                logger.warning(
+                    "Ollama returned non-JSON for %s, attempt %d",
                     prompt_version,
                     attempt,
-                    use_model,
                 )
-
-                payload = {
-                    "model": use_model,
-                    "prompt": user_prompt,
-                    "system": system_prompt,
-                    "format": "json",
-                    "stream": False,
-                    "options": {"num_predict": max_tokens},
-                }
-
-                async with httpx.AsyncClient(
-                    timeout=httpx.Timeout(300.0, connect=30.0)
-                ) as client:
-                    response = await client.post(
-                        f"{settings.OLLAMA_BASE_URL}/api/generate",
-                        json=payload,
-                    )
-                    response.raise_for_status()
-
-                result_data = response.json()
-                text = result_data.get("response", "")
-
-                _total_calls += 1
-
-                # Parse JSON from response
-                parsed = extract_json(text)
-                if parsed is None:
-                    logger.warning(
-                        "Ollama returned non-JSON for %s, attempt %d",
-                        prompt_version,
-                        attempt,
-                    )
-                    if attempt < _max_retries:
-                        await asyncio.sleep(2.0 * attempt)
-                        continue
-                    logger.error(
-                        "Ollama JSON parse failed for %s. Raw: %s",
-                        prompt_version,
-                        text[:500],
-                    )
-                    return None
-
-                # Cache the result
-                if db_session is not None:
-                    analysis_cache_set(
-                        db_session, prompt_version, input_hash, parsed
-                    )
-
-                return parsed
-
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 429:
-                    wait = 30.0 * attempt
-                    logger.warning(
-                        "Ollama rate limited, waiting %.0fs...", wait
-                    )
-                    await asyncio.sleep(wait)
+                if attempt < _max_retries:
+                    await asyncio.sleep(1.0)
                     continue
-
-                if attempt == max_attempts:
-                    logger.error(
-                        "Ollama call failed for %s: %s",
-                        prompt_version,
-                        str(e),
-                    )
-                    return None
-                await asyncio.sleep(2.0 * attempt)
-
-            except (httpx.RequestError, httpx.TimeoutException) as e:
-                if attempt == max_attempts:
-                    logger.error(
-                        "Ollama call failed for %s: %s",
-                        prompt_version,
-                        str(e),
-                    )
-                    return None
-                wait = 5.0 * attempt
-                logger.warning(
-                    "Ollama request error (attempt %d): %s -- retrying in %.0fs",
-                    attempt,
-                    str(e),
-                    wait,
+                logger.error(
+                    "Ollama JSON parse failed for %s. Raw: %s",
+                    prompt_version,
+                    text[:500],
                 )
-                await asyncio.sleep(wait)
+                return None
+
+            # Cache the result
+            if db_session is not None:
+                analysis_cache_set(
+                    db_session, prompt_version, input_hash, parsed
+                )
+
+            return parsed
+
+        except httpx.HTTPStatusError as e:
+            if attempt == _max_retries:
+                logger.error(
+                    "Ollama call failed for %s: %s",
+                    prompt_version,
+                    str(e),
+                )
+                return None
+            await asyncio.sleep(1.0)
+
+        except (httpx.RequestError, httpx.TimeoutException) as e:
+            err_str = str(e)
+            is_disconnect = "disconnected" in err_str.lower()
+            if attempt == _max_retries:
+                if is_disconnect:
+                    logger.error(
+                        "Ollama disconnected for %s after %d attempts. "
+                        "This usually means the prompt + max_tokens is too "
+                        "large for available memory. Try reducing batch size "
+                        "or max_tokens. Error: %s",
+                        prompt_version,
+                        _max_retries,
+                        err_str,
+                    )
+                else:
+                    logger.error(
+                        "Ollama call failed for %s: %s",
+                        prompt_version,
+                        err_str,
+                    )
+                return None
+            logger.warning(
+                "Ollama request error (attempt %d): %s -- retrying in %ds",
+                attempt,
+                err_str,
+                attempt * 2,
+            )
+            await asyncio.sleep(attempt * 2.0)
 
     return None
 

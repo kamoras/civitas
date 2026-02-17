@@ -3,8 +3,9 @@ import json
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models import Donor, IndustryDonation, KeyVote, LobbyingMatch, Senator
+from app.models import CampaignPromise, Donor, IndustryDonation, KeyVote, LobbyingMatch, Senator
 from app.schemas import (
+    CampaignPromiseSchema,
     CorruptionScoreSchema,
     DonorSchema,
     FundingSchema,
@@ -67,10 +68,45 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
         .all()
     )
 
-    # 5. Calculate voting tallies
-    total_votes = len(key_votes)
-    pro_corporate_votes = sum(1 for v in key_votes if v.classification == "pro-corporate")
-    pro_consumer_votes = sum(1 for v in key_votes if v.classification == "pro-consumer")
+    # 4b. Query campaign promises
+    campaign_promises = (
+        db.query(CampaignPromise)
+        .filter(CampaignPromise.senator_id == senator.id)
+        .all()
+    )
+
+    # 5. Split votes by category
+    recent_votes_db = [v for v in key_votes if v.vote_category == "recent"]
+    key_votes_db = [v for v in key_votes if v.vote_category == "key"]
+
+    all_votes = key_votes
+    total_votes = len(all_votes)
+    pro_corporate_votes = sum(1 for v in all_votes if v.classification == "pro-corporate")
+    pro_consumer_votes = sum(1 for v in all_votes if v.classification == "pro-consumer")
+    voted_with = sum(1 for v in all_votes if v.voted_with_party is True)
+    voted_against = sum(1 for v in all_votes if v.voted_with_party is False)
+    party_loyalty_pct = round(
+        voted_with / max(voted_with + voted_against, 1) * 100, 1
+    )
+
+    def _build_vote_schema(v):
+        return KeyVoteSchema(
+            bill_name=v.bill_name,
+            bill_id=v.bill_id,
+            date=v.date,
+            vote=v.vote,
+            pro_business_vote=v.pro_business_vote,
+            classification=v.classification,
+            description=v.description,
+            corporate_interest=v.corporate_interest,
+            public_impact=v.public_impact,
+            relevant_donors=json.loads(v.relevant_donors) if v.relevant_donors else [],
+            relevant_donor_total=v.relevant_donor_total,
+            party_leaning=v.party_leaning,
+            voted_with_party=v.voted_with_party,
+            vote_category=v.vote_category or "key",
+            key_vote_reasoning=v.key_vote_reasoning,
+        )
 
     # 6. Assemble the nested schema
     return SenatorSchema(
@@ -93,7 +129,14 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
             total_from_pacs=senator.total_from_pacs,
             small_donor_percentage=senator.small_donor_percentage,
             top_donors=[
-                DonorSchema(name=d.name, total=d.total, type=d.type)
+                DonorSchema(
+                    name=d.name,
+                    total=d.total,
+                    type=d.type,
+                    pac_sponsor=d.pac_sponsor,
+                    pac_industry=d.pac_industry,
+                    pac_analysis=d.pac_analysis,
+                )
                 for d in donors
             ],
             industry_breakdown=[
@@ -110,22 +153,12 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
             total_votes=total_votes,
             pro_corporate_votes=pro_corporate_votes,
             pro_consumer_votes=pro_consumer_votes,
-            key_votes=[
-                KeyVoteSchema(
-                    bill_name=v.bill_name,
-                    bill_id=v.bill_id,
-                    date=v.date,
-                    vote=v.vote,
-                    pro_business_vote=v.pro_business_vote,
-                    classification=v.classification,
-                    description=v.description,
-                    corporate_interest=v.corporate_interest,
-                    public_impact=v.public_impact,
-                    relevant_donors=json.loads(v.relevant_donors) if v.relevant_donors else [],
-                    relevant_donor_total=v.relevant_donor_total,
-                )
-                for v in key_votes
-            ],
+            voted_with_party_count=voted_with,
+            voted_against_party_count=voted_against,
+            party_loyalty_pct=party_loyalty_pct,
+            voting_summary=senator.voting_summary or "",
+            recent_votes=[_build_vote_schema(v) for v in recent_votes_db],
+            key_votes=[_build_vote_schema(v) for v in key_votes_db],
         ),
         lobbying_matches=[
             LobbyingMatchSchema(
@@ -139,6 +172,17 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
             )
             for lm in lobbying_matches
         ],
+        campaign_promises=[
+            CampaignPromiseSchema(
+                promise_text=cp.promise_text,
+                category=cp.category,
+                alignment=cp.alignment,
+                related_votes=json.loads(cp.related_votes) if cp.related_votes else [],
+                analysis=cp.analysis,
+            )
+            for cp in campaign_promises
+        ],
+        platform_summary=senator.platform_summary or "",
     )
 
 
@@ -207,13 +251,25 @@ def upsert_senator(db: Session, senator_data: dict) -> Senator:
     existing.total_raised = funding.get("totalRaised", 0)
     existing.total_from_pacs = funding.get("totalFromPACs", 0)
     existing.small_donor_percentage = funding.get("smallDonorPercentage", 0)
+    voting_record = senator_data.get("votingRecord", {})
+    existing.voting_summary = voting_record.get("votingSummary", "")
+    existing.platform_summary = senator_data.get("platformSummary", "")
 
     db.flush()
 
     # Replace related records (delete old, insert new)
     db.query(Donor).filter(Donor.senator_id == sid).delete()
     for rank, d in enumerate(funding.get("topDonors", []), start=1):
-        db.add(Donor(senator_id=sid, name=d["name"], total=d["total"], type=d["type"], rank=rank))
+        db.add(Donor(
+            senator_id=sid,
+            name=d["name"],
+            total=d["total"],
+            type=d["type"],
+            rank=rank,
+            pac_sponsor=d.get("pacSponsor"),
+            pac_industry=d.get("pacIndustry"),
+            pac_analysis=d.get("pacAnalysis"),
+        ))
 
     db.query(IndustryDonation).filter(IndustryDonation.senator_id == sid).delete()
     for ind in funding.get("industryBreakdown", []):
@@ -226,20 +282,31 @@ def upsert_senator(db: Session, senator_data: dict) -> Senator:
         ))
 
     db.query(KeyVote).filter(KeyVote.senator_id == sid).delete()
-    for v in senator_data.get("votingRecord", {}).get("keyVotes", []):
+    all_votes = (
+        [(v, "recent") for v in voting_record.get("recentVotes", [])]
+        + [(v, "key") for v in voting_record.get("keyVotes", [])]
+    )
+    # Fallback: if data uses old flat keyVotes list, treat all as "key"
+    if not all_votes and voting_record.get("keyVotes"):
+        all_votes = [(v, "key") for v in voting_record["keyVotes"]]
+    for v, category in all_votes:
         db.add(KeyVote(
             senator_id=sid,
-            bill_name=v["billName"],
-            bill_id=v["billId"],
-            date=v["date"],
-            vote=v["vote"],
+            bill_name=v.get("billName", "Unknown Bill"),
+            bill_id=v.get("billId", ""),
+            date=v.get("date", ""),
+            vote=v.get("vote", "Not Voting"),
             pro_business_vote=v.get("proBusinessVote"),
-            classification=v["classification"],
+            classification=v.get("classification", "mixed"),
             description=v.get("description", ""),
             corporate_interest=v.get("corporateInterest", ""),
             public_impact=v.get("publicImpact", ""),
             relevant_donors=json.dumps(v.get("relevantDonors", [])),
             relevant_donor_total=v.get("relevantDonorTotal", 0),
+            party_leaning=v.get("partyLeaning"),
+            voted_with_party=v.get("votedWithParty"),
+            vote_category=category,
+            key_vote_reasoning=v.get("keyVoteReasoning"),
         ))
 
     db.query(LobbyingMatch).filter(LobbyingMatch.senator_id == sid).delete()
@@ -253,6 +320,17 @@ def upsert_senator(db: Session, senator_data: dict) -> Senator:
             bills_influenced=json.dumps(lm.get("billsInfluenced", [])),
             senator_vote_aligned=lm.get("senatorVoteAligned", False),
             description=lm.get("description", ""),
+        ))
+
+    db.query(CampaignPromise).filter(CampaignPromise.senator_id == sid).delete()
+    for cp in senator_data.get("campaignPromises", []):
+        db.add(CampaignPromise(
+            senator_id=sid,
+            promise_text=cp.get("promiseText", ""),
+            category=cp.get("category", "other"),
+            alignment=cp.get("alignment", "unclear"),
+            related_votes=json.dumps(cp.get("relatedVotes", [])),
+            analysis=cp.get("analysis", ""),
         ))
 
     db.commit()

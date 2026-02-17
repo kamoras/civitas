@@ -19,29 +19,98 @@ RETRY_BACKOFF_S = 2.0
 
 _rate_limiter = RateLimiter(settings.CONGRESS_RPS)
 
-# Key bills to analyze (curated list of significant legislation)
-KEY_BILLS = [
-    {"congress": 117, "type": "hr", "number": 5376, "name": "Inflation Reduction Act"},
-    {"congress": 117, "type": "hr", "number": 3684, "name": "Infrastructure Investment and Jobs Act"},
-    {"congress": 118, "type": "s", "number": 2281, "name": "National Defense Authorization Act FY2024"},
-    {"congress": 117, "type": "hr", "number": 3, "name": "Elijah E. Cummings Lower Drug Costs Now Act"},
-    {"congress": 118, "type": "hr", "number": 2670, "name": "National Defense Authorization Act FY2024"},
-    {"congress": 117, "type": "s", "number": 2093, "name": "CHIPS and Science Act"},
-    {"congress": 118, "type": "s", "number": 2073, "name": "Bipartisan Safer Communities Act"},
-    {"congress": 117, "type": "hr", "number": 1319, "name": "American Rescue Plan Act"},
-    {"congress": 118, "type": "hr", "number": 7024, "name": "Tax Relief for American Families and Workers Act"},
-    {"congress": 117, "type": "s", "number": 3580, "name": "Consolidated Appropriations Act 2022"},
-    {"congress": 118, "type": "s", "number": 3853, "name": "FAA Reauthorization Act"},
-    {"congress": 117, "type": "hr", "number": 2471, "name": "Consolidated Appropriations Act 2022"},
-    {"congress": 118, "type": "s", "number": 1, "name": "For the People Act"},
-    {"congress": 117, "type": "s", "number": 1, "name": "For the People Act"},
-    {"congress": 117, "type": "hr", "number": 1, "name": "For the People Act"},
-    {"congress": 118, "type": "s", "number": 686, "name": "RESTRICT Act"},
-    {"congress": 117, "type": "s", "number": 2938, "name": "Bipartisan Safer Communities Act"},
-    {"congress": 118, "type": "hr", "number": 3746, "name": "Fiscal Responsibility Act"},
-    {"congress": 119, "type": "s", "number": 5, "name": "Laken Riley Act"},
-    {"congress": 118, "type": "hr", "number": 8580, "name": "Continuing Appropriations and Extensions Act 2025"},
-]
+async def fetch_significant_bills(
+    client: httpx.AsyncClient,
+    db: Session,
+    congresses: list[int] | None = None,
+    max_bills: int = 40,
+) -> list[dict]:
+    """Dynamically discover significant bills from Congress.gov.
+
+    Searches for enacted legislation and bills with significant Senate activity
+    from recent congresses. No hardcoded bill lists — all discovery is dynamic.
+
+    Args:
+        client: HTTP client.
+        db: Database session for caching.
+        congresses: Congress numbers to search (default: current + two previous).
+        max_bills: Maximum number of bills to return.
+
+    Returns:
+        List of bill reference dicts with keys: congress, type, number, name.
+    """
+    if congresses is None:
+        current = settings.CURRENT_CONGRESS
+        congresses = [current, current - 1, current - 2]
+
+    cache_key = f"significant-bills-{'_'.join(str(c) for c in congresses)}-{max_bills}"
+    cached = api_cache_get(db, "congress", cache_key)
+    if cached is not None:
+        return cached
+
+    logger.info("Discovering significant bills from congresses %s...", congresses)
+
+    seen: set[str] = set()
+    bills: list[dict] = []
+
+    for congress in congresses:
+        if len(bills) >= max_bills:
+            break
+
+        # Fetch enacted laws (most significant legislation)
+        for bill_type in ("hr", "s"):
+            if len(bills) >= max_bills:
+                break
+
+            data = await _fetch_with_retry(
+                client,
+                f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type}"
+                f"?sort=updateDate+desc&limit=50",
+            )
+            if not data or not data.get("bills"):
+                continue
+
+            for b in data["bills"]:
+                if len(bills) >= max_bills:
+                    break
+
+                bill_number = b.get("number")
+                title = b.get("title", "")
+                latest_action = (b.get("latestAction") or {}).get("text", "")
+
+                # Prioritize bills that became law or had Senate votes
+                is_enacted = "became public law" in latest_action.lower()
+                has_senate_action = any(
+                    kw in latest_action.lower()
+                    for kw in ("passed senate", "senate agreed", "signed by president")
+                )
+
+                if not (is_enacted or has_senate_action):
+                    continue
+
+                bill_key = f"{congress}-{bill_type}-{bill_number}"
+                if bill_key in seen:
+                    continue
+                seen.add(bill_key)
+
+                # Clean up the title (often very long with "An Act to...")
+                name = title
+                if " - " in name:
+                    # Short title is usually after the dash
+                    name = name.split(" - ", 1)[1]
+                if len(name) > 100:
+                    name = name[:97] + "..."
+
+                bills.append({
+                    "congress": congress,
+                    "type": bill_type,
+                    "number": int(bill_number),
+                    "name": name,
+                })
+
+    logger.info("Discovered %d significant bills", len(bills))
+    api_cache_set(db, "congress", cache_key, bills)
+    return bills
 
 
 async def _fetch_with_retry(
@@ -267,13 +336,22 @@ async def fetch_roll_call_vote(
         return None
 
 
+def _root_text(root, xpath: str) -> str:
+    """Extract text from the first element matching an XPath."""
+    els = root.xpath(xpath)
+    if els and hasattr(els[0], "text"):
+        return (els[0].text or "").strip()
+    return ""
+
+
 def parse_senate_vote_xml(
     xml_text: str, congress: int, session: int, roll_number: int
 ) -> dict | None:
     """Parse Senate.gov roll call vote XML into a structured object.
 
     Uses lxml.etree XPath to extract each senator's vote,
-    keyed by last_name + state for matching.
+    keyed by last_name + state for matching.  Also extracts bill/resolution
+    metadata from the XML so we don't need extra API calls.
     """
     try:
         root = etree.fromstring(xml_text.encode("utf-8"))
@@ -300,9 +378,110 @@ def parse_senate_vote_xml(
     if not members:
         return None
 
+    # Extract bill/vote metadata
+    vote_title = _root_text(root, "//vote_title")
+    vote_date = _root_text(root, "//vote_date")
+    question = _root_text(root, "//vote_question_text") or _root_text(root, "//question")
+    document_title = _root_text(root, "//document/document_title")
+    document_name = _root_text(root, "//document/document_name")
+
     return {
         "congress": congress,
         "session": session,
         "rollNumber": roll_number,
+        "voteTitle": vote_title,
+        "voteDate": vote_date,
+        "question": question,
+        "documentTitle": document_title or vote_title,
+        "documentName": document_name,
         "members": members,
     }
+
+
+async def fetch_recent_roll_calls(
+    client: httpx.AsyncClient,
+    db: Session,
+    congress: int = 119,
+    session_number: int = 1,
+    count: int = 15,
+) -> list[dict]:
+    """Fetch the last `count` Senate roll calls from the current session.
+
+    Probes Senate.gov starting from a high roll number, working backward
+    until we find valid votes, then fetches `count` of them.
+
+    Returns list of parsed roll call dicts (newest first).
+    """
+    cache_key = f"recent-rollcalls-{congress}-{session_number}-{count}"
+    cached = api_cache_get(db, "congress", cache_key)
+    if cached is not None:
+        return cached
+
+    logger.info(
+        "Discovering recent Senate roll calls (congress=%d, session=%d)...",
+        congress, session_number,
+    )
+
+    # Binary-ish search: start high (500), find the highest valid roll call
+    import asyncio
+
+    highest_valid = 0
+
+    # Probe at various points to find the range
+    for probe in [500, 300, 200, 150, 100, 75, 50, 25, 10]:
+        padded = str(probe).zfill(5)
+        url = (
+            f"https://www.senate.gov/legislative/LIS/roll_call_votes/"
+            f"vote{congress}{session_number}/"
+            f"vote_{congress}_{session_number}_{padded}.xml"
+        )
+        await _rate_limiter.acquire()
+        try:
+            resp = await client.get(url, timeout=15.0)
+            if resp.status_code == 200:
+                highest_valid = max(highest_valid, probe)
+                break  # Found a valid upper bound
+        except Exception:
+            continue
+
+    if highest_valid == 0:
+        logger.warning("No recent roll calls found for congress %d session %d", congress, session_number)
+        return []
+
+    # Now search upward from the probe hit to find the actual highest
+    check = highest_valid + 1
+    while check <= highest_valid + 50:
+        padded = str(check).zfill(5)
+        url = (
+            f"https://www.senate.gov/legislative/LIS/roll_call_votes/"
+            f"vote{congress}{session_number}/"
+            f"vote_{congress}_{session_number}_{padded}.xml"
+        )
+        await _rate_limiter.acquire()
+        try:
+            resp = await client.get(url, timeout=10.0)
+            if resp.status_code == 200:
+                highest_valid = check
+                check += 1
+            else:
+                break
+        except Exception:
+            break
+
+    logger.info("Highest roll call found: %d", highest_valid)
+
+    # Fetch the last `count` roll calls
+    results: list[dict] = []
+    for roll in range(highest_valid, max(0, highest_valid - count - 5), -1):
+        if len(results) >= count:
+            break
+
+        roll_data = await fetch_roll_call_vote(
+            client, db, congress, session_number, roll
+        )
+        if roll_data:
+            results.append(roll_data)
+
+    logger.info("Fetched %d recent roll calls", len(results))
+    api_cache_set(db, "congress", cache_key, results)
+    return results

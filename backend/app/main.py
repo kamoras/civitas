@@ -1,12 +1,24 @@
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 
+import logging
+from app.config import settings
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
 from app.database import init_db
 from app.scheduler import start_scheduler, stop_scheduler
+
+# Configure logging level from PIPELINE_LOG_LEVEL env setting
+_level_name = (settings.PIPELINE_LOG_LEVEL or "info").upper()
+_level = getattr(logging, _level_name, logging.INFO)
+# Set root + common framework loggers so pipeline DEBUG messages are visible
+logging.getLogger().setLevel(_level)
+for _n in ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi", "app"):
+    logging.getLogger(_n).setLevel(_level)
+logging.getLogger(__name__).info("Logging level set to %s", _level_name)
 
 
 @asynccontextmanager

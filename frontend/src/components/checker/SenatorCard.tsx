@@ -4,6 +4,7 @@ import CorruptionScore from "./CorruptionScore";
 import IndustryBreakdown from "./IndustryBreakdown";
 import VotingRecord from "./VotingRecord";
 import LobbyingMatches from "./LobbyingMatches";
+import PlatformTracker from "./PlatformTracker";
 import PunkCommentary from "./PunkCommentary";
 
 interface SenatorCardProps {
@@ -130,11 +131,30 @@ export default function SenatorCard({ senator }: SenatorCardProps) {
                     }`}
                   >
                     <td className="py-2 pr-4 text-matrix-green/40">#{i + 1}</td>
-                    <td className="py-2 pr-4 text-matrix-green/80">{donor.name}</td>
+                    <td className="py-2 pr-4">
+                      <div className="text-matrix-green/80">{donor.name}</div>
+                      {donor.pacSponsor && (
+                        <div className="text-[10px] text-neon-pink/60 mt-0.5">
+                          BEHIND THE PAC: {donor.pacSponsor}
+                        </div>
+                      )}
+                      {donor.pacAnalysis && (
+                        <div className="text-[10px] text-matrix-green/40 mt-0.5">
+                          {donor.pacAnalysis}
+                        </div>
+                      )}
+                    </td>
                     <td className="py-2 pr-4 text-right text-neon-cyan">
                       {formatCurrency(donor.total)}
                     </td>
-                    <td className="py-2 text-right text-matrix-green/40 text-xs">{donor.type}</td>
+                    <td className="py-2 text-right">
+                      <div className="text-matrix-green/40 text-xs">{donor.type}</div>
+                      {donor.pacIndustry && donor.pacIndustry !== "OTHER" && (
+                        <div className="text-[10px] text-neon-cyan/50 mt-0.5">
+                          {donor.pacIndustry.replace("_", " ")}
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -150,7 +170,18 @@ export default function SenatorCard({ senator }: SenatorCardProps) {
           totalVotes={senator.votingRecord.totalVotes}
           proCorporateVotes={senator.votingRecord.proCorporateVotes}
           proConsumerVotes={senator.votingRecord.proConsumerVotes}
+          votedWithPartyCount={senator.votingRecord.votedWithPartyCount}
+          votedAgainstPartyCount={senator.votingRecord.votedAgainstPartyCount}
+          partyLoyaltyPct={senator.votingRecord.partyLoyaltyPct}
+          votingSummary={senator.votingRecord.votingSummary}
+          recentVotes={senator.votingRecord.recentVotes}
           keyVotes={senator.votingRecord.keyVotes}
+        />
+
+        {/* Campaign Promises vs. Votes */}
+        <PlatformTracker
+          promises={senator.campaignPromises || []}
+          platformSummary={senator.platformSummary || ""}
         />
 
         {/* Lobbying Matches */}

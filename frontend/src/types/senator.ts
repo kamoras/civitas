@@ -46,15 +46,25 @@ export interface Senator {
     totalVotes: number;
     proCorporateVotes: number;
     proConsumerVotes: number;
+    votedWithPartyCount: number;
+    votedAgainstPartyCount: number;
+    partyLoyaltyPct: number;
+    votingSummary: string;
+    recentVotes: KeyVote[];
     keyVotes: KeyVote[];
   };
   lobbyingMatches: LobbyingMatch[];
+  campaignPromises: CampaignPromise[];
+  platformSummary: string;
 }
 
 export interface Donor {
   name: string;
   total: number;
   type: "PAC" | "Individual" | "SuperPAC" | "Org/Employees" | "Party/Ideological";
+  pacSponsor: string | null;
+  pacIndustry: string | null;
+  pacAnalysis: string | null;
 }
 
 export interface IndustryDonation {
@@ -76,6 +86,10 @@ export interface KeyVote {
   publicImpact: string;
   relevantDonors: string[];
   relevantDonorTotal: number;
+  partyLeaning: "R" | "D" | "bipartisan" | null;
+  votedWithParty: boolean | null;
+  voteCategory: "recent" | "key";
+  keyVoteReasoning: string | null;
 }
 
 export interface LobbyingMatch {
@@ -86,4 +100,12 @@ export interface LobbyingMatch {
   billsInfluenced: string[];
   senatorVoteAligned: boolean;
   description: string;
+}
+
+export interface CampaignPromise {
+  promiseText: string;
+  category: string;
+  alignment: "kept" | "broken" | "partial" | "unclear";
+  relatedVotes: string[];
+  analysis: string;
 }
