@@ -163,23 +163,33 @@ async def fetch_senators(
         return cached
 
     logger.info("Fetching senators from Congress.gov...")
-    members: list[dict] = []
+    all_members: list[dict] = []
     offset = 0
     limit = 250
 
+    # The Congress.gov API ignores the chamber= query param on /member, so we
+    # fetch all currentMembers and filter client-side.
     while True:
         data = await _fetch_with_retry(
             client,
-            f"{CONGRESS_API_BASE}/member?currentMember=true&chamber=Senate&limit={limit}&offset={offset}",
+            f"{CONGRESS_API_BASE}/member?currentMember=true&limit={limit}&offset={offset}",
         )
         if not data or not data.get("members"):
             break
-        members.extend(data["members"])
+        all_members.extend(data["members"])
         if len(data["members"]) < limit:
             break
         offset += limit
 
-    logger.info("Fetched %d senators", len(members))
+    # Filter to senators only using the terms embedded in the member listing
+    members = []
+    for m in all_members:
+        terms_obj = m.get("terms") or {}
+        terms_list = terms_obj.get("item", []) if isinstance(terms_obj, dict) else []
+        if any(t.get("chamber") == "Senate" for t in terms_list):
+            members.append(m)
+
+    logger.info("Fetched %d senators (from %d total members)", len(members), len(all_members))
     api_cache_set(db, "congress", "senators-list", members)
     return members
 

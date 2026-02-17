@@ -14,11 +14,15 @@ from app.scheduler import start_scheduler, stop_scheduler
 # Configure logging level from PIPELINE_LOG_LEVEL env setting
 _level_name = (settings.PIPELINE_LOG_LEVEL or "info").upper()
 _level = getattr(logging, _level_name, logging.INFO)
-# Set root + common framework loggers so pipeline DEBUG messages are visible
-logging.getLogger().setLevel(_level)
+# Add a StreamHandler to root so app.* loggers have somewhere to write
+_root = logging.getLogger()
+if not _root.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(levelname)s:%(name)s:%(message)s"))
+    _root.addHandler(_handler)
+_root.setLevel(_level)
 for _n in ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi", "app"):
     logging.getLogger(_n).setLevel(_level)
-logging.getLogger(__name__).info("Logging level set to %s", _level_name)
 
 
 @asynccontextmanager

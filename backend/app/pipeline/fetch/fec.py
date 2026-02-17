@@ -20,6 +20,10 @@ RETRY_BACKOFF_S = 2.0
 
 _rate_limiter = RateLimiter(settings.FEC_RPS)
 
+# Set to True once we detect the by_contributor endpoint is broken for this run,
+# so we skip all 3 URL variants for every remaining senator instead of retrying.
+_by_contributor_broken = False
+
 
 async def _fetch_with_retry(
     client: httpx.AsyncClient, url: str, retries: int = MAX_RETRIES
@@ -41,13 +45,26 @@ async def _fetch_with_retry(
                 continue
 
             if resp.status_code >= 400:
-                raise httpx.HTTPStatusError(
+                err = httpx.HTTPStatusError(
                     f"HTTP {resp.status_code}: {resp.reason_phrase}",
                     request=resp.request,
                     response=resp,
                 )
+                # 4xx errors (except 429) are client errors — retrying won't help
+                if 400 <= resp.status_code < 500:
+                    logger.error("FEC API client error (no retry): %s — %s", url, err)
+                    return None
+                raise err
 
             return resp.json()
+        except httpx.HTTPStatusError as e:
+            if attempt == retries:
+                logger.error(
+                    "FEC API failed after %d attempts: %s — %s",
+                    retries, url, str(e),
+                )
+                return None
+            await asyncio.sleep(RETRY_BACKOFF_S * attempt)
         except Exception as e:
             if attempt == retries:
                 logger.error(
@@ -202,10 +219,18 @@ async def fetch_aggregated_contributors(
     function will try a small set of alternative queries before giving up
     and returning an empty list — the pipeline will continue.
     """
+    global _by_contributor_broken
+
     cache_key = f"aggregated-contributors-{committee_id}"
     cached = api_cache_get(db, "fec", cache_key)
     if cached is not None:
         return cached
+
+    # If a previous senator already proved the endpoint is down, skip entirely.
+    if _by_contributor_broken:
+        logger.debug("Skipping by_contributor for %s (endpoint known broken)", committee_id)
+        api_cache_set(db, "fec", cache_key, [])
+        return []
 
     # Try preferred query first, then fall back to alternatives when a
     # 422/other failures are encountered.
@@ -228,6 +253,7 @@ async def fetch_aggregated_contributors(
             "FEC aggregated contributors failed for %s — continuing with empty result",
             committee_id,
         )
+        _by_contributor_broken = True
 
     results = (data or {}).get("results", [])
     api_cache_set(db, "fec", cache_key, results)
