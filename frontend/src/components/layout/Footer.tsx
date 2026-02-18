@@ -22,10 +22,10 @@ export default function Footer() {
         {/* Links */}
         <div className="flex flex-wrap justify-center gap-4 text-lg">
           <Link
-            href="/influence-tracker"
+            href="/senator-scorecard"
             className="text-matrix-green/60 hover:text-matrix-green transition-colors"
           >
-            INFLUENCE TRACKER
+            SENATOR SCORECARD
           </Link>
           <span className="text-matrix-green/20">|</span>
           <span className="text-matrix-green/30 cursor-not-allowed">GUESTBOOK (COMING SOON)</span>
@@ -45,7 +45,7 @@ export default function Footer() {
         <p className="text-xs text-matrix-green/25 max-w-lg text-center leading-relaxed">
           All data sourced from public records: FEC campaign finance filings (fec.gov),
           OpenSecrets.org donor &amp; industry data, GovTrack.us &amp; MapLight voting records, and
-          Senate Lobbying Disclosure Act filings (lda.senate.gov). The Corporate Influence Index is
+          Senate Lobbying Disclosure Act filings (lda.senate.gov). The Representation Scorecard is
           a weighted composite metric — not a measure of illegality or wrongdoing. Correlation
           between donations and votes does not prove causation. Verify all data at the original
           sources. Draw your own conclusions.

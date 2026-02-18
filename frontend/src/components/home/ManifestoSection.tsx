@@ -75,7 +75,7 @@ export default function ManifestoSection() {
         </div>
 
         <div className="text-center mt-12">
-          <Link href="/influence-tracker" className="btn-retro text-lg">
+          <Link href="/senator-scorecard" className="btn-retro text-lg">
             [ CHECK YOUR SENATORS ]
           </Link>
           <p className="mt-4 text-sm text-matrix-green/40">no login. no paywall. just the data.</p>

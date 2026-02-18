@@ -115,12 +115,12 @@ def normalize_members(
             "initials": initials,
             # These will be populated later
             "punkNickname": "",
-            "corruptionScore": {
-                "corporateFunding": 0,
-                "lobbyistAlignment": 0,
-                "industryConcentration": 0,
-                "flipFlopIndex": 0,
-                "revolvingDoor": 0,
+            "representationScore": {
+                "constituentFunding": 0,
+                "independenceIndex": 0,
+                "donorDiversity": 0,
+                "promiseFulfillment": 0,
+                "accountability": 0,
             },
             "funding": {
                 "totalRaised": 0,

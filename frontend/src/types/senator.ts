@@ -28,12 +28,12 @@ export interface Senator {
   yearsInOffice: number;
   punkNickname: string;
   initials: string;
-  corruptionScore: {
-    corporateFunding: number;
-    lobbyistAlignment: number;
-    industryConcentration: number;
-    flipFlopIndex: number;
-    revolvingDoor: number;
+  representationScore: {
+    constituentFunding: number;
+    independenceIndex: number;
+    donorDiversity: number;
+    promiseFulfillment: number;
+    accountability: number;
   };
   funding: {
     totalRaised: number;
@@ -108,4 +108,19 @@ export interface CampaignPromise {
   alignment: "kept" | "broken" | "partial" | "unclear";
   relatedVotes: string[];
   analysis: string;
+}
+
+export interface LeaderboardEntry {
+  id: string;
+  name: string;
+  state: string;
+  party: "D" | "R" | "I";
+  yearsInOffice: number;
+  initials: string;
+  punkNickname: string;
+  representationScore: Senator["representationScore"];
+  totalRaised: number;
+  totalFromPacs: number;
+  smallDonorPercentage: number;
+  topIndustry: string | null;
 }

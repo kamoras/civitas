@@ -57,198 +57,16 @@ async def analyze_senator_batch(
             for b in batch
         ]
 
-    # Build batch prompt
-    senator_blocks = []
-    for idx, b in enumerate(needs_analysis):
-        senator = b["senator"]
-        donors = b["donors"]
-        key_votes = b["keyVotes"]
-
-        donors_json = json.dumps(
-            [
-                {"name": d["name"], "total": d["total"], "type": d["type"]}
-                for d in donors[:6]
-            ],
-            indent=1,
-        )
-        votes_json = json.dumps(
-            [
-                {
-                    "billId": v["billId"],
-                    "billName": v["billName"],
-                    "vote": v["vote"],
-                    "proBusinessVote": v.get("proBusinessVote", ""),
-                    "partyLeaning": v.get("partyLeaning", "bipartisan"),
-                    "votedWithParty": v.get("votedWithParty"),
-                    "classification": v.get("classification", ""),
-                    "corporateInterest": v.get("corporateInterest", ""),
-                    "affectedIndustries": v.get("affectedIndustries", []),
-                }
-                for v in key_votes[:8]
-            ],
-            indent=1,
-        )
-
-        block = (
-            f"--- SENATOR {idx + 1}: {senator['name']} "
-            f"({senator['party']}-{senator['state']}), "
-            f"{senator.get('yearsInOffice', 0)} yrs ---\n"
-            f"ID: {senator['id']}\n"
-            f"TOP DONORS ({len(donors)}):\n{donors_json}\n"
-            f"KEY VOTES ({len(key_votes)}):\n{votes_json}"
-        )
-        senator_blocks.append(block)
-
-    senator_blocks_str = "\n\n".join(senator_blocks)
-
-    result = await call_llm(
-        prompt_version="senator-batch-analysis-v2",
-        system_prompt=(
-            "You are a factual political data analyst. Given multiple senators' donor "
-            "lists and key votes, provide a comprehensive analysis for EACH senator. "
-            "Be strictly factual \u2014 correlation is not causation. Return ONLY valid JSON."
-        ),
-        user_prompt=f"""Analyze {len(needs_analysis)} senators. For EACH senator, produce cross-references, lobbying matches, a flip-flop score, and a punk nickname.
-
-{senator_blocks_str}
-
-IMPORTANT ANALYSIS RULES:
-- Each vote has a "proBusinessVote" field showing which vote direction (Yea/Nay) serves corporate interests on that bill.
-- For "senatorVoteAligned": compare the senator's actual "vote" to the "proBusinessVote" field. If they match, the senator voted with corporate interests on that bill.
-- Only consider donors with type "PAC" or "Org/Employees" as corporate donors for alignment analysis. Ignore donors with type "Party/Ideological" \u2014 they represent broad party funding, not specific corporate interests.
-- Focus cross-references on industry-specific donors whose business interests directly relate to the bill's affectedIndustries.
-
-Return a JSON array with one object per senator, in the same order:
-[
-  {{
-    "senatorId": "<senator ID from above>",
-    "crossReferences": [
-      {{"billId": "<bill>", "relevantDonors": ["<donor names matching affectedIndustries>"], "relevantDonorTotal": <sum>}}
-    ],
-    "lobbyingMatches": [
-      {{
-        "lobbyistOrg": "<corporate PAC or org from donor list, NOT party PACs>",
-        "industry": "<PHARMA|OIL_GAS|FINANCE|DEFENSE|TECH|etc>",
-        "lobbyingSpend": <realistic estimate>,
-        "donationToSenator": <from donor list>,
-        "billsInfluenced": ["<bill IDs>"],
-        "senatorVoteAligned": <true if senator vote === proBusinessVote on those bills>,
-        "description": "<2-3 factual sentences, no causation claims>"
-      }}
-    ],
-    "flipFlopScore": <0-100>,
-    "punkNickname": "<2-4 word edgy nickname>"
-  }}
-]
-
-Generate 2-3 lobbying matches per senator from the most notable CORPORATE donor-vote relationships.
-Only use donors and bills from the data provided. Do not fabricate.""",
-        cache_key={
-            "senatorIds": [b["senator"]["id"] for b in needs_analysis],
-            "donorCounts": [len(b["donors"]) for b in needs_analysis],
-            "voteCounts": [len(b["keyVotes"]) for b in needs_analysis],
-        },
-        db_session=db_session,
-        max_tokens=min(len(needs_analysis) * 3000, 16384),
-    )
-
-    if not result or not isinstance(result, list):
-        logger.warning(
-            "Batch analysis failed for %d senators", len(needs_analysis)
-        )
-        for item in needs_analysis:
-            senator = item["senator"]
-            results[senator["id"]] = {
-                "keyVotes": item["keyVotes"],
-                "lobbyingMatches": [],
-                "flipFlopScore": 25,
-                "punkNickname": "TBD",
-            }
-        return [
-            {"senatorId": b["senator"]["id"], **results[b["senator"]["id"]]}
-            for b in batch
-        ]
-
-    # Process each senator's result
-    for i, item in enumerate(needs_analysis):
+    # Process each senator individually to stay within the model's context window
+    for item in needs_analysis:
         senator = item["senator"]
-        donors = item["donors"]
-        key_votes = item["keyVotes"]
-
-        # Match by senatorId or by index
-        senator_result = next(
-            (r for r in result if r.get("senatorId") == senator["id"]),
-            result[i] if i < len(result) else None,
+        senator_result = await analyze_senator(
+            senator=senator,
+            donors=item["donors"],
+            key_votes=item["keyVotes"],
+            db_session=db_session,
         )
-
-        if not senator_result:
-            results[senator["id"]] = {
-                "keyVotes": key_votes,
-                "lobbyingMatches": [],
-                "flipFlopScore": 25,
-                "punkNickname": "TBD",
-            }
-            continue
-
-        # Merge cross-references into keyVotes
-        cross_ref_map = {
-            r["billId"]: r
-            for r in (senator_result.get("crossReferences") or [])
-        }
-        valid_donor_names = {d["name"] for d in donors}
-
-        updated_votes = []
-        for vote in key_votes:
-            cross_ref = cross_ref_map.get(vote.get("billId"))
-            if cross_ref:
-                valid_relevant = [
-                    name
-                    for name in (cross_ref.get("relevantDonors") or [])
-                    if name in valid_donor_names
-                ]
-                actual_total = sum(
-                    next(
-                        (d["total"] for d in donors if d["name"] == name), 0
-                    )
-                    for name in valid_relevant
-                )
-                updated_vote = {
-                    **vote,
-                    "relevantDonors": valid_relevant,
-                    "relevantDonorTotal": actual_total,
-                }
-                updated_votes.append(updated_vote)
-            else:
-                updated_votes.append(vote)
-
-        # Clean lobbying matches
-        lobbying_matches = [
-            {
-                "lobbyistOrg": m.get("lobbyistOrg", ""),
-                "industry": m.get("industry", ""),
-                "lobbyingSpend": round(m.get("lobbyingSpend") or 0),
-                "donationToSenator": round(m.get("donationToSenator") or 0),
-                "billsInfluenced": (
-                    m["billsInfluenced"]
-                    if isinstance(m.get("billsInfluenced"), list)
-                    else []
-                ),
-                "senatorVoteAligned": bool(m.get("senatorVoteAligned")),
-                "description": m.get("description", ""),
-            }
-            for m in (senator_result.get("lobbyingMatches") or [])
-            if m.get("lobbyistOrg") and m.get("industry")
-        ]
-
-        flip_flop_score = senator_result.get("flipFlopScore", 25)
-        flip_flop_score = max(0, min(100, flip_flop_score))
-
-        results[senator["id"]] = {
-            "keyVotes": updated_votes,
-            "lobbyingMatches": lobbying_matches,
-            "flipFlopScore": flip_flop_score,
-            "punkNickname": senator_result.get("punkNickname", "TBD"),
-        }
+        results[senator["id"]] = senator_result
 
     return [
         {"senatorId": b["senator"]["id"], **results[b["senator"]["id"]]}
@@ -263,16 +81,9 @@ async def analyze_senator(
     db_session: Any | None = None,
 ) -> dict:
     """
-    Fallback: analyze a single senator individually.
+    Analyze a single senator with a compact prompt sized for gemma2:2b (4096 ctx).
 
-    Args:
-        senator: Base senator record.
-        donors: Top donors list.
-        key_votes: Classified key votes.
-        db_session: SQLAlchemy session for cache access.
-
-    Returns:
-        Dict with keyVotes, lobbyingMatches, flipFlopScore, punkNickname.
+    Returns dict with keyVotes, lobbyingMatches, flipFlopScore, punkNickname.
     """
     if not donors and not key_votes:
         return {
@@ -282,76 +93,48 @@ async def analyze_senator(
             "punkNickname": "TBD",
         }
 
-    donors_json = json.dumps(
+    # Compact JSON: short field names and minimal data to reduce token count
+    donors_compact = json.dumps(
         [
-            {"name": d["name"], "total": d["total"], "type": d["type"]}
-            for d in donors[:8]
+            {"n": d["name"], "t": d["total"], "type": d["type"]}
+            for d in donors[:4]
         ],
-        indent=1,
+        separators=(",", ":"),
     )
-    votes_json = json.dumps(
+    votes_compact = json.dumps(
         [
             {
-                "billId": v["billId"],
-                "billName": v["billName"],
+                "id": v["billId"],
                 "vote": v["vote"],
-                "corporateInterest": v.get("corporateInterest", ""),
-                "affectedIndustries": v.get("affectedIndustries", []),
+                "pbv": v.get("proBusinessVote", ""),
+                "ind": v.get("affectedIndustries", [])[:2],
             }
-            for v in key_votes[:12]
+            for v in key_votes[:6]
         ],
-        indent=1,
+        separators=(",", ":"),
     )
 
     result = await call_llm(
-        prompt_version="senator-analysis-v2",
-        system_prompt=(
-            "You are a factual political data analyst. Given a senator's donor list, "
-            "key votes, and bill classifications, provide a comprehensive analysis. "
-            "Be strictly factual \u2014 correlation is not causation. Return ONLY valid JSON."
-        ),
-        user_prompt=f"""Analyze Senator {senator['name']} ({senator['party']}-{senator['state']}), {senator.get('yearsInOffice', 0)} years in office.
-
-TOP DONORS ({len(donors)}):
-{donors_json}
-
-KEY VOTES ({len(key_votes)}):
-{votes_json}
-
-Return a single JSON object with ALL of these sections:
-
-{{
-  "crossReferences": [
-    {{"billId": "<bill>", "relevantDonors": ["<donor names from list>"], "relevantDonorTotal": <sum>}}
-  ],
-  "lobbyingMatches": [
-    {{
-      "lobbyistOrg": "<org from donor list>",
-      "industry": "<PHARMA|OIL_GAS|FINANCE|DEFENSE|TECH|etc>",
-      "lobbyingSpend": <realistic estimate>,
-      "donationToSenator": <from donor list>,
-      "billsInfluenced": ["<bill IDs>"],
-      "senatorVoteAligned": <true/false>,
-      "description": "<2-3 factual sentences, no causation claims>"
-    }}
-  ],
-  "flipFlopScore": <0-100, 0=consistent, 100=inconsistent>,
-  "punkNickname": "<2-4 word edgy nickname based on their top industry/donors>"
-}}
-
-Generate 2-4 lobbying matches from the most notable donor-vote relationships.
-Only use donors and bills from the data provided. Do not fabricate.""",
+        prompt_version="senator-analysis-v3",
+        system_prompt="Political analyst. Return ONLY valid JSON.",
+        user_prompt=f"""Senator {senator['name']} ({senator['party']}-{senator['state']}), {senator.get('yearsInOffice', 0)} yrs.
+DONORS:{donors_compact}
+VOTES:{votes_compact}
+Return JSON with these fields:
+{{"flipFlopScore":<0-100 consistency score>,"punkNickname":"<2-4 word edgy nickname>","lobbyingMatches":[{{"lobbyistOrg":"<donor name>","industry":"<OIL_GAS|FINANCE|PHARMA|DEFENSE|TECH|OTHER>","donationToSenator":<amount>,"billsInfluenced":["<bill id>"],"senatorVoteAligned":<true/false>,"description":"<1 sentence>"}}]}}
+Include 1-2 lobbyingMatches for the most notable donor-vote relationships. Only use donors and bills from above.""",
         cache_key={
             "senatorId": senator["id"],
             "donorCount": len(donors),
             "voteCount": len(key_votes),
+            "v": 3,
         },
         db_session=db_session,
-        max_tokens=4096,
+        max_tokens=512,
     )
 
-    if not result:
-        logger.warning("Full analysis failed for %s", senator["name"])
+    if not result or not isinstance(result, dict):
+        logger.warning("Analysis failed for %s", senator["name"])
         return {
             "keyVotes": key_votes,
             "lobbyingMatches": [],
@@ -359,41 +142,18 @@ Only use donors and bills from the data provided. Do not fabricate.""",
             "punkNickname": "TBD",
         }
 
-    # Merge cross-references into keyVotes
-    cross_ref_map = {
-        r["billId"]: r for r in (result.get("crossReferences") or [])
-    }
-    valid_donor_names = {d["name"] for d in donors}
-
-    updated_votes = []
-    for vote in key_votes:
-        cross_ref = cross_ref_map.get(vote.get("billId"))
-        if cross_ref:
-            valid_relevant = [
-                name
-                for name in (cross_ref.get("relevantDonors") or [])
-                if name in valid_donor_names
-            ]
-            actual_total = sum(
-                next((d["total"] for d in donors if d["name"] == name), 0)
-                for name in valid_relevant
-            )
-            updated_votes.append(
-                {
-                    **vote,
-                    "relevantDonors": valid_relevant,
-                    "relevantDonorTotal": actual_total,
-                }
-            )
-        else:
-            updated_votes.append(vote)
-
     # Clean lobbying matches
-    lobbying_matches = [
-        {
-            "lobbyistOrg": m.get("lobbyistOrg", ""),
-            "industry": m.get("industry", ""),
-            "lobbyingSpend": round(m.get("lobbyingSpend") or 0),
+    valid_donor_names = {d["name"] for d in donors}
+    lobbying_matches = []
+    for m in (result.get("lobbyingMatches") or []):
+        org = m.get("lobbyistOrg", "")
+        industry = m.get("industry", "")
+        if not org or not industry:
+            continue
+        lobbying_matches.append({
+            "lobbyistOrg": org,
+            "industry": industry,
+            "lobbyingSpend": 0,
             "donationToSenator": round(m.get("donationToSenator") or 0),
             "billsInfluenced": (
                 m["billsInfluenced"]
@@ -402,16 +162,12 @@ Only use donors and bills from the data provided. Do not fabricate.""",
             ),
             "senatorVoteAligned": bool(m.get("senatorVoteAligned")),
             "description": m.get("description", ""),
-        }
-        for m in (result.get("lobbyingMatches") or [])
-        if m.get("lobbyistOrg") and m.get("industry")
-    ]
+        })
 
-    flip_flop_score = result.get("flipFlopScore", 25)
-    flip_flop_score = max(0, min(100, flip_flop_score))
+    flip_flop_score = max(0, min(100, result.get("flipFlopScore", 25)))
 
     return {
-        "keyVotes": updated_votes,
+        "keyVotes": key_votes,
         "lobbyingMatches": lobbying_matches,
         "flipFlopScore": flip_flop_score,
         "punkNickname": result.get("punkNickname", "TBD"),

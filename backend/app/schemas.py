@@ -35,12 +35,12 @@ class IndustryDonationSchema(CamelModel):
     percentage: float
 
 
-class CorruptionScoreSchema(CamelModel):
-    corporate_funding: float
-    lobbyist_alignment: float
-    industry_concentration: float
-    flip_flop_index: float
-    revolving_door: float
+class RepresentationScoreSchema(CamelModel):
+    constituent_funding: float
+    independence_index: float
+    donor_diversity: float
+    promise_fulfillment: float
+    accountability: float
 
 
 class KeyVoteSchema(CamelModel):
@@ -107,12 +107,27 @@ class SenatorSchema(CamelModel):
     years_in_office: int
     initials: str
     punk_nickname: str
-    corruption_score: CorruptionScoreSchema
+    representation_score: RepresentationScoreSchema
     funding: FundingSchema
     voting_record: VotingRecordSchema
     lobbying_matches: list[LobbyingMatchSchema]
     campaign_promises: list[CampaignPromiseSchema] = []
     platform_summary: str = ""
+
+
+class LeaderboardEntrySchema(CamelModel):
+    id: str
+    name: str
+    state: str
+    party: Literal["D", "R", "I"]
+    years_in_office: int
+    initials: str
+    punk_nickname: str
+    representation_score: RepresentationScoreSchema
+    total_raised: float
+    total_from_pacs: float
+    small_donor_percentage: float
+    top_industry: str | None = None
 
 
 # --- Pipeline / Health schemas ---

@@ -84,7 +84,7 @@ function VoteCard({
                   : "text-neon-cyan/60 border-neon-cyan/20 bg-neon-cyan/5"
               }`}
             >
-              {vote.vote === vote.proBusinessVote ? "INDUSTRY-ALIGNED" : "CONSUMER-ALIGNED"}
+              {vote.vote === vote.proBusinessVote ? "VOTED FOR INDUSTRY" : "VOTED FOR CONSUMERS"}
             </span>
           )}
         </>
@@ -188,18 +188,18 @@ export default function VotingRecord({
           </div>
           <div className="terminal-window p-3">
             <div className="text-xl font-pixel text-neon-pink">{corpPercent}%</div>
-            <div className="text-matrix-green/40 text-xs">INDUSTRY-ALIGNED</div>
+            <div className="text-matrix-green/40 text-xs">VOTED FOR INDUSTRY</div>
           </div>
           <div className="terminal-window p-3">
             <div className="text-xl font-pixel text-matrix-green">{100 - corpPercent}%</div>
-            <div className="text-matrix-green/40 text-xs">CONSUMER-ALIGNED</div>
+            <div className="text-matrix-green/40 text-xs">VOTED FOR CONSUMERS</div>
           </div>
         </div>
         <p className="text-[10px] text-matrix-green/30 mb-4 italic">
           &ldquo;Party loyalty&rdquo; = percentage of tracked votes where senator voted with their
-          party&apos;s expected position. &ldquo;Industry-aligned&rdquo; = voted in the direction
-          that serves corporate interests. Neither implies the vote was wrong or motivated by
-          external factors.
+          party&apos;s expected position. &ldquo;Voted for industry&rdquo; = the senator&apos;s
+          vote (Yea or Nay) went in the direction that serves corporate interests on that bill.
+          Neither implies the vote was wrong or motivated by external factors.
         </p>
       </div>
 

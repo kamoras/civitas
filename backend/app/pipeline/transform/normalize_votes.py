@@ -84,8 +84,15 @@ def normalize_votes(
             normalized_vote = "Nay"
 
         # Determine corporate alignment using proBusinessVote
+        # Skip mixed-classified bills (nominations, procedural votes) — they
+        # don't represent a meaningful pro-corporate/pro-consumer stance.
+        classification = bill.get("classification", "mixed")
         pro_business_vote = bill.get("proBusinessVote")
-        if pro_business_vote and normalized_vote != "Not Voting":
+        if (
+            pro_business_vote
+            and normalized_vote != "Not Voting"
+            and classification != "mixed"
+        ):
             voted_pro_business = (
                 (normalized_vote == "Yea" and pro_business_vote == "Yea")
                 or (normalized_vote == "Nay" and pro_business_vote == "Nay")
@@ -123,8 +130,8 @@ def normalize_votes(
             "keyVoteReasoning": None,
         })
 
-    # Estimate total votes from tracked sample
-    estimated_total = round(total_tracked * 15) if total_tracked > 0 else 300
+    # Count votes where proBusinessVote was defined (scoreable votes only)
+    scoreable = pro_corporate_votes + pro_consumer_votes
 
     party_total = voted_with_party + voted_against_party
     party_loyalty_pct = round(
@@ -132,13 +139,9 @@ def normalize_votes(
     )
 
     return {
-        "totalVotes": estimated_total,
-        "proCorporateVotes": round(
-            (pro_corporate_votes / max(total_tracked, 1)) * estimated_total
-        ),
-        "proConsumerVotes": round(
-            (pro_consumer_votes / max(total_tracked, 1)) * estimated_total
-        ),
+        "totalVotes": scoreable,
+        "proCorporateVotes": pro_corporate_votes,
+        "proConsumerVotes": pro_consumer_votes,
         "votedWithPartyCount": voted_with_party,
         "votedAgainstPartyCount": voted_against_party,
         "partyLoyaltyPct": party_loyalty_pct,

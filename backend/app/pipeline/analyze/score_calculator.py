@@ -1,7 +1,8 @@
 """
-Score calculator — computes the five corruption sub-scores from real data.
-These feed into the weighted formula in src/lib/corruption.ts.
-All pure math, no LLM calls.
+Score calculator — computes the five representation sub-scores from real data.
+
+Higher score = better representation of constituents.
+All scores are 0-100 where 100 = ideal representative, 0 = fully captured.
 """
 
 import logging
@@ -17,105 +18,144 @@ def clamp(value: float, min_val: int = 0, max_val: int = 100) -> int:
 
 def calculate_scores(senator: dict, flip_flop_result: dict | None) -> dict:
     """
-    Calculate the five corruption sub-scores from real data.
+    Calculate the five representation sub-scores from real data.
 
     Args:
         senator: Assembled senator data (funding, votingRecord, lobbyingMatches).
-        flip_flop_result: LLM flip-flop analysis result with flipFlopScore key.
+        flip_flop_result: LLM analysis result (unused; kept for signature compat).
 
     Returns:
-        Dict with the five corruptionScore sub-fields.
+        Dict with the five representationScore sub-fields.
     """
     return {
-        "corporateFunding": _calc_corporate_funding(senator.get("funding", {})),
-        "lobbyistAlignment": _calc_lobbyist_alignment(
+        "constituentFunding": _calc_constituent_funding(senator.get("funding", {})),
+        "independenceIndex": _calc_independence_index(
             senator.get("votingRecord", {}),
             senator.get("lobbyingMatches", []),
         ),
-        "industryConcentration": _calc_industry_concentration(
+        "donorDiversity": _calc_donor_diversity(
             senator.get("funding", {}).get("industryBreakdown", [])
         ),
-        "flipFlopIndex": (
-            flip_flop_result.get("flipFlopScore", 25)
-            if flip_flop_result
-            else 25
+        "promiseFulfillment": _calc_promise_fulfillment(
+            senator.get("votingRecord", {}),
+            senator.get("party", "I"),
         ),
-        "revolvingDoor": _calc_revolving_door(senator),
+        "accountability": _calc_accountability(senator),
     }
 
 
-def _calc_corporate_funding(funding: dict) -> int:
+def _calc_constituent_funding(funding: dict) -> int:
     """
-    Corporate Funding Score (0-100).
-    Based on PAC funding ratio and total from corporate sources.
+    Constituent Funding Score (0-100, higher = better).
+
+    Measures how much of a senator's funding comes from small individual
+    donors vs. PACs and large corporate sources.
+
+    - 50% weight: inverse of PAC ratio (less PAC money = higher score)
+    - 50% weight: small donor percentage (more small donors = higher score)
     """
     total_raised = funding.get("totalRaised", 0)
     if not total_raised or total_raised == 0:
-        return 0
+        return 50  # neutral default when no funding data
 
     pac_ratio = funding.get("totalFromPACs", 0) / total_raised
-    small_donor_inverse = 1 - funding.get("smallDonorPercentage", 0) / 100
+    small_donor_pct = funding.get("smallDonorPercentage", 0) / 100
 
-    # Weighted: 60% PAC ratio, 40% inverse small donor percentage
-    raw = pac_ratio * 0.6 + small_donor_inverse * 0.4
+    # Both factors should reward low PAC / high small-donor
+    raw = (1 - pac_ratio) * 0.5 + small_donor_pct * 0.5
 
-    # Scale to 0-100
     return clamp(raw * 100)
 
 
-def _calc_lobbyist_alignment(
+def _calc_independence_index(
     voting_record: dict, lobbying_matches: list[dict]
 ) -> int:
     """
-    Lobbyist Alignment Score (0-100).
-    Percentage of lobbying matches where senator voted with the lobby position.
+    Independence Index (0-100, higher = better).
+
+    Measures how independently a senator votes relative to registered lobbyist
+    positions. A high score means the senator frequently votes against lobbying
+    pressure; a low score means they consistently side with lobbyists.
     """
     if not lobbying_matches or len(lobbying_matches) == 0:
-        return 25  # Default moderate-low
+        return 75  # default: moderately independent when no lobbying data
 
     aligned = sum(
         1 for m in lobbying_matches if m.get("senatorVoteAligned")
     )
-    rate = aligned / len(lobbying_matches)
+    aligned_rate = aligned / len(lobbying_matches)
 
-    return clamp(rate * 100)
+    # Invert: aligned with lobbyists = lower independence
+    return clamp((1 - aligned_rate) * 100)
 
 
-def _calc_industry_concentration(industry_breakdown: list[dict]) -> int:
+def _calc_donor_diversity(industry_breakdown: list[dict]) -> int:
     """
-    Industry Concentration Score (0-100).
-    Uses Herfindahl-Hirschman Index of industry donation shares.
-    High concentration = funding dominated by few industries = higher score.
-    """
-    if not industry_breakdown or len(industry_breakdown) == 0:
-        return 0
+    Donor Diversity Score (0-100, higher = better).
 
-    # Calculate HHI from percentage shares
+    Inverse of the Herfindahl-Hirschman Index — diverse funding sources score
+    high; senators captured by a single industry score low.
+
+    Excludes the "OTHER" catch-all bucket (unclassified donations).
+    """
+    known = [ind for ind in industry_breakdown if ind.get("industry") != "OTHER"]
+    if not known:
+        return 50  # neutral default when no industry data
+
+    total_known_pct = sum(ind.get("percentage", 0) for ind in known)
+    if total_known_pct < 1:
+        return 50
+
     hhi = sum(
-        (ind.get("percentage", 0) / 100) ** 2 for ind in industry_breakdown
+        (ind.get("percentage", 0) / total_known_pct) ** 2 for ind in known
     )
 
-    # HHI ranges from ~0.05 (diverse) to 1.0 (monopoly)
-    # Scale: 0.05 -> 0, 0.5 -> 100
-    normalized = min((hhi - 0.05) / 0.45, 1.0)
+    # HHI: 0.2 (5 even industries) → 1.0 (monopoly).
+    # Scale to 0-100 concentration score, then invert.
+    normalized_concentration = min((hhi - 0.2) / 0.8, 1.0)
+    return clamp((1 - normalized_concentration) * 100)
 
-    return clamp(normalized * 100)
 
-
-def _calc_revolving_door(senator: dict) -> int:
+def _calc_promise_fulfillment(voting_record: dict, party: str) -> int:
     """
-    Revolving Door Score (0-100).
-    Based on years in office and industry ties.
-    Long-serving senators with concentrated industry funding score higher.
+    Promise Fulfillment Score (0-100, higher = better).
+
+    Measures how consistently a senator votes in line with their stated platform.
+    Placeholder: uses party loyalty percentage as a proxy for platform fidelity,
+    since most senators run on explicit party platforms.
+
+    - Party members (R/D): party_loyalty_pct from voting record
+    - Independents: neutral 50 (no party platform to measure against)
+    - No vote data: neutral 50
     """
-    # Simplified heuristic. In v2, the LLM would analyze hearing transcripts
-    # for mentions of prior/future industry employment.
+    if party == "I":
+        return 50  # Independents don't have a clear party platform to measure
+
+    total = voting_record.get("totalVotes", 0)
+    if total == 0:
+        return 50  # neutral default when no vote data
+
+    return clamp(voting_record.get("partyLoyaltyPct", 50))
+
+
+def _calc_accountability(senator: dict) -> int:
+    """
+    Accountability Score (0-100, higher = better).
+
+    Measures institutional accountability: senators with highly concentrated
+    industry ties, heavy PAC dependence, and decades of revolving-door behavior
+    score lower; those with broad constituent support score higher.
+
+    This is the inverse of the prior 'revolving door' heuristic.
+    Future: incorporate missed vote rate from GovTrack, outside spending disclosure.
+    """
     years_factor = min(senator.get("yearsInOffice", 0) / 30, 1.0)
 
     industry_breakdown = senator.get("funding", {}).get("industryBreakdown", [])
+    known_industries = [i for i in industry_breakdown if i.get("industry") != "OTHER"]
     top_industry_pct = (
-        industry_breakdown[0].get("percentage", 0) / 100
-        if industry_breakdown
+        known_industries[0].get("percentage", 0) / 100
+        if known_industries
         else 0
     )
 
@@ -127,5 +167,6 @@ def _calc_revolving_door(senator: dict) -> int:
         else 0
     )
 
-    raw = years_factor * 0.3 + top_industry_pct * 0.4 + pac_factor * 0.3
-    return clamp(raw * 100)
+    # Higher years + industry capture + PAC ratio = lower accountability
+    raw_capture = years_factor * 0.3 + top_industry_pct * 0.4 + pac_factor * 0.3
+    return clamp((1 - raw_capture) * 100)

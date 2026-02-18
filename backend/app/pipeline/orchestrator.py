@@ -85,7 +85,7 @@ def upsert_senator(db: Session, data: dict) -> None:
     existing = db.query(Senator).filter(Senator.id == senator_id).first()
 
     funding = data.get("funding", {})
-    corruption = data.get("corruptionScore", {})
+    corruption = data.get("representationScore", data.get("corruptionScore", {}))
 
     senator_fields = {
         "id": senator_id,
@@ -96,11 +96,11 @@ def upsert_senator(db: Session, data: dict) -> None:
         "years_in_office": data.get("yearsInOffice", 0),
         "initials": data.get("initials", ""),
         "punk_nickname": data.get("punkNickname", "TBD"),
-        "score_corporate_funding": corruption.get("corporateFunding", 0),
-        "score_lobbyist_alignment": corruption.get("lobbyistAlignment", 0),
-        "score_industry_concentration": corruption.get("industryConcentration", 0),
-        "score_flip_flop_index": corruption.get("flipFlopIndex", 0),
-        "score_revolving_door": corruption.get("revolvingDoor", 0),
+        "score_corporate_funding": corruption.get("constituentFunding", 0),
+        "score_lobbyist_alignment": corruption.get("independenceIndex", 0),
+        "score_industry_concentration": corruption.get("donorDiversity", 0),
+        "score_flip_flop_index": corruption.get("promiseFulfillment", 0),
+        "score_revolving_door": corruption.get("accountability", 0),
         "total_raised": funding.get("totalRaised", 0),
         "total_from_pacs": funding.get("totalFromPACs", 0),
         "small_donor_percentage": funding.get("smallDonorPercentage", 0),
@@ -524,14 +524,32 @@ async def run_full_pipeline(
                         if vote:
                             senator_votes[bill["billId"]] = vote
 
+                # Also extract recent roll call votes into the same map so they
+                # contribute to proCorporateVotes in normalize_votes
+                for rc in classified_recent:
+                    rc_id = rc.get("billId", "")
+                    roll_call_data = recent_rc_map.get(rc_id)
+                    if roll_call_data:
+                        vote = extract_senator_vote(
+                            roll_call_data,
+                            senator.get("bioguideId", ""),
+                            last_name,
+                            senator["state"],
+                        )
+                        if vote:
+                            senator_votes[rc_id] = vote
+
+                # Pass both key bills and recent roll calls to normalize_votes
+                # so all tracked votes count toward proCorporateVotes
+                all_classified = classified_bills + classified_recent
                 voting_record = normalize_votes(
                     senator.get("bioguideId", ""),
-                    classified_bills,
+                    all_classified,
                     senator_votes,
                     senator_party=senator.get("party", "I"),
                 )
 
-                # Normalize recent votes for this senator
+                # Normalize recent votes for display in the UI
                 recent_senator_votes = normalize_recent_votes(
                     classified_recent,
                     recent_rc_map,
@@ -756,12 +774,15 @@ async def run_full_pipeline(
                     results.append(result)
                     success_count += 1
 
+                    # Write immediately so the UI reflects progress batch-by-batch
+                    upsert_senator(db, result)
+
                     weighted_score = round(
-                        corruption_score["corporateFunding"] * 0.3
-                        + corruption_score["lobbyistAlignment"] * 0.25
-                        + corruption_score["industryConcentration"] * 0.2
-                        + corruption_score["flipFlopIndex"] * 0.15
-                        + corruption_score["revolvingDoor"] * 0.1
+                        corruption_score["constituentFunding"] * 0.3
+                        + corruption_score["promiseFulfillment"] * 0.3
+                        + corruption_score["independenceIndex"] * 0.2
+                        + corruption_score["donorDiversity"] * 0.1
+                        + corruption_score["accountability"] * 0.1
                     )
                     logger.info(
                         '  %s: score %d/100 -- "%s"',
@@ -776,27 +797,13 @@ async def run_full_pipeline(
                     fail_count += 1
                     results.append(senator)
 
-        # ========================================
-        # PHASE 4: ASSEMBLE & SAVE TO DATABASE
-        # ========================================
-        logger.info("--- Phase 4: SAVE TO DATABASE ---")
+            # Commit after each batch so the UI reflects progress in real time
+            db.commit()
 
-        # Sort by state then name
-        results.sort(
-            key=lambda s: (s.get("state", ""), s.get("name", ""))
-        )
-
-        # Upsert each senator to the database
-        for senator_data in results:
-            try:
-                upsert_senator(db, senator_data)
-            except Exception as e:
-                logger.error(
-                    "Failed to save %s: %s",
-                    senator_data.get("name", "unknown"),
-                    str(e),
-                )
-        db.commit()
+        # ========================================
+        # PHASE 4: FINALIZE
+        # ========================================
+        logger.info("--- Phase 4: FINALIZE ---")
 
         llm_stats = get_llm_stats()
         elapsed = time.time() - start_time

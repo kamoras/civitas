@@ -99,8 +99,8 @@ export default function SenatorCard({ senator }: SenatorCardProps) {
           </div>
         </div>
 
-        {/* Corruption Score */}
-        <CorruptionScore breakdown={senator.corruptionScore} />
+        {/* Representation Score */}
+        <CorruptionScore breakdown={senator.representationScore} />
 
         {/* Top Donors */}
         <div>

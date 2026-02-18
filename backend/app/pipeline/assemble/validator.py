@@ -28,6 +28,7 @@ VALID_INDUSTRIES = {
     "TOBACCO",
     "CRYPTO",
     "PRIVATE_PRISON",
+    "POLITICAL",
     "OTHER",
 }
 
@@ -80,14 +81,14 @@ def validate_senator(senator: dict) -> dict:
     if not senator.get("punkNickname"):
         senator["punkNickname"] = "TBD"
 
-    # Corruption score
-    cs = senator.get("corruptionScore") or {}
-    senator["corruptionScore"] = {
-        "corporateFunding": clamp(cs.get("corporateFunding", 0)),
-        "lobbyistAlignment": clamp(cs.get("lobbyistAlignment", 0)),
-        "industryConcentration": clamp(cs.get("industryConcentration", 0)),
-        "flipFlopIndex": clamp(cs.get("flipFlopIndex", 0)),
-        "revolvingDoor": clamp(cs.get("revolvingDoor", 0)),
+    # Representation score
+    cs = senator.get("representationScore") or {}
+    senator["representationScore"] = {
+        "constituentFunding": clamp(cs.get("constituentFunding", 0)),
+        "independenceIndex": clamp(cs.get("independenceIndex", 0)),
+        "donorDiversity": clamp(cs.get("donorDiversity", 0)),
+        "promiseFulfillment": clamp(cs.get("promiseFulfillment", 0)),
+        "accountability": clamp(cs.get("accountability", 0)),
     }
 
     # Funding

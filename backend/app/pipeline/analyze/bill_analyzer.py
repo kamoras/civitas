@@ -23,7 +23,7 @@ async def classify_all_bills(
     bills: list[dict], db_session: Any | None = None
 ) -> list[dict]:
     """
-    Classify ALL bills in a single LLM call for efficiency.
+    Classify bills one at a time — gemma2:2b can't reliably handle batches.
 
     Args:
         bills: Array of bill objects with text/summary data.
@@ -35,59 +35,48 @@ async def classify_all_bills(
     if len(bills) == 0:
         return []
 
-    logger.info("Classifying %d bills in a single batch...", len(bills))
+    logger.info("Classifying %d bills individually...", len(bills))
+    classified = []
 
-    bill_summaries = [
-        {
-            "billId": b["billId"],
-            "billName": b["billName"],
-            "congress": b["congress"],
-            "summary": (b.get("summary") or "")[:500],
-        }
-        for b in bills
-    ]
+    for b in bills:
+        summary = (b.get("summary") or b.get("billName", ""))[:300]
+        result = await call_llm(
+            prompt_version="bill-classify-v6",
+            system_prompt="Congressional analyst. Return ONLY valid JSON.",
+            user_prompt=f"""Classify this bill:
+billId: {b['billId']}
+billName: {b['billName']}
+congress: {b['congress']}
+summary: {summary}
 
-    result = await call_llm(
-        prompt_version="bill-classify-batch-v4",
-        system_prompt=(
-            "You are a nonpartisan congressional analyst. Classify bills by their "
-            "corporate vs. consumer impact AND by party alignment. Be factual and "
-            "balanced. Return ONLY a valid JSON array."
-        ),
-        user_prompt=f"""Classify each of these {len(bills)} bills. For each, determine:
-- classification: "pro-corporate", "pro-consumer", or "mixed"
-- proBusinessVote: "Yea" or "Nay" -- which vote position serves corporate/business interests. For bills that increase regulation or taxes on industry, the pro-business vote is "Nay". For bills that provide subsidies, deregulate, or benefit specific industries, the pro-business vote is "Yea". For mixed bills, choose the direction that more strongly favors corporate interests.
-- partyLeaning: "R", "D", or "bipartisan" -- which party broadly supports this bill based on its policy direction. Republican-leaning (R): tax cuts, deregulation, defense spending, immigration enforcement, fossil fuel support, law enforcement funding. Democrat-leaning (D): social programs, environmental regulation, healthcare expansion, voting rights, labor protections, gun control. Bipartisan: broad support from both parties (e.g. infrastructure, disaster relief, NDAA, government funding).
-- corporateInterest: 1-2 sentences on which industries had a stake
-- publicImpact: 1-2 sentences on impact to ordinary people
-- description: 1 sentence neutral description
-- affectedIndustries: array of codes from [{INDUSTRY_CODES}]
+Return JSON with EXACTLY these values (pick ONE option for each):
+{{"billId":"{b['billId']}","billName":"{b['billName']}","congress":{b['congress']},"date":"","description":"<1 sentence>","proBusinessVote":"Yea","partyLeaning":"R","corporateInterest":"<1 sentence>","publicImpact":"<1 sentence>","affectedIndustries":["<one code from: {INDUSTRY_CODES}>"],"classification":"pro-corporate"}}
 
-Bills:
-{json.dumps(bill_summaries, indent=1)}
+Rules:
+- classification: exactly one of pro-corporate, pro-consumer, or mixed
+- proBusinessVote: exactly "Yea" if voting YES helps corporate interests, or "Nay" if voting NO helps corporate interests
+- partyLeaning: exactly R, D, or bipartisan
+- affectedIndustries: list 1-3 industry codes from the allowed list""",
+            cache_key={"billId": b["billId"], "v": 6},
+            db_session=db_session,
+            max_tokens=300,
+        )
 
-Return a JSON array with one object per bill:
-[{{"billId": "...", "billName": "...", "congress": ..., "date": "", "description": "...", "proBusinessVote": "Yea|Nay", "partyLeaning": "R|D|bipartisan", "corporateInterest": "...", "publicImpact": "...", "affectedIndustries": [...], "classification": "..."}}]""",
-        cache_key={"billIds": [b["billId"] for b in bill_summaries]},
-        db_session=db_session,
-        max_tokens=8192,
-    )
+        if result and isinstance(result, dict) and result.get("billId"):
+            classified.append(result)
+        else:
+            logger.warning("Bill classification failed for %s", b["billId"])
 
-    if not result or not isinstance(result, list):
-        logger.error("Batch bill classification failed")
-        return []
-
-    _validate_classifications(result)
-    logger.info("Classified %d/%d bills", len(result), len(bills))
-    return result
+    _validate_classifications(classified)
+    logger.info("Classified %d/%d bills", len(classified), len(bills))
+    return classified
 
 
 async def classify_recent_votes(
     roll_calls: list[dict], db_session: Any | None = None
 ) -> list[dict]:
     """
-    Classify recent roll call votes. Lighter classification using vote
-    metadata extracted from Senate.gov XML.
+    Classify recent roll call votes one at a time.
 
     Args:
         roll_calls: Parsed roll call dicts with voteTitle, documentTitle, etc.
@@ -99,60 +88,45 @@ async def classify_recent_votes(
     if not roll_calls:
         return []
 
-    logger.info("Classifying %d recent roll call votes...", len(roll_calls))
+    logger.info("Classifying %d recent roll call votes individually...", len(roll_calls))
+    classified = []
 
-    # Build summaries from the XML metadata
-    vote_summaries = []
     for rc in roll_calls:
         bill_id = rc.get("documentName") or f"Roll-{rc['rollNumber']}"
         name = rc.get("documentTitle") or rc.get("voteTitle") or "Unknown"
-        vote_summaries.append({
-            "billId": bill_id,
-            "billName": name,
-            "congress": rc.get("congress", 119),
-            "voteDate": rc.get("voteDate", ""),
-            "question": rc.get("question", ""),
-        })
+        question = (rc.get("question") or "")[:200]
+        vote_date = rc.get("voteDate", "")
 
-    result = await call_llm(
-        prompt_version="recent-vote-classify-v1",
-        system_prompt=(
-            "You are a nonpartisan congressional analyst. Classify Senate votes "
-            "by their corporate vs. consumer impact and party alignment. Be factual. "
-            "Return ONLY a valid JSON array."
-        ),
-        user_prompt=f"""Classify each of these {len(vote_summaries)} Senate votes:
+        result = await call_llm(
+            prompt_version="recent-vote-classify-v3",
+            system_prompt="Congressional analyst. Return ONLY valid JSON.",
+            user_prompt=f"""Classify this Senate vote:
+billId: {bill_id}
+billName: {name}
+date: {vote_date}
+question: {question}
 
-{json.dumps(vote_summaries, indent=1)}
+Return JSON with EXACTLY these values (pick ONE option for each):
+{{"billId":"{bill_id}","billName":"{name}","date":"{vote_date}","description":"<1 sentence>","classification":"pro-corporate","proBusinessVote":"Yea","partyLeaning":"R","corporateInterest":"<1 sentence>","publicImpact":"<1 sentence>","affectedIndustries":["<one code from: {INDUSTRY_CODES}>"]}}
 
-For each vote, return:
-- billId: the bill/resolution ID from the input
-- billName: the name from the input
-- date: the vote date from the input
-- description: 1 sentence neutral description of what was being voted on
-- classification: "pro-corporate", "pro-consumer", or "mixed"
-- proBusinessVote: "Yea" or "Nay" -- which vote direction serves corporate interests
-- partyLeaning: "R", "D", or "bipartisan" -- which party broadly supports this
-- corporateInterest: 1 sentence on corporate stakes (or "Minimal direct corporate impact" if none)
-- publicImpact: 1 sentence on public impact
-- affectedIndustries: array from [{INDUSTRY_CODES}]
+Rules:
+- classification: exactly one of pro-corporate, pro-consumer, or mixed
+- proBusinessVote: exactly "Yea" if voting YES helps corporate interests, or "Nay" if voting NO helps corporate interests
+- partyLeaning: exactly R, D, or bipartisan
+- If this is a presidential nomination (PN prefix) or procedural vote, use classification "mixed" and omit from corporate scoring""",
+            cache_key={"billId": bill_id, "v": 3},
+            db_session=db_session,
+            max_tokens=300,
+        )
 
-Return a JSON array:
-[{{"billId": "...", "billName": "...", "date": "...", "description": "...", "classification": "...", "proBusinessVote": "Yea|Nay", "partyLeaning": "R|D|bipartisan", "corporateInterest": "...", "publicImpact": "...", "affectedIndustries": [...]}}]""",
-        cache_key={
-            "recentVoteIds": [v["billId"] for v in vote_summaries],
-        },
-        db_session=db_session,
-        max_tokens=8192,
-    )
+        if result and isinstance(result, dict) and result.get("billId"):
+            classified.append(result)
+        else:
+            logger.warning("Recent vote classification failed for %s", bill_id)
 
-    if not result or not isinstance(result, list):
-        logger.error("Recent vote classification failed")
-        return []
-
-    _validate_classifications(result)
-    logger.info("Classified %d/%d recent votes", len(result), len(roll_calls))
-    return result
+    _validate_classifications(classified)
+    logger.info("Classified %d/%d recent votes", len(classified), len(roll_calls))
+    return classified
 
 
 def _validate_classifications(bills: list[dict]) -> None:
@@ -161,6 +135,8 @@ def _validate_classifications(bills: list[dict]) -> None:
         if bill.get("classification") not in ("pro-corporate", "pro-consumer", "mixed"):
             bill["classification"] = "mixed"
         if bill.get("proBusinessVote") not in ("Yea", "Nay"):
-            bill["proBusinessVote"] = "Yea"
+            # Don't guess — set to None so normalize_votes skips this bill
+            # for corporate alignment scoring rather than defaulting everyone to 100%
+            bill["proBusinessVote"] = None
         if bill.get("partyLeaning") not in ("R", "D", "bipartisan"):
             bill["partyLeaning"] = "bipartisan"

@@ -6,11 +6,12 @@ from sqlalchemy.orm import Session
 from app.models import CampaignPromise, Donor, IndustryDonation, KeyVote, LobbyingMatch, Senator
 from app.schemas import (
     CampaignPromiseSchema,
-    CorruptionScoreSchema,
+    RepresentationScoreSchema,
     DonorSchema,
     FundingSchema,
     IndustryDonationSchema,
     KeyVoteSchema,
+    LeaderboardEntrySchema,
     LobbyingMatchSchema,
     SenatorSchema,
     StateCountSchema,
@@ -117,12 +118,12 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
         years_in_office=senator.years_in_office,
         initials=senator.initials,
         punk_nickname=senator.punk_nickname,
-        corruption_score=CorruptionScoreSchema(
-            corporate_funding=senator.score_corporate_funding,
-            lobbyist_alignment=senator.score_lobbyist_alignment,
-            industry_concentration=senator.score_industry_concentration,
-            flip_flop_index=senator.score_flip_flop_index,
-            revolving_door=senator.score_revolving_door,
+        representation_score=RepresentationScoreSchema(
+            constituent_funding=senator.score_corporate_funding,
+            independence_index=senator.score_lobbyist_alignment,
+            donor_diversity=senator.score_industry_concentration,
+            promise_fulfillment=senator.score_flip_flop_index,
+            accountability=senator.score_revolving_door,
         ),
         funding=FundingSchema(
             total_raised=senator.total_raised,
@@ -218,6 +219,64 @@ def get_states_with_counts(db: Session) -> list[StateCountSchema]:
     ]
 
 
+_LEADERBOARD_WEIGHTS = {
+    "score_corporate_funding": 0.3,   # constituentFunding
+    "score_flip_flop_index": 0.3,     # promiseFulfillment
+    "score_lobbyist_alignment": 0.2,  # independenceIndex
+    "score_industry_concentration": 0.1,  # donorDiversity
+    "score_revolving_door": 0.1,      # accountability
+}
+
+
+def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
+    """Return all senators ranked by weighted representation score (higher = better representative)."""
+    senators = db.query(Senator).all()
+
+    # Build top-industry map: senator_id -> industry name with highest total
+    # Query all donations sorted by total desc; keep first seen per senator
+    top_industry_map: dict[str, str] = {}
+    ind_rows = (
+        db.query(IndustryDonation.senator_id, IndustryDonation.name)
+        .order_by(IndustryDonation.senator_id, IndustryDonation.total.desc())
+        .all()
+    )
+    for senator_id, name in ind_rows:
+        if senator_id not in top_industry_map:
+            top_industry_map[senator_id] = name
+
+    def _weighted_score(s: Senator) -> float:
+        return sum(
+            getattr(s, field, 0) * weight
+            for field, weight in _LEADERBOARD_WEIGHTS.items()
+        )
+
+    senators.sort(key=_weighted_score, reverse=True)  # descending: best representatives (highest score) first
+
+    return [
+        LeaderboardEntrySchema(
+            id=s.id,
+            name=s.name,
+            state=s.state,
+            party=s.party,
+            years_in_office=s.years_in_office,
+            initials=s.initials,
+            punk_nickname=s.punk_nickname,
+            representation_score=RepresentationScoreSchema(
+                constituent_funding=s.score_corporate_funding,
+                independence_index=s.score_lobbyist_alignment,
+                donor_diversity=s.score_industry_concentration,
+                promise_fulfillment=s.score_flip_flop_index,
+                accountability=s.score_revolving_door,
+            ),
+            total_raised=s.total_raised,
+            total_from_pacs=s.total_from_pacs,
+            small_donor_percentage=s.small_donor_percentage,
+            top_industry=top_industry_map.get(s.id),
+        )
+        for s in senators
+    ]
+
+
 def upsert_senator(db: Session, senator_data: dict) -> Senator:
     """Insert or update a senator and all related records.
 
@@ -232,7 +291,7 @@ def upsert_senator(db: Session, senator_data: dict) -> Senator:
         existing = Senator(id=sid)
         db.add(existing)
 
-    cs = senator_data.get("corruptionScore", {})
+    cs = senator_data.get("representationScore", senator_data.get("corruptionScore", {}))
     funding = senator_data.get("funding", {})
 
     existing.name = senator_data.get("name", existing.name)
@@ -242,11 +301,11 @@ def upsert_senator(db: Session, senator_data: dict) -> Senator:
     existing.initials = senator_data.get("initials", existing.initials)
     existing.punk_nickname = senator_data.get("punkNickname", existing.punk_nickname)
 
-    existing.score_corporate_funding = cs.get("corporateFunding", 0)
-    existing.score_lobbyist_alignment = cs.get("lobbyistAlignment", 0)
-    existing.score_industry_concentration = cs.get("industryConcentration", 0)
-    existing.score_flip_flop_index = cs.get("flipFlopIndex", 0)
-    existing.score_revolving_door = cs.get("revolvingDoor", 0)
+    existing.score_corporate_funding = cs.get("constituentFunding", cs.get("corporateFunding", 0))
+    existing.score_lobbyist_alignment = cs.get("independenceIndex", cs.get("lobbyistAlignment", 0))
+    existing.score_industry_concentration = cs.get("donorDiversity", cs.get("industryConcentration", 0))
+    existing.score_flip_flop_index = cs.get("promiseFulfillment", cs.get("flipFlopIndex", 0))
+    existing.score_revolving_door = cs.get("accountability", cs.get("revolvingDoor", 0))
 
     existing.total_raised = funding.get("totalRaised", 0)
     existing.total_from_pacs = funding.get("totalFromPACs", 0)

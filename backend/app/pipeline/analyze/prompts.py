@@ -174,7 +174,7 @@ def nickname_prompt(senator: dict) -> dict:
     pac_funding = funding.get("totalFromPACs")
     pac_str = f"${pac_funding / 1_000_000:.1f}M" if pac_funding else "Unknown"
     small_donor_pct = funding.get("smallDonorPercentage", 0)
-    corp_score = senator.get("corruptionScore", {}).get("corporateFunding", 0)
+    corp_score = senator.get("representationScore", senator.get("corruptionScore", {})).get("constituentFunding", 0)
 
     return {
         "promptVersion": "nickname-v1",

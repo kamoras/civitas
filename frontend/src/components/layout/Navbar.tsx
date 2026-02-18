@@ -33,10 +33,16 @@ export default function Navbar() {
             {"> HOME"}
           </Link>
           <Link
-            href="/influence-tracker"
+            href="/senator-scorecard"
             className="text-neon-pink/70 hover:text-neon-pink transition-colors"
           >
-            {"> INFLUENCE_TRACKER"}
+            {"> SENATOR_SCORECARD"}
+          </Link>
+          <Link
+            href="/leaderboard"
+            className="text-neon-yellow/70 hover:text-neon-yellow transition-colors"
+          >
+            {"> LEADERBOARD"}
           </Link>
         </div>
 
@@ -61,11 +67,18 @@ export default function Navbar() {
             {"> HOME"}
           </Link>
           <Link
-            href="/influence-tracker"
+            href="/senator-scorecard"
             className="text-neon-pink/70 hover:text-neon-pink transition-colors"
             onClick={() => setMenuOpen(false)}
           >
-            {"> INFLUENCE_TRACKER"}
+            {"> SENATOR_SCORECARD"}
+          </Link>
+          <Link
+            href="/leaderboard"
+            className="text-neon-yellow/70 hover:text-neon-yellow transition-colors"
+            onClick={() => setMenuOpen(false)}
+          >
+            {"> LEADERBOARD"}
           </Link>
         </div>
       )}

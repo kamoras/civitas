@@ -39,8 +39,8 @@ def build_senator(
             or base_senator.get("punkNickname")
             or "TBD"
         ),
-        "corruptionScore": (
-            corruption_score or base_senator.get("corruptionScore")
+        "representationScore": (
+            corruption_score or base_senator.get("representationScore")
         ),
         "funding": funding or base_senator.get("funding"),
         "votingRecord": voting_record or base_senator.get("votingRecord"),

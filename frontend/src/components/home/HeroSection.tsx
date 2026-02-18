@@ -34,7 +34,7 @@ export default function HeroSection() {
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4 mb-16">
-        <Link href="/influence-tracker" className="btn-retro">
+        <Link href="/senator-scorecard" className="btn-retro">
           [ CHECK YOUR SENATOR ]
         </Link>
         <a href="#the-numbers" className="btn-retro btn-retro-pink">
