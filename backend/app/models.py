@@ -49,6 +49,7 @@ class Donor(Base):
     total: Mapped[float] = mapped_column(Float, default=0.0)
     type: Mapped[str] = mapped_column(String, nullable=False)
     rank: Mapped[int] = mapped_column(Integer, default=0)
+    industry: Mapped[str] = mapped_column(String, default="OTHER")  # Industry classification for this donor
     pac_sponsor: Mapped[str | None] = mapped_column(String, nullable=True)
     pac_industry: Mapped[str | None] = mapped_column(String, nullable=True)
     pac_analysis: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -78,8 +79,14 @@ class KeyVote(Base):
     bill_id: Mapped[str] = mapped_column(String, nullable=False)
     date: Mapped[str] = mapped_column(String, nullable=False)
     vote: Mapped[str] = mapped_column(String, nullable=False)
+    # New policy stance fields
+    policy_area: Mapped[str] = mapped_column(String, default="PROCEDURAL")
+    stance: Mapped[str] = mapped_column(String, default="neutral")
+    stance_vote: Mapped[str | None] = mapped_column(String, nullable=True)  # "Yea" or "Nay"
+    impacted_groups: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
+    # Legacy fields (kept for transition)
     pro_business_vote: Mapped[str | None] = mapped_column(String, nullable=True)
-    classification: Mapped[str] = mapped_column(String, nullable=False)
+    classification: Mapped[str] = mapped_column(String, nullable=False, default="mixed")
     description: Mapped[str] = mapped_column(Text, default="")
     corporate_interest: Mapped[str] = mapped_column(Text, default="")
     public_impact: Mapped[str] = mapped_column(Text, default="")

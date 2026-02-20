@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSenatorsByState } from "@/hooks/useSenators";
 import StateSelector from "./StateSelector";
 import SenatorCard from "./SenatorCard";
@@ -8,12 +8,21 @@ import GlitchText from "@/components/effects/GlitchText";
 import { STATES } from "@/data/states";
 
 export default function CheckerClient() {
-  const [selectedState, setSelectedState] = useState("");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const selectedState = searchParams.get("state") ?? "";
+
   const { senators: stateSenators, loading, error } = useSenatorsByState(selectedState);
   const stateName = STATES.find((s) => s.code === selectedState)?.name || selectedState;
 
   const handleSelect = (stateCode: string) => {
-    setSelectedState(stateCode);
+    const params = new URLSearchParams(searchParams.toString());
+    if (stateCode) {
+      params.set("state", stateCode);
+    } else {
+      params.delete("state");
+    }
+    router.replace(`?${params.toString()}`, { scroll: false });
   };
 
   return (

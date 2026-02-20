@@ -36,6 +36,7 @@ from app.pipeline.fetch.congress import (
     fetch_member_detail,
     fetch_recent_roll_calls,
     fetch_roll_call_vote,
+    fetch_senator_platform_text,
     fetch_senators,
     fetch_significant_bills,
 )
@@ -53,6 +54,7 @@ from app.pipeline.fetch.govinfo import fetch_bill_text
 from app.pipeline.transform.normalize_finance import normalize_finance
 from app.pipeline.transform.normalize_members import normalize_members
 from app.pipeline.transform.normalize_votes import (
+    compute_party_split,
     extract_senator_vote,
     find_senate_roll_call,
     normalize_recent_votes,
@@ -61,6 +63,7 @@ from app.pipeline.transform.normalize_votes import (
 
 # Analyze modules
 from app.pipeline.analyze.bill_analyzer import classify_all_bills, classify_recent_votes
+from app.pipeline.vector_store import embed_bills
 from app.pipeline.analyze.cross_reference import analyze_senator_batch
 from app.pipeline.analyze.industry_llm_classifier import classify_unknown_industries
 from app.pipeline.analyze.ollama_client import get_llm_stats, reset_stats
@@ -252,7 +255,7 @@ async def run_full_pipeline(
     db.commit()
 
     try:
-        logger.info("=== MODERN PUNK DATA PIPELINE ===")
+        logger.info("=== CIVITAS DATA PIPELINE ===")
         if senator_filter:
             logger.info("Single senator: %s", senator_filter)
         if fetch_only:
@@ -314,7 +317,7 @@ async def run_full_pipeline(
 
             # 1c. Dynamically discover significant bills
             logger.info("Discovering significant bills...")
-            discovered_bills = await fetch_significant_bills(client, db)
+            discovered_bills = await fetch_significant_bills(client, db, max_bills=100)
             logger.info("Found %d significant bills", len(discovered_bills))
 
             # Fetch detailed data for each discovered bill
@@ -377,15 +380,56 @@ async def run_full_pipeline(
                 len(bills_data),
             )
 
-            # 1d.2 Fetch recent roll calls from Senate.gov
-            logger.info("Fetching recent Senate roll calls...")
-            recent_roll_calls = await fetch_recent_roll_calls(client, db)
+            # 1d.2 Fetch recent roll calls from Senate.gov across multiple sessions.
+            # We fetch from the current congress AND the previous congress (both sessions)
+            # to get a richer history — the 119th congress has many nomination votes
+            # (classified "mixed"); the 118th had more substantive legislation.
+            logger.info("Fetching recent Senate roll calls (multi-session)...")
+            all_recent_roll_calls: list[dict] = []
+            seen_roll_ids: set[str] = set()
+
+            fetch_sessions = [
+                (settings.CURRENT_CONGRESS, 1),      # e.g. 119th sess 1 (2025)
+                (settings.CURRENT_CONGRESS, 2),      # 119th sess 2 (2026, if started)
+                (settings.CURRENT_CONGRESS - 1, 2),  # 118th sess 2 (2024)
+                (settings.CURRENT_CONGRESS - 1, 1),  # 118th sess 1 (2023)
+            ]
+
+            for congress_num, session_num in fetch_sessions:
+                session_rcs = await fetch_recent_roll_calls(
+                    client, db,
+                    congress=congress_num,
+                    session_number=session_num,
+                    count=100,
+                )
+                added = 0
+                for rc in session_rcs:
+                    rc_id = (
+                        rc.get("documentName")
+                        or f"Roll-{congress_num}-{session_num}-{rc.get('rollNumber', '')}"
+                    )
+                    if rc_id not in seen_roll_ids:
+                        seen_roll_ids.add(rc_id)
+                        all_recent_roll_calls.append(rc)
+                        added += 1
+                logger.info(
+                    "Congress %d session %d: %d roll calls (%d new)",
+                    congress_num, session_num, len(session_rcs), added,
+                )
+
+            recent_roll_calls = all_recent_roll_calls
+
             # Build a map for recent roll calls keyed by document name
             recent_rc_map: dict[str, dict] = {}
             for rc in recent_roll_calls:
-                rc_id = rc.get("documentName") or f"Roll-{rc['rollNumber']}"
+                congress_num_rc = rc.get("congress", settings.CURRENT_CONGRESS)
+                session_num_rc = rc.get("session", 1)
+                rc_id = (
+                    rc.get("documentName")
+                    or f"Roll-{congress_num_rc}-{session_num_rc}-{rc.get('rollNumber', '')}"
+                )
                 recent_rc_map[rc_id] = rc
-            logger.info("Fetched %d recent roll calls", len(recent_roll_calls))
+            logger.info("Total unique recent roll calls: %d", len(recent_roll_calls))
 
             # 1e. Fetch FEC data for each senator
             logger.info("Fetching FEC financial data...")
@@ -442,6 +486,25 @@ async def run_full_pipeline(
                 len(senators),
             )
 
+            # 1f. Fetch platform text for each senator from their official website
+            logger.info("Fetching senator platform text from official websites...")
+            platform_texts: dict[str, str] = {}
+            for senator in senators:
+                text = await fetch_senator_platform_text(
+                    client,
+                    db,
+                    senator["id"],
+                    senator["name"],
+                    senator.get("officialWebsiteUrl", ""),
+                )
+                platform_texts[senator["id"]] = text
+            fetched_platforms = sum(1 for t in platform_texts.values() if t)
+            logger.info(
+                "Platform text fetched for %d/%d senators",
+                fetched_platforms,
+                len(senators),
+            )
+
         if fetch_only:
             logger.info("=== FETCH COMPLETE (fetch-only mode) ===")
             elapsed = time.time() - start_time
@@ -467,6 +530,16 @@ async def run_full_pipeline(
         classified_bills = await classify_all_bills(bills_data, db_session=db)
         logger.info("Classified %d key bills", len(classified_bills))
 
+        # Override LLM partyLeaning with computed party split from actual roll call data.
+        # This is more reliable than LLM guesses — if 80%+ of one party votes the same
+        # way, it's a party-line vote regardless of what the LLM thought.
+        for bill in classified_bills:
+            roll_call_data = roll_call_data_map.get(bill["billId"])
+            if roll_call_data:
+                computed_split = compute_party_split(roll_call_data)
+                if computed_split:
+                    bill["partyLeaning"] = computed_split
+
         # 3a.2 Classify recent roll call votes
         classified_recent: list[dict] = []
         if recent_roll_calls:
@@ -475,6 +548,21 @@ async def run_full_pipeline(
                 recent_roll_calls, db_session=db
             )
             logger.info("Classified %d recent votes", len(classified_recent))
+
+        # Override partyLeaning for recent votes too, using the roll call member data.
+        for rc in classified_recent:
+            rc_id = rc.get("billId", "")
+            roll_call_data = recent_rc_map.get(rc_id)
+            if roll_call_data:
+                computed_split = compute_party_split(roll_call_data)
+                if computed_split:
+                    rc["partyLeaning"] = computed_split
+
+        # 3a.3 Embed all classified bills in vector database for semantic search
+        logger.info("Embedding bills in vector database...")
+        all_bills_for_embedding = classified_bills + classified_recent
+        embed_bills(all_bills_for_embedding)
+        logger.info("Embedded %d bills in vector database", len(all_bills_for_embedding))
 
         # 3a.3 LLM industry classification for unknown donors
         logger.info("Classifying unknown industries via LLM...")
@@ -686,6 +774,7 @@ async def run_full_pipeline(
                 {
                     "senator": b["senator"],
                     "allVotes": all_votes_per_senator[i],
+                    "platformText": platform_texts.get(b["senator"]["id"], ""),
                 }
                 for i, b in enumerate(batch)
             ]
@@ -745,13 +834,12 @@ async def run_full_pipeline(
                         "funding": funding,
                         "votingRecord": voting_record,
                         "lobbyingMatches": lobbying_matches,
+                        "campaignPromises": platform_data.get("campaignPromises", []),
                     }
                     corruption_score = calculate_scores(
                         temp_senator,
                         {"flipFlopScore": analysis.get("flipFlopScore", 25)},
                     )
-
-                    nickname = analysis.get("punkNickname", "TBD")
 
                     # Enrich donors with PAC analysis
                     if pac_data.get("donors"):
@@ -764,7 +852,6 @@ async def run_full_pipeline(
                         voting_record,
                         lobbying_matches,
                         corruption_score,
-                        nickname,
                     )
 
                     # Add platform analysis

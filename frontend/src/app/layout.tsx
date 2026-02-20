@@ -21,9 +21,9 @@ const shareTech = Share_Tech_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MODERN PUNK // EXPOSE THE MACHINE",
+  title: "CIVITAS // EXPOSE THE MACHINE",
   description:
-    "They don't want you to see this. Track corporate money in politics, expose corrupt senators, and follow the receipts. Your democracy is sponsored.",
+    "Track corporate money in politics, see how your senators vote, and follow the receipts. All public data, zero spin.",
   keywords: [
     "political corruption",
     "senator corruption",
@@ -32,8 +32,8 @@ export const metadata: Metadata = {
     "money in politics",
   ],
   openGraph: {
-    title: "MODERN PUNK // EXPOSE THE MACHINE",
-    description: "Track corporate money in politics. Expose corrupt senators. Follow the receipts.",
+    title: "CIVITAS // EXPOSE THE MACHINE",
+    description: "Track corporate money in politics. See how your senators vote. Follow the receipts.",
     type: "website",
   },
 };

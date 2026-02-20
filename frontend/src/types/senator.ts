@@ -18,7 +18,10 @@ export type IndustryCode =
   | "TOBACCO"
   | "CRYPTO"
   | "PRIVATE_PRISON"
-  | "OTHER";
+  | "POLITICAL"
+  | "OTHER"
+  | "SMALL_DONORS"
+  | "LARGE_INDIVIDUAL";
 
 export interface Senator {
   id: string;
@@ -26,7 +29,6 @@ export interface Senator {
   state: string;
   party: "D" | "R" | "I";
   yearsInOffice: number;
-  punkNickname: string;
   initials: string;
   representationScore: {
     constituentFunding: number;
@@ -61,7 +63,8 @@ export interface Senator {
 export interface Donor {
   name: string;
   total: number;
-  type: "PAC" | "Individual" | "SuperPAC" | "Org/Employees" | "Party/Ideological";
+  type: "PAC" | "Individual" | "SuperPAC" | "Org/Employees" | "Party/Ideological" | "CandidateAffiliated";
+  industry: string;
   pacSponsor: string | null;
   pacIndustry: string | null;
   pacAnalysis: string | null;
@@ -79,8 +82,14 @@ export interface KeyVote {
   billId: string;
   date: string;
   vote: "Yea" | "Nay" | "Not Voting";
+  // New policy stance fields
+  policyArea: string;
+  stance: string;
+  stanceVote: "Yea" | "Nay" | null;
+  impactedGroups: string[];
+  // Legacy fields (kept for transition)
   proBusinessVote: "Yea" | "Nay" | null;
-  classification: "pro-corporate" | "pro-consumer" | "mixed";
+  classification: string;
   description: string;
   corporateInterest: string;
   publicImpact: string;
@@ -117,7 +126,6 @@ export interface LeaderboardEntry {
   party: "D" | "R" | "I";
   yearsInOffice: number;
   initials: string;
-  punkNickname: string;
   representationScore: Senator["representationScore"];
   totalRaised: number;
   totalFromPacs: number;

@@ -69,6 +69,16 @@ function VoteCard({
 }) {
   const [expanded, setExpanded] = useState(false);
 
+  // Get color-coded left border based on party alignment
+  const getPartyBorder = (leaning: string | null) => {
+    if (leaning === "R") return "border-l-4 border-l-rep-red/50";
+    if (leaning === "D") return "border-l-4 border-l-dem-blue/50";
+    if (leaning === "bipartisan") return "border-l-4 border-l-ind-purple/50";
+    return "border-l-4 border-l-matrix-green/20";
+  };
+
+  const partyBorderClass = getPartyBorder(vote.partyLeaning);
+
   const content = (
     <div className="flex items-center gap-2 flex-wrap">
       <VoteBadge vote={vote.vote} />
@@ -76,15 +86,17 @@ function VoteCard({
       {vote.vote !== "Not Voting" && (
         <>
           <PartyAlignmentBadge votedWithParty={vote.votedWithParty} />
-          {vote.proBusinessVote && (
+          {/* Policy stance badge - shows if senator voted with or against the bill's stance */}
+          {vote.stanceVote && vote.policyArea !== "PROCEDURAL" && (
             <span
               className={`text-[10px] px-1.5 py-0.5 border ${
-                vote.vote === vote.proBusinessVote
-                  ? "text-neon-pink/60 border-neon-pink/20 bg-neon-pink/5"
-                  : "text-neon-cyan/60 border-neon-cyan/20 bg-neon-cyan/5"
+                vote.vote === vote.stanceVote
+                  ? "text-neon-yellow/70 border-neon-yellow/30 bg-neon-yellow/5"
+                  : "text-matrix-green/50 border-matrix-green/30 bg-matrix-green/5"
               }`}
+              title={vote.vote === vote.stanceVote ? `Voted for ${vote.stance}` : `Voted against ${vote.stance}`}
             >
-              {vote.vote === vote.proBusinessVote ? "VOTED FOR INDUSTRY" : "VOTED FOR CONSUMERS"}
+              {vote.stance.toUpperCase().replace(/-/g, " ")}
             </span>
           )}
         </>
@@ -95,7 +107,7 @@ function VoteCard({
 
   if (!expandable) {
     return (
-      <div className="terminal-window p-3">
+      <div className={`terminal-window p-3 ${partyBorderClass}`}>
         {content}
         {vote.date && (
           <div className="text-[10px] text-matrix-green/30 mt-1">{vote.date}</div>
@@ -105,7 +117,7 @@ function VoteCard({
   }
 
   return (
-    <div className="terminal-window">
+    <div className={`terminal-window ${partyBorderClass}`}>
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full text-left p-3 flex items-center justify-between"
@@ -127,6 +139,21 @@ function VoteCard({
               <div className="text-xs text-matrix-green/80">{vote.keyVoteReasoning}</div>
             </div>
           )}
+
+          {/* Policy area and impacted groups */}
+          {vote.policyArea && vote.policyArea !== "PROCEDURAL" && (
+            <div className="bg-neon-yellow/5 border border-neon-yellow/20 p-2">
+              <div className="text-xs text-neon-yellow/60 mb-1">
+                POLICY AREA: {vote.policyArea}
+              </div>
+              {vote.impactedGroups && vote.impactedGroups.length > 0 && (
+                <div className="text-xs text-matrix-green/70">
+                  Impacted groups: {vote.impactedGroups.join(", ")}
+                </div>
+              )}
+            </div>
+          )}
+
           <p className="text-matrix-green/70">{vote.description}</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
             <div className="bg-red-500/5 border border-red-500/20 p-2">
@@ -185,22 +212,19 @@ export default function VotingRecord({
           <div className="terminal-window p-3">
             <div className="text-xl font-pixel text-neon-cyan">{Math.round(partyLoyaltyPct)}%</div>
             <div className="text-matrix-green/40 text-xs">PARTY LOYALTY</div>
+            <div className="text-[10px] text-matrix-green/25">votes with party line</div>
           </div>
           <div className="terminal-window p-3">
             <div className="text-xl font-pixel text-neon-pink">{corpPercent}%</div>
-            <div className="text-matrix-green/40 text-xs">VOTED FOR INDUSTRY</div>
+            <div className="text-matrix-green/40 text-xs">INDUSTRY-ALIGNED</div>
+            <div className="text-[10px] text-matrix-green/25">favored corporate interests</div>
           </div>
           <div className="terminal-window p-3">
             <div className="text-xl font-pixel text-matrix-green">{100 - corpPercent}%</div>
-            <div className="text-matrix-green/40 text-xs">VOTED FOR CONSUMERS</div>
+            <div className="text-matrix-green/40 text-xs">CONSTITUENT-ALIGNED</div>
+            <div className="text-[10px] text-matrix-green/25">favored public interests</div>
           </div>
         </div>
-        <p className="text-[10px] text-matrix-green/30 mb-4 italic">
-          &ldquo;Party loyalty&rdquo; = percentage of tracked votes where senator voted with their
-          party&apos;s expected position. &ldquo;Voted for industry&rdquo; = the senator&apos;s
-          vote (Yea or Nay) went in the direction that serves corporate interests on that bill.
-          Neither implies the vote was wrong or motivated by external factors.
-        </p>
       </div>
 
       {/* Key Votes — Long-Term Summary */}

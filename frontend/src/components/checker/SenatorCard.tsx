@@ -148,7 +148,9 @@ export default function SenatorCard({ senator }: SenatorCardProps) {
                       {formatCurrency(donor.total)}
                     </td>
                     <td className="py-2 text-right">
-                      <div className="text-matrix-green/40 text-xs">{donor.type}</div>
+                      <div className="text-matrix-green/40 text-xs">
+                        {donor.type === "CandidateAffiliated" ? "Own Committee" : donor.type}
+                      </div>
                       {donor.pacIndustry && donor.pacIndustry !== "OTHER" && (
                         <div className="text-[10px] text-neon-cyan/50 mt-0.5">
                           {donor.pacIndustry.replace("_", " ")}
@@ -163,7 +165,7 @@ export default function SenatorCard({ senator }: SenatorCardProps) {
         </div>
 
         {/* Industry Breakdown */}
-        <IndustryBreakdown industries={senator.funding.industryBreakdown} />
+        <IndustryBreakdown industries={senator.funding.industryBreakdown} donors={senator.funding.topDonors} />
 
         {/* Voting Record */}
         <VotingRecord

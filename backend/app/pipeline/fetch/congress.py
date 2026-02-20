@@ -65,7 +65,7 @@ async def fetch_significant_bills(
             data = await _fetch_with_retry(
                 client,
                 f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type}"
-                f"?sort=updateDate+desc&limit=50",
+                f"?sort=updateDate+desc&limit=250",
             )
             if not data or not data.get("bills"):
                 continue
@@ -495,3 +495,83 @@ async def fetch_recent_roll_calls(
     logger.info("Fetched %d recent roll calls", len(results))
     api_cache_set(db, "congress", cache_key, results)
     return results
+
+
+import re as _re
+
+_platform_rate_limiter = RateLimiter(0.5)  # max 0.5 req/s to senator websites
+
+
+async def fetch_senator_platform_text(
+    client: httpx.AsyncClient,
+    db: Session,
+    senator_id: str,
+    senator_name: str,
+    official_website_url: str,
+) -> str:
+    """Fetch a senator's stated platform/policy positions from their official website.
+
+    Tries the following in order:
+    1. officialWebsiteUrl/issues/
+    2. officialWebsiteUrl/priorities/
+    3. officialWebsiteUrl (homepage)
+    4. Wikipedia "Political positions of {Name}" page
+
+    Returns cleaned plain text truncated to 3000 characters, or empty string if all fail.
+    """
+    cache_key = f"platform-text-{senator_id}-v1"
+    cached = api_cache_get(db, "platform", cache_key)
+    if cached is not None:
+        return cached
+
+    text = ""
+
+    # Build candidate URLs to try
+    candidate_urls: list[str] = []
+    if official_website_url:
+        candidate_urls += [
+            f"{official_website_url}/issues/",
+            f"{official_website_url}/priorities/",
+            official_website_url,
+        ]
+
+    # Wikipedia fallback — "Political positions of First Last"
+    wiki_name = senator_name.replace(" ", "_")
+    candidate_urls.append(
+        f"https://en.wikipedia.org/wiki/Political_positions_of_{wiki_name}"
+    )
+
+    for url in candidate_urls:
+        try:
+            await _platform_rate_limiter.acquire()
+            resp = await client.get(
+                url,
+                timeout=15.0,
+                follow_redirects=True,
+                headers={"User-Agent": "Mozilla/5.0 (compatible; ModernPunk/1.0)"},
+            )
+            if resp.status_code != 200:
+                continue
+
+            raw_html = resp.text
+            # Strip script/style blocks
+            raw_html = _re.sub(r"<script[^>]*>.*?</script>", " ", raw_html, flags=_re.DOTALL | _re.IGNORECASE)
+            raw_html = _re.sub(r"<style[^>]*>.*?</style>", " ", raw_html, flags=_re.DOTALL | _re.IGNORECASE)
+            # Strip all remaining HTML tags
+            plain = _re.sub(r"<[^>]+>", " ", raw_html)
+            # Collapse whitespace
+            plain = _re.sub(r"\s+", " ", plain).strip()
+
+            if len(plain) > 200:  # meaningful content found
+                text = plain[:3000]
+                break
+        except Exception as e:
+            logger.debug("Platform fetch failed for %s at %s: %s", senator_name, url, e)
+            continue
+
+    api_cache_set(db, "platform", cache_key, text)
+    if text:
+        logger.debug("Platform text fetched for %s (%d chars)", senator_name, len(text))
+    else:
+        logger.debug("No platform text found for %s", senator_name)
+    return text

@@ -21,8 +21,91 @@ def list_states(db: Session = Depends(get_db)) -> list[StateCountSchema]:
 
 @router.get("/senators/leaderboard", response_model=list[LeaderboardEntrySchema])
 def list_leaderboard(db: Session = Depends(get_db)) -> list[LeaderboardEntrySchema]:
-    """Return all senators ranked by corporate influence score."""
+    """Return all senators ranked by representation score."""
     return get_leaderboard(db)
+
+
+@router.get("/senators/{senator_id}/highlights")
+async def get_highlights(senator_id: str, db: Session = Depends(get_db)) -> dict:
+    """Return LLM-generated data highlights for a senator (cached after first call)."""
+    from app.pipeline.analyze.ollama_client import call_llm
+
+    senator = get_senator_by_id(db, senator_id)
+    if senator is None:
+        raise HTTPException(status_code=404, detail="Senator not found")
+
+    funding = senator.funding
+    voting = senator.voting_record
+    score = senator.representation_score
+
+    pac_pct = round(
+        (funding.total_from_pacs / funding.total_raised * 100)
+        if funding.total_raised > 0
+        else 0
+    )
+    top_donors_str = (
+        ", ".join(f"{d.name} (${d.total:,.0f})" for d in funding.top_donors[:3])
+        if funding.top_donors
+        else "none on record"
+    )
+    total_score = round(
+        score.constituent_funding * 0.3
+        + score.independence_index * 0.2
+        + score.donor_diversity * 0.1
+        + score.promise_fulfillment * 0.3
+        + score.accountability * 0.1
+    )
+    kept = sum(1 for p in senator.campaign_promises if p.alignment == "kept")
+    partial = sum(1 for p in senator.campaign_promises if p.alignment == "partial")
+    broken = sum(1 for p in senator.campaign_promises if p.alignment == "broken")
+    aligned_connections = sum(1 for m in senator.lobbying_matches if m.senator_vote_aligned)
+
+    result = await call_llm(
+        prompt_version="senator-highlights-v1",
+        system_prompt="Political analyst. Return ONLY valid JSON, no markdown.",
+        user_prompt=(
+            f"Senator {senator.name} ({senator.party}-{senator.state}), "
+            f"{senator.years_in_office} yrs in office.\n"
+            f"FUNDING: ${funding.total_raised:,.0f} raised; {pac_pct}% from PACs; "
+            f"{funding.small_donor_percentage:.0f}% small donors.\n"
+            f"TOP DONORS: {top_donors_str}.\n"
+            f"VOTES: {voting.total_votes} tracked; {voting.pro_corporate_votes} industry-aligned "
+            f"({round(voting.pro_corporate_votes / max(voting.total_votes, 1) * 100)}%), "
+            f"{voting.pro_consumer_votes} constituent-friendly.\n"
+            f"REPRESENTATION SCORE: {total_score}/100 "
+            f"(constituent funding: {score.constituent_funding:.0f}, "
+            f"voting independence: {score.independence_index:.0f}, "
+            f"donor diversity: {score.donor_diversity:.0f}, "
+            f"promise fulfillment: {score.promise_fulfillment:.0f}, "
+            f"accountability: {score.accountability:.0f}).\n"
+            f"DONOR-VOTE CONNECTIONS: {len(senator.lobbying_matches)} found, "
+            f"{aligned_connections} voted in donor's interest.\n"
+            f"PLATFORM PROMISES: {kept} kept, {partial} partial, {broken} broken "
+            f"of {len(senator.campaign_promises)} tracked.\n"
+            f'Return JSON: {{"highlights":["<insight>","<insight>","<insight>"]}}\n'
+            f"Generate 3-4 specific, punchy insights from this data. Focus on what is "
+            f"surprising, notable, or concerning. Use plain English, reference specific numbers."
+        ),
+        cache_key={
+            "senatorId": senator_id,
+            "totalRaised": round(funding.total_raised),
+            "pacPct": pac_pct,
+            "totalVotes": voting.total_votes,
+            "totalScore": total_score,
+            "promiseCounts": f"{kept}/{partial}/{broken}",
+            "v": 1,
+        },
+        db_session=db,
+        max_tokens=400,
+    )
+
+    if not result or not isinstance(result.get("highlights"), list):
+        return {"highlights": []}
+
+    highlights = [
+        str(h)[:300] for h in result["highlights"] if isinstance(h, str) and h.strip()
+    ]
+    return {"highlights": highlights[:5]}
 
 
 @router.get("/senators/{senator_id}", response_model=SenatorSchema)

@@ -118,7 +118,10 @@ export default function PlatformTracker({ promises, platformSummary }: PlatformT
                     </div>
                     <p className="text-sm text-matrix-green/90 mt-1">{promise.promiseText}</p>
                     {promise.analysis && (
-                      <p className="text-xs text-matrix-green/50 mt-1">{promise.analysis}</p>
+                      <div className="mt-2 border-l-2 border-matrix-green/20 pl-2">
+                        <span className="text-[10px] text-matrix-green/40 font-pixel">EVIDENCE: </span>
+                        <span className="text-xs text-matrix-green/70">{promise.analysis}</span>
+                      </div>
                     )}
                   </div>
                 </div>

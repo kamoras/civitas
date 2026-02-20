@@ -3,7 +3,7 @@ FROM python:3.12-slim-bookworm
 WORKDIR /app
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc libxml2-dev libxslt-dev curl && \
+    apt-get install -y --no-install-recommends gcc g++ libxml2-dev libxslt-dev curl && \
     rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

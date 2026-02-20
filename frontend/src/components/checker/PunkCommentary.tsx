@@ -1,22 +1,44 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Senator } from "@/types/senator";
 import { generateCommentary } from "@/data/commentary";
+import { fetchSenatorHighlights } from "@/lib/api";
 
 interface PunkCommentaryProps {
   senator: Senator;
 }
 
 export default function PunkCommentary({ senator }: PunkCommentaryProps) {
-  const comments = generateCommentary(senator);
+  const staticComments = generateCommentary(senator);
+  const [highlights, setHighlights] = useState<string[] | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setHighlights(null);
+    setLoading(true);
+    fetchSenatorHighlights(senator.id)
+      .then((h) => {
+        if (h.length > 0) setHighlights(h);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [senator.id]);
+
+  const comments = highlights ?? staticComments;
 
   return (
     <div>
       <h3
-        className="text-lg text-neon-yellow mb-3"
+        className="text-lg text-neon-yellow mb-3 flex items-center gap-3"
         style={{ textShadow: "0 0 7px #ffff00, 0 0 10px #ffff00" }}
       >
         {">"} DATA HIGHLIGHTS
+        {loading && (
+          <span className="text-[10px] text-matrix-green/50 font-normal animate-pulse">
+            [GENERATING...]
+          </span>
+        )}
       </h3>
       <div className="space-y-3">
         {comments.map((comment, i) => (
@@ -25,10 +47,9 @@ export default function PunkCommentary({ senator }: PunkCommentaryProps) {
           </div>
         ))}
       </div>
-      <p className="text-[10px] text-matrix-green/30 mt-3 italic">
-        These highlights are auto-generated from the public data above. Verify all figures at the
-        sources cited in each section.
-      </p>
+      {highlights && (
+        <div className="text-[10px] text-matrix-green/25 mt-3">AI-generated · fec.gov · congress.gov</div>
+      )}
     </div>
   );
 }

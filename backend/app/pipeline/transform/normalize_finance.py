@@ -13,7 +13,7 @@ from app.pipeline.transform.industry_classifier import classify_industry
 
 logger = logging.getLogger(__name__)
 
-# Words that indicate self-contributions, payment processors, or inter-committee transfers
+# Words that indicate payment processors or pure pass-through transfers — skip entirely
 SKIP_PAC_PATTERNS = [
     "WINRED",
     "ACTBLUE",
@@ -22,6 +22,30 @@ SKIP_PAC_PATTERNS = [
     "VICTORY FUND",
     "JOINT FUNDRAISING",
     "INFORMATION REQUESTED",
+]
+
+# Prefixes/keywords that, when combined with the candidate's own last name,
+# indicate the PAC is controlled by or affiliated with the candidate themselves.
+# These PACs are tagged "CandidateAffiliated" rather than dropped, so they still
+# appear in the donor list (transparent) but are excluded from lobbying-match analysis.
+SELF_PAC_PATTERNS = [
+    "TEAM ",
+    "FRIENDS OF",
+    "COMMITTEE FOR ",
+    "CITIZENS FOR ",
+    "VOLUNTEERS FOR ",
+    "PEOPLE FOR ",
+    "FOR SENATE",
+    "FOR CONGRESS",
+    "FOR PRESIDENT",
+    "FOR GOVERNOR",
+    "LEADERSHIP PAC",
+    "LEADERSHIP FUND",
+    "FOR AMERICA",
+    "FOR FLORIDA",
+    "FOR TEXAS",
+    "FOR CALIFORNIA",
+    "FOR NEW YORK",
 ]
 
 # Generic party/ideological PACs -- not specific corporate interests.
@@ -84,6 +108,25 @@ SKIP_EMPLOYERS = {
 }
 
 
+def _is_candidate_affiliated(name_upper: str, candidate_name: str) -> bool:
+    """Return True if a PAC name suggests it is controlled by or affiliated with the candidate.
+
+    FEC candidate names are stored as 'LAST, FIRST M'.  We extract the last name
+    and check whether it appears in the PAC name together with any of the strong
+    candidate-committee signal words (TEAM, FRIENDS OF, FOR SENATE, etc.).
+    """
+    if not candidate_name:
+        return False
+
+    # Parse last name from "LAST, FIRST" FEC format
+    last_name = candidate_name.split(",")[0].strip().upper()
+    if len(last_name) <= 2 or last_name not in name_upper:
+        return False
+
+    # Candidate's last name is present — now check for affiliated signal words
+    return any(p in name_upper for p in SELF_PAC_PATTERNS)
+
+
 def normalize_finance(
     candidate: dict | None,
     financials: list[dict],
@@ -115,6 +158,10 @@ def normalize_finance(
         c.get("individual_unitemized_contributions", 0) or 0
         for c in recent_cycles
     )
+    large_individual = sum(
+        c.get("individual_itemized_contributions", 0) or 0
+        for c in recent_cycles
+    )
 
     small_donor_percentage = (
         round((small_individual / total_raised) * 100) if total_raised > 0 else 0
@@ -126,9 +173,13 @@ def normalize_finance(
         pac_receipts, individual_receipts, aggregated_contributors, candidate_name
     )
 
-    # Build industry breakdown from all receipts
-    all_receipts = individual_receipts + pac_receipts
-    industry_breakdown = _build_industry_breakdown(all_receipts, total_raised)
+    # Build industry breakdown: individuals get explicit buckets, PACs get industry-classified
+    industry_breakdown = _build_industry_breakdown(
+        pac_receipts=pac_receipts,
+        small_individual_total=small_individual,
+        large_individual_total=large_individual,
+        total_raised=total_raised,
+    )
 
     return {
         "totalRaised": round(total_raised),
@@ -167,20 +218,6 @@ def build_top_donors(
         if any(p in name_upper for p in SKIP_PAC_PATTERNS):
             continue
 
-        # Skip self-contributions (candidate's own name in contributor)
-        if candidate_name:
-            candidate_last_name = candidate_name.split(",")[0].split()[0].upper()
-            if (
-                len(candidate_last_name) > 2
-                and candidate_last_name in name_upper
-                and (
-                    "FOR " in name_upper
-                    or ", " in name_upper
-                    or name_upper == candidate_name.upper()
-                )
-            ):
-                continue
-
         # Skip inter-committee transfers
         memo_text = (r.get("memo_text") or "").upper()
         if (
@@ -190,13 +227,23 @@ def build_top_donors(
         ):
             continue
 
-        is_generic_party = any(p in name_upper for p in GENERIC_PARTY_PAC_PATTERNS)
-        donor_type = "Party/Ideological" if is_generic_party else "PAC"
+        # Classify donor type — candidate's own committees get a distinct label so
+        # they remain visible in the UI but are excluded from lobbying-match analysis.
+        if _is_candidate_affiliated(name_upper, candidate_name):
+            donor_type = "CandidateAffiliated"
+        elif any(p in name_upper for p in GENERIC_PARTY_PAC_PATTERNS):
+            donor_type = "Party/Ideological"
+        else:
+            donor_type = "PAC"
+
+        # Classify industry for this donor
+        industry = classify_industry(name)
 
         existing = donor_map.get(name_upper, {
             "name": name,
             "total": 0,
             "type": donor_type,
+            "industry": industry,
         })
         existing["total"] += r.get("contribution_receipt_amount", 0) or 0
         donor_map[name_upper] = existing
@@ -207,15 +254,22 @@ def build_top_donors(
         if not employer or employer in SKIP_EMPLOYERS:
             continue
 
+        # Classify industry for employer-based donations
+        industry = classify_industry(r.get("contributor_employer", ""))
+
         existing = donor_map.get(employer, {
             "name": r.get("contributor_employer", ""),
             "total": 0,
             "type": "Org/Employees",
+            "industry": industry,
         })
         existing["total"] += r.get("contribution_receipt_amount", 0) or 0
         # Don't overwrite PAC type if we already have PAC entries for this org
         if existing["type"] != "PAC":
             existing["type"] = "Org/Employees"
+        # Keep the industry classification (may already be set if PAC exists)
+        if "industry" not in existing:
+            existing["industry"] = industry
         donor_map[employer] = existing
 
     # 3. Include aggregated contributors as fallback
@@ -226,10 +280,12 @@ def build_top_donors(
 
         normalized_name = name.upper().strip()
         if normalized_name not in donor_map:
+            industry = classify_industry(name)
             donor_map[normalized_name] = {
                 "name": name,
                 "total": c.get("total", 0) or 0,
                 "type": "PAC" if c.get("committee_id") else "Org/Employees",
+                "industry": industry,
             }
 
     # Sort by total, take top 10
@@ -239,6 +295,7 @@ def build_top_donors(
             "name": _clean_donor_name(d["name"]),
             "total": round(d["total"]),
             "type": d["type"],
+            "industry": d.get("industry", "OTHER"),
         }
         for d in sorted_donors[:10]
     ]
@@ -258,36 +315,59 @@ def _clean_donor_name(name: str) -> str:
 
 
 def _build_industry_breakdown(
-    receipts: list[dict], total_raised: float
+    pac_receipts: list[dict],
+    small_individual_total: float,
+    large_individual_total: float,
+    total_raised: float,
 ) -> list[dict]:
-    """Group contributions by employer/organization and classify into industries."""
+    """Build a funding breakdown separating individual donors from corporate/PAC sectors.
+
+    Individual donor money (small and large) gets its own explicit buckets so it
+    is never conflated with industry-classified corporate PAC money. Only PAC and
+    committee receipts are classified by industry.
+    """
     industry_totals: dict[str, dict] = {}
 
-    for r in receipts:
-        org = (
-            r.get("contributor_employer")
-            or r.get("contributor_organization_name")
-            or r.get("contributor_name")
-            or ""
-        )
+    # Explicit buckets for individual donors (never classified by industry)
+    if small_individual_total > 0:
+        industry_totals["SMALL_DONORS"] = {
+            "industry": "SMALL_DONORS",
+            "name": "SMALL_DONORS",
+            "total": small_individual_total,
+        }
+    if large_individual_total > 0:
+        industry_totals["LARGE_INDIVIDUAL"] = {
+            "industry": "LARGE_INDIVIDUAL",
+            "name": "LARGE_INDIVIDUAL",
+            "total": large_individual_total,
+        }
+
+    # Classify PAC/committee receipts by industry
+    for r in pac_receipts:
+        org = r.get("contributor_name") or r.get("contributor_organization_name") or ""
         if not org:
             continue
+        org_upper = org.upper().strip()
+        # Skip payment processors (ActBlue, WinRed, etc.) — they're pass-throughs
+        if any(p in org_upper for p in SKIP_PAC_PATTERNS):
+            continue
 
+        amount = r.get("contribution_receipt_amount", 0) or 0
         industry = classify_industry(org)
         existing = industry_totals.get(industry, {
             "industry": industry,
             "name": industry,
             "total": 0,
         })
-        existing["total"] += r.get("contribution_receipt_amount", 0) or 0
+        existing["total"] += amount
         industry_totals[industry] = existing
 
-    # Convert to list, calculate percentages, sort
+    # Convert to list with percentages, drop zero entries
     breakdown = []
     for ind in industry_totals.values():
         total = round(ind["total"])
         percentage = round((ind["total"] / total_raised) * 100) if total_raised > 0 else 0
-        if total > 0 and percentage >= 1:
+        if total > 0:
             breakdown.append({
                 "industry": ind["industry"],
                 "name": ind["industry"].replace("_", " "),
@@ -296,4 +376,4 @@ def _build_industry_breakdown(
             })
 
     breakdown.sort(key=lambda x: x["total"], reverse=True)
-    return breakdown[:8]  # Top 8 industries
+    return breakdown[:12]  # Top 12 buckets

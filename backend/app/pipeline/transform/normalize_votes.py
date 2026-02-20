@@ -117,6 +117,12 @@ def normalize_votes(
             "billId": bill.get("billId", ""),
             "date": bill.get("date", ""),
             "vote": normalized_vote,
+            # New policy stance fields
+            "policyArea": bill.get("policyArea", "PROCEDURAL"),
+            "stance": bill.get("stance", "neutral"),
+            "stanceVote": bill.get("stanceVote"),
+            "impactedGroups": bill.get("impactedGroups", []),
+            # Legacy fields (kept during transition)
             "proBusinessVote": pro_business_vote or None,
             "classification": bill.get("classification", "mixed"),
             "description": bill.get("description", ""),
@@ -134,8 +140,12 @@ def normalize_votes(
     scoreable = pro_corporate_votes + pro_consumer_votes
 
     party_total = voted_with_party + voted_against_party
-    party_loyalty_pct = round(
-        voted_with_party / max(party_total, 1) * 100, 1
+    # Default to 100 when no party-leaning bills exist in the dataset —
+    # absence of evidence of disloyalty is not evidence of disloyalty.
+    party_loyalty_pct = (
+        round(voted_with_party / party_total * 100, 1)
+        if party_total > 0
+        else 100.0
     )
 
     return {
@@ -204,6 +214,12 @@ def normalize_recent_votes(
             "billId": bill_id,
             "date": bill.get("date", ""),
             "vote": normalized_vote,
+            # New policy stance fields
+            "policyArea": bill.get("policyArea", "PROCEDURAL"),
+            "stance": bill.get("stance", "neutral"),
+            "stanceVote": bill.get("stanceVote"),
+            "impactedGroups": bill.get("impactedGroups", []),
+            # Legacy fields
             "proBusinessVote": bill.get("proBusinessVote"),
             "classification": bill.get("classification", "mixed"),
             "description": bill.get("description", ""),
@@ -218,6 +234,45 @@ def normalize_recent_votes(
         })
 
     return votes
+
+
+def compute_party_split(roll_call_data: dict) -> str | None:
+    """Compute party alignment from roll call member votes.
+
+    Uses actual party vote distributions to determine if a roll call was a
+    Republican bill, Democratic bill, or bipartisan vote — without relying on
+    LLM classification.
+
+    Returns:
+        "R" if 75%+ of Republicans voted Yea and 25%- of Democrats did,
+        "D" if 75%+ of Democrats voted Yea and 25%- of Republicans did,
+        "bipartisan" otherwise, or None if insufficient data.
+    """
+    members = roll_call_data.get("members", [])
+    r_yea = r_total = d_yea = d_total = 0
+    for m in members:
+        party = m.get("party", "")
+        vote = (m.get("voteCast") or "").upper()
+        if party == "R":
+            r_total += 1
+            if vote in ("YEA", "AYE", "YES"):
+                r_yea += 1
+        elif party == "D":
+            d_total += 1
+            if vote in ("YEA", "AYE", "YES"):
+                d_yea += 1
+
+    if r_total < 3 or d_total < 3:
+        return None  # Not enough party data
+
+    r_yea_pct = r_yea / r_total
+    d_yea_pct = d_yea / d_total
+
+    if r_yea_pct >= 0.75 and d_yea_pct <= 0.25:
+        return "R"
+    if d_yea_pct >= 0.75 and r_yea_pct <= 0.25:
+        return "D"
+    return "bipartisan"
 
 
 def extract_senator_vote(

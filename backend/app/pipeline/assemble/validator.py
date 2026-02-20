@@ -30,6 +30,8 @@ VALID_INDUSTRIES = {
     "PRIVATE_PRISON",
     "POLITICAL",
     "OTHER",
+    "SMALL_DONORS",
+    "LARGE_INDIVIDUAL",
 }
 
 VALID_PARTIES = {"D", "R", "I"}
@@ -78,9 +80,6 @@ def validate_senator(senator: dict) -> dict:
         senator["initials"] = "".join(
             w[0].upper() for w in parts[:2] if w
         )
-    if not senator.get("punkNickname"):
-        senator["punkNickname"] = "TBD"
-
     # Representation score
     cs = senator.get("representationScore") or {}
     senator["representationScore"] = {

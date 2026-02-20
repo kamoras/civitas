@@ -105,6 +105,8 @@ def normalize_members(
             if p and not p.startswith("(")
         )[:2]
 
+        official_url = (detail.get("officialWebsiteUrl") or "").rstrip("/")
+
         results.append({
             "bioguideId": m.get("bioguideId", ""),
             "id": senator_id,
@@ -113,6 +115,7 @@ def normalize_members(
             "party": party,
             "yearsInOffice": years_in_office,
             "initials": initials,
+            "officialWebsiteUrl": official_url,
             # These will be populated later
             "punkNickname": "",
             "representationScore": {

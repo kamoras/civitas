@@ -16,7 +16,6 @@ def build_senator(
     voting_record: dict | None,
     lobbying_matches: list[dict] | None,
     corruption_score: dict | None,
-    punk_nickname: str | None,
 ) -> dict:
     """
     Assemble a complete Senator record from all pipeline data.
@@ -27,18 +26,12 @@ def build_senator(
         voting_record: From normalize-votes (with cross-reference data).
         lobbying_matches: From cross-reference analysis.
         corruption_score: From score-calculator.
-        punk_nickname: From LLM analysis.
 
     Returns:
         Complete, validated Senator record.
     """
     senator = {
         **base_senator,
-        "punkNickname": (
-            punk_nickname
-            or base_senator.get("punkNickname")
-            or "TBD"
-        ),
         "representationScore": (
             corruption_score or base_senator.get("representationScore")
         ),

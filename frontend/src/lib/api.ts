@@ -31,3 +31,10 @@ export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
   if (!res.ok) throw new Error(`Failed to load leaderboard: ${res.status}`);
   return res.json();
 }
+
+export async function fetchSenatorHighlights(senatorId: string): Promise<string[]> {
+  const res = await fetch(`${API_BASE}/senators/${senatorId}/highlights`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return Array.isArray(data.highlights) ? data.highlights : [];
+}

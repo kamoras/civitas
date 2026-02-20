@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import MatrixRain from "@/components/effects/MatrixRain";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
@@ -5,7 +6,7 @@ import GlitchText from "@/components/effects/GlitchText";
 import CheckerClient from "@/components/checker/CheckerClient";
 
 export const metadata = {
-  title: "SENATOR SCORECARD // MODERN PUNK",
+  title: "SENATOR SCORECARD // CIVITAS",
   description:
     "Select your state. See who funds your senators, how they vote, and where the lobbying money goes. All public data.",
 };
@@ -25,13 +26,15 @@ export default function SenatorScorecardPage() {
             />
           </div>
 
-          <CheckerClient />
+          <Suspense fallback={null}>
+            <CheckerClient />
+          </Suspense>
 
           <div className="text-center mt-16 mb-8">
             <div className="terminal-window max-w-lg mx-auto p-4">
               <p className="text-matrix-green/40 text-sm">
-                {">"} This is the first Modern Punk tool. We&apos;re building more: House Rep
-                tracking, lobbying timelines, and corporate influence scorecards. All public data.
+                {">"} This is the first Civitas tool. We&apos;re building more: House Rep
+                tracking, lobbying timelines, and representation scorecards. All public data.
                 All free.
               </p>
             </div>

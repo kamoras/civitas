@@ -27,10 +27,15 @@ def calculate_scores(senator: dict, flip_flop_result: dict | None) -> dict:
     Returns:
         Dict with the five representationScore sub-fields.
     """
+    voting_record = senator.get("votingRecord", {})
+    # Inject funding into voting_record so _calc_independence_index can access it
+    # without changing the function signature.
+    voting_record_with_funding = {**voting_record, "_funding": senator.get("funding", {})}
+
     return {
         "constituentFunding": _calc_constituent_funding(senator.get("funding", {})),
         "independenceIndex": _calc_independence_index(
-            senator.get("votingRecord", {}),
+            voting_record_with_funding,
             senator.get("lobbyingMatches", []),
         ),
         "donorDiversity": _calc_donor_diversity(
@@ -39,6 +44,7 @@ def calculate_scores(senator: dict, flip_flop_result: dict | None) -> dict:
         "promiseFulfillment": _calc_promise_fulfillment(
             senator.get("votingRecord", {}),
             senator.get("party", "I"),
+            senator.get("campaignPromises", []),
         ),
         "accountability": _calc_accountability(senator),
     }
@@ -73,20 +79,38 @@ def _calc_independence_index(
     """
     Independence Index (0-100, higher = better).
 
-    Measures how independently a senator votes relative to registered lobbyist
-    positions. A high score means the senator frequently votes against lobbying
-    pressure; a low score means they consistently side with lobbyists.
+    Starts at 100 and decreases when a senator shows the combination of
+    heavy PAC funding AND a high rate of pro-corporate votes. The joint
+    signal is what matters: a senator with no PAC money who happens to vote
+    pro-corporate is likely ideologically aligned; one with heavy PAC
+    dependence who consistently votes pro-corporate is more suspect.
+
+    Formula:
+        capture_rate = pro_corporate_votes / scoreable_votes  (0–1)
+        pac_ratio    = total_from_PACs / total_raised          (0–1)
+        score        = 100 * (1 - capture_rate * pac_ratio)
+
+    Either factor alone does not reduce the score much; both together do.
+    Defaults to 100 when there is no meaningful vote or funding data.
     """
-    if not lobbying_matches or len(lobbying_matches) == 0:
-        return 75  # default: moderately independent when no lobbying data
+    pro_corp = voting_record.get("proCorporateVotes", 0)
+    pro_con = voting_record.get("proConsumerVotes", 0)
+    scoreable = pro_corp + pro_con
 
-    aligned = sum(
-        1 for m in lobbying_matches if m.get("senatorVoteAligned")
+    if scoreable == 0:
+        return 100  # no classifiable votes: assume independent
+
+    capture_rate = pro_corp / scoreable
+
+    funding = voting_record.get("_funding", {})  # injected by calculate_scores
+    total_raised = funding.get("totalRaised", 0)
+    pac_ratio = (
+        funding.get("totalFromPACs", 0) / total_raised
+        if total_raised > 0
+        else 0
     )
-    aligned_rate = aligned / len(lobbying_matches)
 
-    # Invert: aligned with lobbyists = lower independence
-    return clamp((1 - aligned_rate) * 100)
+    return clamp((1 - capture_rate * pac_ratio) * 100)
 
 
 def _calc_donor_diversity(industry_breakdown: list[dict]) -> int:
@@ -116,26 +140,47 @@ def _calc_donor_diversity(industry_breakdown: list[dict]) -> int:
     return clamp((1 - normalized_concentration) * 100)
 
 
-def _calc_promise_fulfillment(voting_record: dict, party: str) -> int:
+def _calc_promise_fulfillment(
+    voting_record: dict, party: str, campaign_promises: list[dict] | None = None
+) -> int:
     """
     Promise Fulfillment Score (0-100, higher = better).
 
-    Measures how consistently a senator votes in line with their stated platform.
-    Placeholder: uses party loyalty percentage as a proxy for platform fidelity,
-    since most senators run on explicit party platforms.
+    Primary: if campaign promise data is available (from platform_analyzer), use
+    the ratio of kept/partial promises to total scoreable promises.
 
-    - Party members (R/D): party_loyalty_pct from voting record
-    - Independents: neutral 50 (no party platform to measure against)
-    - No vote data: neutral 50
+    Fallback: uses party loyalty percentage as a rough proxy when no real
+    platform data has been fetched yet.
+
+    Scoring for promises:
+      kept    = 1.0 point
+      partial = 0.5 point
+      broken  = 0.0 point
+      unclear = excluded (not enough data)
     """
+    if campaign_promises:
+        scoreable = [
+            p for p in campaign_promises if p.get("alignment") in ("kept", "broken", "partial")
+        ]
+        if scoreable:
+            score = sum(
+                1.0 if p["alignment"] == "kept" else 0.5 if p["alignment"] == "partial" else 0.0
+                for p in scoreable
+            )
+            return clamp(score / len(scoreable) * 100)
+
+    # Fallback: party loyalty as proxy
     if party == "I":
-        return 50  # Independents don't have a clear party platform to measure
+        return 100  # Independents: no party line to break, assume full platform adherence
 
-    total = voting_record.get("totalVotes", 0)
-    if total == 0:
-        return 50  # neutral default when no vote data
+    party_total = (
+        voting_record.get("votedWithPartyCount", 0)
+        + voting_record.get("votedAgainstPartyCount", 0)
+    )
+    if party_total == 0:
+        return 100  # no against-party votes on record: full score by default
 
-    return clamp(voting_record.get("partyLoyaltyPct", 50))
+    return clamp(voting_record.get("partyLoyaltyPct", 100))
 
 
 def _calc_accountability(senator: dict) -> int:

@@ -19,7 +19,7 @@ export default function HeroSection() {
     <section className="relative min-h-screen flex flex-col justify-center items-center text-center px-4">
       <div className="mb-8">
         <GlitchText
-          text="MODERN PUNK"
+          text="CIVITAS"
           as="h1"
           className="font-pixel text-3xl sm:text-5xl md:text-7xl text-matrix-green animate-pulse-neon"
         />

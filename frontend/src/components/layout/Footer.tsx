@@ -10,7 +10,7 @@ export default function Footer() {
         {/* Coming soon teaser */}
         <div className="terminal-window max-w-sm w-full p-4 text-center">
           <div className="text-neon-pink/60 font-pixel text-[10px] mb-1">
-            COMING SOON FROM MODERN PUNK
+            COMING SOON FROM CIVITAS
           </div>
           <div className="text-matrix-green/50 text-sm space-y-1">
             <div>{">"} House Rep Tracker</div>

@@ -22,7 +22,8 @@ class CamelModel(BaseModel):
 class DonorSchema(CamelModel):
     name: str
     total: float
-    type: Literal["PAC", "Individual", "SuperPAC", "Org/Employees", "Party/Ideological"]
+    type: Literal["PAC", "Individual", "SuperPAC", "Org/Employees", "Party/Ideological", "CandidateAffiliated"]
+    industry: str = "OTHER"
     pac_sponsor: str | None = None
     pac_industry: str | None = None
     pac_analysis: str | None = None
@@ -48,8 +49,14 @@ class KeyVoteSchema(CamelModel):
     bill_id: str
     date: str
     vote: Literal["Yea", "Nay", "Not Voting"]
+    # New policy stance fields
+    policy_area: str = "PROCEDURAL"
+    stance: str = "neutral"
+    stance_vote: Literal["Yea", "Nay"] | None = None
+    impacted_groups: list[str] = []
+    # Legacy fields (kept for backward compatibility during transition)
     pro_business_vote: Literal["Yea", "Nay"] | None = None
-    classification: Literal["pro-corporate", "pro-consumer", "mixed"]
+    classification: str = "mixed"  # Changed from Literal to str for flexibility
     description: str
     corporate_interest: str
     public_impact: str
@@ -106,7 +113,6 @@ class SenatorSchema(CamelModel):
     party: Literal["D", "R", "I"]
     years_in_office: int
     initials: str
-    punk_nickname: str
     representation_score: RepresentationScoreSchema
     funding: FundingSchema
     voting_record: VotingRecordSchema
@@ -122,7 +128,6 @@ class LeaderboardEntrySchema(CamelModel):
     party: Literal["D", "R", "I"]
     years_in_office: int
     initials: str
-    punk_nickname: str
     representation_score: RepresentationScoreSchema
     total_raised: float
     total_from_pacs: float

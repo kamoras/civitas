@@ -86,9 +86,8 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
     pro_consumer_votes = sum(1 for v in all_votes if v.classification == "pro-consumer")
     voted_with = sum(1 for v in all_votes if v.voted_with_party is True)
     voted_against = sum(1 for v in all_votes if v.voted_with_party is False)
-    party_loyalty_pct = round(
-        voted_with / max(voted_with + voted_against, 1) * 100, 1
-    )
+    party_total = voted_with + voted_against
+    party_loyalty_pct = round(voted_with / party_total * 100, 1) if party_total > 0 else 100.0
 
     def _build_vote_schema(v):
         return KeyVoteSchema(
@@ -117,7 +116,6 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
         party=senator.party,
         years_in_office=senator.years_in_office,
         initials=senator.initials,
-        punk_nickname=senator.punk_nickname,
         representation_score=RepresentationScoreSchema(
             constituent_funding=senator.score_corporate_funding,
             independence_index=senator.score_lobbyist_alignment,
@@ -260,7 +258,6 @@ def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
             party=s.party,
             years_in_office=s.years_in_office,
             initials=s.initials,
-            punk_nickname=s.punk_nickname,
             representation_score=RepresentationScoreSchema(
                 constituent_funding=s.score_corporate_funding,
                 independence_index=s.score_lobbyist_alignment,

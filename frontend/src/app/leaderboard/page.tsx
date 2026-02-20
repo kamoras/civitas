@@ -181,7 +181,7 @@ export default function LeaderboardPage() {
         {loading && (
           <div className="terminal-window p-8 text-center">
             <p className="text-matrix-green animate-pulse">
-              {">"} LOADING CORPORATE CAPTURE DATA...
+              {">"} LOADING SENATOR DATA...
             </p>
           </div>
         )}
@@ -225,7 +225,6 @@ export default function LeaderboardPage() {
                       entry.totalRaised > 0
                         ? Math.round((entry.totalFromPacs / entry.totalRaised) * 100)
                         : 0;
-                    const isTbd = entry.punkNickname === "TBD";
                     const isTopTen = rank <= 10;
 
                     return (
@@ -244,16 +243,9 @@ export default function LeaderboardPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex flex-col">
-                            <span className="text-white group-hover:text-matrix-green transition-colors">
-                              {entry.name}
-                            </span>
-                            <span
-                              className={`text-xs ${isTbd ? "text-white/20" : "text-matrix-green/50"}`}
-                            >
-                              {isTbd ? "[analysis pending...]" : `"${entry.punkNickname}"`}
-                            </span>
-                          </div>
+                          <span className="text-white group-hover:text-matrix-green transition-colors">
+                            {entry.name}
+                          </span>
                         </td>
                         <td className="px-3 py-3 text-center">
                           <span
@@ -302,8 +294,6 @@ export default function LeaderboardPage() {
                   entry.totalRaised > 0
                     ? Math.round((entry.totalFromPacs / entry.totalRaised) * 100)
                     : 0;
-                const isTbd = entry.punkNickname === "TBD";
-
                 return (
                   <Link
                     key={entry.id}
@@ -326,11 +316,6 @@ export default function LeaderboardPage() {
                         <ScoreBar score={score} />
                         <span className="text-xs text-white/40">{formatDollars(entry.totalFromPacs)} PAC ({pacPct}%)</span>
                       </div>
-                      {!isTbd && (
-                        <span className="text-xs text-matrix-green/40">
-                          &quot;{entry.punkNickname}&quot;
-                        </span>
-                      )}
                     </div>
                   </Link>
                 );

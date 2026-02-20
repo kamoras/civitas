@@ -24,7 +24,7 @@ export default function Navbar() {
           href="/"
           className="font-pixel text-[10px] sm:text-xs text-matrix-green hover:text-neon-cyan transition-colors neon-green"
         >
-          [M/P]
+          [CIVITAS]
         </Link>
 
         {/* Desktop nav */}

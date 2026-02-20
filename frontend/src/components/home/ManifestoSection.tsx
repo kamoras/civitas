@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 const MANIFESTO_LINES = [
   "> cat about.txt",
   "",
-  "MODERN PUNK is not a news site.",
+  "CIVITAS is not a news site.",
   "We're not journalists. We're not pundits.",
   "",
   "We are citizens who got tired of digging",
