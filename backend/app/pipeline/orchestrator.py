@@ -65,7 +65,9 @@ from app.pipeline.transform.normalize_votes import (
 from app.pipeline.analyze.bill_analyzer import classify_all_bills, classify_recent_votes
 from app.pipeline.vector_store import embed_bills
 from app.pipeline.analyze.cross_reference import analyze_senator_batch
+from app.pipeline.analyze.donor_classifier_ai import classify_donors_hybrid
 from app.pipeline.analyze.industry_llm_classifier import classify_unknown_industries
+from app.pipeline.transform.industry_classifier import store_llm_classifications
 from app.pipeline.analyze.ollama_client import get_llm_stats, reset_stats
 from app.pipeline.analyze.pac_analyzer import analyze_pacs_batch
 from app.pipeline.analyze.platform_analyzer import analyze_platform_batch
@@ -261,6 +263,9 @@ async def run_full_pipeline(
         if fetch_only:
             logger.info("Fetch only mode -- no LLM analysis")
 
+        pipeline_run.current_phase = "fetch"
+        db.commit()
+
         # Validate API keys
         if not settings.DATA_GOV_API_KEY:
             raise RuntimeError(
@@ -296,6 +301,8 @@ async def run_full_pipeline(
             # ========================================
             # PHASE 2: TRANSFORM (members)
             # ========================================
+            pipeline_run.current_phase = "transform"
+            db.commit()
             logger.info("--- Phase 2: TRANSFORM (members) ---")
             senators = normalize_members(raw_members, member_details)
             logger.info("Normalized %d senators", len(senators))
@@ -314,6 +321,9 @@ async def run_full_pipeline(
                     "Filtered to: %s",
                     ", ".join(s["name"] for s in senators),
                 )
+
+            pipeline_run.senators_total = len(senators)
+            db.commit()
 
             # 1c. Dynamically discover significant bills
             logger.info("Discovering significant bills...")
@@ -523,12 +533,18 @@ async def run_full_pipeline(
         # ========================================
         # PHASE 3: ANALYZE
         # ========================================
+        pipeline_run.current_phase = "analyze"
+        db.commit()
         logger.info("--- Phase 3: ANALYZE ---")
 
         # 3a. Classify all key bills using LLM (with partyLeaning)
         logger.info("Classifying key bills...")
-        classified_bills = await classify_all_bills(bills_data, db_session=db)
-        logger.info("Classified %d key bills", len(classified_bills))
+        try:
+            classified_bills = await classify_all_bills(bills_data, db_session=db)
+            logger.info("Classified %d key bills", len(classified_bills))
+        except Exception as e:
+            logger.error("Bill classification failed: %s — continuing with empty bill list", e)
+            classified_bills = []
 
         # Override LLM partyLeaning with computed party split from actual roll call data.
         # This is more reliable than LLM guesses — if 80%+ of one party votes the same
@@ -561,12 +577,57 @@ async def run_full_pipeline(
         # 3a.3 Embed all classified bills in vector database for semantic search
         logger.info("Embedding bills in vector database...")
         all_bills_for_embedding = classified_bills + classified_recent
-        embed_bills(all_bills_for_embedding)
-        logger.info("Embedded %d bills in vector database", len(all_bills_for_embedding))
+        try:
+            embed_bills(all_bills_for_embedding)
+            logger.info("Embedded %d bills in vector database", len(all_bills_for_embedding))
+        except Exception as e:
+            logger.error("Bill embedding failed: %s — vector search will be unavailable this run", e)
 
-        # 3a.3 LLM industry classification for unknown donors
-        logger.info("Classifying unknown industries via LLM...")
-        # Collect all org names classified as "OTHER" across all senators
+        # 3a.3 Hybrid donor classification (FEC metadata → rules → embeddings → LLM)
+        logger.info("Collecting unique donors for hybrid classification...")
+        all_donor_entries: list[dict] = []
+        skip_employers = {
+            "NONE", "N/A", "SELF-EMPLOYED", "SELF EMPLOYED", "RETIRED",
+            "NOT EMPLOYED", "SELF", "HOMEMAKER", "INFORMATION REQUESTED",
+            "STUDENT", "UNEMPLOYED", "DISABLED",
+        }
+        for senator in senators:
+            fec = fec_data.get(senator["id"])
+            if not fec:
+                continue
+            for r in fec.get("pacReceipts") or []:
+                name = r.get("contributor_name") or ""
+                if not name:
+                    committee = r.get("committee") or {}
+                    name = committee.get("name", "")
+                if name and name != "Unknown":
+                    all_donor_entries.append({
+                        "name": name,
+                        "amount": r.get("contribution_receipt_amount", 0) or 0,
+                        "fec_receipt": r,
+                    })
+            for r in fec.get("receipts") or []:
+                employer = (r.get("contributor_employer") or "").strip()
+                if employer and employer.upper() not in skip_employers:
+                    all_donor_entries.append({
+                        "name": employer,
+                        "amount": r.get("contribution_receipt_amount", 0) or 0,
+                    })
+            for c in fec.get("aggregated") or []:
+                name = c.get("contributor_name") or "Unknown"
+                if name and name != "Unknown":
+                    all_donor_entries.append({
+                        "name": name,
+                        "amount": c.get("total", 0) or 0,
+                    })
+
+        ai_classifications: dict[str, dict] = {}
+        if all_donor_entries:
+            ai_classifications = await classify_donors_hybrid(
+                all_donor_entries, db_session=db
+            )
+
+        # Collect all org names classified as "OTHER" for LLM reclassification
         all_other_orgs: set[str] = set()
 
         # 3b. Prepare senator data for batch LLM analysis
@@ -575,7 +636,6 @@ async def run_full_pipeline(
         success_count = 0
         fail_count = 0
 
-        # Build per-senator data (finance + votes) without LLM calls
         senator_prepared: list[dict] = []
         for senator in senators:
             try:
@@ -587,6 +647,8 @@ async def run_full_pipeline(
                         fec.get("receipts") or [],
                         fec.get("pacReceipts") or [],
                         fec.get("aggregated") or [],
+                        ai_classifications=ai_classifications,
+                        db_session=db,
                     )
                     # Collect "OTHER" industries for LLM reclassification
                     for ind in funding.get("industryBreakdown", []):
@@ -598,6 +660,11 @@ async def run_full_pipeline(
                 # Extract senator's last name for vote matching
                 name_parts = senator["name"].split()
                 last_name = name_parts[-1] if name_parts else ""
+                if not last_name:
+                    logger.warning(
+                        "Senator %s has no parseable last name — vote matching will be skipped",
+                        senator.get("id", "unknown"),
+                    )
 
                 senator_votes: dict[str, str] = {}
                 for bill in classified_bills:
@@ -613,7 +680,7 @@ async def run_full_pipeline(
                             senator_votes[bill["billId"]] = vote
 
                 # Also extract recent roll call votes into the same map so they
-                # contribute to proCorporateVotes in normalize_votes
+                # contribute to stance breakdown in normalize_votes
                 for rc in classified_recent:
                     rc_id = rc.get("billId", "")
                     roll_call_data = recent_rc_map.get(rc_id)
@@ -628,7 +695,7 @@ async def run_full_pipeline(
                             senator_votes[rc_id] = vote
 
                 # Pass both key bills and recent roll calls to normalize_votes
-                # so all tracked votes count toward proCorporateVotes
+                # so all tracked votes contribute to the policy breakdown
                 all_classified = classified_bills + classified_recent
                 voting_record = normalize_votes(
                     senator.get("bioguideId", ""),
@@ -661,16 +728,22 @@ async def run_full_pipeline(
                 fail_count += 1
                 results.append(senator)
 
-        # Reclassify "OTHER" industries using LLM
+        # Reclassify "OTHER" industries using LLM and store in learning store
         if all_other_orgs:
             all_other_orgs.discard("")
             logger.info(
                 "Reclassifying %d unknown industries via LLM...",
                 len(all_other_orgs),
             )
-            reclassified = await classify_unknown_industries(
-                list(all_other_orgs), db_session=db
-            )
+            try:
+                reclassified = await classify_unknown_industries(
+                    list(all_other_orgs), db_session=db
+                )
+                # Store LLM results in learning store for next run
+                store_llm_classifications(reclassified, db)
+            except Exception as e:
+                logger.error("Industry reclassification failed: %s — skipping", e)
+                reclassified = {}
             # Apply reclassifications to prepared senator data
             for prepared in senator_prepared:
                 breakdown = prepared["funding"].get("industryBreakdown", [])
@@ -703,193 +776,166 @@ async def run_full_pipeline(
                     reverse=True,
                 )[:8]
             logger.info(
-                "Reclassified %d/%d industries",
+                "Reclassified %d/%d industries (stored in learning store)",
                 sum(1 for v in reclassified.values() if v != "OTHER"),
                 len(reclassified),
             )
 
-        # Batch senators into groups of 10
-        BATCH_SIZE = 3
-        batches: list[list[dict]] = []
-        for i in range(0, len(senator_prepared), BATCH_SIZE):
-            batches.append(senator_prepared[i : i + BATCH_SIZE])
-        logger.info(
-            "Processing %d senators in %d LLM batches (%d/batch)...",
-            len(senator_prepared),
-            len(batches),
-            BATCH_SIZE,
-        )
+        logger.info("Processing %d senators one at a time...", len(senator_prepared))
 
-        for batch_idx, batch in enumerate(batches):
+        for senator_idx, prepared in enumerate(senator_prepared):
+            senator = prepared["senator"]
+            funding = prepared["funding"]
+            voting_record = prepared["votingRecord"]
+
             logger.info(
-                "Batch %d/%d: %s",
-                batch_idx + 1,
-                len(batches),
-                ", ".join(b["senator"]["name"] for b in batch),
+                "  [%d/%d] %s",
+                senator_idx + 1,
+                len(senator_prepared),
+                senator["name"],
             )
 
-            # Build batch input for analyze_senator_batch
-            batch_input = [
-                {
-                    "senator": b["senator"],
-                    "donors": (b["funding"].get("topDonors") or []),
-                    "keyVotes": (b["votingRecord"].get("keyVotes") or []),
-                }
-                for b in batch
-            ]
-
-            batch_results = await analyze_senator_batch(
-                batch_input, db_session=db
+            all_votes = (voting_record.get("keyVotes") or []) + (
+                voting_record.get("recentVotes") or []
             )
 
-            # 3c. Select key votes for this batch
-            all_votes_per_senator = [
-                (b["votingRecord"].get("keyVotes") or [])
-                + (b["votingRecord"].get("recentVotes") or [])
-                for b in batch
-            ]
-            key_vote_input = [
-                {
-                    "senator": b["senator"],
-                    "allVotes": all_votes_per_senator[i],
-                }
-                for i, b in enumerate(batch)
-            ]
-            key_vote_results = await select_key_votes_batch(
-                key_vote_input, db_session=db
-            )
-
-            # 3d. PAC analysis for this batch
-            pac_input = [
-                {
-                    "senatorId": b["senator"]["id"],
-                    "donors": b["funding"].get("topDonors", []),
-                }
-                for b in batch
-            ]
-            pac_results = await analyze_pacs_batch(pac_input, db_session=db)
-
-            # 3e. Platform analysis for this batch
-            platform_input = [
-                {
-                    "senator": b["senator"],
-                    "allVotes": all_votes_per_senator[i],
-                    "platformText": platform_texts.get(b["senator"]["id"], ""),
-                }
-                for i, b in enumerate(batch)
-            ]
-            platform_results = await analyze_platform_batch(
-                platform_input, db_session=db
-            )
-
-            # Process each senator's result
-            for i, prepared in enumerate(batch):
-                senator = prepared["senator"]
-                funding = prepared["funding"]
-                voting_record = prepared["votingRecord"]
-                analysis = batch_results[i]
-                kv_selection = key_vote_results[i] if i < len(key_vote_results) else {}
-                pac_data = pac_results[i] if i < len(pac_results) else {}
-                platform_data = platform_results[i] if i < len(platform_results) else {}
-
-                try:
-                    # Merge cross-reference analysis into voting record
-                    all_votes = analysis.get("keyVotes") or voting_record["keyVotes"]
-
-                    # Split votes: LLM-selected ones become "key", rest stay as they are
-                    key_vote_ids = set(kv_selection.get("keyVoteIds", []))
-                    reasoning_map = kv_selection.get("reasoning", {})
-
-                    final_key_votes = []
-                    final_recent_votes = list(voting_record.get("recentVotes", []))
-
-                    for v in all_votes:
-                        if v["billId"] in key_vote_ids:
-                            v["voteCategory"] = "key"
-                            v["keyVoteReasoning"] = reasoning_map.get(v["billId"])
-                            final_key_votes.append(v)
-                        else:
-                            v["voteCategory"] = "recent"
-                            final_recent_votes.append(v)
-
-                    # If LLM didn't select any key votes, promote the first 3-5
-                    if not final_key_votes and all_votes:
-                        for v in all_votes[:min(5, len(all_votes))]:
-                            v["voteCategory"] = "key"
-                            final_key_votes.append(v)
-                        final_recent_votes = [
-                            v for v in final_recent_votes
-                            if v["billId"] not in {kv["billId"] for kv in final_key_votes}
-                        ]
-
-                    voting_record["keyVotes"] = final_key_votes
-                    voting_record["recentVotes"] = final_recent_votes
-                    voting_record["votingSummary"] = kv_selection.get("votingSummary", "")
-
-                    lobbying_matches = analysis.get("lobbyingMatches", [])
-
-                    # Calculate scores using the flip-flop score from the batch
-                    temp_senator = {
-                        **senator,
-                        "funding": funding,
-                        "votingRecord": voting_record,
-                        "lobbyingMatches": lobbying_matches,
-                        "campaignPromises": platform_data.get("campaignPromises", []),
+            # 3b. Cross-reference donors with votes (one senator at a time)
+            analysis_results = await analyze_senator_batch(
+                [
+                    {
+                        "senator": senator,
+                        "donors": funding.get("topDonors") or [],
+                        "keyVotes": voting_record.get("keyVotes") or [],
                     }
-                    corruption_score = calculate_scores(
-                        temp_senator,
-                        {"flipFlopScore": analysis.get("flipFlopScore", 25)},
-                    )
+                ],
+                db_session=db,
+            )
+            analysis = analysis_results[0] if analysis_results else {}
 
-                    # Enrich donors with PAC analysis
-                    if pac_data.get("donors"):
-                        funding["topDonors"] = pac_data["donors"]
+            # 3c. Select key votes
+            kv_results = await select_key_votes_batch(
+                [{"senator": senator, "allVotes": all_votes}],
+                db_session=db,
+            )
+            kv_selection = kv_results[0] if kv_results else {}
 
-                    # Assemble final record
-                    result = build_senator(
-                        senator,
-                        funding,
-                        voting_record,
-                        lobbying_matches,
-                        corruption_score,
-                    )
+            # 3d. PAC analysis
+            pac_results = await analyze_pacs_batch(
+                [{"senatorId": senator["id"], "donors": funding.get("topDonors", [])}],
+                db_session=db,
+            )
+            pac_data = pac_results[0] if pac_results else {}
 
-                    # Add platform analysis
-                    result["campaignPromises"] = platform_data.get("campaignPromises", [])
-                    result["platformSummary"] = platform_data.get("platformSummary", "")
+            # 3e. Platform analysis
+            platform_results = await analyze_platform_batch(
+                [
+                    {
+                        "senator": senator,
+                        "allVotes": all_votes,
+                        "platformText": platform_texts.get(senator["id"], ""),
+                    }
+                ],
+                db_session=db,
+            )
+            platform_data = platform_results[0] if platform_results else {}
 
-                    results.append(result)
-                    success_count += 1
+            try:
+                # Merge cross-reference analysis into voting record
+                all_votes = analysis.get("keyVotes") or voting_record["keyVotes"]
 
-                    # Write immediately so the UI reflects progress batch-by-batch
-                    upsert_senator(db, result)
+                # Split votes: LLM-selected ones become "key", rest stay as they are
+                key_vote_ids = set(kv_selection.get("keyVoteIds", []))
+                reasoning_map = kv_selection.get("reasoning", {})
 
-                    weighted_score = round(
-                        corruption_score["constituentFunding"] * 0.3
-                        + corruption_score["promiseFulfillment"] * 0.3
-                        + corruption_score["independenceIndex"] * 0.2
-                        + corruption_score["donorDiversity"] * 0.1
-                        + corruption_score["accountability"] * 0.1
-                    )
-                    logger.info(
-                        '  %s: score %d/100 -- "%s"',
-                        senator["name"],
-                        weighted_score,
-                        nickname,
-                    )
-                except Exception as e:
-                    logger.error(
-                        "  Failed for %s: %s", senator["name"], str(e)
-                    )
-                    fail_count += 1
-                    results.append(senator)
+                final_key_votes = []
+                final_recent_votes = list(voting_record.get("recentVotes", []))
 
-            # Commit after each batch so the UI reflects progress in real time
-            db.commit()
+                for v in all_votes:
+                    if v["billId"] in key_vote_ids:
+                        v["voteCategory"] = "key"
+                        v["keyVoteReasoning"] = reasoning_map.get(v["billId"])
+                        final_key_votes.append(v)
+                    else:
+                        v["voteCategory"] = "recent"
+                        final_recent_votes.append(v)
+
+                # If LLM didn't select any key votes, promote the first 3-5
+                if not final_key_votes and all_votes:
+                    for v in all_votes[:min(5, len(all_votes))]:
+                        v["voteCategory"] = "key"
+                        final_key_votes.append(v)
+                    final_recent_votes = [
+                        v for v in final_recent_votes
+                        if v["billId"] not in {kv["billId"] for kv in final_key_votes}
+                    ]
+
+                voting_record["keyVotes"] = final_key_votes
+                voting_record["recentVotes"] = final_recent_votes
+                voting_record["votingSummary"] = kv_selection.get("votingSummary", "")
+
+                lobbying_matches = analysis.get("lobbyingMatches", [])
+
+                # Calculate scores
+                temp_senator = {
+                    **senator,
+                    "funding": funding,
+                    "votingRecord": voting_record,
+                    "lobbyingMatches": lobbying_matches,
+                    "campaignPromises": platform_data.get("campaignPromises", []),
+                }
+                corruption_score = calculate_scores(
+                    temp_senator,
+                    {"flipFlopScore": analysis.get("flipFlopScore", 25)},
+                )
+
+                # Enrich donors with PAC analysis
+                if pac_data.get("donors"):
+                    funding["topDonors"] = pac_data["donors"]
+
+                # Assemble final record
+                result = build_senator(
+                    senator,
+                    funding,
+                    voting_record,
+                    lobbying_matches,
+                    corruption_score,
+                )
+
+                # Add platform and nickname
+                result["campaignPromises"] = platform_data.get("campaignPromises", [])
+                result["platformSummary"] = platform_data.get("platformSummary", "")
+                result["punkNickname"] = analysis.get("punkNickname", "TBD")
+
+                results.append(result)
+                success_count += 1
+
+                # Write immediately so the UI reflects live progress
+                upsert_senator(db, result)
+                pipeline_run.senators_processed = success_count
+                db.commit()
+
+                weighted_score = round(
+                    corruption_score["constituentFunding"] * 0.3
+                    + corruption_score["promiseFulfillment"] * 0.3
+                    + corruption_score["independenceIndex"] * 0.2
+                    + corruption_score["donorDiversity"] * 0.1
+                    + corruption_score["accountability"] * 0.1
+                )
+                logger.info(
+                    '    score %d/100 | nickname: %s',
+                    weighted_score,
+                    result["punkNickname"],
+                )
+            except Exception as e:
+                logger.error("  Failed for %s: %s", senator["name"], str(e))
+                fail_count += 1
+                results.append(senator)
 
         # ========================================
         # PHASE 4: FINALIZE
         # ========================================
+        pipeline_run.current_phase = "finalize"
+        db.commit()
         logger.info("--- Phase 4: FINALIZE ---")
 
         llm_stats = get_llm_stats()

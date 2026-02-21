@@ -1,19 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { KeyVote } from "@/types/senator";
+import { KeyVote, VotingRecord as VotingRecordType } from "@/types/senator";
 import { formatCurrency } from "@/lib/formatting";
 
 interface VotingRecordProps {
-  totalVotes: number;
-  proCorporateVotes: number;
-  proConsumerVotes: number;
-  votedWithPartyCount: number;
-  votedAgainstPartyCount: number;
-  partyLoyaltyPct: number;
-  votingSummary: string;
-  recentVotes: KeyVote[];
-  keyVotes: KeyVote[];
+  votingRecord: VotingRecordType;
 }
 
 const PARTY_BADGE: Record<string, { label: string; className: string }> = {
@@ -69,7 +61,6 @@ function VoteCard({
 }) {
   const [expanded, setExpanded] = useState(false);
 
-  // Get color-coded left border based on party alignment
   const getPartyBorder = (leaning: string | null) => {
     if (leaning === "R") return "border-l-4 border-l-rep-red/50";
     if (leaning === "D") return "border-l-4 border-l-dem-blue/50";
@@ -86,7 +77,6 @@ function VoteCard({
       {vote.vote !== "Not Voting" && (
         <>
           <PartyAlignmentBadge votedWithParty={vote.votedWithParty} />
-          {/* Policy stance badge - shows if senator voted with or against the bill's stance */}
           {vote.stanceVote && vote.policyArea !== "PROCEDURAL" && (
             <span
               className={`text-[10px] px-1.5 py-0.5 border ${
@@ -96,7 +86,7 @@ function VoteCard({
               }`}
               title={vote.vote === vote.stanceVote ? `Voted for ${vote.stance}` : `Voted against ${vote.stance}`}
             >
-              {vote.stance.toUpperCase().replace(/-/g, " ")}
+              {vote.policyArea}
             </span>
           )}
         </>
@@ -140,15 +130,26 @@ function VoteCard({
             </div>
           )}
 
-          {/* Policy area and impacted groups */}
           {vote.policyArea && vote.policyArea !== "PROCEDURAL" && (
             <div className="bg-neon-yellow/5 border border-neon-yellow/20 p-2">
-              <div className="text-xs text-neon-yellow/60 mb-1">
-                POLICY AREA: {vote.policyArea}
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs text-neon-yellow/60">
+                  POLICY: {vote.policyArea}
+                </span>
+                {vote.stance && (
+                  <span className="text-[10px] text-neon-yellow/40">
+                    STANCE: {vote.stance}
+                  </span>
+                )}
               </div>
               {vote.impactedGroups && vote.impactedGroups.length > 0 && (
                 <div className="text-xs text-matrix-green/70">
-                  Impacted groups: {vote.impactedGroups.join(", ")}
+                  Impacted: {vote.impactedGroups.join(", ")}
+                </div>
+              )}
+              {vote.affectedIndustries && vote.affectedIndustries.length > 0 && (
+                <div className="text-xs text-neon-pink/60 mt-1">
+                  Industries: {vote.affectedIndustries.join(", ").replace(/_/g, " ")}
                 </div>
               )}
             </div>
@@ -156,14 +157,18 @@ function VoteCard({
 
           <p className="text-matrix-green/70">{vote.description}</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
-            <div className="bg-red-500/5 border border-red-500/20 p-2">
-              <div className="text-xs text-red-500/60 mb-1">CORPORATE INTEREST</div>
-              <div className="text-xs text-red-400">{vote.corporateInterest}</div>
-            </div>
-            <div className="bg-neon-cyan/5 border border-neon-cyan/20 p-2">
-              <div className="text-xs text-neon-cyan/60 mb-1">PUBLIC IMPACT</div>
-              <div className="text-xs text-neon-cyan/80">{vote.publicImpact}</div>
-            </div>
+            {vote.corporateInterest && (
+              <div className="bg-red-500/5 border border-red-500/20 p-2">
+                <div className="text-xs text-red-500/60 mb-1">INDUSTRY INTEREST</div>
+                <div className="text-xs text-red-400">{vote.corporateInterest}</div>
+              </div>
+            )}
+            {vote.publicImpact && (
+              <div className="bg-neon-cyan/5 border border-neon-cyan/20 p-2">
+                <div className="text-xs text-neon-cyan/60 mb-1">PUBLIC IMPACT</div>
+                <div className="text-xs text-neon-cyan/80">{vote.publicImpact}</div>
+              </div>
+            )}
           </div>
           {vote.relevantDonors.length > 0 && (
             <div className="bg-neon-pink/5 border border-neon-pink/20 p-2">
@@ -181,19 +186,69 @@ function VoteCard({
   );
 }
 
-export default function VotingRecord({
-  totalVotes,
-  proCorporateVotes,
-  partyLoyaltyPct,
-  votingSummary,
-  recentVotes,
-  keyVotes,
-}: VotingRecordProps) {
-  const corpPercent = totalVotes > 0 ? Math.round((proCorporateVotes / totalVotes) * 100) : 0;
+function PolicyBreakdownChart({ votingRecord }: { votingRecord: VotingRecordType }) {
+  const breakdown = votingRecord.policyBreakdown || [];
+  if (breakdown.length === 0) return null;
+
+  const maxVotes = Math.max(...breakdown.map((b) => b.totalVotes), 1);
+
+  return (
+    <div className="terminal-window p-3">
+      <div className="text-xs text-neon-cyan/60 mb-2 font-pixel">VOTES BY POLICY AREA</div>
+      <div className="space-y-1.5">
+        {breakdown.map((area) => {
+          const withPct = area.totalVotes > 0 ? Math.round((area.withStance / area.totalVotes) * 100) : 0;
+          return (
+            <div key={area.policyArea} className="text-xs">
+              <div className="flex justify-between mb-0.5">
+                <span className="text-matrix-green/70">{area.policyArea}</span>
+                <span className="text-matrix-green/40">
+                  {area.totalVotes} votes
+                </span>
+              </div>
+              <div className="h-2 bg-matrix-dark-green/30 border border-matrix-green/10 flex overflow-hidden">
+                <div
+                  className="h-full bg-neon-yellow/60"
+                  style={{ width: `${(area.withStance / maxVotes) * 100}%` }}
+                  title={`${area.withStance} with stance (${withPct}%)`}
+                />
+                <div
+                  className="h-full bg-neon-cyan/40"
+                  style={{ width: `${(area.againstStance / maxVotes) * 100}%` }}
+                  title={`${area.againstStance} against stance`}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex gap-4 mt-2 text-[10px] text-matrix-green/30">
+        <span className="flex items-center gap-1">
+          <span className="inline-block w-2 h-2 bg-neon-yellow/60" /> with stance
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block w-2 h-2 bg-neon-cyan/40" /> against stance
+        </span>
+      </div>
+    </div>
+  );
+}
+
+export default function VotingRecord({ votingRecord }: VotingRecordProps) {
+  const {
+    totalVotes,
+    scoreableVotes,
+    donorAlignedVotes,
+    partyLoyaltyPct,
+    votingSummary,
+    recentVotes,
+    keyVotes,
+  } = votingRecord;
+
+  const donorAlignedPct = scoreableVotes > 0 ? Math.round((donorAlignedVotes / scoreableVotes) * 100) : 0;
 
   return (
     <div className="space-y-8">
-      {/* Summary Stats */}
       <div>
         <div className="flex items-baseline justify-between mb-3">
           <h3 className="text-lg text-neon-cyan neon-cyan">{">"} VOTING RECORD</h3>
@@ -207,7 +262,7 @@ export default function VotingRecord({
             <div className="text-xl font-pixel text-matrix-green">
               {totalVotes.toLocaleString()}
             </div>
-            <div className="text-matrix-green/40 text-xs">TOTAL VOTES</div>
+            <div className="text-matrix-green/40 text-xs">TOTAL TRACKED</div>
           </div>
           <div className="terminal-window p-3">
             <div className="text-xl font-pixel text-neon-cyan">{Math.round(partyLoyaltyPct)}%</div>
@@ -215,19 +270,22 @@ export default function VotingRecord({
             <div className="text-[10px] text-matrix-green/25">votes with party line</div>
           </div>
           <div className="terminal-window p-3">
-            <div className="text-xl font-pixel text-neon-pink">{corpPercent}%</div>
-            <div className="text-matrix-green/40 text-xs">INDUSTRY-ALIGNED</div>
-            <div className="text-[10px] text-matrix-green/25">favored corporate interests</div>
+            <div className="text-xl font-pixel text-neon-yellow">{donorAlignedPct}%</div>
+            <div className="text-matrix-green/40 text-xs">DONOR-ALIGNED</div>
+            <div className="text-[10px] text-matrix-green/25">
+              {donorAlignedVotes} of {scoreableVotes} scoreable
+            </div>
           </div>
           <div className="terminal-window p-3">
-            <div className="text-xl font-pixel text-matrix-green">{100 - corpPercent}%</div>
-            <div className="text-matrix-green/40 text-xs">CONSTITUENT-ALIGNED</div>
-            <div className="text-[10px] text-matrix-green/25">favored public interests</div>
+            <div className="text-xl font-pixel text-matrix-green">{100 - donorAlignedPct}%</div>
+            <div className="text-matrix-green/40 text-xs">INDEPENDENT</div>
+            <div className="text-[10px] text-matrix-green/25">voted against donor interests</div>
           </div>
         </div>
       </div>
 
-      {/* Key Votes — Long-Term Summary */}
+      <PolicyBreakdownChart votingRecord={votingRecord} />
+
       {keyVotes.length > 0 && (
         <div>
           <div className="text-xs text-neon-cyan/60 mb-2 font-pixel">
@@ -246,7 +304,6 @@ export default function VotingRecord({
         </div>
       )}
 
-      {/* Recent Votes */}
       {recentVotes.length > 0 && (
         <div>
           <div className="text-xs text-neon-cyan/60 mb-2 font-pixel">

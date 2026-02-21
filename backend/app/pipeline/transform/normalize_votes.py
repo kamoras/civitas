@@ -48,6 +48,8 @@ def normalize_votes(
     """Normalize voting data for a senator.
 
     Combines bill classification data with the senator's actual votes.
+    Produces a nuanced policy-area breakdown instead of a binary
+    pro-corporate/pro-consumer split.
 
     Args:
         bioguide_id: Senator's Bioguide ID.
@@ -56,23 +58,26 @@ def normalize_votes(
         senator_party: Senator's party ("R", "D", "I").
 
     Returns:
-        Normalized voting record matching Senator.votingRecord type.
+        Normalized voting record.
     """
     key_votes: list[dict] = []
-    pro_corporate_votes = 0
-    pro_consumer_votes = 0
     voted_with_party = 0
     voted_against_party = 0
     total_tracked = 0
 
+    # Policy area breakdown: {area: {total, withStance, againstStance}}
+    area_stats: dict[str, dict] = {}
+    # Donor-alignment tracking: how often votes favor bills with industry ties
+    donor_aligned_votes = 0
+    donor_opposed_votes = 0
+
     for bill in bill_classifications:
         vote = senator_votes.get(bill.get("billId", ""))
         if not vote:
-            continue  # Senator didn't vote on this bill
+            continue
 
         total_tracked += 1
 
-        # Normalize vote value
         vote_direction = vote.upper()
         is_yea = vote_direction in ("YEA", "AYE", "YES")
         is_nay = vote_direction in ("NAY", "NO")
@@ -83,26 +88,38 @@ def normalize_votes(
         elif is_nay:
             normalized_vote = "Nay"
 
-        # Determine corporate alignment using proBusinessVote
-        # Skip mixed-classified bills (nominations, procedural votes) — they
-        # don't represent a meaningful pro-corporate/pro-consumer stance.
-        classification = bill.get("classification", "mixed")
-        pro_business_vote = bill.get("proBusinessVote")
-        if (
-            pro_business_vote
-            and normalized_vote != "Not Voting"
-            and classification != "mixed"
-        ):
-            voted_pro_business = (
-                (normalized_vote == "Yea" and pro_business_vote == "Yea")
-                or (normalized_vote == "Nay" and pro_business_vote == "Nay")
-            )
-            if voted_pro_business:
-                pro_corporate_votes += 1
-            else:
-                pro_consumer_votes += 1
+        policy_area = bill.get("policyArea", "PROCEDURAL")
+        stance_vote = bill.get("stanceVote")
 
-        # Determine party alignment
+        # Track policy area breakdown for non-procedural, scoreable votes
+        if (
+            stance_vote
+            and normalized_vote != "Not Voting"
+            and policy_area != "PROCEDURAL"
+        ):
+            if policy_area not in area_stats:
+                area_stats[policy_area] = {
+                    "total": 0, "withStance": 0, "againstStance": 0,
+                }
+            area_stats[policy_area]["total"] += 1
+
+            voted_with_stance = normalized_vote == stance_vote
+            if voted_with_stance:
+                area_stats[policy_area]["withStance"] += 1
+            else:
+                area_stats[policy_area]["againstStance"] += 1
+
+            # Donor-alignment: votes on bills that have identifiable industry
+            # stakeholders. This replaces the old binary corporate/consumer count.
+            affected_industries = bill.get("affectedIndustries") or []
+            corporate_interest = bill.get("corporateInterest", "")
+            if bool(affected_industries) or bool(corporate_interest):
+                if voted_with_stance:
+                    donor_aligned_votes += 1
+                else:
+                    donor_opposed_votes += 1
+
+        # Party alignment
         party_leaning = bill.get("partyLeaning")
         party_aligned = _determine_party_alignment(
             senator_party, normalized_vote, party_leaning
@@ -117,47 +134,58 @@ def normalize_votes(
             "billId": bill.get("billId", ""),
             "date": bill.get("date", ""),
             "vote": normalized_vote,
-            # New policy stance fields
-            "policyArea": bill.get("policyArea", "PROCEDURAL"),
+            "policyArea": policy_area,
             "stance": bill.get("stance", "neutral"),
-            "stanceVote": bill.get("stanceVote"),
+            "stanceVote": stance_vote,
             "impactedGroups": bill.get("impactedGroups", []),
-            # Legacy fields (kept during transition)
-            "proBusinessVote": pro_business_vote or None,
-            "classification": bill.get("classification", "mixed"),
+            "affectedIndustries": bill.get("affectedIndustries", []),
             "description": bill.get("description", ""),
             "corporateInterest": bill.get("corporateInterest", ""),
             "publicImpact": bill.get("publicImpact", ""),
-            "relevantDonors": [],  # Populated by cross-reference
+            "relevantDonors": [],
             "relevantDonorTotal": 0,
             "partyLeaning": party_leaning,
             "votedWithParty": party_aligned,
-            "voteCategory": "recent",  # Default; LLM promotes some to "key"
+            "voteCategory": "recent",
             "keyVoteReasoning": None,
         })
 
-    # Count votes where proBusinessVote was defined (scoreable votes only)
-    scoreable = pro_corporate_votes + pro_consumer_votes
-
     party_total = voted_with_party + voted_against_party
-    # Default to 100 when no party-leaning bills exist in the dataset —
-    # absence of evidence of disloyalty is not evidence of disloyalty.
     party_loyalty_pct = (
         round(voted_with_party / party_total * 100, 1)
         if party_total > 0
         else 100.0
     )
 
+    # Build policy area breakdown list sorted by vote count
+    policy_breakdown = sorted(
+        [
+            {
+                "policyArea": area,
+                "totalVotes": stats["total"],
+                "withStance": stats["withStance"],
+                "againstStance": stats["againstStance"],
+            }
+            for area, stats in area_stats.items()
+        ],
+        key=lambda x: x["totalVotes"],
+        reverse=True,
+    )
+
+    scoreable = donor_aligned_votes + donor_opposed_votes
+
     return {
-        "totalVotes": scoreable,
-        "proCorporateVotes": pro_corporate_votes,
-        "proConsumerVotes": pro_consumer_votes,
+        "totalVotes": total_tracked,
+        "scoreableVotes": scoreable,
+        "donorAlignedVotes": donor_aligned_votes,
+        "donorOpposedVotes": donor_opposed_votes,
+        "policyBreakdown": policy_breakdown,
         "votedWithPartyCount": voted_with_party,
         "votedAgainstPartyCount": voted_against_party,
         "partyLoyaltyPct": party_loyalty_pct,
-        "votingSummary": "",  # Populated by vote_summarizer
-        "recentVotes": [],  # Populated after key vote selection
-        "keyVotes": key_votes,  # All votes here initially; split later
+        "votingSummary": "",
+        "recentVotes": [],
+        "keyVotes": key_votes,
     }
 
 
@@ -268,9 +296,9 @@ def compute_party_split(roll_call_data: dict) -> str | None:
     r_yea_pct = r_yea / r_total
     d_yea_pct = d_yea / d_total
 
-    if r_yea_pct >= 0.75 and d_yea_pct <= 0.25:
+    if r_yea_pct > 0.75 and d_yea_pct <= 0.25:
         return "R"
-    if d_yea_pct >= 0.75 and r_yea_pct <= 0.25:
+    if d_yea_pct > 0.75 and r_yea_pct <= 0.25:
         return "D"
     return "bipartisan"
 

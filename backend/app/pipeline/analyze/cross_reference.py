@@ -20,9 +20,7 @@ async def analyze_senator_batch(
     batch: list[dict], db_session: Any | None = None
 ) -> list[dict]:
     """
-    Batch-analyze multiple senators in a single LLM call to stay within RPD limits.
-    Each senator's data is included in one big prompt, and the LLM returns an array
-    of results.
+    Analyze senators individually (one LLM call per senator).
 
     Args:
         batch: List of dicts with keys: senator, donors, keyVotes.
@@ -75,6 +73,29 @@ async def analyze_senator_batch(
     ]
 
 
+async def _generate_punk_nickname(
+    senator: dict,
+    db_session: Any | None,
+) -> str:
+    """Generate a punk/irreverent nickname for a senator based on their persona."""
+    result = await call_llm(
+        prompt_version="punk-nickname-v1",
+        system_prompt="Satirical political commentator. Return ONLY valid JSON.",
+        user_prompt=(
+            f"Give Senator {senator['name']} ({senator['party']}-{senator['state']}) "
+            f"a punk/irreverent nickname that captures their political persona. "
+            f"Examples: 'The Corporate Cowboy', 'Wall Street\\'s BFF', 'Big Oil\\'s Cheerleader', 'The Rubber Stamp'. "
+            f"Return JSON: {{\"nickname\": \"<2-5 word nickname>\"}}"
+        ),
+        cache_key={"senatorId": senator["id"], "v": 1},
+        db_session=db_session,
+        max_tokens=30,
+    )
+    if isinstance(result, dict) and result.get("nickname"):
+        return str(result["nickname"]).strip()[:50]
+    return "TBD"
+
+
 async def analyze_senator(
     senator: dict,
     donors: list[dict],
@@ -82,16 +103,19 @@ async def analyze_senator(
     db_session: Any | None = None,
 ) -> dict:
     """
-    Analyze a single senator with a compact prompt sized for gemma2:2b (4096 ctx).
+    Analyze a single senator with a compact prompt sized for local LLM context.
     Uses vector search to find bills semantically relevant to each donor's industry.
 
-    Returns dict with keyVotes, lobbyingMatches, flipFlopScore.
+    Returns dict with keyVotes, lobbyingMatches, flipFlopScore, punkNickname.
     """
+    punk_nickname = await _generate_punk_nickname(senator, db_session)
+
     if not donors and not key_votes:
         return {
             "keyVotes": key_votes,
             "lobbyingMatches": [],
             "flipFlopScore": 25,
+            "punkNickname": punk_nickname,
         }
 
     # Exclude the senator's own affiliated PACs — they are not external industry lobbyists
@@ -201,6 +225,7 @@ Do NOT include matches for: judicial/executive nominations, procedural votes, or
             "keyVotes": key_votes,
             "lobbyingMatches": [],
             "flipFlopScore": 25,
+            "punkNickname": punk_nickname,
         }
 
     # Clean lobbying matches
@@ -231,4 +256,5 @@ Do NOT include matches for: judicial/executive nominations, procedural votes, or
         "keyVotes": key_votes,
         "lobbyingMatches": lobbying_matches,
         "flipFlopScore": flip_flop_score,
+        "punkNickname": punk_nickname,
     }

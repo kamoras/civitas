@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { IndustryDonation, Donor } from "@/types/senator";
-import { INDUSTRIES } from "@/data/industries";
+import { useIndustries } from "@/hooks/useConfig";
 import { formatCurrency } from "@/lib/formatting";
 
 interface IndustryBreakdownProps {
@@ -12,10 +12,10 @@ interface IndustryBreakdownProps {
 
 export default function IndustryBreakdown({ industries, donors }: IndustryBreakdownProps) {
   const [expandedIndustry, setExpandedIndustry] = useState<string | null>(null);
+  const industryMap = useIndustries();
   const sorted = [...industries].sort((a, b) => b.total - a.total);
   const maxTotal = sorted[0]?.total || 1;
 
-  // Helper to get donors for a specific industry
   const getDonorsForIndustry = (industryCode: string): Donor[] => {
     return donors
       .filter((d) => d.industry === industryCode)
@@ -30,7 +30,9 @@ export default function IndustryBreakdown({ industries, donors }: IndustryBreakd
       </div>
       <div className="space-y-2">
         {sorted.map((ind) => {
-          const info = INDUSTRIES[ind.industry];
+          const info = industryMap[ind.industry];
+          const displayName = info?.name || ind.name || ind.industry.replace(/_/g, " ");
+          const color = info?.color || "#444444";
           const barWidth = Math.round((ind.total / maxTotal) * 100);
           const isExpanded = expandedIndustry === ind.industry;
           const industryDonors = getDonorsForIndustry(ind.industry);
@@ -48,7 +50,7 @@ export default function IndustryBreakdown({ industries, donors }: IndustryBreakd
                       {isExpanded ? "[-]" : "[+]"}
                     </span>
                   )}
-                  {info?.name || ind.name}
+                  {displayName}
                 </span>
                 <span className="text-matrix-green/50">
                   {formatCurrency(ind.total)} ({ind.percentage}%)
@@ -59,13 +61,12 @@ export default function IndustryBreakdown({ industries, donors }: IndustryBreakd
                   className="h-full transition-all duration-500"
                   style={{
                     width: `${barWidth}%`,
-                    backgroundColor: info?.color || "#00ff41",
-                    boxShadow: `0 0 8px ${info?.color || "#00ff41"}40`,
+                    backgroundColor: color,
+                    boxShadow: `0 0 8px ${color}40`,
                   }}
                 />
               </div>
 
-              {/* Expanded donor breakdown */}
               {isExpanded && industryDonors.length > 0 && (
                 <div className="ml-4 mb-3 space-y-1 border-l-2 border-matrix-green/20 pl-3">
                   {industryDonors.map((donor) => (

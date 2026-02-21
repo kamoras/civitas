@@ -1,21 +1,24 @@
 import { Senator } from "@/types/senator";
 
-// Weights for the Representation Scorecard (higher = better representative)
-const WEIGHTS = {
-  constituentFunding: 0.3,    // 30% — small donors vs PAC money
-  promiseFulfillment: 0.3,    // 30% — votes vs stated platform
-  independenceIndex: 0.2,     // 20% — independence from lobbyists
-  donorDiversity: 0.1,        // 10% — breadth of funding sources
-  accountability: 0.1,        // 10% — institutional accountability
+const DEFAULT_WEIGHTS: Record<string, number> = {
+  constituentFunding: 0.25,
+  promiseFulfillment: 0.20,
+  independenceIndex: 0.25,
+  donorDiversity: 0.10,
+  accountability: 0.20,
 };
 
-export function calculateOverallScore(breakdown: Senator["representationScore"]): number {
+export function calculateOverallScore(
+  breakdown: Senator["representationScore"],
+  weights?: Record<string, number>,
+): number {
+  const w = weights ?? DEFAULT_WEIGHTS;
   return Math.round(
-    breakdown.constituentFunding * WEIGHTS.constituentFunding +
-      breakdown.promiseFulfillment * WEIGHTS.promiseFulfillment +
-      breakdown.independenceIndex * WEIGHTS.independenceIndex +
-      breakdown.donorDiversity * WEIGHTS.donorDiversity +
-      breakdown.accountability * WEIGHTS.accountability
+    breakdown.constituentFunding * (w.constituentFunding ?? 0.25) +
+      breakdown.promiseFulfillment * (w.promiseFulfillment ?? 0.20) +
+      breakdown.independenceIndex * (w.independenceIndex ?? 0.25) +
+      breakdown.donorDiversity * (w.donorDiversity ?? 0.10) +
+      breakdown.accountability * (w.accountability ?? 0.20)
   );
 }
 
@@ -27,7 +30,6 @@ export function getScoreLabel(score: number): string {
   return "DEEPLY CAPTURED";
 }
 
-// Higher score = better representation → green is good, red is bad
 export function getScoreColor(score: number): string {
   if (score >= 81) return "text-matrix-green";
   if (score >= 61) return "text-neon-cyan";

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSenatorsByState } from "@/hooks/useSenators";
 import StateSelector from "./StateSelector";
@@ -11,9 +12,19 @@ export default function CheckerClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const selectedState = searchParams.get("state") ?? "";
+  const targetSenator = searchParams.get("senator") ?? "";
 
   const { senators: stateSenators, loading, error } = useSenatorsByState(selectedState);
   const stateName = STATES.find((s) => s.code === selectedState)?.name || selectedState;
+
+  useEffect(() => {
+    if (!loading && targetSenator && stateSenators.length > 0) {
+      const el = document.getElementById(`senator-${targetSenator}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+  }, [loading, targetSenator, stateSenators]);
 
   const handleSelect = (stateCode: string) => {
     const params = new URLSearchParams(searchParams.toString());

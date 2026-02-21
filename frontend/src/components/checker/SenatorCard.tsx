@@ -35,7 +35,7 @@ export default function SenatorCard({ senator }: SenatorCardProps) {
     pacPercentRaw > 0 && pacPercentRaw < 1 ? "<1" : Math.round(pacPercentRaw).toString();
 
   return (
-    <div className={`terminal-window border-t-2 ${PARTY_BORDER[senator.party]}`}>
+    <div id={`senator-${senator.id}`} className={`terminal-window border-t-2 ${PARTY_BORDER[senator.party]}`}>
       <div className="terminal-titlebar">
         <div className="terminal-dot red" />
         <div className="terminal-dot yellow" />
@@ -123,7 +123,7 @@ export default function SenatorCard({ senator }: SenatorCardProps) {
                 </tr>
               </thead>
               <tbody>
-                {senator.funding.topDonors.map((donor, i) => (
+                {senator.funding.topDonors.slice(0, 10).map((donor, i) => (
                   <tr
                     key={donor.name}
                     className={`border-b border-matrix-green/5 ${
@@ -168,17 +168,7 @@ export default function SenatorCard({ senator }: SenatorCardProps) {
         <IndustryBreakdown industries={senator.funding.industryBreakdown} donors={senator.funding.topDonors} />
 
         {/* Voting Record */}
-        <VotingRecord
-          totalVotes={senator.votingRecord.totalVotes}
-          proCorporateVotes={senator.votingRecord.proCorporateVotes}
-          proConsumerVotes={senator.votingRecord.proConsumerVotes}
-          votedWithPartyCount={senator.votingRecord.votedWithPartyCount}
-          votedAgainstPartyCount={senator.votingRecord.votedAgainstPartyCount}
-          partyLoyaltyPct={senator.votingRecord.partyLoyaltyPct}
-          votingSummary={senator.votingRecord.votingSummary}
-          recentVotes={senator.votingRecord.recentVotes}
-          keyVotes={senator.votingRecord.keyVotes}
-        />
+        <VotingRecord votingRecord={senator.votingRecord} />
 
         {/* Campaign Promises vs. Votes */}
         <PlatformTracker

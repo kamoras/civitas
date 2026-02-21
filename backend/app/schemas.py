@@ -44,19 +44,23 @@ class RepresentationScoreSchema(CamelModel):
     accountability: float
 
 
+class PolicyBreakdownSchema(CamelModel):
+    policy_area: str
+    total_votes: int
+    with_stance: int
+    against_stance: int
+
+
 class KeyVoteSchema(CamelModel):
     bill_name: str
     bill_id: str
     date: str
     vote: Literal["Yea", "Nay", "Not Voting"]
-    # New policy stance fields
     policy_area: str = "PROCEDURAL"
     stance: str = "neutral"
     stance_vote: Literal["Yea", "Nay"] | None = None
     impacted_groups: list[str] = []
-    # Legacy fields (kept for backward compatibility during transition)
-    pro_business_vote: Literal["Yea", "Nay"] | None = None
-    classification: str = "mixed"  # Changed from Literal to str for flexibility
+    affected_industries: list[str] = []
     description: str
     corporate_interest: str
     public_impact: str
@@ -78,8 +82,10 @@ class FundingSchema(CamelModel):
 
 class VotingRecordSchema(CamelModel):
     total_votes: int
-    pro_corporate_votes: int
-    pro_consumer_votes: int
+    scoreable_votes: int = 0
+    donor_aligned_votes: int = 0
+    donor_opposed_votes: int = 0
+    policy_breakdown: list[PolicyBreakdownSchema] = []
     voted_with_party_count: int = 0
     voted_against_party_count: int = 0
     party_loyalty_pct: float = 0.0
@@ -143,7 +149,9 @@ class PipelineRunSchema(CamelModel):
     started_at: datetime
     completed_at: datetime | None = None
     status: str
+    current_phase: str | None = None
     senators_processed: int
+    senators_total: int = 0
     senators_failed: int
     bills_classified: int
     llm_calls: int

@@ -1,415 +1,247 @@
-"""Classify an organization/employer name into one of the IndustryCode values.
+"""Hybrid industry classifier using a tiered strategy.
 
-Uses a static lookup table for known organizations, with keyword fallbacks.
-For unknown organizations, this returns "OTHER". The LLM batch classifier
-can be used to reclassify unknowns.
+Classification tiers (in priority order):
+1. Learning store lookup (instant, highest confidence)
+2. Sentence-transformer embedding cosine similarity against industry
+   descriptions (fast, no LLM, generalizes to unseen entities)
+3. Returns "OTHER" — the LLM reclassifier in the pipeline handles
+   unknowns in batch and feeds results back into the learning store.
+
+The embedding approach is academically grounded: cosine similarity
+in a dense embedding space is a standard text classification technique
+(cf. sentence-BERT, Reimers & Gurevych 2019). It generalizes far
+better than keyword lists because it captures semantic meaning.
 """
 
 import logging
+from typing import Any
+
+import numpy as np
+from sqlalchemy.orm import Session
+
+from app.models import LearnedClassification
 
 logger = logging.getLogger(__name__)
 
-INDUSTRY_KEYWORDS: dict[str, list[str]] = {
-    "PHARMA": [
-        "pharma",
-        "pfizer",
-        "merck",
-        "johnson & johnson",
-        "abbvie",
-        "eli lilly",
-        "bristol-myers",
-        "novartis",
-        "roche",
-        "sanofi",
-        "astrazeneca",
-        "amgen",
-        "gilead",
-        "biogen",
-        "regeneron",
-        "moderna",
-        "drug",
-        "biotech",
-        "pharmaceutical",
-        "medicine",
-        "health product",
-    ],
-    "INSURANCE": [
-        "insurance",
-        "anthem",
-        "cigna",
-        "humana",
-        "unitedhealth",
-        "aetna",
-        "blue cross",
-        "blue shield",
-        "metlife",
-        "aflac",
-        "progressive",
-        "allstate",
-        "state farm",
-        "underwriter",
-        "actuarial",
-    ],
-    "OIL_GAS": [
-        "oil",
-        "gas",
-        "petroleum",
-        "exxon",
-        "chevron",
-        "conocophillips",
-        "bp",
-        "shell",
-        "halliburton",
-        "schlumberger",
-        "marathon petroleum",
-        "valero",
-        "pipeline",
-        "drilling",
-        "fracking",
-        "fossil fuel",
-        "koch",
-    ],
-    "DEFENSE": [
-        "defense",
-        "lockheed",
-        "raytheon",
-        "boeing",
-        "northrop grumman",
-        "general dynamics",
-        "bae systems",
-        "l3harris",
-        "leidos",
-        "military",
-        "weapons",
-        "aerospace",
-        "missile",
-        "naval",
-        "army",
-        "air force",
-    ],
-    "FINANCE": [
-        "goldman sachs",
-        "morgan stanley",
-        "jpmorgan",
-        "jp morgan",
-        "citigroup",
-        "bank of america",
-        "wells fargo",
-        "blackrock",
-        "citadel",
-        "hedge fund",
-        "investment",
-        "securities",
-        "capital",
-        "financial",
-        "banking",
-        "credit suisse",
-        "deutsche bank",
-        "merrill lynch",
-        "fidelity",
-        "vanguard",
-        "private equity",
-        "venture capital",
-        "wall street",
-        " bank",
-        "bancorp",
-        "bankers",
-        "brokerage",
-        "schwab",
-        "janney",
-        "raymond james",
-        "edward jones",
-        "ameriprise",
-        "truist",
-        "pnc ",
-        "stifel",
-        "baird",
-        "cowen",
-        "piper sandler",
-        "asset management",
-        "wealth management",
-        "portfolio",
-        "fund manager",
-        "credit union",
-        "loan",
-        "lending",
-    ],
-    "REAL_ESTATE": [
-        "real estate",
-        "realtor",
-        "realty",
-        "property",
-        "housing",
-        "mortgage",
-        "homebuilder",
-        "construction developer",
-        "reit",
-        "national association of realtors",
-    ],
-    "TECH": [
-        "google",
-        "alphabet",
-        "meta",
-        "facebook",
-        "apple",
-        "microsoft",
-        "amazon",
-        "oracle",
-        "salesforce",
-        "adobe",
-        "intel",
-        "nvidia",
-        "qualcomm",
-        "ibm",
-        "cisco",
-        "software",
-        "internet",
-        "silicon valley",
-        "data",
-        "cloud",
-        "ai ",
-        "artificial intelligence",
-        "computing",
-    ],
-    "TELECOM": [
-        "at&t",
-        "verizon",
-        "t-mobile",
-        "comcast",
-        "charter",
-        "telecommunications",
-        "telecom",
-        "wireless",
-        "broadband",
-        "cable",
-        "dish network",
-        "sprint",
-    ],
-    "AGRIBUSINESS": [
-        "agribusiness",
-        "agriculture",
-        "farm",
-        "monsanto",
-        "bayer crop",
-        "cargill",
-        "archer daniels",
-        "deere",
-        "john deere",
-        "crop",
-        "cattle",
-        "dairy",
-        "grain",
-        "livestock",
-        "rancher",
-    ],
-    "ENERGY": [
-        "energy",
-        "utility",
-        "utilities",
-        "electric",
-        "power",
-        "duke energy",
-        "southern company",
-        "dominion",
-        "exelon",
-        "nextera",
-        "solar",
-        "wind",
-        "renewable",
-        "nuclear",
-        "coal",
-    ],
-    "CONSTRUCTION": [
-        "construction",
-        "building",
-        "contractor",
-        "engineering",
-        "cement",
-        "infrastructure",
-        "architect",
-    ],
-    "TRANSPORT": [
-        "transport",
-        "airline",
-        "aviation",
-        "railroad",
-        "shipping",
-        "trucking",
-        "logistics",
-        "ups",
-        "fedex",
-        "delta",
-        "united airlines",
-        "american airlines",
-        "southwest airlines",
-    ],
-    "LAWYERS": [
-        "law firm",
-        "attorney",
-        "lawyer",
-        "legal",
-        "litigation",
-        "skadden",
-        "jones day",
-        "kirkland",
-        "latham",
-        "sidley",
-        "sullivan & cromwell",
-        "davis polk",
-        "wilmer",
-        "covington",
-        "hogan lovells",
-        "mayer brown",
-        "dechert",
-        "greenberg traurig",
-        "dentons",
-        " llp",
-        " pllc",
-        "law offices",
-        "law group",
-    ],
-    "LOBBYISTS": [
-        "lobbying",
-        "lobbyist",
-        "government relations",
-        "public affairs",
-        "advocacy",
-        "akin gump",
-        "brownstein",
-    ],
-    "GAMBLING": [
-        "casino",
-        "gambling",
-        "gaming",
-        "las vegas sands",
-        "mgm resorts",
-        "wynn",
-        "caesars",
-        "lottery",
-        "sports betting",
-    ],
-    "GUNS": [
-        "firearm",
-        "gun",
-        "rifle",
-        "nra",
-        "national rifle",
-        "smith & wesson",
-        "remington",
-        "ammunition",
-        "weapons manufacturer",
-    ],
-    "TOBACCO": [
-        "tobacco",
-        "cigarette",
-        "altria",
-        "philip morris",
-        "reynolds",
-        "vaping",
-        "juul",
-        "e-cigarette",
-    ],
-    "CRYPTO": [
-        "crypto",
-        "bitcoin",
-        "blockchain",
-        "coinbase",
-        "binance",
-        "digital currency",
-        "web3",
-        "defi",
-    ],
-    "PRIVATE_PRISON": [
-        "prison",
-        "corrections",
-        "corecivic",
-        "geo group",
-        "detention",
-        "incarceration",
-        "correctional",
-    ],
-    "POLITICAL": [
-        "battleground",
-        " victory",
-        "majority fund",
-        "emily's list",
-        "no labels",
-        "action fund",
-        "victory fund",
-        "senate pac",
-        "problem solvers",
-        "for senate",
-        "for congress",
-        "norpac",
-        "majority pac",
-        "leadership pac",
-        "leadership fund",
-        "political action",
-        "political committee",
-        "election fund",
-        "campaign fund",
-        "grassroots fund",
-        "progressive fund",
-        "conservative fund",
-        "party committee",
-        "political fund",
-        "campaign committee",
-        "reelect",
-        "re-elect",
-        "friends of",
-        "citizens for",
-        "senate coalition",
-        "house coalition",
-    ],
+INDUSTRY_DESCRIPTIONS: dict[str, str] = {
+    "PHARMA": "pharmaceutical drugs biotech medicine vaccines clinical trials drug manufacturing biopharmaceutical Pfizer Merck AbbVie Eli Lilly Johnson & Johnson Novartis Sanofi AstraZeneca Amgen Gilead Moderna Regeneron",
+    "INSURANCE": "insurance underwriting coverage premiums actuarial health insurance property casualty Anthem Cigna Humana UnitedHealth Aetna Blue Cross MetLife Aflac Progressive Allstate",
+    "OIL_GAS": "oil gas petroleum drilling fracking pipeline fossil fuel refinery crude natural gas exploration Exxon Chevron ConocoPhillips BP Shell Halliburton Koch Marathon Valero",
+    "DEFENSE": "defense military weapons aerospace missiles contractors armed forces naval army air force Lockheed Raytheon Boeing Northrop Grumman General Dynamics BAE L3Harris Leidos",
+    "FINANCE": "banking investment securities hedge fund private equity venture capital financial services Wall Street asset management brokerage wealth management credit lending Goldman Sachs Morgan Stanley JPMorgan Citigroup Bank of America Wells Fargo BlackRock Fidelity Vanguard",
+    "REAL_ESTATE": "real estate property housing mortgage realty homebuilder REIT commercial property development National Association of Realtors",
+    "TECH": "technology software internet cloud computing artificial intelligence data silicon valley digital platform Google Alphabet Meta Facebook Apple Microsoft Amazon Oracle Salesforce Intel Nvidia",
+    "TELECOM": "telecommunications wireless broadband cable internet service provider cellular network satellite AT&T Verizon T-Mobile Comcast Charter",
+    "AGRIBUSINESS": "agriculture farming crop livestock dairy grain agribusiness ranching fertilizer seed Monsanto Cargill Archer Daniels Deere John Deere Bayer crop",
+    "ENERGY": "energy utility electric power renewable solar wind nuclear coal generation transmission Duke Energy Dominion Exelon NextEra Southern Company",
+    "CONSTRUCTION": "construction building contractor engineering infrastructure cement architecture development general contractor",
+    "TRANSPORT": "transportation airline aviation railroad shipping trucking logistics freight maritime FedEx UPS Delta United Airlines American Airlines Southwest",
+    "LAWYERS": "law firm attorney legal litigation counsel solicitor legal services LLP PLLC Skadden Jones Day Kirkland Latham Sidley Covington Greenberg",
+    "LOBBYISTS": "lobbying government relations public affairs advocacy political consulting Akin Gump Brownstein",
+    "GAMBLING": "casino gambling gaming sports betting lottery wagering Las Vegas Sands MGM Wynn Caesars",
+    "GUNS": "firearm gun rifle ammunition weapons manufacturer second amendment NRA National Rifle Association Smith & Wesson Remington",
+    "TOBACCO": "tobacco cigarette vaping e-cigarette nicotine smoking Altria Philip Morris Reynolds JUUL",
+    "CRYPTO": "cryptocurrency bitcoin blockchain digital currency decentralized finance web3 Coinbase Binance",
+    "PRIVATE_PRISON": "prison corrections incarceration detention correctional facility CoreCivic GEO Group",
+    "LABOR_UNIONS": "union labor workers organized labor collective bargaining AFL-CIO SEIU Teamsters AFSCME United Auto Workers UAW carpenters electricians plumbers",
+    "EDUCATION": "university college school education academic teaching research higher education",
+    "MEDIA": "media broadcast television news publishing journalism entertainment studio film",
+    "RETAIL": "retail store merchandise consumer goods shopping wholesale distribution",
+    "MANUFACTURING": "manufacturing factory production industrial assembly plant fabrication",
+    "HEALTHCARE": "hospital health clinic medical healthcare nursing patient care physician HCA Kaiser Permanente Mayo Clinic medical center",
+    "POLITICAL": "political party campaign committee victory fund leadership PAC political action election Emily's List Club for Growth DSCC NRSC",
 }
 
-# Pre-compile lowercase keywords for faster matching
-_COMPILED_RULES: list[dict] = [
-    {"industry": industry, "keywords": [k.lower() for k in keywords]}
-    for industry, keywords in INDUSTRY_KEYWORDS.items()
-]
+_embeddings_cache: dict[str, np.ndarray] = {}
+_model_ref = None
+SIMILARITY_THRESHOLD = 0.35
+
+
+def _get_model():
+    """Lazy-load the shared sentence-transformer model."""
+    global _model_ref
+    if _model_ref is None:
+        from app.pipeline.vector_store import get_embedding_model
+        _model_ref = get_embedding_model()
+    return _model_ref
+
+
+def _get_industry_embeddings() -> dict[str, np.ndarray]:
+    """Pre-compute and cache industry description embeddings."""
+    if _embeddings_cache:
+        return _embeddings_cache
+
+    model = _get_model()
+    for industry, description in INDUSTRY_DESCRIPTIONS.items():
+        embedding = model.encode([description], show_progress_bar=False)[0]
+        _embeddings_cache[industry] = embedding / np.linalg.norm(embedding)
+
+    logger.info("Computed embeddings for %d industry descriptions", len(_embeddings_cache))
+    return _embeddings_cache
 
 
 def classify_industry(org_name: str | None) -> str:
-    """Classify an organization name into an IndustryCode.
+    """Classify a single org name by embedding similarity.
+
+    This is the fast path — no DB lookup, no LLM. Uses cosine similarity
+    between the org name embedding and pre-computed industry embeddings.
 
     Args:
         org_name: Organization or employer name.
 
     Returns:
-        IndustryCode enum value string, or "OTHER".
+        Industry code string, or "OTHER" if below similarity threshold.
     """
-    if not org_name:
+    if not org_name or len(org_name.strip()) < 2:
         return "OTHER"
-    lower = org_name.lower()
 
-    for rule in _COMPILED_RULES:
-        for keyword in rule["keywords"]:
-            if keyword in lower:
-                return rule["industry"]
+    industry_embs = _get_industry_embeddings()
+    model = _get_model()
 
-    return "OTHER"
+    query_emb = model.encode([org_name], show_progress_bar=False)[0]
+    query_emb = query_emb / np.linalg.norm(query_emb)
+
+    best_industry = "OTHER"
+    best_score = SIMILARITY_THRESHOLD
+
+    for industry, ind_emb in industry_embs.items():
+        score = float(np.dot(query_emb, ind_emb))
+        if score > best_score:
+            best_score = score
+            best_industry = industry
+
+    return best_industry
 
 
-def classify_batch(org_names: list[str]) -> dict[str, str]:
-    """Batch classify organizations.
+def classify_with_learning(
+    org_name: str,
+    db_session: Session | None = None,
+) -> tuple[str, str]:
+    """Classify using the full tiered strategy.
 
-    Returns a dict of orgName -> IndustryCode.
-    This is the static classifier; for unknown orgs, use the LLM batch classifier.
+    Returns:
+        (industry_code, source) where source is "learned", "embedding", or "unknown"
+    """
+    if not org_name or len(org_name.strip()) < 2:
+        return "OTHER", "unknown"
+
+    normalized = org_name.upper().strip()
+
+    if db_session is not None:
+        learned = (
+            db_session.query(LearnedClassification)
+            .filter(
+                LearnedClassification.entity_name == normalized,
+                LearnedClassification.entity_type == "industry",
+            )
+            .first()
+        )
+        if learned:
+            return learned.value, "learned"
+
+    industry = classify_industry(org_name)
+    if industry != "OTHER":
+        if db_session is not None:
+            _store_classification(db_session, normalized, "industry", industry, 0.9, "embedding")
+        return industry, "embedding"
+
+    return "OTHER", "unknown"
+
+
+def classify_batch_with_learning(
+    org_names: list[str],
+    db_session: Session | None = None,
+) -> tuple[dict[str, str], list[str]]:
+    """Batch classify with learning store.
+
+    Returns:
+        (results_dict, unknowns_list) where unknowns need LLM classification.
     """
     results: dict[str, str] = {}
     unknowns: list[str] = []
 
+    known_from_db: dict[str, str] = {}
+    if db_session is not None:
+        unique_names = list({n.upper().strip() for n in org_names if n})
+        if unique_names:
+            rows = (
+                db_session.query(LearnedClassification)
+                .filter(
+                    LearnedClassification.entity_name.in_(unique_names),
+                    LearnedClassification.entity_type == "industry",
+                )
+                .all()
+            )
+            known_from_db = {r.entity_name: r.value for r in rows}
+
     for name in org_names:
+        if not name:
+            results[name] = "OTHER"
+            continue
+
+        normalized = name.upper().strip()
+
+        if normalized in known_from_db:
+            results[name] = known_from_db[normalized]
+            continue
+
         industry = classify_industry(name)
         results[name] = industry
-        if industry == "OTHER":
+
+        if industry != "OTHER":
+            if db_session is not None:
+                _store_classification(db_session, normalized, "industry", industry, 0.9, "embedding")
+        else:
             unknowns.append(name)
 
-    if unknowns:
-        logger.debug(
-            "Industry classifier: %d unknowns out of %d",
-            len(unknowns), len(org_names),
-        )
+    return results, unknowns
 
-    return results
+
+def store_llm_classifications(
+    classifications: dict[str, str],
+    db_session: Session,
+) -> None:
+    """Store LLM-derived classifications in the learning store.
+
+    Called after the LLM reclassifier processes unknowns.
+    Next pipeline run will find these via the learning store (tier 1).
+    """
+    for name, industry in classifications.items():
+        normalized = name.upper().strip()
+        _store_classification(db_session, normalized, "industry", industry, 0.7, "llm")
+    db_session.flush()
+
+
+def _store_classification(
+    db_session: Session,
+    entity_name: str,
+    entity_type: str,
+    value: str,
+    confidence: float,
+    source: str,
+) -> None:
+    """Upsert a classification into the learning store."""
+    from datetime import datetime
+    existing = (
+        db_session.query(LearnedClassification)
+        .filter(
+            LearnedClassification.entity_name == entity_name,
+            LearnedClassification.entity_type == entity_type,
+        )
+        .first()
+    )
+    if existing:
+        if confidence >= existing.confidence:
+            existing.value = value
+            existing.confidence = confidence
+            existing.source = source
+            existing.learned_at = datetime.utcnow()
+    else:
+        db_session.add(LearnedClassification(
+            entity_name=entity_name,
+            entity_type=entity_type,
+            value=value,
+            confidence=confidence,
+            source=source,
+        ))
+    db_session.flush()

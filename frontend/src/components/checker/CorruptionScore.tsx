@@ -2,6 +2,7 @@
 
 import { Senator } from "@/types/senator";
 import { calculateOverallScore, getScoreLabel, getScoreColor } from "@/lib/corruption";
+import { useScoreWeights } from "@/hooks/useConfig";
 
 interface RepresentationScoreProps {
   breakdown: Senator["representationScore"];
@@ -18,24 +19,24 @@ const SUB_SCORES: {
     description: "Small donors vs. PAC money",
   },
   {
-    key: "promiseFulfillment",
-    label: "Promise Fulfillment",
-    description: "Campaign platform kept vs. broken",
-  },
-  {
     key: "independenceIndex",
     label: "Independence Index",
-    description: "Votes free from PAC influence",
+    description: "Votes free from donor/lobbyist influence",
+  },
+  {
+    key: "promiseFulfillment",
+    label: "Promise Fulfillment",
+    description: "Campaign commitments kept vs. broken",
+  },
+  {
+    key: "accountability",
+    label: "Accountability",
+    description: "Attendance, transparency, and engagement",
   },
   {
     key: "donorDiversity",
     label: "Donor Diversity",
     description: "Funding spread across industries",
-  },
-  {
-    key: "accountability",
-    label: "Accountability",
-    description: "Resistance to institutional capture",
   },
 ];
 
@@ -82,7 +83,8 @@ function ScoreBar({
 }
 
 export default function CorruptionScore({ breakdown }: RepresentationScoreProps) {
-  const overall = calculateOverallScore(breakdown);
+  const weights = useScoreWeights();
+  const overall = calculateOverallScore(breakdown, weights);
   const label = getScoreLabel(overall);
   const colorClass = getScoreColor(overall);
 

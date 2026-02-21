@@ -84,6 +84,7 @@ class KeyVote(Base):
     stance: Mapped[str] = mapped_column(String, default="neutral")
     stance_vote: Mapped[str | None] = mapped_column(String, nullable=True)  # "Yea" or "Nay"
     impacted_groups: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
+    affected_industries: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array
     # Legacy fields (kept for transition)
     pro_business_vote: Mapped[str | None] = mapped_column(String, nullable=True)
     classification: Mapped[str] = mapped_column(String, nullable=False, default="mixed")
@@ -130,6 +131,24 @@ class CampaignPromise(Base):
     senator: Mapped["Senator"] = relationship(back_populates="campaign_promises")
 
 
+class LearnedClassification(Base):
+    """Persistent learning store for entity classifications.
+
+    Each time the pipeline successfully classifies an entity (org, PAC, employer)
+    via any method (rules, embeddings, LLM), the result is stored here.
+    On subsequent runs, this table is checked FIRST, making the system faster
+    and more consistent over time. A form of active learning.
+    """
+    __tablename__ = "learned_classifications"
+
+    entity_name: Mapped[str] = mapped_column(String, primary_key=True)
+    entity_type: Mapped[str] = mapped_column(String, primary_key=True)  # "donor_type", "industry"
+    value: Mapped[str] = mapped_column(String, nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, default=1.0)  # 1.0=rule, 0.9=embedding, 0.7=LLM
+    source: Mapped[str] = mapped_column(String, nullable=False)  # "rule", "embedding", "llm", "fec"
+    learned_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
+
 class ApiCache(Base):
     __tablename__ = "api_cache"
 
@@ -155,7 +174,9 @@ class PipelineRun(Base):
     started_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
     status: Mapped[str] = mapped_column(String, default="running")
+    current_phase: Mapped[str | None] = mapped_column(String, nullable=True)
     senators_processed: Mapped[int] = mapped_column(Integer, default=0)
+    senators_total: Mapped[int] = mapped_column(Integer, default=0)
     senators_failed: Mapped[int] = mapped_column(Integer, default=0)
     bills_classified: Mapped[int] = mapped_column(Integer, default=0)
     llm_calls: Mapped[int] = mapped_column(Integer, default=0)

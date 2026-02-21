@@ -8,31 +8,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-VALID_INDUSTRIES = {
-    "PHARMA",
-    "INSURANCE",
-    "OIL_GAS",
-    "DEFENSE",
-    "FINANCE",
-    "REAL_ESTATE",
-    "TECH",
-    "TELECOM",
-    "AGRIBUSINESS",
-    "ENERGY",
-    "CONSTRUCTION",
-    "TRANSPORT",
-    "LAWYERS",
-    "LOBBYISTS",
-    "GAMBLING",
-    "GUNS",
-    "TOBACCO",
-    "CRYPTO",
-    "PRIVATE_PRISON",
-    "POLITICAL",
-    "OTHER",
-    "SMALL_DONORS",
-    "LARGE_INDIVIDUAL",
-}
+from app.config_definitions import VALID_INDUSTRIES
 
 VALID_PARTIES = {"D", "R", "I"}
 VALID_VOTES = {"Yea", "Nay", "Not Voting"}
@@ -134,8 +110,10 @@ def validate_senator(senator: dict) -> dict:
     vr = senator.get("votingRecord") or {}
     senator["votingRecord"] = {
         "totalVotes": max(0, vr.get("totalVotes", 0)),
-        "proCorporateVotes": max(0, vr.get("proCorporateVotes", 0)),
-        "proConsumerVotes": max(0, vr.get("proConsumerVotes", 0)),
+        "scoreableVotes": max(0, vr.get("scoreableVotes", 0)),
+        "donorAlignedVotes": max(0, vr.get("donorAlignedVotes", 0)),
+        "donorOpposedVotes": max(0, vr.get("donorOpposedVotes", 0)),
+        "policyBreakdown": vr.get("policyBreakdown", []),
         "keyVotes": [
             {
                 "billName": v.get("billName", "Unknown Bill"),
@@ -146,16 +124,22 @@ def validate_senator(senator: dict) -> dict:
                     if v.get("vote") in VALID_VOTES
                     else "Not Voting"
                 ),
-                "proBusinessVote": (
-                    v.get("proBusinessVote")
-                    if v.get("proBusinessVote") in ("Yea", "Nay")
+                "policyArea": v.get("policyArea", "PROCEDURAL"),
+                "stance": v.get("stance", "neutral"),
+                "stanceVote": (
+                    v.get("stanceVote")
+                    if v.get("stanceVote") in ("Yea", "Nay")
                     else None
                 ),
-                "classification": (
-                    v.get("classification")
-                    if v.get("classification")
-                    in ("pro-corporate", "pro-consumer", "mixed")
-                    else "mixed"
+                "impactedGroups": (
+                    v["impactedGroups"]
+                    if isinstance(v.get("impactedGroups"), list)
+                    else []
+                ),
+                "affectedIndustries": (
+                    v["affectedIndustries"]
+                    if isinstance(v.get("affectedIndustries"), list)
+                    else []
                 ),
                 "description": v.get("description", ""),
                 "corporateInterest": v.get("corporateInterest", ""),

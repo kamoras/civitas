@@ -1,28 +1,3 @@
-export type IndustryCode =
-  | "PHARMA"
-  | "INSURANCE"
-  | "OIL_GAS"
-  | "DEFENSE"
-  | "FINANCE"
-  | "REAL_ESTATE"
-  | "TECH"
-  | "TELECOM"
-  | "AGRIBUSINESS"
-  | "ENERGY"
-  | "CONSTRUCTION"
-  | "TRANSPORT"
-  | "LAWYERS"
-  | "LOBBYISTS"
-  | "GAMBLING"
-  | "GUNS"
-  | "TOBACCO"
-  | "CRYPTO"
-  | "PRIVATE_PRISON"
-  | "POLITICAL"
-  | "OTHER"
-  | "SMALL_DONORS"
-  | "LARGE_INDIVIDUAL";
-
 export interface Senator {
   id: string;
   name: string;
@@ -44,17 +19,7 @@ export interface Senator {
     topDonors: Donor[];
     industryBreakdown: IndustryDonation[];
   };
-  votingRecord: {
-    totalVotes: number;
-    proCorporateVotes: number;
-    proConsumerVotes: number;
-    votedWithPartyCount: number;
-    votedAgainstPartyCount: number;
-    partyLoyaltyPct: number;
-    votingSummary: string;
-    recentVotes: KeyVote[];
-    keyVotes: KeyVote[];
-  };
+  votingRecord: VotingRecord;
   lobbyingMatches: LobbyingMatch[];
   campaignPromises: CampaignPromise[];
   platformSummary: string;
@@ -71,10 +36,31 @@ export interface Donor {
 }
 
 export interface IndustryDonation {
-  industry: IndustryCode;
+  industry: string;
   name: string;
   total: number;
   percentage: number;
+}
+
+export interface PolicyBreakdown {
+  policyArea: string;
+  totalVotes: number;
+  withStance: number;
+  againstStance: number;
+}
+
+export interface VotingRecord {
+  totalVotes: number;
+  scoreableVotes: number;
+  donorAlignedVotes: number;
+  donorOpposedVotes: number;
+  policyBreakdown: PolicyBreakdown[];
+  votedWithPartyCount: number;
+  votedAgainstPartyCount: number;
+  partyLoyaltyPct: number;
+  votingSummary: string;
+  recentVotes: KeyVote[];
+  keyVotes: KeyVote[];
 }
 
 export interface KeyVote {
@@ -82,14 +68,11 @@ export interface KeyVote {
   billId: string;
   date: string;
   vote: "Yea" | "Nay" | "Not Voting";
-  // New policy stance fields
   policyArea: string;
   stance: string;
   stanceVote: "Yea" | "Nay" | null;
   impactedGroups: string[];
-  // Legacy fields (kept for transition)
-  proBusinessVote: "Yea" | "Nay" | null;
-  classification: string;
+  affectedIndustries: string[];
   description: string;
   corporateInterest: string;
   publicImpact: string;
@@ -103,7 +86,7 @@ export interface KeyVote {
 
 export interface LobbyingMatch {
   lobbyistOrg: string;
-  industry: IndustryCode;
+  industry: string;
   lobbyingSpend: number;
   donationToSenator: number;
   billsInfluenced: string[];

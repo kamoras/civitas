@@ -4,12 +4,12 @@ This is the most complex transform module. It handles:
 - PAC vs individual contribution separation
 - Donor type classification (PAC, Party/Ideological, Org/Employees)
 - Candidate self-contribution filtering
-- Industry breakdown via the static classifier
+- Industry breakdown via AI-based classifier (when provided)
 """
 
 import logging
 
-from app.pipeline.transform.industry_classifier import classify_industry
+from app.pipeline.transform.industry_classifier import classify_industry, classify_with_learning
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +86,44 @@ GENERIC_PARTY_PAC_PATTERNS = [
     "RECLAIM AMERICA",
 ]
 
+# Corporate/organizational suffixes that indicate employee contributions,
+# not actual PACs. These should be classified as "Org/Employees".
+CORPORATE_ORG_PATTERNS = [
+    " BANK",
+    " & COMPANY",
+    " CORPORATION",
+    " CORP",
+    " INC",
+    " LLC",
+    " LLP",
+    " LIMITED",
+    " PARTNERS",
+    " ASSOCIATES",
+    " GROUP",
+    " HOLDINGS",
+    " ENTERPRISES",
+    " INDUSTRIES",
+    " SERVICES",
+    " SYSTEMS",
+    " SOLUTIONS",
+    " TECHNOLOGIES",
+    " PHARMA",
+    " PHARMACEUTICALS",
+    " ENERGY",
+    " OIL",
+    " GAS",
+    " CAPITAL",
+    " INVESTMENT",
+    " FINANCIAL",
+    " INSURANCE",
+    " HEALTHCARE",
+    " HOSPITAL",
+    " MEDICAL",
+    " UNIVERSITY",
+    " COLLEGE",
+    " LAW FIRM",
+]
+
 # Employers to skip when grouping individual contributions
 SKIP_EMPLOYERS = {
     "NONE",
@@ -133,6 +171,8 @@ def normalize_finance(
     individual_receipts: list[dict],
     pac_receipts: list[dict],
     aggregated_contributors: list[dict],
+    ai_classifications: dict[str, dict] | None = None,
+    db_session=None,
 ) -> dict:
     """Normalize FEC financial data into the Senator funding shape.
 
@@ -142,6 +182,7 @@ def normalize_finance(
         individual_receipts: Individual contribution receipts (Schedule A, is_individual=true).
         pac_receipts: PAC/committee contribution receipts (Schedule A, is_individual=false).
         aggregated_contributors: Top contributors by total.
+        ai_classifications: Optional AI classifications for donors (type + industry).
 
     Returns:
         Normalized funding object matching Senator.funding type.
@@ -170,15 +211,24 @@ def normalize_finance(
     # Build top donors: PACs first, then employer-grouped individuals
     candidate_name = (candidate or {}).get("name", "")
     top_donors = build_top_donors(
-        pac_receipts, individual_receipts, aggregated_contributors, candidate_name
+        pac_receipts,
+        individual_receipts,
+        aggregated_contributors,
+        candidate_name,
+        ai_classifications=ai_classifications,
+        db_session=db_session,
     )
 
     # Build industry breakdown: individuals get explicit buckets, PACs get industry-classified
     industry_breakdown = _build_industry_breakdown(
         pac_receipts=pac_receipts,
+        individual_receipts=individual_receipts,
+        aggregated_contributors=aggregated_contributors,
         small_individual_total=small_individual,
         large_individual_total=large_individual,
         total_raised=total_raised,
+        ai_classifications=ai_classifications,
+        db_session=db_session,
     )
 
     return {
@@ -195,13 +245,20 @@ def build_top_donors(
     individual_receipts: list[dict],
     aggregated_contributors: list[dict],
     candidate_name: str,
+    ai_classifications: dict[str, dict] | None = None,
+    db_session=None,
 ) -> list[dict]:
     """Build top donors list prioritizing PAC/corporate money.
 
     PAC contributions show up directly by committee name.
     Individual contributions are grouped by employer to show corporate influence.
+
+    Args:
+        ai_classifications: Optional AI-based donor classifications mapping
+            donor name (uppercase) -> {type, industry, skip}
     """
     donor_map: dict[str, dict] = {}
+    ai_classifications = ai_classifications or {}
 
     # 1. Process PAC/committee contributions -- these are the direct corporate money
     for r in pac_receipts:
@@ -214,10 +271,6 @@ def build_top_donors(
 
         name_upper = name.upper().strip()
 
-        # Skip payment processors, victory funds, and self-transfers
-        if any(p in name_upper for p in SKIP_PAC_PATTERNS):
-            continue
-
         # Skip inter-committee transfers
         memo_text = (r.get("memo_text") or "").upper()
         if (
@@ -227,17 +280,35 @@ def build_top_donors(
         ):
             continue
 
-        # Classify donor type — candidate's own committees get a distinct label so
-        # they remain visible in the UI but are excluded from lobbying-match analysis.
-        if _is_candidate_affiliated(name_upper, candidate_name):
-            donor_type = "CandidateAffiliated"
-        elif any(p in name_upper for p in GENERIC_PARTY_PAC_PATTERNS):
-            donor_type = "Party/Ideological"
-        else:
-            donor_type = "PAC"
+        # Use AI classification if available, otherwise fall back to hardcoded patterns
+        ai_class = ai_classifications.get(name_upper)
 
-        # Classify industry for this donor
-        industry = classify_industry(name)
+        if ai_class and ai_class.get("skip"):
+            # AI says to skip this donor (payment processor, etc.)
+            continue
+
+        if ai_class:
+            # Use AI-provided type and industry
+            donor_type = ai_class.get("type", "PAC")
+            industry = ai_class.get("industry", "OTHER")
+        else:
+            # Fall back to hardcoded pattern matching
+            # Skip payment processors, victory funds, and self-transfers
+            if any(p in name_upper for p in SKIP_PAC_PATTERNS):
+                continue
+
+            # Classify donor type
+            if _is_candidate_affiliated(name_upper, candidate_name):
+                donor_type = "CandidateAffiliated"
+            elif any(p in name_upper for p in GENERIC_PARTY_PAC_PATTERNS):
+                donor_type = "Party/Ideological"
+            elif any(p in name_upper for p in CORPORATE_ORG_PATTERNS):
+                donor_type = "Org/Employees"
+            else:
+                donor_type = "PAC"
+
+            # Classify industry (check learning store first, then embeddings)
+            industry, _ = classify_with_learning(name, db_session)
 
         existing = donor_map.get(name_upper, {
             "name": name,
@@ -254,19 +325,27 @@ def build_top_donors(
         if not employer or employer in SKIP_EMPLOYERS:
             continue
 
-        # Classify industry for employer-based donations
-        industry = classify_industry(r.get("contributor_employer", ""))
+        # Use AI classification if available
+        ai_class = ai_classifications.get(employer)
+
+        if ai_class:
+            donor_type = ai_class.get("type", "Org/Employees")
+            industry = ai_class.get("industry", "OTHER")
+        else:
+            # Fall back to learning store + embedding classifier
+            donor_type = "Org/Employees"
+            industry, _ = classify_with_learning(r.get("contributor_employer", ""), db_session)
 
         existing = donor_map.get(employer, {
             "name": r.get("contributor_employer", ""),
             "total": 0,
-            "type": "Org/Employees",
+            "type": donor_type,
             "industry": industry,
         })
         existing["total"] += r.get("contribution_receipt_amount", 0) or 0
         # Don't overwrite PAC type if we already have PAC entries for this org
         if existing["type"] != "PAC":
-            existing["type"] = "Org/Employees"
+            existing["type"] = donor_type
         # Keep the industry classification (may already be set if PAC exists)
         if "industry" not in existing:
             existing["industry"] = industry
@@ -280,15 +359,26 @@ def build_top_donors(
 
         normalized_name = name.upper().strip()
         if normalized_name not in donor_map:
-            industry = classify_industry(name)
+            # Use AI classification if available
+            ai_class = ai_classifications.get(normalized_name)
+
+            if ai_class:
+                donor_type = ai_class.get("type", "PAC")
+                industry = ai_class.get("industry", "OTHER")
+            else:
+                # Fall back to learning store + embedding classifier
+                donor_type = "PAC" if c.get("committee_id") else "Org/Employees"
+                industry, _ = classify_with_learning(name, db_session)
+
             donor_map[normalized_name] = {
                 "name": name,
                 "total": c.get("total", 0) or 0,
-                "type": "PAC" if c.get("committee_id") else "Org/Employees",
+                "type": donor_type,
                 "industry": industry,
             }
 
-    # Sort by total, take top 10
+    # Sort by total, take top 100 for detailed industry breakdown
+    # (Frontend will show top donors, but all 100 are available for expand/collapse)
     sorted_donors = sorted(donor_map.values(), key=lambda d: d["total"], reverse=True)
     return [
         {
@@ -297,7 +387,7 @@ def build_top_donors(
             "type": d["type"],
             "industry": d.get("industry", "OTHER"),
         }
-        for d in sorted_donors[:10]
+        for d in sorted_donors[:100]
     ]
 
 
@@ -316,19 +406,31 @@ def _clean_donor_name(name: str) -> str:
 
 def _build_industry_breakdown(
     pac_receipts: list[dict],
+    individual_receipts: list[dict],
+    aggregated_contributors: list[dict],
     small_individual_total: float,
     large_individual_total: float,
     total_raised: float,
+    ai_classifications: dict[str, dict] | None = None,
+    db_session=None,
 ) -> list[dict]:
-    """Build a funding breakdown separating individual donors from corporate/PAC sectors.
+    """Build a funding breakdown showing all sources by industry.
 
-    Individual donor money (small and large) gets its own explicit buckets so it
-    is never conflated with industry-classified corporate PAC money. Only PAC and
-    committee receipts are classified by industry.
+    Small/large unclassified individual donors get explicit buckets.
+    PAC receipts and employer-grouped contributions are classified by industry
+    to show corporate influence across all contribution types.
+
+    Args:
+        ai_classifications: Optional AI-based donor classifications mapping
+            donor name (uppercase) -> {type, industry, skip}
     """
     industry_totals: dict[str, dict] = {}
+    ai_classifications = ai_classifications or {}
 
-    # Explicit buckets for individual donors (never classified by industry)
+    # Track donors we've counted from detailed receipts to avoid double-counting with aggregated
+    counted_donors: set[str] = set()
+
+    # Explicit buckets for individual donors without employer info
     if small_individual_total > 0:
         industry_totals["SMALL_DONORS"] = {
             "industry": "SMALL_DONORS",
@@ -348,12 +450,101 @@ def _build_industry_breakdown(
         if not org:
             continue
         org_upper = org.upper().strip()
-        # Skip payment processors (ActBlue, WinRed, etc.) — they're pass-throughs
-        if any(p in org_upper for p in SKIP_PAC_PATTERNS):
+
+        # Use AI classification if available
+        ai_class = ai_classifications.get(org_upper)
+
+        if ai_class and ai_class.get("skip"):
+            # AI says to skip (payment processor, etc.)
             continue
 
         amount = r.get("contribution_receipt_amount", 0) or 0
-        industry = classify_industry(org)
+
+        if ai_class:
+            industry = ai_class.get("industry", "OTHER")
+        else:
+            # Fall back to hardcoded skip patterns and industry classifier
+            if any(p in org_upper for p in SKIP_PAC_PATTERNS):
+                continue
+            industry, _ = classify_with_learning(org, db_session)
+
+        existing = industry_totals.get(industry, {
+            "industry": industry,
+            "name": industry,
+            "total": 0,
+        })
+        existing["total"] += amount
+        industry_totals[industry] = existing
+        counted_donors.add(org_upper)  # Track this donor
+
+    # ALSO classify individual employer-grouped contributions by industry
+    # This ensures the industry breakdown matches the donor list
+    employer_totals: dict[str, float] = {}
+    for r in individual_receipts:
+        employer = (r.get("contributor_employer") or "").upper().strip()
+        if not employer or employer in SKIP_EMPLOYERS:
+            continue
+        employer_totals[employer] = employer_totals.get(employer, 0) + (
+            r.get("contribution_receipt_amount", 0) or 0
+        )
+
+    for employer, amount in employer_totals.items():
+        # Use AI classification if available
+        ai_class = ai_classifications.get(employer)
+
+        if ai_class:
+            industry = ai_class.get("industry", "OTHER")
+        else:
+            # Fall back to learning store + embedding classifier
+            industry, _ = classify_with_learning(employer, db_session)
+
+        existing = industry_totals.get(industry, {
+            "industry": industry,
+            "name": industry,
+            "total": 0,
+        })
+        existing["total"] += amount
+        industry_totals[industry] = existing
+        counted_donors.add(employer)  # Track this donor
+
+    # Add aggregated contributors that we haven't already counted from detailed receipts
+    # (Aggregated data may include contributions we don't have in detailed receipts due to pagination)
+    logger.info(
+        "Industry breakdown: %d donors from detailed receipts, checking %d aggregated",
+        len(counted_donors),
+        len(aggregated_contributors)
+    )
+    added_from_aggregated = 0
+    for c in aggregated_contributors:
+        name = c.get("contributor_name") or "Unknown"
+        if not name or name == "Unknown":
+            continue
+
+        normalized_name = name.upper().strip()
+
+        # Skip if we already counted this donor from detailed receipts
+        if normalized_name in counted_donors:
+            logger.debug("Skipping aggregated donor (already counted): %s", name)
+            continue
+
+        amount = c.get("total", 0) or 0
+        added_from_aggregated += 1
+
+        # Use AI classification if available
+        ai_class = ai_classifications.get(normalized_name)
+
+        if ai_class and ai_class.get("skip"):
+            continue
+
+        if ai_class:
+            industry = ai_class.get("industry", "OTHER")
+        else:
+            # Fall back to learning store + embedding classifier
+            if any(p in normalized_name for p in SKIP_PAC_PATTERNS):
+                continue
+            industry, _ = classify_with_learning(name, db_session)
+
+        # Add to industry totals
         existing = industry_totals.get(industry, {
             "industry": industry,
             "name": industry,
@@ -362,7 +553,9 @@ def _build_industry_breakdown(
         existing["total"] += amount
         industry_totals[industry] = existing
 
-    # Convert to list with percentages, drop zero entries
+    # Convert to list with percentages, drop zero entries.
+    # Percentages are relative to total_raised (all FEC receipts), not just classified funds,
+    # so they intentionally sum to <100% when some receipts are unclassified.
     breakdown = []
     for ind in industry_totals.values():
         total = round(ind["total"])
@@ -376,4 +569,4 @@ def _build_industry_breakdown(
             })
 
     breakdown.sort(key=lambda x: x["total"], reverse=True)
-    return breakdown[:12]  # Top 12 buckets
+    return breakdown[:20]  # Top 20 buckets (increased for detailed breakdown)

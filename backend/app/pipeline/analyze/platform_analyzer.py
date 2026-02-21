@@ -11,6 +11,7 @@ a plain-English platformSummary.
 import logging
 from typing import Any
 
+from app.config_definitions import PLATFORM_CATEGORIES
 from app.pipeline.analyze.ollama_client import call_llm
 from app.pipeline.vector_store import search_bills
 
@@ -87,22 +88,25 @@ async def _analyze_single(
         if v.get("billId") not in vector_bill_ids and len(combined_votes) < 15:
             combined_votes.append(v)
 
-    # Build rich vote summary including policy stances and impacted groups
+    # Build rich vote summary including bill descriptions and policy context
     vote_lines = []
     for v in combined_votes[:15]:  # Top 15 most relevant
-        bill = v.get("billName", "")[:50]
+        bill_name = v.get("billName", "")[:100]  # Increased from 50
         vote = v.get("vote", "")
         bill_id = v.get("billId", "")
+        description = v.get("description", "")[:200]  # Add bill description!
         policy_area = v.get("policyArea", "")
         stance = v.get("stance", "")
         groups = v.get("impactedGroups", [])
         groups_str = ", ".join(groups[:3]) if groups else ""
 
-        # Format: billId | billName | vote | policy: stance | affects: groups
+        # Format: billId | billName | description | vote | policy: stance | affects: groups
         vote_lines.append(
-            f"{bill_id} | {bill} | {vote} | {policy_area}: {stance} | affects: {groups_str}"
+            f"{bill_id} | {bill_name}\n"
+            f"  What it does: {description}\n"
+            f"  Senator voted: {vote} | Policy: {policy_area} ({stance}) | Affects: {groups_str}"
         )
-    votes_text = "\n".join(vote_lines) if vote_lines else "No votes on record"
+    votes_text = "\n\n".join(vote_lines) if vote_lines else "No votes on record"
 
     logger.info(
         "Analyzing platform with %d semantically relevant votes (from vector search: %d)",
@@ -110,8 +114,10 @@ async def _analyze_single(
         len([v for v in combined_votes if v.get("billId") in vector_bill_ids]),
     )
 
+    categories_str = "|".join(PLATFORM_CATEGORIES.keys())
+
     result = await call_llm(
-        prompt_version="platform-analysis-v2",
+        prompt_version="platform-analysis-v3",
         system_prompt="Political analyst. Return ONLY valid JSON, no markdown.",
         user_prompt=(
             f"Senator {senator['name']} ({senator['party']}-{senator['state']}), "
@@ -121,24 +127,28 @@ async def _analyze_single(
             f"TASK: Extract 3-5 specific POLICY COMMITMENTS from the platform text. "
             f"A commitment is a promise to take action, support/oppose specific policies, or advocate for change. "
             f"IGNORE general statements of fact or observations.\n\n"
-            f"For each commitment, match it to relevant votes and determine if kept/broken:\n"
-            f"- KEPT: Senator voted consistently with their stated commitment\n"
-            f"- BROKEN: Senator voted against their stated commitment\n"
+            f"For each commitment, carefully READ the bill descriptions to find votes that relate to the promise. "
+            f"Match commitments to votes and determine if kept/broken:\n"
+            f"- KEPT: Senator voted consistently with their stated commitment (use bill description to verify)\n"
+            f"- BROKEN: Senator voted against their stated commitment (use bill description to verify)\n"
             f"- PARTIAL: Mixed votes - some support, some contradict\n"
-            f"- UNCLEAR: No relevant votes found, or commitment too vague to assess\n\n"
+            f"- UNCLEAR: No relevant votes found, or commitment too vague to assess, or bill description doesn't clearly relate\n\n"
             f"Return JSON:\n"
             f'{{"platformSummary":"<1-2 sentence summary>",'
             f'"campaignPromises":['
-            f'{{"promiseText":"<the actual policy commitment>","category":"<healthcare|economy|environment|defense|education|immigration|labor|justice|other>","alignment":"<kept|broken|partial|unclear>","relatedBills":["<billId from votes above>"],"analysis":"<2-3 sentences: (1) What did they promise? (2) Which specific votes relate to this? (3) How did their votes support or contradict the promise?>"}}'
+            f'{{"promiseText":"<the actual policy commitment>","category":"<{categories_str}>","alignment":"<kept|broken|partial|unclear>","relatedBills":["<billId from votes above>"],"analysis":"<2-3 sentences: (1) What did they promise? (2) Which specific votes relate to this? (3) How did their votes support or contradict the promise?>"}}'
             f"]}}\n\n"
-            f"CRITICAL: In the analysis field, cite SPECIFIC bill IDs and explain the connection clearly. "
-            f"Do NOT mark something as broken/kept without specific vote evidence."
+            f"CRITICAL: In the analysis field:\n"
+            f"1. Reference SPECIFIC bill IDs from the votes above\n"
+            f"2. Explain HOW the bill description relates to the promise\n"
+            f"3. Show whether their vote supported or contradicted the promise\n"
+            f"Do NOT mark something as kept/broken without specific bill descriptions that clearly relate to the promise."
         ),
         cache_key={
             "senatorId": senator["id"],
             "platformLen": len(platform_text),
             "voteCount": len(all_votes),
-            "v": 2,
+            "v": 3,  # Bumped: now includes bill descriptions in prompt
         },
         db_session=db_session,
         max_tokens=800,
@@ -151,10 +161,7 @@ async def _analyze_single(
     promises_raw = result.get("campaignPromises") or []
     promises = []
     valid_alignments = {"kept", "broken", "partial", "unclear"}
-    valid_categories = {
-        "healthcare", "economy", "environment", "defense",
-        "education", "immigration", "other",
-    }
+    valid_categories = set(PLATFORM_CATEGORIES.keys())
     for p in promises_raw:
         if not isinstance(p, dict) or not p.get("promiseText"):
             continue

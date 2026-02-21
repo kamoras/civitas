@@ -13,6 +13,28 @@ from app.services.senator_service import (
 router = APIRouter()
 
 
+@router.get("/config")
+def get_config() -> dict:
+    """Return all dynamic configuration for the frontend.
+
+    Serves industries, platform categories, score weights, and policy areas
+    so the frontend never needs to hardcode these values.
+    """
+    from app.config_definitions import (
+        INDUSTRIES,
+        PLATFORM_CATEGORIES,
+        POLICY_AREAS,
+        SCORE_WEIGHTS,
+    )
+
+    return {
+        "scoreWeights": SCORE_WEIGHTS,
+        "industries": INDUSTRIES,
+        "platformCategories": PLATFORM_CATEGORIES,
+        "policyAreas": POLICY_AREAS,
+    }
+
+
 @router.get("/senators/states", response_model=list[StateCountSchema])
 def list_states(db: Session = Depends(get_db)) -> list[StateCountSchema]:
     """Return all states that have senator data, with counts."""
@@ -48,12 +70,13 @@ async def get_highlights(senator_id: str, db: Session = Depends(get_db)) -> dict
         if funding.top_donors
         else "none on record"
     )
+    from app.config_definitions import SCORE_WEIGHTS
     total_score = round(
-        score.constituent_funding * 0.3
-        + score.independence_index * 0.2
-        + score.donor_diversity * 0.1
-        + score.promise_fulfillment * 0.3
-        + score.accountability * 0.1
+        score.constituent_funding * SCORE_WEIGHTS["constituentFunding"]
+        + score.independence_index * SCORE_WEIGHTS["independenceIndex"]
+        + score.donor_diversity * SCORE_WEIGHTS["donorDiversity"]
+        + score.promise_fulfillment * SCORE_WEIGHTS["promiseFulfillment"]
+        + score.accountability * SCORE_WEIGHTS["accountability"]
     )
     kept = sum(1 for p in senator.campaign_promises if p.alignment == "kept")
     partial = sum(1 for p in senator.campaign_promises if p.alignment == "partial")
@@ -69,9 +92,10 @@ async def get_highlights(senator_id: str, db: Session = Depends(get_db)) -> dict
             f"FUNDING: ${funding.total_raised:,.0f} raised; {pac_pct}% from PACs; "
             f"{funding.small_donor_percentage:.0f}% small donors.\n"
             f"TOP DONORS: {top_donors_str}.\n"
-            f"VOTES: {voting.total_votes} tracked; {voting.pro_corporate_votes} industry-aligned "
-            f"({round(voting.pro_corporate_votes / max(voting.total_votes, 1) * 100)}%), "
-            f"{voting.pro_consumer_votes} constituent-friendly.\n"
+            f"VOTES: {voting.total_votes} tracked; {voting.donor_aligned_votes} donor-aligned "
+            f"of {voting.scoreable_votes} scoreable "
+            f"({round(voting.donor_aligned_votes / max(voting.scoreable_votes, 1) * 100)}%), "
+            f"{voting.donor_opposed_votes} went against donor interests.\n"
             f"REPRESENTATION SCORE: {total_score}/100 "
             f"(constituent funding: {score.constituent_funding:.0f}, "
             f"voting independence: {score.independence_index:.0f}, "

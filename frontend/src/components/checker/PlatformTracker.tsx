@@ -1,4 +1,5 @@
 import { CampaignPromise } from "@/types/senator";
+import { useCategoryLabel } from "@/hooks/useConfig";
 
 interface PlatformTrackerProps {
   promises: CampaignPromise[];
@@ -36,19 +37,14 @@ const ALIGNMENT_STYLES = {
   },
 };
 
-const CATEGORY_LABELS: Record<string, string> = {
-  healthcare: "HEALTHCARE",
-  economy: "ECONOMY",
-  defense: "DEFENSE",
-  environment: "ENVIRONMENT",
-  immigration: "IMMIGRATION",
-  education: "EDUCATION",
-  guns: "GUNS",
-  tech: "TECH",
-  finance: "FINANCE",
-  civil_rights: "CIVIL RIGHTS",
-  other: "OTHER",
-};
+function CategoryBadge({ category }: { category: string }) {
+  const label = useCategoryLabel(category);
+  return (
+    <span className="text-[10px] px-1.5 py-0.5 border border-matrix-green/15 text-matrix-green/40">
+      {label}
+    </span>
+  );
+}
 
 export default function PlatformTracker({ promises, platformSummary }: PlatformTrackerProps) {
   if (promises.length === 0) return null;
@@ -112,9 +108,7 @@ export default function PlatformTracker({ promises, platformSummary }: PlatformT
                       >
                         {style.label}
                       </span>
-                      <span className="text-[10px] px-1.5 py-0.5 border border-matrix-green/15 text-matrix-green/40">
-                        {CATEGORY_LABELS[promise.category] || promise.category.toUpperCase()}
-                      </span>
+                      <CategoryBadge category={promise.category} />
                     </div>
                     <p className="text-sm text-matrix-green/90 mt-1">{promise.promiseText}</p>
                     {promise.analysis && (

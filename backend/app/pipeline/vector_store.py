@@ -147,7 +147,7 @@ def search_bills(
     try:
         collection = client.get_collection(name="bills")
     except Exception:
-        logger.warning("Bills collection not found in vector DB")
+        logger.error("Bills collection not found in vector DB — embed_bills() may not have run yet")
         return []
 
     # Generate query embedding
@@ -201,7 +201,7 @@ def search_bills_by_bill_ids(bill_ids: list[str]) -> list[dict]:
     try:
         collection = client.get_collection(name="bills")
     except Exception:
-        logger.warning("Bills collection not found in vector DB")
+        logger.error("Bills collection not found in vector DB — embed_bills() may not have run yet")
         return []
 
     # Retrieve by IDs

@@ -10,3 +10,5 @@ lxml==5.3.*
 numpy<2.0
 chromadb==0.4.*
 sentence-transformers==2.7.*
+pytest==8.*
+pytest-asyncio==0.24.*

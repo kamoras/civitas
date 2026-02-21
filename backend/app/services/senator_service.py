@@ -13,6 +13,7 @@ from app.schemas import (
     KeyVoteSchema,
     LeaderboardEntrySchema,
     LobbyingMatchSchema,
+    PolicyBreakdownSchema,
     SenatorSchema,
     StateCountSchema,
     VotingRecordSchema,
@@ -81,11 +82,56 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
     key_votes_db = [v for v in key_votes if v.vote_category == "key"]
 
     all_votes = key_votes
+    donor_aligned = 0
+    donor_opposed = 0
+    area_stats: dict[str, dict] = {}
+
+    for v in all_votes:
+        if (
+            v.stance_vote
+            and v.vote != "Not Voting"
+            and v.policy_area
+            and v.policy_area != "PROCEDURAL"
+        ):
+            area = v.policy_area
+            if area not in area_stats:
+                area_stats[area] = {"total": 0, "withStance": 0, "againstStance": 0}
+            area_stats[area]["total"] += 1
+
+            voted_with_stance = v.vote == v.stance_vote
+            if voted_with_stance:
+                area_stats[area]["withStance"] += 1
+            else:
+                area_stats[area]["againstStance"] += 1
+
+            has_industry_signal = bool(v.corporate_interest)
+            if not has_industry_signal:
+                impacted = json.loads(v.impacted_groups) if v.impacted_groups else []
+                has_industry_signal = bool(impacted)
+            if has_industry_signal:
+                if voted_with_stance:
+                    donor_aligned += 1
+                else:
+                    donor_opposed += 1
+
     total_votes = len(all_votes)
-    pro_corporate_votes = sum(1 for v in all_votes if v.classification == "pro-corporate")
-    pro_consumer_votes = sum(1 for v in all_votes if v.classification == "pro-consumer")
+    scoreable = donor_aligned + donor_opposed
     voted_with = sum(1 for v in all_votes if v.voted_with_party is True)
     voted_against = sum(1 for v in all_votes if v.voted_with_party is False)
+
+    policy_breakdown = sorted(
+        [
+            PolicyBreakdownSchema(
+                policy_area=area,
+                total_votes=stats["total"],
+                with_stance=stats["withStance"],
+                against_stance=stats["againstStance"],
+            )
+            for area, stats in area_stats.items()
+        ],
+        key=lambda x: x.total_votes,
+        reverse=True,
+    )
     party_total = voted_with + voted_against
     party_loyalty_pct = round(voted_with / party_total * 100, 1) if party_total > 0 else 100.0
 
@@ -95,8 +141,11 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
             bill_id=v.bill_id,
             date=v.date,
             vote=v.vote,
-            pro_business_vote=v.pro_business_vote,
-            classification=v.classification,
+            policy_area=v.policy_area or "PROCEDURAL",
+            stance=v.stance or "neutral",
+            stance_vote=v.stance_vote,
+            impacted_groups=json.loads(v.impacted_groups) if v.impacted_groups else [],
+            affected_industries=json.loads(v.affected_industries) if getattr(v, "affected_industries", None) else [],
             description=v.description,
             corporate_interest=v.corporate_interest,
             public_impact=v.public_impact,
@@ -132,6 +181,7 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
                     name=d.name,
                     total=d.total,
                     type=d.type,
+                    industry=d.industry or "OTHER",
                     pac_sponsor=d.pac_sponsor,
                     pac_industry=d.pac_industry,
                     pac_analysis=d.pac_analysis,
@@ -150,8 +200,10 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
         ),
         voting_record=VotingRecordSchema(
             total_votes=total_votes,
-            pro_corporate_votes=pro_corporate_votes,
-            pro_consumer_votes=pro_consumer_votes,
+            scoreable_votes=scoreable,
+            donor_aligned_votes=donor_aligned,
+            donor_opposed_votes=donor_opposed,
+            policy_breakdown=policy_breakdown,
             voted_with_party_count=voted_with,
             voted_against_party_count=voted_against,
             party_loyalty_pct=party_loyalty_pct,
@@ -217,12 +269,14 @@ def get_states_with_counts(db: Session) -> list[StateCountSchema]:
     ]
 
 
-_LEADERBOARD_WEIGHTS = {
-    "score_corporate_funding": 0.3,   # constituentFunding
-    "score_flip_flop_index": 0.3,     # promiseFulfillment
-    "score_lobbyist_alignment": 0.2,  # independenceIndex
-    "score_industry_concentration": 0.1,  # donorDiversity
-    "score_revolving_door": 0.1,      # accountability
+from app.config_definitions import SCORE_WEIGHTS
+
+_FIELD_TO_WEIGHT_KEY = {
+    "score_corporate_funding":      "constituentFunding",
+    "score_flip_flop_index":        "promiseFulfillment",
+    "score_lobbyist_alignment":     "independenceIndex",
+    "score_industry_concentration": "donorDiversity",
+    "score_revolving_door":         "accountability",
 }
 
 
@@ -244,8 +298,8 @@ def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
 
     def _weighted_score(s: Senator) -> float:
         return sum(
-            getattr(s, field, 0) * weight
-            for field, weight in _LEADERBOARD_WEIGHTS.items()
+            getattr(s, db_field, 0) * SCORE_WEIGHTS[weight_key]
+            for db_field, weight_key in _FIELD_TO_WEIGHT_KEY.items()
         )
 
     senators.sort(key=_weighted_score, reverse=True)  # descending: best representatives (highest score) first
@@ -321,6 +375,7 @@ def upsert_senator(db: Session, senator_data: dict) -> Senator:
             name=d["name"],
             total=d["total"],
             type=d["type"],
+            industry=d.get("industry", "OTHER"),
             rank=rank,
             pac_sponsor=d.get("pacSponsor"),
             pac_industry=d.get("pacIndustry"),
@@ -346,12 +401,19 @@ def upsert_senator(db: Session, senator_data: dict) -> Senator:
     if not all_votes and voting_record.get("keyVotes"):
         all_votes = [(v, "key") for v in voting_record["keyVotes"]]
     for v, category in all_votes:
+        impacted_groups = v.get("impactedGroups", [])
+        affected_industries = v.get("affectedIndustries", [])
         db.add(KeyVote(
             senator_id=sid,
             bill_name=v.get("billName", "Unknown Bill"),
             bill_id=v.get("billId", ""),
             date=v.get("date", ""),
             vote=v.get("vote", "Not Voting"),
+            policy_area=v.get("policyArea", "PROCEDURAL"),
+            stance=v.get("stance", "neutral"),
+            stance_vote=v.get("stanceVote"),
+            impacted_groups=json.dumps(impacted_groups) if impacted_groups else None,
+            affected_industries=json.dumps(affected_industries) if affected_industries else None,
             pro_business_vote=v.get("proBusinessVote"),
             classification=v.get("classification", "mixed"),
             description=v.get("description", ""),

@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { VT323, Press_Start_2P, Share_Tech_Mono } from "next/font/google";
+import ConfigProvider from "@/components/providers/ConfigProvider";
+import PipelineProgress from "@/components/pipeline/PipelineProgress";
 import "./globals.css";
 
 const vt323 = VT323({
@@ -48,8 +50,11 @@ export default function RootLayout({
       <body
         className={`${vt323.variable} ${pressStart.variable} ${shareTech.variable} font-terminal antialiased`}
       >
-        <div className="crt-overlay" aria-hidden="true" />
-        {children}
+        <ConfigProvider>
+          <div className="crt-overlay" aria-hidden="true" />
+          {children}
+          <PipelineProgress />
+        </ConfigProvider>
       </body>
     </html>
   );

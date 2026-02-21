@@ -6,6 +6,7 @@ import Navbar from "@/components/layout/Navbar";
 import MatrixRain from "@/components/effects/MatrixRain";
 import { fetchLeaderboard } from "@/lib/api";
 import { calculateOverallScore, getScoreColor } from "@/lib/corruption";
+import { useScoreWeights } from "@/hooks/useConfig";
 import type { LeaderboardEntry } from "@/types/senator";
 
 type PartyFilter = "ALL" | "D" | "R" | "I";
@@ -69,6 +70,7 @@ export default function LeaderboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [partyFilter, setPartyFilter] = useState<PartyFilter>("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("score");
+  const weights = useScoreWeights();
 
   useEffect(() => {
     fetchLeaderboard()
@@ -89,10 +91,10 @@ export default function LeaderboardPage() {
         return pctB - pctA;
       }
       return (
-        calculateOverallScore(b.representationScore) - calculateOverallScore(a.representationScore)
+        calculateOverallScore(b.representationScore, weights) - calculateOverallScore(a.representationScore, weights)
       );
     });
-  }, [entries, partyFilter, sortKey]);
+  }, [entries, partyFilter, sortKey, weights]);
 
   const counts = useMemo(
     () => ({
@@ -220,7 +222,7 @@ export default function LeaderboardPage() {
                 <tbody>
                   {displayed.map((entry, idx) => {
                     const rank = idx + 1;
-                    const score = calculateOverallScore(entry.representationScore);
+                    const score = calculateOverallScore(entry.representationScore, weights);
                     const pacPct =
                       entry.totalRaised > 0
                         ? Math.round((entry.totalFromPacs / entry.totalRaised) * 100)
@@ -234,7 +236,7 @@ export default function LeaderboardPage() {
                           isTopTen ? "border-l-2 border-l-red-500/30" : ""
                         }`}
                         onClick={() =>
-                          (window.location.href = `/senator-scorecard?state=${entry.state}`)
+                          (window.location.href = `/senator-scorecard?state=${entry.state}&senator=${entry.id}`)
                         }
                       >
                         <td className="px-4 py-3">
@@ -289,7 +291,7 @@ export default function LeaderboardPage() {
             <div className="md:hidden divide-y divide-matrix-green/10">
               {displayed.map((entry, idx) => {
                 const rank = idx + 1;
-                const score = calculateOverallScore(entry.representationScore);
+                const score = calculateOverallScore(entry.representationScore, weights);
                 const pacPct =
                   entry.totalRaised > 0
                     ? Math.round((entry.totalFromPacs / entry.totalRaised) * 100)
@@ -297,7 +299,7 @@ export default function LeaderboardPage() {
                 return (
                   <Link
                     key={entry.id}
-                    href={`/senator-scorecard?state=${entry.state}`}
+                    href={`/senator-scorecard?state=${entry.state}&senator=${entry.id}`}
                     className="flex items-center gap-3 px-4 py-3 hover:bg-matrix-green/5 transition-colors"
                   >
                     <span className={`text-lg font-bold w-10 shrink-0 ${rankColor(rank)}`}>

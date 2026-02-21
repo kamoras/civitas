@@ -16,11 +16,11 @@ def bill_classification_prompt(bill: dict) -> dict:
     )
 
     return {
-        "promptVersion": "bill-classify-v1",
+        "promptVersion": "bill-classify-v2",
         "systemPrompt": (
-            "You are a nonpartisan congressional analyst. Classify bills by their "
-            "corporate vs. consumer impact. Be factual and balanced. Return ONLY valid "
-            "JSON with no additional text."
+            "You are a nonpartisan congressional analyst. Analyze bills for their "
+            "policy impact on different stakeholder groups. Be factual and balanced. "
+            "Return ONLY valid JSON with no additional text."
         ),
         "userPrompt": f"""Analyze this bill and return a JSON object:
 
@@ -38,8 +38,9 @@ Return this exact JSON structure:
   "description": "<1-2 sentence neutral description of what the bill does>",
   "corporateInterest": "<1-2 sentences: which industries had a stake and why>",
   "publicImpact": "<1-2 sentences: concrete impact on ordinary people>",
-  "affectedIndustries": ["<IndustryCode values from: PHARMA, INSURANCE, OIL_GAS, DEFENSE, FINANCE, REAL_ESTATE, TECH, TELECOM, AGRIBUSINESS, ENERGY, CONSTRUCTION, TRANSPORT, LAWYERS, LOBBYISTS, GAMBLING, GUNS, TOBACCO, CRYPTO, PRIVATE_PRISON, OTHER>"],
-  "classification": "<one of: pro-corporate, pro-consumer, mixed>"
+  "affectedIndustries": ["<IndustryCode values from: PHARMA, INSURANCE, OIL_GAS, DEFENSE, FINANCE, REAL_ESTATE, TECH, TELECOM, AGRIBUSINESS, ENERGY, CONSTRUCTION, TRANSPORT, LAWYERS, LOBBYISTS, GAMBLING, GUNS, TOBACCO, CRYPTO, PRIVATE_PRISON, LABOR_UNIONS, EDUCATION, MEDIA, RETAIL, MANUFACTURING, HEALTHCARE, OTHER>"],
+  "impactedGroups": ["<groups affected: consumers, workers, businesses, patients, students, veterans, etc.>"],
+  "policyArea": "<one of: LABOR, DEFENSE, GUNS, HEALTHCARE, ENVIRONMENT, TAXES, IMMIGRATION, EDUCATION, FINANCIAL, ENERGY, TECH, JUSTICE, TRADE, WELFARE, PROCEDURAL>"
 }}""",
     }
 
@@ -208,7 +209,7 @@ def industry_classification_prompt(org_names: list[str]) -> dict:
         ),
         "userPrompt": f"""Classify these organizations into industry codes.
 
-Valid codes: PHARMA, INSURANCE, OIL_GAS, DEFENSE, FINANCE, REAL_ESTATE, TECH, TELECOM, AGRIBUSINESS, ENERGY, CONSTRUCTION, TRANSPORT, LAWYERS, LOBBYISTS, GAMBLING, GUNS, TOBACCO, CRYPTO, PRIVATE_PRISON, OTHER
+Valid codes: PHARMA, INSURANCE, OIL_GAS, DEFENSE, FINANCE, REAL_ESTATE, TECH, TELECOM, AGRIBUSINESS, ENERGY, CONSTRUCTION, TRANSPORT, LAWYERS, LOBBYISTS, GAMBLING, GUNS, TOBACCO, CRYPTO, PRIVATE_PRISON, LABOR_UNIONS, EDUCATION, MEDIA, RETAIL, MANUFACTURING, HEALTHCARE, OTHER
 
 Organizations:
 {org_list}

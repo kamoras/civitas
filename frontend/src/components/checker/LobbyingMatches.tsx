@@ -6,6 +6,8 @@ interface LobbyingMatchesProps {
 }
 
 export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
+  if (!matches || matches.length === 0) return null;
+
   return (
     <div>
       <div className="flex items-baseline justify-between mb-3">
