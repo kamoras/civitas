@@ -47,6 +47,7 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
                   );
                 })}
               </div>
+              {match.senatorVoteAligned !== null && match.senatorVoteAligned !== undefined && (
               <div>
                 VOTED IN DONOR&apos;S INTEREST:{" "}
                 <span
@@ -59,6 +60,7 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
                   {match.senatorVoteAligned ? "YES" : "NO"}
                 </span>
               </div>
+              )}
             </div>
 
             <p className="text-sm text-matrix-green/70">{match.description}</p>

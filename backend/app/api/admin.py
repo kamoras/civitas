@@ -146,6 +146,96 @@ def _read_system_stats() -> dict:
     return stats
 
 
+def _collect_vector_db_stats(db: Session) -> dict:
+    """Collect comprehensive vector DB and learning store metrics."""
+    stats: dict = {}
+    try:
+        from app.pipeline.vector_store import (
+            get_chroma_client,
+            get_model_version,
+            EMBEDDING_MODEL_NAME,
+            EMBEDDING_DIMENSIONS,
+        )
+        chroma = get_chroma_client()
+        collections = chroma.list_collections()
+        total_vectors = 0
+        collection_details = []
+        for col in collections:
+            count = col.count()
+            total_vectors += count
+            meta = col.metadata or {}
+            detail: dict = {
+                "name": col.name,
+                "count": count,
+                "metadata": {k: str(v) for k, v in meta.items()} if meta else {},
+            }
+            if count > 0:
+                peek = col.peek(1)
+                if peek and peek.get("metadatas") and peek["metadatas"][0]:
+                    detail["sampleMetadataKeys"] = sorted(peek["metadatas"][0].keys())
+            collection_details.append(detail)
+
+        chroma_path = "/data/chroma"
+        chroma_size = 0
+        for dirpath, _, filenames in os.walk(chroma_path):
+            for f in filenames:
+                try:
+                    chroma_size += os.path.getsize(os.path.join(dirpath, f))
+                except OSError:
+                    pass
+
+        stats["status"] = "ok"
+        stats["totalVectors"] = total_vectors
+        stats["sizeBytes"] = chroma_size
+        stats["collections"] = collection_details
+        stats["embeddingModel"] = EMBEDDING_MODEL_NAME
+        stats["embeddingModelVersion"] = get_model_version()
+        stats["embeddingDimensions"] = EMBEDDING_DIMENSIONS
+
+    except Exception as e:
+        stats = {"status": "unavailable", "error": str(e)}
+
+    # Learning store metrics (always attempt even if chroma is down)
+    try:
+        total_learned = db.query(func.count(LearnedClassification.entity_name)).scalar() or 0
+        by_source = dict(
+            db.query(LearnedClassification.source, func.count(LearnedClassification.entity_name))
+            .group_by(LearnedClassification.source).all()
+        )
+        by_type = dict(
+            db.query(LearnedClassification.entity_type, func.count(LearnedClassification.entity_name))
+            .group_by(LearnedClassification.entity_type).all()
+        )
+        avg_confidence = db.query(func.avg(LearnedClassification.confidence)).scalar()
+        confidence_buckets_raw = (
+            db.query(
+                func.round(LearnedClassification.confidence, 1).label("bucket"),
+                func.count(LearnedClassification.entity_name),
+            )
+            .group_by("bucket")
+            .order_by("bucket")
+            .all()
+        )
+        confidence_dist = {str(round(float(b), 1)): c for b, c in confidence_buckets_raw}
+
+        newest = db.query(func.max(LearnedClassification.learned_at)).scalar()
+        oldest = db.query(func.min(LearnedClassification.learned_at)).scalar()
+
+        stats["learningStore"] = {
+            "totalEntries": total_learned,
+            "bySource": by_source,
+            "byType": by_type,
+            "avgConfidence": round(float(avg_confidence), 3) if avg_confidence else None,
+            "confidenceDistribution": confidence_dist,
+            "newestEntry": newest.isoformat() if newest else None,
+            "oldestEntry": oldest.isoformat() if oldest else None,
+        }
+    except Exception as e:
+        stats["learningStore"] = {"error": str(e)}
+
+    return stats
+
+
 @router.get("/system/stats", dependencies=[Depends(require_admin)])
 async def admin_system_stats():
     """Lightweight endpoint for live system metrics polling."""
@@ -253,6 +343,9 @@ async def admin_dashboard(db: Session = Depends(get_db)):
             "errorMessage": last_run.error_message,
         }
 
+    # --- Vector DB stats ---
+    vector_db_stats = _collect_vector_db_stats(db)
+
     # --- LLM stats ---
     try:
         from app.pipeline.analyze.ollama_client import get_llm_stats
@@ -267,6 +360,7 @@ async def admin_dashboard(db: Session = Depends(get_db)):
             "ollamaModel": ollama_model,
             "ollamaUrl": settings.OLLAMA_BASE_URL,
             "dbSizeBytes": db_size_bytes,
+            "vectorDb": vector_db_stats,
         },
         "host": _read_system_stats(),
         "data": data_counts,

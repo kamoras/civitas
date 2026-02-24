@@ -285,14 +285,16 @@ export default function VotingRecord({ votingRecord }: VotingRecordProps) {
   const {
     totalVotes,
     scoreableVotes,
-    donorAlignedVotes,
     partyLoyaltyPct,
     votingSummary,
     recentVotes,
     keyVotes,
+    votedWithPartyCount = 0,
+    votedAgainstPartyCount = 0,
   } = votingRecord;
 
-  const donorAlignedPct = scoreableVotes > 0 ? Math.round((donorAlignedVotes / scoreableVotes) * 100) : 0;
+  const partyIndependencePct = 100 - Math.round(partyLoyaltyPct);
+  const partyTotal = votedWithPartyCount + votedAgainstPartyCount;
 
   return (
     <div className="space-y-8">
@@ -304,7 +306,7 @@ export default function VotingRecord({ votingRecord }: VotingRecordProps) {
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2 text-center text-sm">
+        <div className="grid grid-cols-3 gap-2 mb-2 text-center text-sm">
           <div className="terminal-window p-3">
             <div className="text-xl font-pixel text-matrix-green">
               {totalVotes.toLocaleString()}
@@ -317,16 +319,11 @@ export default function VotingRecord({ votingRecord }: VotingRecordProps) {
             <div className="text-[10px] text-matrix-green/50">votes with party line</div>
           </div>
           <div className="terminal-window p-3">
-            <div className="text-xl font-pixel text-neon-yellow">{donorAlignedPct}%</div>
-            <div className="text-matrix-green/40 text-xs">DONOR-ALIGNED</div>
-            <div className="text-[10px] text-matrix-green/50">
-              {donorAlignedVotes} of {scoreableVotes} scoreable
-            </div>
-          </div>
-          <div className="terminal-window p-3">
-            <div className="text-xl font-pixel text-matrix-green">{100 - donorAlignedPct}%</div>
+            <div className="text-xl font-pixel text-neon-yellow">{partyIndependencePct}%</div>
             <div className="text-matrix-green/40 text-xs">INDEPENDENT</div>
-            <div className="text-[10px] text-matrix-green/50">voted against donor interests</div>
+            <div className="text-[10px] text-matrix-green/50">
+              {votedAgainstPartyCount} of {partyTotal || scoreableVotes} broke party line
+            </div>
           </div>
         </div>
       </div>

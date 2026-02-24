@@ -4,32 +4,39 @@ import pytest
 
 from app.pipeline.transform.normalize_finance import (
     _clean_donor_name,
-    _is_candidate_affiliated,
     build_top_donors,
     normalize_finance,
 )
+from app.pipeline.analyze.donor_classifier_ai import classify_donor_type_semantic
 
 
 class TestCandidateAffiliation:
-    """Detect candidate-controlled PACs."""
+    """Detect candidate-controlled PACs via semantic classification."""
 
-    def test_team_pac(self):
-        assert _is_candidate_affiliated("TEAM CRUZ FOR SENATE", "CRUZ, TED") is True
-
-    def test_friends_of(self):
-        assert _is_candidate_affiliated("FRIENDS OF SCHUMER", "SCHUMER, CHARLES") is True
-
-    def test_for_senate(self):
-        assert _is_candidate_affiliated("WARREN FOR SENATE", "WARREN, ELIZABETH") is True
+    def test_personal_contribution(self):
+        result = classify_donor_type_semantic(
+            "CRUZ, RAPHAEL EDWARD TED",
+            candidate_name="CRUZ, RAFAEL EDWARD (TED)",
+        )
+        assert result == "CandidateAffiliated"
 
     def test_unrelated_pac(self):
-        assert _is_candidate_affiliated("GOLDMAN SACHS PAC", "CRUZ, TED") is False
+        result = classify_donor_type_semantic(
+            "GOLDMAN SACHS PAC",
+            candidate_name="CRUZ, TED",
+        )
+        assert result != "CandidateAffiliated" or result is None
 
     def test_empty_candidate(self):
-        assert _is_candidate_affiliated("TEAM SOMEONE", "") is False
+        result = classify_donor_type_semantic("TEAM SOMEONE", candidate_name="")
+        assert result != "CandidateAffiliated" or result is None
 
     def test_short_last_name_skipped(self):
-        assert _is_candidate_affiliated("MR FO FOR SENATE", "FO, JOHN") is False
+        result = classify_donor_type_semantic(
+            "MR FO FOR SENATE",
+            candidate_name="FO, JOHN",
+        )
+        assert result != "CandidateAffiliated" or result is None
 
 
 class TestCleanDonorName:

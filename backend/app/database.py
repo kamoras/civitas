@@ -47,6 +47,8 @@ def _migrate_columns() -> None:
         ("explore_documents", "agency_name", "TEXT"),
         ("explore_documents", "comment_url", "TEXT"),
         ("explore_documents", "comments_close_on", "TEXT"),
+        ("learned_classifications", "model_version", "TEXT"),
+        ("learned_classifications", "match_metadata", "TEXT"),
     ]
     with engine.begin() as conn:
         for table, column, col_type in migrations:

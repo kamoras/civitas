@@ -57,15 +57,139 @@ STATE_NAMES: dict[str, str] = {
 }
 
 
+_ERROR_PAGE_RE = re.compile(
+    r"(?:404\s*error|page\s*not\s*found|page\s*requested|"
+    r"search\s+senate\.gov|e-?mail\s+webmaster|broken\s+link)",
+    re.IGNORECASE,
+)
+
+_BILL_ID_RE = re.compile(
+    r"(?:H\.R\.|S\.|H\.J\.Res\.|S\.J\.Res\.|S\.Res\.|H\.Res\.|Roll-|Amdt\.)"
+)
+
+
+_USELESS_SPONSOR = {"unclear", "unknown", "n/a", "none", ""}
+
+
+def _clean_pac_sponsor(sponsor: str | None, donor_name: str) -> str | None:
+    """Return None for useless or self-referential PAC sponsors."""
+    if not sponsor or sponsor.lower().strip() in _USELESS_SPONSOR:
+        return None
+    if len(sponsor.strip()) <= 2:
+        return None
+    if sponsor.lower().strip() == donor_name.lower().strip():
+        return None
+    return sponsor
+
+
+def _compute_initials(name: str) -> str:
+    """Compute initials from 'First [Middle] Last' display name."""
+    parts = name.split()
+    if len(parts) >= 2:
+        return parts[0][0].upper() + parts[-1][0].upper()
+    if parts:
+        return parts[0][0].upper()
+    return ""
+
+
+_NAV_ARTIFACT_RE = re.compile(
+    r"skip to (?:main )?content|menu\s+menu\s+menu|"
+    r"toggle navigation|hamburger|breadcrumb",
+    re.IGNORECASE,
+)
+
+
+def _clean_platform_summary(text: str | None) -> str:
+    """Strip error pages and navigation artifacts from platform text."""
+    if not text:
+        return ""
+    if _ERROR_PAGE_RE.search(text):
+        return ""
+    text = _NAV_ARTIFACT_RE.sub("", text).strip()
+    if text.startswith(". ") or text.startswith(", "):
+        text = text[2:].strip()
+    return text
+
+
+_PROMISE_ARTIFACT_RE = re.compile(
+    r"^On the (?:Amendment|Joint Resolution|Resolution|Bill|Motion|Cloture)"
+    r"|^Pursuant to Senate Policy"
+    r"|^Learn About \w+"
+    r"|^See \w+'s Position",
+    re.IGNORECASE,
+)
+
+def _fixup_donor_type(donor_name: str, donor_type: str, senator_name: str) -> str:
+    """Read-time safety-net for donor types persisted before embedding classifier.
+
+    Uses the same semantic classifier from the pipeline to correct
+    already-persisted data that was classified with hardcoded patterns.
+    Only runs when the donor_type looks suspicious (PAC without PAC keywords).
+    """
+    if donor_type != "PAC":
+        return donor_type
+
+    name_upper = donor_name.upper()
+    has_pac_keywords = any(
+        sig in name_upper for sig in ("PAC", "COMMITTEE", "FUND", "LEAGUE", "CAUCUS")
+    )
+    if has_pac_keywords:
+        return donor_type
+
+    try:
+        from app.pipeline.analyze.donor_classifier_ai import classify_donor_type_semantic
+        cand_name = ",".join(senator_name.split()[::-1]) if senator_name else ""
+        sem_type = classify_donor_type_semantic(donor_name, candidate_name=cand_name)
+        if sem_type and sem_type != "PAC":
+            return sem_type
+    except Exception:
+        pass
+
+    return donor_type
+
+
 def _filter_promises(campaign_promises: list) -> list[CampaignPromiseSchema]:
     """Filter and correct campaign promise quality issues in persisted data."""
     from collections import Counter
 
     result = []
+    seen_texts: set[str] = set()
+
     for cp in campaign_promises:
         analysis = cp.analysis or ""
         alignment = cp.alignment or "unclear"
         related = json.loads(cp.related_votes) if cp.related_votes else []
+        promise_text = cp.promise_text or ""
+
+        # Skip error page artifacts
+        if _ERROR_PAGE_RE.search(promise_text) or _ERROR_PAGE_RE.search(analysis):
+            continue
+
+        # Skip promises that are actually browser/embed artifacts
+        promise_lower = promise_text.lower()
+        if any(sig in promise_lower for sig in (
+            "browser does not support",
+            "twitter feed",
+            "skip to content",
+            "menu menu menu",
+            "javascript",
+            "cookie",
+        )):
+            continue
+
+        # Skip overly short or generic promises
+        if len(promise_text.strip()) < 10:
+            continue
+
+        # Skip promises that are actually bill amendment titles or Senate policy boilerplate
+        if _PROMISE_ARTIFACT_RE.search(promise_text.strip()):
+            continue
+
+        # Deduplicate by exact promise text
+        text_key = promise_text.strip().lower()
+        if text_key in seen_texts:
+            continue
+        seen_texts.add(text_key)
 
         if _FILLER_RE.search(analysis):
             analysis = ""
@@ -79,8 +203,18 @@ def _filter_promises(campaign_promises: list) -> list[CampaignPromiseSchema]:
         elif alignment == "kept" and broken > 0 and kept == 0:
             alignment = "broken"
 
+        # Downgrade bold claims that lack specific bill evidence
+        if (
+            alignment in ("kept", "broken")
+            and analysis
+            and not _BILL_ID_RE.search(analysis)
+            and not related
+        ):
+            alignment = "unclear"
+            analysis = ""
+
         result.append(CampaignPromiseSchema(
-            promise_text=cp.promise_text,
+            promise_text=promise_text,
             category=cp.category,
             alignment=alignment,
             related_votes=related,
@@ -180,7 +314,7 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
         reverse=True,
     )
     party_total = voted_with + voted_against
-    party_loyalty_pct = round(voted_with / party_total * 100, 1) if party_total > 0 else 100.0
+    party_loyalty_pct = round(voted_with / party_total * 100, 1) if party_total > 0 else 0.0
 
     def _build_vote_schema(v):
         return KeyVoteSchema(
@@ -205,13 +339,14 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
         )
 
     # 6. Assemble the nested schema
+    initials = _compute_initials(senator.name) or senator.initials
     return SenatorSchema(
         id=senator.id,
         name=senator.name,
         state=senator.state,
         party=senator.party,
         years_in_office=senator.years_in_office,
-        initials=senator.initials,
+        initials=initials,
         approval_rating=senator.approval_rating,
         disapproval_rating=senator.disapproval_rating,
         representation_score=RepresentationScoreSchema(
@@ -228,10 +363,13 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
                 DonorSchema(
                     name=d.name,
                     total=d.total,
-                    type=d.type,
+                    type=_fixup_donor_type(d.name, d.type, senator.name),
                     industry=d.industry or "OTHER",
-                    pac_sponsor=d.pac_sponsor,
-                    pac_industry=d.pac_industry,
+                    pac_sponsor=_clean_pac_sponsor(d.pac_sponsor, d.name),
+                    pac_industry=(
+                        None if d.pac_industry and d.pac_industry.lower().strip() in _USELESS_SPONSOR
+                        else d.pac_industry
+                    ),
                     pac_analysis="" if (d.pac_analysis and _FILLER_RE.search(d.pac_analysis)) else d.pac_analysis,
                 )
                 for d in donors
@@ -272,7 +410,7 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
             for lm in lobbying_matches
         ],
         campaign_promises=_filter_promises(campaign_promises),
-        platform_summary=senator.platform_summary or "",
+        platform_summary=_clean_platform_summary(senator.platform_summary),
     )
 
 
@@ -359,7 +497,7 @@ def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
             state=s.state,
             party=s.party,
             years_in_office=s.years_in_office,
-            initials=s.initials,
+            initials=_compute_initials(s.name) or s.initials,
             approval_rating=s.approval_rating,
             disapproval_rating=s.disapproval_rating,
             representation_score=RepresentationScoreSchema(

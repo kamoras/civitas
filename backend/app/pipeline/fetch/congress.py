@@ -557,7 +557,7 @@ async def fetch_senator_platform_text(
 
     Returns cleaned plain text truncated to 3000 characters, or empty string if all fail.
     """
-    cache_key = f"platform-text-{senator_id}-v2"
+    cache_key = f"platform-text-{senator_id}-v3"
     cached = api_cache_get(db, "platform", cache_key)
     if cached is not None:
         return cached
@@ -592,6 +592,16 @@ async def fetch_senator_platform_text(
                 continue
 
             plain = _extract_body_text(resp.text)
+
+            # Reject error pages that slipped through with a 200 status
+            plain_lower = plain.lower()
+            if any(sig in plain_lower for sig in (
+                "page not found", "404 error", "page requested",
+                "not found (404)", "page you requested",
+                "this page doesn't exist", "page does not exist",
+            )):
+                logger.debug("Skipping error page for %s at %s", senator_name, url)
+                continue
 
             if len(plain) > 200:
                 text = plain[:3000]

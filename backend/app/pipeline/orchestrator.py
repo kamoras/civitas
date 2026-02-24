@@ -62,11 +62,17 @@ from app.pipeline.transform.normalize_votes import (
 )
 
 # Analyze modules
-from app.pipeline.analyze.bill_analyzer import classify_all_bills, classify_recent_votes
-from app.pipeline.vector_store import embed_bills
+from app.pipeline.analyze.bill_analyzer import classify_all_bills, classify_recent_votes, clear_bill_embedding_cache
+from app.pipeline.vector_store import (
+    check_model_version,
+    embed_bills,
+    invalidate_on_model_change,
+    _write_model_version,
+)
 from app.pipeline.analyze.cross_reference import analyze_senator_batch
 from app.pipeline.analyze.donor_classifier_ai import classify_donors_hybrid
 from app.pipeline.analyze.ollama_client import get_llm_stats, reset_client, reset_stats
+from app.pipeline.analyze.policy_alignment import clear_alignment_cache
 from app.pipeline.analyze.floor_speech_analyzer import analyze_floor_advocacy
 from app.pipeline.analyze.score_calculator import calculate_scores
 
@@ -275,7 +281,19 @@ async def run_full_pipeline(
     reset_stats()
     reset_client()
 
+    # Clear embedding caches from prior runs to bound memory usage
+    clear_alignment_cache()
+    clear_bill_embedding_cache()
+    from app.pipeline.transform.industry_classifier import clear_industry_embedding_cache
+    clear_industry_embedding_cache()
+
     db: Session = SessionLocal()
+
+    # Verify embedding model version — invalidate stored embeddings on change
+    if not check_model_version():
+        invalidate_on_model_change(db_session=db)
+    else:
+        _write_model_version()
 
     pipeline_run = _acquire_pipeline_lock(db)
     if pipeline_run is None:
@@ -662,6 +680,7 @@ async def run_full_pipeline(
             fec = fec_data.get(senator["id"])
             if not fec:
                 continue
+            cand_name = (fec.get("candidate") or {}).get("name", "")
             for r in fec.get("pacReceipts") or []:
                 name = r.get("contributor_name") or ""
                 if not name:
@@ -672,6 +691,7 @@ async def run_full_pipeline(
                         "name": name,
                         "amount": r.get("contribution_receipt_amount", 0) or 0,
                         "fec_receipt": r,
+                        "candidate_name": cand_name,
                     })
             for r in fec.get("receipts") or []:
                 employer = (r.get("contributor_employer") or "").strip()
@@ -686,6 +706,7 @@ async def run_full_pipeline(
                     all_donor_entries.append({
                         "name": name,
                         "amount": c.get("total", 0) or 0,
+                        "candidate_name": cand_name,
                     })
 
         ai_classifications: dict[str, dict] = {}
@@ -851,7 +872,7 @@ async def run_full_pipeline(
                 reasoning_map = analysis.get("reasoning", {})
 
                 final_key_votes = []
-                final_recent_votes = list(voting_record.get("recentVotes", []))
+                final_recent_votes = []
 
                 for v in all_key_votes:
                     if v["billId"] in key_vote_ids:

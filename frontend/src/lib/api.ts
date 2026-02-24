@@ -321,6 +321,36 @@ export interface HostStats {
   netTxBytes?: number;
 }
 
+export interface VectorCollectionStats {
+  name: string;
+  count: number;
+  metadata?: Record<string, string>;
+  sampleMetadataKeys?: string[];
+}
+
+export interface LearningStoreStats {
+  totalEntries: number;
+  bySource: Record<string, number>;
+  byType: Record<string, number>;
+  avgConfidence: number | null;
+  confidenceDistribution: Record<string, number>;
+  newestEntry: string | null;
+  oldestEntry: string | null;
+  error?: string;
+}
+
+export interface VectorDbStats {
+  status: string;
+  totalVectors?: number;
+  sizeBytes?: number;
+  collections?: VectorCollectionStats[];
+  embeddingModel?: string;
+  embeddingModelVersion?: string;
+  embeddingDimensions?: number;
+  learningStore?: LearningStoreStats;
+  error?: string;
+}
+
 export interface AdminDashboard {
   system: {
     database: string;
@@ -328,6 +358,7 @@ export interface AdminDashboard {
     ollamaModel: string;
     ollamaUrl: string;
     dbSizeBytes: number;
+    vectorDb?: VectorDbStats;
   };
   host?: HostStats;
   data: Record<string, number>;

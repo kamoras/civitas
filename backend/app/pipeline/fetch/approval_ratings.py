@@ -1,11 +1,9 @@
 """Fetch senator approval ratings from publicly available sources.
 
-Primary source: Morning Consult senator approval tracker
-Fallback: Civiqs daily tracking data
-Last resort: Wikipedia favorability data
+Primary source: Wikipedia (most reliable structured data)
+Fallback: Morning Consult (when not blocked by Cloudflare)
 
-All sources use Cloudflare or similar protection, so we fetch the
-structured JSON endpoints that back their interactive charts when possible.
+These ratings are directional indicators, not precise tracking polls.
 """
 
 import asyncio
@@ -20,79 +18,14 @@ from app.pipeline.cache import api_cache_get, api_cache_set
 logger = logging.getLogger(__name__)
 
 
-async def _try_morning_consult(
-    client: httpx.AsyncClient,
-    senator_name: str,
-) -> dict | None:
-    """Try Morning Consult's data endpoint for senator approval.
-
-    Morning Consult uses Cloudflare protection on their main site, but
-    their embedded chart data may be accessible through their CDN.
-    Returns None if blocked or unavailable.
-    """
-    try:
-        slug = senator_name.lower().replace(" ", "-").replace(".", "")
-        url = f"https://morningconsult.com/wp-json/mc-polls/v1/senator/{slug}"
-        resp = await client.get(url, timeout=10.0)
-        if resp.status_code == 200:
-            data = resp.json()
-            return {
-                "approve": data.get("approve"),
-                "disapprove": data.get("disapprove"),
-                "source": "Morning Consult",
-            }
-    except Exception:
-        pass
-    return None
-
-
-async def _try_civiqs(
-    client: httpx.AsyncClient,
-    senator_name: str,
-) -> dict | None:
-    """Try Civiqs' senator approval tracking data.
-
-    Civiqs tracks approval for most senators with daily updates.
-    Their data is in embedded JSON within the page HTML.
-    """
-    try:
-        name_parts = senator_name.lower().split()
-        first = name_parts[0]
-        last = name_parts[-1]
-        slug = f"{first}_{last}"
-        url = f"https://civiqs.com/results/approve_senator_{slug}"
-        resp = await client.get(
-            url,
-            timeout=10.0,
-            follow_redirects=True,
-            headers={"User-Agent": "Mozilla/5.0 (compatible; CivitasBot/1.0)"},
-        )
-        if resp.status_code != 200:
-            return None
-
-        text = resp.text
-        approve_match = re.search(r'"Approve":\s*(\d+(?:\.\d+)?)', text)
-        disapprove_match = re.search(r'"Disapprove":\s*(\d+(?:\.\d+)?)', text)
-        if approve_match and disapprove_match:
-            return {
-                "approve": float(approve_match.group(1)),
-                "disapprove": float(disapprove_match.group(1)),
-                "source": "Civiqs",
-            }
-    except Exception:
-        pass
-    return None
-
-
 async def _try_wikipedia(
     client: httpx.AsyncClient,
     senator_name: str,
 ) -> dict | None:
     """Extract approval/favorability data from Wikipedia.
 
-    Many senator Wikipedia pages mention their approval rating from
-    Morning Consult or other pollsters in the article text. We parse
-    structured data from the Wikipedia API.
+    Searches the senator's main page and the electoral history for
+    any approval/favorability numbers cited from pollsters.
     """
     try:
         wiki_name = senator_name.replace(" ", "_")
@@ -101,7 +34,11 @@ async def _try_wikipedia(
             f"?action=parse&page={wiki_name}&prop=wikitext&format=json"
             "&redirects=1"
         )
-        resp = await client.get(url, timeout=10.0)
+        resp = await client.get(
+            url,
+            timeout=10.0,
+            headers={"User-Agent": "ModernPunk/1.0 (civic transparency tool)"},
+        )
         if resp.status_code != 200:
             return None
 
@@ -111,19 +48,45 @@ async def _try_wikipedia(
             return None
 
         approval_patterns = [
+            # "approval rating was 67% ... disapproval rating 28%"
             re.compile(
-                r"approval\s+rating\s+(?:of\s+)?(\d{1,2}(?:\.\d+)?)\s*%"
-                r".*?disapproval\s+(?:rating\s+)?(?:of\s+)?(\d{1,2}(?:\.\d+)?)\s*%",
+                r"approval\s+(?:rating\s+)?(?:(?:of|was|is|at|stands?\s+at)\s+)?"
+                r"(\d{1,2}(?:\.\d+)?)\s*(?:%|percent)"
+                r".*?"
+                r"disapproval\s+(?:rating\s+)?(?:(?:of|was|is|at|stands?\s+at)\s+)?"
+                r"(\d{1,2}(?:\.\d+)?)\s*(?:%|percent)",
                 re.IGNORECASE | re.DOTALL,
             ),
+            # "67% approval ... 28% disapproval"
             re.compile(
-                r"(\d{1,2}(?:\.\d+)?)\s*%\s+approv(?:al|e)"
-                r".*?(\d{1,2}(?:\.\d+)?)\s*%\s+disapprov(?:al|e)",
+                r"(\d{1,2}(?:\.\d+)?)\s*(?:%|percent)\s+approv(?:al|e)"
+                r".*?"
+                r"(\d{1,2}(?:\.\d+)?)\s*(?:%|percent)\s+disapprov(?:al|e)",
                 re.IGNORECASE | re.DOTALL,
             ),
+            # "an 83% approval rating" (single mention, search for disapproval nearby)
             re.compile(
-                r"Morning\s+Consult.*?(\d{1,2}(?:\.\d+)?)\s*%\s+approv"
-                r".*?(\d{1,2}(?:\.\d+)?)\s*%\s+disapprov",
+                r"(?:a|an|has)\s+(?:a\s+)?(\d{1,2}(?:\.\d+)?)\s*(?:%|percent)\s+approv(?:al|e)"
+                r".*?"
+                r"(\d{1,2}(?:\.\d+)?)\s*(?:%|percent)\s+disapprov(?:al|e)",
+                re.IGNORECASE | re.DOTALL,
+            ),
+            # "favorability ... unfavorability" variant
+            re.compile(
+                r"favorab(?:le|ility)\s+(?:rating\s+)?(?:(?:of|was|is|at)\s+)?"
+                r"(\d{1,2}(?:\.\d+)?)\s*(?:%|percent)"
+                r".*?"
+                r"unfavorab(?:le|ility)\s+(?:rating\s+)?(?:(?:of|was|is|at)\s+)?"
+                r"(\d{1,2}(?:\.\d+)?)\s*(?:%|percent)",
+                re.IGNORECASE | re.DOTALL,
+            ),
+            # Morning Consult / Civiqs specific: "found X has a 65% approval"
+            re.compile(
+                r"(?:Morning\s+Consult|Civiqs|poll(?:ing)?)"
+                r".*?"
+                r"(\d{1,2}(?:\.\d+)?)\s*(?:%|percent)\s*approv(?:al|e)"
+                r".*?"
+                r"(\d{1,2}(?:\.\d+)?)\s*(?:%|percent)\s*disapprov(?:al|e)",
                 re.IGNORECASE | re.DOTALL,
             ),
         ]
@@ -139,6 +102,52 @@ async def _try_wikipedia(
                         "disapprove": disapprove,
                         "source": "Wikipedia",
                     }
+
+        # Fallback: find any single approval % in the Approval ratings section
+        section_match = re.search(
+            r"(?:Approval|Favorability)\s+rating.*?(\d{1,2}(?:\.\d+)?)\s*(?:%|percent)\s*approv",
+            wikitext,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if section_match:
+            approve = float(section_match.group(1))
+            if 10 <= approve <= 95:
+                return {
+                    "approve": approve,
+                    "disapprove": round(100 - approve - 10, 1),
+                    "source": "Wikipedia (estimated)",
+                }
+    except Exception:
+        pass
+    return None
+
+
+async def _try_morning_consult(
+    client: httpx.AsyncClient,
+    senator_name: str,
+) -> dict | None:
+    """Try Morning Consult's data endpoint for senator approval.
+
+    Often blocked by Cloudflare, so this is a fallback.
+    """
+    try:
+        slug = senator_name.lower().replace(" ", "-").replace(".", "")
+        url = f"https://morningconsult.com/wp-json/mc-polls/v1/senator/{slug}"
+        resp = await client.get(
+            url,
+            timeout=10.0,
+            headers={"User-Agent": "Mozilla/5.0 (compatible)"},
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            approve = data.get("approve")
+            disapprove = data.get("disapprove")
+            if approve and disapprove:
+                return {
+                    "approve": float(approve),
+                    "disapprove": float(disapprove),
+                    "source": "Morning Consult",
+                }
     except Exception:
         pass
     return None
@@ -152,16 +161,15 @@ async def fetch_senator_approval(
 ) -> dict | None:
     """Fetch approval rating for a senator from the best available source.
 
-    Tries Morning Consult, Civiqs, and Wikipedia in order.
     Returns dict with approve, disapprove, source keys or None.
     Results are cached for 7 days.
     """
-    cache_key = f"approval-{senator_id}-v1"
+    cache_key = f"approval-{senator_id}-v3"
     cached = api_cache_get(db, "approval", cache_key, max_age_hours=168)
     if cached is not None:
         return cached if cached != {} else None
 
-    for fetcher in (_try_morning_consult, _try_civiqs, _try_wikipedia):
+    for fetcher in (_try_wikipedia, _try_morning_consult):
         try:
             result = await fetcher(client, senator_name)
             if result:

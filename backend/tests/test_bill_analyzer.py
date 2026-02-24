@@ -88,10 +88,15 @@ class TestValidation:
         _validate_classifications(bills)
         assert bills[0]["policyArea"] == "HEALTHCARE"
 
-    def test_stance_lowercased(self):
+    def test_stance_lowercased_and_validated(self):
+        bills = [{"billId": "1", "policyArea": "DEFENSE", "stance": "PRO", "stanceVote": "Yea", "partyLeaning": "R"}]
+        _validate_classifications(bills)
+        assert bills[0]["stance"] == "pro"
+
+    def test_invalid_stance_normalized_to_neutral(self):
         bills = [{"billId": "1", "policyArea": "DEFENSE", "stance": "PRO-MILITARY", "stanceVote": "Yea", "partyLeaning": "R"}]
         _validate_classifications(bills)
-        assert bills[0]["stance"] == "pro-military"
+        assert bills[0]["stance"] == "neutral"
 
     def test_missing_stance_defaults_to_neutral(self):
         bills = [{"billId": "1", "policyArea": "DEFENSE", "stance": None, "stanceVote": "Yea", "partyLeaning": "R"}]

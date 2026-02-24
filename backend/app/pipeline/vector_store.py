@@ -1,19 +1,44 @@
 """
 Vector store for bill embeddings using ChromaDB and sentence-transformers.
 
-Enables semantic search for:
-- Promise-to-vote matching
-- Donor-bill connections
-- Cross-senator policy analysis
+Architecture note — two vector computation paths coexist by design:
+
+  1. **ChromaDB** (this module): persistent storage + user-facing semantic
+     search.  Used for explore document search, bill retrieval by query,
+     and admin stats.  Suited for variable-length result sets with
+     metadata filtering.
+
+  2. **Numpy matrix ops** (policy_alignment, industry_classifier, nn_classifier):
+     pipeline-time batch classification via raw cosine similarity matrices.
+     Faster than ChromaDB round-trips for fixed-size matrices (hundreds of
+     donors × hundreds of votes).  Results are ephemeral within a pipeline
+     run.
+
+Both paths share the same SentenceTransformer model singleton and the same
+model version tracking.  If the model changes, both paths are invalidated
+via invalidate_on_model_change().
 """
 
 import logging
+import os
 
 import chromadb
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger(__name__)
+
+# ── Embedding model version ──────────────────────────────────────
+# All persisted embeddings (ChromaDB collections, LearnedClassification
+# kNN references) are derived from this model.  Changing the model
+# invalidates all stored embeddings — call invalidate_on_model_change()
+# to wipe ChromaDB and the learning store when upgrading.
+
+EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+EMBEDDING_MODEL_VERSION = "all-MiniLM-L6-v2"  # short id for metadata
+EMBEDDING_DIMENSIONS = 384
+
+_VERSION_FILE = "/data/chroma/.model_version"
 
 # Singleton instances
 _client: chromadb.ClientAPI | None = None
@@ -36,14 +61,75 @@ def get_chroma_client() -> chromadb.ClientAPI:
 
 
 def get_embedding_model() -> SentenceTransformer:
-    """Get or load sentence-transformers embedding model."""
+    """Get or load sentence-transformers embedding model (singleton)."""
     global _model
     if _model is None:
-        logger.info("Loading sentence-transformers model: all-MiniLM-L6-v2")
-        # Small, fast model (80MB) optimized for semantic similarity
-        # 384-dimensional embeddings, works well on CPU
-        _model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+        logger.info("Loading sentence-transformers model: %s", EMBEDDING_MODEL_NAME)
+        _model = SentenceTransformer(EMBEDDING_MODEL_NAME)
     return _model
+
+
+def get_model_version() -> str:
+    """Return the current embedding model version string."""
+    return EMBEDDING_MODEL_VERSION
+
+
+def check_model_version() -> bool:
+    """Check if stored embeddings match the current model version.
+
+    Returns True if versions match (or no prior version recorded).
+    Returns False if a model change is detected — caller should
+    call invalidate_on_model_change().
+    """
+    try:
+        if os.path.exists(_VERSION_FILE):
+            with open(_VERSION_FILE) as f:
+                stored = f.read().strip()
+            if stored and stored != EMBEDDING_MODEL_VERSION:
+                logger.warning(
+                    "Embedding model changed: stored=%s, current=%s",
+                    stored, EMBEDDING_MODEL_VERSION,
+                )
+                return False
+    except OSError:
+        pass
+    return True
+
+
+def _write_model_version() -> None:
+    """Record the current model version to disk."""
+    try:
+        os.makedirs(os.path.dirname(_VERSION_FILE), exist_ok=True)
+        with open(_VERSION_FILE, "w") as f:
+            f.write(EMBEDDING_MODEL_VERSION)
+    except OSError as e:
+        logger.warning("Could not write model version file: %s", e)
+
+
+def invalidate_on_model_change(db_session=None) -> None:
+    """Wipe all persisted embeddings when the model version changes.
+
+    Clears ChromaDB collections and optionally the learning store
+    (LearnedClassification rows derived from embeddings).
+    """
+    logger.warning("Invalidating all stored embeddings for model change")
+
+    # Reset ChromaDB collections
+    reset_vector_db()
+
+    # Clear learning store entries that were derived from embeddings or kNN
+    if db_session is not None:
+        from app.models import LearnedClassification
+        deleted = (
+            db_session.query(LearnedClassification)
+            .filter(LearnedClassification.source.in_(["embedding", "nn"]))
+            .delete(synchronize_session="fetch")
+        )
+        db_session.commit()
+        logger.info("Deleted %d embedding-derived learning store entries", deleted)
+
+    _write_model_version()
+    logger.info("Model version recorded: %s", EMBEDDING_MODEL_VERSION)
 
 
 def embed_bills(bills: list[dict]) -> None:

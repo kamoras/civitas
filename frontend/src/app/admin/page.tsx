@@ -895,6 +895,15 @@ function AdminDashboardView({
                 <span className="text-matrix-green/60">DB SIZE</span>
                 <span>{formatBytes(d?.system.dbSizeBytes ?? 0)}</span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-matrix-green/60">VECTOR DB</span>
+                <span className="flex items-center gap-2">
+                  <StatusDot ok={d?.system.vectorDb?.status === "ok"} />
+                  {d?.system.vectorDb?.status === "ok"
+                    ? `${(d?.system.vectorDb?.totalVectors ?? 0).toLocaleString()} vectors / ${formatBytes(d?.system.vectorDb?.sizeBytes ?? 0)}`
+                    : "UNAVAILABLE"}
+                </span>
+              </div>
               <div className="border-t border-matrix-green/15 pt-2 mt-2">
                 <div className="flex justify-between">
                   <span className="text-matrix-green/60">PIPELINE</span>
@@ -1011,6 +1020,281 @@ function AdminDashboardView({
             </div>
           </div>
         </div>
+
+        {/* Vector DB & ML Metrics */}
+        {d?.system.vectorDb && (
+          <div className="terminal-window mb-6">
+            <div className="terminal-titlebar" aria-hidden="true">
+              <span className="terminal-dot red" />
+              <span className="terminal-dot yellow" />
+              <span className="terminal-dot green" />
+              <span className="ml-3 text-white/40 text-xs font-terminal">vector_db_metrics</span>
+            </div>
+            <div className="p-4 space-y-4">
+              {d.system.vectorDb.status !== "ok" ? (
+                <p className="text-neon-pink text-xs font-terminal">
+                  VECTOR DB UNAVAILABLE: {d.system.vectorDb.error}
+                </p>
+              ) : (
+                <>
+                  {/* Embedding Model */}
+                  <div>
+                    <h3 className="text-[10px] font-pixel text-matrix-green/50 tracking-wider mb-2">
+                      EMBEDDING MODEL
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="border border-matrix-green/15 rounded p-3">
+                        <div className="text-[10px] font-pixel text-matrix-green/40 mb-1">MODEL</div>
+                        <div className="text-xs font-terminal text-neon-cyan break-all">
+                          {d.system.vectorDb.embeddingModel}
+                        </div>
+                      </div>
+                      <div className="border border-matrix-green/15 rounded p-3">
+                        <div className="text-[10px] font-pixel text-matrix-green/40 mb-1">VERSION</div>
+                        <div className="text-sm font-terminal text-matrix-green">
+                          {d.system.vectorDb.embeddingModelVersion}
+                        </div>
+                      </div>
+                      <div className="border border-matrix-green/15 rounded p-3">
+                        <div className="text-[10px] font-pixel text-matrix-green/40 mb-1">DIMENSIONS</div>
+                        <div className="text-sm font-terminal text-matrix-green">
+                          {d.system.vectorDb.embeddingDimensions}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Collections */}
+                  <div>
+                    <h3 className="text-[10px] font-pixel text-matrix-green/50 tracking-wider mb-2">
+                      COLLECTIONS ({d.system.vectorDb.collections?.length ?? 0})
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {d.system.vectorDb.collections?.map((col) => {
+                        const pct = d.system.vectorDb!.totalVectors
+                          ? Math.round((col.count / d.system.vectorDb!.totalVectors!) * 100)
+                          : 0;
+                        return (
+                          <div
+                            key={col.name}
+                            className="border border-matrix-green/15 rounded p-3"
+                          >
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="text-xs font-terminal text-matrix-green">
+                                {col.name}
+                              </span>
+                              <span className="text-xs font-terminal text-neon-cyan">
+                                {col.count.toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="w-full h-1.5 bg-matrix-green/10 rounded-full overflow-hidden mb-2">
+                              <div
+                                className="h-full bg-matrix-green/60 rounded-full transition-all"
+                                style={{ width: `${Math.max(pct, 2)}%` }}
+                              />
+                            </div>
+                            <div className="text-[10px] font-terminal text-matrix-green/40">
+                              {pct}% of total vectors
+                            </div>
+                            {col.sampleMetadataKeys && col.sampleMetadataKeys.length > 0 && (
+                              <div className="mt-1 text-[10px] font-terminal text-matrix-green/30">
+                                fields: {col.sampleMetadataKeys.join(", ")}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Storage Summary */}
+                  <div>
+                    <h3 className="text-[10px] font-pixel text-matrix-green/50 tracking-wider mb-2">
+                      STORAGE
+                    </h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="border border-matrix-green/15 rounded p-3 text-center">
+                        <div className="text-lg font-terminal text-matrix-green">
+                          {(d.system.vectorDb.totalVectors ?? 0).toLocaleString()}
+                        </div>
+                        <div className="text-[10px] font-pixel text-matrix-green/50">TOTAL VECTORS</div>
+                      </div>
+                      <div className="border border-matrix-green/15 rounded p-3 text-center">
+                        <div className="text-lg font-terminal text-matrix-green">
+                          {formatBytes(d.system.vectorDb.sizeBytes ?? 0)}
+                        </div>
+                        <div className="text-[10px] font-pixel text-matrix-green/50">DISK SIZE</div>
+                      </div>
+                      <div className="border border-matrix-green/15 rounded p-3 text-center">
+                        <div className="text-lg font-terminal text-matrix-green">
+                          {d.system.vectorDb.collections?.length ?? 0}
+                        </div>
+                        <div className="text-[10px] font-pixel text-matrix-green/50">COLLECTIONS</div>
+                      </div>
+                      <div className="border border-matrix-green/15 rounded p-3 text-center">
+                        <div className="text-lg font-terminal text-matrix-green">
+                          {d.system.vectorDb.totalVectors && d.system.vectorDb.sizeBytes
+                            ? `${Math.round(d.system.vectorDb.sizeBytes / d.system.vectorDb.totalVectors)} B`
+                            : "—"}
+                        </div>
+                        <div className="text-[10px] font-pixel text-matrix-green/50">AVG PER VECTOR</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Learning Store */}
+                  {d.system.vectorDb.learningStore && !d.system.vectorDb.learningStore.error && (
+                    <div>
+                      <h3 className="text-[10px] font-pixel text-matrix-green/50 tracking-wider mb-2">
+                        LEARNING STORE
+                      </h3>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                        <div className="border border-matrix-green/15 rounded p-3 text-center">
+                          <div className="text-lg font-terminal text-matrix-green">
+                            {d.system.vectorDb.learningStore.totalEntries.toLocaleString()}
+                          </div>
+                          <div className="text-[10px] font-pixel text-matrix-green/50">CLASSIFICATIONS</div>
+                        </div>
+                        <div className="border border-matrix-green/15 rounded p-3 text-center">
+                          <div className="text-lg font-terminal text-matrix-green">
+                            {d.system.vectorDb.learningStore.avgConfidence != null
+                              ? `${(d.system.vectorDb.learningStore.avgConfidence * 100).toFixed(1)}%`
+                              : "—"}
+                          </div>
+                          <div className="text-[10px] font-pixel text-matrix-green/50">AVG CONFIDENCE</div>
+                        </div>
+                        <div className="border border-matrix-green/15 rounded p-3 text-center">
+                          <div className="text-lg font-terminal text-matrix-green">
+                            {Object.keys(d.system.vectorDb.learningStore.bySource).length}
+                          </div>
+                          <div className="text-[10px] font-pixel text-matrix-green/50">SOURCES</div>
+                        </div>
+                        <div className="border border-matrix-green/15 rounded p-3 text-center">
+                          <div className="text-lg font-terminal text-matrix-green">
+                            {Object.keys(d.system.vectorDb.learningStore.byType).length}
+                          </div>
+                          <div className="text-[10px] font-pixel text-matrix-green/50">ENTITY TYPES</div>
+                        </div>
+                      </div>
+
+                      {/* By Source breakdown */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="border border-matrix-green/15 rounded p-3">
+                          <div className="text-[10px] font-pixel text-matrix-green/40 mb-2">BY SOURCE</div>
+                          <div className="space-y-1.5">
+                            {Object.entries(d.system.vectorDb.learningStore.bySource)
+                              .sort(([, a], [, b]) => (b as number) - (a as number))
+                              .map(([source, count]) => {
+                                const total = d.system.vectorDb!.learningStore!.totalEntries;
+                                const pct = total ? Math.round(((count as number) / total) * 100) : 0;
+                                return (
+                                  <div key={source}>
+                                    <div className="flex justify-between text-xs font-terminal mb-0.5">
+                                      <span className="text-matrix-green/70">{source}</span>
+                                      <span className="text-matrix-green/50">
+                                        {(count as number).toLocaleString()} ({pct}%)
+                                      </span>
+                                    </div>
+                                    <div className="w-full h-1 bg-matrix-green/10 rounded-full overflow-hidden">
+                                      <div
+                                        className="h-full bg-neon-cyan/50 rounded-full"
+                                        style={{ width: `${Math.max(pct, 1)}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        </div>
+                        <div className="border border-matrix-green/15 rounded p-3">
+                          <div className="text-[10px] font-pixel text-matrix-green/40 mb-2">BY ENTITY TYPE</div>
+                          <div className="space-y-1.5">
+                            {Object.entries(d.system.vectorDb.learningStore.byType)
+                              .sort(([, a], [, b]) => (b as number) - (a as number))
+                              .map(([type, count]) => {
+                                const total = d.system.vectorDb!.learningStore!.totalEntries;
+                                const pct = total ? Math.round(((count as number) / total) * 100) : 0;
+                                return (
+                                  <div key={type}>
+                                    <div className="flex justify-between text-xs font-terminal mb-0.5">
+                                      <span className="text-matrix-green/70">{type}</span>
+                                      <span className="text-matrix-green/50">
+                                        {(count as number).toLocaleString()} ({pct}%)
+                                      </span>
+                                    </div>
+                                    <div className="w-full h-1 bg-matrix-green/10 rounded-full overflow-hidden">
+                                      <div
+                                        className="h-full bg-matrix-green/40 rounded-full"
+                                        style={{ width: `${Math.max(pct, 1)}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Confidence Distribution */}
+                      {Object.keys(d.system.vectorDb.learningStore.confidenceDistribution).length > 0 && (
+                        <div className="border border-matrix-green/15 rounded p-3 mt-3">
+                          <div className="text-[10px] font-pixel text-matrix-green/40 mb-2">
+                            CONFIDENCE DISTRIBUTION
+                          </div>
+                          <div className="flex items-end gap-1 h-16">
+                            {(() => {
+                              const dist = d.system.vectorDb!.learningStore!.confidenceDistribution;
+                              const buckets = Array.from({ length: 11 }, (_, i) => (i / 10).toFixed(1));
+                              const maxCount = Math.max(
+                                ...buckets.map((b) => (dist[b] ?? 0) as number),
+                                1,
+                              );
+                              return buckets.map((bucket) => {
+                                const count = (dist[bucket] ?? 0) as number;
+                                const height = count > 0 ? Math.max((count / maxCount) * 100, 5) : 0;
+                                return (
+                                  <div
+                                    key={bucket}
+                                    className="flex-1 flex flex-col items-center gap-0.5"
+                                    title={`${bucket}: ${count} entries`}
+                                  >
+                                    <div className="w-full flex items-end justify-center" style={{ height: "48px" }}>
+                                      <div
+                                        className="w-full rounded-t bg-neon-cyan/40 transition-all min-w-[4px]"
+                                        style={{ height: `${height}%` }}
+                                      />
+                                    </div>
+                                    <span className="text-[8px] font-terminal text-matrix-green/30">
+                                      {bucket}
+                                    </span>
+                                  </div>
+                                );
+                              });
+                            })()}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Timestamps */}
+                      <div className="flex gap-4 mt-2 text-[10px] font-terminal text-matrix-green/40">
+                        {d.system.vectorDb.learningStore.oldestEntry && (
+                          <span>
+                            oldest: {formatTime(d.system.vectorDb.learningStore.oldestEntry)}
+                          </span>
+                        )}
+                        {d.system.vectorDb.learningStore.newestEntry && (
+                          <span>
+                            newest: {formatTime(d.system.vectorDb.learningStore.newestEntry)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Last Run Details */}
         {d?.pipeline.lastRun && (

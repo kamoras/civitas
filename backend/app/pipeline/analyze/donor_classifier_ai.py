@@ -3,9 +3,10 @@ Hybrid donor classifier — tiered strategy for donor type and industry.
 
 Classification tiers (donor TYPE):
 1. FEC committee type codes (structured data from the API itself)
-2. Deterministic pattern rules (payment processors, party committees)
-3. Learning store lookup
-4. Nearest-neighbor embedding classifier for remaining unknowns
+2. Semantic candidate-affiliated detection (embedding similarity)
+3. Minimal safety-net rules (payment processor skips only)
+4. Learning store lookup
+5. Nearest-neighbor embedding classifier for remaining unknowns
 
 Classification tiers (donor INDUSTRY):
 1. Learning store
@@ -16,9 +17,16 @@ Design rationale: FEC already encodes committee type in structured fields
 (committee_type, designation). Using those is faster and more accurate
 than asking an LLM to re-derive what the FEC already knows. The kNN
 classifier handles the remaining ~5-10% in seconds rather than hours.
+
+Semantic detection replaces ~200 lines of hardcoded string patterns
+with embedding cosine similarity against category prototypes. This
+generalizes to unseen entities (e.g., new senator names, new PACs)
+without requiring code changes.
 """
 
 import logging
+
+import numpy as np
 from sqlalchemy.orm import Session
 
 from app.models import LearnedClassification
@@ -36,41 +44,134 @@ from app.pipeline.transform.industry_classifier import (
 logger = logging.getLogger(__name__)
 
 # FEC contributor entity_type codes → donor types
-# The entity_type field on a Schedule A receipt describes the *contributor*,
-# whereas committee.committee_type describes the *receiving* committee (the filer).
-# We must use entity_type to classify the contributor.
 FEC_ENTITY_TYPE_MAP = {
-    "CCM": "CandidateAffiliated",  # Candidate Committee
-    "CAN": "CandidateAffiliated",  # Candidate
+    "CCM": "CandidateAffiliated",
+    "CAN": "CandidateAffiliated",
     "PAC": "PAC",
-    "COM": "PAC",                  # Committee (generic)
+    "COM": "PAC",
     "ORG": "Org/Employees",
-    "IND": "Org/Employees",        # Individual (shouldn't appear in PAC receipts)
-    "PTY": "Party/Ideological",    # Party organization
+    "IND": "Org/Employees",
+    "PTY": "Party/Ideological",
 }
 
-# FEC receipt_type codes that indicate affiliated/authorized transfers
 AFFILIATED_RECEIPT_TYPES = {"18G", "18H", "18K", "18J", "22G", "22H"}
 
-SKIP_PATTERNS = [
-    "WINRED", "ACTBLUE", "ANEDOT",
-    "VICTORY COMMITTEE", "VICTORY FUND", "JOINT FUNDRAISING",
-    "INFORMATION REQUESTED",
-]
+# Minimal safety-net: payment processors that must always be skipped.
+# These are financial conduits (not actual donors) and misclassifying
+# them would pollute every senator's donor list.
+SKIP_NAMES = {"WINRED", "ACTBLUE", "ANEDOT"}
 
-PARTY_PATTERNS = [
-    "DEMOCRATIC NATIONAL COMMITTEE", "REPUBLICAN NATIONAL COMMITTEE",
-    "DEMOCRATIC SENATORIAL CAMPAIGN", "DSCC",
-    "NATIONAL REPUBLICAN SENATORIAL", "NRSC",
-    "DEMOCRATIC CONGRESSIONAL CAMPAIGN", "DCCC",
-    "NATIONAL REPUBLICAN CONGRESSIONAL", "NRCC",
-    "EMILY'S LIST", "EMILYS LIST", "CLUB FOR GROWTH",
-    "MOVEON", "PRIORITIES USA", "SENATE MAJORITY PAC",
-    "SENATE LEADERSHIP FUND", "HOUSE MAJORITY PAC",
-    "CONGRESSIONAL LEADERSHIP FUND", "AMERICAN CROSSROADS",
-    "END CITIZENS UNITED",
-]
+# Embedding prototypes for semantic donor-type classification.
+# Each description captures the semantic signature of a donor category
+# so the embedding model can generalize to unseen entities.
+_CANDIDATE_AFFILIATED_PROTOTYPE = (
+    "candidate personal campaign committee senator victory fund "
+    "friends of for senate for congress reelect leadership pac "
+    "joint fundraising state victory"
+)
+_PARTY_PROTOTYPE = (
+    "national party committee democratic republican senatorial "
+    "congressional campaign committee DSCC NRSC DCCC NRCC "
+    "Emily's List Club for Growth Senate Majority PAC "
+    "ideological super PAC political action crossroads"
+)
+_ORG_EMPLOYEES_PROTOTYPE = (
+    "corporation company business employees organization firm "
+    "group LLC LLP inc bank hospital university hotel "
+    "airline insurance manufacturing construction"
+)
+_PAC_PROTOTYPE = (
+    "political action committee PAC fund committee league caucus "
+    "association political contributions campaign donations"
+)
 
+_SEMANTIC_PROTOTYPES = {
+    "CandidateAffiliated": _CANDIDATE_AFFILIATED_PROTOTYPE,
+    "Party/Ideological": _PARTY_PROTOTYPE,
+    "Org/Employees": _ORG_EMPLOYEES_PROTOTYPE,
+    "PAC": _PAC_PROTOTYPE,
+}
+
+_semantic_embeddings: dict[str, np.ndarray] | None = None
+
+
+def _get_semantic_type_embeddings() -> dict[str, np.ndarray]:
+    """Pre-compute embeddings for donor type prototype descriptions."""
+    global _semantic_embeddings
+    if _semantic_embeddings is not None:
+        return _semantic_embeddings
+
+    from app.pipeline.vector_store import get_embedding_model
+    model = get_embedding_model()
+
+    _semantic_embeddings = {}
+    for dtype, desc in _SEMANTIC_PROTOTYPES.items():
+        emb = model.encode([desc], show_progress_bar=False)[0]
+        _semantic_embeddings[dtype] = emb / np.linalg.norm(emb)
+
+    return _semantic_embeddings
+
+
+def classify_donor_type_semantic(
+    name: str,
+    candidate_name: str | None = None,
+    threshold: float = 0.35,
+) -> str | None:
+    """Classify donor type using embedding similarity against prototypes.
+
+    For candidate-affiliated detection, also generates a dynamic template
+    using the candidate's last name so the model can detect entities like
+    "Sullivan Victory" or "Cruz for Senate" without hardcoded patterns.
+    """
+    if not name or len(name.strip()) < 3:
+        return None
+
+    from app.pipeline.vector_store import get_embedding_model
+    model = get_embedding_model()
+    type_embs = _get_semantic_type_embeddings()
+
+    query_emb = model.encode([name], show_progress_bar=False)[0]
+    query_emb = query_emb / np.linalg.norm(query_emb)
+
+    best_type: str | None = None
+    best_score = threshold
+
+    for dtype, emb in type_embs.items():
+        score = float(np.dot(query_emb, emb))
+        if score > best_score:
+            best_score = score
+            best_type = dtype
+
+    # Dynamic candidate-affiliated check: if the senator's last name
+    # appears in the donor name, generate a personalized template and
+    # check similarity. This generalizes to any senator.
+    if candidate_name:
+        last_name = candidate_name.split(",")[0].strip().upper()
+        if len(last_name) > 2 and last_name in name.upper():
+            template = (
+                f"{last_name} senate campaign victory fund committee "
+                f"friends of {last_name} for senate reelect {last_name}"
+            )
+            template_emb = model.encode([template], show_progress_bar=False)[0]
+            template_emb = template_emb / np.linalg.norm(template_emb)
+            affil_score = float(np.dot(query_emb, template_emb))
+            if affil_score > 0.30:
+                return "CandidateAffiliated"
+
+            # Also detect personal contributions: "LAST, FIRST MIDDLE"
+            name_upper = name.upper().strip()
+            donor_parts = [p.strip() for p in name_upper.split(",")]
+            cand_parts = [p.strip() for p in candidate_name.upper().split(",")]
+            if len(donor_parts) >= 2 and len(cand_parts) >= 2:
+                if donor_parts[0] == cand_parts[0]:
+                    cand_tokens = set(cand_parts[1].split())
+                    donor_tokens = set(
+                        donor_parts[1].replace("'", "").replace('"', "").split()
+                    )
+                    if cand_tokens & donor_tokens:
+                        return "CandidateAffiliated"
+
+    return best_type
 
 
 def classify_donor_type_from_fec(receipt: dict) -> str | None:
@@ -80,13 +181,10 @@ def classify_donor_type_from_fec(receipt: dict) -> str | None:
     category) — NOT committee.committee_type, which describes the *receiving*
     campaign committee and would misclassify every donor.
     """
-    # receipt_type encodes the FEC schedule line — affiliated transfers are
-    # always from the candidate's own committees
     receipt_type = receipt.get("receipt_type") or ""
     if receipt_type in AFFILIATED_RECEIPT_TYPES:
         return "CandidateAffiliated"
 
-    # entity_type describes the contributor
     entity_type = receipt.get("entity_type") or ""
     if entity_type and entity_type in FEC_ENTITY_TYPE_MAP:
         return FEC_ENTITY_TYPE_MAP[entity_type]
@@ -94,31 +192,24 @@ def classify_donor_type_from_fec(receipt: dict) -> str | None:
     return None
 
 
-def classify_donor_type_from_rules(name_upper: str) -> str | None:
-    """Classify donor type using deterministic pattern rules.
-
-    For well-known entities (payment processors, party committees),
-    pattern matching is faster and more reliable than LLM.
-    """
-    if any(p in name_upper for p in SKIP_PATTERNS):
-        return "SKIP"
-
-    if any(p in name_upper for p in PARTY_PATTERNS):
-        return "Party/Ideological"
-
-    return None
+def is_skip_entity(name_upper: str) -> bool:
+    """Check if a donor is a payment processor that should be skipped."""
+    return any(skip in name_upper for skip in SKIP_NAMES)
 
 
 async def classify_donors_hybrid(
     donors: list[dict],
     db_session: Session | None = None,
     on_progress=None,
+    candidate_name: str | None = None,
 ) -> dict[str, dict]:
     """Classify donors using the full tiered strategy.
 
     Args:
         donors: List of dicts with 'name' and optionally 'amount', 'fec_receipt'.
         db_session: SQLAlchemy session for learning store access.
+        candidate_name: FEC candidate name ("LAST, FIRST M") for
+            semantic candidate-affiliated detection.
 
     Returns:
         Dict mapping UPPERCASE donor name -> {type, industry, skip}
@@ -139,7 +230,7 @@ async def classify_donors_hybrid(
         return {}
 
     results: dict[str, dict] = {}
-    needs_llm: list[dict] = []
+    needs_nn: list[dict] = []
 
     known_from_db: dict[str, dict] = {}
     if db_session is not None:
@@ -160,10 +251,8 @@ async def classify_donors_hybrid(
                     known_from_db[r.entity_name] = {}
                 known_from_db[r.entity_name][r.entity_type] = r.value
 
-    tier_stats = {"fec": 0, "rules": 0, "learned": 0, "embedding": 0, "llm_needed": 0}
+    tier_stats = {"fec": 0, "semantic": 0, "learned": 0, "embedding": 0, "nn_needed": 0}
 
-    # Pre-compute embedding-based industry classifications in one batched call
-    # instead of 6000+ individual model.encode() calls that can crash native code.
     names_needing_embedding: list[str] = []
     for donor in unique_donors:
         name_upper = (donor.get("name") or "").upper().strip()
@@ -185,6 +274,11 @@ async def classify_donors_hybrid(
         industry = None
         source_type = None
 
+        # Skip payment processors immediately
+        if is_skip_entity(name_upper):
+            results[name_upper] = {"type": "SKIP", "industry": "OTHER", "skip": True}
+            continue
+
         learned = known_from_db.get(name_upper, {})
         if "donor_type" in learned and "industry" in learned:
             donor_type = learned["donor_type"]
@@ -192,17 +286,24 @@ async def classify_donors_hybrid(
             source_type = "learned"
             tier_stats["learned"] += 1
         else:
+            # Tier 1: FEC structured metadata (highest confidence)
             fec_type = classify_donor_type_from_fec(fec_receipt) if fec_receipt else None
             if fec_type:
                 donor_type = fec_type
                 source_type = "fec"
                 tier_stats["fec"] += 1
             else:
-                rule_type = classify_donor_type_from_rules(name_upper)
-                if rule_type:
-                    donor_type = rule_type
-                    source_type = "rules"
-                    tier_stats["rules"] += 1
+                # Tier 2: Semantic classification (embedding similarity)
+                # Use per-donor candidate_name if available, otherwise the
+                # function-level candidate_name
+                donor_cand = donor.get("candidate_name") or candidate_name
+                sem_type = classify_donor_type_semantic(
+                    name, candidate_name=donor_cand
+                )
+                if sem_type:
+                    donor_type = sem_type
+                    source_type = "semantic"
+                    tier_stats["semantic"] += 1
 
             if industry is None:
                 industry = embedding_results.get(name, "OTHER")
@@ -213,7 +314,7 @@ async def classify_donors_hybrid(
             results[name_upper] = {
                 "type": donor_type,
                 "industry": industry,
-                "skip": donor_type == "SKIP",
+                "skip": False,
             }
             if db_session is not None and source_type != "learned":
                 _store_donor_learning(db_session, name_upper, donor_type, industry, source_type or "embedding")
@@ -221,24 +322,24 @@ async def classify_donors_hybrid(
             results[name_upper] = {
                 "type": donor_type,
                 "industry": industry or "OTHER",
-                "skip": donor_type == "SKIP",
+                "skip": False,
             }
             if industry == "OTHER":
-                needs_llm.append(donor)
+                needs_nn.append(donor)
             if db_session is not None and source_type and source_type != "learned":
                 _store_donor_learning(db_session, name_upper, donor_type, industry or "OTHER", source_type)
         else:
-            needs_llm.append(donor)
-            tier_stats["llm_needed"] += 1
+            needs_nn.append(donor)
+            tier_stats["nn_needed"] += 1
 
     logger.info(
-        "Donor classification tiers: %d FEC, %d rules, %d learned, %d embedding, %d need kNN (of %d total)",
-        tier_stats["fec"], tier_stats["rules"], tier_stats["learned"],
-        tier_stats["embedding"], tier_stats["llm_needed"], len(unique_donors),
+        "Donor classification tiers: %d FEC, %d semantic, %d learned, %d embedding, %d need kNN (of %d total)",
+        tier_stats["fec"], tier_stats["semantic"], tier_stats["learned"],
+        tier_stats["embedding"], tier_stats["nn_needed"], len(unique_donors),
     )
 
-    if needs_llm and db_session is not None:
-        nn_results = _classify_remaining_via_nn(needs_llm, db_session, on_progress=on_progress)
+    if needs_nn and db_session is not None:
+        nn_results = _classify_remaining_via_nn(needs_nn, db_session, on_progress=on_progress)
         for name_upper, classification in nn_results.items():
             existing = results.get(name_upper, {})
             merged = {**existing, **classification}
@@ -296,7 +397,7 @@ def _classify_remaining_via_nn(
         name = donor["name"]
         name_upper = name.upper().strip()
         industry = industry_results.get(name, "OTHER")
-        dtype = type_results.get(name, "PAC")
+        dtype = type_results.get(name, "Org/Employees")
 
         all_results[name_upper] = {"type": dtype, "industry": industry}
 
@@ -319,7 +420,10 @@ def _classify_remaining_via_nn(
     return all_results
 
 
-_pending_learnings: dict[tuple[str, str], tuple[str, float]] = {}
+_CONFIDENCE_MAP = {"fec": 1.0, "rules": 0.95, "semantic": 0.9, "embedding": 0.9, "nn": 0.75, "llm": 0.7}
+
+# Tracks writes this run to skip redundant SQL queries for the same entity
+_seen_this_run: dict[tuple[str, str], float] = {}
 
 
 def _store_donor_learning(
@@ -328,51 +432,54 @@ def _store_donor_learning(
     donor_type: str,
     industry: str,
     source: str,
+    match_metadata: dict | None = None,
 ) -> None:
-    """Store both type and industry classifications in the learning store.
+    """Store both type and industry classifications using SQL upsert.
 
-    Tracks pending writes in _pending_learnings to avoid duplicate INSERTs
-    (autoflush=False means pending adds aren't visible to queries).
+    Uses INSERT ... ON CONFLICT DO UPDATE to handle races atomically.
     Only overwrites if new confidence >= existing confidence.
     """
+    import json
     from datetime import datetime
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+    from app.pipeline.vector_store import get_model_version
 
-    confidence = {"fec": 1.0, "rules": 0.95, "embedding": 0.9, "nn": 0.75, "llm": 0.7}.get(source, 0.5)
+    confidence = _CONFIDENCE_MAP.get(source, 0.5)
+    model_ver = get_model_version() if source in ("embedding", "nn", "semantic") else None
+    meta_json = json.dumps(match_metadata) if match_metadata else None
 
     for entity_type, value in [("donor_type", donor_type), ("industry", industry)]:
         key = (name_upper, entity_type)
 
-        # Check if we already wrote a higher-confidence value this run
-        pending = _pending_learnings.get(key)
-        if pending and pending[1] > confidence:
+        prev_confidence = _seen_this_run.get(key, -1.0)
+        if prev_confidence > confidence:
             continue
 
-        existing = (
-            db_session.query(LearnedClassification)
-            .filter(
-                LearnedClassification.entity_name == name_upper,
-                LearnedClassification.entity_type == entity_type,
-            )
-            .first()
+        stmt = sqlite_insert(LearnedClassification).values(
+            entity_name=name_upper,
+            entity_type=entity_type,
+            value=value,
+            confidence=confidence,
+            source=source,
+            model_version=model_ver,
+            match_metadata=meta_json,
+            learned_at=datetime.utcnow(),
+        ).on_conflict_do_update(
+            index_elements=["entity_name", "entity_type"],
+            set_={
+                "value": value,
+                "confidence": confidence,
+                "source": source,
+                "model_version": model_ver,
+                "match_metadata": meta_json,
+                "learned_at": datetime.utcnow(),
+            },
+            where=(LearnedClassification.confidence <= confidence),
         )
-        if existing:
-            if confidence >= existing.confidence:
-                existing.value = value
-                existing.confidence = confidence
-                existing.source = source
-                existing.learned_at = datetime.utcnow()
-        elif key not in _pending_learnings:
-            db_session.add(LearnedClassification(
-                entity_name=name_upper,
-                entity_type=entity_type,
-                value=value,
-                confidence=confidence,
-                source=source,
-            ))
-
-        _pending_learnings[key] = (value, confidence)
+        db_session.execute(stmt)
+        _seen_this_run[key] = confidence
 
 
 def _reset_pending_learnings() -> None:
-    """Clear pending learning tracker (call at start of each pipeline run)."""
-    _pending_learnings.clear()
+    """Clear per-run dedup tracker (call at start of each pipeline run)."""
+    _seen_this_run.clear()

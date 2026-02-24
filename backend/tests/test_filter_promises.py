@@ -16,7 +16,7 @@ def _make_promise(
     text="Lower drug costs",
     category="healthcare",
     alignment="kept",
-    analysis="Senator voted for healthcare expansion.",
+    analysis="Senator voted Yea on H.R. 3 to lower drug costs.",
     related_votes=None,
 ):
     """Build a mock CampaignPromise ORM-like object."""
@@ -25,7 +25,7 @@ def _make_promise(
         category=category,
         alignment=alignment,
         analysis=analysis,
-        related_votes=json.dumps(related_votes or []),
+        related_votes=json.dumps(related_votes if related_votes is not None else ["H.R. 3"]),
     )
 
 
@@ -41,14 +41,20 @@ class TestFilterPromises:
 
     def test_filler_analysis_stripped(self):
         promises = [
-            _make_promise(analysis="Senator has received funding from healthcare PACs."),
+            _make_promise(
+                analysis="Senator has received funding from healthcare PACs.",
+                related_votes=["H.R. 3"],
+            ),
         ]
         result = _filter_promises(promises)
         assert result[0].analysis == ""
 
     def test_filler_political_pac_stripped(self):
         promises = [
-            _make_promise(analysis="This is, a political PAC that supports healthcare."),
+            _make_promise(
+                analysis="This is, a political PAC that supports healthcare.",
+                related_votes=["H.R. 3"],
+            ),
         ]
         result = _filter_promises(promises)
         assert result[0].analysis == ""
@@ -101,8 +107,8 @@ class TestFilterPromises:
 
     def test_unique_bill_sets_preserved(self):
         promises = [
-            _make_promise(text="Healthcare", related_votes=["HR.1"]),
-            _make_promise(text="Defense", related_votes=["HR.2"]),
+            _make_promise(text="Lower healthcare costs for families", related_votes=["HR.1"]),
+            _make_promise(text="Strengthen national defense spending", related_votes=["HR.2"]),
         ]
         result = _filter_promises(promises)
         assert result[0].related_votes == ["HR.1"]
@@ -111,12 +117,12 @@ class TestFilterPromises:
     def test_empty_bill_sets_not_flagged_as_duplicate(self):
         """Two promises with empty bill sets should NOT trigger the duplicate guard."""
         promises = [
-            _make_promise(text="Promise A", related_votes=[]),
-            _make_promise(text="Promise B", related_votes=[]),
+            _make_promise(text="Expand renewable energy funding", related_votes=[], alignment="unclear", analysis="No related votes found."),
+            _make_promise(text="Protect public lands from development", related_votes=[], alignment="unclear", analysis="No related votes found."),
         ]
         result = _filter_promises(promises)
-        assert result[0].alignment == "kept"
-        assert result[1].alignment == "kept"
+        assert result[0].alignment == "unclear"
+        assert result[1].alignment == "unclear"
 
     def test_empty_input(self):
         assert _filter_promises([]) == []
@@ -132,13 +138,36 @@ class TestFilterPromises:
         result = _filter_promises([p])
         assert len(result) == 1
 
+    def test_error_page_promise_filtered(self):
+        """Promises scraped from 404 pages should be removed entirely."""
+        promises = [
+            _make_promise(
+                text="404 Error Page Requested Page Not Found (404). Search Senate.gov",
+                analysis="The senator's voting record does not align.",
+            ),
+        ]
+        result = _filter_promises(promises)
+        assert len(result) == 0
+
+    def test_kept_without_bill_ref_downgraded(self):
+        """A 'kept' promise whose analysis doesn't cite a bill should become 'unclear'."""
+        promises = [
+            _make_promise(
+                alignment="kept",
+                analysis="Senator supports healthcare expansion.",
+                related_votes=[],
+            ),
+        ]
+        result = _filter_promises(promises)
+        assert result[0].alignment == "unclear"
+
     def test_related_votes_deserialized(self):
         p = _make_promise(related_votes=["HR.1", "S.200"])
         result = _filter_promises([p])
         assert result[0].related_votes == ["HR.1", "S.200"]
 
     def test_no_related_votes_field(self):
-        p = _make_promise()
+        p = _make_promise(alignment="unclear", analysis="No related legislation found.")
         p.related_votes = None
         result = _filter_promises([p])
         assert result[0].related_votes == []

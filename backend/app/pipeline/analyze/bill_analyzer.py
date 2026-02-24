@@ -29,21 +29,87 @@ INDUSTRY_CODES = {
 }
 
 POLICY_TAXONOMY = {
-    "LABOR": "labor unions workers employment wages collective bargaining NLRB workforce rights minimum wage overtime",
-    "DEFENSE": "military defense national security armed forces Pentagon troops veterans weapons procurement defense spending authorization",
-    "GUNS": "firearms gun control second amendment weapons background checks ammunition assault weapons mass shootings",
-    "HEALTHCARE": "healthcare medical insurance hospitals Medicare Medicaid public health drugs prescription ACA Affordable Care Act",
-    "ENVIRONMENT": "environment climate change pollution EPA emissions regulations conservation clean air water endangered species carbon",
-    "TAXES": "taxes tax reform revenue IRS deductions credits corporate tax income tax estate tax capital gains",
-    "IMMIGRATION": "immigration border security asylum refugees visa DACA citizenship deportation undocumented",
-    "EDUCATION": "education schools universities student loans teachers curriculum STEM federal education Pell grants Title I",
-    "FINANCIAL": "financial regulation banking Wall Street SEC consumer protection Dodd-Frank CFPB banking oversight",
-    "ENERGY": "energy renewable solar wind nuclear fossil fuel pipeline drilling electricity clean energy subsidies grid power plant",
-    "TECH": "technology internet data privacy cybersecurity artificial intelligence social media antitrust big tech surveillance",
-    "JUSTICE": "criminal justice police reform sentencing prison courts judicial system law enforcement bail mandatory minimum",
-    "TRADE": "trade tariffs imports exports international commerce USMCA sanctions foreign trade China",
-    "WELFARE": "welfare social programs food stamps SNAP housing assistance unemployment benefits poverty safety net",
-    "PROCEDURAL": "nomination confirmation cloture procedural motion table resolution appointing executive calendar",
+    "LABOR": (
+        "Labor unions, workers' rights, employment, wages, and collective bargaining. "
+        "Includes minimum wage, overtime protections, NLRB, workforce safety, "
+        "paid family leave, and right-to-work legislation."
+    ),
+    "DEFENSE": (
+        "Military, defense, national security, armed forces, and veterans. "
+        "Includes the National Defense Authorization Act (NDAA), Pentagon budget, "
+        "troop deployments, weapons procurement, defense contracts, VA benefits, "
+        "and military base funding."
+    ),
+    "GUNS": (
+        "Firearms, gun control, and the Second Amendment. "
+        "Includes background checks, assault weapons bans, ammunition regulations, "
+        "concealed carry, red flag laws, and gun violence prevention."
+    ),
+    "HEALTHCARE": (
+        "Healthcare, medical insurance, hospitals, Medicare, and Medicaid. "
+        "Includes the Affordable Care Act, prescription drug prices, public health, "
+        "mental health, opioid crisis, and health system regulation."
+    ),
+    "ENVIRONMENT": (
+        "Environment, climate change, pollution, EPA, and conservation. "
+        "Includes clean air and water regulations, emissions standards, "
+        "endangered species, national parks, and environmental justice."
+    ),
+    "TAXES": (
+        "Taxes, federal budget, government spending, and appropriations. "
+        "Includes tax reform, IRS, deductions, credits, corporate tax, "
+        "continuing resolutions, omnibus spending bills, government funding, "
+        "debt ceiling, and fiscal policy."
+    ),
+    "IMMIGRATION": (
+        "Immigration, border security, asylum, and citizenship. "
+        "Includes visa policy, DACA, deportation, refugee resettlement, "
+        "border wall funding, and immigration courts."
+    ),
+    "EDUCATION": (
+        "Education, schools, universities, and student loans. "
+        "Includes Pell grants, Title I, STEM funding, teacher pay, "
+        "school choice, and higher education access."
+    ),
+    "FINANCIAL": (
+        "Financial regulation, banking oversight, and consumer protection. "
+        "Includes Wall Street reform, SEC, Dodd-Frank, CFPB, "
+        "cryptocurrency regulation, and banking compliance."
+    ),
+    "ENERGY": (
+        "Energy production, utilities, and power grid. "
+        "Includes renewable energy, solar, wind, nuclear, fossil fuels, "
+        "pipeline construction, drilling permits, electricity grid modernization, "
+        "and energy subsidies."
+    ),
+    "TECH": (
+        "Technology, internet, data privacy, and cybersecurity. "
+        "Includes artificial intelligence regulation, social media oversight, "
+        "antitrust for big tech, surveillance, and broadband access."
+    ),
+    "JUSTICE": (
+        "Criminal justice, law enforcement, courts, and civil rights. "
+        "Includes police reform, sentencing reform, prison conditions, "
+        "bail reform, executive authority, national emergencies, "
+        "District of Columbia governance, and constitutional powers."
+    ),
+    "TRADE": (
+        "International trade, tariffs, sanctions, and commerce. "
+        "Includes import/export policy, USMCA, trade agreements, "
+        "trade wars, foreign sanctions, and economic diplomacy."
+    ),
+    "WELFARE": (
+        "Social programs, safety net, and disaster relief. "
+        "Includes SNAP, food assistance, housing, unemployment benefits, "
+        "Social Security, retirement, disability, postal service, "
+        "infrastructure, FEMA, and disaster assistance."
+    ),
+    "PROCEDURAL": (
+        "Procedural motions with no substantive policy content. "
+        "Includes cloture votes, motions to table, motions to proceed, "
+        "quorum calls, adjournment, journal reading, naming buildings, "
+        "commemorations, and parliamentary procedure."
+    ),
 }
 
 POLICY_AREAS = ", ".join(POLICY_TAXONOMY.keys())
@@ -82,19 +148,61 @@ POLICY_IMPACTED_GROUPS: dict[str, list[str]] = {
     "PROCEDURAL": [],
 }
 
-_ACTION_PATTERNS: list[tuple[list[str], str]] = [
-    (["ban", "prohibit", "restrict", "limit", "block"], "restrict {area} activities"),
-    (["protect", "strengthen", "expand", "extend", "increase"], "strengthen {area} protections"),
-    (["repeal", "eliminate", "remove", "defund", "rescind"], "roll back {area} measures"),
-    (["reform", "modernize", "update", "overhaul"], "reform {area} policy"),
-    (["fund", "appropriate", "authorize spending", "invest"], "fund {area} programs"),
-    (["establish", "create", "institute"], "establish new {area} measures"),
-    (["require", "mandate"], "mandate {area} requirements"),
-    (["reauthorize"], "reauthorize {area} programs"),
+def _augmented_embedding_classify(text: str) -> str:
+    """Second-pass embedding classification with augmented context.
+
+    When the first embedding pass is below the confidence threshold,
+    this function tries again with a richer query that includes
+    contextual framing to help the model distinguish substantive
+    legislation from procedural votes.
+    """
+    from app.pipeline.vector_store import get_embedding_model
+    model = get_embedding_model()
+    policy_embs = _get_policy_embeddings()
+
+    augmented = f"This legislation concerns: {text}"
+    query_emb = model.encode([augmented[:500]], show_progress_bar=False)[0]
+    query_emb = query_emb / np.linalg.norm(query_emb)
+
+    best_area = "PROCEDURAL"
+    best_score = 0.0
+
+    for area, area_emb in policy_embs.items():
+        if area == "PROCEDURAL":
+            continue
+        score = float(np.dot(query_emb, area_emb))
+        if score > best_score:
+            best_score = score
+            best_area = area
+
+    if best_score > 0.18:
+        return best_area
+    return "PROCEDURAL"
+
+
+# Each pattern: (keywords, description_template, stance_direction)
+# "pro" = bill supports/expands the policy area
+# "anti" = bill restricts/opposes the policy area
+# "neutral" = directional intent is ambiguous
+_ACTION_PATTERNS: list[tuple[list[str], str, str]] = [
+    (["ban", "prohibit", "restrict", "limit", "block"], "restrict {area} activities", "anti"),
+    (["protect", "strengthen", "expand", "extend", "increase"], "strengthen {area} protections", "pro"),
+    (["repeal", "eliminate", "remove", "defund", "rescind"], "roll back {area} measures", "anti"),
+    (["reform", "modernize", "update", "overhaul"], "reform {area} policy", "neutral"),
+    (["fund", "appropriate", "authorize spending", "invest"], "fund {area} programs", "pro"),
+    (["establish", "create", "institute"], "establish new {area} measures", "pro"),
+    (["require", "mandate"], "mandate {area} requirements", "pro"),
+    (["reauthorize"], "reauthorize {area} programs", "pro"),
 ]
 
 _policy_embeddings: dict[str, np.ndarray] = {}
 _industry_embeddings: dict[str, np.ndarray] = {}
+
+
+def clear_bill_embedding_cache() -> None:
+    """Clear cached bill/policy embeddings (call between pipeline runs)."""
+    _policy_embeddings.clear()
+    _industry_embeddings.clear()
 
 
 def _get_policy_embeddings() -> dict[str, np.ndarray]:
@@ -133,8 +241,15 @@ def _get_industry_embeddings() -> dict[str, np.ndarray]:
 # ── Policy area classification (embeddings) ──────────────────────
 
 
+EMBEDDING_CONFIDENCE_THRESHOLD = 0.25
+
+
 def classify_policy_area(text: str) -> tuple[str, float]:
-    """Classify policy area via embedding cosine similarity."""
+    """Classify policy area via embedding cosine similarity.
+
+    PROCEDURAL is only assigned by keyword match, never by embeddings,
+    to prevent substantive legislation from being misclassified.
+    """
     if not text or len(text.strip()) < 5:
         return "PROCEDURAL", 0.0
 
@@ -154,10 +269,16 @@ def classify_policy_area(text: str) -> tuple[str, float]:
     best_score = 0.0
 
     for area, area_emb in policy_embs.items():
+        if area == "PROCEDURAL":
+            continue
         score = float(np.dot(query_emb, area_emb))
         if score > best_score:
             best_score = score
             best_area = area
+
+    if best_score < EMBEDDING_CONFIDENCE_THRESHOLD:
+        augmented_area = _augmented_embedding_classify(text)
+        return augmented_area, best_score
 
     return best_area, best_score
 
@@ -193,22 +314,52 @@ def classify_affected_industries(text: str, top_n: int = 3) -> list[str]:
 # ── Stance and narrative derivation (keyword + template) ─────────
 
 
-def derive_stance(bill_name: str, summary: str, policy_area: str) -> str:
-    """Derive a brief stance description from bill name and summary."""
+def derive_stance(bill_name: str, summary: str, policy_area: str) -> tuple[str, str]:
+    """Derive a brief stance description and direction from bill name and summary.
+
+    Returns:
+        (stance_text, stance_direction) where direction is "pro", "anti", or "neutral".
+        "pro"  = bill supports/expands the policy area (Yea = supporting)
+        "anti" = bill restricts/opposes the policy area (Nay = supporting)
+        "neutral" = directional intent is ambiguous
+    """
+    text = bill_name.lower()
+    area = policy_area.lower().replace("_", " ")
+
+    # Try keyword patterns first to get structured direction
+    matched_direction = "neutral"
+    matched_desc: str | None = None
+    for keywords, template, direction in _ACTION_PATTERNS:
+        if any(w in text for w in keywords):
+            matched_desc = template.format(area=area)
+            matched_direction = direction
+            break
+
+    # Prefer summary first sentence for display text
     if summary and len(summary) > 30:
         first_sentence = summary.split(".")[0].strip()
         first_sentence = re.sub(r"<[^>]+>", "", first_sentence).strip()
         if len(first_sentence) > 20:
-            return first_sentence[:150]
+            return first_sentence[:150], matched_direction
 
-    text = bill_name.lower()
-    area = policy_area.lower().replace("_", " ")
+    if matched_desc:
+        return matched_desc, matched_direction
 
-    for keywords, template in _ACTION_PATTERNS:
-        if any(w in text for w in keywords):
-            return template.format(area=area)
+    return f"{area} legislation", "neutral"
 
-    return f"{area} legislation"
+
+def _direction_to_stance_vote(direction: str) -> str | None:
+    """Convert a stance direction to the expected vote for *supporting* the policy.
+
+    "pro" bills expand/strengthen the policy area -> Yea supports the area.
+    "anti" bills restrict/roll back the policy area -> Nay supports the area.
+    "neutral" -> None (ambiguous).
+    """
+    if direction == "pro":
+        return "Yea"
+    if direction == "anti":
+        return "Nay"
+    return None
 
 
 def _make_corporate_interest(policy_area: str, industries: list[str]) -> str:
@@ -246,15 +397,21 @@ async def classify_all_bills(
     for b in bills:
         summary = (b.get("summary") or b.get("billName", ""))[:300]
         bill_text = f"{b['billName']} {summary}"
+        bill_date = _extract_bill_date(b.get("actions", []))
 
         policy_area, confidence = classify_policy_area(bill_text)
 
-        if policy_area == "PROCEDURAL" and confidence >= 0.8:
-            classified.append(_make_procedural(b))
+        if policy_area == "PROCEDURAL" and confidence >= 0.9:
+            proc = _make_procedural(b)
+            proc["date"] = bill_date
+            classified.append(proc)
             procedural_count += 1
         else:
+            if policy_area == "PROCEDURAL":
+                policy_area = _augmented_embedding_classify(bill_text)
             industries = classify_affected_industries(bill_text)
-            stance = derive_stance(b["billName"], summary, policy_area)
+            stance_text, stance_direction = derive_stance(b["billName"], summary, policy_area)
+            stance_vote = _direction_to_stance_vote(stance_direction)
             groups = POLICY_IMPACTED_GROUPS.get(policy_area, ["general public"])[:3]
             description = _clean_summary(summary, b["billName"])
 
@@ -262,11 +419,12 @@ async def classify_all_bills(
                 "billId": b["billId"],
                 "billName": b["billName"],
                 "congress": b["congress"],
-                "date": "",
+                "date": bill_date,
                 "description": description,
                 "policyArea": policy_area,
-                "stance": stance,
-                "stanceVote": "Yea",
+                "stance": stance_direction,
+                "stanceText": stance_text,
+                "stanceVote": stance_vote,
                 "impactedGroups": groups,
                 "corporateInterest": _make_corporate_interest(policy_area, industries),
                 "publicImpact": _make_public_impact(policy_area, groups),
@@ -307,7 +465,7 @@ async def classify_recent_votes(
         vote_text = f"{name} {question}"
         policy_area, confidence = classify_policy_area(vote_text)
 
-        if policy_area == "PROCEDURAL" and confidence >= 0.8:
+        if policy_area == "PROCEDURAL" and confidence >= 0.9:
             classified.append({
                 "billId": bill_id,
                 "billName": name,
@@ -324,8 +482,11 @@ async def classify_recent_votes(
             })
             procedural_count += 1
         else:
+            if policy_area == "PROCEDURAL":
+                policy_area = _augmented_embedding_classify(vote_text)
             industries = classify_affected_industries(vote_text)
-            stance = derive_stance(name, question, policy_area)
+            stance_text, stance_direction = derive_stance(name, question, policy_area)
+            stance_vote = _direction_to_stance_vote(stance_direction)
             groups = POLICY_IMPACTED_GROUPS.get(policy_area, ["general public"])[:3]
 
             classified.append({
@@ -334,8 +495,9 @@ async def classify_recent_votes(
                 "date": vote_date,
                 "description": description,
                 "policyArea": policy_area,
-                "stance": stance,
-                "stanceVote": "Yea",
+                "stance": stance_direction,
+                "stanceText": stance_text,
+                "stanceVote": stance_vote,
                 "impactedGroups": groups,
                 "corporateInterest": _make_corporate_interest(policy_area, industries),
                 "publicImpact": _make_public_impact(policy_area, groups),
@@ -352,6 +514,21 @@ async def classify_recent_votes(
 
 
 # ── Helpers ──────────────────────────────────────────────────────
+
+
+def _extract_bill_date(actions: list[dict]) -> str:
+    """Extract the most relevant date from bill actions (e.g. when signed or passed)."""
+    if not actions:
+        return ""
+    for action in actions:
+        text = (action.get("text") or "").lower()
+        if any(kw in text for kw in ("became public law", "signed by president", "passed senate")):
+            date_str = action.get("actionDate") or action.get("date") or ""
+            if date_str:
+                return date_str
+    if actions:
+        return actions[0].get("actionDate") or actions[0].get("date") or ""
+    return ""
 
 
 def _make_procedural(b: dict) -> dict:
@@ -393,6 +570,8 @@ def _validate_classifications(bills: list[dict]) -> None:
         if not bill.get("stance") or not isinstance(bill.get("stance"), str):
             bill["stance"] = "neutral"
         bill["stance"] = bill["stance"].strip().lower()
+        if bill["stance"] not in ("pro", "anti", "neutral", "procedural", "nomination"):
+            bill["stance"] = "neutral"
 
         if bill.get("stanceVote") not in ("Yea", "Nay"):
             bill["stanceVote"] = None

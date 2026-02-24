@@ -222,6 +222,8 @@ class LearnedClassification(Base):
     value: Mapped[str] = mapped_column(String, nullable=False)
     confidence: Mapped[float] = mapped_column(Float, default=1.0)  # 1.0=rule, 0.9=embedding, 0.7=LLM
     source: Mapped[str] = mapped_column(String, nullable=False)  # "rule", "embedding", "llm", "fec"
+    model_version: Mapped[str | None] = mapped_column(String, nullable=True)  # embedding model that produced this
+    match_metadata: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON: top scores, matched anchors
     learned_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
 
 

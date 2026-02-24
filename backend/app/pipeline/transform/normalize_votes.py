@@ -296,9 +296,9 @@ def compute_party_split(roll_call_data: dict) -> str | None:
     r_yea_pct = r_yea / r_total
     d_yea_pct = d_yea / d_total
 
-    if r_yea_pct > 0.75 and d_yea_pct <= 0.25:
+    if r_yea_pct >= 0.65 and d_yea_pct <= 0.35:
         return "R"
-    if d_yea_pct > 0.75 and r_yea_pct <= 0.25:
+    if d_yea_pct >= 0.65 and r_yea_pct <= 0.35:
         return "D"
     return "bipartisan"
 

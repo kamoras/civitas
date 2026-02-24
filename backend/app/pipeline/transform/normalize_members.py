@@ -92,25 +92,29 @@ def normalize_members(
         party = _normalize_party(m.get("partyName") or m.get("party"))
         years_in_office = _calculate_years_in_office(m, detail)
 
-        # Generate ID matching existing format: lastname-firstname
-        name_parts = name.split()
-        last_name = re.sub(r"[^a-z]", "", name_parts[-1].lower()) if name_parts else ""
-        first_name = re.sub(r"[^a-z]", "", name_parts[0].lower()) if name_parts else ""
-        senator_id = f"{last_name}-{first_name}"
+        # Generate ID from raw name for backward compatibility with DB records
+        raw_parts = name.split()
+        raw_last = re.sub(r"[^a-z]", "", raw_parts[-1].lower()) if raw_parts else ""
+        raw_first = re.sub(r"[^a-z]", "", raw_parts[0].lower()) if raw_parts else ""
+        senator_id = f"{raw_last}-{raw_first}"
 
-        # Initials
-        initials = "".join(
-            p[0].upper()
-            for p in name_parts
-            if p and not p.startswith("(")
-        )[:2]
+        # Clean name to "First Last" order for display and initials
+        name = _clean_name(name)
+        name_parts = name.split()
+
+        # Initials: first letter of first name + first letter of last name
+        initials = ""
+        if len(name_parts) >= 2:
+            initials = name_parts[0][0].upper() + name_parts[-1][0].upper()
+        elif name_parts:
+            initials = name_parts[0][0].upper()
 
         official_url = (detail.get("officialWebsiteUrl") or "").rstrip("/")
 
         results.append({
             "bioguideId": m.get("bioguideId", ""),
             "id": senator_id,
-            "name": _clean_name(name),
+            "name": name,
             "state": state,
             "party": party,
             "yearsInOffice": years_in_office,

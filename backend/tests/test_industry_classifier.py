@@ -53,7 +53,7 @@ class TestEmbeddingClassification:
             assert result in list(INDUSTRY_DESCRIPTIONS.keys()) + ["OTHER"]
 
     def test_unknown_entity_returns_other(self):
-        assert classify_industry("Random Unknown LLC") == "OTHER"
+        assert classify_industry("Xylophone Kumquat Zephyr") == "OTHER"
 
     def test_empty_input(self):
         assert classify_industry("") == "OTHER"
@@ -87,7 +87,7 @@ class TestLearningStore:
         assert source == "embedding"
 
     def test_learning_store_miss_unknown_returns_other(self, db_session):
-        result, source = classify_with_learning("Random Unknown LLC", db_session)
+        result, source = classify_with_learning("Xylophone Kumquat Zephyr", db_session)
         assert result == "OTHER"
         assert source == "unknown"
 
@@ -166,13 +166,13 @@ class TestBatchClassification:
     """Batch classification with learning store integration."""
 
     def test_batch_returns_results_and_unknowns(self, db_session):
-        names = ["Goldman Sachs", "Pfizer Inc", "Random Unknown LLC"]
+        names = ["Goldman Sachs", "Pfizer Inc", "Xylophone Kumquat Zephyr"]
         results, unknowns = classify_batch_with_learning(names, db_session)
 
         assert results["Goldman Sachs"] == "FINANCE"
         assert results["Pfizer Inc"] == "PHARMA"
-        assert results["Random Unknown LLC"] == "OTHER"
-        assert "Random Unknown LLC" in unknowns
+        assert results["Xylophone Kumquat Zephyr"] == "OTHER"
+        assert "Xylophone Kumquat Zephyr" in unknowns
         assert "Goldman Sachs" not in unknowns
 
     def test_batch_uses_learning_store(self, db_session):

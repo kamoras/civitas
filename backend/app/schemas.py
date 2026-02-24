@@ -99,7 +99,7 @@ class LobbyingMatchSchema(CamelModel):
     lobbying_spend: float
     donation_to_senator: float
     bills_influenced: list[str]
-    senator_vote_aligned: bool
+    senator_vote_aligned: bool | None = None
     description: str
 
 

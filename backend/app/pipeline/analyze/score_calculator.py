@@ -234,32 +234,19 @@ def _calc_promise_persistence(
     return clamp(final)
 
 
-# Maps donor industries to the policy areas they care about.
-_INDUSTRY_POLICY_MAP: dict[str, set[str]] = {
-    "FINANCE":      {"FINANCIAL", "TAXES"},
-    "PHARMA":       {"HEALTHCARE"},
-    "INSURANCE":    {"HEALTHCARE"},
-    "HEALTHCARE":   {"HEALTHCARE"},
-    "OIL_GAS":      {"ENERGY", "ENVIRONMENT"},
-    "ENERGY":       {"ENERGY", "ENVIRONMENT"},
-    "DEFENSE":      {"DEFENSE"},
-    "TECH":         {"TECH"},
-    "TELECOM":      {"TECH"},
-    "REAL_ESTATE":  {"FINANCIAL", "WELFARE"},
-    "AGRIBUSINESS": {"TRADE", "ENVIRONMENT"},
-    "TRANSPORT":    {"TRADE"},
-    "CONSTRUCTION": {"TRADE"},
-    "LABOR_UNIONS": {"LABOR"},
-    "CRYPTO":       {"FINANCIAL", "TECH"},
-}
-
-
 def _get_state_relevant_policies(funding: dict) -> set[str]:
-    """Derive state-relevant policy areas from the senator's top donor industries."""
+    """Derive state-relevant policy areas from the senator's top donor industries.
+
+    Uses embedding similarity instead of a hardcoded mapping.
+    """
+    from app.pipeline.analyze.policy_alignment import get_related_policies
+
     policies: set[str] = set()
     for ind in funding.get("industryBreakdown", [])[:5]:
         industry = ind.get("industry", "")
-        policies.update(_INDUSTRY_POLICY_MAP.get(industry, set()))
+        if industry in ("OTHER", "SMALL_DONORS", "LARGE_INDIVIDUAL", "POLITICAL"):
+            continue
+        policies.update(get_related_policies(industry))
     return policies
 
 
@@ -348,14 +335,20 @@ def _calc_independent_voting(
     )
 
     if lobbying_matches:
-        aligned = sum(1 for m in lobbying_matches if m.get("senatorVoteAligned"))
-        total_matches = len(lobbying_matches)
-        if total_matches > 0:
-            lobby_alignment_rate = aligned / total_matches
-            # Scale penalty by PAC ratio: high PAC + high alignment = bad
+        # Count only matches with explicit alignment data (non-null)
+        with_alignment = [
+            m for m in lobbying_matches
+            if m.get("senatorVoteAligned") is not None
+        ]
+        if with_alignment:
+            aligned = sum(1 for m in with_alignment if m.get("senatorVoteAligned"))
+            lobby_alignment_rate = aligned / len(with_alignment)
             donor_score = (1 - lobby_alignment_rate * min(pac_ratio * 2, 1.0)) * 100
         else:
-            donor_score = 75
+            # Matches found but alignment is unknown — mildly penalize
+            # based on the sheer number of industry-connected votes and PAC ratio
+            connection_factor = min(len(lobbying_matches) / 6, 1.0)
+            donor_score = (1 - connection_factor * pac_ratio * 0.5) * 100
     else:
         donor_score = 75  # no lobbying signal → mildly positive
 

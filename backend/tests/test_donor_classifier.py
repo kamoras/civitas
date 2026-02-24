@@ -2,9 +2,9 @@
 
 Tests the tiered classification strategy:
 1. FEC committee type codes (structured metadata)
-2. Deterministic pattern rules (SKIP, Party/Ideological)
+2. Semantic embedding-based classification
 3. Learning store lookup
-4. LLM fallback (mocked)
+4. kNN fallback
 """
 
 import pytest
@@ -14,7 +14,8 @@ from app.models import LearnedClassification
 from app.pipeline.analyze.donor_classifier_ai import (
     FEC_ENTITY_TYPE_MAP,
     classify_donor_type_from_fec,
-    classify_donor_type_from_rules,
+    classify_donor_type_semantic,
+    is_skip_entity,
     classify_donors_hybrid,
 )
 
@@ -54,40 +55,34 @@ class TestFECTypeClassification:
         assert len(FEC_ENTITY_TYPE_MAP) == 7
 
 
-class TestRuleClassification:
-    """Tier 2: Deterministic pattern rules."""
+class TestSkipDetection:
+    """Tier 2: Payment processor skip detection."""
 
     @pytest.mark.parametrize(
-        "name, expected",
-        [
-            ("WINRED TECHNICAL SERVICES", "SKIP"),
-            ("ACTBLUE", "SKIP"),
-            ("ANEDOT INC", "SKIP"),
-            ("SOME VICTORY COMMITTEE", "SKIP"),
-            ("JOINT FUNDRAISING COMMITTEE", "SKIP"),
-        ],
+        "name",
+        ["WINRED TECHNICAL SERVICES", "ACTBLUE", "ANEDOT INC"],
     )
-    def test_skip_patterns(self, name, expected):
-        assert classify_donor_type_from_rules(name) == expected
+    def test_skip_entities(self, name):
+        assert is_skip_entity(name) is True
 
-    @pytest.mark.parametrize(
-        "name, expected",
-        [
-            ("DEMOCRATIC NATIONAL COMMITTEE", "Party/Ideological"),
-            ("REPUBLICAN NATIONAL COMMITTEE", "Party/Ideological"),
-            ("DSCC", "Party/Ideological"),
-            ("NRSC", "Party/Ideological"),
-            ("EMILY'S LIST", "Party/Ideological"),
-            ("CLUB FOR GROWTH", "Party/Ideological"),
-            ("SENATE MAJORITY PAC", "Party/Ideological"),
-        ],
-    )
-    def test_party_patterns(self, name, expected):
-        assert classify_donor_type_from_rules(name) == expected
+    def test_non_skip_entities(self):
+        assert is_skip_entity("PFIZER INC") is False
+        assert is_skip_entity("GOLDMAN SACHS") is False
 
-    def test_unknown_name_returns_none(self):
-        assert classify_donor_type_from_rules("PFIZER INC") is None
-        assert classify_donor_type_from_rules("GOLDMAN SACHS") is None
+
+class TestSemanticClassification:
+    """Tier 2: Embedding-based semantic donor type classification."""
+
+    def test_candidate_affiliated_personal_contribution(self):
+        result = classify_donor_type_semantic(
+            "CRUZ, RAPHAEL EDWARD TED",
+            candidate_name="CRUZ, RAFAEL EDWARD (TED)",
+        )
+        assert result == "CandidateAffiliated"
+
+    def test_returns_none_for_empty_name(self):
+        assert classify_donor_type_semantic("") is None
+        assert classify_donor_type_semantic("AB") is None
 
 
 @pytest.mark.slow
@@ -113,7 +108,7 @@ class TestHybridClassification:
         assert result["TEST PAC"]["type"] == "PAC"
 
     @pytest.mark.asyncio
-    async def test_rules_tier(self, db_session):
+    async def test_skip_tier(self, db_session):
         donors = [{"name": "ACTBLUE", "amount": 1000}]
         result = await classify_donors_hybrid(donors, db_session=db_session)
         assert "ACTBLUE" in result
@@ -156,16 +151,15 @@ class TestHybridClassification:
         assert "TEST CORP" in result
 
     @pytest.mark.asyncio
-    async def test_unknown_donors_skipped_without_llm(self, db_session):
-        """Donors with unknown type AND industry should be queued for LLM."""
+    async def test_unknown_donors_classified_via_nn(self, db_session):
+        """Donors with unknown type AND industry should be queued for kNN."""
         donors = [{"name": "Completely Unknown Entity XYZ", "amount": 500}]
         with patch(
-            "app.pipeline.analyze.donor_classifier_ai._classify_remaining_via_llm",
-            new_callable=AsyncMock,
+            "app.pipeline.analyze.donor_classifier_ai._classify_remaining_via_nn",
             return_value={"COMPLETELY UNKNOWN ENTITY XYZ": {"type": "Org/Employees", "industry": "OTHER"}},
-        ) as mock_llm:
+        ) as mock_nn:
             result = await classify_donors_hybrid(donors, db_session=db_session)
-            mock_llm.assert_called_once()
+            mock_nn.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_skip_unknown_and_empty_names(self, db_session):

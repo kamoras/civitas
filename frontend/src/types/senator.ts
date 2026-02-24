@@ -91,7 +91,7 @@ export interface LobbyingMatch {
   lobbyingSpend: number;
   donationToSenator: number;
   billsInfluenced: string[];
-  senatorVoteAligned: boolean;
+  senatorVoteAligned: boolean | null;
   description: string;
 }
 

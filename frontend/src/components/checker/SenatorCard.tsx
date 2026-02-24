@@ -185,7 +185,9 @@ export default function SenatorCard({ senator }: SenatorCardProps) {
                         )}
                       </div>
                       {donor.pacSponsor &&
-                        donor.pacSponsor.toLowerCase() !== donor.name.toLowerCase() && (
+                        donor.pacSponsor.toLowerCase() !== donor.name.toLowerCase() &&
+                        !["unclear", "unknown", "n/a", "none", ""].includes(donor.pacSponsor.toLowerCase().trim()) &&
+                        donor.pacSponsor.length > 2 && (
                         <div className="text-[10px] text-neon-pink/60 mt-0.5">
                           BEHIND THE PAC: {donor.pacSponsor}
                         </div>

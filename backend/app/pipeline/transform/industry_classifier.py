@@ -22,78 +22,118 @@ from app.models import LearnedClassification
 logger = logging.getLogger(__name__)
 
 INDUSTRY_DESCRIPTIONS: dict[str, str] = {
-    "PHARMA": "pharmaceutical drugs biotech medicine vaccines clinical trials drug manufacturing biopharmaceutical Pfizer Merck AbbVie Eli Lilly Johnson & Johnson Novartis Sanofi AstraZeneca Amgen Gilead Moderna Regeneron",
-    "INSURANCE": "insurance underwriting coverage premiums actuarial health insurance property casualty Anthem Cigna Humana UnitedHealth Aetna Blue Cross MetLife Aflac Progressive Allstate",
-    "OIL_GAS": "oil gas petroleum drilling fracking pipeline fossil fuel refinery crude natural gas exploration Exxon Chevron ConocoPhillips BP Shell Halliburton Koch Marathon Valero",
-    "DEFENSE": "defense military weapons aerospace missiles contractors armed forces naval army air force Lockheed Raytheon Boeing Northrop Grumman General Dynamics BAE L3Harris Leidos",
-    "FINANCE": "banking investment securities hedge fund private equity venture capital financial services Wall Street asset management brokerage wealth management credit lending credit union savings loan mutual savings federal credit union community bank Goldman Sachs Morgan Stanley JPMorgan Citigroup Bank of America Wells Fargo BlackRock Fidelity Vanguard",
-    "REAL_ESTATE": "real estate property housing mortgage realty homebuilder REIT commercial property development National Association of Realtors",
-    "TECH": "technology software internet cloud computing artificial intelligence data silicon valley digital platform Google Alphabet Meta Facebook Apple Microsoft Amazon Oracle Salesforce Intel Nvidia",
-    "TELECOM": "telecommunications wireless broadband cable internet service provider cellular network satellite AT&T Verizon T-Mobile Comcast Charter",
-    "AGRIBUSINESS": "agriculture farming crop livestock dairy grain agribusiness ranching fertilizer seed Monsanto Cargill Archer Daniels Deere John Deere Bayer crop",
-    "ENERGY": "energy utility electric power renewable solar wind nuclear coal generation transmission Duke Energy Dominion Exelon NextEra Southern Company",
-    "CONSTRUCTION": "construction building contractor engineering infrastructure cement architecture development general contractor",
-    "TRANSPORT": "transportation airline aviation railroad shipping trucking logistics freight maritime FedEx UPS Delta United Airlines American Airlines Southwest",
-    "LAWYERS": "law firm attorney legal litigation counsel solicitor legal services LLP PLLC Skadden Jones Day Kirkland Latham Sidley Covington Greenberg",
+    "PHARMA": (
+        "pharmaceutical drugs biotech medicine vaccines clinical trials drug manufacturing. "
+        "Pfizer Merck AbbVie Eli Lilly Johnson & Johnson Novartis Sanofi AstraZeneca Amgen "
+        "Gilead Moderna Regeneron biopharmaceutical prescription drugs"
+    ),
+    "INSURANCE": (
+        "insurance underwriting coverage premiums actuarial health insurance property casualty. "
+        "Anthem Cigna Humana UnitedHealth Aetna Blue Cross Blue Shield MetLife Aflac Progressive "
+        "Allstate State Farm Geico mutual life benefit plan underwriter indemnity"
+    ),
+    "OIL_GAS": (
+        "oil gas petroleum drilling fracking pipeline fossil fuel refinery crude natural gas. "
+        "Exxon Chevron ConocoPhillips BP Shell Halliburton Koch Marathon Valero exploration "
+        "upstream downstream"
+    ),
+    "DEFENSE": (
+        "defense military weapons aerospace missiles contractors armed forces. "
+        "Lockheed Raytheon Boeing Northrop Grumman General Dynamics BAE L3Harris Leidos "
+        "naval army air force Pentagon"
+    ),
+    "FINANCE": (
+        "banking investment securities hedge fund private equity venture capital financial services. "
+        "Wall Street asset management brokerage wealth management credit lending. "
+        "Credit union savings bank savings & loan community bank federal credit union mutual savings. "
+        "Goldman Sachs Morgan Stanley JPMorgan Citigroup Bank of America Wells Fargo BlackRock "
+        "Fidelity Vanguard Raymond James Chain Bridge"
+    ),
+    "REAL_ESTATE": (
+        "real estate property housing mortgage realty homebuilder REIT commercial property development. "
+        "National Association of Realtors"
+    ),
+    "TECH": (
+        "technology software internet cloud computing artificial intelligence data silicon valley. "
+        "Google Alphabet Meta Facebook Apple Microsoft Amazon Oracle Salesforce Intel Nvidia "
+        "digital platform cybersecurity"
+    ),
+    "TELECOM": (
+        "telecommunications wireless broadband cable internet service provider cellular network satellite. "
+        "AT&T Verizon T-Mobile Comcast Charter"
+    ),
+    "AGRIBUSINESS": (
+        "agriculture farming crop livestock dairy grain agribusiness ranching fertilizer seed. "
+        "Monsanto Cargill Archer Daniels Deere John Deere Bayer sugar cotton"
+    ),
+    "ENERGY": (
+        "energy utility electric power renewable solar wind nuclear coal generation transmission. "
+        "Electric cooperative power company electric co-op. "
+        "Duke Energy Dominion Exelon NextEra Southern Company"
+    ),
+    "CONSTRUCTION": "construction building contractor engineering infrastructure cement architecture development",
+    "TRANSPORT": (
+        "transportation airline aviation railroad shipping trucking logistics freight maritime. "
+        "FedEx UPS Delta United Airlines American Airlines Southwest"
+    ),
+    "LAWYERS": (
+        "law firm attorney legal litigation counsel solicitor legal services LLP PLLC. "
+        "Skadden Jones Day Kirkland Latham Sidley Covington Greenberg law office attorneys at law"
+    ),
     "LOBBYISTS": "lobbying government relations public affairs advocacy political consulting Akin Gump Brownstein",
     "GAMBLING": "casino gambling gaming sports betting lottery wagering Las Vegas Sands MGM Wynn Caesars",
-    "GUNS": "firearm gun rifle ammunition weapons manufacturer second amendment NRA National Rifle Association Smith & Wesson Remington",
+    "GUNS": (
+        "firearm gun rifle ammunition weapons manufacturer second amendment. "
+        "NRA National Rifle Association Gun Owners of America Smith & Wesson Remington"
+    ),
     "TOBACCO": "tobacco cigarette vaping e-cigarette nicotine smoking Altria Philip Morris Reynolds JUUL",
     "CRYPTO": "cryptocurrency bitcoin blockchain digital currency decentralized finance web3 Coinbase Binance",
     "PRIVATE_PRISON": "prison corrections incarceration detention correctional facility CoreCivic GEO Group",
-    "LABOR_UNIONS": "union labor workers organized labor collective bargaining AFL-CIO SEIU Teamsters AFSCME United Auto Workers UAW carpenters electricians plumbers",
+    "LABOR_UNIONS": (
+        "union labor workers organized labor collective bargaining. "
+        "AFL-CIO SEIU Teamsters AFSCME United Auto Workers UAW carpenters electricians plumbers "
+        "steelworkers machinists firefighters laborers IBEW teachers union brotherhood"
+    ),
     "EDUCATION": "university college school education academic teaching research higher education",
     "MEDIA": "media broadcast television news publishing journalism entertainment studio film",
     "RETAIL": "retail store merchandise consumer goods shopping wholesale distribution",
     "MANUFACTURING": "manufacturing factory production industrial assembly plant fabrication",
-    "HEALTHCARE": "hospital health clinic medical healthcare nursing patient care physician medical center health system medical association dental nurses association optometric chiropractic podiatry American Medical Association AMA HCA Kaiser Permanente Mayo Clinic",
-    "POLITICAL": "political party campaign committee victory fund leadership fund election national committee Emily's List Club for Growth DSCC NRSC Democratic Republican senatorial congressional",
+    "HEALTHCARE": (
+        "hospital health clinic medical healthcare nursing patient care physician. "
+        "Medical center health system medical association dental nurses optometric chiropractic podiatry. "
+        "Surgical orthopedic anesthesiology radiology dermatology ophthalmology pediatric obstetrics. "
+        "AMA HCA Kaiser Permanente Mayo Clinic"
+    ),
+    "POLITICAL": (
+        "political party campaign committee victory fund leadership fund election. "
+        "National committee DSCC NRSC Democratic Republican senatorial congressional. "
+        "Emily's List Club for Growth campaign services digital strategy voter contact"
+    ),
 }
 
-_KEYWORD_INDUSTRY_RULES: list[tuple[list[str], str]] = [
-    (["CREDIT UNION", "FEDERAL CREDIT", "SAVINGS BANK", "SAVINGS & LOAN", "COMMUNITY BANK"], "FINANCE"),
-    (["MEDICAL", "HOSPITAL", "HEALTH SYSTEM", "HEALTH CENTER", "CLINIC", "PHYSICIANS", "NURSES", "DENTAL", "OPTOMETRIC", "CHIROPRACTIC", "PODIATRY", "SURGICAL", "ORTHOPEDIC", "ANESTHESI", "RADIOLOG", "EMERGENCY MEDICINE", "DERMATOLOG", "OPHTHALM", "PEDIATRIC", "OBSTET", "UROLOG", "ONCOLOG", "CARDIO", "NEURO", "GASTRO", "PULMON", "NEPHRO", "PATHOLOG", "PSYCHIATRIC"], "HEALTHCARE"),
-    (["PHARMA", "PHARMACEUTICAL", "BIOTECH", "BIOPHARMA"], "PHARMA"),
-    (["INSURANCE", "UNDERWRITER", "CASUALTY", "MUTUAL LIFE", "BENEFIT PLAN"], "INSURANCE"),
-    (["OIL ", "PETROLEUM", "NATURAL GAS", "PIPELINE", "REFINER", "DRILLING"], "OIL_GAS"),
-    (["ELECTRIC COOPERATIVE", "ELECTRIC CO-OP", "POWER COMPANY", "UTILITY", "SOLAR", "WIND ENERGY"], "ENERGY"),
-    (["REALT", "HOMEBUILDER", "MORTGAGE", "NATIONAL ASSOCIATION OF REALTORS"], "REAL_ESTATE"),
-    (["LAW OFFICE", "LAW FIRM", "ATTORNEYS AT LAW", " LLP", " PLLC"], "LAWYERS"),
-    (["AFL-CIO", "TEAMSTER", "CARPENTERS", "ELECTRICIAN", "PLUMBER", "LABORERS", "STEELWORKER", "MACHINISTS", "FIREFIGHTER", "TEACHERS UNION", "SEIU", "AFSCME", "IBEW"], "LABOR_UNIONS"),
-    (["LOCKHEED", "RAYTHEON", "NORTHROP", "GENERAL DYNAMICS", "BAE SYSTEMS", "L3HARRIS", "LEIDOS"], "DEFENSE"),
-    (["NATIONAL RIFLE", "GUN OWNERS", "FIREARM", "SECOND AMENDMENT"], "GUNS"),
-]
 
+def _strip_pac_suffix(name: str) -> str:
+    """Remove 'PAC' suffix from org names to improve embedding classification.
 
-def _keyword_industry(name_upper: str) -> str | None:
-    """Fast keyword-based industry classification for unambiguous cases.
-
-    Runs before the embedding classifier to catch obvious patterns like
-    "XYZ CREDIT UNION PAC" or "ABC MEDICAL CENTER PAC" that the embedder
-    misclassifies as POLITICAL because of the word "PAC" in the name.
+    Entity names like 'XYZ CREDIT UNION PAC' get misclassified as POLITICAL
+    because the word 'PAC' dominates the embedding. Stripping it lets the
+    semantic content ('credit union') drive classification.
     """
-    for keywords, industry in _KEYWORD_INDUSTRY_RULES:
-        if any(kw in name_upper for kw in keywords):
-            return industry
-    return None
+    import re
+    return re.sub(
+        r"\s+(?:PAC|POLITICAL ACTION COMMITTEE|POLITICAL ACTION)\s*$",
+        "",
+        name.strip(),
+        flags=re.IGNORECASE,
+    ).strip()
 
 
 _embeddings_cache: dict[str, np.ndarray] = {}
-_model_ref = None
-SIMILARITY_THRESHOLD = 0.35
-
-
-def _get_model():
-    """Lazy-load the shared sentence-transformer model."""
-    global _model_ref
-    if _model_ref is None:
-        from app.pipeline.vector_store import get_embedding_model
-        _model_ref = get_embedding_model()
-    return _model_ref
+SIMILARITY_THRESHOLD = 0.30
 
 
 def clear_industry_embedding_cache() -> None:
-    """Clear cached industry embeddings (call after updating descriptions)."""
+    """Clear cached industry embeddings (call between pipeline runs)."""
     _embeddings_cache.clear()
 
 
@@ -102,7 +142,8 @@ def _get_industry_embeddings() -> dict[str, np.ndarray]:
     if _embeddings_cache:
         return _embeddings_cache
 
-    model = _get_model()
+    from app.pipeline.vector_store import get_embedding_model
+    model = get_embedding_model()
     for industry, description in INDUSTRY_DESCRIPTIONS.items():
         embedding = model.encode([description], show_progress_bar=False)[0]
         _embeddings_cache[industry] = embedding / np.linalg.norm(embedding)
@@ -112,77 +153,91 @@ def _get_industry_embeddings() -> dict[str, np.ndarray]:
 
 
 def classify_industry(org_name: str | None) -> str:
-    """Classify a single org name, keyword rules first then embedding similarity.
-
-    Args:
-        org_name: Organization or employer name.
+    """Classify a single org name using embedding cosine similarity.
 
     Returns:
         Industry code string, or "OTHER" if below similarity threshold.
     """
-    if not org_name or len(org_name.strip()) < 2:
-        return "OTHER"
+    result, _ = classify_industry_with_provenance(org_name)
+    return result
 
-    keyword_hit = _keyword_industry(org_name.upper().strip())
-    if keyword_hit:
-        return keyword_hit
+
+def classify_industry_with_provenance(org_name: str | None) -> tuple[str, dict]:
+    """Classify and return provenance metadata (top scores, matched anchor).
+
+    Returns:
+        (industry_code, metadata_dict) where metadata_dict contains
+        top_match, top_score, runner_up, runner_up_score.
+    """
+    if not org_name or len(org_name.strip()) < 2:
+        return "OTHER", {}
+
+    clean_name = _strip_pac_suffix(org_name)
+    if len(clean_name.strip()) < 2:
+        clean_name = org_name
+
+    from app.pipeline.vector_store import get_embedding_model
 
     industry_embs = _get_industry_embeddings()
-    model = _get_model()
+    model = get_embedding_model()
 
-    query_emb = model.encode([org_name], show_progress_bar=False)[0]
+    query_emb = model.encode([clean_name], show_progress_bar=False)[0]
     query_emb = query_emb / np.linalg.norm(query_emb)
 
-    best_industry = "OTHER"
-    best_score = SIMILARITY_THRESHOLD
-
+    scored: list[tuple[str, float]] = []
     for industry, ind_emb in industry_embs.items():
         score = float(np.dot(query_emb, ind_emb))
-        if score > best_score:
-            best_score = score
-            best_industry = industry
+        scored.append((industry, score))
+    scored.sort(key=lambda x: x[1], reverse=True)
 
-    return best_industry
+    best_industry, best_score = scored[0] if scored else ("OTHER", 0.0)
+    if best_score < SIMILARITY_THRESHOLD:
+        best_industry = "OTHER"
+
+    meta: dict = {"top_match": scored[0][0], "top_score": round(scored[0][1], 4)} if scored else {}
+    if len(scored) > 1:
+        meta["runner_up"] = scored[1][0]
+        meta["runner_up_score"] = round(scored[1][1], 4)
+
+    return best_industry, meta
 
 
 def classify_industries_batch(org_names: list[str]) -> dict[str, str]:
-    """Batch-classify org names: keyword rules first, then embedding similarity.
+    """Batch-classify org names using embedding cosine similarity.
 
-    Much more efficient and stable than calling classify_industry() per name.
+    Strips 'PAC' suffixes before embedding to improve accuracy.
+    Much more efficient than calling classify_industry() per name.
     """
     if not org_names:
         return {}
 
     results: dict[str, str] = {name: "OTHER" for name in org_names}
 
-    # Fast keyword pass — resolve obvious cases before embedding
-    needs_embedding: list[tuple[int, str]] = []
-    keyword_resolved = 0
+    needs_embedding: list[tuple[int, str, str]] = []
     for i, name in enumerate(org_names):
         if not name or len(name.strip()) < 2:
             continue
-        hit = _keyword_industry(name.upper().strip())
-        if hit:
-            results[name] = hit
-            keyword_resolved += 1
-        else:
-            needs_embedding.append((i, name))
+        clean = _strip_pac_suffix(name)
+        if len(clean.strip()) < 2:
+            clean = name
+        needs_embedding.append((i, name, clean))
 
     if not needs_embedding:
-        logger.info("Batch classified %d org names (all %d via keywords)", len(org_names), keyword_resolved)
         return results
+
+    from app.pipeline.vector_store import get_embedding_model
 
     industry_embs = _get_industry_embeddings()
     ind_keys = list(industry_embs.keys())
     ind_matrix = np.stack([industry_embs[k] for k in ind_keys])
 
-    model = _get_model()
-    valid_names = [name for _, name in needs_embedding]
+    model = get_embedding_model()
+    clean_names = [clean for _, _, clean in needs_embedding]
 
     _ENCODE_BATCH = 256
     all_embeddings = []
-    for start in range(0, len(valid_names), _ENCODE_BATCH):
-        batch = valid_names[start : start + _ENCODE_BATCH]
+    for start in range(0, len(clean_names), _ENCODE_BATCH):
+        batch = clean_names[start : start + _ENCODE_BATCH]
         embs = model.encode(batch, show_progress_bar=False, batch_size=min(64, len(batch)))
         all_embeddings.append(embs)
     query_embs = np.vstack(all_embeddings)
@@ -194,14 +249,13 @@ def classify_industries_batch(org_names: list[str]) -> dict[str, str]:
     best_indices = np.argmax(scores, axis=1)
     best_scores = scores[np.arange(len(scores)), best_indices]
 
-    for j, (_, name) in enumerate(needs_embedding):
+    for j, (_, name, _) in enumerate(needs_embedding):
         if best_scores[j] > SIMILARITY_THRESHOLD:
             results[name] = ind_keys[best_indices[j]]
 
     logger.info(
-        "Batch classified %d org names (%d keywords, %d embedding)",
+        "Batch classified %d org names (%d matched via embedding)",
         len(org_names),
-        keyword_resolved,
         int(np.sum(best_scores > SIMILARITY_THRESHOLD)),
     )
     return results
@@ -233,10 +287,13 @@ def classify_with_learning(
         if learned:
             return learned.value, "learned"
 
-    industry = classify_industry(org_name)
+    industry, meta = classify_industry_with_provenance(org_name)
     if industry != "OTHER":
         if db_session is not None:
-            _store_classification(db_session, normalized, "industry", industry, 0.9, "embedding")
+            _store_classification(
+                db_session, normalized, "industry", industry, 0.9, "embedding",
+                match_metadata=meta,
+            )
         return industry, "embedding"
 
     return "OTHER", "unknown"
@@ -313,9 +370,15 @@ def _store_classification(
     value: str,
     confidence: float,
     source: str,
+    match_metadata: dict | None = None,
 ) -> None:
-    """Upsert a classification into the learning store."""
+    """Upsert a classification into the learning store with provenance."""
+    import json
     from datetime import datetime
+    from app.pipeline.vector_store import get_model_version
+
+    meta_json = json.dumps(match_metadata) if match_metadata else None
+
     existing = (
         db_session.query(LearnedClassification)
         .filter(
@@ -329,6 +392,8 @@ def _store_classification(
             existing.value = value
             existing.confidence = confidence
             existing.source = source
+            existing.model_version = get_model_version() if source in ("embedding", "nn") else None
+            existing.match_metadata = meta_json
             existing.learned_at = datetime.utcnow()
     else:
         db_session.add(LearnedClassification(
@@ -337,5 +402,7 @@ def _store_classification(
             value=value,
             confidence=confidence,
             source=source,
+            model_version=get_model_version() if source in ("embedding", "nn") else None,
+            match_metadata=meta_json,
         ))
     db_session.commit()
