@@ -1,0 +1,312 @@
+"""Explore API — semantic search over government activity documents."""
+
+import logging
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
+
+from app.config import settings
+from app.database import get_db
+from app.models import ExploreDocument
+from app.pipeline.vector_store import search_explore_documents
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/explore")
+
+
+@router.get("")
+async def search_explore(
+    q: str = Query(..., min_length=2, max_length=200, description="Search query"),
+    doc_type: str | None = Query(None, description="Filter by document type"),
+    chamber: str | None = Query(None, description="Filter by chamber"),
+    commentable: bool = Query(False, description="Only show documents open for comment"),
+    sort: str = Query("relevance", description="Sort order: relevance or date"),
+    limit: int = Query(20, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    """Semantic search over government activity documents.
+
+    Returns matching documents ranked by relevance (default) or date.
+    """
+    fetch_limit = limit * 3 if commentable else limit
+    results = search_explore_documents(
+        query=q,
+        n_results=fetch_limit,
+        doc_type=doc_type,
+        chamber=chamber,
+    )
+
+    doc_ids = [r["id"] for r in results if r.get("id")]
+    if doc_ids:
+        docs = (
+            db.query(
+                ExploreDocument.id,
+                ExploreDocument.url,
+                ExploreDocument.summary,
+                ExploreDocument.agency_name,
+                ExploreDocument.comment_url,
+                ExploreDocument.comments_close_on,
+            )
+            .filter(ExploreDocument.id.in_(doc_ids))
+            .all()
+        )
+        doc_map = {d.id: d for d in docs}
+        for result in results:
+            doc = doc_map.get(result.get("id"))
+            if doc:
+                result["url"] = doc.url or ""
+                result["summary"] = doc.summary or result.get("snippet", "")
+                result["agencyName"] = doc.agency_name or ""
+                result["commentUrl"] = doc.comment_url or ""
+                result["commentsCloseOn"] = doc.comments_close_on or ""
+
+    if commentable:
+        from datetime import date as date_type
+        today_str = date_type.today().isoformat()
+        results = [
+            r for r in results
+            if r.get("commentUrl") and r.get("commentsCloseOn", "") >= today_str
+        ][:limit]
+
+    if sort == "date":
+        results.sort(key=lambda r: r.get("date", ""), reverse=True)
+
+    return JSONResponse(
+        content={"query": q, "results": results, "count": len(results)},
+        headers={"Cache-Control": "public, max-age=60, stale-while-revalidate=60"},
+    )
+
+
+@router.get("/stats")
+async def explore_stats(db: Session = Depends(get_db)):
+    """Return counts of explore documents by type and chamber."""
+    total = db.query(ExploreDocument).count()
+
+    type_counts: dict[str, int] = {}
+    chamber_counts: dict[str, int] = {}
+
+    if total > 0:
+        from sqlalchemy import func
+        type_rows = (
+            db.query(ExploreDocument.doc_type, func.count())
+            .group_by(ExploreDocument.doc_type)
+            .all()
+        )
+        for doc_type, count in type_rows:
+            type_counts[doc_type] = count
+
+        chamber_rows = (
+            db.query(ExploreDocument.chamber, func.count())
+            .group_by(ExploreDocument.chamber)
+            .all()
+        )
+        for chamber, count in chamber_rows:
+            if chamber:
+                chamber_counts[chamber] = count
+
+    open_for_comment = 0
+    if total > 0:
+        from datetime import date as date_type
+        today_str = date_type.today().isoformat()
+        open_for_comment = (
+            db.query(ExploreDocument)
+            .filter(
+                ExploreDocument.comment_url.isnot(None),
+                ExploreDocument.comment_url != "",
+                ExploreDocument.comments_close_on >= today_str,
+            )
+            .count()
+        )
+
+    return JSONResponse(
+        content={
+            "totalDocuments": total,
+            "byType": type_counts,
+            "byChamber": chamber_counts,
+            "openForComment": open_for_comment,
+        },
+        headers={"Cache-Control": "public, max-age=300, stale-while-revalidate=300"},
+    )
+
+
+@router.get("/{doc_id}")
+async def get_explore_document(doc_id: int, db: Session = Depends(get_db)):
+    """Return full details for a single explore document."""
+    doc = db.query(ExploreDocument).filter(ExploreDocument.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    return JSONResponse(
+        content={
+            "id": doc.id,
+            "title": doc.title,
+            "summary": doc.summary,
+            "body": doc.body,
+            "date": doc.date,
+            "docType": doc.doc_type,
+            "source": doc.source,
+            "url": doc.url or "",
+            "politicianName": doc.politician_name or "",
+            "politicianId": doc.politician_id or "",
+            "chamber": doc.chamber or "",
+            "agencyName": doc.agency_name or "",
+            "commentUrl": doc.comment_url or "",
+            "commentsCloseOn": doc.comments_close_on or "",
+        },
+        headers={"Cache-Control": "public, max-age=300, stale-while-revalidate=300"},
+    )
+
+
+@router.get("/{doc_id}/comments")
+async def get_document_comments(
+    doc_id: int,
+    page: int = Query(1, ge=1, le=100),
+    page_size: int = Query(25, ge=1, le=25),
+    db: Session = Depends(get_db),
+):
+    """Fetch public comments for a regulatory document from regulations.gov."""
+    doc = db.query(ExploreDocument).filter(ExploreDocument.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if not doc.comment_url:
+        return JSONResponse(content={
+            "comments": [],
+            "totalElements": 0,
+            "message": "This document does not accept public comments.",
+        })
+
+    from app.pipeline.fetch.regulations_gov import fetch_comments
+    result = await fetch_comments(
+        comment_url=doc.comment_url,
+        page_size=page_size,
+        page_number=page,
+    )
+    return JSONResponse(content=result)
+
+
+@router.post("/{doc_id}/comments")
+async def post_document_comment(
+    doc_id: int,
+    db: Session = Depends(get_db),
+    comment: str = Query(..., min_length=10, max_length=5000, description="Comment text"),
+    name: str = Query("Anonymous", max_length=100, description="Your name"),
+    organization: str = Query("", max_length=200, description="Organization (optional)"),
+    dry_run: bool = Query(False, description="Validate without submitting"),
+):
+    """Submit a public comment on a regulatory document via regulations.gov.
+
+    Pass dry_run=true to validate everything without actually submitting.
+    """
+    doc = db.query(ExploreDocument).filter(ExploreDocument.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if not doc.comment_url:
+        raise HTTPException(status_code=400, detail="This document does not accept public comments")
+
+    if doc.comments_close_on:
+        from datetime import date as date_type
+        if doc.comments_close_on < date_type.today().isoformat():
+            raise HTTPException(status_code=400, detail="The comment period for this document has closed")
+
+    from app.pipeline.fetch.regulations_gov import submit_comment, _extract_document_object_id
+
+    if dry_run:
+        reg_doc_id = _extract_document_object_id(doc.comment_url)
+        return JSONResponse(content={
+            "success": True,
+            "dryRun": True,
+            "message": "Validation passed. Comment would be submitted to regulations.gov.",
+            "payload": {
+                "commentOnDocumentId": reg_doc_id,
+                "comment": comment.strip()[:80] + ("..." if len(comment.strip()) > 80 else ""),
+                "commentLength": len(comment.strip()),
+                "submitterName": name.strip() or "Anonymous",
+                "organization": organization.strip() or None,
+                "targetUrl": doc.comment_url,
+                "commentsCloseOn": doc.comments_close_on,
+            },
+        })
+
+    result = await submit_comment(
+        comment_url=doc.comment_url,
+        comment_text=comment,
+        submitter_name=name,
+        organization=organization,
+    )
+
+    status_code = 201 if result.get("success") else 400
+    return JSONResponse(content=result, status_code=status_code)
+
+
+@router.post("/{doc_id}/summary")
+async def get_explore_document_summary(
+    doc_id: int,
+    q: str = Query(..., min_length=2, max_length=200, description="Original search query"),
+    db: Session = Depends(get_db),
+):
+    """Generate an AI summary of how a document relates to the user's search query."""
+    from app.pipeline.analyze.ollama_client import call_llm
+    from app.pipeline.analyze.prompts import explore_document_summary_prompt
+
+    doc = db.query(ExploreDocument).filter(ExploreDocument.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    doc_dict = {
+        "title": doc.title,
+        "body": doc.body,
+        "doc_type": doc.doc_type,
+        "chamber": doc.chamber or "",
+        "politician_name": doc.politician_name or "",
+        "date": doc.date,
+    }
+    prompt = explore_document_summary_prompt(q, doc_dict)
+
+    import asyncio
+    result = await asyncio.to_thread(
+        call_llm,
+        prompt_version=prompt["promptVersion"],
+        system_prompt=prompt["systemPrompt"],
+        user_prompt=prompt["userPrompt"],
+        cache_key={"query": q, "doc_id": doc_id},
+        max_tokens=512,
+    )
+
+    if not result or not isinstance(result, dict):
+        return {
+            "relevance": "",
+            "keyPoints": [],
+            "impact": "",
+        }
+
+    return {
+        "relevance": result.get("relevance", ""),
+        "keyPoints": result.get("keyPoints", result.get("key_points", [])),
+        "impact": result.get("impact", ""),
+    }
+
+
+@router.post("/pipeline/trigger")
+async def trigger_explore_pipeline(
+    background_tasks: BackgroundTasks,
+    token: str = Query(""),
+):
+    """Trigger the explore document ingestion pipeline."""
+    if settings.PIPELINE_TRIGGER_TOKEN and token != settings.PIPELINE_TRIGGER_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid token")
+
+    background_tasks.add_task(_run_explore_pipeline)
+    return {"status": "started"}
+
+
+async def _run_explore_pipeline():
+    from app.pipeline.explore_pipeline import run_explore_pipeline
+    try:
+        result = await run_explore_pipeline(days_back=60)
+        logger.info("Explore pipeline result: %s", result)
+    except Exception as e:
+        logger.error("Explore pipeline background task failed: %s", e)

@@ -8,7 +8,6 @@ Enables semantic search for:
 """
 
 import logging
-from typing import Any
 
 import chromadb
 from chromadb.config import Settings
@@ -25,9 +24,9 @@ def get_chroma_client() -> chromadb.ClientAPI:
     """Get or create ChromaDB client with persistent storage."""
     global _client
     if _client is None:
-        logger.info("Initializing ChromaDB client (persistent storage: /app/data/chroma)")
+        logger.info("Initializing ChromaDB client (persistent storage: /data/chroma)")
         _client = chromadb.PersistentClient(
-            path="/app/data/chroma",
+            path="/data/chroma",
             settings=Settings(
                 anonymized_telemetry=False,
                 allow_reset=True,
@@ -222,11 +221,139 @@ def search_bills_by_bill_ids(bill_ids: list[str]) -> list[dict]:
     return matches
 
 
+def embed_explore_documents(docs: list[dict]) -> int:
+    """Embed explore documents for semantic search.
+
+    Args:
+        docs: list of dicts with keys: id (int), title, summary, body,
+              doc_type, source, date, politician_name, chamber, policy_areas.
+
+    Returns:
+        Number of documents embedded.
+    """
+    if not docs:
+        return 0
+
+    client = get_chroma_client()
+    model = get_embedding_model()
+
+    collection = client.get_or_create_collection(
+        name="explore_documents",
+        metadata={"description": "Government activity documents for semantic search"},
+    )
+
+    documents = []
+    metadatas = []
+    ids = []
+
+    for doc in docs:
+        text = (
+            f"{doc.get('title', '')} "
+            f"{doc.get('summary', '')} "
+            f"{doc.get('body', '')[:800]}"
+        ).strip()
+        if not text:
+            continue
+
+        documents.append(text)
+        ids.append(str(doc["id"]))
+        metadatas.append({
+            "doc_type": doc.get("doc_type", ""),
+            "source": doc.get("source", ""),
+            "date": doc.get("date", ""),
+            "title": doc.get("title", "")[:200],
+            "politician_name": doc.get("politician_name") or "",
+            "politician_id": doc.get("politician_id") or "",
+            "chamber": doc.get("chamber") or "",
+        })
+
+    if not documents:
+        return 0
+
+    BATCH = 200
+    for i in range(0, len(documents), BATCH):
+        batch_docs = documents[i:i + BATCH]
+        batch_ids = ids[i:i + BATCH]
+        batch_meta = metadatas[i:i + BATCH]
+        batch_emb = model.encode(batch_docs, show_progress_bar=False).tolist()
+        collection.upsert(
+            ids=batch_ids,
+            embeddings=batch_emb,
+            documents=batch_docs,
+            metadatas=batch_meta,
+        )
+
+    logger.info("Embedded %d explore documents in vector DB", len(documents))
+    return len(documents)
+
+
+def search_explore_documents(
+    query: str,
+    n_results: int = 20,
+    doc_type: str | None = None,
+    chamber: str | None = None,
+) -> list[dict]:
+    """Semantic search over explore documents.
+
+    Returns list of dicts with id, title, date, doc_type, source,
+    politician_name, politician_id, chamber, distance.
+    """
+    client = get_chroma_client()
+    model = get_embedding_model()
+
+    try:
+        collection = client.get_collection(name="explore_documents")
+    except Exception:
+        logger.warning("explore_documents collection not found")
+        return []
+
+    query_embedding = model.encode([query], show_progress_bar=False)[0].tolist()
+
+    where_clause: dict | None = None
+    conditions = []
+    if doc_type:
+        conditions.append({"doc_type": doc_type})
+    if chamber:
+        conditions.append({"chamber": chamber})
+    if len(conditions) == 1:
+        where_clause = conditions[0]
+    elif len(conditions) > 1:
+        where_clause = {"$and": conditions}
+
+    results = collection.query(
+        query_embeddings=[query_embedding],
+        n_results=n_results,
+        where=where_clause,
+    )
+
+    matches = []
+    if results and results["ids"]:
+        for i, doc_id in enumerate(results["ids"][0]):
+            meta = results["metadatas"][0][i] if results["metadatas"] else {}
+            dist = results["distances"][0][i] if results["distances"] else 0.0
+            doc_text = results["documents"][0][i] if results["documents"] else ""
+            matches.append({
+                "id": int(doc_id),
+                "title": meta.get("title", ""),
+                "date": meta.get("date", ""),
+                "docType": meta.get("doc_type", ""),
+                "source": meta.get("source", ""),
+                "politicianName": meta.get("politician_name", ""),
+                "politicianId": meta.get("politician_id", ""),
+                "chamber": meta.get("chamber", ""),
+                "distance": dist,
+                "snippet": doc_text[:300] if doc_text else "",
+            })
+
+    return matches
+
+
 def reset_vector_db() -> None:
     """Reset the entire vector database (useful for fresh starts)."""
     client = get_chroma_client()
-    try:
-        client.delete_collection(name="bills")
-        logger.info("Reset vector database")
-    except Exception as e:
-        logger.warning("Could not reset vector DB: %s", e)
+    for name in ["bills", "explore_documents"]:
+        try:
+            client.delete_collection(name=name)
+            logger.info("Reset vector DB collection: %s", name)
+        except Exception as e:
+            logger.warning("Could not reset vector DB collection %s: %s", name, e)

@@ -8,8 +8,9 @@ This is the most complex transform module. It handles:
 """
 
 import logging
+import re
 
-from app.pipeline.transform.industry_classifier import classify_industry, classify_with_learning
+from app.pipeline.transform.industry_classifier import classify_with_learning
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +123,64 @@ CORPORATE_ORG_PATTERNS = [
     " UNIVERSITY",
     " COLLEGE",
     " LAW FIRM",
+    "CREDIT UNION",
+    " HEALTH SYSTEM",
+    " HEALTH CENTER",
+    " CLINIC",
+    " DENTAL",
+    " PHYSICIANS",
+    " NURSES",
+    " COOPERATIVE",
+    " CO-OP",
 ]
+
+# Keywords that indicate a political/campaign entity regardless of LLM classification.
+# These are NOT industry donors — they're campaign infrastructure.
+POLITICAL_OVERRIDE_PATTERNS = [
+    "VICTORY FUND", "VICTORY FU",
+    "FOR PRESIDENT", "FOR SENATE", "FOR CONGRESS",
+    "FOR GOVERNOR", "SENATE VICTORY",
+    "JOINT FUNDRAISING", "VICTORY COMMITTEE",
+    "ACTION FUND",
+    "NGP VAN",
+    "DEMOCRATIC NATIONAL", "REPUBLICAN NATIONAL",
+    "DSCC", "NRSC", "DCCC", "NRCC",
+]
+
+POLITICAL_CAMPAIGN_SERVICES = {
+    "RAPID RETURNS", "NGP VAN", "CIVIS ANALYTICS",
+    "ACTBLUE TECHNICAL", "BULLY PULPIT INTERACTIVE",
+    "PROGRESSIVE VICTORY",
+}
+
+# Patterns that identify joint fundraising / pass-through committees
+# regardless of whether the candidate's name appears.
+_PASSTHROUGH_PATTERNS = [
+    "VICTORY FUND", "VICTORY FU", "VICTORY COMMITTEE",
+    "JOINT FUNDRAISING", "SENATE VICTORY", "ACTION FUND",
+    " VICTORY 20",
+]
+
+
+def _override_campaign_industry(name_upper: str, industry: str) -> str:
+    """Force POLITICAL for campaign-related entities that LLMs misclassify."""
+    if industry == "POLITICAL":
+        return industry
+    if any(p in name_upper for p in POLITICAL_OVERRIDE_PATTERNS):
+        return "POLITICAL"
+    if name_upper in POLITICAL_CAMPAIGN_SERVICES:
+        return "POLITICAL"
+    return industry
+
+
+def _override_donor_type(name_upper: str, donor_type: str) -> str:
+    """Force CandidateAffiliated for pass-through fundraising vehicles."""
+    if donor_type == "CandidateAffiliated":
+        return donor_type
+    if any(p in name_upper for p in _PASSTHROUGH_PATTERNS):
+        return "CandidateAffiliated"
+    return donor_type
+
 
 # Employers to skip when grouping individual contributions
 SKIP_EMPLOYERS = {
@@ -152,17 +210,23 @@ def _is_candidate_affiliated(name_upper: str, candidate_name: str) -> bool:
     FEC candidate names are stored as 'LAST, FIRST M'.  We extract the last name
     and check whether it appears in the PAC name together with any of the strong
     candidate-committee signal words (TEAM, FRIENDS OF, FOR SENATE, etc.).
+    Also catches joint fundraising committees (e.g. "Cantwell-Warren 2012").
     """
     if not candidate_name:
         return False
 
-    # Parse last name from "LAST, FIRST" FEC format
     last_name = candidate_name.split(",")[0].strip().upper()
     if len(last_name) <= 2 or last_name not in name_upper:
         return False
 
-    # Candidate's last name is present — now check for affiliated signal words
-    return any(p in name_upper for p in SELF_PAC_PATTERNS)
+    if any(p in name_upper for p in SELF_PAC_PATTERNS):
+        return True
+
+    # Joint fundraising committees: "LastName-LastName YEAR" or "LastName LastName YEAR"
+    if re.search(r"\b20\d{2}\b", name_upper):
+        return True
+
+    return False
 
 
 def normalize_finance(
@@ -231,9 +295,14 @@ def normalize_finance(
         db_session=db_session,
     )
 
+    computed_pac_total = sum(
+        d["total"] for d in top_donors
+        if d.get("type") in ("PAC", "SuperPAC", "Party/Ideological")
+    )
+
     return {
         "totalRaised": round(total_raised),
-        "totalFromPACs": round(total_from_pacs),
+        "totalFromPACs": round(computed_pac_total),
         "smallDonorPercentage": small_donor_percentage,
         "topDonors": top_donors,
         "industryBreakdown": industry_breakdown,
@@ -280,24 +349,23 @@ def build_top_donors(
         ):
             continue
 
+        # Hard skip for payment processors — always filter regardless of AI
+        if any(p in name_upper for p in SKIP_PAC_PATTERNS):
+            continue
+
         # Use AI classification if available, otherwise fall back to hardcoded patterns
         ai_class = ai_classifications.get(name_upper)
 
         if ai_class and ai_class.get("skip"):
-            # AI says to skip this donor (payment processor, etc.)
             continue
 
         if ai_class:
-            # Use AI-provided type and industry
             donor_type = ai_class.get("type", "PAC")
-            industry = ai_class.get("industry", "OTHER")
+            industry = _override_campaign_industry(
+                name_upper, ai_class.get("industry", "OTHER")
+            )
         else:
-            # Fall back to hardcoded pattern matching
-            # Skip payment processors, victory funds, and self-transfers
-            if any(p in name_upper for p in SKIP_PAC_PATTERNS):
-                continue
 
-            # Classify donor type
             if _is_candidate_affiliated(name_upper, candidate_name):
                 donor_type = "CandidateAffiliated"
             elif any(p in name_upper for p in GENERIC_PARTY_PAC_PATTERNS):
@@ -307,8 +375,12 @@ def build_top_donors(
             else:
                 donor_type = "PAC"
 
-            # Classify industry (check learning store first, then embeddings)
             industry, _ = classify_with_learning(name, db_session)
+
+        # Catch candidate-affiliated entities the AI missed
+        if _is_candidate_affiliated(name_upper, candidate_name):
+            donor_type = "CandidateAffiliated"
+        donor_type = _override_donor_type(name_upper, donor_type)
 
         existing = donor_map.get(name_upper, {
             "name": name,
@@ -330,11 +402,15 @@ def build_top_donors(
 
         if ai_class:
             donor_type = ai_class.get("type", "Org/Employees")
-            industry = ai_class.get("industry", "OTHER")
+            industry = _override_campaign_industry(
+                employer, ai_class.get("industry", "OTHER")
+            )
         else:
-            # Fall back to learning store + embedding classifier
             donor_type = "Org/Employees"
             industry, _ = classify_with_learning(r.get("contributor_employer", ""), db_session)
+            industry = _override_campaign_industry(employer, industry)
+
+        donor_type = _override_donor_type(employer, donor_type)
 
         existing = donor_map.get(employer, {
             "name": r.get("contributor_employer", ""),
@@ -427,46 +503,48 @@ def _build_industry_breakdown(
     industry_totals: dict[str, dict] = {}
     ai_classifications = ai_classifications or {}
 
-    # Track donors we've counted from detailed receipts to avoid double-counting with aggregated
     counted_donors: set[str] = set()
 
-    # Explicit buckets for individual donors without employer info
     if small_individual_total > 0:
         industry_totals["SMALL_DONORS"] = {
             "industry": "SMALL_DONORS",
             "name": "SMALL_DONORS",
             "total": small_individual_total,
         }
-    if large_individual_total > 0:
-        industry_totals["LARGE_INDIVIDUAL"] = {
-            "industry": "LARGE_INDIVIDUAL",
-            "name": "LARGE_INDIVIDUAL",
-            "total": large_individual_total,
-        }
 
-    # Classify PAC/committee receipts by industry
+    # Classify PAC/committee receipts by industry.
+    # Skip pass-through entities (victory funds, joint fundraising, candidate
+    # PACs) — their money originates from individuals already counted above.
     for r in pac_receipts:
         org = r.get("contributor_name") or r.get("contributor_organization_name") or ""
         if not org:
             continue
         org_upper = org.upper().strip()
 
-        # Use AI classification if available
+        if any(p in org_upper for p in SKIP_PAC_PATTERNS):
+            continue
+
         ai_class = ai_classifications.get(org_upper)
 
         if ai_class and ai_class.get("skip"):
-            # AI says to skip (payment processor, etc.)
+            continue
+
+        # Skip candidate-affiliated pass-through entities from the breakdown
+        ai_type = (ai_class or {}).get("type", "")
+        if ai_type == "CandidateAffiliated":
+            continue
+        if any(p in org_upper for p in POLITICAL_OVERRIDE_PATTERNS):
             continue
 
         amount = r.get("contribution_receipt_amount", 0) or 0
 
         if ai_class:
-            industry = ai_class.get("industry", "OTHER")
+            industry = _override_campaign_industry(
+                org_upper, ai_class.get("industry", "OTHER")
+            )
         else:
-            # Fall back to hardcoded skip patterns and industry classifier
-            if any(p in org_upper for p in SKIP_PAC_PATTERNS):
-                continue
             industry, _ = classify_with_learning(org, db_session)
+            industry = _override_campaign_industry(org_upper, industry)
 
         existing = industry_totals.get(industry, {
             "industry": industry,
@@ -475,10 +553,9 @@ def _build_industry_breakdown(
         })
         existing["total"] += amount
         industry_totals[industry] = existing
-        counted_donors.add(org_upper)  # Track this donor
+        counted_donors.add(org_upper)
 
-    # ALSO classify individual employer-grouped contributions by industry
-    # This ensures the industry breakdown matches the donor list
+    # Classify individual employer-grouped contributions by industry
     employer_totals: dict[str, float] = {}
     for r in individual_receipts:
         employer = (r.get("contributor_employer") or "").upper().strip()
@@ -488,15 +565,17 @@ def _build_industry_breakdown(
             r.get("contribution_receipt_amount", 0) or 0
         )
 
+    classified_individual_total = 0.0
     for employer, amount in employer_totals.items():
-        # Use AI classification if available
         ai_class = ai_classifications.get(employer)
 
         if ai_class:
-            industry = ai_class.get("industry", "OTHER")
+            industry = _override_campaign_industry(
+                employer, ai_class.get("industry", "OTHER")
+            )
         else:
-            # Fall back to learning store + embedding classifier
             industry, _ = classify_with_learning(employer, db_session)
+            industry = _override_campaign_industry(employer, industry)
 
         existing = industry_totals.get(industry, {
             "industry": industry,
@@ -505,7 +584,17 @@ def _build_industry_breakdown(
         })
         existing["total"] += amount
         industry_totals[industry] = existing
-        counted_donors.add(employer)  # Track this donor
+        counted_donors.add(employer)
+        classified_individual_total += amount
+
+    # Remainder: large individual money not matched to any employer
+    unclassified_large = large_individual_total - classified_individual_total
+    if unclassified_large > 1000:
+        industry_totals["LARGE_INDIVIDUAL"] = {
+            "industry": "LARGE_INDIVIDUAL",
+            "name": "LARGE_INDIVIDUAL",
+            "total": unclassified_large,
+        }
 
     # Add aggregated contributors that we haven't already counted from detailed receipts
     # (Aggregated data may include contributions we don't have in detailed receipts due to pagination)
@@ -530,19 +619,26 @@ def _build_industry_breakdown(
         amount = c.get("total", 0) or 0
         added_from_aggregated += 1
 
-        # Use AI classification if available
         ai_class = ai_classifications.get(normalized_name)
 
         if ai_class and ai_class.get("skip"):
             continue
 
+        ai_type = (ai_class or {}).get("type", "")
+        if ai_type == "CandidateAffiliated":
+            continue
+        if any(p in normalized_name for p in SKIP_PAC_PATTERNS):
+            continue
+        if any(p in normalized_name for p in POLITICAL_OVERRIDE_PATTERNS):
+            continue
+
         if ai_class:
-            industry = ai_class.get("industry", "OTHER")
+            industry = _override_campaign_industry(
+                normalized_name, ai_class.get("industry", "OTHER")
+            )
         else:
-            # Fall back to learning store + embedding classifier
-            if any(p in normalized_name for p in SKIP_PAC_PATTERNS):
-                continue
             industry, _ = classify_with_learning(name, db_session)
+            industry = _override_campaign_industry(normalized_name, industry)
 
         # Add to industry totals
         existing = industry_totals.get(industry, {

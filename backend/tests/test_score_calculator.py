@@ -1,13 +1,12 @@
-"""Tests for the five representation sub-score calculations."""
+"""Tests for the four representation sub-score calculations."""
 
 import pytest
 
 from app.pipeline.analyze.score_calculator import (
-    _calc_accountability,
-    _calc_constituent_funding,
-    _calc_donor_diversity,
-    _calc_independence_index,
-    _calc_promise_fulfillment,
+    _calc_funding_diversity,
+    _calc_funding_independence,
+    _calc_independent_voting,
+    _calc_promise_persistence,
     calculate_scores,
     clamp,
 )
@@ -28,156 +27,214 @@ class TestClamp:
         assert clamp(100.0) == 100
 
 
-class TestConstituentFunding:
-    """Higher score = more small donors, less PAC money."""
+class TestFundingIndependence:
+    """Higher score = less PAC dependency, less top-donor concentration."""
 
     def test_ideal_grassroots(self):
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 0, "smallDonorPercentage": 100}
-        assert _calc_constituent_funding(funding) == 100
+        funding = {
+            "totalRaised": 1_000_000,
+            "totalFromPACs": 0,
+            "topDonors": [{"total": 100} for _ in range(10)],
+        }
+        score = _calc_funding_independence(funding)
+        assert score >= 90
 
-    def test_fully_pac_funded(self):
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 1_000_000, "smallDonorPercentage": 0}
-        assert _calc_constituent_funding(funding) == 0
+    def test_fully_pac_funded_concentrated(self):
+        funding = {
+            "totalRaised": 1_000_000,
+            "totalFromPACs": 1_000_000,
+            "topDonors": [{"total": 500_000}],
+        }
+        assert _calc_funding_independence(funding) < 30
 
     def test_balanced_funding(self):
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 500_000, "smallDonorPercentage": 50}
-        score = _calc_constituent_funding(funding)
-        assert 40 <= score <= 60
+        funding = {
+            "totalRaised": 1_000_000,
+            "totalFromPACs": 300_000,
+            "topDonors": [{"total": 20_000} for _ in range(10)],
+        }
+        score = _calc_funding_independence(funding)
+        assert 50 <= score <= 80
 
     def test_no_funding_data(self):
-        assert _calc_constituent_funding({}) == 50
-        assert _calc_constituent_funding({"totalRaised": 0}) == 50
+        assert _calc_funding_independence({}) == 50
+        assert _calc_funding_independence({"totalRaised": 0}) == 50
+
+    def test_low_pac_but_concentrated(self):
+        """Low PAC ratio but one big individual donor = penalized for concentration."""
+        funding = {
+            "totalRaised": 1_000_000,
+            "totalFromPACs": 50_000,
+            "topDonors": [{"total": 800_000}],
+        }
+        score = _calc_funding_independence(funding)
+        assert score < 70
+
+    def test_many_pacs_but_diversified(self):
+        """High PAC ratio but spread across many small PACs."""
+        funding = {
+            "totalRaised": 1_000_000,
+            "totalFromPACs": 700_000,
+            "topDonors": [{"total": 10_000} for _ in range(10)],
+        }
+        score = _calc_funding_independence(funding)
+        assert score <= 60  # penalized for PAC dependency
 
 
-class TestIndependenceIndex:
-    """Higher score = less captured by donor interests."""
+class TestIndependentVoting:
+    """Higher score = more independent from party and donors."""
+
+    def _make_votes(self, with_party=0, against_party=0, policy="JUSTICE"):
+        votes = []
+        for _ in range(with_party):
+            votes.append({"votedWithParty": True, "policyArea": policy, "vote": "Yea"})
+        for _ in range(against_party):
+            votes.append({"votedWithParty": False, "policyArea": policy, "vote": "Yea"})
+        return votes
 
     def test_no_data_returns_neutral(self):
-        """No votes AND no lobbying → neutral 50, not a perfect 100."""
-        record = {"donorAlignedVotes": 0, "donorOpposedVotes": 0, "_funding": {}}
-        assert _calc_independence_index(record, []) == 50
+        record = {"keyVotes": [], "recentVotes": []}
+        score = _calc_independent_voting(record, [], {})
+        assert 40 <= score <= 60
 
-    def test_fully_captured(self):
+    def test_high_party_independence(self):
         record = {
-            "donorAlignedVotes": 100,
-            "donorOpposedVotes": 0,
-            "_funding": {"totalRaised": 1_000_000, "totalFromPACs": 1_000_000},
+            "keyVotes": self._make_votes(with_party=80, against_party=20),
+            "recentVotes": [],
         }
-        assert _calc_independence_index(record, []) == 0
+        score = _calc_independent_voting(
+            record, [], {"totalRaised": 1_000_000, "totalFromPACs": 0}
+        )
+        assert score >= 70
 
-    def test_donor_aligned_but_no_pac_money(self):
-        """Donor-aligned votes without PAC money = ideological, not captured."""
+    def test_pure_party_line_voter(self):
         record = {
-            "donorAlignedVotes": 100,
-            "donorOpposedVotes": 0,
-            "_funding": {"totalRaised": 1_000_000, "totalFromPACs": 0},
+            "keyVotes": self._make_votes(with_party=100, against_party=0),
+            "recentVotes": [],
         }
-        assert _calc_independence_index(record, []) == 100
-
-    def test_pac_money_but_donor_opposed(self):
-        """PAC money but votes against donors = independent despite donors."""
-        record = {
-            "donorAlignedVotes": 0,
-            "donorOpposedVotes": 100,
-            "_funding": {"totalRaised": 1_000_000, "totalFromPACs": 1_000_000},
-        }
-        assert _calc_independence_index(record, []) == 100
-
-    def test_moderate_capture(self):
-        record = {
-            "donorAlignedVotes": 50,
-            "donorOpposedVotes": 50,
-            "_funding": {"totalRaised": 1_000_000, "totalFromPACs": 500_000},
-        }
-        score = _calc_independence_index(record, [])
-        assert 60 <= score <= 85
+        score = _calc_independent_voting(
+            record, [], {"totalRaised": 1_000_000, "totalFromPACs": 500_000}
+        )
+        assert score < 50
 
     def test_lobbying_alignment_penalizes(self):
-        """Lobbying matches where senator votes with donors should reduce score."""
         record = {
-            "donorAlignedVotes": 0,
-            "donorOpposedVotes": 0,
-            "_funding": {"totalRaised": 1_000_000, "totalFromPACs": 500_000},
+            "keyVotes": self._make_votes(with_party=90, against_party=10),
+            "recentVotes": [],
         }
         all_aligned = [
             {"senatorVoteAligned": True},
             {"senatorVoteAligned": True},
             {"senatorVoteAligned": True},
         ]
-        score = _calc_independence_index(record, all_aligned)
-        assert score < 100  # penalty applied
+        score_with = _calc_independent_voting(
+            record, all_aligned,
+            {"totalRaised": 1_000_000, "totalFromPACs": 500_000},
+        )
+        score_without = _calc_independent_voting(
+            record, [],
+            {"totalRaised": 1_000_000, "totalFromPACs": 500_000},
+        )
+        assert score_with < score_without
 
-    def test_lobbying_no_alignment_no_penalty(self):
-        """Lobbying matches where senator votes AGAINST donors = no penalty."""
-        record = {
-            "donorAlignedVotes": 0,
-            "donorOpposedVotes": 0,
-            "_funding": {"totalRaised": 1_000_000, "totalFromPACs": 500_000},
+    def test_state_relevant_party_votes_excluded(self):
+        """Party-line votes on state-relevant bills shouldn't count against independence."""
+        funding = {
+            "totalRaised": 1_000_000,
+            "totalFromPACs": 200_000,
+            "industryBreakdown": [{"industry": "OIL_GAS", "percentage": 40}],
         }
-        none_aligned = [
-            {"senatorVoteAligned": False},
-            {"senatorVoteAligned": False},
-        ]
-        score = _calc_independence_index(record, none_aligned)
-        assert score == 100
+        energy_votes = self._make_votes(with_party=20, against_party=0, policy="ENERGY")
+        other_votes = self._make_votes(with_party=8, against_party=2, policy="JUSTICE")
+
+        record_with_energy = {
+            "keyVotes": energy_votes + other_votes,
+            "recentVotes": [],
+        }
+        record_just_other = {
+            "keyVotes": other_votes,
+            "recentVotes": [],
+        }
+        score_with_energy = _calc_independent_voting(record_with_energy, [], funding)
+        score_just_other = _calc_independent_voting(record_just_other, [], funding)
+        assert abs(score_with_energy - score_just_other) <= 5
+
+    def test_deep_red_state_senator_not_penalized(self):
+        """A Republican in a deep red state voting with the party should score OK.
+
+        The state lean adjustment lowers the independence threshold, so
+        even small break rates in safe states are considered independent.
+        """
+        record = {
+            "keyVotes": self._make_votes(with_party=95, against_party=5),
+            "recentVotes": [],
+        }
+        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
+
+        score_deep_red = _calc_independent_voting(
+            record, [], funding, state="WY", party="R"
+        )
+        score_swing = _calc_independent_voting(
+            record, [], funding, state="NV", party="R"
+        )
+        assert score_deep_red > score_swing
 
 
-class TestDonorDiversity:
-    """Higher score = more diverse funding sources. Uses inverse HHI."""
+class TestFundingDiversity:
+    """Higher score = more traceable and diverse funding sources."""
 
-    def test_single_industry_monopoly(self):
-        breakdown = [{"industry": "FINANCE", "percentage": 100}]
-        assert _calc_donor_diversity(breakdown) == 0
+    def test_fully_classified_itemized(self):
+        funding = {
+            "smallDonorPercentage": 10,
+            "industryBreakdown": [
+                {"industry": "FINANCE", "percentage": 20},
+                {"industry": "TECH", "percentage": 20},
+                {"industry": "HEALTHCARE", "percentage": 15},
+                {"industry": "DEFENSE", "percentage": 15},
+            ],
+        }
+        score = _calc_funding_diversity(funding)
+        assert score >= 70
 
-    def test_perfectly_even_five_industries(self):
-        breakdown = [{"industry": f"IND_{i}", "percentage": 20} for i in range(5)]
-        score = _calc_donor_diversity(breakdown)
-        assert score == 100
+    def test_mostly_opaque_small_donors(self):
+        """High small-donor percentage = low traceability (sub-$200 not itemized)."""
+        funding = {
+            "smallDonorPercentage": 90,
+            "industryBreakdown": [
+                {"industry": "OTHER", "percentage": 5},
+            ],
+        }
+        score = _calc_funding_diversity(funding)
+        assert score < 50
+
+    def test_single_industry_dominated(self):
+        """Concentrated in one industry = low diversity score."""
+        funding = {
+            "smallDonorPercentage": 20,
+            "industryBreakdown": [
+                {"industry": "OIL_GAS", "percentage": 75},
+                {"industry": "OTHER", "percentage": 5},
+            ],
+        }
+        score = _calc_funding_diversity(funding)
+        assert score < 60
 
     def test_empty_breakdown(self):
-        assert _calc_donor_diversity([]) == 50
-
-    def test_other_industry_excluded(self):
-        breakdown = [
-            {"industry": "FINANCE", "percentage": 50},
-            {"industry": "OTHER", "percentage": 50},
-        ]
-        score = _calc_donor_diversity(breakdown)
-        assert score == 0  # single known industry = monopoly
-
-    def test_small_donors_excluded_from_hhi(self):
-        """SMALL_DONORS and LARGE_INDIVIDUAL are not industries."""
-        breakdown = [
-            {"industry": "FINANCE", "percentage": 30},
-            {"industry": "TECH", "percentage": 30},
-            {"industry": "SMALL_DONORS", "percentage": 20},
-            {"industry": "LARGE_INDIVIDUAL", "percentage": 20},
-        ]
-        score = _calc_donor_diversity(breakdown)
-        # Only FINANCE and TECH count → 50/50 split → HHI=0.5
-        # 2 even industries is moderate diversity, not high
-        assert 50 <= score <= 70
-
-    def test_political_excluded_from_hhi(self):
-        """POLITICAL (party PACs) are not industry influence."""
-        breakdown = [
-            {"industry": "PHARMA", "percentage": 40},
-            {"industry": "POLITICAL", "percentage": 60},
-        ]
-        score = _calc_donor_diversity(breakdown)
-        assert score == 0  # single industry = monopoly
+        score = _calc_funding_diversity({})
+        assert score == 50
 
 
-class TestPromiseFulfillment:
-    """Higher score = more kept promises."""
+class TestPromisePersistence:
+    """Higher score = more kept promises + floor advocacy boost."""
 
     def test_all_kept(self):
         promises = [{"alignment": "kept"}, {"alignment": "kept"}, {"alignment": "kept"}]
-        assert _calc_promise_fulfillment({}, "D", promises) == 100
+        assert _calc_promise_persistence({}, "D", promises) == 100
 
     def test_all_broken(self):
         promises = [{"alignment": "broken"}, {"alignment": "broken"}]
-        assert _calc_promise_fulfillment({}, "D", promises) == 0
+        score = _calc_promise_persistence({}, "D", promises)
+        assert score <= 10
 
     def test_mixed(self):
         promises = [
@@ -185,106 +242,74 @@ class TestPromiseFulfillment:
             {"alignment": "partial"},
             {"alignment": "broken"},
         ]
-        score = _calc_promise_fulfillment({}, "D", promises)
-        assert score == 50  # (1.0 + 0.5 + 0.0) / 3 * 100 = 50
+        score = _calc_promise_persistence({}, "D", promises)
+        assert 40 <= score <= 60
 
-    def test_unclear_excluded(self):
-        promises = [
-            {"alignment": "kept"},
-            {"alignment": "unclear"},  # excluded from scoring
+    def test_unclear_penalizes_confidence(self):
+        """1 kept + 9 unclear should NOT score 100 — low confidence."""
+        promises_inflated = [{"alignment": "kept"}] + [
+            {"alignment": "unclear"} for _ in range(9)
         ]
-        assert _calc_promise_fulfillment({}, "D", promises) == 100
+        promises_genuine = [{"alignment": "kept"}] * 3
+
+        score_inflated = _calc_promise_persistence({}, "D", promises_inflated)
+        score_genuine = _calc_promise_persistence({}, "D", promises_genuine)
+        assert score_inflated < score_genuine
+        assert score_inflated < 70  # should be pulled toward 50
+
+    def test_all_unclear_returns_neutral(self):
+        promises = [{"alignment": "unclear"}, {"alignment": "unclear"}]
+        score = _calc_promise_persistence({}, "D", promises)
+        assert 45 <= score <= 60  # near neutral, participation component may shift slightly
 
     def test_no_data_returns_neutral(self):
-        """No platform data and no flip-flop → neutral 50, not party loyalty."""
-        assert _calc_promise_fulfillment({}, "D", None) == 50
-        assert _calc_promise_fulfillment({}, "R", None) == 50
-        assert _calc_promise_fulfillment({}, "I", None) == 50
+        score = _calc_promise_persistence({}, "D", None)
+        assert 45 <= score <= 60
 
     def test_flip_flop_fallback(self):
-        """When no promises but flip-flop score exists, use inverted flip-flop."""
         ff = {"flipFlopScore": 30}
-        assert _calc_promise_fulfillment({}, "D", None, ff) == 70
+        score = _calc_promise_persistence({}, "D", None, ff)
+        assert 60 <= score <= 75
 
-    def test_flip_flop_high_inconsistency(self):
-        ff = {"flipFlopScore": 80}
-        assert _calc_promise_fulfillment({}, "R", None, ff) == 20
-
-
-class TestAccountability:
-    """Higher score = more accountable. No tenure penalty."""
-
-    def test_fully_present_no_lobbying(self):
-        """Perfect attendance + no lobbying alignment + no PAC money = high score."""
-        senator = {
-            "votingRecord": {
-                "keyVotes": [
-                    {"vote": "Yea"}, {"vote": "Nay"}, {"vote": "Yea"},
-                ],
-            },
-            "funding": {"totalRaised": 1_000_000, "totalFromPACs": 0},
-            "yearsInOffice": 30,  # tenure should NOT penalize
+    def test_floor_advocacy_boosts_score(self):
+        promises = [{"alignment": "kept"}, {"alignment": "broken"}]
+        advocacy = {
+            "advocacyCoverage": 1.0,
+            "totalRemarks": 25,
+            "advocatedCategories": ["healthcare", "economy"],
+            "remarksByCategory": {"healthcare": 15, "economy": 10},
         }
-        score = _calc_accountability(senator, [])
-        assert score >= 90
+        score_with = _calc_promise_persistence({}, "D", promises, None, advocacy)
+        score_without = _calc_promise_persistence({}, "D", promises, None, None)
+        assert score_with > score_without
 
-    def test_tenure_not_penalized(self):
-        """Same senator data with 0 and 30 years should score the same."""
-        base = {
-            "votingRecord": {
-                "keyVotes": [{"vote": "Yea"}, {"vote": "Nay"}],
-            },
-            "funding": {"totalRaised": 1_000_000, "totalFromPACs": 200_000},
+    def test_participation_folded_in(self):
+        """Low vote participation should reduce promise persistence score."""
+        promises = [{"alignment": "kept"}, {"alignment": "kept"}]
+        record_active = {
+            "keyVotes": [{"vote": "Yea"} for _ in range(10)],
+            "recentVotes": [],
         }
-        new_senator = {**base, "yearsInOffice": 0}
-        vet_senator = {**base, "yearsInOffice": 30}
-        assert _calc_accountability(new_senator, []) == _calc_accountability(vet_senator, [])
-
-    def test_missed_votes_penalize(self):
-        """Senators who miss votes should score lower."""
-        senator = {
-            "votingRecord": {
-                "keyVotes": [
-                    {"vote": "Not Voting"}, {"vote": "Not Voting"},
-                    {"vote": "Not Voting"}, {"vote": "Yea"},
-                ],
-            },
-            "funding": {"totalRaised": 1_000_000, "totalFromPACs": 0},
-            "yearsInOffice": 5,
+        record_absent = {
+            "keyVotes": [{"vote": "Not Voting"} for _ in range(8)]
+                + [{"vote": "Yea"} for _ in range(2)],
+            "recentVotes": [],
         }
-        score = _calc_accountability(senator, [])
-        assert score < 80  # 75% missed votes should hurt
-
-    def test_lobbying_alignment_penalizes(self):
-        """High lobbying alignment rate should lower accountability."""
-        senator = {
-            "votingRecord": {"keyVotes": [{"vote": "Yea"}]},
-            "funding": {"totalRaised": 1_000_000, "totalFromPACs": 500_000},
-            "yearsInOffice": 10,
-        }
-        all_aligned = [
-            {"senatorVoteAligned": True},
-            {"senatorVoteAligned": True},
-            {"senatorVoteAligned": True},
-        ]
-        score = _calc_accountability(senator, all_aligned)
-        assert score < 60
-
-    def test_no_data_returns_neutral(self):
-        senator = {"yearsInOffice": 10, "funding": {}, "votingRecord": {}}
-        score = _calc_accountability(senator, [])
-        assert score == 50
+        score_active = _calc_promise_persistence(record_active, "D", promises)
+        score_absent = _calc_promise_persistence(record_absent, "D", promises)
+        assert score_active > score_absent
 
 
 class TestCalculateScoresIntegration:
     """Full calculate_scores integration."""
 
-    def test_returns_all_five_scores(self):
+    def test_returns_all_four_scores(self):
         senator = {
             "funding": {
                 "totalRaised": 1_000_000,
                 "totalFromPACs": 200_000,
                 "smallDonorPercentage": 30,
+                "topDonors": [{"total": 20_000} for _ in range(10)],
                 "industryBreakdown": [
                     {"industry": "FINANCE", "percentage": 30},
                     {"industry": "TECH", "percentage": 20},
@@ -294,14 +319,12 @@ class TestCalculateScoresIntegration:
                 ],
             },
             "votingRecord": {
-                "donorAlignedVotes": 30,
-                "donorOpposedVotes": 70,
-                "votedWithPartyCount": 85,
-                "votedAgainstPartyCount": 15,
-                "partyLoyaltyPct": 85.0,
                 "keyVotes": [
-                    {"vote": "Yea"}, {"vote": "Nay"}, {"vote": "Yea"},
+                    {"vote": "Yea", "votedWithParty": True, "policyArea": "HEALTHCARE"},
+                    {"vote": "Nay", "votedWithParty": False, "policyArea": "DEFENSE"},
+                    {"vote": "Yea", "votedWithParty": True, "policyArea": "JUSTICE"},
                 ],
+                "recentVotes": [],
             },
             "lobbyingMatches": [
                 {"senatorVoteAligned": True},
@@ -309,16 +332,18 @@ class TestCalculateScoresIntegration:
             ],
             "yearsInOffice": 12,
             "party": "D",
+            "state": "NY",
             "campaignPromises": [],
         }
 
         scores = calculate_scores(senator, None)
 
-        assert "constituentFunding" in scores
-        assert "independenceIndex" in scores
-        assert "donorDiversity" in scores
-        assert "promiseFulfillment" in scores
-        assert "accountability" in scores
+        assert "fundingIndependence" in scores
+        assert "promisePersistence" in scores
+        assert "independentVoting" in scores
+        assert "fundingDiversity" in scores
+        assert "transparency" not in scores
+        assert "accessibility" not in scores
 
         for key, value in scores.items():
             assert 0 <= value <= 100, f"{key} = {value} out of bounds"
@@ -331,6 +356,7 @@ class TestCalculateScoresIntegration:
             "lobbyingMatches": [],
             "yearsInOffice": 0,
             "party": "D",
+            "state": "DC",
             "campaignPromises": [],
         }
         scores = calculate_scores(senator, None)

@@ -1,7 +1,6 @@
 """Fetch modules for Congress.gov and Senate.gov APIs."""
 
 import logging
-from urllib.parse import quote, urlencode
 
 import httpx
 from lxml import etree
@@ -501,6 +500,45 @@ import re as _re
 
 _platform_rate_limiter = RateLimiter(0.5)  # max 0.5 req/s to senator websites
 
+_STRIP_TAGS = {"script", "style", "nav", "header", "footer", "aside", "noscript", "svg", "form"}
+
+
+def _extract_body_text(raw_html: str) -> str:
+    """Extract meaningful text from HTML, stripping navigation chrome.
+
+    Uses lxml to remove nav/header/footer/aside/script/style elements,
+    then extracts text from <main> or <article> if present, falling back
+    to <body>.  This avoids polluting platform text with menu items and
+    sidebar links.
+    """
+    try:
+        doc = etree.HTML(raw_html)
+    except Exception:
+        plain = _re.sub(r"<[^>]+>", " ", raw_html)
+        return _re.sub(r"\s+", " ", plain).strip()
+
+    for tag in _STRIP_TAGS:
+        for el in doc.iter(tag):
+            el.getparent().remove(el)
+
+    # Prefer <main> or <article> content over the full <body>
+    content_root = None
+    for selector in ("main", "article"):
+        found = doc.iter(selector)
+        candidate = next(found, None)
+        if candidate is not None:
+            text = " ".join(candidate.itertext())
+            if len(text.strip()) > 200:
+                content_root = candidate
+                break
+
+    if content_root is None:
+        body = doc.find(".//body")
+        content_root = body if body is not None else doc
+
+    plain = " ".join(content_root.itertext())
+    return _re.sub(r"\s+", " ", plain).strip()
+
 
 async def fetch_senator_platform_text(
     client: httpx.AsyncClient,
@@ -519,7 +557,7 @@ async def fetch_senator_platform_text(
 
     Returns cleaned plain text truncated to 3000 characters, or empty string if all fail.
     """
-    cache_key = f"platform-text-{senator_id}-v1"
+    cache_key = f"platform-text-{senator_id}-v2"
     cached = api_cache_get(db, "platform", cache_key)
     if cached is not None:
         return cached
@@ -553,16 +591,9 @@ async def fetch_senator_platform_text(
             if resp.status_code != 200:
                 continue
 
-            raw_html = resp.text
-            # Strip script/style blocks
-            raw_html = _re.sub(r"<script[^>]*>.*?</script>", " ", raw_html, flags=_re.DOTALL | _re.IGNORECASE)
-            raw_html = _re.sub(r"<style[^>]*>.*?</style>", " ", raw_html, flags=_re.DOTALL | _re.IGNORECASE)
-            # Strip all remaining HTML tags
-            plain = _re.sub(r"<[^>]+>", " ", raw_html)
-            # Collapse whitespace
-            plain = _re.sub(r"\s+", " ", plain).strip()
+            plain = _extract_body_text(resp.text)
 
-            if len(plain) > 200:  # meaningful content found
+            if len(plain) > 200:
                 text = plain[:3000]
                 break
         except Exception as e:

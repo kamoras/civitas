@@ -154,7 +154,7 @@ def normalize_votes(
     party_loyalty_pct = (
         round(voted_with_party / party_total * 100, 1)
         if party_total > 0
-        else 100.0
+        else 0.0
     )
 
     # Build policy area breakdown list sorted by vote count

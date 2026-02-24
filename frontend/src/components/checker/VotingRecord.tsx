@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { KeyVote, VotingRecord as VotingRecordType } from "@/types/senator";
 import { formatCurrency } from "@/lib/formatting";
+import { voteSourceUrl } from "@/lib/sources";
 
 interface VotingRecordProps {
   votingRecord: VotingRecordType;
@@ -61,16 +62,23 @@ function VoteCard({
 }) {
   const [expanded, setExpanded] = useState(false);
 
-  const getPartyBorder = (leaning: string | null) => {
-    if (leaning === "R") return "border-l-4 border-l-rep-red/50";
-    if (leaning === "D") return "border-l-4 border-l-dem-blue/50";
-    if (leaning === "bipartisan") return "border-l-4 border-l-ind-purple/50";
-    return "border-l-4 border-l-matrix-green/20";
+  const getVoteBorder = (v: string) => {
+    if (v === "Yea") return "border-l-4 border-l-matrix-green/40";
+    if (v === "Nay") return "border-l-4 border-l-red-500/40";
+    return "border-l-4 border-l-yellow-500/30";
   };
 
-  const partyBorderClass = getPartyBorder(vote.partyLeaning);
+  const voteColor =
+    vote.vote === "Yea"
+      ? "text-matrix-green"
+      : vote.vote === "Nay"
+        ? "text-red-500"
+        : "text-yellow-500";
 
-  const content = (
+  const borderClass = getVoteBorder(vote.vote);
+  const sourceLink = voteSourceUrl(vote.billId);
+
+  const detailBadges = (
     <div className="flex items-center gap-2 flex-wrap">
       <VoteBadge vote={vote.vote} />
       <PartyBadge leaning={vote.partyLeaning} />
@@ -91,38 +99,78 @@ function VoteCard({
           )}
         </>
       )}
-      <span className="text-matrix-green/80 text-sm">{vote.billName}</span>
     </div>
   );
 
   if (!expandable) {
     return (
-      <div className={`terminal-window p-3 ${partyBorderClass}`}>
-        {content}
-        {vote.date && (
-          <div className="text-[10px] text-matrix-green/30 mt-1">{vote.date}</div>
-        )}
+      <div className={`terminal-window p-3 ${borderClass}`}>
+        <div className="flex items-center gap-2 flex-wrap">
+          <VoteBadge vote={vote.vote} />
+          <span className="text-matrix-green/80 text-sm">{vote.billName}</span>
+        </div>
+        <div className="flex items-center gap-2 mt-1">
+          {vote.date && (
+            <span className="text-[10px] text-matrix-green/30">{vote.date}</span>
+          )}
+          {sourceLink && (
+            <a
+              href={sourceLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[10px] text-neon-cyan/40 hover:text-neon-cyan transition-colors"
+            >
+              [SOURCE]
+            </a>
+          )}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className={`terminal-window ${partyBorderClass}`}>
+    <div className={`terminal-window ${borderClass}`}>
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full text-left p-3 flex items-center justify-between"
+        aria-expanded={expanded}
+        aria-label={`${vote.billName}: ${vote.vote}. ${expanded ? "Collapse" : "Expand"} details`}
+        className="w-full text-left p-3 flex items-center justify-between gap-2"
       >
-        {content}
-        <span className="text-matrix-green/40 ml-2 shrink-0">
-          {expanded ? "[-]" : "[+]"}
-        </span>
+        <div className="flex-1 min-w-0">
+          <span className="text-matrix-green/80 text-sm">{vote.billName}</span>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className={`font-pixel text-xs ${voteColor}`}>
+            {vote.vote.toUpperCase()}
+          </span>
+          <span className="text-matrix-green/40" aria-hidden="true">
+            {expanded ? "[-]" : "[+]"}
+          </span>
+        </div>
       </button>
 
       {expanded && (
         <div className="px-3 pb-3 border-t border-matrix-green/10 pt-3 space-y-2 text-sm">
-          <div className="text-matrix-green/50">
-            {vote.billId} &mdash; {vote.date}
+          {detailBadges}
+
+          <div className="flex items-center gap-2 flex-wrap text-matrix-green/50">
+            <span>{vote.billId} &mdash; {vote.date}</span>
+            {sourceLink && (
+              <a
+                href={sourceLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[10px] text-neon-cyan/50 hover:text-neon-cyan transition-colors border border-neon-cyan/20 px-1.5 py-0.5"
+              >
+                VIEW ON CONGRESS.GOV
+              </a>
+            )}
           </div>
+
+          {vote.description && vote.description !== vote.billName && (
+            <p className="text-matrix-green/70">{vote.description}</p>
+          )}
+
           {vote.keyVoteReasoning && (
             <div className="bg-matrix-green/5 border border-matrix-green/20 p-2">
               <div className="text-xs text-matrix-green/60 mb-1">WHY THIS VOTE MATTERS</div>
@@ -155,7 +203,6 @@ function VoteCard({
             </div>
           )}
 
-          <p className="text-matrix-green/70">{vote.description}</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
             {vote.corporateInterest && (
               <div className="bg-red-500/5 border border-red-500/20 p-2">
@@ -222,7 +269,7 @@ function PolicyBreakdownChart({ votingRecord }: { votingRecord: VotingRecordType
           );
         })}
       </div>
-      <div className="flex gap-4 mt-2 text-[10px] text-matrix-green/30">
+      <div className="flex gap-4 mt-2 text-[10px] text-matrix-green/50">
         <span className="flex items-center gap-1">
           <span className="inline-block w-2 h-2 bg-neon-yellow/60" /> with stance
         </span>
@@ -252,7 +299,7 @@ export default function VotingRecord({ votingRecord }: VotingRecordProps) {
       <div>
         <div className="flex items-baseline justify-between mb-3">
           <h3 className="text-lg text-neon-cyan neon-cyan">{">"} VOTING RECORD</h3>
-          <span className="text-[10px] text-matrix-green/25">
+          <span className="text-[10px] text-matrix-green/50">
             Source: congress.gov &amp; senate.gov roll calls
           </span>
         </div>
@@ -267,19 +314,19 @@ export default function VotingRecord({ votingRecord }: VotingRecordProps) {
           <div className="terminal-window p-3">
             <div className="text-xl font-pixel text-neon-cyan">{Math.round(partyLoyaltyPct)}%</div>
             <div className="text-matrix-green/40 text-xs">PARTY LOYALTY</div>
-            <div className="text-[10px] text-matrix-green/25">votes with party line</div>
+            <div className="text-[10px] text-matrix-green/50">votes with party line</div>
           </div>
           <div className="terminal-window p-3">
             <div className="text-xl font-pixel text-neon-yellow">{donorAlignedPct}%</div>
             <div className="text-matrix-green/40 text-xs">DONOR-ALIGNED</div>
-            <div className="text-[10px] text-matrix-green/25">
+            <div className="text-[10px] text-matrix-green/50">
               {donorAlignedVotes} of {scoreableVotes} scoreable
             </div>
           </div>
           <div className="terminal-window p-3">
             <div className="text-xl font-pixel text-matrix-green">{100 - donorAlignedPct}%</div>
             <div className="text-matrix-green/40 text-xs">INDEPENDENT</div>
-            <div className="text-[10px] text-matrix-green/25">voted against donor interests</div>
+            <div className="text-[10px] text-matrix-green/50">voted against donor interests</div>
           </div>
         </div>
       </div>

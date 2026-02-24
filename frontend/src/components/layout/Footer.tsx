@@ -20,16 +20,21 @@ export default function Footer() {
         </div>
 
         {/* Links */}
-        <div className="flex flex-wrap justify-center gap-4 text-lg">
+        <nav aria-label="Footer navigation" className="flex flex-wrap justify-center gap-4 text-lg">
           <Link
-            href="/senator-scorecard"
+            href="/scorecard"
             className="text-matrix-green/60 hover:text-matrix-green transition-colors"
           >
-            SENATOR SCORECARD
+            SCORECARD
           </Link>
           <span className="text-matrix-green/20">|</span>
-          <span className="text-matrix-green/30 cursor-not-allowed">GUESTBOOK (COMING SOON)</span>
-        </div>
+          <Link
+            href="/about"
+            className="text-matrix-green/60 hover:text-matrix-green transition-colors"
+          >
+            METHODOLOGY
+          </Link>
+        </nav>
 
         {/* Visitor Counter */}
         <VisitorCounter />
@@ -42,7 +47,7 @@ export default function Footer() {
         </div>
 
         {/* Disclaimer */}
-        <p className="text-xs text-matrix-green/25 max-w-lg text-center leading-relaxed">
+        <p className="text-xs text-matrix-green/50 max-w-lg text-center leading-relaxed">
           All data sourced from public records: FEC campaign finance filings (fec.gov),
           OpenSecrets.org donor &amp; industry data, GovTrack.us &amp; MapLight voting records, and
           Senate Lobbying Disclosure Act filings (lda.senate.gov). The Representation Scorecard is

@@ -119,11 +119,11 @@ def normalize_members(
             # These will be populated later
             "punkNickname": "",
             "representationScore": {
-                "constituentFunding": 0,
-                "independenceIndex": 0,
-                "donorDiversity": 0,
-                "promiseFulfillment": 0,
-                "accountability": 0,
+                "fundingIndependence": 0,
+                "promisePersistence": 0,
+                "independentVoting": 0,
+                "transparency": 0,
+                "accessibility": 0,
             },
             "funding": {
                 "totalRaised": 0,

@@ -37,11 +37,10 @@ class IndustryDonationSchema(CamelModel):
 
 
 class RepresentationScoreSchema(CamelModel):
-    constituent_funding: float
-    independence_index: float
-    donor_diversity: float
-    promise_fulfillment: float
-    accountability: float
+    funding_independence: float
+    promise_persistence: float
+    independent_voting: float
+    funding_diversity: float
 
 
 class PolicyBreakdownSchema(CamelModel):
@@ -119,6 +118,8 @@ class SenatorSchema(CamelModel):
     party: Literal["D", "R", "I"]
     years_in_office: int
     initials: str
+    approval_rating: float | None = None
+    disapproval_rating: float | None = None
     representation_score: RepresentationScoreSchema
     funding: FundingSchema
     voting_record: VotingRecordSchema
@@ -134,6 +135,8 @@ class LeaderboardEntrySchema(CamelModel):
     party: Literal["D", "R", "I"]
     years_in_office: int
     initials: str
+    approval_rating: float | None = None
+    disapproval_rating: float | None = None
     representation_score: RepresentationScoreSchema
     total_raised: float
     total_from_pacs: float
@@ -178,3 +181,48 @@ class StateCountSchema(CamelModel):
     code: str
     name: str
     senator_count: int
+
+
+# --- Presidential schemas ---
+
+
+class PresidentialScoreSchema(CamelModel):
+    independence: float
+    follow_through: float
+    public_mandate: float
+    effectiveness: float
+    competence: float
+    agency_alignment: float
+
+
+class PresidentSchema(CamelModel):
+    id: str
+    name: str
+    party: str
+    number: int
+    term_start: str
+    term_end: str | None = None
+    is_current: bool = False
+    score: PresidentialScoreSchema
+    avg_approval: float | None = None
+    gdp_growth_avg: float | None = None
+    jobs_created_millions: float | None = None
+    eo_count: int | None = None
+    eo_court_success_pct: float | None = None
+    cabinet_turnover_pct: float | None = None
+    summary: str = ""
+    key_achievements: list[str] = []
+    key_failures: list[str] = []
+
+
+class PresidentLeaderboardEntry(CamelModel):
+    id: str
+    name: str
+    party: str
+    number: int
+    term_start: str
+    term_end: str | None = None
+    is_current: bool = False
+    score: PresidentialScoreSchema
+    avg_approval: float | None = None
+    gdp_growth_avg: float | None = None

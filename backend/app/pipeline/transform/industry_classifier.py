@@ -14,8 +14,6 @@ better than keyword lists because it captures semantic meaning.
 """
 
 import logging
-from typing import Any
-
 import numpy as np
 from sqlalchemy.orm import Session
 
@@ -28,7 +26,7 @@ INDUSTRY_DESCRIPTIONS: dict[str, str] = {
     "INSURANCE": "insurance underwriting coverage premiums actuarial health insurance property casualty Anthem Cigna Humana UnitedHealth Aetna Blue Cross MetLife Aflac Progressive Allstate",
     "OIL_GAS": "oil gas petroleum drilling fracking pipeline fossil fuel refinery crude natural gas exploration Exxon Chevron ConocoPhillips BP Shell Halliburton Koch Marathon Valero",
     "DEFENSE": "defense military weapons aerospace missiles contractors armed forces naval army air force Lockheed Raytheon Boeing Northrop Grumman General Dynamics BAE L3Harris Leidos",
-    "FINANCE": "banking investment securities hedge fund private equity venture capital financial services Wall Street asset management brokerage wealth management credit lending Goldman Sachs Morgan Stanley JPMorgan Citigroup Bank of America Wells Fargo BlackRock Fidelity Vanguard",
+    "FINANCE": "banking investment securities hedge fund private equity venture capital financial services Wall Street asset management brokerage wealth management credit lending credit union savings loan mutual savings federal credit union community bank Goldman Sachs Morgan Stanley JPMorgan Citigroup Bank of America Wells Fargo BlackRock Fidelity Vanguard",
     "REAL_ESTATE": "real estate property housing mortgage realty homebuilder REIT commercial property development National Association of Realtors",
     "TECH": "technology software internet cloud computing artificial intelligence data silicon valley digital platform Google Alphabet Meta Facebook Apple Microsoft Amazon Oracle Salesforce Intel Nvidia",
     "TELECOM": "telecommunications wireless broadband cable internet service provider cellular network satellite AT&T Verizon T-Mobile Comcast Charter",
@@ -48,9 +46,37 @@ INDUSTRY_DESCRIPTIONS: dict[str, str] = {
     "MEDIA": "media broadcast television news publishing journalism entertainment studio film",
     "RETAIL": "retail store merchandise consumer goods shopping wholesale distribution",
     "MANUFACTURING": "manufacturing factory production industrial assembly plant fabrication",
-    "HEALTHCARE": "hospital health clinic medical healthcare nursing patient care physician HCA Kaiser Permanente Mayo Clinic medical center",
-    "POLITICAL": "political party campaign committee victory fund leadership PAC political action election Emily's List Club for Growth DSCC NRSC",
+    "HEALTHCARE": "hospital health clinic medical healthcare nursing patient care physician medical center health system medical association dental nurses association optometric chiropractic podiatry American Medical Association AMA HCA Kaiser Permanente Mayo Clinic",
+    "POLITICAL": "political party campaign committee victory fund leadership fund election national committee Emily's List Club for Growth DSCC NRSC Democratic Republican senatorial congressional",
 }
+
+_KEYWORD_INDUSTRY_RULES: list[tuple[list[str], str]] = [
+    (["CREDIT UNION", "FEDERAL CREDIT", "SAVINGS BANK", "SAVINGS & LOAN", "COMMUNITY BANK"], "FINANCE"),
+    (["MEDICAL", "HOSPITAL", "HEALTH SYSTEM", "HEALTH CENTER", "CLINIC", "PHYSICIANS", "NURSES", "DENTAL", "OPTOMETRIC", "CHIROPRACTIC", "PODIATRY", "SURGICAL", "ORTHOPEDIC", "ANESTHESI", "RADIOLOG", "EMERGENCY MEDICINE", "DERMATOLOG", "OPHTHALM", "PEDIATRIC", "OBSTET", "UROLOG", "ONCOLOG", "CARDIO", "NEURO", "GASTRO", "PULMON", "NEPHRO", "PATHOLOG", "PSYCHIATRIC"], "HEALTHCARE"),
+    (["PHARMA", "PHARMACEUTICAL", "BIOTECH", "BIOPHARMA"], "PHARMA"),
+    (["INSURANCE", "UNDERWRITER", "CASUALTY", "MUTUAL LIFE", "BENEFIT PLAN"], "INSURANCE"),
+    (["OIL ", "PETROLEUM", "NATURAL GAS", "PIPELINE", "REFINER", "DRILLING"], "OIL_GAS"),
+    (["ELECTRIC COOPERATIVE", "ELECTRIC CO-OP", "POWER COMPANY", "UTILITY", "SOLAR", "WIND ENERGY"], "ENERGY"),
+    (["REALT", "HOMEBUILDER", "MORTGAGE", "NATIONAL ASSOCIATION OF REALTORS"], "REAL_ESTATE"),
+    (["LAW OFFICE", "LAW FIRM", "ATTORNEYS AT LAW", " LLP", " PLLC"], "LAWYERS"),
+    (["AFL-CIO", "TEAMSTER", "CARPENTERS", "ELECTRICIAN", "PLUMBER", "LABORERS", "STEELWORKER", "MACHINISTS", "FIREFIGHTER", "TEACHERS UNION", "SEIU", "AFSCME", "IBEW"], "LABOR_UNIONS"),
+    (["LOCKHEED", "RAYTHEON", "NORTHROP", "GENERAL DYNAMICS", "BAE SYSTEMS", "L3HARRIS", "LEIDOS"], "DEFENSE"),
+    (["NATIONAL RIFLE", "GUN OWNERS", "FIREARM", "SECOND AMENDMENT"], "GUNS"),
+]
+
+
+def _keyword_industry(name_upper: str) -> str | None:
+    """Fast keyword-based industry classification for unambiguous cases.
+
+    Runs before the embedding classifier to catch obvious patterns like
+    "XYZ CREDIT UNION PAC" or "ABC MEDICAL CENTER PAC" that the embedder
+    misclassifies as POLITICAL because of the word "PAC" in the name.
+    """
+    for keywords, industry in _KEYWORD_INDUSTRY_RULES:
+        if any(kw in name_upper for kw in keywords):
+            return industry
+    return None
+
 
 _embeddings_cache: dict[str, np.ndarray] = {}
 _model_ref = None
@@ -64,6 +90,11 @@ def _get_model():
         from app.pipeline.vector_store import get_embedding_model
         _model_ref = get_embedding_model()
     return _model_ref
+
+
+def clear_industry_embedding_cache() -> None:
+    """Clear cached industry embeddings (call after updating descriptions)."""
+    _embeddings_cache.clear()
 
 
 def _get_industry_embeddings() -> dict[str, np.ndarray]:
@@ -81,10 +112,7 @@ def _get_industry_embeddings() -> dict[str, np.ndarray]:
 
 
 def classify_industry(org_name: str | None) -> str:
-    """Classify a single org name by embedding similarity.
-
-    This is the fast path — no DB lookup, no LLM. Uses cosine similarity
-    between the org name embedding and pre-computed industry embeddings.
+    """Classify a single org name, keyword rules first then embedding similarity.
 
     Args:
         org_name: Organization or employer name.
@@ -94,6 +122,10 @@ def classify_industry(org_name: str | None) -> str:
     """
     if not org_name or len(org_name.strip()) < 2:
         return "OTHER"
+
+    keyword_hit = _keyword_industry(org_name.upper().strip())
+    if keyword_hit:
+        return keyword_hit
 
     industry_embs = _get_industry_embeddings()
     model = _get_model()
@@ -111,6 +143,68 @@ def classify_industry(org_name: str | None) -> str:
             best_industry = industry
 
     return best_industry
+
+
+def classify_industries_batch(org_names: list[str]) -> dict[str, str]:
+    """Batch-classify org names: keyword rules first, then embedding similarity.
+
+    Much more efficient and stable than calling classify_industry() per name.
+    """
+    if not org_names:
+        return {}
+
+    results: dict[str, str] = {name: "OTHER" for name in org_names}
+
+    # Fast keyword pass — resolve obvious cases before embedding
+    needs_embedding: list[tuple[int, str]] = []
+    keyword_resolved = 0
+    for i, name in enumerate(org_names):
+        if not name or len(name.strip()) < 2:
+            continue
+        hit = _keyword_industry(name.upper().strip())
+        if hit:
+            results[name] = hit
+            keyword_resolved += 1
+        else:
+            needs_embedding.append((i, name))
+
+    if not needs_embedding:
+        logger.info("Batch classified %d org names (all %d via keywords)", len(org_names), keyword_resolved)
+        return results
+
+    industry_embs = _get_industry_embeddings()
+    ind_keys = list(industry_embs.keys())
+    ind_matrix = np.stack([industry_embs[k] for k in ind_keys])
+
+    model = _get_model()
+    valid_names = [name for _, name in needs_embedding]
+
+    _ENCODE_BATCH = 256
+    all_embeddings = []
+    for start in range(0, len(valid_names), _ENCODE_BATCH):
+        batch = valid_names[start : start + _ENCODE_BATCH]
+        embs = model.encode(batch, show_progress_bar=False, batch_size=min(64, len(batch)))
+        all_embeddings.append(embs)
+    query_embs = np.vstack(all_embeddings)
+    norms = np.linalg.norm(query_embs, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    query_embs = query_embs / norms
+
+    scores = query_embs @ ind_matrix.T
+    best_indices = np.argmax(scores, axis=1)
+    best_scores = scores[np.arange(len(scores)), best_indices]
+
+    for j, (_, name) in enumerate(needs_embedding):
+        if best_scores[j] > SIMILARITY_THRESHOLD:
+            results[name] = ind_keys[best_indices[j]]
+
+    logger.info(
+        "Batch classified %d org names (%d keywords, %d embedding)",
+        len(org_names),
+        keyword_resolved,
+        int(np.sum(best_scores > SIMILARITY_THRESHOLD)),
+    )
+    return results
 
 
 def classify_with_learning(
@@ -244,4 +338,4 @@ def _store_classification(
             confidence=confidence,
             source=source,
         ))
-    db_session.flush()
+    db_session.commit()

@@ -33,9 +33,6 @@ pnpm-debug.log*
 .env
 .env*.local
 
-# pipeline cache
-scripts/.cache/
-
 # vercel
 .vercel
 
@@ -52,6 +49,9 @@ next-env.d.ts
 
 # docker
 data/
+
+# deploy state
+.deploy-*-slot
 
 # python
 *.egg-info/

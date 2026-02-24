@@ -14,29 +14,24 @@ const SUB_SCORES: {
   description: string;
 }[] = [
   {
-    key: "constituentFunding",
-    label: "Constituent Funding",
-    description: "Small donors vs. PAC money",
+    key: "fundingIndependence",
+    label: "Funding Independence",
+    description: "PAC dependency and top-donor concentration",
   },
   {
-    key: "independenceIndex",
-    label: "Independence Index",
-    description: "Votes free from donor/lobbyist influence",
+    key: "promisePersistence",
+    label: "Promise Persistence",
+    description: "Campaign commitments kept vs. broken + participation",
   },
   {
-    key: "promiseFulfillment",
-    label: "Promise Fulfillment",
-    description: "Campaign commitments kept vs. broken",
+    key: "independentVoting",
+    label: "Independent Voting",
+    description: "Willingness to break party line, adjusted for state lean",
   },
   {
-    key: "accountability",
-    label: "Accountability",
-    description: "Attendance, transparency, and engagement",
-  },
-  {
-    key: "donorDiversity",
-    label: "Donor Diversity",
-    description: "Funding spread across industries",
+    key: "fundingDiversity",
+    label: "Funding Diversity",
+    description: "Source traceability and industry diversification",
   },
 ];
 
@@ -59,15 +54,29 @@ function ScoreBar({
   return (
     <div className="flex flex-col gap-0.5">
       <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 text-sm">
-        <div className="w-48 shrink-0">
+        <div className="w-48 shrink-0" id={`score-label-${label.replace(/\s+/g, "-").toLowerCase()}`}>
           <span className="text-matrix-green/70">{label}</span>
-          <div className="text-[10px] text-matrix-green/35 leading-tight">{description}</div>
+          <div className="text-[10px] text-matrix-green/50 leading-tight">{description}</div>
         </div>
-        <span className="font-mono text-xs tracking-tight hidden sm:inline">
-          <span className={colorClass}>{bar}</span>
+        <span
+          className="font-mono text-xs tracking-tight hidden sm:inline"
+          role="progressbar"
+          aria-valuenow={value}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-labelledby={`score-label-${label.replace(/\s+/g, "-").toLowerCase()}`}
+        >
+          <span className={colorClass} aria-hidden="true">{bar}</span>
         </span>
         <span className="sm:hidden flex-1">
-          <span className="block h-2 bg-matrix-dark-green/30 border border-matrix-green/20">
+          <span
+            className="block h-2 bg-matrix-dark-green/30 border border-matrix-green/20"
+            role="progressbar"
+            aria-valuenow={value}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-labelledby={`score-label-${label.replace(/\s+/g, "-").toLowerCase()}`}
+          >
             <span
               className={`block h-full ${
                 value >= 70 ? "bg-matrix-green" : value >= 40 ? "bg-yellow-500" : "bg-red-500"
@@ -76,7 +85,7 @@ function ScoreBar({
             />
           </span>
         </span>
-        <span className={`text-right w-12 shrink-0 font-pixel ${colorClass}`}>{value}</span>
+        <span className={`text-right w-12 shrink-0 font-pixel ${colorClass}`} aria-hidden="true">{value}</span>
       </div>
     </div>
   );
@@ -95,7 +104,7 @@ export default function CorruptionScore({ breakdown }: RepresentationScoreProps)
         <div className="pb-2">
           <div className="text-xs text-matrix-green/40">REPRESENTATION SCORECARD</div>
           <div className={`text-sm font-pixel ${colorClass} tracking-wider`}>{label}</div>
-          <div className="text-[10px] text-matrix-green/30 mt-0.5">100 = fully represents constituents</div>
+          <div className="text-[10px] text-matrix-green/50 mt-0.5">100 = fully represents constituents</div>
         </div>
       </div>
 
@@ -105,7 +114,7 @@ export default function CorruptionScore({ breakdown }: RepresentationScoreProps)
         ))}
       </div>
 
-      <div className="mt-3 text-[10px] text-matrix-green/25">
+      <div className="mt-3 text-[10px] text-matrix-green/50">
         Data: fec.gov · opensecrets.org · congress.gov
       </div>
     </div>

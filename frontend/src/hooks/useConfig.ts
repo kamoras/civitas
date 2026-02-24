@@ -39,10 +39,9 @@ export function useCategoryLabel(key: string): string {
 export function useScoreWeights(): Record<string, number> {
   const config = useConfig();
   return config?.scoreWeights ?? {
-    constituentFunding: 0.25,
-    promiseFulfillment: 0.20,
-    independenceIndex: 0.25,
-    donorDiversity: 0.10,
-    accountability: 0.20,
+    fundingIndependence: 0.30,
+    promisePersistence: 0.25,
+    independentVoting: 0.25,
+    fundingDiversity: 0.20,
   };
 }

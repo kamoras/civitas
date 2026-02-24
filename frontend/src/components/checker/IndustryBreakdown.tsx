@@ -26,7 +26,7 @@ export default function IndustryBreakdown({ industries, donors }: IndustryBreakd
     <div>
       <div className="flex items-baseline justify-between mb-3">
         <h3 className="text-lg text-neon-cyan neon-cyan">{">"} FOLLOW THE MONEY</h3>
-        <span className="text-[10px] text-matrix-green/25">Source: opensecrets.org/industries</span>
+        <span className="text-[10px] text-matrix-green/50">Source: opensecrets.org/industries</span>
       </div>
       <div className="space-y-2">
         {sorted.map((ind) => {
@@ -40,22 +40,31 @@ export default function IndustryBreakdown({ industries, donors }: IndustryBreakd
 
           return (
             <div key={ind.industry} className="text-sm">
-              <div
-                className={`flex justify-between mb-1 ${hasDonerBreakdown ? "cursor-pointer hover:text-neon-cyan transition-colors" : ""}`}
-                onClick={() => hasDonerBreakdown && setExpandedIndustry(isExpanded ? null : ind.industry)}
-              >
-                <span className="text-matrix-green/70 flex items-center gap-1">
-                  {hasDonerBreakdown && (
-                    <span className="text-[10px] text-matrix-green/40">
+              {hasDonerBreakdown ? (
+                <button
+                  className="flex justify-between mb-1 w-full text-left cursor-pointer hover:text-neon-cyan transition-colors"
+                  onClick={() => setExpandedIndustry(isExpanded ? null : ind.industry)}
+                  aria-expanded={isExpanded}
+                  aria-label={`${displayName}: ${formatCurrency(ind.total)} (${ind.percentage}%). ${isExpanded ? "Collapse" : "Expand"} donor list`}
+                >
+                  <span className="text-matrix-green/70 flex items-center gap-1">
+                    <span className="text-[10px] text-matrix-green/40" aria-hidden="true">
                       {isExpanded ? "[-]" : "[+]"}
                     </span>
-                  )}
-                  {displayName}
-                </span>
-                <span className="text-matrix-green/50">
-                  {formatCurrency(ind.total)} ({ind.percentage}%)
-                </span>
-              </div>
+                    {displayName}
+                  </span>
+                  <span className="text-matrix-green/50">
+                    {formatCurrency(ind.total)} ({ind.percentage}%)
+                  </span>
+                </button>
+              ) : (
+                <div className="flex justify-between mb-1">
+                  <span className="text-matrix-green/70">{displayName}</span>
+                  <span className="text-matrix-green/50">
+                    {formatCurrency(ind.total)} ({ind.percentage}%)
+                  </span>
+                </div>
+              )}
               <div className="h-3 bg-matrix-dark-green/30 border border-matrix-green/20 mb-2">
                 <div
                   className="h-full transition-all duration-500"

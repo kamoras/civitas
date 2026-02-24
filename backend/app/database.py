@@ -19,6 +19,7 @@ engine = create_engine(
     settings.DATABASE_URL,
     connect_args=_sqlite_connect_args,
     echo=False,
+    pool_pre_ping=True,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -39,6 +40,13 @@ def _migrate_columns() -> None:
         ("key_votes", "affected_industries", "TEXT"),
         ("pipeline_runs", "current_phase", "TEXT"),
         ("pipeline_runs", "senators_total", "INTEGER DEFAULT 0"),
+        ("senators", "approval_rating", "REAL"),
+        ("senators", "disapproval_rating", "REAL"),
+        ("senators", "approval_source", "TEXT"),
+        ("presidents", "score_agency_alignment", "REAL DEFAULT 0.0"),
+        ("explore_documents", "agency_name", "TEXT"),
+        ("explore_documents", "comment_url", "TEXT"),
+        ("explore_documents", "comments_close_on", "TEXT"),
     ]
     with engine.begin() as conn:
         for table, column, col_type in migrations:
@@ -57,11 +65,22 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _migrate_columns()
 
-    # Enable WAL mode on SQLite so readers never block on pipeline writes.
     if "sqlite" in settings.DATABASE_URL:
         with engine.connect() as conn:
             conn.execute(text("PRAGMA journal_mode=WAL"))
             conn.execute(text("PRAGMA synchronous=NORMAL"))
+            conn.execute(text("PRAGMA cache_size=-32000"))  # 32MB page cache
+            conn.execute(text("PRAGMA mmap_size=268435456"))  # 256MB memory-mapped I/O
+            conn.execute(text("PRAGMA temp_store=MEMORY"))
+
+    # Seed president data if the table is empty
+    from app.services.president_service import seed_presidents
+
+    db = SessionLocal()
+    try:
+        seed_presidents(db)
+    finally:
+        db.close()
 
 
 def get_db() -> Generator[Session, None, None]:

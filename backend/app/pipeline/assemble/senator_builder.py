@@ -3,7 +3,6 @@ Senator builder — assembles a complete Senator record from all pipeline data.
 """
 
 import logging
-from typing import Any
 
 from app.pipeline.assemble.validator import validate_senator
 

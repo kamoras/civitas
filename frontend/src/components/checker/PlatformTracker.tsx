@@ -1,5 +1,6 @@
 import { CampaignPromise } from "@/types/senator";
 import { useCategoryLabel } from "@/hooks/useConfig";
+import { voteSourceUrl } from "@/lib/sources";
 
 interface PlatformTrackerProps {
   promises: CampaignPromise[];
@@ -63,7 +64,7 @@ export default function PlatformTracker({ promises, platformSummary }: PlatformT
     <div>
       <div className="flex items-baseline justify-between mb-3">
         <h3 className="text-lg text-neon-cyan neon-cyan">{">"} PROMISES vs. VOTES</h3>
-        <span className="text-[10px] text-matrix-green/25">
+        <span className="text-[10px] text-matrix-green/50">
           AI-analyzed campaign platform
         </span>
       </div>
@@ -115,6 +116,27 @@ export default function PlatformTracker({ promises, platformSummary }: PlatformT
                       <div className="mt-2 border-l-2 border-matrix-green/20 pl-2">
                         <span className="text-[10px] text-matrix-green/40 font-pixel">EVIDENCE: </span>
                         <span className="text-xs text-matrix-green/70">{promise.analysis}</span>
+                      </div>
+                    )}
+                    {promise.relatedVotes && promise.relatedVotes.length > 0 && (
+                      <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] text-matrix-green/30">RELATED VOTES:</span>
+                        {promise.relatedVotes.map((v, j) => {
+                          const url = voteSourceUrl(v);
+                          return url ? (
+                            <a
+                              key={j}
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[10px] text-neon-cyan/50 hover:text-neon-cyan underline underline-offset-2 transition-colors"
+                            >
+                              {v}
+                            </a>
+                          ) : (
+                            <span key={j} className="text-[10px] text-matrix-green/40">{v}</span>
+                          );
+                        })}
                       </div>
                     )}
                   </div>

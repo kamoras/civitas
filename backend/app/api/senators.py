@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.schemas import LeaderboardEntrySchema, SenatorSchema, StateCountSchema
+
 from app.services.senator_service import (
     get_leaderboard,
     get_senator_by_id,
@@ -13,8 +14,16 @@ from app.services.senator_service import (
 router = APIRouter()
 
 
+def _cached_json(data, max_age: int = 300) -> JSONResponse:
+    """Wrap data in a JSONResponse with Cache-Control headers."""
+    return JSONResponse(
+        content=data,
+        headers={"Cache-Control": f"public, max-age={max_age}, stale-while-revalidate={max_age}"},
+    )
+
+
 @router.get("/config")
-def get_config() -> dict:
+def get_config() -> JSONResponse:
     """Return all dynamic configuration for the frontend.
 
     Serves industries, platform categories, score weights, and policy areas
@@ -24,127 +33,214 @@ def get_config() -> dict:
         INDUSTRIES,
         PLATFORM_CATEGORIES,
         POLICY_AREAS,
+        PRESIDENT_SCORE_WEIGHTS,
         SCORE_WEIGHTS,
     )
 
-    return {
+    return _cached_json({
         "scoreWeights": SCORE_WEIGHTS,
+        "presidentScoreWeights": PRESIDENT_SCORE_WEIGHTS,
         "industries": INDUSTRIES,
         "platformCategories": PLATFORM_CATEGORIES,
         "policyAreas": POLICY_AREAS,
-    }
+    }, max_age=3600)
 
 
-@router.get("/senators/states", response_model=list[StateCountSchema])
-def list_states(db: Session = Depends(get_db)) -> list[StateCountSchema]:
+@router.get("/senators/states")
+def list_states(db: Session = Depends(get_db)) -> JSONResponse:
     """Return all states that have senator data, with counts."""
-    return get_states_with_counts(db)
+    data = get_states_with_counts(db)
+    return _cached_json([s.model_dump(by_alias=True) for s in data], max_age=300)
 
 
-@router.get("/senators/leaderboard", response_model=list[LeaderboardEntrySchema])
-def list_leaderboard(db: Session = Depends(get_db)) -> list[LeaderboardEntrySchema]:
+@router.get("/senators/leaderboard")
+def list_leaderboard(db: Session = Depends(get_db)) -> JSONResponse:
     """Return all senators ranked by representation score."""
-    return get_leaderboard(db)
+    data = get_leaderboard(db)
+    return _cached_json([e.model_dump(by_alias=True) for e in data], max_age=300)
 
 
 @router.get("/senators/{senator_id}/highlights")
-async def get_highlights(senator_id: str, db: Session = Depends(get_db)) -> dict:
-    """Return LLM-generated data highlights for a senator (cached after first call)."""
-    from app.pipeline.analyze.ollama_client import call_llm
-
+async def get_highlights(senator_id: str, db: Session = Depends(get_db)) -> JSONResponse:
+    """Return data-driven highlights for a senator — no LLM, pure data."""
     senator = get_senator_by_id(db, senator_id)
     if senator is None:
         raise HTTPException(status_code=404, detail="Senator not found")
 
+    highlights = _build_highlights(senator)
+    return _cached_json({"highlights": highlights[:5]}, max_age=120)
+
+
+def _build_highlights(senator) -> list[str]:
+    """Generate factual, data-driven insights from senator records."""
     funding = senator.funding
     voting = senator.voting_record
     score = senator.representation_score
+    hints: list[tuple[int, str]] = []  # (priority, text)
 
-    pac_pct = round(
-        (funding.total_from_pacs / funding.total_raised * 100)
-        if funding.total_raised > 0
-        else 0
-    )
-    top_donors_str = (
-        ", ".join(f"{d.name} (${d.total:,.0f})" for d in funding.top_donors[:3])
-        if funding.top_donors
-        else "none on record"
-    )
+    total = funding.total_raised
+    small_pct = funding.small_donor_percentage or 0
+    pac_total = funding.total_from_pacs or 0
+    pac_pct_raw = pac_total / total * 100 if total > 0 else 0.0
+    pac_pct_str = f"<1" if 0 < pac_pct_raw < 1 else f"{pac_pct_raw:.0f}"
+
+    # --- Approval rating highlight ---
+    approve = senator.approval_rating
+    disapprove = senator.disapproval_rating
+    if approve is not None and disapprove is not None:
+        net = approve - disapprove
+        if net > 20:
+            hints.append((11, (
+                f"Approval rating: {approve:.0f}% approve / {disapprove:.0f}% disapprove "
+                f"(net +{net:.0f}) — among the most popular senators."
+            )))
+        elif net > 0:
+            hints.append((11, (
+                f"Approval rating: {approve:.0f}% approve / {disapprove:.0f}% disapprove "
+                f"(net +{net:.0f})."
+            )))
+        elif net > -10:
+            hints.append((11, (
+                f"Approval rating: {approve:.0f}% approve / {disapprove:.0f}% disapprove "
+                f"(net {net:.0f}) — approval is underwater."
+            )))
+        else:
+            hints.append((11, (
+                f"Approval rating: {approve:.0f}% approve / {disapprove:.0f}% disapprove "
+                f"(net {net:.0f}) — significantly underwater."
+            )))
+
+    # --- Funding highlights ---
+    if small_pct >= 50:
+        hints.append((10, (
+            f"Grassroots funded: {small_pct:.0f}% of {senator.name}'s "
+            f"${total / 1e6:.1f}M raised comes from small donors (under $200), "
+            f"suggesting broad constituent support."
+        )))
+    elif small_pct < 15 and total > 0:
+        small_str = f"<1" if 0 < small_pct < 1 else f"{small_pct:.0f}"
+        hints.append((10, (
+            f"Only {small_str}% of {senator.name}'s "
+            f"${total / 1e6:.1f}M came from small donors — "
+            f"the vast majority flows from large donors and organizations."
+        )))
+
+    if pac_pct_raw > 40:
+        hints.append((9, (
+            f"PAC-heavy: {pac_pct_str}% of funding (${pac_total:,.0f}) "
+            f"comes from political action committees."
+        )))
+    elif pac_pct_raw < 5 and total > 500_000:
+        hints.append((9, (
+            f"Virtually PAC-free: Only ${pac_total:,.0f} "
+            f"({pac_pct_str}%) came from PACs — an unusually low amount."
+        )))
+
+    # Top industry donor
+    industry_donors = [
+        d for d in funding.top_donors
+        if d.type not in ("CandidateAffiliated",) and d.industry not in (
+            "POLITICAL", "SMALL_DONORS", "LARGE_INDIVIDUAL", "OTHER"
+        )
+    ]
+    if industry_donors:
+        top = industry_donors[0]
+        hints.append((5, (
+            f"Largest industry donor: {top.name} "
+            f"(${top.total:,.0f}, {top.industry.replace('_', ' ').title()})."
+        )))
+
+    # --- Voting highlights ---
+    scoreable = voting.scoreable_votes or 0
+    aligned = voting.donor_aligned_votes or 0
+    opposed = voting.donor_opposed_votes or 0
+    if scoreable > 0:
+        aligned_pct = round(aligned / scoreable * 100)
+        if aligned_pct > 70:
+            hints.append((8, (
+                f"Votes frequently align with donor interests: "
+                f"{aligned} of {scoreable} scoreable votes ({aligned_pct}%) "
+                f"went in their donors' favor."
+            )))
+        elif aligned_pct < 30 and scoreable >= 3:
+            hints.append((8, (
+                f"Votes rarely favor donors: Only {aligned} of {scoreable} "
+                f"scoreable votes ({aligned_pct}%) aligned with donor interests."
+            )))
+    if opposed > 2:
+        hints.append((4, (
+            f"Went against donor interests {opposed} times on tracked votes."
+        )))
+
+    # --- Lobbying matches ---
+    matches = senator.lobbying_matches or []
+    aligned_matches = sum(1 for m in matches if m.senator_vote_aligned)
+    if len(matches) > 3 and aligned_matches > 2:
+        hints.append((7, (
+            f"Found {len(matches)} donor-vote connections where a major donor's "
+            f"industry overlaps with legislation — {aligned_matches} votes went "
+            f"the donor's way."
+        )))
+    elif len(matches) == 0:
+        hints.append((3, (
+            f"No direct donor-vote industry connections detected in tracked legislation."
+        )))
+
+    # --- Promise fulfillment ---
+    promises = senator.campaign_promises or []
+    kept = sum(1 for p in promises if p.alignment == "kept")
+    broken = sum(1 for p in promises if p.alignment == "broken")
+    if len(promises) > 0:
+        if kept > 0 and broken == 0:
+            hints.append((6, (
+                f"Platform follow-through: {kept} of {len(promises)} tracked "
+                f"campaign promises rated as kept, with none broken."
+            )))
+        elif broken > kept and len(promises) >= 3:
+            hints.append((6, (
+                f"Promise gap: {broken} campaign promises rated as broken "
+                f"versus only {kept} kept out of {len(promises)} tracked."
+            )))
+
+    # --- Overall score ---
     from app.config_definitions import SCORE_WEIGHTS
     total_score = round(
-        score.constituent_funding * SCORE_WEIGHTS["constituentFunding"]
-        + score.independence_index * SCORE_WEIGHTS["independenceIndex"]
-        + score.donor_diversity * SCORE_WEIGHTS["donorDiversity"]
-        + score.promise_fulfillment * SCORE_WEIGHTS["promiseFulfillment"]
-        + score.accountability * SCORE_WEIGHTS["accountability"]
+        score.funding_independence * SCORE_WEIGHTS["fundingIndependence"]
+        + score.promise_persistence * SCORE_WEIGHTS["promisePersistence"]
+        + score.independent_voting * SCORE_WEIGHTS["independentVoting"]
+        + score.funding_diversity * SCORE_WEIGHTS["fundingDiversity"]
     )
-    kept = sum(1 for p in senator.campaign_promises if p.alignment == "kept")
-    partial = sum(1 for p in senator.campaign_promises if p.alignment == "partial")
-    broken = sum(1 for p in senator.campaign_promises if p.alignment == "broken")
-    aligned_connections = sum(1 for m in senator.lobbying_matches if m.senator_vote_aligned)
+    if total_score >= 80:
+        hints.append((2, (
+            f"Overall representation score: {total_score}/100 — "
+            f"strong marks across funding transparency, voting independence, "
+            f"and promise fulfillment."
+        )))
+    elif total_score <= 40:
+        hints.append((2, (
+            f"Overall representation score: {total_score}/100 — "
+            f"significant concerns across funding sources, voting patterns, "
+            f"or promise fulfillment."
+        )))
 
-    result = await call_llm(
-        prompt_version="senator-highlights-v1",
-        system_prompt="Political analyst. Return ONLY valid JSON, no markdown.",
-        user_prompt=(
-            f"Senator {senator.name} ({senator.party}-{senator.state}), "
-            f"{senator.years_in_office} yrs in office.\n"
-            f"FUNDING: ${funding.total_raised:,.0f} raised; {pac_pct}% from PACs; "
-            f"{funding.small_donor_percentage:.0f}% small donors.\n"
-            f"TOP DONORS: {top_donors_str}.\n"
-            f"VOTES: {voting.total_votes} tracked; {voting.donor_aligned_votes} donor-aligned "
-            f"of {voting.scoreable_votes} scoreable "
-            f"({round(voting.donor_aligned_votes / max(voting.scoreable_votes, 1) * 100)}%), "
-            f"{voting.donor_opposed_votes} went against donor interests.\n"
-            f"REPRESENTATION SCORE: {total_score}/100 "
-            f"(constituent funding: {score.constituent_funding:.0f}, "
-            f"voting independence: {score.independence_index:.0f}, "
-            f"donor diversity: {score.donor_diversity:.0f}, "
-            f"promise fulfillment: {score.promise_fulfillment:.0f}, "
-            f"accountability: {score.accountability:.0f}).\n"
-            f"DONOR-VOTE CONNECTIONS: {len(senator.lobbying_matches)} found, "
-            f"{aligned_connections} voted in donor's interest.\n"
-            f"PLATFORM PROMISES: {kept} kept, {partial} partial, {broken} broken "
-            f"of {len(senator.campaign_promises)} tracked.\n"
-            f'Return JSON: {{"highlights":["<insight>","<insight>","<insight>"]}}\n'
-            f"Generate 3-4 specific, punchy insights from this data. Focus on what is "
-            f"surprising, notable, or concerning. Use plain English, reference specific numbers."
-        ),
-        cache_key={
-            "senatorId": senator_id,
-            "totalRaised": round(funding.total_raised),
-            "pacPct": pac_pct,
-            "totalVotes": voting.total_votes,
-            "totalScore": total_score,
-            "promiseCounts": f"{kept}/{partial}/{broken}",
-            "v": 1,
-        },
-        db_session=db,
-        max_tokens=400,
-    )
-
-    if not result or not isinstance(result.get("highlights"), list):
-        return {"highlights": []}
-
-    highlights = [
-        str(h)[:300] for h in result["highlights"] if isinstance(h, str) and h.strip()
-    ]
-    return {"highlights": highlights[:5]}
+    hints.sort(key=lambda x: x[0], reverse=True)
+    return [text for _, text in hints]
 
 
-@router.get("/senators/{senator_id}", response_model=SenatorSchema)
-def get_senator(senator_id: str, db: Session = Depends(get_db)) -> SenatorSchema:
+@router.get("/senators/{senator_id}")
+def get_senator(senator_id: str, db: Session = Depends(get_db)) -> JSONResponse:
     """Return a single senator by ID."""
     result = get_senator_by_id(db, senator_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Senator not found")
-    return result
+    return _cached_json(result.model_dump(by_alias=True), max_age=120)
 
 
-@router.get("/senators", response_model=list[SenatorSchema])
+@router.get("/senators")
 def list_senators(
     state: str = Query(..., min_length=2, max_length=2, description="Two-letter state code"),
     db: Session = Depends(get_db),
-) -> list[SenatorSchema]:
+) -> JSONResponse:
     """Return senators filtered by state."""
-    return get_senators_by_state(db, state)
+    data = get_senators_by_state(db, state)
+    return _cached_json([s.model_dump(by_alias=True) for s in data], max_age=120)

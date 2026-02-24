@@ -1,46 +1,84 @@
 # Civitas — Senator Representation Tracker
 
-Civitas is an AI-powered platform that analyzes U.S. senators' voting records,
+Civitas is an open-data platform that analyzes U.S. senators' voting records,
 campaign donors, and stated platforms to produce a transparency scorecard showing
-how well each senator represents their constituents.
+how well each senator represents their constituents. All scores are computed from
+publicly available federal records using deterministic, auditable formulas.
 
 ## Architecture
 
 ```
-┌───────────────┐     ┌───────────────┐     ┌───────────────┐
-│   Frontend    │────▶│    Backend    │────▶│    Ollama     │
-│  (Next.js)    │     │  (FastAPI)    │     │  (Local LLM)  │
-│   port 3000   │     │   port 8000   │     │  port 11434   │
-└───────────────┘     └───────┬───────┘     └───────────────┘
+┌───────────────┐     ┌───────────────┐     ┌──────────────────┐
+│   Frontend    │────▶│    Backend    │────▶│  llama-server    │
+│  (Next.js)    │     │  (FastAPI)    │     │  (native ARM)    │
+│   port 3000   │     │   port 8000   │     │  port 8070       │
+└───────────────┘     └───────┬───────┘     └──────────────────┘
                               │
                     ┌─────────┴─────────┐
-                    │   SQLite + ChromaDB │
-                    │   /data volume      │
-                    └─────────────────────┘
+                    │  SQLite + ChromaDB │
+                    │  /data volume      │
+                    └───────────────────┘
 ```
 
-**Data pipeline** (runs nightly via cron, or manually triggered):
+### Data Pipeline
 
-1. **FETCH** — Pull senator info, bills, votes, and FEC financial data from
-   Congress.gov, GovInfo, and FEC APIs
-2. **TRANSFORM** — Normalize financial records, classify industries (embeddings),
-   classify donor types (FEC metadata + rules)
-3. **ANALYZE** — Classify bill policy areas (embeddings + LLM), analyze PACs,
-   summarize votes, cross-reference donors with votes
+The pipeline runs nightly (or manually triggered) in 4 phases:
+
+1. **FETCH** — Pull senator info, bills, votes, floor speeches, and FEC
+   financial data from Congress.gov, GovInfo, and FEC APIs
+2. **TRANSFORM** — Normalize financial records, classify industries and
+   donor types using FEC metadata and deterministic rules
+3. **ANALYZE** — Classify bills via embeddings (zero LLM), classify
+   remaining donors via kNN, cross-reference donors with votes, analyze
+   campaign promises (LLM), generate per-senator narratives (LLM)
 4. **ASSEMBLE + SAVE** — Build senator scorecards with five representation
    sub-scores and persist to database
 
-The pipeline uses a tiered classification strategy to minimize LLM calls:
-structured data first, then deterministic rules, then embedding similarity,
-with LLM reserved as a fallback. A learning store persists classifications
-across runs so the system improves over time.
+### Classification Strategy
+
+The pipeline uses a tiered classification strategy that reserves expensive
+techniques for cases where cheaper methods fail:
+
+| Tier | Technique | Speed | Used For |
+|------|-----------|-------|----------|
+| 1 | FEC metadata / deterministic rules | Instant | Donor types, payment processors, party committees |
+| 2 | Sentence-transformer embeddings (cosine similarity) | Fast | Bill policy areas, industry classification, semantic search |
+| 3 | k-Nearest Neighbor in embedding space | Fast | Remaining unclassified donors (~5%) |
+| 4 | LLM (Qwen 2.5 1.5B via llama.cpp) | Slow | Narrative synthesis, promise analysis, PAC identification |
+
+A persistent learning store accumulates labeled classifications across runs,
+so the system improves over time and requires fewer expensive classifications
+on subsequent runs.
+
+**Academic grounding:**
+- Embedding classification: Reimers & Gurevych (2019), *Sentence-BERT*
+- kNN in embedding space: Cover & Hart (1967), *Nearest Neighbor Pattern Classification*
+- Dense passage retrieval: Karpukhin et al. (2020), *DPR for Open-Domain QA*
+
+See the [Methodology page](/about) for full details and references.
+
+## Scoring Methodology
+
+Each senator receives five sub-scores (0-100, higher = better):
+
+| Metric | Weight | What It Measures |
+|--------|--------|------------------|
+| **Funding Independence** | 25% | Small-dollar donors vs corporate PAC money |
+| **Promise Persistence** | 25% | Campaign commitments kept vs broken + floor advocacy |
+| **Independent Voting** | 25% | Party-line breaks on non-state-relevant votes + donor independence |
+| **Transparency** | 15% | Donor traceability + industry diversity (inverse HHI) |
+| **Accessibility** | 10% | Vote participation rate |
+
+All scores default to 50 when data is insufficient. No LLM input is used
+in score calculation — formulas are deterministic and auditable.
 
 ## Prerequisites
 
 - **Docker** and **Docker Compose** (v2)
 - A free **api.data.gov** API key — sign up at https://api.data.gov/signup/
-- ~16 GB RAM recommended (Ollama needs ~4 GB for the LLM model)
+- ~16 GB RAM recommended
 - ~10 GB disk for Docker images and model weights
+- For native LLM inference: llama.cpp compiled for your architecture
 
 ## Quick Start
 
@@ -52,52 +90,88 @@ cd modern-punk
 # 2. Create your env file from the template
 cp .env.example .env
 
-# 3. Edit .env — at minimum set your API key
+# 3. Edit .env — at minimum set your API key and admin token
 #    DATA_GOV_API_KEY=your-key-from-api-data-gov
+#    ADMIN_TOKEN=your-secret-admin-token
 nano .env
 
 # 4. Start all services
 docker compose up -d
 
-# 5. Pull the LLM model (first time only, ~1.6 GB download)
-docker exec mp-ollama ollama pull gemma2:2b
-
-# 6. Verify everything is running
+# 5. Verify everything is running
 docker compose ps
-# All three services should show "healthy" or "running"
 
-# 7. Open the app
+# 6. Open the app
 #    Frontend: http://localhost:3000
 #    API docs: http://localhost:8000/docs
 ```
 
+### LLM Backend Options
+
+The pipeline supports two LLM backends, configured via `LLM_BACKEND` in `.env`:
+
+**Option A: llama.cpp (recommended for ARM/RPi)**
+```bash
+# Compile llama.cpp with ARM optimizations
+git clone https://github.com/ggerganov/llama.cpp
+cd llama.cpp && mkdir build && cd build
+cmake .. -DCMAKE_C_FLAGS="-mcpu=cortex-a76+dotprod+fp16" \
+         -DCMAKE_CXX_FLAGS="-mcpu=cortex-a76+dotprod+fp16"
+cmake --build . --config Release -j4
+
+# Install as systemd service (see deploy docs)
+# Set LLM_BACKEND=llama-server in .env
+```
+
+**Option B: Ollama (simpler setup)**
+```bash
+# Ollama runs as a Docker container alongside the app
+# Set LLM_BACKEND=ollama in .env
+docker exec mp-ollama ollama pull qwen2.5:1.5b
+```
+
 The data pipeline runs automatically on the cron schedule in `.env`
-(default: 3 AM daily). To trigger it manually:
+(default: 3 AM daily). To trigger it manually from the admin panel
+or via API:
 
 ```bash
-curl -X POST http://localhost:8000/api/pipeline/run \
-  -H "Authorization: Bearer $PIPELINE_TRIGGER_TOKEN"
+curl -X POST http://localhost:8000/api/admin/pipeline/trigger \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
 ```
+
+## Deployment
+
+The project uses blue/green zero-downtime deployment via `deploy.sh`:
+
+```bash
+# Deploy backend (builds image, starts new container, health checks, swaps nginx)
+./deploy.sh backend
+
+# Deploy frontend
+./deploy.sh frontend
+
+# Deploy both
+./deploy.sh
+```
+
+Data is persisted in Docker named volumes (`app_data`) that survive
+container rebuilds and redeployments.
 
 ## Development Setup
 
 For local development with hot-reload:
 
 ```bash
-# Start Ollama + deps, then run backend and frontend with live reloading
+# Start deps, then run backend and frontend with live reloading
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 ```
-
-This mounts `backend/app/` and `frontend/src/` as volumes so code changes
-take effect immediately without rebuilding images.
 
 ### Running Backend Tests
 
 ```bash
-# Run the full test suite inside Docker (includes embedding model)
 docker compose run --rm --no-deps backend python -m pytest tests/ -v
 
-# Run only fast tests (no embedding model needed)
+# Fast tests only (no embedding model)
 docker compose run --rm --no-deps backend python -m pytest tests/ -v \
   -k "not Embedding and not PolicyArea"
 ```
@@ -112,61 +186,42 @@ modern-punk/
 │   │   ├── pipeline/
 │   │   │   ├── fetch/        # Congress.gov, FEC, GovInfo API clients
 │   │   │   ├── transform/    # Data normalization + industry classifier
-│   │   │   ├── analyze/      # Bill, donor, vote, PAC analysis
+│   │   │   ├── analyze/      # Bill, donor, cross-reference analysis
+│   │   │   │   ├── bill_analyzer.py       # Embedding-based (zero LLM)
+│   │   │   │   ├── nn_classifier.py       # kNN donor classifier
+│   │   │   │   ├── cross_reference.py     # Per-senator LLM narrative
+│   │   │   │   ├── score_calculator.py    # Deterministic scoring
+│   │   │   │   └── ollama_client.py       # LLM backend abstraction
 │   │   │   ├── assemble/     # Senator scorecard builder
 │   │   │   └── orchestrator.py  # Pipeline control flow
 │   │   ├── models.py         # SQLAlchemy ORM models
 │   │   ├── database.py       # DB engine + session management
 │   │   └── config.py         # Pydantic settings from .env
-│   ├── tests/                # pytest test suite
+│   ├── tests/
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/
-│   ├── src/
-│   │   ├── app/              # Next.js app router pages
-│   │   ├── components/       # React components
-│   │   └── types/            # TypeScript types
-│   ├── package.json
+│   ├── src/app/              # Next.js app router pages
+│   ├── src/components/       # React components
 │   └── Dockerfile
-├── nginx/
-│   └── nginx.conf            # Reverse proxy config (optional)
-├── docker-compose.yml        # Production compose
-├── docker-compose.dev.yml    # Dev overrides (hot-reload)
-├── .env.example              # Template for environment variables
-└── .github/workflows/
-    ├── ci.yml                # Lint + test on push/PR
-    └── deploy.yml            # Build ARM64 images on tags
+├── deploy.sh                 # Blue/green zero-downtime deploy
+├── docker-compose.yml
+├── .env.example
+└── README.md
 ```
 
 ## Environment Variables
 
-See `.env.example` for all options. The only required variable is:
+See `.env.example` for all options. Key variables:
 
 | Variable | Required | Description |
 |---|---|---|
 | `DATA_GOV_API_KEY` | Yes | API key from api.data.gov (covers Congress.gov, FEC, GovInfo) |
-| `OLLAMA_MODEL` | No | LLM model name (default: `gemma2:2b`) |
-| `PIPELINE_TRIGGER_TOKEN` | No | Bearer token for manual pipeline triggers |
+| `ADMIN_TOKEN` | Yes | Bearer token for admin panel and pipeline triggers |
+| `LLM_BACKEND` | No | `llama-server` (default) or `ollama` |
+| `LLAMA_SERVER_URL` | No | llama.cpp server URL (default: `http://host.docker.internal:8070`) |
+| `OLLAMA_MODEL` | No | Model name for cache keys and Ollama (default: `qwen2.5:1.5b`) |
 | `DATABASE_URL` | No | SQLite path (default: `sqlite:///data/modern-punk.db`) |
-
-## Reverse Proxy (Optional)
-
-For production deployments behind a reverse proxy, an nginx config is provided
-in `nginx/nginx.conf`. It routes `/api/*` to the backend and everything else
-to the frontend. You can either:
-
-- Use the host's nginx and point it at ports 3000/8000
-- Add an nginx container to `docker-compose.yml` using the provided config
-
-## Scoring Methodology
-
-Each senator receives five sub-scores (0-100, higher = better):
-
-- **Constituent Funding** — Ratio of small donors vs PAC money
-- **Independence Index** — Joint signal of PAC dependence and pro-corporate voting
-- **Donor Diversity** — Inverse Herfindahl-Hirschman Index of industry concentration
-- **Promise Fulfillment** — Campaign platform alignment with voting record
-- **Accountability** — Tenure, industry concentration, and PAC dependence composite
 
 ## License
 

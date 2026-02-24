@@ -5,12 +5,13 @@ export interface Senator {
   party: "D" | "R" | "I";
   yearsInOffice: number;
   initials: string;
+  approvalRating: number | null;
+  disapprovalRating: number | null;
   representationScore: {
-    constituentFunding: number;
-    independenceIndex: number;
-    donorDiversity: number;
-    promiseFulfillment: number;
-    accountability: number;
+    fundingIndependence: number;
+    promisePersistence: number;
+    independentVoting: number;
+    fundingDiversity: number;
   };
   funding: {
     totalRaised: number;
@@ -109,6 +110,8 @@ export interface LeaderboardEntry {
   party: "D" | "R" | "I";
   yearsInOffice: number;
   initials: string;
+  approvalRating: number | null;
+  disapprovalRating: number | null;
   representationScore: Senator["representationScore"];
   totalRaised: number;
   totalFromPacs: number;

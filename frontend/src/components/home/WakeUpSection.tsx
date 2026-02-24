@@ -61,36 +61,34 @@ export default function WakeUpSection() {
       <div className="max-w-5xl mx-auto">
         <div className="text-center mb-16">
           <GlitchText
-            text="THE NUMBERS DON'T LIE"
+            text="WHAT WE TRACK"
             as="h2"
             className="font-pixel text-sm sm:text-xl md:text-2xl text-neon-pink"
           />
           <p className="text-matrix-green/40 text-sm mt-3">
-            All figures from public federal filings and nonpartisan research organizations.
+            Three branches of government. Public data only. Updated nightly.
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <StatCard
-            value="14.4B"
-            prefix="$"
-            label="Total corporate lobbying spend in 2023"
-            source="Source: OpenSecrets.org"
+            value="100"
+            label="Senators scored across 5 representation metrics using FEC, Congress.gov, and GovInfo data"
+            source="Source: FEC + Congress.gov + GovInfo APIs"
           />
           <StatCard
-            value="89%"
-            label="Of senators vote with their biggest donors most of the time"
-            source="Source: MapLight / FEC cross-reference"
+            value="47"
+            label="Presidents ranked from Washington to today, with live data for modern administrations"
+            source="Source: Federal Register + BLS + C-SPAN Historians Survey"
           />
           <StatCard
-            value="27,432"
-            prefix="$"
-            label="Average lobbying spend per congressional vote cast"
-            source="Source: Senate LDA filings"
+            value="3"
+            label="Branches of government searchable through the Explore feature — Senate, House, and Executive"
+            source="Source: Congressional Record + Federal Register"
           />
         </div>
 
-        <div className="ascii-divider mt-16">{"=".repeat(60)}</div>
+        <div className="ascii-divider mt-16" aria-hidden="true">{"=".repeat(60)}</div>
       </div>
     </section>
   );

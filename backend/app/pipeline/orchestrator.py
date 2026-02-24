@@ -1,11 +1,9 @@
 """
-Pipeline orchestrator -- full pipeline flow ported from scripts/pipeline/index.mjs.
+Pipeline orchestrator.
 
 The 4 phases: FETCH -> TRANSFORM -> ANALYZE -> ASSEMBLE+SAVE
 
-Adapts to use database (SQLAlchemy session) instead of file writes,
-using senator_service.upsert_senator() to save results and PipelineRun
-records to track progress.
+Uses SQLAlchemy sessions for persistence and PipelineRun records to track progress.
 """
 
 import json
@@ -49,6 +47,8 @@ from app.pipeline.fetch.fec import (
     find_candidate,
 )
 from app.pipeline.fetch.govinfo import fetch_bill_text
+from app.pipeline.fetch.congressional_record import fetch_floor_remarks
+from app.pipeline.fetch.approval_ratings import fetch_all_senator_approvals
 
 # Transform modules
 from app.pipeline.transform.normalize_finance import normalize_finance
@@ -66,13 +66,9 @@ from app.pipeline.analyze.bill_analyzer import classify_all_bills, classify_rece
 from app.pipeline.vector_store import embed_bills
 from app.pipeline.analyze.cross_reference import analyze_senator_batch
 from app.pipeline.analyze.donor_classifier_ai import classify_donors_hybrid
-from app.pipeline.analyze.industry_llm_classifier import classify_unknown_industries
-from app.pipeline.transform.industry_classifier import store_llm_classifications
-from app.pipeline.analyze.ollama_client import get_llm_stats, reset_stats
-from app.pipeline.analyze.pac_analyzer import analyze_pacs_batch
-from app.pipeline.analyze.platform_analyzer import analyze_platform_batch
+from app.pipeline.analyze.ollama_client import get_llm_stats, reset_client, reset_stats
+from app.pipeline.analyze.floor_speech_analyzer import analyze_floor_advocacy
 from app.pipeline.analyze.score_calculator import calculate_scores
-from app.pipeline.analyze.vote_summarizer import select_key_votes_batch
 
 # Assemble modules
 from app.pipeline.assemble.senator_builder import build_senator
@@ -101,16 +97,18 @@ def upsert_senator(db: Session, data: dict) -> None:
         "years_in_office": data.get("yearsInOffice", 0),
         "initials": data.get("initials", ""),
         "punk_nickname": data.get("punkNickname", "TBD"),
-        "score_corporate_funding": corruption.get("constituentFunding", 0),
-        "score_lobbyist_alignment": corruption.get("independenceIndex", 0),
-        "score_industry_concentration": corruption.get("donorDiversity", 0),
-        "score_flip_flop_index": corruption.get("promiseFulfillment", 0),
-        "score_revolving_door": corruption.get("accountability", 0),
+        "score_funding_independence": corruption.get("fundingIndependence", 0),
+        "score_promise_persistence": corruption.get("promisePersistence", 0),
+        "score_independent_voting": corruption.get("independentVoting", 0),
+        "score_funding_diversity": corruption.get("fundingDiversity", 0),
         "total_raised": funding.get("totalRaised", 0),
         "total_from_pacs": funding.get("totalFromPACs", 0),
         "small_donor_percentage": funding.get("smallDonorPercentage", 0),
         "voting_summary": data.get("votingRecord", {}).get("votingSummary", ""),
         "platform_summary": data.get("platformSummary", ""),
+        "approval_rating": data.get("approvalRating"),
+        "disapproval_rating": data.get("disapprovalRating"),
+        "approval_source": data.get("approvalSource"),
         "updated_at": datetime.utcnow(),
     }
 
@@ -139,6 +137,7 @@ def upsert_senator(db: Session, data: dict) -> None:
                 name=donor_data.get("name", "Unknown"),
                 total=donor_data.get("total", 0),
                 type=donor_data.get("type", "PAC"),
+                industry=donor_data.get("industry", "OTHER"),
                 rank=rank,
                 pac_sponsor=donor_data.get("pacSponsor"),
                 pac_industry=donor_data.get("pacIndustry"),
@@ -229,12 +228,41 @@ def upsert_senator(db: Session, data: dict) -> None:
     db.flush()
 
 
+def _acquire_pipeline_lock(db: Session) -> PipelineRun | None:
+    """Atomically check for a running pipeline and create a new locked run.
+
+    Uses the shared SQLite database so the lock works across blue/green
+    containers.  Returns the new PipelineRun if the lock was acquired,
+    or None if another pipeline is already running.
+    """
+    running = (
+        db.query(PipelineRun)
+        .filter(PipelineRun.status == "running")
+        .first()
+    )
+    if running:
+        age = (datetime.utcnow() - running.started_at).total_seconds()
+        if age > 43200:  # 12 hours -- treat as stale
+            running.status = "stale"
+            running.completed_at = datetime.utcnow()
+            running.error_message = "Marked stale: exceeded 2-hour timeout"
+            db.commit()
+            logger.warning("Cleaned up stale pipeline run #%d (age: %ds)", running.id, int(age))
+        else:
+            return None
+
+    pipeline_run = PipelineRun(started_at=datetime.utcnow(), status="running")
+    db.add(pipeline_run)
+    db.commit()
+    return pipeline_run
+
+
 async def run_full_pipeline(
     senator_filter: str | None = None,
     fetch_only: bool = False,
 ) -> dict:
     """
-    Full pipeline implementation -- ported from scripts/pipeline/index.mjs.
+    Full pipeline implementation.
 
     Args:
         senator_filter: Optional name/id filter to process a single senator.
@@ -245,16 +273,15 @@ async def run_full_pipeline(
     """
     start_time = time.time()
     reset_stats()
+    reset_client()
 
     db: Session = SessionLocal()
 
-    # Create PipelineRun record
-    pipeline_run = PipelineRun(
-        started_at=datetime.utcnow(),
-        status="running",
-    )
-    db.add(pipeline_run)
-    db.commit()
+    pipeline_run = _acquire_pipeline_lock(db)
+    if pipeline_run is None:
+        logger.warning("Pipeline already running in another process — skipping")
+        db.close()
+        return {"status": "skipped", "reason": "already_running"}
 
     try:
         logger.info("=== CIVITAS DATA PIPELINE ===")
@@ -264,6 +291,7 @@ async def run_full_pipeline(
             logger.info("Fetch only mode -- no LLM analysis")
 
         pipeline_run.current_phase = "fetch"
+        pipeline_run.elapsed_seconds = 0
         db.commit()
 
         # Validate API keys
@@ -302,6 +330,7 @@ async def run_full_pipeline(
             # PHASE 2: TRANSFORM (members)
             # ========================================
             pipeline_run.current_phase = "transform"
+            pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
             db.commit()
             logger.info("--- Phase 2: TRANSFORM (members) ---")
             senators = normalize_members(raw_members, member_details)
@@ -515,6 +544,40 @@ async def run_full_pipeline(
                 len(senators),
             )
 
+            # 1g. Fetch approval ratings
+            logger.info("Fetching senator approval ratings...")
+            approval_data: dict[str, dict] = {}
+            try:
+                approval_data = await fetch_all_senator_approvals(
+                    client, db, senators,
+                )
+                logger.info(
+                    "Approval ratings: %d/%d senators",
+                    len(approval_data), len(senators),
+                )
+            except Exception as e:
+                logger.warning(
+                    "Approval rating fetch failed: %s — continuing without approval data", e,
+                )
+
+            # 1h. Fetch Congressional Record floor remarks
+            logger.info("Fetching Congressional Record floor proceedings...")
+            try:
+                all_floor_remarks = await fetch_floor_remarks(
+                    client, db, days_back=60, max_granules_per_day=8,
+                )
+                logger.info(
+                    "Floor remarks: %d speakers, %d total remarks",
+                    len(all_floor_remarks),
+                    sum(len(v) for v in all_floor_remarks.values()),
+                )
+            except Exception as e:
+                logger.warning(
+                    "Congressional Record fetch failed: %s — continuing without floor data",
+                    e,
+                )
+                all_floor_remarks = {}
+
         if fetch_only:
             logger.info("=== FETCH COMPLETE (fetch-only mode) ===")
             elapsed = time.time() - start_time
@@ -534,11 +597,12 @@ async def run_full_pipeline(
         # PHASE 3: ANALYZE
         # ========================================
         pipeline_run.current_phase = "analyze"
+        pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
         db.commit()
         logger.info("--- Phase 3: ANALYZE ---")
 
-        # 3a. Classify all key bills using LLM (with partyLeaning)
-        logger.info("Classifying key bills...")
+        # 3a. Classify bills using embeddings (zero LLM calls)
+        logger.info("Classifying key bills (embedding-based)...")
         try:
             classified_bills = await classify_all_bills(bills_data, db_session=db)
             logger.info("Classified %d key bills", len(classified_bills))
@@ -556,14 +620,17 @@ async def run_full_pipeline(
                 if computed_split:
                     bill["partyLeaning"] = computed_split
 
-        # 3a.2 Classify recent roll call votes
+        # 3a.2 Classify recent roll call votes (embedding-based, zero LLM)
         classified_recent: list[dict] = []
         if recent_roll_calls:
-            logger.info("Classifying %d recent votes...", len(recent_roll_calls))
+            logger.info("Classifying %d recent votes (embedding-based)...", len(recent_roll_calls))
             classified_recent = await classify_recent_votes(
                 recent_roll_calls, db_session=db
             )
             logger.info("Classified %d recent votes", len(classified_recent))
+
+        pipeline_run.bills_classified = len(classified_bills) + len(classified_recent)
+        db.commit()
 
         # Override partyLeaning for recent votes too, using the roll call member data.
         for rc in classified_recent:
@@ -574,7 +641,7 @@ async def run_full_pipeline(
                 if computed_split:
                     rc["partyLeaning"] = computed_split
 
-        # 3a.3 Embed all classified bills in vector database for semantic search
+        # 3a.3 Embed classified bills in vector database for semantic search
         logger.info("Embedding bills in vector database...")
         all_bills_for_embedding = classified_bills + classified_recent
         try:
@@ -623,12 +690,24 @@ async def run_full_pipeline(
 
         ai_classifications: dict[str, dict] = {}
         if all_donor_entries:
+            def _flush_donor_progress():
+                s = get_llm_stats()
+                pipeline_run.llm_calls = s["total_calls"]
+                pipeline_run.cache_hits = s["cache_hits"]
+                pipeline_run.cache_misses = s["cache_misses"]
+                pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
+                db.commit()
+
             ai_classifications = await classify_donors_hybrid(
-                all_donor_entries, db_session=db
+                all_donor_entries, db_session=db, on_progress=_flush_donor_progress
             )
 
-        # Collect all org names classified as "OTHER" for LLM reclassification
-        all_other_orgs: set[str] = set()
+        _flush = get_llm_stats()
+        pipeline_run.llm_calls = _flush["total_calls"]
+        pipeline_run.cache_hits = _flush["cache_hits"]
+        pipeline_run.cache_misses = _flush["cache_misses"]
+        pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
+        db.commit()
 
         # 3b. Prepare senator data for batch LLM analysis
         logger.info("Preparing senator data for batch analysis...")
@@ -650,10 +729,6 @@ async def run_full_pipeline(
                         ai_classifications=ai_classifications,
                         db_session=db,
                     )
-                    # Collect "OTHER" industries for LLM reclassification
-                    for ind in funding.get("industryBreakdown", []):
-                        if ind.get("industry") == "OTHER":
-                            all_other_orgs.add(ind.get("name", ""))
                 else:
                     funding = senator.get("funding", {})
 
@@ -728,60 +803,14 @@ async def run_full_pipeline(
                 fail_count += 1
                 results.append(senator)
 
-        # Reclassify "OTHER" industries using LLM and store in learning store
-        if all_other_orgs:
-            all_other_orgs.discard("")
-            logger.info(
-                "Reclassifying %d unknown industries via LLM...",
-                len(all_other_orgs),
-            )
-            try:
-                reclassified = await classify_unknown_industries(
-                    list(all_other_orgs), db_session=db
-                )
-                # Store LLM results in learning store for next run
-                store_llm_classifications(reclassified, db)
-            except Exception as e:
-                logger.error("Industry reclassification failed: %s — skipping", e)
-                reclassified = {}
-            # Apply reclassifications to prepared senator data
-            for prepared in senator_prepared:
-                breakdown = prepared["funding"].get("industryBreakdown", [])
-                new_breakdown: dict[str, dict] = {}
-                for ind in breakdown:
-                    industry = ind["industry"]
-                    if industry == "OTHER" and ind["name"] in reclassified:
-                        new_industry = reclassified[ind["name"]]
-                        if new_industry != "OTHER":
-                            industry = new_industry
-                    existing = new_breakdown.get(industry)
-                    if existing:
-                        existing["total"] += ind["total"]
-                    else:
-                        new_breakdown[industry] = {
-                            "industry": industry,
-                            "name": industry.replace("_", " "),
-                            "total": ind["total"],
-                            "percentage": ind["percentage"],
-                        }
-                # Recalculate percentages
-                total = sum(i["total"] for i in new_breakdown.values())
-                for ind in new_breakdown.values():
-                    ind["percentage"] = (
-                        round(ind["total"] / total * 100) if total > 0 else 0
-                    )
-                prepared["funding"]["industryBreakdown"] = sorted(
-                    new_breakdown.values(),
-                    key=lambda x: x["total"],
-                    reverse=True,
-                )[:8]
-            logger.info(
-                "Reclassified %d/%d industries (stored in learning store)",
-                sum(1 for v in reclassified.values() if v != "OTHER"),
-                len(reclassified),
-            )
+        _flush = get_llm_stats()
+        pipeline_run.llm_calls = _flush["total_calls"]
+        pipeline_run.cache_hits = _flush["cache_hits"]
+        pipeline_run.cache_misses = _flush["cache_misses"]
+        pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
+        db.commit()
 
-        logger.info("Processing %d senators one at a time...", len(senator_prepared))
+        logger.info("Processing %d senators (1 LLM call each)...", len(senator_prepared))
 
         for senator_idx, prepared in enumerate(senator_prepared):
             senator = prepared["senator"]
@@ -795,62 +824,36 @@ async def run_full_pipeline(
                 senator["name"],
             )
 
-            all_votes = (voting_record.get("keyVotes") or []) + (
-                voting_record.get("recentVotes") or []
-            )
-
-            # 3b. Cross-reference donors with votes (one senator at a time)
-            analysis_results = await analyze_senator_batch(
-                [
-                    {
-                        "senator": senator,
-                        "donors": funding.get("topDonors") or [],
-                        "keyVotes": voting_record.get("keyVotes") or [],
-                    }
-                ],
-                db_session=db,
-            )
-            analysis = analysis_results[0] if analysis_results else {}
-
-            # 3c. Select key votes
-            kv_results = await select_key_votes_batch(
-                [{"senator": senator, "allVotes": all_votes}],
-                db_session=db,
-            )
-            kv_selection = kv_results[0] if kv_results else {}
-
-            # 3d. PAC analysis
-            pac_results = await analyze_pacs_batch(
-                [{"senatorId": senator["id"], "donors": funding.get("topDonors", [])}],
-                db_session=db,
-            )
-            pac_data = pac_results[0] if pac_results else {}
-
-            # 3e. Platform analysis
-            platform_results = await analyze_platform_batch(
-                [
-                    {
-                        "senator": senator,
-                        "allVotes": all_votes,
-                        "platformText": platform_texts.get(senator["id"], ""),
-                    }
-                ],
-                db_session=db,
-            )
-            platform_data = platform_results[0] if platform_results else {}
-
             try:
-                # Merge cross-reference analysis into voting record
-                all_votes = analysis.get("keyVotes") or voting_record["keyVotes"]
+                all_votes = (voting_record.get("keyVotes") or []) + (
+                    voting_record.get("recentVotes") or []
+                )
 
-                # Split votes: LLM-selected ones become "key", rest stay as they are
-                key_vote_ids = set(kv_selection.get("keyVoteIds", []))
-                reasoning_map = kv_selection.get("reasoning", {})
+                analysis_results = await analyze_senator_batch(
+                    [
+                        {
+                            "senator": senator,
+                            "donors": funding.get("topDonors") or [],
+                            "keyVotes": voting_record.get("keyVotes") or [],
+                            "allVotes": all_votes,
+                            "platformText": platform_texts.get(senator["id"], ""),
+                        }
+                    ],
+                    db_session=db,
+                )
+                analysis = analysis_results[0] if analysis_results else {}
+                platform_data = {
+                    "campaignPromises": analysis.get("campaignPromises", []),
+                    "platformSummary": analysis.get("platformSummary", ""),
+                }
+                all_key_votes = analysis.get("keyVotes") or voting_record["keyVotes"]
+                key_vote_ids = set(analysis.get("keyVoteIds", []))
+                reasoning_map = analysis.get("reasoning", {})
 
                 final_key_votes = []
                 final_recent_votes = list(voting_record.get("recentVotes", []))
 
-                for v in all_votes:
+                for v in all_key_votes:
                     if v["billId"] in key_vote_ids:
                         v["voteCategory"] = "key"
                         v["keyVoteReasoning"] = reasoning_map.get(v["billId"])
@@ -859,9 +862,8 @@ async def run_full_pipeline(
                         v["voteCategory"] = "recent"
                         final_recent_votes.append(v)
 
-                # If LLM didn't select any key votes, promote the first 3-5
-                if not final_key_votes and all_votes:
-                    for v in all_votes[:min(5, len(all_votes))]:
+                if not final_key_votes and all_key_votes:
+                    for v in all_key_votes[:min(5, len(all_key_votes))]:
                         v["voteCategory"] = "key"
                         final_key_votes.append(v)
                     final_recent_votes = [
@@ -871,11 +873,27 @@ async def run_full_pipeline(
 
                 voting_record["keyVotes"] = final_key_votes
                 voting_record["recentVotes"] = final_recent_votes
-                voting_record["votingSummary"] = kv_selection.get("votingSummary", "")
+                voting_record["votingSummary"] = analysis.get("votingSummary", "")
 
                 lobbying_matches = analysis.get("lobbyingMatches", [])
 
-                # Calculate scores
+                # Match Congressional Record floor remarks to this senator
+                name_parts = senator["name"].split()
+                senator_last_name = name_parts[-1].upper() if name_parts else ""
+                senator_floor_remarks = all_floor_remarks.get(
+                    senator_last_name, []
+                )
+                floor_advocacy = analyze_floor_advocacy(
+                    senator_floor_remarks,
+                    platform_data.get("campaignPromises", []),
+                )
+                if senator_floor_remarks:
+                    logger.info(
+                        "    floor remarks: %d (%d categories advocated)",
+                        floor_advocacy["totalRemarks"],
+                        len(floor_advocacy["advocatedCategories"]),
+                    )
+
                 temp_senator = {
                     **senator,
                     "funding": funding,
@@ -886,13 +904,24 @@ async def run_full_pipeline(
                 corruption_score = calculate_scores(
                     temp_senator,
                     {"flipFlopScore": analysis.get("flipFlopScore", 25)},
+                    floor_advocacy=floor_advocacy,
                 )
 
-                # Enrich donors with PAC analysis
-                if pac_data.get("donors"):
-                    funding["topDonors"] = pac_data["donors"]
+                # Enrich donors with PAC details from combined analysis
+                pac_detail_map = {
+                    d["name"].upper().strip(): d
+                    for d in analysis.get("pacDetails", [])
+                }
+                if pac_detail_map:
+                    enriched_donors = []
+                    for d in funding.get("topDonors", []):
+                        key = d["name"].upper().strip()
+                        if key in pac_detail_map:
+                            enriched_donors.append({**d, **pac_detail_map[key]})
+                        else:
+                            enriched_donors.append(d)
+                    funding["topDonors"] = enriched_donors
 
-                # Assemble final record
                 result = build_senator(
                     senator,
                     funding,
@@ -901,40 +930,48 @@ async def run_full_pipeline(
                     corruption_score,
                 )
 
-                # Add platform and nickname
                 result["campaignPromises"] = platform_data.get("campaignPromises", [])
                 result["platformSummary"] = platform_data.get("platformSummary", "")
-                result["punkNickname"] = analysis.get("punkNickname", "TBD")
+
+                approval = approval_data.get(senator["id"])
+                if approval:
+                    result["approvalRating"] = approval.get("approve")
+                    result["disapprovalRating"] = approval.get("disapprove")
+                    result["approvalSource"] = approval.get("source")
 
                 results.append(result)
                 success_count += 1
 
-                # Write immediately so the UI reflects live progress
                 upsert_senator(db, result)
                 pipeline_run.senators_processed = success_count
+                incremental_stats = get_llm_stats()
+                pipeline_run.llm_calls = incremental_stats["total_calls"]
+                pipeline_run.cache_hits = incremental_stats["cache_hits"]
+                pipeline_run.cache_misses = incremental_stats["cache_misses"]
+                pipeline_run.bills_classified = len(classified_bills)
+                pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
                 db.commit()
 
-                weighted_score = round(
-                    corruption_score["constituentFunding"] * 0.3
-                    + corruption_score["promiseFulfillment"] * 0.3
-                    + corruption_score["independenceIndex"] * 0.2
-                    + corruption_score["donorDiversity"] * 0.1
-                    + corruption_score["accountability"] * 0.1
-                )
-                logger.info(
-                    '    score %d/100 | nickname: %s',
-                    weighted_score,
-                    result["punkNickname"],
-                )
-            except Exception as e:
-                logger.error("  Failed for %s: %s", senator["name"], str(e))
+                from app.config_definitions import SCORE_WEIGHTS
+                weighted_score = round(sum(
+                    corruption_score.get(k, 0) * w
+                    for k, w in SCORE_WEIGHTS.items()
+                ))
+                logger.info("    score %d/100", weighted_score)
+            except Exception:
+                logger.exception("  Failed for %s", senator["name"])
                 fail_count += 1
                 results.append(senator)
+                pipeline_run.senators_failed = fail_count
+                pipeline_run.senators_processed = success_count
+                pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
+                db.commit()
 
         # ========================================
         # PHASE 4: FINALIZE
         # ========================================
         pipeline_run.current_phase = "finalize"
+        pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
         db.commit()
         logger.info("--- Phase 4: FINALIZE ---")
 
@@ -974,13 +1011,16 @@ async def run_full_pipeline(
             "elapsed_seconds": round(elapsed, 1),
         }
 
-    except Exception as e:
-        logger.error("Pipeline failed: %s", str(e))
-        pipeline_run.status = "failed"
-        pipeline_run.completed_at = datetime.utcnow()
-        pipeline_run.error_message = str(e)
-        pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
-        db.commit()
+    except BaseException as e:
+        logger.exception("Pipeline failed: %s", e)
+        try:
+            pipeline_run.status = "failed"
+            pipeline_run.completed_at = datetime.utcnow()
+            pipeline_run.error_message = str(e)[:500]
+            pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
+            db.commit()
+        except Exception:
+            logger.exception("Failed to record pipeline failure in DB")
         raise
     finally:
         db.close()

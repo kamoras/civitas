@@ -4,7 +4,6 @@ Ports all validation rules, valid sets, and the clamp function.
 """
 
 import logging
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -59,11 +58,10 @@ def validate_senator(senator: dict) -> dict:
     # Representation score
     cs = senator.get("representationScore") or {}
     senator["representationScore"] = {
-        "constituentFunding": clamp(cs.get("constituentFunding", 0)),
-        "independenceIndex": clamp(cs.get("independenceIndex", 0)),
-        "donorDiversity": clamp(cs.get("donorDiversity", 0)),
-        "promiseFulfillment": clamp(cs.get("promiseFulfillment", 0)),
-        "accountability": clamp(cs.get("accountability", 0)),
+        "fundingIndependence": clamp(cs.get("fundingIndependence", 0)),
+        "promisePersistence": clamp(cs.get("promisePersistence", 0)),
+        "independentVoting": clamp(cs.get("independentVoting", 0)),
+        "fundingDiversity": clamp(cs.get("fundingDiversity", 0)),
     }
 
     # Funding
@@ -74,6 +72,7 @@ def validate_senator(senator: dict) -> dict:
         "SuperPAC",
         "Org/Employees",
         "Party/Ideological",
+        "CandidateAffiliated",
     }
     senator["funding"] = {
         "totalRaised": max(0, round(f.get("totalRaised", 0))),
@@ -88,6 +87,14 @@ def validate_senator(senator: dict) -> dict:
                     if d.get("type") in valid_donor_types
                     else "PAC"
                 ),
+                "industry": (
+                    d.get("industry")
+                    if d.get("industry") in VALID_INDUSTRIES
+                    else "OTHER"
+                ),
+                "pacSponsor": d.get("pacSponsor"),
+                "pacIndustry": d.get("pacIndustry"),
+                "pacAnalysis": d.get("pacAnalysis"),
             }
             for d in (f.get("topDonors") or [])
         ],

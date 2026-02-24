@@ -7,7 +7,9 @@ from app.config import settings
 from app.models import AnalysisCache, ApiCache
 
 
-def api_cache_get(db: Session, tier: str, key: str) -> dict | None:
+def api_cache_get(
+    db: Session, tier: str, key: str, max_age_hours: int | None = None,
+) -> dict | None:
     """Get cached API response, return None if expired or missing."""
     entry = (
         db.query(ApiCache)
@@ -17,7 +19,8 @@ def api_cache_get(db: Session, tier: str, key: str) -> dict | None:
     if not entry:
         return None
     age = datetime.utcnow() - entry.cached_at
-    if age > timedelta(hours=settings.PIPELINE_CACHE_TTL_HOURS):
+    ttl = max_age_hours if max_age_hours is not None else settings.PIPELINE_CACHE_TTL_HOURS
+    if age > timedelta(hours=ttl):
         return None
     return json.loads(entry.data_json)
 
@@ -48,17 +51,20 @@ def analysis_cache_get(
     db: Session, version: str, input_hash: str
 ) -> dict | None:
     """Get cached analysis result (no TTL - invalidated by version change)."""
-    entry = (
-        db.query(AnalysisCache)
-        .filter(
-            AnalysisCache.prompt_version == version,
-            AnalysisCache.input_hash == input_hash,
+    try:
+        entry = (
+            db.query(AnalysisCache)
+            .filter(
+                AnalysisCache.prompt_version == version,
+                AnalysisCache.input_hash == input_hash,
+            )
+            .first()
         )
-        .first()
-    )
-    if not entry:
+        if not entry:
+            return None
+        return json.loads(entry.result_json)
+    except Exception:
         return None
-    return json.loads(entry.result_json)
 
 
 def analysis_cache_set(

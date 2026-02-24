@@ -4,18 +4,22 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import MatrixRain from "@/components/effects/MatrixRain";
-import { fetchLeaderboard } from "@/lib/api";
-import { calculateOverallScore, getScoreColor } from "@/lib/corruption";
+import BranchSelector, { type Branch } from "@/components/BranchSelector";
+import ComingSoon from "@/components/ComingSoon";
+import { fetchLeaderboard, fetchPresidentLeaderboard } from "@/lib/api";
+import { calculateOverallScore, calculatePresidentScore, getScoreColor } from "@/lib/corruption";
 import { useScoreWeights } from "@/hooks/useConfig";
 import type { LeaderboardEntry } from "@/types/senator";
+import type { PresidentLeaderboardEntry } from "@/types/president";
 
 type PartyFilter = "ALL" | "D" | "R" | "I";
-type SortKey = "score" | "pac_dollars" | "pac_pct";
+type SortKey = "score" | "pac_dollars" | "pac_pct" | "approval";
 
-function formatDollars(n: number): string {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`;
-  return `$${n.toFixed(0)}`;
+function formatDollars(n: number | undefined | null): string {
+  const v = n ?? 0;
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K`;
+  return `$${v.toFixed(0)}`;
 }
 
 function partyColor(party: string): string {
@@ -39,7 +43,6 @@ function rankColor(rank: number): string {
 }
 
 function ScoreBar({ score }: { score: number }) {
-  // Higher = better (green = good representation, red = captured)
   const color =
     score >= 81
       ? "bg-matrix-green"
@@ -53,20 +56,198 @@ function ScoreBar({ score }: { score: number }) {
 
   return (
     <div className="flex items-center gap-2">
-      <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden">
+      <div
+        className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden"
+        role="progressbar"
+        aria-valuenow={score}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={`Score: ${score} out of 100`}
+      >
         <div
           className={`h-full rounded-full ${color} transition-all`}
           style={{ width: `${score}%` }}
         />
       </div>
-      <span className={`text-sm font-bold tabular-nums ${getScoreColor(score)}`}>{score}</span>
+      <span className={`text-sm font-bold tabular-nums ${getScoreColor(score)}`} aria-hidden="true">{score}</span>
     </div>
   );
 }
 
+const PRES_PARTY: Record<string, { label: string; color: string; bg: string }> = {
+  D:  { label: "DEM", color: "text-dem-blue",   bg: "bg-dem-blue/20 border-dem-blue/40" },
+  R:  { label: "REP", color: "text-rep-red",    bg: "bg-rep-red/20 border-rep-red/40" },
+  DR: { label: "D-R", color: "text-teal-400",   bg: "bg-teal-400/20 border-teal-400/40" },
+  F:  { label: "FED", color: "text-purple-400", bg: "bg-purple-400/20 border-purple-400/40" },
+  W:  { label: "WHG", color: "text-amber-400",  bg: "bg-amber-400/20 border-amber-400/40" },
+  I:  { label: "IND", color: "text-white/70",   bg: "bg-white/10 border-white/30" },
+};
+
+function presParty(party: string) {
+  return PRES_PARTY[party] ?? { label: party, color: "text-white/50", bg: "bg-white/10 border-white/20" };
+}
+
+function termYears(start: string, end: string | null): string {
+  const s = start.slice(0, 4);
+  const e = end ? end.slice(0, 4) : "Present";
+  return `${s}–${e}`;
+}
+
+function PresidentLeaderboard({
+  entries,
+  loading,
+  error,
+}: {
+  entries: PresidentLeaderboardEntry[];
+  loading: boolean;
+  error: string | null;
+}) {
+  if (loading) {
+    return (
+      <div className="terminal-window p-8 text-center">
+        <p className="text-matrix-green animate-pulse">{">"} LOADING PRESIDENTIAL DATA...</p>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="terminal-window p-8 text-center border-red-500/40">
+        <p className="text-red-400">{">"} ERROR: {error}</p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="terminal-window overflow-hidden">
+        <div className="terminal-titlebar">
+          <span className="terminal-dot red" />
+          <span className="terminal-dot yellow" />
+          <span className="terminal-dot green" />
+          <span className="ml-3 text-white/40 text-xs font-terminal">
+            president_leaderboard.db — {entries.length} presidents
+          </span>
+        </div>
+
+        {/* Desktop table */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full text-sm font-terminal">
+            <thead>
+              <tr className="border-b border-matrix-green/20 text-matrix-green/50 text-xs uppercase tracking-widest">
+                <th scope="col" className="px-4 py-3 text-left w-14">RANK</th>
+                <th scope="col" className="px-4 py-3 text-left">PRESIDENT</th>
+                <th scope="col" className="px-3 py-3 text-center w-20">PARTY</th>
+                <th scope="col" className="px-3 py-3 text-center w-24">TERM</th>
+                <th scope="col" className="px-3 py-3 text-left w-36">SCORE</th>
+                <th scope="col" className="px-3 py-3 text-right w-24">APPROVAL</th>
+                <th scope="col" className="px-3 py-3 text-right w-24">GDP %</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((entry, idx) => {
+                const rank = idx + 1;
+                const score = calculatePresidentScore(entry.score);
+                return (
+                  <tr
+                    key={entry.id}
+                    className={`border-b border-matrix-green/10 hover:bg-matrix-green/5 transition-colors cursor-pointer group ${
+                      rank <= 3 ? "border-l-2 border-l-neon-yellow/30" : ""
+                    }`}
+                    tabIndex={0}
+                    role="link"
+                    aria-label={`View profile for ${entry.name}, rank ${rank}`}
+                    onClick={() => (window.location.href = `/scorecard?branch=president&id=${entry.id}`)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); window.location.href = `/scorecard?branch=president&id=${entry.id}`; } }}
+                  >
+                    <td className="px-4 py-3">
+                      <span className={`font-bold text-lg ${rankColor(rank)}`}>#{rank}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-white group-hover:text-matrix-green transition-colors">
+                        {entry.name}
+                      </span>
+                      <span className="ml-2 text-matrix-green/30 text-xs">#{entry.number}</span>
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      <span
+                        className={`text-xs px-2 py-0.5 border rounded-sm ${presParty(entry.party).bg} ${presParty(entry.party).color}`}
+                      >
+                        {presParty(entry.party).label}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3 text-center text-white/50 text-xs">
+                      {termYears(entry.termStart, entry.termEnd)}
+                      {entry.isCurrent && (
+                        <span className="ml-1 text-neon-yellow text-[10px] animate-pulse">ACTIVE</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3">
+                      <ScoreBar score={score} />
+                    </td>
+                    <td className="px-3 py-3 text-right tabular-nums text-white/70">
+                      {entry.avgApproval != null ? `${entry.avgApproval.toFixed(0)}%` : "—"}
+                    </td>
+                    <td className="px-3 py-3 text-right tabular-nums text-white/70">
+                      {entry.gdpGrowthAvg != null ? `${entry.gdpGrowthAvg.toFixed(1)}%` : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="md:hidden divide-y divide-matrix-green/10">
+          {entries.map((entry, idx) => {
+            const rank = idx + 1;
+            const score = calculatePresidentScore(entry.score);
+            return (
+              <Link
+                key={entry.id}
+                href={`/scorecard?branch=president&id=${entry.id}`}
+                className="flex items-center gap-3 px-4 py-3 hover:bg-matrix-green/5 transition-colors"
+              >
+                <span className={`text-lg font-bold w-10 shrink-0 ${rankColor(rank)}`}>
+                  #{rank}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-white text-sm truncate">{entry.name}</span>
+                    <span
+                      className={`text-xs px-1 border shrink-0 ${presParty(entry.party).bg} ${presParty(entry.party).color}`}
+                    >
+                      {presParty(entry.party).label}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 mt-0.5">
+                    <ScoreBar score={score} />
+                    <span className="text-xs text-white/40">
+                      {termYears(entry.termStart, entry.termEnd)}
+                    </span>
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+
+          <p className="mt-4 text-center text-matrix-green/50 text-xs">
+            Higher score = better constituent representation. Computed from: independence (20%) +
+            follow-through (25%) + public mandate (20%) + effectiveness (20%) +
+            competence (15%). Click any row to view full profile.
+          </p>
+    </>
+  );
+}
+
 export default function LeaderboardPage() {
+  const [branch, setBranch] = useState<Branch>("senate");
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+  const [presEntries, setPresEntries] = useState<PresidentLeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [presLoading, setPresLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [partyFilter, setPartyFilter] = useState<PartyFilter>("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("score");
@@ -79,16 +260,31 @@ export default function LeaderboardPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    if (branch !== "president") return;
+    if (presEntries.length > 0) return;
+    setPresLoading(true);
+    fetchPresidentLeaderboard()
+      .then(setPresEntries)
+      .catch((e) => setError(e.message))
+      .finally(() => setPresLoading(false));
+  }, [branch, presEntries.length]);
+
   const displayed = useMemo(() => {
     let list = entries;
     if (partyFilter !== "ALL") list = list.filter((e) => e.party === partyFilter);
 
     return [...list].sort((a, b) => {
-      if (sortKey === "pac_dollars") return b.totalFromPacs - a.totalFromPacs;
+      if (sortKey === "pac_dollars") return (b.totalFromPacs ?? 0) - (a.totalFromPacs ?? 0);
       if (sortKey === "pac_pct") {
-        const pctA = a.totalRaised > 0 ? a.totalFromPacs / a.totalRaised : 0;
-        const pctB = b.totalRaised > 0 ? b.totalFromPacs / b.totalRaised : 0;
+        const pctA = (a.totalRaised ?? 0) > 0 ? (a.totalFromPacs ?? 0) / a.totalRaised : 0;
+        const pctB = (b.totalRaised ?? 0) > 0 ? (b.totalFromPacs ?? 0) / b.totalRaised : 0;
         return pctB - pctA;
+      }
+      if (sortKey === "approval") {
+        const approvalA = a.approvalRating ?? -1;
+        const approvalB = b.approvalRating ?? -1;
+        return approvalB - approvalA;
       }
       return (
         calculateOverallScore(b.representationScore, weights) - calculateOverallScore(a.representationScore, weights)
@@ -107,7 +303,7 @@ export default function LeaderboardPage() {
   );
 
   return (
-    <main className="min-h-screen bg-terminal-bg text-matrix-green font-terminal overflow-x-hidden">
+    <main id="main-content" className="min-h-screen bg-terminal-bg text-matrix-green font-terminal overflow-x-hidden">
       <MatrixRain />
       <Navbar />
 
@@ -116,25 +312,35 @@ export default function LeaderboardPage() {
         <div className="mb-8 text-center">
           <h1
             className="glitch text-3xl sm:text-5xl font-terminal text-matrix-green mb-2 uppercase tracking-widest"
-            data-text="REPRESENTATION SCORECARD"
+            data-text="LEADERBOARD"
           >
-            REPRESENTATION SCORECARD
+            LEADERBOARD
           </h1>
           <p className="text-matrix-green/50 text-lg">
-            All 100 senators ranked by constituent representation score
+            Representatives ranked by constituent representation score
           </p>
-          <div className="ascii-divider mt-4 text-matrix-green/20">
+          <div className="ascii-divider mt-4 text-matrix-green/20" aria-hidden="true">
             {"═".repeat(60)}
           </div>
         </div>
 
+        <div className="mb-8">
+          <BranchSelector selected={branch} onChange={setBranch} />
+        </div>
+
+        {branch === "house" && <ComingSoon branch="house" />}
+
+        {branch === "president" && <PresidentLeaderboard entries={presEntries} loading={presLoading} error={error} />}
+
+        {branch === "senate" && <>
         {/* Controls */}
         <div className="flex flex-col sm:flex-row gap-4 mb-6 items-start sm:items-center justify-between">
           {/* Party filter */}
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap" role="group" aria-label="Filter by party">
             {(["ALL", "D", "R", "I"] as PartyFilter[]).map((p) => (
               <button
                 key={p}
+                aria-pressed={partyFilter === p}
                 onClick={() => setPartyFilter(p)}
                 className={`px-3 py-1 text-sm border transition-all font-terminal ${
                   partyFilter === p
@@ -154,11 +360,12 @@ export default function LeaderboardPage() {
           </div>
 
           {/* Sort */}
-          <div className="flex items-center gap-2 text-sm text-matrix-green/60">
-            <span>SORT:</span>
+          <div className="flex items-center gap-2 text-sm text-matrix-green/60" role="group" aria-label="Sort order">
+            <span id="sort-label">SORT:</span>
             {(
               [
                 ["score", "INFLUENCE SCORE"],
+                ["approval", "APPROVAL"],
                 ["pac_dollars", "PAC $"],
                 ["pac_pct", "PAC %"],
               ] as [SortKey, string][]
@@ -166,14 +373,15 @@ export default function LeaderboardPage() {
               <button
                 key={key}
                 onClick={() => setSortKey(key)}
+                aria-pressed={sortKey === key}
                 className={`px-2 py-0.5 border text-xs transition-all ${
                   sortKey === key
                     ? "border-neon-yellow text-neon-yellow"
-                    : "border-white/10 text-white/30 hover:border-white/30 hover:text-white/50"
+                    : "border-white/10 text-white/50 hover:border-white/30 hover:text-white/70"
                 }`}
               >
                 {label}
-                {sortKey === key && " ▼"}
+                {sortKey === key && <span aria-hidden="true"> ▼</span>}
               </button>
             ))}
           </div>
@@ -201,7 +409,7 @@ export default function LeaderboardPage() {
               <span className="terminal-dot yellow" />
               <span className="terminal-dot green" />
               <span className="ml-3 text-white/40 text-xs font-terminal">
-                senate_capture.db — {displayed.length} senators
+                senate_leaderboard.db — {displayed.length} senators
               </span>
             </div>
 
@@ -210,13 +418,14 @@ export default function LeaderboardPage() {
               <table className="w-full text-sm font-terminal">
                 <thead>
                   <tr className="border-b border-matrix-green/20 text-matrix-green/50 text-xs uppercase tracking-widest">
-                    <th className="px-4 py-3 text-left w-14">RANK</th>
-                    <th className="px-4 py-3 text-left">SENATOR</th>
-                    <th className="px-3 py-3 text-center w-20">STATE</th>
-                    <th className="px-3 py-3 text-left w-36">REP. SCORE</th>
-                    <th className="px-3 py-3 text-right w-24">PAC $</th>
-                    <th className="px-3 py-3 text-right w-20">PAC %</th>
-                    <th className="px-3 py-3 text-left w-32">TOP INDUSTRY</th>
+                    <th scope="col" className="px-4 py-3 text-left w-14">RANK</th>
+                    <th scope="col" className="px-4 py-3 text-left">SENATOR</th>
+                    <th scope="col" className="px-3 py-3 text-center w-20">STATE</th>
+                    <th scope="col" className="px-3 py-3 text-left w-36">REP. SCORE</th>
+                    <th scope="col" className="px-3 py-3 text-right w-24">APPROVAL</th>
+                    <th scope="col" className="px-3 py-3 text-right w-24">PAC $</th>
+                    <th scope="col" className="px-3 py-3 text-right w-20">PAC %</th>
+                    <th scope="col" className="px-3 py-3 text-left w-32">TOP INDUSTRY</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -224,8 +433,8 @@ export default function LeaderboardPage() {
                     const rank = idx + 1;
                     const score = calculateOverallScore(entry.representationScore, weights);
                     const pacPct =
-                      entry.totalRaised > 0
-                        ? Math.round((entry.totalFromPacs / entry.totalRaised) * 100)
+                      (entry.totalRaised ?? 0) > 0
+                        ? Math.round(((entry.totalFromPacs ?? 0) / entry.totalRaised) * 100)
                         : 0;
                     const isTopTen = rank <= 10;
 
@@ -235,9 +444,13 @@ export default function LeaderboardPage() {
                         className={`border-b border-matrix-green/10 hover:bg-matrix-green/5 transition-colors cursor-pointer group ${
                           isTopTen ? "border-l-2 border-l-red-500/30" : ""
                         }`}
+                        tabIndex={0}
+                        role="link"
+                        aria-label={`View profile for ${entry.name}, ${entry.state}, rank ${rank}, score ${score}`}
                         onClick={() =>
-                          (window.location.href = `/senator-scorecard?state=${entry.state}&senator=${entry.id}`)
+                          (window.location.href = `/scorecard?state=${entry.state}&senator=${entry.id}`)
                         }
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); window.location.href = `/scorecard?state=${entry.state}&senator=${entry.id}`; } }}
                       >
                         <td className="px-4 py-3">
                           <span className={`font-bold text-lg ${rankColor(rank)}`}>
@@ -258,6 +471,23 @@ export default function LeaderboardPage() {
                         </td>
                         <td className="px-3 py-3">
                           <ScoreBar score={score} />
+                        </td>
+                        <td className="px-3 py-3 text-right tabular-nums">
+                          {entry.approvalRating != null ? (
+                            <span
+                              className={
+                                entry.approvalRating - (entry.disapprovalRating ?? 0) > 10
+                                  ? "text-matrix-green"
+                                  : entry.approvalRating - (entry.disapprovalRating ?? 0) > 0
+                                    ? "text-white/70"
+                                    : "text-red-400"
+                              }
+                            >
+                              {Math.round(entry.approvalRating)}%
+                            </span>
+                          ) : (
+                            <span className="text-white/20">—</span>
+                          )}
                         </td>
                         <td className="px-3 py-3 text-right tabular-nums text-white/70">
                           {formatDollars(entry.totalFromPacs)}
@@ -293,13 +523,13 @@ export default function LeaderboardPage() {
                 const rank = idx + 1;
                 const score = calculateOverallScore(entry.representationScore, weights);
                 const pacPct =
-                  entry.totalRaised > 0
-                    ? Math.round((entry.totalFromPacs / entry.totalRaised) * 100)
+                  (entry.totalRaised ?? 0) > 0
+                    ? Math.round(((entry.totalFromPacs ?? 0) / entry.totalRaised) * 100)
                     : 0;
                 return (
                   <Link
                     key={entry.id}
-                    href={`/senator-scorecard?state=${entry.state}&senator=${entry.id}`}
+                    href={`/scorecard?state=${entry.state}&senator=${entry.id}`}
                     className="flex items-center gap-3 px-4 py-3 hover:bg-matrix-green/5 transition-colors"
                   >
                     <span className={`text-lg font-bold w-10 shrink-0 ${rankColor(rank)}`}>
@@ -316,6 +546,9 @@ export default function LeaderboardPage() {
                       </div>
                       <div className="flex items-center gap-3 mt-0.5">
                         <ScoreBar score={score} />
+                        {entry.approvalRating != null && (
+                          <span className="text-xs text-white/50">{Math.round(entry.approvalRating)}% apr</span>
+                        )}
                         <span className="text-xs text-white/40">{formatDollars(entry.totalFromPacs)} PAC ({pacPct}%)</span>
                       </div>
                     </div>
@@ -334,12 +567,13 @@ export default function LeaderboardPage() {
 
         {/* Footer note */}
         {!loading && !error && entries.length > 0 && (
-          <p className="mt-4 text-center text-matrix-green/30 text-xs">
-            Higher score = better constituent representation. Computed from: constituent funding (30%) +
-            promise fulfillment (30%) + independence from lobbyists (20%) + donor diversity (10%) +
-            accountability (10%). Click any row to view full senator profile.
+          <p className="mt-4 text-center text-matrix-green/50 text-xs">
+            Higher score = better constituent representation. Computed from: funding independence (30%) +
+            promise persistence (25%) + independent voting (25%) + funding diversity (20%).
+            Click any row to view full profile.
           </p>
         )}
+        </>}
       </div>
     </main>
   );

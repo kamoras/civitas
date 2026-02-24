@@ -43,7 +43,12 @@ export default function PipelineProgress() {
   const pct = isAnalyzePhase ? Math.round((processed / total) * 100) : null;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-crt-black/95 border-t border-matrix-green/40 px-4 py-3">
+    <div
+      className="fixed bottom-0 left-0 right-0 z-50 bg-crt-black/95 border-t border-matrix-green/40 px-4 py-3"
+      role="status"
+      aria-live="polite"
+      aria-label={`Data pipeline running: ${phaseLabel}${isAnalyzePhase ? `, ${processed} of ${total} senators processed` : ""}`}
+    >
       <div className="max-w-7xl mx-auto flex flex-col gap-1.5">
         <div className="flex items-center justify-between text-sm font-terminal">
           <span className="text-matrix-green animate-pulse">
@@ -56,9 +61,15 @@ export default function PipelineProgress() {
           )}
         </div>
 
-        <div className="w-full h-2 bg-matrix-green/10 border border-matrix-green/20 rounded-sm overflow-hidden">
+        <div
+          className="w-full h-2 bg-matrix-green/10 border border-matrix-green/20 rounded-sm overflow-hidden"
+          role="progressbar"
+          aria-valuenow={isAnalyzePhase ? (pct ?? 0) : undefined}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={isAnalyzePhase ? `${pct}% complete` : "Processing"}
+        >
           {isAnalyzePhase ? (
-            // Determinate bar during analyze phase
             <div
               className="h-full bg-matrix-green transition-all duration-700 ease-out"
               style={{ width: `${pct}%` }}

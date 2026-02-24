@@ -1,9 +1,29 @@
 import json
+import re
 
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models import CampaignPromise, Donor, IndustryDonation, KeyVote, LobbyingMatch, Senator
+
+_FILLER_RE = re.compile(
+    r"has received funding from|(?:^|[,.])\s*a political PAC"
+    r"|opposes the removal of the United States Army"
+    r"|which is (?:not )?(?:aligned with|related to) (?:his|her|their) (?:platform|stance|stated)",
+    re.IGNORECASE,
+)
+
+_KEPT_RE = re.compile(
+    r"align(?:s|ed|ing|ment)|support(?:s|ing|ed)?(?:\s+(?:for|of|this))?"
+    r"|consistent|keeping|kept|match|fulfill|advance[sd]?|further[sd]?",
+    re.IGNORECASE,
+)
+_BROKEN_RE = re.compile(
+    r"contradict|voted\s+against|oppos(?:es|ing|ed)|undermin"
+    r"|broke[n]?|fail(?:s|ed|ing)|violat|inconsistent"
+    r"|does not (?:support|align|match)",
+    re.IGNORECASE,
+)
 from app.schemas import (
     CampaignPromiseSchema,
     RepresentationScoreSchema,
@@ -37,45 +57,72 @@ STATE_NAMES: dict[str, str] = {
 }
 
 
+def _filter_promises(campaign_promises: list) -> list[CampaignPromiseSchema]:
+    """Filter and correct campaign promise quality issues in persisted data."""
+    from collections import Counter
+
+    result = []
+    for cp in campaign_promises:
+        analysis = cp.analysis or ""
+        alignment = cp.alignment or "unclear"
+        related = json.loads(cp.related_votes) if cp.related_votes else []
+
+        if _FILLER_RE.search(analysis):
+            analysis = ""
+
+        kept = len(_KEPT_RE.findall(analysis))
+        broken = len(_BROKEN_RE.findall(analysis))
+        if kept > 0 and broken > 0:
+            alignment = "unclear"
+        elif alignment == "broken" and kept > 0 and broken == 0:
+            alignment = "kept"
+        elif alignment == "kept" and broken > 0 and kept == 0:
+            alignment = "broken"
+
+        result.append(CampaignPromiseSchema(
+            promise_text=cp.promise_text,
+            category=cp.category,
+            alignment=alignment,
+            related_votes=related,
+            analysis=analysis,
+        ))
+
+    if len(result) >= 2:
+        bill_sets = [tuple(sorted(p.related_votes)) for p in result]
+        counts = Counter(bill_sets)
+        overused = {bs for bs, cnt in counts.items() if cnt >= 2 and bs}
+        if overused:
+            for p in result:
+                if tuple(sorted(p.related_votes)) in overused:
+                    p.alignment = "unclear"
+                    p.related_votes = []
+                    p.analysis = ""
+
+    return result
+
+
+def _senator_eager_options():
+    """SQLAlchemy options to eager-load all senator relationships in one round-trip."""
+    return [
+        selectinload(Senator.donors),
+        selectinload(Senator.industry_donations),
+        selectinload(Senator.key_votes),
+        selectinload(Senator.lobbying_matches),
+        selectinload(Senator.campaign_promises),
+    ]
+
+
 def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
-    """Assemble a full SenatorSchema from the ORM model and related records."""
+    """Assemble a full SenatorSchema from the ORM model and related records.
 
-    # 1. Query donors ordered by rank
-    donors = (
-        db.query(Donor)
-        .filter(Donor.senator_id == senator.id)
-        .order_by(Donor.rank.asc())
-        .all()
-    )
-
-    # 2. Query industry donations ordered by total desc
-    industry_donations = (
-        db.query(IndustryDonation)
-        .filter(IndustryDonation.senator_id == senator.id)
-        .order_by(IndustryDonation.total.desc())
-        .all()
-    )
-
-    # 3. Query key votes
-    key_votes = (
-        db.query(KeyVote)
-        .filter(KeyVote.senator_id == senator.id)
-        .all()
-    )
-
-    # 4. Query lobbying matches
-    lobbying_matches = (
-        db.query(LobbyingMatch)
-        .filter(LobbyingMatch.senator_id == senator.id)
-        .all()
-    )
-
-    # 4b. Query campaign promises
-    campaign_promises = (
-        db.query(CampaignPromise)
-        .filter(CampaignPromise.senator_id == senator.id)
-        .all()
-    )
+    Expects senator to be loaded with eager-loaded relationships via
+    ``_senator_eager_options()``.
+    """
+    donors = sorted(senator.donors, key=lambda d: d.rank)
+    industry_donations = sorted(senator.industry_donations, key=lambda d: d.total, reverse=True)
+    key_votes = senator.key_votes
+    lobbying_matches = senator.lobbying_matches
+    campaign_promises = senator.campaign_promises
 
     # 5. Split votes by category
     recent_votes_db = [v for v in key_votes if v.vote_category == "recent"]
@@ -165,12 +212,13 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
         party=senator.party,
         years_in_office=senator.years_in_office,
         initials=senator.initials,
+        approval_rating=senator.approval_rating,
+        disapproval_rating=senator.disapproval_rating,
         representation_score=RepresentationScoreSchema(
-            constituent_funding=senator.score_corporate_funding,
-            independence_index=senator.score_lobbyist_alignment,
-            donor_diversity=senator.score_industry_concentration,
-            promise_fulfillment=senator.score_flip_flop_index,
-            accountability=senator.score_revolving_door,
+            funding_independence=senator.score_funding_independence,
+            promise_persistence=senator.score_promise_persistence,
+            independent_voting=senator.score_independent_voting,
+            funding_diversity=senator.score_funding_diversity,
         ),
         funding=FundingSchema(
             total_raised=senator.total_raised,
@@ -184,7 +232,7 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
                     industry=d.industry or "OTHER",
                     pac_sponsor=d.pac_sponsor,
                     pac_industry=d.pac_industry,
-                    pac_analysis=d.pac_analysis,
+                    pac_analysis="" if (d.pac_analysis and _FILLER_RE.search(d.pac_analysis)) else d.pac_analysis,
                 )
                 for d in donors
             ],
@@ -223,29 +271,30 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
             )
             for lm in lobbying_matches
         ],
-        campaign_promises=[
-            CampaignPromiseSchema(
-                promise_text=cp.promise_text,
-                category=cp.category,
-                alignment=cp.alignment,
-                related_votes=json.loads(cp.related_votes) if cp.related_votes else [],
-                analysis=cp.analysis,
-            )
-            for cp in campaign_promises
-        ],
+        campaign_promises=_filter_promises(campaign_promises),
         platform_summary=senator.platform_summary or "",
     )
 
 
 def get_senators_by_state(db: Session, state: str) -> list[SenatorSchema]:
     """Return all senators for a given state code."""
-    senators = db.query(Senator).filter(Senator.state == state.upper()).all()
+    senators = (
+        db.query(Senator)
+        .options(*_senator_eager_options())
+        .filter(Senator.state == state.upper())
+        .all()
+    )
     return [build_senator_response(s, db) for s in senators]
 
 
 def get_senator_by_id(db: Session, senator_id: str) -> SenatorSchema | None:
     """Return a single senator by ID, or None if not found."""
-    senator = db.query(Senator).filter(Senator.id == senator_id).first()
+    senator = (
+        db.query(Senator)
+        .options(*_senator_eager_options())
+        .filter(Senator.id == senator_id)
+        .first()
+    )
     if senator is None:
         return None
     return build_senator_response(senator, db)
@@ -272,11 +321,10 @@ def get_states_with_counts(db: Session) -> list[StateCountSchema]:
 from app.config_definitions import SCORE_WEIGHTS
 
 _FIELD_TO_WEIGHT_KEY = {
-    "score_corporate_funding":      "constituentFunding",
-    "score_flip_flop_index":        "promiseFulfillment",
-    "score_lobbyist_alignment":     "independenceIndex",
-    "score_industry_concentration": "donorDiversity",
-    "score_revolving_door":         "accountability",
+    "score_funding_independence": "fundingIndependence",
+    "score_promise_persistence":  "promisePersistence",
+    "score_independent_voting":   "independentVoting",
+    "score_funding_diversity":    "fundingDiversity",
 }
 
 
@@ -312,12 +360,13 @@ def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
             party=s.party,
             years_in_office=s.years_in_office,
             initials=s.initials,
+            approval_rating=s.approval_rating,
+            disapproval_rating=s.disapproval_rating,
             representation_score=RepresentationScoreSchema(
-                constituent_funding=s.score_corporate_funding,
-                independence_index=s.score_lobbyist_alignment,
-                donor_diversity=s.score_industry_concentration,
-                promise_fulfillment=s.score_flip_flop_index,
-                accountability=s.score_revolving_door,
+                funding_independence=s.score_funding_independence,
+                promise_persistence=s.score_promise_persistence,
+                independent_voting=s.score_independent_voting,
+                funding_diversity=s.score_funding_diversity,
             ),
             total_raised=s.total_raised,
             total_from_pacs=s.total_from_pacs,
@@ -352,11 +401,10 @@ def upsert_senator(db: Session, senator_data: dict) -> Senator:
     existing.initials = senator_data.get("initials", existing.initials)
     existing.punk_nickname = senator_data.get("punkNickname", existing.punk_nickname)
 
-    existing.score_corporate_funding = cs.get("constituentFunding", cs.get("corporateFunding", 0))
-    existing.score_lobbyist_alignment = cs.get("independenceIndex", cs.get("lobbyistAlignment", 0))
-    existing.score_industry_concentration = cs.get("donorDiversity", cs.get("industryConcentration", 0))
-    existing.score_flip_flop_index = cs.get("promiseFulfillment", cs.get("flipFlopIndex", 0))
-    existing.score_revolving_door = cs.get("accountability", cs.get("revolvingDoor", 0))
+    existing.score_funding_independence = cs.get("fundingIndependence", 0)
+    existing.score_promise_persistence = cs.get("promisePersistence", 0)
+    existing.score_independent_voting = cs.get("independentVoting", 0)
+    existing.score_funding_diversity = cs.get("fundingDiversity", 0)
 
     existing.total_raised = funding.get("totalRaised", 0)
     existing.total_from_pacs = funding.get("totalFromPACs", 0)
@@ -364,6 +412,11 @@ def upsert_senator(db: Session, senator_data: dict) -> Senator:
     voting_record = senator_data.get("votingRecord", {})
     existing.voting_summary = voting_record.get("votingSummary", "")
     existing.platform_summary = senator_data.get("platformSummary", "")
+
+    if "approvalRating" in senator_data:
+        existing.approval_rating = senator_data.get("approvalRating")
+        existing.disapproval_rating = senator_data.get("disapprovalRating")
+        existing.approval_source = senator_data.get("approvalSource")
 
     db.flush()
 

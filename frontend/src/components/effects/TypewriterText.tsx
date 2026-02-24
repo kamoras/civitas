@@ -40,9 +40,11 @@ export default function TypewriterText({
   }, [text, speed, started]);
 
   return (
-    <span className={className}>
-      {displayed}
-      <span className="animate-blink text-matrix-green">_</span>
+    <span className={className} aria-label={text}>
+      <span aria-hidden="true">
+        {displayed}
+        <span className="animate-blink text-matrix-green">_</span>
+      </span>
     </span>
   );
 }

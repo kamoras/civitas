@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, patch
 
 from app.models import LearnedClassification
 from app.pipeline.analyze.donor_classifier_ai import (
-    FEC_TYPE_MAP,
+    FEC_ENTITY_TYPE_MAP,
     classify_donor_type_from_fec,
     classify_donor_type_from_rules,
     classify_donors_hybrid,
@@ -20,38 +20,38 @@ from app.pipeline.analyze.donor_classifier_ai import (
 
 
 class TestFECTypeClassification:
-    """Tier 1: FEC committee type codes."""
+    """Tier 1: FEC entity type and receipt type codes."""
 
     @pytest.mark.parametrize(
-        "committee_type, expected",
+        "entity_type, expected",
         [
-            ("N", "PAC"),
-            ("Q", "PAC"),
-            ("O", "PAC"),
-            ("W", "PAC"),
-            ("X", "Party/Ideological"),
-            ("Y", "Party/Ideological"),
-            ("Z", "Party/Ideological"),
-            ("H", "CandidateAffiliated"),
-            ("S", "CandidateAffiliated"),
-            ("P", "CandidateAffiliated"),
-            ("I", "Org/Employees"),
+            ("PAC", "PAC"),
+            ("COM", "PAC"),
+            ("ORG", "Org/Employees"),
+            ("IND", "Org/Employees"),
+            ("CCM", "CandidateAffiliated"),
+            ("CAN", "CandidateAffiliated"),
+            ("PTY", "Party/Ideological"),
         ],
     )
-    def test_known_committee_types(self, committee_type, expected):
-        receipt = {"committee": {"committee_type": committee_type}}
+    def test_known_entity_types(self, entity_type, expected):
+        receipt = {"entity_type": entity_type}
         assert classify_donor_type_from_fec(receipt) == expected
 
-    def test_unknown_committee_type_returns_none(self):
-        receipt = {"committee": {"committee_type": "ZZ"}}
+    def test_affiliated_receipt_types(self):
+        for rt in ("18G", "18H", "18K", "18J", "22G", "22H"):
+            receipt = {"receipt_type": rt}
+            assert classify_donor_type_from_fec(receipt) == "CandidateAffiliated"
+
+    def test_unknown_entity_type_returns_none(self):
+        receipt = {"entity_type": "ZZZ"}
         assert classify_donor_type_from_fec(receipt) is None
 
-    def test_missing_committee_returns_none(self):
+    def test_missing_fields_returns_none(self):
         assert classify_donor_type_from_fec({}) is None
-        assert classify_donor_type_from_fec({"committee": {}}) is None
 
-    def test_fec_map_covers_all_expected_codes(self):
-        assert len(FEC_TYPE_MAP) == 16
+    def test_fec_entity_type_map_covers_expected_codes(self):
+        assert len(FEC_ENTITY_TYPE_MAP) == 7
 
 
 class TestRuleClassification:
@@ -105,7 +105,7 @@ class TestHybridClassification:
             {
                 "name": "Test PAC",
                 "amount": 5000,
-                "fec_receipt": {"committee": {"committee_type": "Q"}},
+                "fec_receipt": {"entity_type": "PAC"},
             }
         ]
         result = await classify_donors_hybrid(donors, db_session=db_session)
@@ -147,9 +147,9 @@ class TestHybridClassification:
     @pytest.mark.asyncio
     async def test_deduplication(self, db_session):
         donors = [
-            {"name": "Test Corp", "amount": 1000, "fec_receipt": {"committee": {"committee_type": "Q"}}},
-            {"name": "TEST CORP", "amount": 2000, "fec_receipt": {"committee": {"committee_type": "Q"}}},
-            {"name": "test corp", "amount": 500, "fec_receipt": {"committee": {"committee_type": "Q"}}},
+            {"name": "Test Corp", "amount": 1000, "fec_receipt": {"entity_type": "PAC"}},
+            {"name": "TEST CORP", "amount": 2000, "fec_receipt": {"entity_type": "PAC"}},
+            {"name": "test corp", "amount": 500, "fec_receipt": {"entity_type": "PAC"}},
         ]
         result = await classify_donors_hybrid(donors, db_session=db_session)
         assert len(result) == 1

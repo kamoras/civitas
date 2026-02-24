@@ -238,7 +238,7 @@ class TestNormalizeVotes:
         result = normalize_votes("B001", bills, {}, "R")
         assert result["totalVotes"] == 0
         assert len(result["keyVotes"]) == 0
-        assert result["partyLoyaltyPct"] == 100.0
+        assert result["partyLoyaltyPct"] == 0.0  # no votes = 0% measurable loyalty
 
     def test_no_stance_vote_not_scored(self):
         """Bills without stanceVote (None) are not donor-scored."""

@@ -1,5 +1,6 @@
 import { LobbyingMatch } from "@/types/senator";
 import { formatCurrency } from "@/lib/formatting";
+import { billUrl } from "@/lib/sources";
 
 interface LobbyingMatchesProps {
   matches: LobbyingMatch[];
@@ -12,7 +13,7 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
     <div>
       <div className="flex items-baseline justify-between mb-3">
         <h3 className="text-lg text-neon-pink neon-pink">{">"} DONOR-VOTE CONNECTIONS</h3>
-        <span className="text-[10px] text-matrix-green/25">fec.gov/data</span>
+        <span className="text-[10px] text-matrix-green/50">fec.gov/data</span>
       </div>
 
       <div className="space-y-4">
@@ -27,7 +28,25 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
 
             <div className="text-xs font-mono text-matrix-green/60 mb-3 space-y-1">
               <div>DONATED: {formatCurrency(match.donationToSenator)}</div>
-              <div>LINKED BILL: {match.billsInfluenced.join(", ")}</div>
+              <div className="flex items-center gap-1 flex-wrap">
+                <span>LINKED BILL:</span>
+                {match.billsInfluenced.map((b, j) => {
+                  const url = billUrl(b);
+                  return url ? (
+                    <a
+                      key={j}
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-neon-cyan/60 hover:text-neon-cyan underline underline-offset-2 transition-colors"
+                    >
+                      {b}
+                    </a>
+                  ) : (
+                    <span key={j}>{b}</span>
+                  );
+                })}
+              </div>
               <div>
                 VOTED IN DONOR&apos;S INTEREST:{" "}
                 <span

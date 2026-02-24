@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import threading
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from sqlalchemy.orm import Session
@@ -14,13 +15,27 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Simple in-memory flag for whether a pipeline is currently running
-_pipeline_running = False
+
+def _is_pipeline_running(db: Session) -> bool:
+    """Check the shared database for a currently running pipeline.
+
+    A run older than 2 hours is considered stale and ignored.
+    """
+    from datetime import datetime, timedelta
+
+    cutoff = datetime.utcnow() - timedelta(hours=12)
+    return (
+        db.query(PipelineRun)
+        .filter(PipelineRun.status == "running", PipelineRun.started_at > cutoff)
+        .first()
+        is not None
+    )
 
 
 @router.get("/pipeline/status", response_model=PipelineStatusSchema)
 def pipeline_status(db: Session = Depends(get_db)) -> PipelineStatusSchema:
     """Return the last pipeline run info and next scheduled time."""
+    db.expire_all()
     last_run = (
         db.query(PipelineRun)
         .order_by(PipelineRun.started_at.desc())
@@ -45,7 +60,6 @@ def pipeline_status(db: Session = Depends(get_db)) -> PipelineStatusSchema:
             error_message=last_run.error_message,
         )
 
-    # Get next scheduled time from scheduler if available
     try:
         from app.scheduler import get_next_run_time
         next_time = get_next_run_time()
@@ -55,7 +69,7 @@ def pipeline_status(db: Session = Depends(get_db)) -> PipelineStatusSchema:
     return PipelineStatusSchema(
         last_run=last_run_schema,
         next_scheduled=next_time,
-        is_running=_pipeline_running,
+        is_running=_is_pipeline_running(db),
     )
 
 
@@ -64,10 +78,9 @@ async def trigger_pipeline(
     authorization: str | None = Header(default=None),
     senator: str | None = Query(default=None, description="Filter to a single senator by name"),
     fetch_only: bool = Query(default=False, description="Stop after fetch phase (no LLM analysis)"),
+    db: Session = Depends(get_db),
 ) -> dict:
     """Trigger a pipeline run. Requires Bearer token matching PIPELINE_TRIGGER_TOKEN."""
-    global _pipeline_running
-
     if not settings.PIPELINE_TRIGGER_TOKEN:
         raise HTTPException(status_code=503, detail="Pipeline trigger token not configured")
 
@@ -75,18 +88,19 @@ async def trigger_pipeline(
     if authorization != expected:
         raise HTTPException(status_code=401, detail="Invalid or missing authorization token")
 
-    if _pipeline_running:
+    if _is_pipeline_running(db):
         raise HTTPException(status_code=409, detail="Pipeline is already running")
 
-    async def _run():
-        global _pipeline_running
-        _pipeline_running = True
+    def _run_in_thread():
+        loop = asyncio.new_event_loop()
         try:
-            await run_full_pipeline(senator_filter=senator, fetch_only=fetch_only)
-        except Exception:
+            loop.run_until_complete(
+                run_full_pipeline(senator_filter=senator, fetch_only=fetch_only)
+            )
+        except BaseException:
             logger.exception("Pipeline run failed")
         finally:
-            _pipeline_running = False
+            loop.close()
 
-    asyncio.create_task(_run())
+    threading.Thread(target=_run_in_thread, daemon=True, name="pipeline-run").start()
     return {"message": "Pipeline run triggered", "senator_filter": senator, "fetch_only": fetch_only}

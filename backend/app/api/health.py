@@ -13,24 +13,24 @@ router = APIRouter()
 
 @router.get("/health", response_model=HealthSchema)
 async def health_check(db: Session = Depends(get_db)) -> HealthSchema:
-    # Check database
     db_status = "ok"
     try:
         db.execute(text("SELECT 1"))
     except Exception:
         db_status = "unavailable"
 
-    # Check Ollama
-    ollama_status = "ok"
+    llm_status = "ok"
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{settings.OLLAMA_BASE_URL}/api/tags")
+            if settings.LLM_BACKEND == "llama-server":
+                resp = await client.get(f"{settings.LLAMA_SERVER_URL}/health")
+            else:
+                resp = await client.get(f"{settings.OLLAMA_BASE_URL}/api/tags")
             if resp.status_code != 200:
-                ollama_status = "unavailable"
+                llm_status = "unavailable"
     except Exception:
-        ollama_status = "unavailable"
+        llm_status = "unavailable"
 
-    # Last pipeline run
     last_run = (
         db.query(PipelineRun)
         .order_by(PipelineRun.started_at.desc())
@@ -43,6 +43,6 @@ async def health_check(db: Session = Depends(get_db)) -> HealthSchema:
     return HealthSchema(
         status=overall,
         database=db_status,
-        ollama=ollama_status,
+        ollama=llm_status,
         last_pipeline_run=last_pipeline_ts,
     )

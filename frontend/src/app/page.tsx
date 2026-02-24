@@ -10,7 +10,7 @@ export default function Home() {
     <>
       <MatrixRain />
       <Navbar />
-      <main>
+      <main id="main-content">
         <HeroSection />
         <WakeUpSection />
         <ManifestoSection />

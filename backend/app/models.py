@@ -18,6 +18,16 @@ class Senator(Base):
     initials: Mapped[str] = mapped_column(String(4), default="")
     punk_nickname: Mapped[str] = mapped_column(String, default="")
 
+    score_funding_independence: Mapped[float] = mapped_column(Float, default=0.0)
+    score_promise_persistence: Mapped[float] = mapped_column(Float, default=0.0)
+    score_independent_voting: Mapped[float] = mapped_column(Float, default=0.0)
+    score_funding_diversity: Mapped[float] = mapped_column(Float, default=0.0)
+
+    # Legacy columns (kept for migration safety)
+    score_transparency: Mapped[float] = mapped_column(Float, default=0.0)
+    score_accessibility: Mapped[float] = mapped_column(Float, default=0.0)
+
+    # Legacy columns (kept for migration safety, will be dropped later)
     score_corporate_funding: Mapped[float] = mapped_column(Float, default=0.0)
     score_lobbyist_alignment: Mapped[float] = mapped_column(Float, default=0.0)
     score_industry_concentration: Mapped[float] = mapped_column(Float, default=0.0)
@@ -27,6 +37,10 @@ class Senator(Base):
     total_raised: Mapped[float] = mapped_column(Float, default=0.0)
     total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)
     small_donor_percentage: Mapped[float] = mapped_column(Float, default=0.0)
+    approval_rating: Mapped[float | None] = mapped_column(Float, nullable=True)
+    disapproval_rating: Mapped[float | None] = mapped_column(Float, nullable=True)
+    approval_source: Mapped[str | None] = mapped_column(String, nullable=True)
+
     voting_summary: Mapped[str] = mapped_column(Text, default="")
     platform_summary: Mapped[str] = mapped_column(Text, default="")
 
@@ -129,6 +143,68 @@ class CampaignPromise(Base):
     analysis: Mapped[str] = mapped_column(Text, default="")  # LLM explanation of alignment
 
     senator: Mapped["Senator"] = relationship(back_populates="campaign_promises")
+
+
+class President(Base):
+    __tablename__ = "presidents"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)  # e.g. "obama-44"
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    party: Mapped[str] = mapped_column(String, nullable=False)  # D, R, W(hig), F(ederalist), DR
+    number: Mapped[int] = mapped_column(Integer, nullable=False)  # 44th, 45th, etc.
+    term_start: Mapped[str] = mapped_column(String, nullable=False)  # "2009-01-20"
+    term_end: Mapped[str | None] = mapped_column(String, nullable=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    score_independence: Mapped[float] = mapped_column(Float, default=0.0)
+    score_follow_through: Mapped[float] = mapped_column(Float, default=0.0)
+    score_public_mandate: Mapped[float] = mapped_column(Float, default=0.0)
+    score_effectiveness: Mapped[float] = mapped_column(Float, default=0.0)
+    score_competence: Mapped[float] = mapped_column(Float, default=0.0)
+    score_agency_alignment: Mapped[float] = mapped_column(Float, default=0.0)
+
+    avg_approval: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gdp_growth_avg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    jobs_created_millions: Mapped[float | None] = mapped_column(Float, nullable=True)
+    eo_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    eo_court_success_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cabinet_turnover_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    summary: Mapped[str] = mapped_column(Text, default="")
+    key_achievements: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
+    key_failures: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
+
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ExploreDocument(Base):
+    """Searchable government activity document for the Explore feature.
+
+    Stores Senate/House floor proceedings, executive orders, proclamations,
+    memoranda, and other official actions. Each document is also embedded in
+    ChromaDB for semantic search and linked to a politician where applicable.
+    """
+    __tablename__ = "explore_documents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    doc_type: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String, nullable=False)
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    summary: Mapped[str] = mapped_column(Text, default="")
+    body: Mapped[str] = mapped_column(Text, default="")
+    date: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    url: Mapped[str | None] = mapped_column(String, nullable=True)
+    politician_name: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    politician_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    chamber: Mapped[str | None] = mapped_column(String, nullable=True)
+    agency_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    comment_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    comments_close_on: Mapped[str | None] = mapped_column(String, nullable=True)
+    policy_areas: Mapped[str] = mapped_column(Text, default="[]")
+    external_id: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
+
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
 
 
 class LearnedClassification(Base):
