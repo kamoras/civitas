@@ -181,7 +181,7 @@ class TestIndependentVoting:
 
 
 class TestFundingDiversity:
-    """Higher score = more traceable and diverse funding sources."""
+    """Higher score = broader, more distributed funding base."""
 
     def test_fully_classified_itemized(self):
         funding = {
@@ -194,10 +194,10 @@ class TestFundingDiversity:
             ],
         }
         score = _calc_funding_diversity(funding)
-        assert score >= 70
+        assert score >= 65
 
-    def test_mostly_opaque_small_donors(self):
-        """High small-donor percentage = low traceability (sub-$200 not itemized)."""
+    def test_grassroots_small_donors_scores_high(self):
+        """High small-donor percentage = broad grassroots base = high diversity."""
         funding = {
             "smallDonorPercentage": 90,
             "industryBreakdown": [
@@ -205,7 +205,7 @@ class TestFundingDiversity:
             ],
         }
         score = _calc_funding_diversity(funding)
-        assert score < 50
+        assert score >= 70
 
     def test_single_industry_dominated(self):
         """Concentrated in one industry = low diversity score."""
@@ -266,10 +266,18 @@ class TestPromisePersistence:
         score = _calc_promise_persistence({}, "D", None)
         assert 45 <= score <= 60
 
-    def test_flip_flop_fallback(self):
-        ff = {"flipFlopScore": 30}
-        score = _calc_promise_persistence({}, "D", None, ff)
-        assert 60 <= score <= 75
+    def test_vote_independence_fallback(self):
+        """When no promises are evaluable, voting independence is used as proxy."""
+        voting_record = {
+            "keyVotes": [
+                {"votedWithParty": False, "vote": "Yea"},
+                {"votedWithParty": True, "vote": "Nay"},
+                {"votedWithParty": True, "vote": "Yea"},
+                {"votedWithParty": False, "vote": "Nay"},
+            ],
+        }
+        score = _calc_promise_persistence(voting_record, "D", None)
+        assert 55 <= score <= 75
 
     def test_floor_advocacy_boosts_score(self):
         promises = [{"alignment": "kept"}, {"alignment": "broken"}]

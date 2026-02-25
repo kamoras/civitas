@@ -245,10 +245,9 @@ async def post_document_comment(
 @router.post("/{doc_id}/summary")
 async def get_explore_document_summary(
     doc_id: int,
-    q: str = Query(..., min_length=2, max_length=200, description="Original search query"),
     db: Session = Depends(get_db),
 ):
-    """Generate an AI summary of how a document relates to the user's search query."""
+    """Generate an AI summary of a government document."""
     from app.pipeline.analyze.ollama_client import call_llm
     from app.pipeline.analyze.prompts import explore_document_summary_prompt
 
@@ -264,7 +263,7 @@ async def get_explore_document_summary(
         "politician_name": doc.politician_name or "",
         "date": doc.date,
     }
-    prompt = explore_document_summary_prompt(q, doc_dict)
+    prompt = explore_document_summary_prompt(doc_dict)
 
     import asyncio
     result = await asyncio.to_thread(
@@ -272,19 +271,19 @@ async def get_explore_document_summary(
         prompt_version=prompt["promptVersion"],
         system_prompt=prompt["systemPrompt"],
         user_prompt=prompt["userPrompt"],
-        cache_key={"query": q, "doc_id": doc_id},
+        cache_key={"doc_id": doc_id, "v": 3},
         max_tokens=512,
     )
 
     if not result or not isinstance(result, dict):
         return {
-            "relevance": "",
+            "summary": "",
             "keyPoints": [],
             "impact": "",
         }
 
     return {
-        "relevance": result.get("relevance", ""),
+        "summary": result.get("summary", ""),
         "keyPoints": result.get("keyPoints", result.get("key_points", [])),
         "impact": result.get("impact", ""),
     }

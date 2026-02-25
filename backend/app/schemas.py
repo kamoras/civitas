@@ -103,12 +103,28 @@ class LobbyingMatchSchema(CamelModel):
     description: str
 
 
+class PolicyAlignmentSchema(CamelModel):
+    area: str
+    alignment: Literal["R", "D", "bipartisan"]
+    strength: float
+
+
+class PartisanDepthSchema(CamelModel):
+    overall_lean: float
+    overall_party: Literal["R", "D", "centrist"]
+    depth: Literal["deep", "moderate", "centrist", "cross-cutting"]
+    cross_party_count: int
+    total_positions: int
+    policy_breakdown: list[PolicyAlignmentSchema] = []
+
+
 class CampaignPromiseSchema(CamelModel):
     promise_text: str
     category: str
     alignment: Literal["kept", "broken", "partial", "unclear"] = "unclear"
     related_votes: list[str] = []
     analysis: str = ""
+    party_alignment: Literal["R", "D", "bipartisan"] | None = None
 
 
 class SenatorSchema(CamelModel):
@@ -118,14 +134,13 @@ class SenatorSchema(CamelModel):
     party: Literal["D", "R", "I"]
     years_in_office: int
     initials: str
-    approval_rating: float | None = None
-    disapproval_rating: float | None = None
     representation_score: RepresentationScoreSchema
     funding: FundingSchema
     voting_record: VotingRecordSchema
     lobbying_matches: list[LobbyingMatchSchema]
     campaign_promises: list[CampaignPromiseSchema] = []
     platform_summary: str = ""
+    partisan_depth: PartisanDepthSchema | None = None
 
 
 class LeaderboardEntrySchema(CamelModel):
@@ -135,8 +150,6 @@ class LeaderboardEntrySchema(CamelModel):
     party: Literal["D", "R", "I"]
     years_in_office: int
     initials: str
-    approval_rating: float | None = None
-    disapproval_rating: float | None = None
     representation_score: RepresentationScoreSchema
     total_raised: float
     total_from_pacs: float
@@ -226,3 +239,52 @@ class PresidentLeaderboardEntry(CamelModel):
     score: PresidentialScoreSchema
     avg_approval: float | None = None
     gdp_growth_avg: float | None = None
+
+
+# ── Supreme Court Justices ──────────────────────────────────────────
+
+class JusticeScoreSchema(CamelModel):
+    consistency: float
+    independence: float
+    bipartisan_agreement: float
+    judicial_restraint: float
+
+
+class JusticeSchema(CamelModel):
+    id: str
+    name: str
+    last_name: str
+    role_title: str = "Associate Justice"
+    appointing_president: str | None = None
+    appointing_party: str | None = None
+    date_start: str | None = None
+    is_active: bool = True
+    thumbnail_url: str | None = None
+    score: JusticeScoreSchema
+    cases_decided: int = 0
+    majority_pct: float = 0.0
+    dissent_pct: float = 0.0
+    unanimous_pct: float = 0.0
+    authored_majority: int = 0
+    authored_dissent: int = 0
+    authored_concurrence: int = 0
+    close_case_majority_pct: float = 0.0
+    cross_bloc_pct: float = 0.0
+    agreement_matrix: dict[str, float] = {}
+    summary: str = ""
+
+
+class JusticeLeaderboardEntry(CamelModel):
+    id: str
+    name: str
+    last_name: str
+    role_title: str = "Associate Justice"
+    appointing_president: str | None = None
+    appointing_party: str | None = None
+    is_active: bool = True
+    thumbnail_url: str | None = None
+    score: JusticeScoreSchema
+    cases_decided: int = 0
+    majority_pct: float = 0.0
+    dissent_pct: float = 0.0
+    cross_bloc_pct: float = 0.0

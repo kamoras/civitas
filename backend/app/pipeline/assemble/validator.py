@@ -121,6 +121,59 @@ def validate_senator(senator: dict) -> dict:
         "donorAlignedVotes": max(0, vr.get("donorAlignedVotes", 0)),
         "donorOpposedVotes": max(0, vr.get("donorOpposedVotes", 0)),
         "policyBreakdown": vr.get("policyBreakdown", []),
+        "votingSummary": vr.get("votingSummary", ""),
+        "votedWithPartyCount": max(0, vr.get("votedWithPartyCount", 0)),
+        "votedAgainstPartyCount": max(0, vr.get("votedAgainstPartyCount", 0)),
+        "partyLoyaltyPct": max(0.0, vr.get("partyLoyaltyPct", 0.0)),
+        "recentVotes": [
+            {
+                "billName": v.get("billName", "Unknown Bill"),
+                "billId": v.get("billId", ""),
+                "date": v.get("date", ""),
+                "vote": (
+                    v.get("vote")
+                    if v.get("vote") in VALID_VOTES
+                    else "Not Voting"
+                ),
+                "policyArea": v.get("policyArea", "PROCEDURAL"),
+                "stance": v.get("stance", "neutral"),
+                "stanceVote": (
+                    v.get("stanceVote")
+                    if v.get("stanceVote") in ("Yea", "Nay")
+                    else None
+                ),
+                "impactedGroups": (
+                    v["impactedGroups"]
+                    if isinstance(v.get("impactedGroups"), list)
+                    else []
+                ),
+                "affectedIndustries": (
+                    v["affectedIndustries"]
+                    if isinstance(v.get("affectedIndustries"), list)
+                    else []
+                ),
+                "description": v.get("description", ""),
+                "corporateInterest": v.get("corporateInterest", ""),
+                "publicImpact": v.get("publicImpact", ""),
+                "relevantDonors": (
+                    v["relevantDonors"]
+                    if isinstance(v.get("relevantDonors"), list)
+                    else []
+                ),
+                "relevantDonorTotal": max(
+                    0, round(v.get("relevantDonorTotal", 0))
+                ),
+                "partyLeaning": (
+                    v.get("partyLeaning")
+                    if v.get("partyLeaning") in ("R", "D", "bipartisan")
+                    else None
+                ),
+                "votedWithParty": v.get("votedWithParty"),
+                "voteCategory": v.get("voteCategory", "recent"),
+                "keyVoteReasoning": v.get("keyVoteReasoning"),
+            }
+            for v in (vr.get("recentVotes") or [])
+        ],
         "keyVotes": [
             {
                 "billName": v.get("billName", "Unknown Bill"),
@@ -159,6 +212,14 @@ def validate_senator(senator: dict) -> dict:
                 "relevantDonorTotal": max(
                     0, round(v.get("relevantDonorTotal", 0))
                 ),
+                "partyLeaning": (
+                    v.get("partyLeaning")
+                    if v.get("partyLeaning") in ("R", "D", "bipartisan")
+                    else None
+                ),
+                "votedWithParty": v.get("votedWithParty"),
+                "voteCategory": v.get("voteCategory", "recent"),
+                "keyVoteReasoning": v.get("keyVoteReasoning"),
             }
             for v in (vr.get("keyVotes") or [])
         ],
@@ -188,8 +249,9 @@ def validate_senator(senator: dict) -> dict:
         for m in (senator.get("lobbyingMatches") or [])
     ]
 
-    # Remove the bioguideId field (internal, not in Senator type)
-    senator.pop("bioguideId", None)
+    # Strip internal/pipeline-only fields not needed in the final output
+    for _internal_key in ("bioguideId",):
+        senator.pop(_internal_key, None)
 
     if warnings:
         logger.warning(

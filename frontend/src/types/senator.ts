@@ -5,8 +5,6 @@ export interface Senator {
   party: "D" | "R" | "I";
   yearsInOffice: number;
   initials: string;
-  approvalRating: number | null;
-  disapprovalRating: number | null;
   representationScore: {
     fundingIndependence: number;
     promisePersistence: number;
@@ -24,6 +22,7 @@ export interface Senator {
   lobbyingMatches: LobbyingMatch[];
   campaignPromises: CampaignPromise[];
   platformSummary: string;
+  partisanDepth: PartisanDepth | null;
 }
 
 export interface Donor {
@@ -95,12 +94,28 @@ export interface LobbyingMatch {
   description: string;
 }
 
+export interface PolicyAlignment {
+  area: string;
+  alignment: "R" | "D" | "bipartisan";
+  strength: number;
+}
+
+export interface PartisanDepth {
+  overallLean: number;
+  overallParty: "R" | "D" | "centrist";
+  depth: "deep" | "moderate" | "centrist" | "cross-cutting";
+  crossPartyCount: number;
+  totalPositions: number;
+  policyBreakdown: PolicyAlignment[];
+}
+
 export interface CampaignPromise {
   promiseText: string;
   category: string;
   alignment: "kept" | "broken" | "partial" | "unclear";
   relatedVotes: string[];
   analysis: string;
+  partyAlignment: "R" | "D" | "bipartisan" | null;
 }
 
 export interface LeaderboardEntry {
@@ -110,8 +125,6 @@ export interface LeaderboardEntry {
   party: "D" | "R" | "I";
   yearsInOffice: number;
   initials: string;
-  approvalRating: number | null;
-  disapprovalRating: number | null;
   representationScore: Senator["representationScore"];
   totalRaised: number;
   totalFromPacs: number;

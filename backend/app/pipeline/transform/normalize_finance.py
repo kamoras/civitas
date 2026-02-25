@@ -101,9 +101,13 @@ def normalize_finance(
         if d.get("type") in ("PAC", "SuperPAC", "Party/Ideological")
     )
 
+    final_pac_total = min(computed_pac_total, total_raised)
+    if total_from_pacs > 0 and abs(total_from_pacs - computed_pac_total) > total_raised * 0.5:
+        final_pac_total = total_from_pacs
+
     return {
         "totalRaised": round(total_raised),
-        "totalFromPACs": round(computed_pac_total),
+        "totalFromPACs": round(final_pac_total),
         "smallDonorPercentage": small_donor_percentage,
         "topDonors": top_donors,
         "industryBreakdown": industry_breakdown,
@@ -343,10 +347,21 @@ def _build_industry_breakdown(
         existing["total"] += amount
         industry_totals[industry] = existing
 
+    # Add an UNCLASSIFIED bucket for money not captured by any classification
+    raw_total = sum(ind["total"] for ind in industry_totals.values())
+    unclassified = total_raised - raw_total
+    if unclassified > total_raised * 0.01:
+        industry_totals["UNCLASSIFIED"] = {
+            "industry": "UNCLASSIFIED", "name": "UNCLASSIFIED",
+            "total": unclassified,
+        }
+        raw_total = total_raised
+
+    denom = raw_total if raw_total > 0 else 1
     breakdown = []
     for ind in industry_totals.values():
         total = round(ind["total"])
-        percentage = round((ind["total"] / total_raised) * 100) if total_raised > 0 else 0
+        percentage = round((ind["total"] / denom) * 100) if denom > 0 else 0
         if total > 0:
             breakdown.append({
                 "industry": ind["industry"],

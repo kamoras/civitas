@@ -165,6 +165,34 @@ server {
         add_header X-Cache-Status \$upstream_cache_status;
     }
 
+    location = /api/justices/leaderboard {
+        proxy_pass http://backend_app;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_cache civitas_cache;
+        proxy_cache_valid 200 5m;
+        proxy_cache_use_stale error timeout updating http_500 http_502 http_503;
+        proxy_cache_lock on;
+        add_header X-Cache-Status \$upstream_cache_status;
+    }
+
+    location ~ ^/api/justices/[^/]+\$ {
+        proxy_pass http://backend_app;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_cache civitas_cache;
+        proxy_cache_valid 200 2m;
+        proxy_cache_use_stale error timeout updating http_500 http_502 http_503;
+        proxy_cache_lock on;
+        add_header X-Cache-Status \$upstream_cache_status;
+    }
+
     location = /api/senators {
         proxy_pass http://backend_app;
         proxy_set_header Host \$host;
@@ -321,6 +349,15 @@ deploy_backend() {
 
   docker rm -f "$container_name" 2>/dev/null || true
 
+  # Stop any container blocking the target port (e.g. docker-compose containers)
+  local blocking
+  blocking=$(docker ps --filter "publish=${new_port}" --format '{{.Names}}' 2>/dev/null || true)
+  if [[ -n "$blocking" ]]; then
+    log "Stopping container(s) on port ${new_port}: $blocking"
+    docker rm -f $blocking 2>/dev/null || true
+    sleep 1
+  fi
+
   log "Starting $container_name..."
   docker run -d \
     --name "$container_name" \
@@ -371,6 +408,15 @@ deploy_frontend() {
   docker compose build frontend
 
   docker rm -f "$container_name" 2>/dev/null || true
+
+  # Stop any container blocking the target port (e.g. docker-compose containers)
+  local blocking
+  blocking=$(docker ps --filter "publish=${new_port}" --format '{{.Names}}' 2>/dev/null || true)
+  if [[ -n "$blocking" ]]; then
+    log "Stopping container(s) on port ${new_port}: $blocking"
+    docker rm -f $blocking 2>/dev/null || true
+    sleep 1
+  fi
 
   log "Starting $container_name..."
   docker run -d \

@@ -14,7 +14,7 @@ scheduler = AsyncIOScheduler()
 
 
 def _nightly_pipeline() -> None:
-    """Run the full senator pipeline, then the explore document pipeline.
+    """Run the unified pipeline (senators, explore docs, SCOTUS justices).
 
     Runs in a background thread with its own event loop so the main
     uvicorn loop stays responsive during long-running pipeline phases.
@@ -28,12 +28,6 @@ def _nightly_pipeline() -> None:
             result = loop.run_until_complete(run_full_pipeline())
             if result.get("status") == "skipped":
                 logger.info("Pipeline skipped — another instance is already running")
-                return
-            try:
-                from app.pipeline.explore_pipeline import run_explore_pipeline
-                loop.run_until_complete(run_explore_pipeline(days_back=60))
-            except BaseException as e:
-                logger.exception("Explore pipeline failed during nightly run: %s", e)
         except BaseException:
             logger.exception("Nightly pipeline failed")
         finally:

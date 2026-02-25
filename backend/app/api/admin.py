@@ -326,6 +326,13 @@ async def admin_dashboard(db: Session = Depends(get_db)):
     }
 
     if last_run:
+        dash_progress_steps = None
+        if last_run.progress_detail:
+            try:
+                import json as _json
+                dash_progress_steps = _json.loads(last_run.progress_detail)
+            except (ValueError, TypeError):
+                pass
         pipeline_info["lastRun"] = {
             "id": last_run.id,
             "startedAt": last_run.started_at.isoformat() if last_run.started_at else None,
@@ -341,6 +348,7 @@ async def admin_dashboard(db: Session = Depends(get_db)):
             "cacheMisses": last_run.cache_misses,
             "elapsedSeconds": last_run.elapsed_seconds,
             "errorMessage": last_run.error_message,
+            "progressSteps": dash_progress_steps,
         }
 
     # --- Vector DB stats ---
@@ -390,6 +398,15 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
             from datetime import datetime
             now = datetime.utcnow()
             elapsed = round((now - last_run.started_at).total_seconds(), 1)
+
+        progress_steps = None
+        if last_run.progress_detail:
+            try:
+                import json
+                progress_steps = json.loads(last_run.progress_detail)
+            except (json.JSONDecodeError, TypeError):
+                pass
+
         result["lastRun"] = {
             "id": last_run.id,
             "startedAt": last_run.started_at.isoformat() if last_run.started_at else None,
@@ -405,6 +422,7 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
             "cacheMisses": last_run.cache_misses,
             "elapsedSeconds": elapsed,
             "errorMessage": last_run.error_message,
+            "progressSteps": progress_steps,
         }
     return result
 
@@ -474,47 +492,10 @@ async def admin_trigger_pipeline(
     }
 
 
-@router.post("/senators/{senator_id}/approval", dependencies=[Depends(require_admin)])
-async def update_approval_rating(
-    senator_id: str,
-    approve: float = Query(..., ge=0, le=100),
-    disapprove: float = Query(..., ge=0, le=100),
-    source: str = Query(default="Manual"),
-    db: Session = Depends(get_db),
-):
-    """Manually set a senator's approval rating."""
-    senator = db.query(Senator).filter(Senator.id == senator_id).first()
-    if not senator:
-        raise HTTPException(status_code=404, detail="Senator not found")
-
-    senator.approval_rating = approve
-    senator.disapproval_rating = disapprove
-    senator.approval_source = source
-    db.commit()
-
-    return {
-        "senatorId": senator_id,
-        "name": senator.name,
-        "approvalRating": approve,
-        "disapprovalRating": disapprove,
-        "source": source,
-    }
+@router.get("/classification/health", dependencies=[Depends(require_admin)])
+async def admin_classification_health(db: Session = Depends(get_db)):
+    """Classification system health metrics for monitoring adaptive learning."""
+    from app.pipeline.analyze.bill_learning import get_health_metrics
+    return get_health_metrics(db)
 
 
-@router.post("/explore/trigger", dependencies=[Depends(require_admin)])
-async def admin_trigger_explore():
-    """Trigger the explore document ingestion pipeline."""
-    from app.pipeline.explore_pipeline import run_explore_pipeline
-
-    def _run_in_thread():
-        loop = asyncio.new_event_loop()
-        try:
-            result = loop.run_until_complete(run_explore_pipeline(days_back=60))
-            logger.info("Admin-triggered explore pipeline: %s", result)
-        except BaseException:
-            logger.exception("Admin-triggered explore pipeline failed")
-        finally:
-            loop.close()
-
-    threading.Thread(target=_run_in_thread, daemon=True, name="explore-run").start()
-    return {"message": "Explore pipeline triggered"}

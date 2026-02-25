@@ -49,6 +49,13 @@ def _migrate_columns() -> None:
         ("explore_documents", "comments_close_on", "TEXT"),
         ("learned_classifications", "model_version", "TEXT"),
         ("learned_classifications", "match_metadata", "TEXT"),
+        ("senators", "partisan_depth", "TEXT"),
+        ("campaign_promises", "party_alignment", "TEXT"),
+        ("pipeline_runs", "progress_detail", "TEXT"),
+        ("justices", "score_consistency", "REAL DEFAULT 0.0"),
+        ("justices", "score_independence", "REAL DEFAULT 0.0"),
+        ("justices", "score_bipartisan_agreement", "REAL DEFAULT 0.0"),
+        ("justices", "score_judicial_restraint", "REAL DEFAULT 0.0"),
     ]
     with engine.begin() as conn:
         for table, column, col_type in migrations:

@@ -28,8 +28,6 @@ def _make_senator(**overrides) -> SenatorSchema:
         party="D",
         years_in_office=6,
         initials="JD",
-        approval_rating=None,
-        disapproval_rating=None,
         representation_score=RepresentationScoreSchema(
             funding_independence=60,
             promise_persistence=55,
@@ -54,39 +52,6 @@ def _make_senator(**overrides) -> SenatorSchema:
     )
     defaults.update(overrides)
     return SenatorSchema(**defaults)
-
-
-class TestApprovalHighlights:
-
-    def test_high_net_approval(self):
-        senator = _make_senator(approval_rating=65.0, disapproval_rating=30.0)
-        highlights = _build_highlights(senator)
-        match = [h for h in highlights if "among the most popular" in h]
-        assert len(match) == 1
-
-    def test_slightly_positive_approval(self):
-        senator = _make_senator(approval_rating=50.0, disapproval_rating=45.0)
-        highlights = _build_highlights(senator)
-        match = [h for h in highlights if "net +5" in h]
-        assert len(match) == 1
-
-    def test_slightly_underwater(self):
-        senator = _make_senator(approval_rating=42.0, disapproval_rating=48.0)
-        highlights = _build_highlights(senator)
-        match = [h for h in highlights if "underwater" in h]
-        assert len(match) == 1
-
-    def test_deeply_underwater(self):
-        senator = _make_senator(approval_rating=30.0, disapproval_rating=55.0)
-        highlights = _build_highlights(senator)
-        match = [h for h in highlights if "significantly underwater" in h]
-        assert len(match) == 1
-
-    def test_no_approval_data(self):
-        senator = _make_senator()
-        highlights = _build_highlights(senator)
-        match = [h for h in highlights if "Approval" in h]
-        assert len(match) == 0
 
 
 class TestFundingHighlights:
@@ -309,8 +274,6 @@ class TestHighlightPriority:
     def test_sorted_by_priority_descending(self):
         """Higher-priority highlights should appear first in the list."""
         senator = _make_senator(
-            approval_rating=55.0,
-            disapproval_rating=40.0,
             funding=FundingSchema(
                 total_raised=5_000_000,
                 total_from_pacs=2_500_000,
@@ -322,9 +285,8 @@ class TestHighlightPriority:
             ),
         )
         highlights = _build_highlights(senator)
-        assert len(highlights) >= 3
-        # Approval (11) should come before funding (10/9) which comes before industry donor (5)
-        approval_idx = next((i for i, h in enumerate(highlights) if "Approval" in h), None)
+        assert len(highlights) >= 2
+        grassroots_idx = next((i for i, h in enumerate(highlights) if "Grassroots" in h), None)
         donor_idx = next((i for i, h in enumerate(highlights) if "Big Corp" in h), None)
-        if approval_idx is not None and donor_idx is not None:
-            assert approval_idx < donor_idx
+        if grassroots_idx is not None and donor_idx is not None:
+            assert grassroots_idx < donor_idx

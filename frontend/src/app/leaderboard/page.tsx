@@ -1,19 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import MatrixRain from "@/components/effects/MatrixRain";
 import BranchSelector, { type Branch } from "@/components/BranchSelector";
 import ComingSoon from "@/components/ComingSoon";
-import { fetchLeaderboard, fetchPresidentLeaderboard } from "@/lib/api";
-import { calculateOverallScore, calculatePresidentScore, getScoreColor } from "@/lib/corruption";
+import { fetchLeaderboard, fetchPresidentLeaderboard, fetchJusticeLeaderboard } from "@/lib/api";
+import { calculateOverallScore, calculatePresidentScore, calculateJusticeScore, getScoreColor } from "@/lib/corruption";
 import { useScoreWeights } from "@/hooks/useConfig";
 import type { LeaderboardEntry } from "@/types/senator";
 import type { PresidentLeaderboardEntry } from "@/types/president";
+import type { JusticeLeaderboardEntry } from "@/types/justice";
 
 type PartyFilter = "ALL" | "D" | "R" | "I";
-type SortKey = "score" | "pac_dollars" | "pac_pct" | "approval";
+type SortKey = "score" | "pac_dollars" | "pac_pct";
 
 function formatDollars(n: number | undefined | null): string {
   const v = n ?? 0;
@@ -242,12 +244,186 @@ function PresidentLeaderboard({
   );
 }
 
-export default function LeaderboardPage() {
-  const [branch, setBranch] = useState<Branch>("senate");
+const APPT_PARTY: Record<string, { label: string; color: string; bg: string }> = {
+  D:  { label: "D", color: "text-dem-blue",   bg: "bg-dem-blue/20 border-dem-blue/40" },
+  R:  { label: "R", color: "text-rep-red",    bg: "bg-rep-red/20 border-rep-red/40" },
+};
+
+function apptParty(party: string | null) {
+  if (!party) return { label: "—", color: "text-white/50", bg: "bg-white/10 border-white/20" };
+  return APPT_PARTY[party] ?? { label: party, color: "text-white/50", bg: "bg-white/10 border-white/20" };
+}
+
+function JusticeLeaderboard({
+  entries,
+  loading,
+  error,
+}: {
+  entries: JusticeLeaderboardEntry[];
+  loading: boolean;
+  error: string | null;
+}) {
+  if (loading) {
+    return (
+      <div className="terminal-window p-8 text-center">
+        <p className="text-matrix-green animate-pulse">{">"} LOADING SCOTUS DATA...</p>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="terminal-window p-8 text-center border-red-500/40">
+        <p className="text-red-400">{">"} ERROR: {error}</p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="terminal-window overflow-hidden">
+        <div className="terminal-titlebar">
+          <span className="terminal-dot red" />
+          <span className="terminal-dot yellow" />
+          <span className="terminal-dot green" />
+          <span className="ml-3 text-white/40 text-xs font-terminal">
+            scotus_leaderboard.db — {entries.length} justices
+          </span>
+        </div>
+
+        {/* Desktop table */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full text-sm font-terminal">
+            <thead>
+              <tr className="border-b border-matrix-green/20 text-matrix-green/50 text-xs uppercase tracking-widest">
+                <th scope="col" className="px-4 py-3 text-left w-14">RANK</th>
+                <th scope="col" className="px-4 py-3 text-left">JUSTICE</th>
+                <th scope="col" className="px-3 py-3 text-center w-20">APPT</th>
+                <th scope="col" className="px-3 py-3 text-left w-36">SCORE</th>
+                <th scope="col" className="px-3 py-3 text-right w-20">CASES</th>
+                <th scope="col" className="px-3 py-3 text-right w-24">MAJORITY</th>
+                <th scope="col" className="px-3 py-3 text-right w-24">CROSS-BLOC</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((entry, idx) => {
+                const rank = idx + 1;
+                const score = calculateJusticeScore(entry.score);
+                const pp = apptParty(entry.appointingParty);
+                return (
+                  <tr
+                    key={entry.id}
+                    className={`border-b border-matrix-green/10 hover:bg-matrix-green/5 transition-colors cursor-pointer group ${
+                      rank <= 3 ? "border-l-2 border-l-neon-yellow/30" : ""
+                    }`}
+                    tabIndex={0}
+                    role="link"
+                    aria-label={`View profile for ${entry.name}, rank ${rank}`}
+                    onClick={() => (window.location.href = `/scorecard?branch=scotus&id=${entry.id}`)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); window.location.href = `/scorecard?branch=scotus&id=${entry.id}`; } }}
+                  >
+                    <td className="px-4 py-3">
+                      <span className={`font-bold text-lg ${rankColor(rank)}`}>#{rank}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-white group-hover:text-matrix-green transition-colors">
+                        {entry.name}
+                      </span>
+                      {entry.roleTitle.includes("Chief") && (
+                        <span className="ml-2 text-neon-yellow text-[10px]">CHIEF</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      <span
+                        className={`text-xs px-2 py-0.5 border rounded-sm ${pp.bg} ${pp.color}`}
+                      >
+                        {pp.label}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <ScoreBar score={score} />
+                    </td>
+                    <td className="px-3 py-3 text-right tabular-nums text-white/70">
+                      {entry.casesDecided}
+                    </td>
+                    <td className="px-3 py-3 text-right tabular-nums text-white/70">
+                      {entry.majorityPct.toFixed(0)}%
+                    </td>
+                    <td className="px-3 py-3 text-right tabular-nums">
+                      <span className={entry.crossBlocPct >= 15 ? "text-matrix-green" : entry.crossBlocPct >= 8 ? "text-neon-cyan/70" : "text-white/50"}>
+                        {entry.crossBlocPct.toFixed(1)}%
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="md:hidden divide-y divide-matrix-green/10">
+          {entries.map((entry, idx) => {
+            const rank = idx + 1;
+            const score = calculateJusticeScore(entry.score);
+            const pp = apptParty(entry.appointingParty);
+            return (
+              <Link
+                key={entry.id}
+                href={`/scorecard?branch=scotus&id=${entry.id}`}
+                className="flex items-center gap-3 px-4 py-3 hover:bg-matrix-green/5 transition-colors"
+              >
+                <span className={`text-lg font-bold w-10 shrink-0 ${rankColor(rank)}`}>
+                  #{rank}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-white text-sm truncate">{entry.name}</span>
+                    <span
+                      className={`text-xs px-1 border shrink-0 ${pp.bg} ${pp.color}`}
+                    >
+                      {pp.label}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 mt-0.5">
+                    <ScoreBar score={score} />
+                    <span className="text-xs text-white/40">
+                      {entry.casesDecided} cases
+                    </span>
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+
+      <p className="mt-4 text-center text-matrix-green/50 text-xs">
+        Higher score = more impartial jurisprudence. Computed from: ideological consistency (35%) +
+        independence (30%) + judicial restraint (20%) + bipartisan agreement (15%).
+        Click any row to view full profile.
+      </p>
+    </>
+  );
+}
+
+function LeaderboardContent() {
+  const searchParams = useSearchParams();
+  const initialBranch = (searchParams.get("branch") as Branch) || "senate";
+  const [branch, setBranchState] = useState<Branch>(initialBranch);
+
+  const setBranch = useCallback((b: Branch) => {
+    setBranchState(b);
+    const url = new URL(window.location.href);
+    url.searchParams.set("branch", b);
+    window.history.replaceState({}, "", url.toString());
+  }, []);
+
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [presEntries, setPresEntries] = useState<PresidentLeaderboardEntry[]>([]);
+  const [justiceEntries, setJusticeEntries] = useState<JusticeLeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [presLoading, setPresLoading] = useState(false);
+  const [justiceLoading, setJusticeLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [partyFilter, setPartyFilter] = useState<PartyFilter>("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("score");
@@ -270,6 +446,16 @@ export default function LeaderboardPage() {
       .finally(() => setPresLoading(false));
   }, [branch, presEntries.length]);
 
+  useEffect(() => {
+    if (branch !== "scotus") return;
+    if (justiceEntries.length > 0) return;
+    setJusticeLoading(true);
+    fetchJusticeLeaderboard()
+      .then(setJusticeEntries)
+      .catch((e) => setError(e.message))
+      .finally(() => setJusticeLoading(false));
+  }, [branch, justiceEntries.length]);
+
   const displayed = useMemo(() => {
     let list = entries;
     if (partyFilter !== "ALL") list = list.filter((e) => e.party === partyFilter);
@@ -280,11 +466,6 @@ export default function LeaderboardPage() {
         const pctA = (a.totalRaised ?? 0) > 0 ? (a.totalFromPacs ?? 0) / a.totalRaised : 0;
         const pctB = (b.totalRaised ?? 0) > 0 ? (b.totalFromPacs ?? 0) / b.totalRaised : 0;
         return pctB - pctA;
-      }
-      if (sortKey === "approval") {
-        const approvalA = a.approvalRating ?? -1;
-        const approvalB = b.approvalRating ?? -1;
-        return approvalB - approvalA;
       }
       return (
         calculateOverallScore(b.representationScore, weights) - calculateOverallScore(a.representationScore, weights)
@@ -332,6 +513,8 @@ export default function LeaderboardPage() {
 
         {branch === "president" && <PresidentLeaderboard entries={presEntries} loading={presLoading} error={error} />}
 
+        {branch === "scotus" && <JusticeLeaderboard entries={justiceEntries} loading={justiceLoading} error={error} />}
+
         {branch === "senate" && <>
         {/* Controls */}
         <div className="flex flex-col sm:flex-row gap-4 mb-6 items-start sm:items-center justify-between">
@@ -365,7 +548,6 @@ export default function LeaderboardPage() {
             {(
               [
                 ["score", "INFLUENCE SCORE"],
-                ["approval", "APPROVAL"],
                 ["pac_dollars", "PAC $"],
                 ["pac_pct", "PAC %"],
               ] as [SortKey, string][]
@@ -422,7 +604,6 @@ export default function LeaderboardPage() {
                     <th scope="col" className="px-4 py-3 text-left">SENATOR</th>
                     <th scope="col" className="px-3 py-3 text-center w-20">STATE</th>
                     <th scope="col" className="px-3 py-3 text-left w-36">REP. SCORE</th>
-                    <th scope="col" className="px-3 py-3 text-right w-24">APPROVAL</th>
                     <th scope="col" className="px-3 py-3 text-right w-24">PAC $</th>
                     <th scope="col" className="px-3 py-3 text-right w-20">PAC %</th>
                     <th scope="col" className="px-3 py-3 text-left w-32">TOP INDUSTRY</th>
@@ -471,23 +652,6 @@ export default function LeaderboardPage() {
                         </td>
                         <td className="px-3 py-3">
                           <ScoreBar score={score} />
-                        </td>
-                        <td className="px-3 py-3 text-right tabular-nums">
-                          {entry.approvalRating != null ? (
-                            <span
-                              className={
-                                entry.approvalRating - (entry.disapprovalRating ?? 0) > 10
-                                  ? "text-matrix-green"
-                                  : entry.approvalRating - (entry.disapprovalRating ?? 0) > 0
-                                    ? "text-white/70"
-                                    : "text-red-400"
-                              }
-                            >
-                              {Math.round(entry.approvalRating)}%
-                            </span>
-                          ) : (
-                            <span className="text-white/20">—</span>
-                          )}
                         </td>
                         <td className="px-3 py-3 text-right tabular-nums text-white/70">
                           {formatDollars(entry.totalFromPacs)}
@@ -546,9 +710,6 @@ export default function LeaderboardPage() {
                       </div>
                       <div className="flex items-center gap-3 mt-0.5">
                         <ScoreBar score={score} />
-                        {entry.approvalRating != null && (
-                          <span className="text-xs text-white/50">{Math.round(entry.approvalRating)}% apr</span>
-                        )}
                         <span className="text-xs text-white/40">{formatDollars(entry.totalFromPacs)} PAC ({pacPct}%)</span>
                       </div>
                     </div>
@@ -576,5 +737,15 @@ export default function LeaderboardPage() {
         </>}
       </div>
     </main>
+  );
+}
+
+import { Suspense } from "react";
+
+export default function LeaderboardPage() {
+  return (
+    <Suspense fallback={null}>
+      <LeaderboardContent />
+    </Suspense>
   );
 }

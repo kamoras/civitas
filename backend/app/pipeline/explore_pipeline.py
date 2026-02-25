@@ -330,7 +330,7 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
 
                     db.add(ExploreDocument(
                         doc_type=case["doc_type"],
-                        source="Oyez / Supreme Court",
+                        source="Supreme Court (supremecourt.gov)",
                         title=case["title"],
                         summary=case["summary"],
                         body=case.get("body", ""),

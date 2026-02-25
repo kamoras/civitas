@@ -65,7 +65,7 @@ function resolveSourceUrl(doc: ExploreDocumentDetail): string {
     return `https://www.congress.gov/congressional-record/${datePart}/house-section`;
   }
   if (doc.docType === "Supreme Court Opinion") {
-    return "https://www.supremecourt.gov/opinions/slipopinion/24";
+    return "https://www.supremecourt.gov/opinions/slipopinion/25";
   }
   return "";
 }
@@ -449,7 +449,6 @@ export default function ExploreDetailPage() {
   const [summary, setSummary] = useState<ExploreDocumentSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [summaryLoading, setSummaryLoading] = useState(false);
-  const [summaryRequested, setSummaryRequested] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -461,19 +460,16 @@ export default function ExploreDetailPage() {
       .finally(() => setLoading(false));
   }, [docId]);
 
-  const generateSummary = useCallback(async () => {
-    if (!query || !docId || summaryLoading) return;
+  useEffect(() => {
+    if (!docId || summaryLoading || summary) return;
     setSummaryLoading(true);
-    setSummaryRequested(true);
-    try {
-      const result = await fetchExploreDocumentSummary(docId, query);
-      setSummary(result);
-    } catch {
-      setSummary({ relevance: "Analysis unavailable. Try again later.", keyPoints: [], impact: "" });
-    } finally {
-      setSummaryLoading(false);
-    }
-  }, [docId, query, summaryLoading]);
+    fetchExploreDocumentSummary(docId)
+      .then(setSummary)
+      .catch(() => {
+        setSummary({ summary: "Analysis unavailable. Try again later.", keyPoints: [], impact: "" });
+      })
+      .finally(() => setSummaryLoading(false));
+  }, [docId, summaryLoading, summary]);
 
   if (loading) {
     return (
@@ -521,7 +517,7 @@ export default function ExploreDetailPage() {
       : doc.chamber === "Executive"
         ? "Federal Register"
         : doc.chamber === "Judicial"
-          ? "Supreme Court (via Oyez)"
+          ? "Supreme Court of the United States"
           : doc.chamber === "Regulatory"
             ? "Federal Register"
             : doc.source;
@@ -630,88 +626,70 @@ export default function ExploreDetailPage() {
           </div>
 
           {/* AI Analysis section */}
-          {query && (
-            <div className="terminal-window mb-6">
-              <div className="terminal-titlebar" aria-hidden="true">
-                <span className="terminal-dot red" />
-                <span className="terminal-dot yellow" />
-                <span className="terminal-dot green" />
-                <span className="ml-3 text-white/40 text-xs font-terminal">
-                  ai_analysis.sh
-                </span>
-              </div>
-              <div className="p-5">
-                {!summaryRequested && (
-                  <div className="text-center py-4">
-                    <p className="text-matrix-green/50 text-xs mb-4">
-                      How does this document relate to &ldquo;{query}&rdquo;?
-                    </p>
-                    <button
-                      onClick={generateSummary}
-                      className="text-xs font-pixel text-crt-black bg-neon-cyan/80 hover:bg-neon-cyan
-                                 px-6 py-2 rounded transition-colors"
-                    >
-                      ▶ GENERATE AI ANALYSIS
-                    </button>
-                  </div>
-                )}
+          <div className="terminal-window mb-6">
+            <div className="terminal-titlebar" aria-hidden="true">
+              <span className="terminal-dot red" />
+              <span className="terminal-dot yellow" />
+              <span className="terminal-dot green" />
+              <span className="ml-3 text-white/40 text-xs font-terminal">
+                ai_analysis.sh
+              </span>
+            </div>
+            <div className="p-5">
+              {summaryLoading && (
+                <div className="text-center py-6">
+                  <span className="text-neon-cyan text-sm font-terminal animate-pulse">
+                    Analyzing document...
+                  </span>
+                  <p className="text-matrix-green/40 text-xs mt-2">
+                    This may take a moment
+                  </p>
+                </div>
+              )}
 
-                {summaryLoading && (
-                  <div className="text-center py-6">
-                    <span className="text-neon-cyan text-sm font-terminal animate-pulse">
-                      Analyzing document relevance...
-                    </span>
-                    <p className="text-matrix-green/40 text-xs mt-2">
-                      This may take a moment
-                    </p>
-                  </div>
-                )}
-
-                {summary && !summaryLoading && (
-                  <div className="space-y-4" aria-live="polite">
-                    {/* Relevance */}
+              {summary && !summaryLoading && (
+                <div className="space-y-4" aria-live="polite">
+                  {summary.summary && (
                     <div>
                       <h3 className="text-[10px] font-pixel text-neon-cyan/60 tracking-wider mb-2">
-                        RELEVANCE TO YOUR SEARCH
+                        AI SUMMARY
                       </h3>
                       <p className="text-sm text-matrix-green/90 leading-relaxed">
-                        {summary.relevance}
+                        {summary.summary}
                       </p>
                     </div>
+                  )}
 
-                    {/* Key points */}
-                    {summary.keyPoints.length > 0 && (
-                      <div>
-                        <h3 className="text-[10px] font-pixel text-neon-cyan/60 tracking-wider mb-2">
-                          KEY POINTS
-                        </h3>
-                        <ul className="space-y-1.5">
-                          {summary.keyPoints.map((point, i) => (
-                            <li key={i} className="flex gap-2 text-sm text-matrix-green/80">
-                              <span className="text-neon-cyan/50 shrink-0">▸</span>
-                              <span className="leading-relaxed">{point}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+                  {summary.keyPoints.length > 0 && (
+                    <div>
+                      <h3 className="text-[10px] font-pixel text-neon-cyan/60 tracking-wider mb-2">
+                        KEY POINTS
+                      </h3>
+                      <ul className="space-y-1.5">
+                        {summary.keyPoints.map((point, i) => (
+                          <li key={i} className="flex gap-2 text-sm text-matrix-green/80">
+                            <span className="text-neon-cyan/50 shrink-0">▸</span>
+                            <span className="leading-relaxed">{point}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
 
-                    {/* Impact */}
-                    {summary.impact && (
-                      <div className="border-t border-matrix-green/15 pt-3">
-                        <h3 className="text-[10px] font-pixel text-neon-cyan/60 tracking-wider mb-2">
-                          IMPACT
-                        </h3>
-                        <p className="text-sm text-matrix-green/80 leading-relaxed">
-                          {summary.impact}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+                  {summary.impact && (
+                    <div className="border-t border-matrix-green/15 pt-3">
+                      <h3 className="text-[10px] font-pixel text-neon-cyan/60 tracking-wider mb-2">
+                        IMPACT
+                      </h3>
+                      <p className="text-sm text-matrix-green/80 leading-relaxed">
+                        {summary.impact}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          )}
+          </div>
 
           {/* Document body */}
           <div className="terminal-window">

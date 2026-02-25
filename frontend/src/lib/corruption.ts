@@ -1,5 +1,6 @@
 import { Senator } from "@/types/senator";
 import type { PresidentialScore } from "@/types/president";
+import type { JusticeScore } from "@/types/justice";
 
 const DEFAULT_WEIGHTS: Record<string, number> = {
   fundingIndependence: 0.30,
@@ -44,6 +45,33 @@ export function calculatePresidentScore(
       s.competence * (w.competence ?? 0.15) +
       s.agencyAlignment * (w.agencyAlignment ?? 0.15),
   );
+}
+
+const DEFAULT_JUSTICE_WEIGHTS: Record<string, number> = {
+  consistency: 0.35,
+  independence: 0.30,
+  bipartisanAgreement: 0.15,
+  judicialRestraint: 0.20,
+};
+
+export function calculateJusticeScore(
+  s: JusticeScore,
+  weights?: Record<string, number>,
+): number {
+  const w = weights ?? DEFAULT_JUSTICE_WEIGHTS;
+  return Math.round(
+    s.consistency * (w.consistency ?? 0.35) +
+      s.independence * (w.independence ?? 0.30) +
+      s.bipartisanAgreement * (w.bipartisanAgreement ?? 0.15) +
+      s.judicialRestraint * (w.judicialRestraint ?? 0.20),
+  );
+}
+
+export function getJusticeLabel(score: number): string {
+  if (score >= 75) return "HIGHLY CONSISTENT";
+  if (score >= 55) return "MODERATELY CONSISTENT";
+  if (score >= 35) return "IDEOLOGICALLY PREDICTABLE";
+  return "DEEPLY PARTISAN";
 }
 
 export function getScoreLabel(score: number): string {

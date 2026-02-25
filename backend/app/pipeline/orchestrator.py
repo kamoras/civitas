@@ -1,7 +1,13 @@
 """
-Pipeline orchestrator.
+Pipeline orchestrator — unified data pipeline.
 
-The 4 phases: FETCH -> TRANSFORM -> ANALYZE -> ASSEMBLE+SAVE
+The 6 phases:
+  1. FETCH      — congress, FEC, platforms, floor remarks
+  2. TRANSFORM  — normalize members, votes, finance
+  3. ANALYZE    — classify bills/donors, cross-reference, score
+  4. EXPLORE    — ingest government documents for semantic search
+  5. JUSTICES   — fetch and score Supreme Court justices
+  6. FINALIZE   — persist stats and mark complete
 
 Uses SQLAlchemy sessions for persistence and PipelineRun records to track progress.
 """
@@ -48,8 +54,6 @@ from app.pipeline.fetch.fec import (
 )
 from app.pipeline.fetch.govinfo import fetch_bill_text
 from app.pipeline.fetch.congressional_record import fetch_floor_remarks
-from app.pipeline.fetch.approval_ratings import fetch_all_senator_approvals
-
 # Transform modules
 from app.pipeline.transform.normalize_finance import normalize_finance
 from app.pipeline.transform.normalize_members import normalize_members
@@ -63,6 +67,8 @@ from app.pipeline.transform.normalize_votes import (
 
 # Analyze modules
 from app.pipeline.analyze.bill_analyzer import classify_all_bills, classify_recent_votes, clear_bill_embedding_cache
+from app.pipeline.analyze.bill_learning import clear_reference_cache
+from app.pipeline.analyze.party_platform import clear_platform_cache, initialize_platform_embeddings
 from app.pipeline.vector_store import (
     check_model_version,
     embed_bills,
@@ -80,6 +86,96 @@ from app.pipeline.analyze.score_calculator import calculate_scores
 from app.pipeline.assemble.senator_builder import build_senator
 
 logger = logging.getLogger(__name__)
+
+
+PIPELINE_STEPS = [
+    ("fetch_senators",       "fetch",     "Fetch senator list"),
+    ("fetch_member_details", "fetch",     "Fetch member details"),
+    ("normalize_members",    "transform", "Normalize members"),
+    ("discover_bills",       "fetch",     "Discover significant bills"),
+    ("fetch_bill_details",   "fetch",     "Fetch bill details"),
+    ("fetch_roll_calls",     "fetch",     "Fetch roll call votes"),
+    ("fetch_recent_rcs",     "fetch",     "Fetch recent roll calls"),
+    ("fetch_fec",            "fetch",     "Fetch FEC financial data"),
+    ("fetch_platforms",      "fetch",     "Fetch platform text"),
+    ("fetch_floor_remarks",  "fetch",     "Fetch floor remarks"),
+    ("classify_bills",       "analyze",   "Classify bills"),
+    ("classify_recent",      "analyze",   "Classify recent votes"),
+    ("embed_bills",          "analyze",   "Embed bills in vector DB"),
+    ("classify_donors",      "analyze",   "Classify donors"),
+    ("prepare_senators",     "analyze",   "Prepare senator data"),
+    ("analyze_senators",     "analyze",   "Analyze senators (LLM)"),
+    ("finalize",             "finalize",  "Finalize & save"),
+]
+
+
+class ProgressTracker:
+    """Track sub-step progress within a pipeline run and persist to the DB."""
+
+    def __init__(self, pipeline_run: PipelineRun, db: Session, start_time: float):
+        self._run = pipeline_run
+        self._db = db
+        self._start_time = start_time
+        self._steps: dict[str, dict] = {}
+        for key, phase, label in PIPELINE_STEPS:
+            self._steps[key] = {
+                "key": key,
+                "phase": phase,
+                "label": label,
+                "status": "pending",
+            }
+        self._flush()
+
+    def begin(self, key: str, *, total: int | None = None) -> None:
+        step = self._steps.get(key)
+        if not step:
+            return
+        step["status"] = "active"
+        step["startedAt"] = datetime.utcnow().isoformat()
+        if total is not None:
+            step["total"] = total
+            step["done"] = 0
+        self._flush()
+
+    def update(self, key: str, *, done: int | None = None, detail: str | None = None) -> None:
+        step = self._steps.get(key)
+        if not step:
+            return
+        if done is not None:
+            step["done"] = done
+        if detail is not None:
+            step["detail"] = detail
+        self._flush()
+
+    def complete(self, key: str, *, detail: str | None = None) -> None:
+        step = self._steps.get(key)
+        if not step:
+            return
+        step["status"] = "done"
+        step["completedAt"] = datetime.utcnow().isoformat()
+        if detail is not None:
+            step["detail"] = detail
+        if "total" in step and "done" not in step:
+            step["done"] = step["total"]
+        self._flush()
+
+    def skip(self, key: str, *, detail: str | None = None) -> None:
+        step = self._steps.get(key)
+        if not step:
+            return
+        step["status"] = "skipped"
+        if detail:
+            step["detail"] = detail
+        self._flush()
+
+    def _flush(self) -> None:
+        ordered = [self._steps[k] for k, _, _ in PIPELINE_STEPS]
+        self._run.progress_detail = json.dumps(ordered)
+        self._run.elapsed_seconds = round(time.time() - self._start_time, 1)
+        try:
+            self._db.commit()
+        except Exception:
+            self._db.rollback()
 
 
 def upsert_senator(db: Session, data: dict) -> None:
@@ -112,9 +208,6 @@ def upsert_senator(db: Session, data: dict) -> None:
         "small_donor_percentage": funding.get("smallDonorPercentage", 0),
         "voting_summary": data.get("votingRecord", {}).get("votingSummary", ""),
         "platform_summary": data.get("platformSummary", ""),
-        "approval_rating": data.get("approvalRating"),
-        "disapproval_rating": data.get("disapprovalRating"),
-        "approval_source": data.get("approvalSource"),
         "updated_at": datetime.utcnow(),
     }
 
@@ -171,6 +264,8 @@ def upsert_senator(db: Session, data: dict) -> None:
         (v, "recent") for v in voting_record.get("recentVotes", [])
     ]
     for vote_data, category in all_vote_entries:
+        impacted = vote_data.get("impactedGroups", [])
+        affected = vote_data.get("affectedIndustries", [])
         db.add(
             KeyVote(
                 senator_id=senator_id,
@@ -178,6 +273,11 @@ def upsert_senator(db: Session, data: dict) -> None:
                 bill_id=vote_data.get("billId", ""),
                 date=vote_data.get("date", ""),
                 vote=vote_data.get("vote", "Not Voting"),
+                policy_area=vote_data.get("policyArea", "PROCEDURAL"),
+                stance=vote_data.get("stance", "neutral"),
+                stance_vote=vote_data.get("stanceVote"),
+                impacted_groups=json.dumps(impacted if isinstance(impacted, list) else []),
+                affected_industries=json.dumps(affected if isinstance(affected, list) else []),
                 pro_business_vote=vote_data.get("proBusinessVote"),
                 classification=vote_data.get("classification", "mixed"),
                 description=vote_data.get("description", ""),
@@ -228,8 +328,14 @@ def upsert_senator(db: Session, data: dict) -> None:
                     promise_data.get("relatedVotes", [])
                 ),
                 analysis=promise_data.get("analysis", ""),
+                party_alignment=promise_data.get("partyAlignment"),
             )
         )
+
+    # Save partisan depth profile as JSON on the senator row
+    partisan_depth_data = data.get("partisanDepth")
+    if partisan_depth_data and existing:
+        existing.partisan_depth = json.dumps(partisan_depth_data)
 
     db.flush()
 
@@ -281,9 +387,13 @@ async def run_full_pipeline(
     reset_stats()
     reset_client()
 
-    # Clear embedding caches from prior runs to bound memory usage
+    # Clear in-memory caches from prior runs to bound memory usage.
+    # Note: the ChromaDB reference corpus and learning store persist across
+    # runs intentionally — they're the adaptive learning mechanism.
     clear_alignment_cache()
     clear_bill_embedding_cache()
+    clear_reference_cache()
+    clear_platform_cache()
     from app.pipeline.transform.industry_classifier import clear_industry_embedding_cache
     clear_industry_embedding_cache()
 
@@ -295,11 +405,18 @@ async def run_full_pipeline(
     else:
         _write_model_version()
 
+    # Build party platform centroids from seeds + accumulated bill data.
+    # This implements Bayesian self-training: seed descriptions act as a
+    # prior, and real bill data from previous runs updates the posterior.
+    initialize_platform_embeddings(db)
+
     pipeline_run = _acquire_pipeline_lock(db)
     if pipeline_run is None:
         logger.warning("Pipeline already running in another process — skipping")
         db.close()
         return {"status": "skipped", "reason": "already_running"}
+
+    progress = ProgressTracker(pipeline_run, db, start_time)
 
     try:
         logger.info("=== CIVITAS DATA PIPELINE ===")
@@ -327,22 +444,27 @@ async def run_full_pipeline(
         async with httpx.AsyncClient() as client:
             # 1a. Fetch all current senators from Congress.gov
             logger.info("Fetching senator list from Congress.gov...")
+            progress.begin("fetch_senators")
             raw_members = await fetch_senators(client, db)
             if not raw_members:
                 raise RuntimeError(
                     "Failed to fetch senators. Check your DATA_GOV_API_KEY."
                 )
             logger.info("Found %d senators", len(raw_members))
+            progress.complete("fetch_senators", detail=f"{len(raw_members)} found")
 
             # 1b. Fetch detailed member info
             logger.info("Fetching member details...")
+            progress.begin("fetch_member_details", total=len(raw_members))
             member_details: dict[str, dict] = {}
-            for m in raw_members:
+            for mi, m in enumerate(raw_members):
                 bioguide_id = m.get("bioguideId")
                 if bioguide_id:
                     detail = await fetch_member_detail(client, db, bioguide_id)
                     if detail:
                         member_details[bioguide_id] = detail
+                progress.update("fetch_member_details", done=mi + 1)
+            progress.complete("fetch_member_details", detail=f"{len(member_details)} detailed")
 
             # ========================================
             # PHASE 2: TRANSFORM (members)
@@ -351,8 +473,10 @@ async def run_full_pipeline(
             pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
             db.commit()
             logger.info("--- Phase 2: TRANSFORM (members) ---")
+            progress.begin("normalize_members")
             senators = normalize_members(raw_members, member_details)
             logger.info("Normalized %d senators", len(senators))
+            progress.complete("normalize_members", detail=f"{len(senators)} senators")
 
             # Filter to single senator if specified
             if senator_filter:
@@ -374,12 +498,15 @@ async def run_full_pipeline(
 
             # 1c. Dynamically discover significant bills
             logger.info("Discovering significant bills...")
+            progress.begin("discover_bills")
             discovered_bills = await fetch_significant_bills(client, db, max_bills=100)
             logger.info("Found %d significant bills", len(discovered_bills))
+            progress.complete("discover_bills", detail=f"{len(discovered_bills)} discovered")
 
             # Fetch detailed data for each discovered bill
+            progress.begin("fetch_bill_details", total=len(discovered_bills))
             bills_data: list[dict] = []
-            for bill_ref in discovered_bills:
+            for bill_idx, bill_ref in enumerate(discovered_bills):
                 bill = await fetch_bill(
                     client, db, bill_ref["congress"], bill_ref["type"], bill_ref["number"]
                 )
@@ -396,6 +523,11 @@ async def run_full_pipeline(
                 )
 
                 if bill:
+                    sponsors = bill.get("sponsors", [])
+                    sponsor_party = None
+                    if sponsors:
+                        sponsor_party = sponsors[0].get("party")
+
                     bills_data.append(
                         {
                             "billId": f"{bill_ref['type'].upper()}.{bill_ref['number']}",
@@ -408,18 +540,22 @@ async def run_full_pipeline(
                             ),
                             "fullText": full_text or "",
                             "actions": actions or [],
+                            "sponsorParty": sponsor_party,
                         }
                     )
+                progress.update("fetch_bill_details", done=bill_idx + 1)
             logger.info(
                 "Fetched details for %d/%d discovered bills",
                 len(bills_data),
                 len(discovered_bills),
             )
+            progress.complete("fetch_bill_details", detail=f"{len(bills_data)} fetched")
 
             # 1d. Fetch roll call votes for each bill
             logger.info("Fetching roll call votes...")
+            progress.begin("fetch_roll_calls", total=len(bills_data))
             roll_call_data_map: dict[str, dict] = {}
-            for bill in bills_data:
+            for rc_idx, bill in enumerate(bills_data):
                 roll_call_ref = find_senate_roll_call(bill.get("actions"))
                 if roll_call_ref:
                     roll_call_data = await fetch_roll_call_vote(
@@ -431,17 +567,20 @@ async def run_full_pipeline(
                     )
                     if roll_call_data:
                         roll_call_data_map[bill["billId"]] = roll_call_data
+                progress.update("fetch_roll_calls", done=rc_idx + 1)
             logger.info(
                 "Roll call data fetched for %d/%d bills",
                 len(roll_call_data_map),
                 len(bills_data),
             )
+            progress.complete("fetch_roll_calls", detail=f"{len(roll_call_data_map)} matched")
 
             # 1d.2 Fetch recent roll calls from Senate.gov across multiple sessions.
             # We fetch from the current congress AND the previous congress (both sessions)
             # to get a richer history — the 119th congress has many nomination votes
             # (classified "mixed"); the 118th had more substantive legislation.
             logger.info("Fetching recent Senate roll calls (multi-session)...")
+            progress.begin("fetch_recent_rcs", total=4)
             all_recent_roll_calls: list[dict] = []
             seen_roll_ids: set[str] = set()
 
@@ -452,7 +591,7 @@ async def run_full_pipeline(
                 (settings.CURRENT_CONGRESS - 1, 1),  # 118th sess 1 (2023)
             ]
 
-            for congress_num, session_num in fetch_sessions:
+            for sess_idx, (congress_num, session_num) in enumerate(fetch_sessions):
                 session_rcs = await fetch_recent_roll_calls(
                     client, db,
                     congress=congress_num,
@@ -473,6 +612,7 @@ async def run_full_pipeline(
                     "Congress %d session %d: %d roll calls (%d new)",
                     congress_num, session_num, len(session_rcs), added,
                 )
+                progress.update("fetch_recent_rcs", done=sess_idx + 1)
 
             recent_roll_calls = all_recent_roll_calls
 
@@ -487,11 +627,13 @@ async def run_full_pipeline(
                 )
                 recent_rc_map[rc_id] = rc
             logger.info("Total unique recent roll calls: %d", len(recent_roll_calls))
+            progress.complete("fetch_recent_rcs", detail=f"{len(recent_roll_calls)} unique")
 
             # 1e. Fetch FEC data for each senator
             logger.info("Fetching FEC financial data...")
+            progress.begin("fetch_fec", total=len(senators))
             fec_data: dict[str, dict] = {}
-            for senator in senators:
+            for fec_idx, senator in enumerate(senators):
                 candidate = await find_candidate(
                     client, db, senator["name"], senator["state"]
                 )
@@ -537,16 +679,19 @@ async def run_full_pipeline(
                     "pacReceipts": pac_receipts_data,
                     "aggregated": aggregated,
                 }
+                progress.update("fetch_fec", done=fec_idx + 1)
             logger.info(
                 "FEC data fetched for %d/%d senators",
                 len(fec_data),
                 len(senators),
             )
+            progress.complete("fetch_fec", detail=f"{len(fec_data)}/{len(senators)} matched")
 
             # 1f. Fetch platform text for each senator from their official website
             logger.info("Fetching senator platform text from official websites...")
+            progress.begin("fetch_platforms", total=len(senators))
             platform_texts: dict[str, str] = {}
-            for senator in senators:
+            for plat_idx, senator in enumerate(senators):
                 text = await fetch_senator_platform_text(
                     client,
                     db,
@@ -555,31 +700,18 @@ async def run_full_pipeline(
                     senator.get("officialWebsiteUrl", ""),
                 )
                 platform_texts[senator["id"]] = text
+                progress.update("fetch_platforms", done=plat_idx + 1)
             fetched_platforms = sum(1 for t in platform_texts.values() if t)
             logger.info(
                 "Platform text fetched for %d/%d senators",
                 fetched_platforms,
                 len(senators),
             )
+            progress.complete("fetch_platforms", detail=f"{fetched_platforms}/{len(senators)} found")
 
-            # 1g. Fetch approval ratings
-            logger.info("Fetching senator approval ratings...")
-            approval_data: dict[str, dict] = {}
-            try:
-                approval_data = await fetch_all_senator_approvals(
-                    client, db, senators,
-                )
-                logger.info(
-                    "Approval ratings: %d/%d senators",
-                    len(approval_data), len(senators),
-                )
-            except Exception as e:
-                logger.warning(
-                    "Approval rating fetch failed: %s — continuing without approval data", e,
-                )
-
-            # 1h. Fetch Congressional Record floor remarks
+            # 1g. Fetch Congressional Record floor remarks
             logger.info("Fetching Congressional Record floor proceedings...")
+            progress.begin("fetch_floor_remarks")
             try:
                 all_floor_remarks = await fetch_floor_remarks(
                     client, db, days_back=60, max_granules_per_day=8,
@@ -589,15 +721,25 @@ async def run_full_pipeline(
                     len(all_floor_remarks),
                     sum(len(v) for v in all_floor_remarks.values()),
                 )
+                total_remarks = sum(len(v) for v in all_floor_remarks.values())
+                progress.complete(
+                    "fetch_floor_remarks",
+                    detail=f"{len(all_floor_remarks)} speakers, {total_remarks} remarks",
+                )
             except Exception as e:
                 logger.warning(
                     "Congressional Record fetch failed: %s — continuing without floor data",
                     e,
                 )
                 all_floor_remarks = {}
+                progress.complete("fetch_floor_remarks", detail="failed — skipped")
 
         if fetch_only:
             logger.info("=== FETCH COMPLETE (fetch-only mode) ===")
+            for sk in ("classify_bills", "classify_recent", "embed_bills",
+                        "classify_donors", "prepare_senators", "analyze_senators",
+                        "explore_documents", "justice_scorecards", "finalize"):
+                progress.skip(sk, detail="fetch-only mode")
             elapsed = time.time() - start_time
             pipeline_run.status = "completed"
             pipeline_run.completed_at = datetime.utcnow()
@@ -621,31 +763,56 @@ async def run_full_pipeline(
 
         # 3a. Classify bills using embeddings (zero LLM calls)
         logger.info("Classifying key bills (embedding-based)...")
+        progress.begin("classify_bills", total=len(bills_data))
         try:
             classified_bills = await classify_all_bills(bills_data, db_session=db)
             logger.info("Classified %d key bills", len(classified_bills))
+            progress.complete("classify_bills", detail=f"{len(classified_bills)} classified")
         except Exception as e:
             logger.error("Bill classification failed: %s — continuing with empty bill list", e)
             classified_bills = []
+            progress.complete("classify_bills", detail="failed")
 
-        # Override LLM partyLeaning with computed party split from actual roll call data.
-        # This is more reliable than LLM guesses — if 80%+ of one party votes the same
-        # way, it's a party-line vote regardless of what the LLM thought.
+        # Refine content-based party alignment with vote data as a secondary signal.
+        # Content analysis (what the bill does) is the primary signal.
+        # Vote tallies validate or adjust — they don't blindly override, because
+        # senators trade votes, face whip pressure, and make tactical compromises.
+        from app.pipeline.analyze.party_platform import (
+            refine_with_vote_data,
+            record_sponsor_alignment,
+        )
         for bill in classified_bills:
             roll_call_data = roll_call_data_map.get(bill["billId"])
             if roll_call_data:
-                computed_split = compute_party_split(roll_call_data)
-                if computed_split:
-                    bill["partyLeaning"] = computed_split
+                vote_split = compute_party_split(roll_call_data)
+                bill["partyLeaning"] = refine_with_vote_data(
+                    bill.get("partyLeaning", "bipartisan"), vote_split,
+                )
+
+        # Use bill sponsor party as ground truth for the learning store.
+        # Bills sponsored by R senators are examples of R-aligned legislation.
+        for bill_ref in bills_data:
+            sponsor_party = bill_ref.get("sponsorParty")
+            if sponsor_party in ("R", "D"):
+                bill_id = bill_ref["billId"]
+                bill_text = f"{bill_ref['billName']} {(bill_ref.get('summary') or '')[:200]}"
+                try:
+                    record_sponsor_alignment(db, bill_id, bill_text, sponsor_party)
+                except Exception:
+                    pass
 
         # 3a.2 Classify recent roll call votes (embedding-based, zero LLM)
         classified_recent: list[dict] = []
         if recent_roll_calls:
             logger.info("Classifying %d recent votes (embedding-based)...", len(recent_roll_calls))
+            progress.begin("classify_recent", total=len(recent_roll_calls))
             classified_recent = await classify_recent_votes(
                 recent_roll_calls, db_session=db
             )
             logger.info("Classified %d recent votes", len(classified_recent))
+            progress.complete("classify_recent", detail=f"{len(classified_recent)} classified")
+        else:
+            progress.skip("classify_recent", detail="no roll calls")
 
         pipeline_run.bills_classified = len(classified_bills) + len(classified_recent)
         db.commit()
@@ -662,14 +829,18 @@ async def run_full_pipeline(
         # 3a.3 Embed classified bills in vector database for semantic search
         logger.info("Embedding bills in vector database...")
         all_bills_for_embedding = classified_bills + classified_recent
+        progress.begin("embed_bills", total=len(all_bills_for_embedding))
         try:
             embed_bills(all_bills_for_embedding)
             logger.info("Embedded %d bills in vector database", len(all_bills_for_embedding))
+            progress.complete("embed_bills", detail=f"{len(all_bills_for_embedding)} embedded")
         except Exception as e:
             logger.error("Bill embedding failed: %s — vector search will be unavailable this run", e)
+            progress.complete("embed_bills", detail="failed")
 
         # 3a.3 Hybrid donor classification (FEC metadata → rules → embeddings → LLM)
         logger.info("Collecting unique donors for hybrid classification...")
+        progress.begin("classify_donors")
         all_donor_entries: list[dict] = []
         skip_employers = {
             "NONE", "N/A", "SELF-EMPLOYED", "SELF EMPLOYED", "RETIRED",
@@ -711,6 +882,8 @@ async def run_full_pipeline(
 
         ai_classifications: dict[str, dict] = {}
         if all_donor_entries:
+            progress.update("classify_donors", detail=f"{len(all_donor_entries)} donors queued")
+
             def _flush_donor_progress():
                 s = get_llm_stats()
                 pipeline_run.llm_calls = s["total_calls"]
@@ -722,6 +895,9 @@ async def run_full_pipeline(
             ai_classifications = await classify_donors_hybrid(
                 all_donor_entries, db_session=db, on_progress=_flush_donor_progress
             )
+            progress.complete("classify_donors", detail=f"{len(ai_classifications)} classified")
+        else:
+            progress.skip("classify_donors", detail="no donors")
 
         _flush = get_llm_stats()
         pipeline_run.llm_calls = _flush["total_calls"]
@@ -732,12 +908,13 @@ async def run_full_pipeline(
 
         # 3b. Prepare senator data for batch LLM analysis
         logger.info("Preparing senator data for batch analysis...")
+        progress.begin("prepare_senators", total=len(senators))
         results: list[dict] = []
         success_count = 0
         fail_count = 0
 
         senator_prepared: list[dict] = []
-        for senator in senators:
+        for prep_idx, senator in enumerate(senators):
             try:
                 fec = fec_data.get(senator["id"])
                 if fec:
@@ -817,12 +994,16 @@ async def run_full_pipeline(
                         "votingRecord": voting_record,
                     }
                 )
+                progress.update("prepare_senators", done=prep_idx + 1)
             except Exception as e:
                 logger.error(
                     "  Prep failed for %s: %s", senator["name"], str(e)
                 )
                 fail_count += 1
                 results.append(senator)
+                progress.update("prepare_senators", done=prep_idx + 1)
+
+        progress.complete("prepare_senators", detail=f"{len(senator_prepared)} ready, {fail_count} failed")
 
         _flush = get_llm_stats()
         pipeline_run.llm_calls = _flush["total_calls"]
@@ -833,6 +1014,7 @@ async def run_full_pipeline(
 
         logger.info("Processing %d senators (1 LLM call each)...", len(senator_prepared))
 
+        progress.begin("analyze_senators", total=len(senator_prepared))
         for senator_idx, prepared in enumerate(senator_prepared):
             senator = prepared["senator"]
             funding = prepared["funding"]
@@ -844,6 +1026,7 @@ async def run_full_pipeline(
                 len(senator_prepared),
                 senator["name"],
             )
+            progress.update("analyze_senators", done=senator_idx, detail=senator["name"])
 
             try:
                 all_votes = (voting_record.get("keyVotes") or []) + (
@@ -954,11 +1137,20 @@ async def run_full_pipeline(
                 result["campaignPromises"] = platform_data.get("campaignPromises", [])
                 result["platformSummary"] = platform_data.get("platformSummary", "")
 
-                approval = approval_data.get(senator["id"])
-                if approval:
-                    result["approvalRating"] = approval.get("approve")
-                    result["disapprovalRating"] = approval.get("disapprove")
-                    result["approvalSource"] = approval.get("source")
+                from app.pipeline.analyze.party_platform import analyze_partisan_depth
+                partisan_profile = analyze_partisan_depth(
+                    platform_data.get("campaignPromises", []),
+                    senator.get("party", ""),
+                )
+                result["partisanDepth"] = partisan_profile
+                if partisan_profile.get("totalPositions", 0) > 0:
+                    logger.info(
+                        "    partisan depth: %s (%s, %d positions, %d cross-party)",
+                        partisan_profile["depth"],
+                        partisan_profile["overallParty"],
+                        partisan_profile["totalPositions"],
+                        partisan_profile["crossPartyCount"],
+                    )
 
                 results.append(result)
                 success_count += 1
@@ -979,6 +1171,7 @@ async def run_full_pipeline(
                     for k, w in SCORE_WEIGHTS.items()
                 ))
                 logger.info("    score %d/100", weighted_score)
+                progress.update("analyze_senators", done=senator_idx + 1)
             except Exception:
                 logger.exception("  Failed for %s", senator["name"])
                 fail_count += 1
@@ -987,19 +1180,67 @@ async def run_full_pipeline(
                 pipeline_run.senators_processed = success_count
                 pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
                 db.commit()
+                progress.update("analyze_senators", done=senator_idx + 1)
+
+        progress.complete(
+            "analyze_senators",
+            detail=f"{success_count} OK, {fail_count} failed",
+        )
 
         # ========================================
-        # PHASE 4: FINALIZE
+        # PHASE 4: EXPLORE DOCUMENTS
+        # ========================================
+        pipeline_run.current_phase = "explore"
+        pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
+        db.commit()
+        logger.info("--- Phase 4: EXPLORE DOCUMENTS ---")
+        progress.begin("explore_documents")
+        explore_result: dict = {}
+        try:
+            from app.pipeline.explore_pipeline import run_explore_pipeline
+            explore_result = await run_explore_pipeline(days_back=60)
+            total_docs = sum(v for v in explore_result.values() if isinstance(v, int))
+            logger.info("Explore pipeline ingested %d documents", total_docs)
+            progress.complete("explore_documents", detail=f"{total_docs} ingested")
+        except Exception as e:
+            logger.exception("Explore pipeline failed: %s — continuing", e)
+            progress.complete("explore_documents", detail="failed")
+
+        # ========================================
+        # PHASE 5: SCOTUS JUSTICES
+        # ========================================
+        pipeline_run.current_phase = "justices"
+        pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
+        db.commit()
+        logger.info("--- Phase 5: SCOTUS JUSTICES ---")
+        progress.begin("justice_scorecards")
+        justice_result: dict = {}
+        try:
+            from app.pipeline.justice_pipeline import run_justice_pipeline
+            justice_db = SessionLocal()
+            try:
+                justice_result = await run_justice_pipeline(justice_db)
+            finally:
+                justice_db.close()
+            justices_count = justice_result.get("justices_scored", 0)
+            logger.info("Justice pipeline scored %d justices", justices_count)
+            progress.complete("justice_scorecards", detail=f"{justices_count} scored")
+        except Exception as e:
+            logger.exception("Justice pipeline failed: %s — continuing", e)
+            progress.complete("justice_scorecards", detail="failed")
+
+        # ========================================
+        # PHASE 6: FINALIZE
         # ========================================
         pipeline_run.current_phase = "finalize"
         pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
         db.commit()
-        logger.info("--- Phase 4: FINALIZE ---")
+        logger.info("--- Phase 6: FINALIZE ---")
+        progress.begin("finalize")
 
         llm_stats = get_llm_stats()
         elapsed = time.time() - start_time
 
-        # Update PipelineRun record
         pipeline_run.status = "completed"
         pipeline_run.completed_at = datetime.utcnow()
         pipeline_run.senators_processed = success_count
@@ -1010,6 +1251,7 @@ async def run_full_pipeline(
         pipeline_run.cache_misses = llm_stats["cache_misses"]
         pipeline_run.elapsed_seconds = round(elapsed, 1)
         db.commit()
+        progress.complete("finalize", detail="done")
 
         logger.info("=== PIPELINE COMPLETE ===")
         logger.info(
@@ -1028,6 +1270,8 @@ async def run_full_pipeline(
             "senators_processed": success_count,
             "senators_failed": fail_count,
             "bills_classified": len(classified_bills),
+            "explore": explore_result,
+            "justices": justice_result,
             "llm_stats": llm_stats,
             "elapsed_seconds": round(elapsed, 1),
         }

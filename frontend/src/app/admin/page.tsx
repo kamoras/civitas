@@ -8,11 +8,11 @@ import {
   fetchAdminPipelineHistory,
   fetchAdminSystemStats,
   triggerAdminPipeline,
-  triggerAdminExplorePipeline,
   type AdminDashboard,
   type AdminPipelineStatus,
   type HostStats,
   type PipelineRunInfo,
+  type PipelineStepInfo,
 } from "@/lib/api";
 
 const PHASE_LABELS: Record<string, string> = {
@@ -282,6 +282,27 @@ function useAnalyzeEta(
   return { eta, rate };
 }
 
+function StepProgressMini({ step }: { step: PipelineStepInfo }) {
+  if (step.total == null || step.total === 0 || step.status === "pending") return null;
+  const done = step.done ?? 0;
+  const pct = Math.round((done / step.total) * 100);
+  return (
+    <div className="mt-1">
+      <div className="w-full h-1 bg-matrix-green/10 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${
+            step.status === "active" ? "bg-neon-cyan/70" : "bg-matrix-green/50"
+          }`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span className="text-[9px] font-terminal text-matrix-green/40 tabular-nums">
+        {done}/{step.total}
+      </span>
+    </div>
+  );
+}
+
 function PipelineProgressBar({ status }: { status: AdminPipelineStatus }) {
   const run = status.lastRun;
   const phase = run?.currentPhase ?? "fetch";
@@ -289,10 +310,29 @@ function PipelineProgressBar({ status }: { status: AdminPipelineStatus }) {
   const processed = run?.senatorsProcessed ?? 0;
   const elapsed = run?.elapsedSeconds ?? null;
   const isAnalyze = status.isRunning && phase === "analyze" && total > 0;
-  const pct = isAnalyze ? Math.round((processed / total) * 100) : null;
   const { eta, rate } = useAnalyzeEta(isAnalyze, processed, total, elapsed);
 
   if (!status.isRunning || !run) return null;
+
+  const steps = run.progressSteps ?? [];
+  const totalSteps = steps.length;
+  const doneSteps = steps.filter((s) => s.status === "done" || s.status === "skipped").length;
+  const overallPct = totalSteps > 0 ? Math.round((doneSteps / totalSteps) * 100) : 0;
+  const activeStep = steps.find((s) => s.status === "active");
+
+  const phaseGroups: { phase: string; label: string; steps: PipelineStepInfo[] }[] = [];
+  for (const s of steps) {
+    const last = phaseGroups[phaseGroups.length - 1];
+    if (last && last.phase === s.phase) {
+      last.steps.push(s);
+    } else {
+      phaseGroups.push({
+        phase: s.phase,
+        label: PHASE_LABELS[s.phase] ?? s.phase.toUpperCase(),
+        steps: [s],
+      });
+    }
+  }
 
   return (
     <div className="border border-neon-cyan/40 rounded p-4 bg-neon-cyan/5">
@@ -308,38 +348,29 @@ function PipelineProgressBar({ status }: { status: AdminPipelineStatus }) {
 
       <PhaseSteps currentPhase={phase} />
 
+      {/* Overall progress bar */}
       <div className="mt-3">
-        {isAnalyze && (
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-matrix-green/60 text-[10px] font-terminal">
-              PROCESSING SENATORS
-            </span>
-            <span className="text-matrix-green text-xs font-terminal tabular-nums">
-              {processed} / {total} ({pct}%)
-            </span>
-          </div>
-        )}
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-matrix-green/60 text-[10px] font-terminal">
+            {activeStep
+              ? activeStep.label.toUpperCase()
+              : "INITIALIZING"}
+          </span>
+          <span className="text-matrix-green text-xs font-terminal tabular-nums">
+            {doneSteps}/{totalSteps} steps ({overallPct}%)
+          </span>
+        </div>
         <div
           className="w-full h-2 bg-matrix-green/10 border border-matrix-green/20 rounded-sm overflow-hidden"
           role="progressbar"
-          aria-valuenow={pct ?? undefined}
+          aria-valuenow={overallPct}
           aria-valuemin={0}
           aria-valuemax={100}
         >
-          {isAnalyze ? (
-            <div
-              className="h-full bg-neon-cyan transition-all duration-700"
-              style={{ width: `${pct}%` }}
-            />
-          ) : (
-            <div className="h-full w-full relative overflow-hidden">
-              <div className="absolute inset-0 bg-neon-cyan/20" />
-              <div
-                className="absolute inset-y-0 w-1/3 bg-neon-cyan/60"
-                style={{ animation: "pipeline-scan 1.6s ease-in-out infinite" }}
-              />
-            </div>
-          )}
+          <div
+            className="h-full bg-neon-cyan transition-all duration-700"
+            style={{ width: `${overallPct}%` }}
+          />
         </div>
         {isAnalyze && eta && (
           <div className="flex items-center justify-between mt-1">
@@ -353,7 +384,83 @@ function PipelineProgressBar({ status }: { status: AdminPipelineStatus }) {
         )}
       </div>
 
-      <div className="flex gap-4 mt-2 text-[10px] text-matrix-green/50 font-terminal">
+      {/* Granular sub-steps grouped by phase */}
+      {steps.length > 0 && (
+        <div className="mt-4 space-y-3">
+          {phaseGroups.map((group) => {
+            const groupDone = group.steps.every(
+              (s) => s.status === "done" || s.status === "skipped",
+            );
+            const groupActive = group.steps.some((s) => s.status === "active");
+            return (
+              <div key={group.phase}>
+                <div
+                  className={`text-[10px] font-pixel tracking-wider mb-1.5 ${
+                    groupActive
+                      ? "text-neon-cyan"
+                      : groupDone
+                        ? "text-matrix-green/70"
+                        : "text-matrix-green/30"
+                  }`}
+                >
+                  {groupDone ? "✓ " : groupActive ? "▶ " : ""}
+                  {group.label}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 pl-3 border-l border-matrix-green/15">
+                  {group.steps.map((step) => (
+                    <div key={step.key} className="flex items-start gap-2 min-h-[20px]">
+                      <span
+                        className={`mt-0.5 flex-shrink-0 w-3 text-center text-[10px] ${
+                          step.status === "done"
+                            ? "text-matrix-green"
+                            : step.status === "active"
+                              ? "text-neon-cyan animate-pulse"
+                              : step.status === "skipped"
+                                ? "text-matrix-green/25"
+                                : "text-matrix-green/20"
+                        }`}
+                      >
+                        {step.status === "done"
+                          ? "✓"
+                          : step.status === "active"
+                            ? "●"
+                            : step.status === "skipped"
+                              ? "—"
+                              : "○"}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`text-[11px] font-terminal truncate ${
+                              step.status === "active"
+                                ? "text-neon-cyan"
+                                : step.status === "done"
+                                  ? "text-matrix-green/80"
+                                  : step.status === "skipped"
+                                    ? "text-matrix-green/30 line-through"
+                                    : "text-matrix-green/35"
+                            }`}
+                          >
+                            {step.label}
+                          </span>
+                          {step.detail && (step.status === "done" || step.status === "active") && (
+                            <span className="text-[9px] font-terminal text-matrix-green/40 truncate">
+                              {step.detail}
+                            </span>
+                          )}
+                        </div>
+                        <StepProgressMini step={step} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="flex gap-4 mt-3 pt-2 border-t border-matrix-green/10 text-[10px] text-matrix-green/50 font-terminal">
         <span>LLM: {run.llmCalls}</span>
         <span>Cache: {run.cacheHits}H / {run.cacheMisses}M</span>
         <span>Bills: {run.billsClassified}</span>
@@ -669,6 +776,61 @@ function RunHistory({ runs }: { runs: PipelineRunInfo[] }) {
   );
 }
 
+function LastRunSteps({ steps }: { steps?: PipelineStepInfo[] | null }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!steps || steps.length === 0) return null;
+
+  return (
+    <div className="mt-4 border-t border-matrix-green/15 pt-3">
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="text-[10px] font-pixel text-matrix-green/50 hover:text-matrix-green/80 transition-colors"
+      >
+        {expanded ? "▼" : "▶"} STEP BREAKDOWN ({steps.length} steps)
+      </button>
+      {expanded && (
+        <div className="mt-2 space-y-0.5">
+          {steps.map((step) => (
+            <div
+              key={step.key}
+              className="flex items-center gap-2 text-[11px] font-terminal py-0.5"
+            >
+              <span
+                className={`w-3 text-center flex-shrink-0 ${
+                  step.status === "done"
+                    ? "text-matrix-green"
+                    : step.status === "skipped"
+                      ? "text-matrix-green/25"
+                      : "text-matrix-green/40"
+                }`}
+              >
+                {step.status === "done" ? "✓" : step.status === "skipped" ? "—" : "○"}
+              </span>
+              <span
+                className={`w-40 truncate ${
+                  step.status === "skipped"
+                    ? "text-matrix-green/30 line-through"
+                    : "text-matrix-green/70"
+                }`}
+              >
+                {step.label}
+              </span>
+              {step.detail && (
+                <span className="text-matrix-green/40 truncate">{step.detail}</span>
+              )}
+              {step.total != null && step.total > 0 && (
+                <span className="text-matrix-green/30 tabular-nums ml-auto">
+                  {step.done ?? step.total}/{step.total}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // --- Main Admin Dashboard ---
 function AdminDashboardView({
   token,
@@ -760,23 +922,18 @@ function AdminDashboardView({
     };
   }, [loadDashboard, pipelineStatus?.isRunning]);
 
-  const handleTrigger = async (type: "full" | "fetch" | "explore") => {
+  const handleTrigger = async (type: "full" | "fetch") => {
     setTriggerMsg("");
     setTriggerError("");
     setCompletionBanner(null);
     setTriggering(true);
     try {
-      if (type === "explore") {
-        const r = await triggerAdminExplorePipeline(token);
-        setTriggerMsg(r.message);
-      } else {
-        const r = await triggerAdminPipeline(token, {
-          fetchOnly: type === "fetch",
-        });
-        setTriggerMsg(r.message);
-        setPipelineStatus((prev) => (prev ? { ...prev, isRunning: true } : prev));
-        wasRunningRef.current = true;
-      }
+      const r = await triggerAdminPipeline(token, {
+        fetchOnly: type === "fetch",
+      });
+      setTriggerMsg(r.message);
+      setPipelineStatus((prev) => (prev ? { ...prev, isRunning: true } : prev));
+      wasRunningRef.current = true;
 
       if (triggerMsgTimeoutRef.current) clearTimeout(triggerMsgTimeoutRef.current);
       triggerMsgTimeoutRef.current = setTimeout(() => setTriggerMsg(""), 8000);
@@ -960,15 +1117,9 @@ function AdminDashboardView({
                 >
                   ▶ FETCH ONLY (NO LLM)
                 </button>
-                <button
-                  onClick={() => handleTrigger("explore")}
-                  disabled={triggering}
-                  className="w-full text-xs font-pixel py-2.5 rounded border transition-all
-                             text-neon-yellow/70 border-neon-yellow/30 hover:bg-neon-yellow/10 hover:border-neon-yellow/50
-                             disabled:text-matrix-green/20 disabled:border-matrix-green/15 disabled:cursor-not-allowed"
-                >
-                  ▶ RE-INDEX EXPLORE DOCS
-                </button>
+                <p className="text-matrix-green/30 text-[10px] font-terminal mt-1">
+                  Full pipeline includes senators, explore docs, and SCOTUS justices.
+                </p>
               </div>
               {triggerMsg && (
                 <div className="mt-3 p-2 border border-matrix-green/30 rounded bg-matrix-green/10
@@ -1380,6 +1531,7 @@ function AdminDashboardView({
                   </span>
                 </div>
               )}
+              <LastRunSteps steps={d.pipeline.lastRun.progressSteps} />
             </div>
           </div>
         )}

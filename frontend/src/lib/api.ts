@@ -1,5 +1,6 @@
 import { LeaderboardEntry, Senator } from "@/types/senator";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
+import type { Justice, JusticeLeaderboardEntry } from "@/types/justice";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -75,6 +76,18 @@ const DEFAULT_CONFIG: AppConfig = {
 
 let _cachedConfig: AppConfig | null = null;
 
+export interface PipelineStepInfo {
+  key: string;
+  phase: string;
+  label: string;
+  status: "pending" | "active" | "done" | "skipped";
+  detail?: string;
+  total?: number;
+  done?: number;
+  startedAt?: string;
+  completedAt?: string;
+}
+
 export interface PipelineRunInfo {
   id: number;
   startedAt: string;
@@ -90,6 +103,7 @@ export interface PipelineRunInfo {
   cacheMisses: number;
   elapsedSeconds: number | null;
   errorMessage: string | null;
+  progressSteps?: PipelineStepInfo[] | null;
 }
 
 export interface PipelineStatus {
@@ -137,6 +151,20 @@ export async function fetchPresident(id: string): Promise<President> {
   if (!res.ok) throw new Error(`President not found: ${res.status}`);
   const raw = await res.json();
   return camelizeKeys(raw) as President;
+}
+
+export async function fetchJusticeLeaderboard(): Promise<JusticeLeaderboardEntry[]> {
+  const res = await fetch(`${API_BASE}/justices/leaderboard`);
+  if (!res.ok) throw new Error(`Failed to load justice leaderboard: ${res.status}`);
+  const raw = await res.json();
+  return camelizeKeys(raw) as JusticeLeaderboardEntry[];
+}
+
+export async function fetchJustice(id: string): Promise<Justice> {
+  const res = await fetch(`${API_BASE}/justices/${id}`);
+  if (!res.ok) throw new Error(`Justice not found: ${res.status}`);
+  const raw = await res.json();
+  return camelizeKeys(raw) as Justice;
 }
 
 export interface ExploreResult {
@@ -204,7 +232,7 @@ export interface ExploreDocumentDetail {
 }
 
 export interface ExploreDocumentSummary {
-  relevance: string;
+  summary: string;
   keyPoints: string[];
   impact: string;
 }
@@ -217,10 +245,8 @@ export async function fetchExploreDocument(id: number): Promise<ExploreDocumentD
 
 export async function fetchExploreDocumentSummary(
   id: number,
-  query: string,
 ): Promise<ExploreDocumentSummary> {
-  const params = new URLSearchParams({ q: query });
-  const res = await fetch(`${API_BASE}/explore/${id}/summary?${params}`, {
+  const res = await fetch(`${API_BASE}/explore/${id}/summary`, {
     method: "POST",
   });
   if (!res.ok) throw new Error(`Summary failed: ${res.status}`);
@@ -428,14 +454,7 @@ export async function fetchAdminSystemStats(token: string): Promise<HostStats> {
   return res.json();
 }
 
-export async function triggerAdminExplorePipeline(token: string): Promise<{ message: string }> {
-  const res = await fetch(`${API_BASE}/admin/explore/trigger`, {
-    method: "POST",
-    headers: adminHeaders(token),
-  });
-  if (!res.ok) throw new Error(`Explore trigger failed: ${res.status}`);
-  return res.json();
-}
+
 
 export async function fetchConfig(): Promise<AppConfig> {
   if (_cachedConfig) return _cachedConfig;

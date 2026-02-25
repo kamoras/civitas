@@ -17,6 +17,56 @@ Design principles
 - Missing data yields a neutral 50, never a perfect 100 or 0.
 - Seniority alone is never penalized; only *behavioral* signals matter.
 
+Academic rationale
+------------------
+Funding Independence: grounded in Bonica (2014, "Mapping the Ideological
+Marketplace," AJPS 58:2) which demonstrates that donor composition
+(individual vs PAC, concentrated vs diffuse) is a strong predictor of
+legislative behavior. PAC dependency ratio follows the operationalization
+in Stratmann (2005, "Some Talk: Money in Politics," Public Choice 124:1-2).
+Top-donor concentration uses the same intuition as HHI but applied to
+individual donors rather than industries.
+
+Promise Persistence: follows Naurin (2011, "Election Promises, Party
+Behaviour and Voter Perceptions," Palgrave) who showed that promise
+fulfillment is measurable and varies meaningfully across legislators.
+The confidence penalty (blending toward 50 when few promises are
+evaluable) implements a Bayesian shrinkage toward the prior, standard
+in small-sample estimation (Efron & Morris 1975, "Data Analysis Using
+Stein's Estimator," JASA 70:350). Floor advocacy uses Martin (2011,
+"Using Parliamentary Questions to Measure Constituency Focus," Political
+Studies 59:2) as precedent for floor speech as a proxy for legislative
+effort.
+
+Independent Voting: party-line break rate is the simplest measure of
+independence, but raw break rates are misleading without context.
+Following Carson et al. (2010, "The Electoral Costs of Party Loyalty,"
+AJPS 54:3), we adjust for state partisan lean using Cook PVI as a proxy
+for constituent preferences — a senator in a safe R+20 state voting with
+their party may be representing constituents, not following orders.
+Donor independence via lobbying matches follows Stratmann (2005) with
+the methodological caution from Ansolabehere, de Figueiredo & Snyder
+(2003, "Why Is There So Little Money in U.S. Politics?" JEP 17:1) that
+donation-vote correlations are not causal evidence of influence.
+
+Funding Diversity: the inverse Herfindahl-Hirschman Index (HHI) is a
+standard concentration metric from industrial organization (Rhoades
+1993, "The Herfindahl-Hirschman Index," Fed Reserve Bulletin 79). We
+apply it to industry-level donation shares: concentrated funding from
+a single industry suggests potential regulatory capture, while broad
+funding suggests diverse constituent support.
+
+References
+----------
+- Bonica, A. (2014). AJPS, 58(2), 367-386.
+- Stratmann, T. (2005). Public Choice, 124(1-2), 135-156.
+- Naurin, E. (2011). Election Promises. Palgrave Macmillan.
+- Efron, B. & Morris, C. (1975). JASA, 70(350), 311-319.
+- Martin, S. (2011). Political Studies, 59(2), 472-488.
+- Carson, J. et al. (2010). AJPS, 54(3), 598-616.
+- Ansolabehere, S. et al. (2003). JEP, 17(1), 105-130.
+- Rhoades, S. (1993). Fed Reserve Bulletin, 79, 188-189.
+
 Changes from v1:
 - Funding Independence: replaced double-counted PAC ratio + small donor %
   with PAC ratio (50%) + top-donor concentration (50%).
@@ -39,8 +89,10 @@ logger = logging.getLogger(__name__)
 
 NON_INDUSTRY_CODES = {"OTHER", "SMALL_DONORS", "LARGE_INDIVIDUAL", "POLITICAL"}
 
-# Cook PVI approximation (2024). Positive = R lean, negative = D lean.
-# Used to adjust party independence expectations by state.
+# Cook Partisan Voting Index approximation (2024 cycle, based on
+# 2020 presidential results).  Source: Cook Political Report.
+# Positive = R lean, negative = D lean.  Updated per election cycle;
+# see https://www.cookpolitical.com/cook-pvi for current values.
 STATE_PVI: dict[str, int] = {
     "AL": 15, "AK": 9, "AZ": 2, "AR": 16, "CA": -15,
     "CO": -4, "CT": -7, "DE": -7, "FL": 5, "GA": 1,
@@ -101,11 +153,14 @@ def _calc_funding_independence(funding: dict) -> int:
     Funding Independence Score (0-100, higher = better).
 
     Two independent dimensions:
-      1. PAC dependency (50%): what fraction of funding comes from PACs
-         (organized interests) vs individual donors.
-      2. Top-donor concentration (50%): what fraction of total funding
-         comes from the top 10 donors.  High concentration means a few
-         big players dominate the senator's fundraising.
+      1. PAC dependency (50%): fraction of funding from PACs vs individuals.
+         Operationalizes Stratmann's (2005) finding that PAC contributions
+         are more strongly correlated with roll-call alignment than
+         individual contributions.
+      2. Top-donor concentration (50%): fraction from top 10 donors.
+         Analogous to HHI but at the donor level — high concentration
+         means a few large contributors dominate fundraising, creating
+         dependency (Bonica 2014).
 
     These are genuinely independent — a senator can have many small PACs
     (low concentration, high PAC ratio) or one big individual donor
@@ -186,13 +241,28 @@ def _calc_promise_persistence(
             base_score = raw_pct * confidence + 50 * (1 - confidence)
 
     if base_score is None:
-        if flip_flop_result and isinstance(flip_flop_result, dict):
-            ff_score = flip_flop_result.get("flipFlopScore")
-            if ff_score is not None and isinstance(ff_score, (int, float)):
-                base_score = 100 - ff_score
-
-    if base_score is None:
-        base_score = 50  # neutral default
+        # No evaluable campaign promises — derive a proxy from voting
+        # behavior.  Senators who vote more independently and participate
+        # actively tend to be more accountable to their stated positions.
+        all_votes = (voting_record.get("keyVotes") or []) + (
+            voting_record.get("recentVotes") or []
+        )
+        if all_votes:
+            cross_party = sum(
+                1 for v in all_votes
+                if (v.get("votedWithParty") if isinstance(v, dict) else None) is False
+            )
+            party_tracked = sum(
+                1 for v in all_votes
+                if (v.get("votedWithParty") if isinstance(v, dict) else None) is not None
+            )
+            if party_tracked >= 3:
+                independence_rate = cross_party / party_tracked
+                base_score = 35 + independence_rate * 60
+            else:
+                base_score = 50
+        else:
+            base_score = 50
 
     # ── Vote participation component ──
     all_votes = (voting_record.get("keyVotes") or []) + (
@@ -359,19 +429,30 @@ def _calc_funding_diversity(funding: dict) -> int:
     """
     Funding Diversity Score (0-100, higher = better).
 
-    Renamed from "Transparency" with corrected methodology.
+    Measures how broad and distributed a senator's funding base is.
+    Higher = funding comes from many independent sources (harder to
+    capture); lower = funding concentrated in few large donors/industries.
 
     Two signals:
-      1. Donor traceability (50%): what fraction of funding comes from
-         itemized (>$200), disclosed sources vs anonymous small-dollar
-         contributions.  Sub-$200 donations are NOT individually
-         disclosed to the FEC — they're the *least* traceable source.
-         Classified industry money (non-OTHER) adds extra traceability.
 
-      2. Industry diversity (50%): inverse HHI among classified
-         industry donations.  Funding concentrated in a single
-         industry suggests capture; broad funding suggests diverse
-         constituent support.
+      1. Source breadth (50%): rewards broad donor bases. Small donor
+         funding (<$200) represents the widest possible base — hundreds
+         of thousands of individual contributors, none with outsized
+         influence. Large itemized donors with classified industries
+         add breadth only when spread across sectors. Funding dominated
+         by a few large unclassified sources is the least diverse.
+
+      2. Industry concentration (50%): inverse HHI among ALL funding
+         source categories (including SMALL_DONORS as its own category).
+         Funding concentrated in a single industry suggests potential
+         capture; broad funding suggests diverse constituent support.
+
+    Academic note: the FEC does not itemize sub-$200 donors, so we
+    cannot measure their individual diversity — but aggregate small-
+    dollar fundraising is a well-established proxy for broad grassroots
+    support (Bonica 2014; Malbin 2009). Treating small donors as
+    "opaque" conflates traceability with diversity; this score measures
+    the latter.
     """
     industry_breakdown = funding.get("industryBreakdown", [])
     small_donor_pct = funding.get("smallDonorPercentage", 0)
@@ -380,45 +461,59 @@ def _calc_funding_diversity(funding: dict) -> int:
     if not industry_breakdown and not total_raised:
         return 50
 
-    # Signal 1: donor traceability
-    # Itemized donations (>$200) are disclosed with names and employers.
-    # Small donors (<$200) are reported only as aggregate totals.
-    itemized_pct = (100 - small_donor_pct) / 100.0
+    # Signal 1: source breadth
+    # Small donors = broadest possible base (many independent contributors).
+    # Classified industry donors = moderate breadth (we know the sector).
+    # Unclassified large donors = narrowest (few large, opaque sources).
+    small_frac = small_donor_pct / 100.0
 
-    # Bonus for classified industry money (we know what sector it's from)
-    total_industry_pct = sum(
+    classified_industry_pct = sum(
         ind.get("percentage", 0) for ind in industry_breakdown
+        if ind.get("industry") not in NON_INDUSTRY_CODES
     )
-    other_pct = sum(
-        ind.get("percentage", 0) for ind in industry_breakdown
-        if ind.get("industry") == "OTHER"
-    )
-    classified_pct = (total_industry_pct - other_pct) / 100.0
+    classified_frac = classified_industry_pct / 100.0
 
-    # Blend: itemized is the base, classified adds bonus
-    traceability = min(itemized_pct * 0.7 + classified_pct * 0.3, 1.0)
-    traceability_score = traceability * 100
+    # Small donors are the most diverse source; classified industry
+    # money is moderately diverse; the remainder (large unclassified,
+    # OTHER, POLITICAL) is least diverse.
+    breadth = small_frac * 1.0 + classified_frac * 0.6 + max(0, 1 - small_frac - classified_frac) * 0.2
+    breadth_score = min(breadth, 1.0) * 100
 
-    # Signal 2: industry diversity (inverse HHI)
+    # Signal 2: industry concentration (inverse HHI)
+    # Measures whether the non-grassroots money is spread across
+    # industries or concentrated in one. Small donors and large
+    # unclassified individuals are excluded — they're not industry-
+    # specific money and their concentration is already captured in
+    # Signal 1.  A senator with all PAC money from PHARMA is more
+    # captured than one whose PAC money spans 8 industries.
     industries = [
         ind for ind in industry_breakdown
         if ind.get("industry") not in NON_INDUSTRY_CODES
     ]
-    if not industries:
-        industry_score = 50
-    else:
-        total_known_pct = sum(ind.get("percentage", 0) for ind in industries)
-        if total_known_pct < 1:
-            industry_score = 50
-        else:
-            hhi = sum(
-                (ind.get("percentage", 0) / total_known_pct) ** 2
-                for ind in industries
-            )
-            # HHI ranges from 1/n (perfectly equal) to 1.0 (single source).
-            # Unconcentrated: HHI < 0.15 (DOJ standard).
-            # We scale so that HHI 0.15 = score 100, HHI 1.0 = score 0.
-            normalized = max(0, min((hhi - 0.10) / 0.90, 1.0))
-            industry_score = (1 - normalized) * 100
+    total_known_pct = sum(ind.get("percentage", 0) for ind in industries) if industries else 0
 
-    return clamp(traceability_score * 0.5 + industry_score * 0.5)
+    if total_known_pct < 5:
+        # Very little classified industry money — HHI is meaningless
+        # noise on a tiny slice. Default to neutral, with a boost
+        # when grassroots funding is high (the money IS diverse,
+        # just not industry-classifiable).
+        concentration_score = 65 if small_frac > 0.3 else 50
+    else:
+        hhi = sum(
+            (ind.get("percentage", 0) / total_known_pct) ** 2
+            for ind in industries
+        )
+        normalized = max(0, min((hhi - 0.10) / 0.90, 1.0))
+        raw_concentration = (1 - normalized) * 100
+
+        # When industry money is a small fraction of total funding,
+        # its concentration matters less. Blend toward neutral based
+        # on how much of total funding is industry-classified.
+        industry_relevance = min(total_known_pct / 40, 1.0)
+        neutral = 65 if small_frac > 0.3 else 50
+        concentration_score = (
+            raw_concentration * industry_relevance
+            + neutral * (1 - industry_relevance)
+        )
+
+    return clamp(breadth_score * 0.5 + concentration_score * 0.5)

@@ -4,13 +4,39 @@ Classification tiers (in priority order):
 1. Learning store lookup (instant, highest confidence)
 2. Sentence-transformer embedding cosine similarity against industry
    descriptions (fast, no LLM, generalizes to unseen entities)
-3. Returns "OTHER" — the LLM reclassifier in the pipeline handles
-   unknowns in batch and feeds results back into the learning store.
+3. Returns "OTHER" — the kNN reclassifier handles unknowns in batch
+   and feeds results back into the learning store.
 
-The embedding approach is academically grounded: cosine similarity
-in a dense embedding space is a standard text classification technique
-(cf. sentence-BERT, Reimers & Gurevych 2019). It generalizes far
-better than keyword lists because it captures semantic meaning.
+Academic rationale
+------------------
+Industry classification of campaign donors is a text classification
+task where the "document" is an entity name (e.g. "Lockheed Martin
+Employees PAC") and the classes are industry sectors. Cosine similarity
+in dense embedding space (Reimers & Gurevych 2019, Sentence-BERT) is
+the standard approach for short-text classification where labeled
+training data per class is limited (Minaee et al. 2021, "Deep Learning-
+Based Text Classification: A Comprehensive Review," ACM Computing
+Surveys 54:3).
+
+The industry descriptions serve as class prototypes in a zero-shot
+classification setup (Yin, Hay & Roth 2019, "Benchmarking Zero-shot
+Text Classification," EMNLP). Each description is a natural-language
+definition of the industry enriched with exemplar company names,
+providing both semantic coverage and entity-level anchoring.
+
+The tiered strategy follows the computational parsimony principle from
+Jurafsky & Martin (2023, "Speech and Language Processing," 3rd ed.):
+use the simplest sufficient model at each stage, reserving expensive
+methods for the residual.
+
+References
+----------
+- Reimers, N. & Gurevych, I. (2019). Sentence-BERT. EMNLP 2019.
+- Minaee, S. et al. (2021). ACM Computing Surveys, 54(3), 1-40.
+- Yin, W., Hay, J. & Roth, D. (2019). Benchmarking Zero-shot Text
+  Classification. EMNLP 2019, 3914-3923.
+- Jurafsky, D. & Martin, J. H. (2023). Speech and Language
+  Processing. 3rd ed. Stanford University.
 """
 
 import logging
@@ -202,16 +228,21 @@ def classify_industry_with_provenance(org_name: str | None) -> tuple[str, dict]:
     return best_industry, meta
 
 
-def classify_industries_batch(org_names: list[str]) -> dict[str, str]:
-    """Batch-classify org names using embedding cosine similarity.
+def classify_industries_batch_scored(org_names: list[str]) -> dict[str, tuple[str, float]]:
+    """Batch-classify org names, returning (industry, confidence) pairs.
 
-    Strips 'PAC' suffixes before embedding to improve accuracy.
-    Much more efficient than calling classify_industry() per name.
+    Core embedding classifier — all names are encoded in batch against
+    industry description embeddings.  Only entries above
+    SIMILARITY_THRESHOLD are included in the result; absent names should
+    be treated as OTHER.
+
+    Returns:
+        Dict mapping original name -> (industry_code, cosine_score).
     """
     if not org_names:
         return {}
 
-    results: dict[str, str] = {name: "OTHER" for name in org_names}
+    results: dict[str, tuple[str, float]] = {}
 
     needs_embedding: list[tuple[int, str, str]] = []
     for i, name in enumerate(org_names):
@@ -251,13 +282,26 @@ def classify_industries_batch(org_names: list[str]) -> dict[str, str]:
 
     for j, (_, name, _) in enumerate(needs_embedding):
         if best_scores[j] > SIMILARITY_THRESHOLD:
-            results[name] = ind_keys[best_indices[j]]
+            results[name] = (ind_keys[best_indices[j]], float(best_scores[j]))
 
     logger.info(
         "Batch classified %d org names (%d matched via embedding)",
         len(org_names),
-        int(np.sum(best_scores > SIMILARITY_THRESHOLD)),
+        sum(1 for _ in results),
     )
+    return results
+
+
+def classify_industries_batch(org_names: list[str]) -> dict[str, str]:
+    """Batch-classify org names using embedding cosine similarity.
+
+    Convenience wrapper around classify_industries_batch_scored that
+    returns plain industry codes (scores discarded).
+    """
+    scored = classify_industries_batch_scored(org_names)
+    results: dict[str, str] = {name: "OTHER" for name in org_names}
+    for name, (industry, _score) in scored.items():
+        results[name] = industry
     return results
 
 

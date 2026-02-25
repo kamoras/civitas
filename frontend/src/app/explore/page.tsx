@@ -474,7 +474,7 @@ export default function ExplorePage() {
             <p className="text-matrix-green/50 text-xs max-w-lg mx-auto">
               Data sourced from the Congressional Record (GovInfo API), the
               Federal Register (federalregister.gov), and Supreme Court opinions
-              (Oyez). Comment links go directly to regulations.gov.
+              (supremecourt.gov via Oyez). Comment links go directly to regulations.gov.
             </p>
           </div>
         </div>

@@ -37,12 +37,14 @@ class Senator(Base):
     total_raised: Mapped[float] = mapped_column(Float, default=0.0)
     total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)
     small_donor_percentage: Mapped[float] = mapped_column(Float, default=0.0)
+    # Legacy columns (kept for migration safety, will be dropped later)
     approval_rating: Mapped[float | None] = mapped_column(Float, nullable=True)
     disapproval_rating: Mapped[float | None] = mapped_column(Float, nullable=True)
     approval_source: Mapped[str | None] = mapped_column(String, nullable=True)
 
     voting_summary: Mapped[str] = mapped_column(Text, default="")
     platform_summary: Mapped[str] = mapped_column(Text, default="")
+    partisan_depth: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -141,6 +143,7 @@ class CampaignPromise(Base):
     alignment: Mapped[str] = mapped_column(String, default="unclear")  # "kept", "broken", "partial", "unclear"
     related_votes: Mapped[str] = mapped_column(Text, default="[]")  # JSON array of bill IDs
     analysis: Mapped[str] = mapped_column(Text, default="")  # LLM explanation of alignment
+    party_alignment: Mapped[str | None] = mapped_column(String, nullable=True)  # "R", "D", "bipartisan"
 
     senator: Mapped["Senator"] = relationship(back_populates="campaign_promises")
 
@@ -176,6 +179,65 @@ class President(Base):
 
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class Justice(Base):
+    """Supreme Court justice with ideological consistency scores."""
+    __tablename__ = "justices"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)  # oyez identifier
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    last_name: Mapped[str] = mapped_column(String, nullable=False)
+    role_title: Mapped[str] = mapped_column(String, default="Associate Justice")
+    appointing_president: Mapped[str | None] = mapped_column(String, nullable=True)
+    appointing_party: Mapped[str | None] = mapped_column(String, nullable=True)  # R or D
+    date_start: Mapped[str | None] = mapped_column(String, nullable=True)
+    date_end: Mapped[str | None] = mapped_column(String, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    thumbnail_url: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    score_consistency: Mapped[float] = mapped_column(Float, default=0.0)
+    score_independence: Mapped[float] = mapped_column(Float, default=0.0)
+    score_bipartisan_agreement: Mapped[float] = mapped_column(Float, default=0.0)
+    score_judicial_restraint: Mapped[float] = mapped_column(Float, default=0.0)
+
+    cases_decided: Mapped[int] = mapped_column(Integer, default=0)
+    majority_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    dissent_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    unanimous_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    authored_majority: Mapped[int] = mapped_column(Integer, default=0)
+    authored_dissent: Mapped[int] = mapped_column(Integer, default=0)
+    authored_concurrence: Mapped[int] = mapped_column(Integer, default=0)
+    close_case_majority_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    cross_bloc_pct: Mapped[float] = mapped_column(Float, default=0.0)
+
+    agreement_matrix: Mapped[str] = mapped_column(Text, default="{}")  # JSON
+    summary: Mapped[str] = mapped_column(Text, default="")
+
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    votes = relationship("JusticeVote", back_populates="justice", cascade="all, delete-orphan")
+
+
+class JusticeVote(Base):
+    """Per-case vote record for a justice."""
+    __tablename__ = "justice_votes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    justice_id: Mapped[str] = mapped_column(String, ForeignKey("justices.id"), index=True)
+    case_id: Mapped[str] = mapped_column(String, nullable=False)  # e.g. "scotus-2024-23-191"
+    case_name: Mapped[str] = mapped_column(String, default="")
+    case_term: Mapped[str] = mapped_column(String, default="")
+    decided_date: Mapped[str | None] = mapped_column(String, nullable=True)
+    vote: Mapped[str] = mapped_column(String, nullable=False)  # majority, minority
+    opinion_type: Mapped[str] = mapped_column(String, default="none")  # majority, dissent, concurrence, none
+    is_unanimous: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_close: Mapped[bool] = mapped_column(Boolean, default=False)  # 5-4 or 5-3
+    majority_votes: Mapped[int] = mapped_column(Integer, default=0)
+    minority_votes: Mapped[int] = mapped_column(Integer, default=0)
+
+    justice = relationship("Justice", back_populates="votes")
 
 
 class ExploreDocument(Base):
@@ -262,3 +324,4 @@ class PipelineRun(Base):
     cache_misses: Mapped[int] = mapped_column(Integer, default=0)
     elapsed_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    progress_detail: Mapped[str | None] = mapped_column(Text, nullable=True)

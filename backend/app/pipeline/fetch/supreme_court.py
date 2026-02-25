@@ -2,7 +2,10 @@
 
 The Oyez project (api.oyez.org) provides free, unauthenticated access to
 Supreme Court case metadata including case names, docket numbers, questions
-presented, decision descriptions, and links to full opinions on Justia.
+presented, and decision descriptions.
+
+Links point to the official supremecourt.gov docket page for each case,
+which contains all filings, proceedings, and opinion PDFs.
 
 We fetch cases from recent terms (SCOTUS terms run October-June) and
 format them for the explore document store.
@@ -124,7 +127,11 @@ async def fetch_scotus_cases(
                 body = "\n\n".join(body_parts)
                 summary = description or question or ""
 
-                justia_url = case.get("justia_url", "")
+                scotus_url = (
+                    f"https://www.supremecourt.gov/docket/docketfiles/html/public/{docket}.html"
+                    if docket
+                    else ""
+                )
 
                 results.append({
                     "external_id": ext_id,
@@ -133,7 +140,7 @@ async def fetch_scotus_cases(
                     "body": body,
                     "date": decided_date,
                     "doc_type": "Supreme Court Opinion",
-                    "url": justia_url,
+                    "url": scotus_url,
                     "politician_name": None,
                     "chamber": "Judicial",
                 })

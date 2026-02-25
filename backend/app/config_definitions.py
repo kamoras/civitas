@@ -51,6 +51,7 @@ INDUSTRIES: dict[str, dict] = {
     "OTHER":           {"name": "Other (Unclassified)",     "color": "#444444"},
     "SMALL_DONORS":    {"name": "Small Donors (<$200)",     "color": "#00ff41"},
     "LARGE_INDIVIDUAL":{"name": "Large Individual Donors",  "color": "#39ff14"},
+    "UNCLASSIFIED":    {"name": "Other Sources",            "color": "#666666"},
 }
 
 PLATFORM_CATEGORIES: dict[str, str] = {

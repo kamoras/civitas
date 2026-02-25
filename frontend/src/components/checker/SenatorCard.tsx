@@ -90,25 +90,29 @@ export default function SenatorCard({ senator }: SenatorCardProps) {
         {/* Quick Stats */}
         <div>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center">
-            {senator.approvalRating != null ? (
-              <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2">
-                <div
-                  className={`text-lg font-pixel ${
-                    senator.approvalRating - (senator.disapprovalRating ?? 0) > 0
-                      ? "text-matrix-green"
-                      : "text-red-400"
-                  }`}
-                >
-                  {Math.round(senator.approvalRating)}%
-                </div>
-                <div className="text-[10px] text-matrix-green/40">APPROVAL</div>
-              </div>
-            ) : (
-              <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2">
-                <div className="text-lg font-pixel text-matrix-green/30">—</div>
-                <div className="text-[10px] text-matrix-green/40">APPROVAL</div>
-              </div>
-            )}
+            <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2">
+              {senator.partisanDepth && senator.partisanDepth.totalPositions > 0 ? (
+                <>
+                  <div className={`text-lg font-pixel ${
+                    senator.partisanDepth.depth === "deep" ? "text-neon-pink"
+                    : senator.partisanDepth.depth === "cross-cutting" ? "text-neon-cyan"
+                    : senator.partisanDepth.depth === "moderate" ? "text-yellow-500"
+                    : "text-matrix-green"
+                  }`}>
+                    {senator.partisanDepth.depth === "deep" ? "DEEP"
+                    : senator.partisanDepth.depth === "cross-cutting" ? "XCUT"
+                    : senator.partisanDepth.depth === "moderate" ? "MOD"
+                    : "CTR"}
+                  </div>
+                  <div className="text-[10px] text-matrix-green/40">PARTISAN</div>
+                </>
+              ) : (
+                <>
+                  <div className="text-lg font-pixel text-matrix-green/30">—</div>
+                  <div className="text-[10px] text-matrix-green/40">PARTISAN</div>
+                </>
+              )}
+            </div>
             <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2">
               <div className="text-lg font-pixel text-neon-cyan">
                 {formatCurrency(senator.funding.totalRaised)}
@@ -229,6 +233,8 @@ export default function SenatorCard({ senator }: SenatorCardProps) {
         <PlatformTracker
           promises={senator.campaignPromises || []}
           platformSummary={senator.platformSummary || ""}
+          partisanDepth={senator.partisanDepth}
+          senatorParty={senator.party}
         />
 
         {/* Lobbying Matches */}

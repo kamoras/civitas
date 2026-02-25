@@ -4,7 +4,7 @@ Each function returns a dict with promptVersion, systemPrompt, userPrompt.
 """
 
 
-def explore_document_summary_prompt(query: str, doc: dict) -> dict:
+def explore_document_summary_prompt(doc: dict) -> dict:
     title = doc.get("title", "")
     body = doc.get("body", "")[:2000]
     doc_type = doc.get("doc_type", "document")
@@ -13,18 +13,18 @@ def explore_document_summary_prompt(query: str, doc: dict) -> dict:
     date = doc.get("date", "")
 
     return {
-        "promptVersion": "explore-doc-summary-v2",
+        "promptVersion": "explore-doc-summary-v3",
         "systemPrompt": (
-            "You are a nonpartisan civic analyst. Rules:\n"
-            "1. Every sentence must add information not already visible in the title.\n"
-            "2. Never restate the document title or type.\n"
-            "3. Be factual — no editorializing, no filler.\n"
-            "4. If the document is only weakly related to the search, say so honestly.\n"
+            "You are a nonpartisan civic analyst summarizing government documents "
+            "for a public transparency platform. Rules:\n"
+            "1. Summarize what the document DOES — its purpose, provisions, and scope.\n"
+            "2. Every sentence must add information not already visible in the title.\n"
+            "3. Never restate the document title or type.\n"
+            "4. Be factual — no editorializing, no filler.\n"
+            "5. Focus on substance: what changes, who is affected, and why it matters.\n"
             "Return ONLY valid JSON."
         ),
-        "userPrompt": f"""A citizen searched for: "{query}"
-
-This government document matched their search.
+        "userPrompt": f"""Summarize this government document for a citizen.
 
 Document type: {doc_type}
 Chamber: {chamber}
@@ -37,7 +37,7 @@ Content:
 
 Return JSON:
 {{
-  "relevance": "<2-3 sentences: what specific part of this document connects to '{query}'? Be concrete.>",
+  "summary": "<2-3 sentences: what does this document do? What is its purpose and substance?>",
   "keyPoints": ["<specific factual point from the content>", "<another specific point>"],
   "impact": "<1 sentence: concrete consequence for ordinary people, or empty string if none>"
 }}""",

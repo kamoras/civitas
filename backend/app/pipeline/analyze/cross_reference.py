@@ -89,6 +89,16 @@ def select_key_votes(
     return [bid for _, bid in scored[:max_keys]]
 
 
+_TOPIC_SKIP_RE = re.compile(
+    r"(?:^(?:Home|About|Contact|Press|Media|News|Office|Staff)\b|"
+    r"Sign Up|Subscribe|Follow\s|Share\s|Download\s|"
+    r"Scheduling Request|How Can|Send \w+ A Message|"
+    r"HELP WITH|Flag Request|Schedule a Tour|"
+    r"Committee Assignments|Voting Record\b)",
+    re.IGNORECASE,
+)
+
+
 def _extract_platform_topics(platform_text: str, max_topics: int = 6) -> list[str]:
     """Split platform text into distinct topic queries for targeted vector search."""
     lines = [
@@ -100,13 +110,20 @@ def _extract_platform_topics(platform_text: str, max_topics: int = 6) -> list[st
     topics = []
     for line in lines:
         cleaned = line.strip()
-        if cleaned and cleaned not in topics:
-            topics.append(cleaned[:150])
+        if not cleaned or cleaned in topics:
+            continue
+        if _TOPIC_SKIP_RE.search(cleaned):
+            continue
+        if _ERROR_PAGE_SIGS.search(cleaned):
+            continue
+        topics.append(cleaned[:150])
         if len(topics) >= max_topics:
             break
 
     if not topics and platform_text.strip():
-        topics = [platform_text[:200]]
+        candidate = platform_text[:200].strip()
+        if not _TOPIC_SKIP_RE.search(candidate) and len(candidate) > 30:
+            topics = [candidate]
 
     return topics
 
@@ -193,6 +210,11 @@ def _compute_promise_alignments(
     if _ERROR_PAGE_SIGS.search(platform_text):
         return []
 
+    if _SCRAPE_ARTIFACT_SIGS.search(platform_text[:500]):
+        platform_text = _SCRAPE_ARTIFACT_SIGS.sub("", platform_text).strip()
+        if len(platform_text) < 100:
+            return []
+
     topics = _extract_platform_topics(platform_text)
     if not topics:
         return []
@@ -200,11 +222,14 @@ def _compute_promise_alignments(
     valid_categories = set(PLATFORM_CATEGORIES.keys())
     promises = []
 
+    from app.pipeline.analyze.party_platform import classify_party_alignment
+
     for topic in topics:
         result = compute_promise_vote_alignment(topic, all_votes)
 
-        # Classify the topic into a category using embedding similarity
         category = _classify_promise_category(topic, valid_categories)
+
+        party_align = classify_party_alignment(topic[:300], category.upper(), "pro")
 
         promises.append({
             "promiseText": topic[:250],
@@ -213,6 +238,7 @@ def _compute_promise_alignments(
             "relatedVotes": result["relatedVotes"],
             "analysis": result["reasoning"],
             "confidence": result["confidence"],
+            "partyAlignment": party_align,
         })
 
     return promises
@@ -392,5 +418,18 @@ _ERROR_PAGE_SIGS = re.compile(
     r"(?:404\s*error|page\s*not\s*found|page\s*requested|"
     r"search\s+senate\.gov|e-?mail\s+webmaster|broken\s+link"
     r"|this\s+page\s+doesn.t\s+exist|page\s+does\s+not\s+exist)",
+    re.IGNORECASE,
+)
+
+_SCRAPE_ARTIFACT_SIGS = re.compile(
+    r"(?:Skip to (?:primary navigation|main content|content)|"
+    r"× Close Mobile Nav|How Can \w+ Help|"
+    r"Send \w+ A Message|Scheduling Requests|"
+    r"HELP WITH A FEDERAL AGENCY|Schedule a Tour|"
+    r"Flag Request|Appropriations & CDS|"
+    r"Toggle (?:navigation|submenu)|Menu Menu|"
+    r"your? browser does not support|twitter feed|"
+    r"javascript|cookie\s+(?:policy|preferences)|"
+    r"Contact\s+(?:Form|Us|Senator)|Newsletter\s+Sign)",
     re.IGNORECASE,
 )

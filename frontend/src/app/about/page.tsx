@@ -74,9 +74,10 @@ export default function AboutPage() {
           {/* ── Philosophy ── */}
           <Section title="OUR APPROACH">
             <P>
-              Civitas is an open-data project that measures how well elected officials
-              represent their constituents. Every score is computed from publicly available
-              federal records. We do not editorialize, endorse, or oppose any candidate or party.
+              Civitas is an open-data AI/ML platform that aggregates data from official
+              U.S. government sources into a unified transparency scorecard for elected
+              officials. Every score is computed from publicly available federal records.
+              We do not editorialize, endorse, or oppose any candidate or party.
             </P>
             <P>
               Scores reflect observable behavior — voting patterns, funding sources,
@@ -87,14 +88,17 @@ export default function AboutPage() {
             <P>
               When data is missing or insufficient, scores default to a neutral 50 out of 100.
               No politician is penalized for something we cannot measure, and no politician
-              receives a perfect score without evidence.
+              receives a perfect score without evidence. This implements Bayesian shrinkage
+              toward a neutral prior — a standard statistical technique for preventing
+              extreme estimates from small samples.
+              <Cite id="19">Efron &amp; Morris 1975</Cite>
             </P>
           </Section>
 
           {/* ── Senate Metrics ── */}
           <Section title="SENATE SCORECARD METRICS">
             <P>
-              Each senator receives five sub-scores on a 0-100 scale, weighted into an
+              Each senator receives four sub-scores on a 0-100 scale, weighted into an
               overall Representation Score. Higher is better.
             </P>
 
@@ -102,11 +106,16 @@ export default function AboutPage() {
               <div>
                 <Label>Funding Independence (25%)</Label>
                 <P>
-                  Measures the ratio of small-dollar individual donors to corporate PAC money.
-                  A senator funded primarily by individual constituents scores higher than one
-                  reliant on industry PACs. The formula factors in small-donor percentage and
-                  PAC concentration ratio. This approach draws on campaign finance research
-                  showing that donor composition strongly predicts legislative behavior.
+                  Measures two independent dimensions: (1) the ratio of individual donors to
+                  corporate PAC money, and (2) top-donor concentration — what fraction of
+                  total fundraising comes from the top 10 donors. PAC dependency is
+                  operationalized following Stratmann (2005),
+                  <Cite id="5">Stratmann 2005</Cite>
+                  who found that PAC contributions are more strongly correlated with
+                  roll-call alignment than individual contributions. The donor concentration
+                  component applies the same intuition as HHI but at the donor level,
+                  following Bonica (2014) who demonstrated that donor composition is a
+                  strong predictor of legislative behavior.
                   <Cite id="1">Bonica 2014</Cite>
                 </P>
               </div>
@@ -121,14 +130,20 @@ export default function AboutPage() {
                   <Cite id="2">Naurin 2011</Cite>
                 </P>
                 <P>
+                  A confidence penalty is applied when few promises are evaluable: if only
+                  1 of 10 promises could be checked against votes, the score blends toward
+                  50 (neutral) rather than being inflated by a single data point. This
+                  implements Bayesian shrinkage toward the prior.
+                  <Cite id="19">Efron &amp; Morris 1975</Cite>
+                </P>
+                <P>
                   This metric also incorporates floor advocacy analysis — whether
                   a senator actively speaks on the Senate floor about their promised issues,
-                  parsed from Congressional Record proceedings using keyword matching.
-                  This captures effort that voting records miss: in a gridlocked Senate,
-                  a senator may not get bills to a vote but can still demonstrate persistence
-                  through floor speeches. The floor advocacy component is weighted at 20% of
-                  the promise score, following research on legislative speech as a signal of
-                  commitment.
+                  parsed from Congressional Record proceedings. This captures effort that
+                  voting records miss: in a gridlocked Senate, a senator may not get bills
+                  to a vote but can still demonstrate persistence through floor speeches.
+                  The floor advocacy component is weighted at 15% of the promise score,
+                  following research on legislative speech as a signal of commitment.
                   <Cite id="3">Martin 2011</Cite>
                 </P>
               </div>
@@ -136,45 +151,45 @@ export default function AboutPage() {
               <div>
                 <Label>Independent Voting (25%)</Label>
                 <P>
-                  Measures willingness to break with party leadership on votes that directly
-                  affect the senator&apos;s state. We identify state-relevant policy areas by
-                  analyzing the senator&apos;s top donor industries (which serve as a proxy for
+                  Measures willingness to break with party leadership on votes that are not
+                  explained by constituent interests. We identify state-relevant policy areas
+                  by analyzing the senator&apos;s top donor industries (which serve as a proxy for
                   the state&apos;s economic composition). Party-line votes on state-relevant issues
                   are excluded from the independence penalty because they may reflect genuine
                   constituent representation rather than blind party loyalty.
                   <Cite id="4">Carson et al. 2010</Cite>
                 </P>
                 <P>
+                  The score is adjusted by state partisan lean using Cook PVI as a proxy:
+                  a senator in a safe R+20 state voting with their party may be representing
+                  constituents, not following orders. Raw break rates are misleading without
+                  this contextual adjustment.
+                </P>
+                <P>
                   The score blends two components: party independence (60%) — the rate of
                   breaking with the party on non-state-relevant votes — and donor independence
-                  (40%) — whether votes appear free from donor influence, measured by the
-                  correlation between PAC funding and voting alignment on donor-relevant legislation.
+                  (40%) — whether votes appear free from donor influence, measured by
+                  lobbying match alignment and PAC funding levels. We follow the
+                  methodological caution of Ansolabehere et al. (2003)
+                  <Cite id="18">Ansolabehere et al. 2003</Cite>
+                  in interpreting donation-vote correlations: correlation does not prove causation.
                   <Cite id="5">Stratmann 2005</Cite>
                 </P>
               </div>
 
               <div>
-                <Label>Transparency (15%)</Label>
+                <Label>Funding Diversity (25%)</Label>
                 <P>
                   Evaluates how traceable and diverse a senator&apos;s funding sources are.
                   The score blends donor traceability (50%) — the fraction of funding from
-                  classifiable, named sources versus opaque or unclassified money — with
-                  industry diversity (50%), measured as the inverse Herfindahl-Hirschman
-                  Index (HHI) of industry donations. HHI is a standard concentration metric
-                  from industrial organization economics; in this context, funding concentrated
-                  in a single industry suggests regulatory capture, while broad funding suggests
-                  diverse constituent support.
+                  itemized ({">"}$200), disclosed sources versus anonymous small-dollar
+                  contributions — with industry diversity (50%), measured as the inverse
+                  Herfindahl-Hirschman Index (HHI) of industry donations. HHI is a standard
+                  concentration metric from industrial organization economics;
                   <Cite id="6">Rhoades 1993</Cite>
-                </P>
-              </div>
-
-              <div>
-                <Label>Accessibility (10%)</Label>
-                <P>
-                  Currently uses vote participation rate as a proxy for constituent engagement.
-                  A senator who shows up to vote consistently scores higher. This is an admittedly
-                  limited metric — we plan to incorporate town hall frequency and public
-                  availability data as those sources become programmatically accessible.
+                  in this context, funding concentrated in a single industry suggests
+                  potential regulatory capture, while broad funding suggests diverse
+                  constituent support.
                 </P>
               </div>
             </div>
@@ -245,12 +260,83 @@ export default function AboutPage() {
             </div>
           </Section>
 
+          {/* ── Party Alignment ── */}
+          <Section title="CONTENT-BASED PARTY ALIGNMENT">
+            <P>
+              A bill&apos;s partisan alignment is determined by analyzing <em className="text-matrix-green/80">what the bill
+              does</em>, not how senators voted on it. This is a deliberate architectural
+              decision grounded in political science methodology.
+            </P>
+            <P>
+              The standard approach in political science — roll-call-based ideology
+              estimation (DW-NOMINATE)
+              <Cite id="20">Poole &amp; Rosenthal 1985</Cite>
+              — assumes sincere voting. But as Clinton, Jackman &amp; Rivers (2004) note,
+              this assumption is routinely violated by logrolling (vote trading), whip
+              pressure, omnibus packaging, and tactical compromises.
+              <Cite id="21">Clinton, Jackman &amp; Rivers 2004</Cite>
+              A senator might vote for a bill they ideologically oppose to secure support
+              for a different bill, or because party leadership made it a litmus test.
+            </P>
+
+            <div className="space-y-4 mt-4">
+              <div>
+                <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">HOW IT WORKS</h3>
+                <P>
+                  We implement a nearest-centroid classifier (Rocchio 1971)
+                  <Cite id="22">Manning, Raghavan &amp; Schütze 2008</Cite>
+                  in sentence-embedding space. Each party&apos;s known platform positions on
+                  each policy area (taxes, healthcare, environment, etc.) are embedded as
+                  centroids using the same sentence-transformer model used throughout the
+                  pipeline. Bill text is then embedded and compared to both party centroids
+                  via cosine similarity.
+                </P>
+                <P>
+                  The <em className="text-matrix-green/80">stance direction</em> (pro/anti) disambiguates cases where both
+                  parties have positions on the same topic: a &quot;pro&quot; environment bill
+                  (strengthen EPA enforcement) aligns with the Democratic platform, while
+                  an &quot;anti&quot; environment bill (roll back regulations) aligns with the
+                  Republican platform. This encodes the saliency-plus-direction model
+                  from manifesto research.
+                  <Cite id="23">Laver &amp; Garry 2000</Cite>
+                </P>
+              </div>
+
+              <div>
+                <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">TWO-SIGNAL FUSION</h3>
+                <P>
+                  Content analysis is the <em className="text-matrix-green/80">primary</em> signal for party alignment.
+                  Vote tallies from roll-call data serve as a <em className="text-matrix-green/80">secondary</em> refinement.
+                  When both agree, confidence is high. When they disagree, content wins
+                  unless the vote data shows a clear party-line split (which is itself
+                  informative — the bill was important enough to whip). This follows
+                  Snyder &amp; Groseclose (2000) who demonstrated that vote outcomes reflect
+                  party discipline as much as ideology.
+                  <Cite id="24">Snyder &amp; Groseclose 2000</Cite>
+                </P>
+              </div>
+
+              <div>
+                <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">ADAPTIVE LEARNING</h3>
+                <P>
+                  Platform position descriptions are seed prototypes bootstrapped from
+                  published party platforms. As the pipeline processes bills, sponsor
+                  party data from Congress.gov serves as supervised ground truth — bills
+                  sponsored by a single party are labeled examples that refine the
+                  classifier over time. This follows the self-training paradigm.
+                  <Cite id="25">Yarowsky 1995</Cite>
+                </P>
+              </div>
+            </div>
+          </Section>
+
           {/* ── Classification Pipeline ── */}
           <Section title="CLASSIFICATION AND NLP PIPELINE">
             <P>
               The pipeline classifies thousands of entities (bills, donors, industries, votes)
               per run. We use a tiered strategy that reserves expensive techniques for cases
-              where cheaper methods fail, following the principle of computational parsimony.
+              where cheaper methods fail, following the computational parsimony principle.
+              <Cite id="12">Jurafsky &amp; Martin 2023</Cite>
             </P>
 
             <div className="space-y-4 mt-4">
@@ -258,16 +344,49 @@ export default function AboutPage() {
                 <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">BILL POLICY AREA CLASSIFICATION</h3>
                 <P>
                   Bills and votes are classified into 15 policy areas (healthcare, defense,
-                  energy, etc.) using cosine similarity between sentence embeddings of bill text
-                  and pre-computed embeddings of policy area descriptions.
-                  <Cite id="7">Reimers &amp; Gurevych 2019</Cite>
+                  energy, etc.) using a tiered adaptive strategy:
                 </P>
+                <ul className="space-y-2 mt-2 text-sm text-matrix-green/60">
+                  <li className="flex items-start gap-2">
+                    <span className="text-neon-yellow shrink-0">1.</span>
+                    <span>
+                      <span className="text-neon-pink/60">Learning store exact match</span> — bills
+                      classified in prior pipeline runs are recalled instantly by ID.
+                      This is the experience replay pattern.
+                      <Cite id="10">Lin 1992</Cite>
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-neon-yellow shrink-0">2.</span>
+                    <span>
+                      <span className="text-neon-pink/60">kNN against reference corpus</span> — the
+                      k=7 most similar previously-classified bills in ChromaDB are retrieved
+                      and the policy area is assigned by similarity-weighted majority vote.
+                      <Cite id="9">Cover &amp; Hart 1967</Cite>
+                      This is retrieval-augmented classification: the reference corpus
+                      grows with each pipeline run, improving accuracy over time.
+                      <Cite id="26">Lewis et al. 2020</Cite>
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-neon-yellow shrink-0">3.</span>
+                    <span>
+                      <span className="text-neon-pink/60">Embedding similarity against policy descriptions</span> —
+                      cosine similarity between bill text embeddings and pre-computed policy
+                      area description embeddings. This is the cold-start fallback using
+                      nearest-centroid classification.
+                      <Cite id="7">Reimers &amp; Gurevych 2019</Cite>
+                    </span>
+                  </li>
+                </ul>
                 <P>
-                  The embedding model is <Label>all-MiniLM-L6-v2</Label>, a distilled
-                  sentence transformer optimized for semantic similarity tasks. At 22M
-                  parameters, it runs efficiently on constrained hardware while maintaining
-                  strong performance on STS benchmarks.
-                  <Cite id="8">Wang et al. 2020</Cite>
+                  The policy taxonomy is based on the Congressional Research Service (CRS)
+                  policy area scheme used by Congress.gov. The approach follows the text-as-data
+                  paradigm reviewed in Grimmer &amp; Stewart (2013).
+                  <Cite id="27">Grimmer &amp; Stewart 2013</Cite>
+                  Stance derivation (pro/anti/neutral) uses action-verb patterns following
+                  the Comparative Agendas Project coding scheme.
+                  <Cite id="28">Baumgartner &amp; Jones 1993</Cite>
                   Zero LLM calls are used for bill classification.
                 </P>
               </div>
@@ -275,7 +394,7 @@ export default function AboutPage() {
               <div>
                 <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">DONOR AND INDUSTRY CLASSIFICATION</h3>
                 <P>
-                  Donor classification uses a four-tier strategy:
+                  Donor classification uses a five-tier strategy:
                 </P>
                 <ul className="space-y-2 mt-2 text-sm text-matrix-green/60">
                   <li className="flex items-start gap-2">
@@ -289,37 +408,47 @@ export default function AboutPage() {
                   <li className="flex items-start gap-2">
                     <span className="text-neon-yellow shrink-0">2.</span>
                     <span>
-                      <span className="text-neon-pink/60">Deterministic rules</span> — pattern
-                      matching for payment processors (ActBlue, WinRed), party committees, and
-                      known entity types using hand-crafted regular expressions.
+                      <span className="text-neon-pink/60">Semantic detection</span> — embedding
+                      cosine similarity against category prototypes replaces ~200 lines of
+                      hardcoded string patterns. This generalizes to unseen entities because
+                      distributed representations capture semantic meaning.
+                      <Cite id="29">Bengio et al. 2003</Cite>
                     </span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-neon-yellow shrink-0">3.</span>
                     <span>
-                      <span className="text-neon-pink/60">Embedding cosine similarity</span> — donor
-                      names are embedded using the same sentence transformer and compared against
-                      pre-computed industry description embeddings. Names above a similarity threshold
-                      of 0.35 are classified directly.
-                      <Cite id="7">Reimers &amp; Gurevych 2019</Cite>
+                      <span className="text-neon-pink/60">Learning store lookup</span> — previously
+                      classified entities are recalled instantly by name.
                     </span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-neon-yellow shrink-0">4.</span>
                     <span>
+                      <span className="text-neon-pink/60">Embedding cosine similarity</span> — donor
+                      names are compared against pre-computed industry description embeddings.
+                      Industry descriptions include exemplar company names as anchoring tokens,
+                      following the zero-shot classification setup.
+                      <Cite id="30">Yin, Hay &amp; Roth 2019</Cite>
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-neon-yellow shrink-0">5.</span>
+                    <span>
                       <span className="text-neon-pink/60">k-Nearest Neighbor (kNN)</span> — remaining
-                      unclassified donors are classified by finding the k=7 most similar
-                      already-labeled entities in the learning store using similarity-weighted
-                      majority voting in embedding space. This is an instance-based learning method
-                      <Cite id="9">Cover &amp; Hart 1967</Cite> that dynamically adapts to new
-                      categories as labeled examples accumulate. Each pipeline run enriches the
-                      reference set, making subsequent classifications faster and more accurate.
+                      unclassified donors are classified by the k=7 most similar already-labeled
+                      entities using distance-weighted majority voting.
+                      <Cite id="9">Cover &amp; Hart 1967</Cite>
+                      This mirrors prototypical networks for few-shot learning
+                      <Cite id="14">Snell et al. 2017</Cite>
+                      where classification is performed by comparing query embeddings to
+                      accumulated real examples.
                     </span>
                   </li>
                 </ul>
                 <P>
                   The kNN approach was chosen over LLM-based classification after empirical
-                  analysis showed the LLM hallucinated invalid categories (producing labels like
+                  testing showed the LLM hallucinated invalid categories (producing labels like
                   &quot;SPORTS&quot; or &quot;RESTAURANT&quot; outside the valid taxonomy) and was
                   orders of magnitude slower. The kNN classifier processes ~5,000 donors in under
                   5 seconds versus 40+ minutes for the LLM, with more consistent results.
@@ -327,7 +456,7 @@ export default function AboutPage() {
               </div>
 
               <div>
-                <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">LEARNING STORE</h3>
+                <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">LEARNING STORE AND ADAPTIVE CLASSIFICATION</h3>
                 <P>
                   All classifications are persisted in a learning store (SQLite table) that
                   functions as an evolving knowledge base. On subsequent pipeline runs, previously
@@ -335,6 +464,12 @@ export default function AboutPage() {
                   analogous to experience replay in reinforcement learning
                   <Cite id="10">Lin 1992</Cite> — past decisions inform future ones,
                   improving both speed and accuracy over time.
+                </P>
+                <P>
+                  The learning store also feeds into the self-training loop
+                  <Cite id="25">Yarowsky 1995</Cite> — high-confidence classifications from
+                  prior runs become labeled examples for kNN and reference corpus retrieval in
+                  future runs. The system literally gets better each time the pipeline runs.
                 </P>
               </div>
 
@@ -355,17 +490,32 @@ export default function AboutPage() {
           {/* ── AI Usage ── */}
           <Section title="HOW AI IS USED">
             <P>
-              Civitas uses a small, locally-hosted language model for specific analytical
-              tasks in the senator data pipeline. AI is never used to generate scores
-              directly — all scores are computed by deterministic, auditable formulas.
+              Civitas uses two types of AI models, each for the task it is best suited for.
+              AI is never used to generate scores directly — all scores are computed by
+              deterministic, auditable formulas.
             </P>
 
             <div className="space-y-4 mt-4">
               <div>
-                <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">WHAT THE LLM DOES</h3>
+                <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">EMBEDDING MODEL (CLASSIFICATION + SEARCH)</h3>
                 <P>
-                  The LLM handles tasks that require natural language understanding and
-                  synthesis — areas where rule-based or embedding approaches are insufficient:
+                  <Label>all-MiniLM-L6-v2</Label> (22M parameters)
+                  <Cite id="8">Wang et al. 2020</Cite>
+                  handles all classification tasks: bill policy areas, donor industries,
+                  party alignment, motion types, and semantic search retrieval.
+                  Sentence-transformers produce dense vector representations where cosine
+                  similarity correlates with semantic similarity
+                  <Cite id="7">Reimers &amp; Gurevych 2019</Cite> — making them ideal for
+                  classification-by-comparison tasks where category definitions exist.
+                </P>
+              </div>
+
+              <div>
+                <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">LLM (NARRATIVE SYNTHESIS)</h3>
+                <P>
+                  <Label>Qwen 2.5 1.5B</Label> via llama.cpp
+                  <Cite id="16">Gerganov 2023</Cite> handles tasks requiring natural
+                  language understanding and multi-step reasoning:
                 </P>
                 <div className="space-y-2 mt-2">
                   <Row label="Campaign promise extraction" value="Parses platform text from senator websites to identify specific policy commitments and assess whether votes support or contradict them" />
@@ -377,12 +527,13 @@ export default function AboutPage() {
               </div>
 
               <div>
-                <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">WHAT THE LLM DOES NOT DO</h3>
+                <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">WHAT AI DOES NOT DO</h3>
                 <div className="space-y-2">
-                  <Row label="Score calculation" value="All five sub-scores use deterministic formulas with no LLM input. The math is fully auditable." />
-                  <Row label="Classification" value="Bill, donor, and industry classification use embedding similarity and kNN — no LLM in the classification loop." />
+                  <Row label="Score calculation" value="All four sub-scores use deterministic formulas with no LLM input. The math is fully auditable." />
+                  <Row label="Bill classification" value="Policy areas, party alignment, and stance are all embedding-based — no LLM in the loop." />
+                  <Row label="Donor classification" value="FEC metadata + embeddings + kNN handle all donor and industry classification." />
                   <Row label="Data fabrication" value="The LLM only analyzes data already fetched from official APIs. It does not generate or invent facts." />
-                  <Row label="Partisan analysis" value="Prompts are explicitly structured to avoid partisan framing. The LLM analyzes behavior, not ideology." />
+                  <Row label="Partisan framing" value="Prompts are explicitly structured to avoid editorial framing. The LLM analyzes behavior, not ideology." />
                 </div>
               </div>
 
@@ -402,10 +553,17 @@ export default function AboutPage() {
                   They are deterministic, fast, and avoid the hallucination risks inherent in
                   generative models.
                   <Cite id="13">Minaee et al. 2021</Cite>
-                  The kNN classifier further leverages the accumulated labeled data as a growing
-                  reference set, which is a well-established approach in few-shot and
+                  The kNN classifier further leverages accumulated labeled data as a growing
+                  reference set — a well-established approach in few-shot and
                   semi-supervised learning settings.
                   <Cite id="14">Snell et al. 2017</Cite>
+                </P>
+                <P>
+                  Content analysis (not votes) for party alignment: roll-call votes confound
+                  ideology with legislative strategy. Analyzing what a bill does relative to
+                  published party platforms recovers ideological alignment more accurately,
+                  following the manifesto analysis tradition.
+                  <Cite id="31">Laver, Benoit &amp; Garry 2003</Cite>
                 </P>
                 <P>
                   LLM for narrative synthesis: tasks like promise-vote cross-referencing and PAC
@@ -429,9 +587,9 @@ export default function AboutPage() {
                 <P>
                   The embedding model is <Label>all-MiniLM-L6-v2</Label>
                   <Cite id="8">Wang et al. 2020</Cite>, a 22M-parameter sentence transformer.
-                  It handles all classification (bills, donors, industries), semantic search, and
-                  nearest-neighbor retrieval. Both models run entirely on-device with no external
-                  API calls.
+                  It handles all classification (bills, donors, industries, party alignment),
+                  semantic search, and nearest-neighbor retrieval. Both models run entirely
+                  on-device with no external API calls.
                 </P>
               </div>
             </div>
@@ -446,10 +604,10 @@ export default function AboutPage() {
 
             <div className="space-y-2 mt-4">
               <h3 className="text-xs text-matrix-green/50 tracking-widest">SENATE DATA</h3>
-              <Row label="Congress.gov API" value="Bill text, voting records, member data, and legislative activity for the current Congress" />
-              <Row label="FEC API (fec.gov)" value="Campaign finance data: individual contributions, PAC donations, committee filings, and disbursements" />
+              <Row label="Congress.gov API" value="Bill text, voting records, member data, sponsored legislation, and bill sponsor party affiliation" />
+              <Row label="FEC API (fec.gov)" value="Campaign finance data: individual contributions, PAC donations, committee filings, disbursements, and committee type codes" />
               <Row label="GovInfo API" value="Full bill text for policy area classification, Congressional Record floor proceedings for advocacy analysis" />
-              <Row label="Senate.gov" value="Official senator websites scraped for platform text and campaign promises" />
+              <Row label="Senate.gov" value="Official senator websites scraped for platform text and campaign promises, roll-call vote records with per-member votes" />
             </div>
 
             <div className="space-y-2 mt-6">
@@ -487,7 +645,8 @@ export default function AboutPage() {
                   The entire Civitas stack runs on a single Raspberry Pi 5 (16GB RAM) with an
                   NVMe SSD. There are no cloud GPU instances, no third-party AI API calls, and
                   no data sent to external services for processing. The LLM, embedding model,
-                  database, backend API, and frontend all run on the same device.
+                  vector database, SQLite database, backend API, and frontend all run on the
+                  same device.
                 </P>
               </div>
 
@@ -543,11 +702,11 @@ export default function AboutPage() {
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-neon-yellow shrink-0">-</span>
-                    <span>Correlation between donations and votes does not prove causation. A senator who receives PAC money and votes favorably may be doing so for policy reasons unrelated to the donation. We follow the methodological caution urged by Ansolabehere et al. (2003)<Cite id="18">Ansolabehere et al. 2003</Cite> in interpreting donation-vote correlations.</span>
+                    <span>Correlation between donations and votes does not prove causation. A senator who receives PAC money and votes favorably may be doing so for policy reasons unrelated to the donation. We follow the methodological caution urged by Ansolabehere et al. (2003).<Cite id="18">Ansolabehere et al. 2003</Cite></span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-neon-yellow shrink-0">-</span>
-                    <span>The Accessibility metric is currently limited to vote participation rate. True accessibility (town halls, responsiveness to constituents) is difficult to measure programmatically.</span>
+                    <span>Content-based party alignment depends on the quality of platform position descriptions. While these are seeded from published party platforms and refined by sponsor data, edge cases involving bipartisan or cross-cutting legislation may be misclassified.</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-neon-yellow shrink-0">-</span>
@@ -574,6 +733,7 @@ export default function AboutPage() {
               <Row label="Containers" value="Docker Compose (blue/green zero-downtime deploy)" />
               <Row label="Pipeline Schedule" value="Nightly at 3:00 AM via APScheduler" />
               <Row label="Data Caching" value="72-hour TTL with persistent SQLite cache" />
+              <Row label="Learning Store" value="SQLite table for persistent classification memory" />
             </div>
           </Section>
 
@@ -633,6 +793,45 @@ export default function AboutPage() {
               </Ref>
               <Ref id="18">
                 Ansolabehere, S., de Figueiredo, J. M., &amp; Snyder, J. M. (2003). Why Is There So Little Money in U.S. Politics? <em className="text-matrix-green/60">Journal of Economic Perspectives</em>, 17(1), 105-130. doi:10.1257/089533003321164976
+              </Ref>
+              <Ref id="19">
+                Efron, B. &amp; Morris, C. (1975). Data Analysis Using Stein&apos;s Estimator and Its Generalizations. <em className="text-matrix-green/60">Journal of the American Statistical Association</em>, 70(350), 311-319. doi:10.2307/2285814
+              </Ref>
+              <Ref id="20">
+                Poole, K. T. &amp; Rosenthal, H. (1985). A Spatial Model for Legislative Roll Call Analysis. <em className="text-matrix-green/60">American Journal of Political Science</em>, 29(2), 357-384. doi:10.2307/2111172
+              </Ref>
+              <Ref id="21">
+                Clinton, J., Jackman, S., &amp; Rivers, D. (2004). The Statistical Analysis of Roll Call Data. <em className="text-matrix-green/60">American Political Science Review</em>, 98(2), 355-370. doi:10.1017/S0003055404001194
+              </Ref>
+              <Ref id="22">
+                Manning, C. D., Raghavan, P., &amp; Schütze, H. (2008). <em className="text-matrix-green/60">Introduction to Information Retrieval</em>. Cambridge University Press. Ch. 14: Vector Space Classification.
+              </Ref>
+              <Ref id="23">
+                Laver, M. &amp; Garry, J. (2000). Estimating Policy Positions from Political Texts. <em className="text-matrix-green/60">American Journal of Political Science</em>, 44(3), 619-634. doi:10.2307/2669268
+              </Ref>
+              <Ref id="24">
+                Snyder, J. M. &amp; Groseclose, T. (2000). Estimating Party Influence in Congressional Roll-Call Voting. <em className="text-matrix-green/60">American Journal of Political Science</em>, 44(2), 193-211. doi:10.2307/2669305
+              </Ref>
+              <Ref id="25">
+                Yarowsky, D. (1995). Unsupervised Word Sense Disambiguation Rivaling Supervised Methods. <em className="text-matrix-green/60">Proceedings of ACL 1995</em>, 189-196. doi:10.3115/981658.981684
+              </Ref>
+              <Ref id="26">
+                Lewis, P., Perez, E., Piktus, A., Petroni, F., Karpukhin, V., Goyal, N., Küttler, H., Lewis, M., Yih, W., Rocktäschel, T., Riedel, S., &amp; Kiela, D. (2020). Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks. <em className="text-matrix-green/60">Proceedings of NeurIPS 2020</em>. arXiv:2005.11401
+              </Ref>
+              <Ref id="27">
+                Grimmer, J. &amp; Stewart, B. M. (2013). Text as Data: The Promise and Pitfalls of Automatic Content Analysis Methods for Political Texts. <em className="text-matrix-green/60">Political Analysis</em>, 21(3), 267-297. doi:10.1093/pan/mps028
+              </Ref>
+              <Ref id="28">
+                Baumgartner, F. R. &amp; Jones, B. D. (1993). <em className="text-matrix-green/60">Agendas and Instability in American Politics</em>. University of Chicago Press.
+              </Ref>
+              <Ref id="29">
+                Bengio, Y., Ducharme, R., Vincent, P., &amp; Jauvin, C. (2003). A Neural Probabilistic Language Model. <em className="text-matrix-green/60">Journal of Machine Learning Research</em>, 3, 1137-1155.
+              </Ref>
+              <Ref id="30">
+                Yin, W., Hay, J., &amp; Roth, D. (2019). Benchmarking Zero-shot Text Classification: Datasets, Evaluation and Entailment Approach. <em className="text-matrix-green/60">Proceedings of EMNLP 2019</em>, 3914-3923. doi:10.18653/v1/D19-1404
+              </Ref>
+              <Ref id="31">
+                Laver, M., Benoit, K., &amp; Garry, J. (2003). Extracting Policy Positions from Political Texts Using Words as Data. <em className="text-matrix-green/60">American Political Science Review</em>, 97(2), 311-331. doi:10.1017/S0003055403000698
               </Ref>
             </ol>
           </Section>

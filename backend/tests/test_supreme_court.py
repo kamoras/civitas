@@ -79,7 +79,7 @@ class TestFetchScotusCases:
         assert r["chamber"] == "Judicial"
         assert "exhaustion" in r["summary"].lower()
         assert "604 U.S. 123" in r["body"]
-        assert r["url"] == "https://supreme.justia.com/cases/federal/us/604/23-191/"
+        assert r["url"] == "https://www.supremecourt.gov/docket/docketfiles/html/public/23-191.html"
         assert r["external_id"] == "scotus-2024-23-191"
 
     @pytest.mark.asyncio

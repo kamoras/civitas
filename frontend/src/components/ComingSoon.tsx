@@ -1,8 +1,8 @@
 "use client";
 
-import type { Branch } from "./BranchSelector";
+type ComingSoonBranch = "house";
 
-const COPY: Record<Exclude<Branch, "senate">, { title: string; lines: string[] }> = {
+const COPY: Record<ComingSoonBranch, { title: string; lines: string[] }> = {
   house: {
     title: "HOUSE OF REPRESENTATIVES",
     lines: [
@@ -12,18 +12,9 @@ const COPY: Record<Exclude<Branch, "senate">, { title: string; lines: string[] }
       "We're building it now.",
     ],
   },
-  president: {
-    title: "EXECUTIVE BRANCH",
-    lines: [
-      "Campaign donors. Cabinet appointments. Executive orders.",
-      "Presidential campaign finance tracking across cycles.",
-      "Cross-referencing donors with policy decisions.",
-      "We're building it now.",
-    ],
-  },
 };
 
-export default function ComingSoon({ branch }: { branch: Exclude<Branch, "senate"> }) {
+export default function ComingSoon({ branch }: { branch: ComingSoonBranch }) {
   const { title, lines } = COPY[branch];
 
   return (

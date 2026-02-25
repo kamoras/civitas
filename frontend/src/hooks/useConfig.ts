@@ -36,6 +36,12 @@ export function useCategoryLabel(key: string): string {
   return config?.platformCategories[key] ?? key.toUpperCase();
 }
 
+export function usePolicyLabel(area: string): string {
+  return area
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export function useScoreWeights(): Record<string, number> {
   const config = useConfig();
   return config?.scoreWeights ?? {

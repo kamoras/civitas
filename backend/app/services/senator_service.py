@@ -26,6 +26,8 @@ _BROKEN_RE = re.compile(
 )
 from app.schemas import (
     CampaignPromiseSchema,
+    PartisanDepthSchema,
+    PolicyAlignmentSchema,
     RepresentationScoreSchema,
     DonorSchema,
     FundingSchema,
@@ -219,6 +221,7 @@ def _filter_promises(campaign_promises: list) -> list[CampaignPromiseSchema]:
             alignment=alignment,
             related_votes=related,
             analysis=analysis,
+            party_alignment=cp.party_alignment,
         ))
 
     if len(result) >= 2:
@@ -233,6 +236,31 @@ def _filter_promises(campaign_promises: list) -> list[CampaignPromiseSchema]:
                     p.analysis = ""
 
     return result
+
+
+def _parse_partisan_depth(raw: str | None) -> PartisanDepthSchema | None:
+    """Deserialize JSON partisan depth profile stored on the senator row."""
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        return PartisanDepthSchema(
+            overall_lean=data.get("overallLean", 0.0),
+            overall_party=data.get("overallParty", "centrist"),
+            depth=data.get("depth", "centrist"),
+            cross_party_count=data.get("crossPartyCount", 0),
+            total_positions=data.get("totalPositions", 0),
+            policy_breakdown=[
+                PolicyAlignmentSchema(
+                    area=p["area"],
+                    alignment=p["alignment"],
+                    strength=p["strength"],
+                )
+                for p in data.get("policyBreakdown", [])
+            ],
+        )
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return None
 
 
 def _senator_eager_options():
@@ -347,8 +375,6 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
         party=senator.party,
         years_in_office=senator.years_in_office,
         initials=initials,
-        approval_rating=senator.approval_rating,
-        disapproval_rating=senator.disapproval_rating,
         representation_score=RepresentationScoreSchema(
             funding_independence=senator.score_funding_independence,
             promise_persistence=senator.score_promise_persistence,
@@ -411,6 +437,7 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
         ],
         campaign_promises=_filter_promises(campaign_promises),
         platform_summary=_clean_platform_summary(senator.platform_summary),
+        partisan_depth=_parse_partisan_depth(senator.partisan_depth),
     )
 
 
@@ -498,8 +525,6 @@ def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
             party=s.party,
             years_in_office=s.years_in_office,
             initials=_compute_initials(s.name) or s.initials,
-            approval_rating=s.approval_rating,
-            disapproval_rating=s.disapproval_rating,
             representation_score=RepresentationScoreSchema(
                 funding_independence=s.score_funding_independence,
                 promise_persistence=s.score_promise_persistence,
@@ -550,11 +575,6 @@ def upsert_senator(db: Session, senator_data: dict) -> Senator:
     voting_record = senator_data.get("votingRecord", {})
     existing.voting_summary = voting_record.get("votingSummary", "")
     existing.platform_summary = senator_data.get("platformSummary", "")
-
-    if "approvalRating" in senator_data:
-        existing.approval_rating = senator_data.get("approvalRating")
-        existing.disapproval_rating = senator_data.get("disapprovalRating")
-        existing.approval_source = senator_data.get("approvalSource")
 
     db.flush()
 
@@ -640,7 +660,12 @@ def upsert_senator(db: Session, senator_data: dict) -> Senator:
             alignment=cp.get("alignment", "unclear"),
             related_votes=json.dumps(cp.get("relatedVotes", [])),
             analysis=cp.get("analysis", ""),
+            party_alignment=cp.get("partyAlignment"),
         ))
+
+    partisan_depth_data = senator_data.get("partisanDepth")
+    if partisan_depth_data:
+        existing.partisan_depth = json.dumps(partisan_depth_data)
 
     db.commit()
     db.refresh(existing)

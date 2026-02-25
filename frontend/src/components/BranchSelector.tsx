@@ -1,11 +1,12 @@
 "use client";
 
-export type Branch = "senate" | "house" | "president";
+export type Branch = "senate" | "house" | "president" | "scotus";
 
 const BRANCHES: { key: Branch; label: string }[] = [
   { key: "senate", label: "SENATE" },
   { key: "house", label: "HOUSE" },
   { key: "president", label: "PRESIDENT" },
+  { key: "scotus", label: "SCOTUS" },
 ];
 
 interface BranchSelectorProps {

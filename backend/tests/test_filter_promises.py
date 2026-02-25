@@ -18,6 +18,7 @@ def _make_promise(
     alignment="kept",
     analysis="Senator voted Yea on H.R. 3 to lower drug costs.",
     related_votes=None,
+    party_alignment=None,
 ):
     """Build a mock CampaignPromise ORM-like object."""
     return SimpleNamespace(
@@ -26,6 +27,7 @@ def _make_promise(
         alignment=alignment,
         analysis=analysis,
         related_votes=json.dumps(related_votes if related_votes is not None else ["H.R. 3"]),
+        party_alignment=party_alignment,
     )
 
 

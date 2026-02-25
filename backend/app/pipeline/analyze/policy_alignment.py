@@ -364,13 +364,18 @@ def detect_donor_vote_connections(
     # Compute similarity matrix: donors x votes
     sim_matrix = donor_embs @ vote_embs.T
 
-    matches: list[dict] = []
-    seen_pairs: set[tuple[str, str]] = set()
+    # Consolidate per donor: one match entry per unique donor org,
+    # with all related bills aggregated into billsInfluenced.
+    donor_matches: dict[str, dict] = {}
 
     for i, donor in enumerate(external[:8]):
         donor_name = donor.get("name", "")
+        donor_key = donor_name.upper().strip()
 
         best_vote_indices = np.argsort(sim_matrix[i])[::-1]
+        best_sim = 0.0
+        matched_bills: list[str] = []
+        desc_parts: list[str] = []
 
         for j in best_vote_indices[:3]:
             sim = float(sim_matrix[i, j])
@@ -379,32 +384,47 @@ def detect_donor_vote_connections(
 
             vote = substantive[j]
             bid = vote["billId"]
-            pair_key = (donor_name.upper(), bid)
-            if pair_key in seen_pairs:
+            if bid in matched_bills:
                 continue
-            seen_pairs.add(pair_key)
+            matched_bills.append(bid)
+            best_sim = max(best_sim, sim)
 
             vote_cast = vote["vote"]
             bill_name = vote.get("billName", bid)[:80]
-            bill_desc = vote.get("description", "")[:120]
             is_amendment = "amdt" in bid.lower() or "amendment" in bill_name.lower()
+            desc_parts.append(
+                f"Voted {vote_cast} on {'amendment ' if is_amendment else ''}"
+                f"{bill_name} ({vote.get('policyArea', '')})"
+            )
 
-            matches.append({
+        if not matched_bills:
+            continue
+
+        if donor_key in donor_matches:
+            existing = donor_matches[donor_key]
+            for b in matched_bills:
+                if b not in existing["billsInfluenced"]:
+                    existing["billsInfluenced"].append(b)
+            existing["similarity"] = max(existing["similarity"], best_sim)
+        else:
+            donor_matches[donor_key] = {
                 "lobbyistOrg": donor_name,
                 "industry": donor.get("industry", "OTHER"),
                 "lobbyingSpend": 0,
                 "donationToSenator": round(donor.get("total", 0)),
-                "billsInfluenced": [bid],
+                "billsInfluenced": matched_bills,
                 "senatorVoteAligned": None,
-                "similarity": round(sim, 3),
+                "similarity": round(best_sim, 3),
                 "description": (
                     f"{donor_name} ({donor.get('industry', '?')}) donated "
-                    f"${donor.get('total', 0):,.0f}. Senator voted "
-                    f"{vote_cast} on {'amendment ' if is_amendment else ''}"
-                    f"{bill_name} ({vote.get('policyArea', '')})."
-                    + (f" {bill_desc}" if bill_desc else "")
+                    f"${donor.get('total', 0):,.0f}. "
+                    + ". ".join(desc_parts) + "."
                 ),
-            })
+            }
 
-    matches.sort(key=lambda m: m["donationToSenator"], reverse=True)
+    matches = sorted(
+        donor_matches.values(),
+        key=lambda m: m["donationToSenator"],
+        reverse=True,
+    )
     return matches[:max_matches]

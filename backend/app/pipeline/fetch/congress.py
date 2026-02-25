@@ -500,7 +500,11 @@ import re as _re
 
 _platform_rate_limiter = RateLimiter(0.5)  # max 0.5 req/s to senator websites
 
-_STRIP_TAGS = {"script", "style", "nav", "header", "footer", "aside", "noscript", "svg", "form"}
+_STRIP_TAGS = {
+    "script", "style", "nav", "header", "footer", "aside",
+    "noscript", "svg", "form", "iframe", "button", "select",
+    "input", "textarea",
+}
 
 
 def _extract_body_text(raw_html: str) -> str:
@@ -537,7 +541,73 @@ def _extract_body_text(raw_html: str) -> str:
         content_root = body if body is not None else doc
 
     plain = " ".join(content_root.itertext())
-    return _re.sub(r"\s+", " ", plain).strip()
+    plain = _re.sub(r"\s+", " ", plain).strip()
+    plain = _strip_nav_artifacts(plain)
+    return plain
+
+
+_NAV_ARTIFACT_PATTERNS = _re.compile(
+    r"(?:Skip to (?:primary navigation|main content|content)|"
+    r"Toggle (?:navigation|submenu|menu)|"
+    r"× Close (?:Mobile Nav|Menu)|"
+    r"Menu Menu Menu|Hamburger|Breadcrumb|"
+    r"Share (?:on|via) (?:Facebook|Twitter|X|LinkedIn|Email)|"
+    r"(?:Facebook|Twitter|Instagram|YouTube)\s*(?:Facebook|Twitter|Instagram|YouTube)|"
+    r"How Can [\w]+ Help\?|"
+    r"Send [\w]+ A Message|"
+    r"Scheduling Requests|"
+    r"HELP WITH A FEDERAL AGENCY|"
+    r"Flag Request Servi\w*|"
+    r"Appropriations & CDS Requests|"
+    r"Schedule a Tour)",
+    _re.IGNORECASE,
+)
+
+
+def _strip_nav_artifacts(text: str) -> str:
+    """Remove common navigation/UI artifacts from extracted text."""
+    text = _NAV_ARTIFACT_PATTERNS.sub("", text)
+    text = _re.sub(r"\s+", " ", text).strip()
+    if text.startswith(". ") or text.startswith(", "):
+        text = text[2:].strip()
+    return text
+
+
+_BOILERPLATE_SIGNALS = [
+    "skip to content", "skip to primary navigation", "skip to main",
+    "open search", "close search", "toggle submenu",
+    "follow senator", "on social media", "newsletter signup",
+    "how can i help", "facebook-f", "x-twitter",
+    "share your opinion", "scheduling requests", "media requests",
+    "stay engaged", "connect with senator",
+]
+
+_POLICY_SIGNALS = [
+    "legislation", "vote", "bill", "act", "committee", "sponsor",
+    "policy", "reform", "regulation", "funding", "appropriation",
+    "healthcare", "education", "defense", "economy", "tax",
+    "environment", "immigration", "security", "infrastructure",
+    "agriculture", "energy", "veterans", "social security",
+    "medicare", "medicaid", "gun", "labor", "trade",
+    "budget", "amendment", "bipartisan",
+]
+
+
+def _is_policy_content(text: str) -> bool:
+    """Detect whether scraped text has actual policy content vs boilerplate."""
+    lower = text[:1500].lower()
+
+    boilerplate_hits = sum(1 for s in _BOILERPLATE_SIGNALS if s in lower)
+    policy_hits = sum(1 for s in _POLICY_SIGNALS if s in lower)
+
+    words = lower.split()
+    if len(words) < 40:
+        return False
+
+    if boilerplate_hits >= 4 and policy_hits < 3:
+        return False
+
+    return True
 
 
 async def fetch_senator_platform_text(
@@ -557,7 +627,7 @@ async def fetch_senator_platform_text(
 
     Returns cleaned plain text truncated to 3000 characters, or empty string if all fail.
     """
-    cache_key = f"platform-text-{senator_id}-v3"
+    cache_key = f"platform-text-{senator_id}-v4"
     cached = api_cache_get(db, "platform", cache_key)
     if cached is not None:
         return cached
@@ -603,7 +673,7 @@ async def fetch_senator_platform_text(
                 logger.debug("Skipping error page for %s at %s", senator_name, url)
                 continue
 
-            if len(plain) > 200:
+            if len(plain) > 200 and _is_policy_content(plain):
                 text = plain[:3000]
                 break
         except Exception as e:

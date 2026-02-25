@@ -84,32 +84,6 @@ def _build_highlights(senator) -> list[str]:
     pac_pct_raw = pac_total / total * 100 if total > 0 else 0.0
     pac_pct_str = f"<1" if 0 < pac_pct_raw < 1 else f"{pac_pct_raw:.0f}"
 
-    # --- Approval rating highlight ---
-    approve = senator.approval_rating
-    disapprove = senator.disapproval_rating
-    if approve is not None and disapprove is not None:
-        net = approve - disapprove
-        if net > 20:
-            hints.append((11, (
-                f"Approval rating: {approve:.0f}% approve / {disapprove:.0f}% disapprove "
-                f"(net +{net:.0f}) — among the most popular senators."
-            )))
-        elif net > 0:
-            hints.append((11, (
-                f"Approval rating: {approve:.0f}% approve / {disapprove:.0f}% disapprove "
-                f"(net +{net:.0f})."
-            )))
-        elif net > -10:
-            hints.append((11, (
-                f"Approval rating: {approve:.0f}% approve / {disapprove:.0f}% disapprove "
-                f"(net {net:.0f}) — approval is underwater."
-            )))
-        else:
-            hints.append((11, (
-                f"Approval rating: {approve:.0f}% approve / {disapprove:.0f}% disapprove "
-                f"(net {net:.0f}) — significantly underwater."
-            )))
-
     # --- Funding highlights ---
     if small_pct >= 50:
         hints.append((10, (

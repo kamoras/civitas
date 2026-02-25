@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useCallback, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import MatrixRain from "@/components/effects/MatrixRain";
 import Navbar from "@/components/layout/Navbar";
@@ -8,13 +8,21 @@ import Footer from "@/components/layout/Footer";
 import GlitchText from "@/components/effects/GlitchText";
 import CheckerClient from "@/components/checker/CheckerClient";
 import PresidentClient from "@/components/president/PresidentClient";
+import JusticeClient from "@/components/justice/JusticeClient";
 import BranchSelector, { type Branch } from "@/components/BranchSelector";
 import ComingSoon from "@/components/ComingSoon";
 
 function ScorecardContent() {
   const searchParams = useSearchParams();
   const initialBranch = (searchParams.get("branch") as Branch) || "senate";
-  const [branch, setBranch] = useState<Branch>(initialBranch);
+  const [branch, setBranchState] = useState<Branch>(initialBranch);
+
+  const setBranch = useCallback((b: Branch) => {
+    setBranchState(b);
+    const url = new URL(window.location.href);
+    url.searchParams.set("branch", b);
+    window.history.replaceState({}, "", url.toString());
+  }, []);
 
   return (
     <>
@@ -43,6 +51,12 @@ function ScorecardContent() {
           {branch === "president" && (
             <Suspense fallback={null}>
               <PresidentClient />
+            </Suspense>
+          )}
+
+          {branch === "scotus" && (
+            <Suspense fallback={null}>
+              <JusticeClient />
             </Suspense>
           )}
 

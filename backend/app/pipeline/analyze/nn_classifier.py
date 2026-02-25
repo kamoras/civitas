@@ -2,11 +2,39 @@
 Nearest-neighbor classifier using sentence-transformer embeddings.
 
 Classifies donors by finding the most similar already-labeled entities
-in the learning store. Supports dynamic categories -- any label that
+in the learning store. Supports dynamic categories — any label that
 exists in the learning store is automatically a valid classification target.
 
+Academic rationale
+------------------
+Instance-based learning via kNN (Cover & Hart 1967, "Nearest Neighbor
+Pattern Classification," IEEE Trans. Info Theory 13:1) is chosen over
+parametric classifiers because: (1) the category set evolves as new
+entity types appear in FEC data, (2) no retraining is needed when
+new labeled examples arrive — they are simply added to the reference
+set, and (3) the method is naturally non-parametric and adapts to
+arbitrary decision boundaries.
+
+Similarity-weighted voting (Dudani 1976) is used instead of unweighted
+majority vote, which reduces sensitivity to the choice of k and gives
+higher influence to closer neighbors. This is equivalent to a kernel
+density estimate with a cosine-similarity kernel in embedding space.
+
+The approach mirrors prototypical networks (Snell, Swersky & Zemel
+2017, "Prototypical Networks for Few-Shot Learning," NeurIPS) where
+classification is performed by comparing query embeddings to class
+prototypes — here, the prototypes are real labeled examples rather
+than learned centroids.
+
 This replaces the LLM-based classification fallback, cutting the
-classification phase from ~40+ minutes to under 5 seconds.
+classification phase from ~40+ minutes to under 5 seconds while
+producing more consistent results (LLM hallucinated invalid categories).
+
+References
+----------
+- Cover, T. & Hart, P. (1967). IEEE Trans. Info Theory, 13(1), 21-27.
+- Dudani, S. (1976). IEEE Trans. SMC, 6(4), 325-327.
+- Snell, J. et al. (2017). NeurIPS 2017, 4077-4087.
 """
 
 import logging
