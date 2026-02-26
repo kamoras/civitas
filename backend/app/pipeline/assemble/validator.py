@@ -73,6 +73,7 @@ def validate_senator(senator: dict) -> dict:
         "Org/Employees",
         "Party/Ideological",
         "CandidateAffiliated",
+        "Self-Funded",
     }
     senator["funding"] = {
         "totalRaised": max(0, round(f.get("totalRaised", 0))),
@@ -85,7 +86,7 @@ def validate_senator(senator: dict) -> dict:
                 "type": (
                     d.get("type")
                     if d.get("type") in valid_donor_types
-                    else "PAC"
+                    else "Org/Employees"
                 ),
                 "industry": (
                     d.get("industry")
@@ -243,7 +244,7 @@ def validate_senator(senator: dict) -> dict:
                 if isinstance(m.get("billsInfluenced"), list)
                 else []
             ),
-            "senatorVoteAligned": bool(m.get("senatorVoteAligned")),
+            "senatorVoteAligned": m.get("senatorVoteAligned") if m.get("senatorVoteAligned") is not None else None,
             "description": m.get("description", ""),
         }
         for m in (senator.get("lobbyingMatches") or [])

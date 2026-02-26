@@ -236,8 +236,14 @@ def _calc_promise_persistence(
             raw_pct = raw_score / n_scoreable * 100
 
             # Confidence penalty: blend toward 50 when few promises
-            # were evaluable.  Full confidence when all are scoreable.
-            confidence = n_scoreable / max(n_total, 1)
+            # are evaluable.  Uses both ratio (how many were scoreable
+            # vs total) AND absolute count (statistical reliability).
+            # With n=1, confidence is ~0.33 regardless of ratio —
+            # a single data point can't anchor a score at 0 or 100.
+            # Full confidence requires both high ratio AND >= 5 scored.
+            ratio_conf = n_scoreable / max(n_total, 1)
+            count_conf = min(n_scoreable / 5, 1.0)
+            confidence = ratio_conf * count_conf
             base_score = raw_pct * confidence + 50 * (1 - confidence)
 
     if base_score is None:
@@ -320,23 +326,28 @@ def _get_state_relevant_policies(funding: dict) -> set[str]:
     return policies
 
 
-def _state_partisan_lean(state: str, party: str) -> float:
+def _state_partisan_lean(state: str, party: str, effective_party: str | None = None) -> float:
     """How strongly the state leans toward the senator's party.
 
     Returns 0.0 (swing/opposing) to 1.0 (deep partisan match).
     Used to discount party-line voting penalties in safe states.
+
+    For Independents, uses effective_party (inferred caucus) to
+    determine state alignment. Sanders (I-VT, caucuses D) gets
+    the D lean for Vermont.
     """
     pvi = STATE_PVI.get(state, 0)
-    if party == "R":
-        lean = pvi  # positive PVI = R state
-    elif party == "D":
-        lean = -pvi  # negative PVI = D state
+    eval_party = effective_party or party
+    if eval_party == "R":
+        lean = pvi
+    elif eval_party == "D":
+        lean = -pvi
     else:
-        return 0.0  # independents: no adjustment
+        return 0.0
 
     if lean <= 0:
-        return 0.0  # state leans AGAINST senator's party
-    return min(lean / 15.0, 1.0)  # scale: PVI 15+ = full discount
+        return 0.0
+    return min(lean / 15.0, 1.0)
 
 
 def _calc_independent_voting(
@@ -360,36 +371,47 @@ def _calc_independent_voting(
          votes aligned with that industry's interests on related bills,
          that's a red flag — especially when PAC funding is high.
     """
+    effective_party = voting_record.get("effectiveParty", party)
     state_policies = _get_state_relevant_policies(funding)
-    state_lean = _state_partisan_lean(state, party)
+    state_lean = _state_partisan_lean(state, party, effective_party=effective_party)
 
     all_votes = (voting_record.get("keyVotes") or []) + (
         voting_record.get("recentVotes") or []
     )
 
-    voted_with = 0
-    voted_against = 0
+    voted_with = 0.0
+    voted_against = 0.0
     for v in all_votes:
         wp = v.get("votedWithParty") if isinstance(v, dict) else None
         if wp is None:
             continue
         policy = (v.get("policyArea") or "") if isinstance(v, dict) else ""
 
+        # Multi-area alignment weight: when a bill spans multiple policy
+        # areas, some may align with the senator's party and some may not.
+        # The weight reflects the proportion of areas that lean toward the
+        # overall party alignment. A vote on a 60/40 D-leaning bill is
+        # less informative about party loyalty than a vote on a 100% D bill.
+        # This implements the weighted-expert aggregation framework from
+        # Clemen (1989, "Combining Forecasts," Intl J Forecasting 5:4).
+        weight = 1.0
+        if isinstance(v, dict):
+            raw_weight = v.get("partyAlignmentWeight", 0.0)
+            if raw_weight > 0.0:
+                weight = raw_weight
+
         if wp is True and policy in state_policies:
             continue
 
         if wp is True:
-            voted_with += 1
+            voted_with += weight
         elif wp is False:
-            voted_against += 1
+            voted_against += weight
 
     party_total = voted_with + voted_against
 
-    if party_total >= 3:
+    if party_total >= 3.0:
         against_pct = voted_against / party_total
-        # Adjust threshold by state lean: in deep partisan states,
-        # even small break rates are significant.
-        # Swing state: 15% breaks = perfect. Deep R+20: 5% = perfect.
         threshold = max(0.05, 0.15 - state_lean * 0.10)
         party_score = min(against_pct / threshold, 1.0) * 100
     else:
@@ -405,7 +427,6 @@ def _calc_independent_voting(
     )
 
     if lobbying_matches:
-        # Count only matches with explicit alignment data (non-null)
         with_alignment = [
             m for m in lobbying_matches
             if m.get("senatorVoteAligned") is not None
@@ -415,10 +436,21 @@ def _calc_independent_voting(
             lobby_alignment_rate = aligned / len(with_alignment)
             donor_score = (1 - lobby_alignment_rate * min(pac_ratio * 2, 1.0)) * 100
         else:
-            # Matches found but alignment is unknown — mildly penalize
-            # based on the sheer number of industry-connected votes and PAC ratio
-            connection_factor = min(len(lobbying_matches) / 6, 1.0)
-            donor_score = (1 - connection_factor * pac_ratio * 0.5) * 100
+            # Matches found but alignment is unknown. The existence of
+            # industry-connected donors whose bills the senator voted on
+            # is a mild yellow flag. Scale by match count and total
+            # donation size relative to total raised.
+            total_lobby_donations = sum(
+                m.get("donationToSenator", 0) for m in lobbying_matches
+            )
+            donation_ratio = (
+                total_lobby_donations / total_raised if total_raised > 0 else 0
+            )
+            connection_factor = min(len(lobbying_matches) / 8, 1.0)
+            # Blend: more matches + higher donation ratio = lower score.
+            # Cap penalty at 35 points (score floor ~65 from donor side).
+            penalty = connection_factor * 0.20 + min(donation_ratio * 5, 0.15)
+            donor_score = max(50, (1 - penalty) * 100)
     else:
         donor_score = 75  # no lobbying signal → mildly positive
 

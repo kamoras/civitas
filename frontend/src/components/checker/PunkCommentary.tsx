@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Senator } from "@/types/senator";
 import { generateCommentary } from "@/data/commentary";
 import { fetchSenatorHighlights } from "@/lib/api";
+import CollapsibleSection from "./CollapsibleSection";
 
 interface PunkCommentaryProps {
   senator: Senator;
@@ -27,19 +28,15 @@ export default function PunkCommentary({ senator }: PunkCommentaryProps) {
 
   const comments = highlights ?? staticComments;
 
+  const title = loading ? "DATA HIGHLIGHTS [GENERATING...]" : "DATA HIGHLIGHTS";
+
   return (
-    <div>
-      <h3
-        className="text-lg text-neon-yellow mb-3 flex items-center gap-3"
-        style={{ textShadow: "0 0 7px #ffff00, 0 0 10px #ffff00" }}
-      >
-        {">"} DATA HIGHLIGHTS
-        {loading && (
-          <span className="text-[10px] text-matrix-green/50 font-normal animate-pulse">
-            [GENERATING...]
-          </span>
-        )}
-      </h3>
+    <CollapsibleSection
+      title={title}
+      titleColor="text-neon-yellow neon-yellow"
+      summary={comments[0]?.slice(0, 80) + (comments[0]?.length > 80 ? "..." : "")}
+      source={highlights ? "AI-generated" : undefined}
+    >
       <div className="space-y-3">
         {comments.map((comment, i) => (
           <div key={i} className="terminal-window p-4 border-l-2 border-l-neon-yellow/50">
@@ -50,6 +47,6 @@ export default function PunkCommentary({ senator }: PunkCommentaryProps) {
       {highlights && (
         <div className="text-[10px] text-matrix-green/25 mt-3">AI-generated · fec.gov · congress.gov</div>
       )}
-    </div>
+    </CollapsibleSection>
   );
 }

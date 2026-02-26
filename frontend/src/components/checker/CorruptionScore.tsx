@@ -3,6 +3,7 @@
 import { Senator } from "@/types/senator";
 import { calculateOverallScore, getScoreLabel, getScoreColor } from "@/lib/corruption";
 import { useScoreWeights } from "@/hooks/useConfig";
+import MetricTooltip from "./MetricTooltip";
 
 interface RepresentationScoreProps {
   breakdown: Senator["representationScore"];
@@ -16,22 +17,22 @@ const SUB_SCORES: {
   {
     key: "fundingIndependence",
     label: "Funding Independence",
-    description: "PAC dependency and top-donor concentration",
+    description: "How free is this senator from PAC and mega-donor influence? Penalizes heavy reliance on PAC money and concentration in a few top donors.",
   },
   {
     key: "promisePersistence",
     label: "Promise Persistence",
-    description: "Campaign commitments kept vs. broken + participation",
+    description: "Are they keeping campaign promises? Compares stated platform commitments against actual votes, using AI analysis. Higher = more follow-through.",
   },
   {
     key: "independentVoting",
     label: "Independent Voting",
-    description: "Willingness to break party line, adjusted for state lean",
+    description: "How often do they vote against their own party? Adjusted for state partisanship — breaking party line in a swing state counts less than in a deep-red/blue state.",
   },
   {
     key: "fundingDiversity",
     label: "Funding Diversity",
-    description: "Source traceability and industry diversification",
+    description: "Is their funding spread across many industries, or dominated by a few? Uses Shannon entropy to measure concentration. Higher = more diverse funding sources.",
   },
 ];
 
@@ -102,7 +103,11 @@ export default function CorruptionScore({ breakdown }: RepresentationScoreProps)
       <div className="flex items-end gap-4 mb-4">
         <div className={`text-5xl sm:text-6xl font-pixel ${colorClass}`}>{overall}</div>
         <div className="pb-2">
-          <div className="text-xs text-matrix-green/40">REPRESENTATION SCORECARD</div>
+          <div className="text-xs text-matrix-green/40">
+            <MetricTooltip text="Weighted average of 4 sub-scores measuring how well this senator represents constituents. Based on funding sources, promise follow-through, voting independence, and funding diversity. 100 = ideal representation, 0 = none. Scores near 50 mean limited data.">
+              REPRESENTATION SCORECARD
+            </MetricTooltip>
+          </div>
           <div className={`text-sm font-pixel ${colorClass} tracking-wider`}>{label}</div>
           <div className="text-[10px] text-matrix-green/50 mt-0.5">100 = fully represents constituents</div>
         </div>
@@ -115,7 +120,7 @@ export default function CorruptionScore({ breakdown }: RepresentationScoreProps)
       </div>
 
       <div className="mt-3 text-[10px] text-matrix-green/50">
-        Data: fec.gov · opensecrets.org · congress.gov
+        Data: fec.gov · opensecrets.org · congress.gov · Scores regress toward 50 when data is sparse
       </div>
     </div>
   );

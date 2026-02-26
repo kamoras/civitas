@@ -1,6 +1,8 @@
 import { CampaignPromise, PartisanDepth } from "@/types/senator";
 import { useCategoryLabel, usePolicyLabel } from "@/hooks/useConfig";
 import { voteSourceUrl } from "@/lib/sources";
+import CollapsibleSection from "./CollapsibleSection";
+import MetricTooltip from "./MetricTooltip";
 
 interface PlatformTrackerProps {
   promises: CampaignPromise[];
@@ -43,7 +45,7 @@ const ALIGNMENT_STYLES = {
 const PARTY_ALIGNMENT_STYLES = {
   R: { text: "text-red-400", bg: "bg-red-500/15", border: "border-red-500/30", label: "R" },
   D: { text: "text-blue-400", bg: "bg-blue-500/15", border: "border-blue-500/30", label: "D" },
-  bipartisan: { text: "text-purple-400", bg: "bg-purple-500/15", border: "border-purple-500/30", label: "BI" },
+  bipartisan: { text: "text-purple-400", bg: "bg-purple-500/15", border: "border-purple-500/30", label: "BP" },
 };
 
 const DEPTH_STYLES = {
@@ -88,7 +90,7 @@ function PartisanDepthPanel({ depth, senatorParty }: { depth: PartisanDepth; sen
   return (
     <div className="terminal-window p-4 mb-4">
       <div className="flex items-baseline justify-between mb-3">
-        <h4 className="text-sm font-pixel text-neon-cyan">{">"} PARTISAN DEPTH ANALYSIS</h4>
+        <h4 className="text-sm font-pixel text-neon-cyan">{">"} <MetricTooltip text="Measures how deeply partisan this senator is by analyzing their voting record and stated platform against each party's positions. Content-based — determined by what bills do, not just how parties vote.">PARTISAN DEPTH ANALYSIS</MetricTooltip></h4>
         <span className={`text-xs font-pixel ${depthStyle.text}`}>{depthStyle.label}</span>
       </div>
 
@@ -124,17 +126,17 @@ function PartisanDepthPanel({ depth, senatorParty }: { depth: PartisanDepth; sen
           <div className={`text-sm font-pixel ${depth.overallParty === "R" ? "text-red-400" : depth.overallParty === "D" ? "text-blue-400" : "text-matrix-green"}`}>
             {depth.overallParty === "centrist" ? "CTR" : depth.overallParty}
           </div>
-          <div className="text-[10px] text-matrix-green/40">LEAN</div>
+          <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Overall ideological direction based on voting record and platform content. R = leans Republican, D = leans Democrat, CTR = centrist.">LEAN</MetricTooltip></div>
         </div>
         <div className="terminal-window p-2">
           <div className="text-sm font-pixel text-matrix-green">{depth.totalPositions}</div>
-          <div className="text-[10px] text-matrix-green/40">POSITIONS</div>
+          <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Total policy positions analyzed from this senator's votes and stated platform. More positions = more data for the analysis.">POSITIONS</MetricTooltip></div>
         </div>
         <div className="terminal-window p-2">
           <div className={`text-sm font-pixel ${depth.crossPartyCount > 0 ? "text-neon-cyan" : "text-matrix-green/40"}`}>
             {depth.crossPartyCount}
           </div>
-          <div className="text-[10px] text-matrix-green/40">CROSS-PARTY</div>
+          <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Number of policy areas where this senator's positions align with the opposite party's platform. Higher = more ideologically independent.">CROSS-PARTY</MetricTooltip></div>
         </div>
       </div>
 
@@ -175,7 +177,7 @@ function PartisanDepthPanel({ depth, senatorParty }: { depth: PartisanDepth; sen
                   />
                 </div>
                 <span className={`w-5 text-[10px] font-pixel ${isR ? "text-red-400" : isD ? "text-blue-400" : "text-purple-400"}`}>
-                  {p.alignment === "bipartisan" ? "BI" : p.alignment}
+                  {p.alignment === "bipartisan" ? "BP" : p.alignment}
                 </span>
               </div>
             );
@@ -198,45 +200,53 @@ export default function PlatformTracker({ promises, platformSummary, partisanDep
     (a, b) => sortOrder[a.alignment] - sortOrder[b.alignment],
   );
 
-  return (
-    <div>
-      <div className="flex items-baseline justify-between mb-3">
-        <h3 className="text-lg text-neon-cyan neon-cyan">{">"} PROMISES vs. VOTES</h3>
-        <span className="text-[10px] text-matrix-green/50">
-          AI-analyzed campaign platform
-        </span>
-      </div>
+  const summaryParts: string[] = [];
+  if (partisanDepth && partisanDepth.totalPositions > 0) {
+    summaryParts.push(partisanDepth.depth.toUpperCase());
+  }
+  if (promises.length > 0) {
+    summaryParts.push(`${kept} kept · ${broken} broken · ${partial} partial`);
+  }
 
-      {/* Partisan Depth Panel */}
+  const alwaysVisibleContent = (
+    <>
       {partisanDepth && partisanDepth.totalPositions > 0 && (
         <PartisanDepthPanel depth={partisanDepth} senatorParty={senatorParty} />
       )}
-
       {promises.length > 0 && (
-        <>
-          {/* Summary stats */}
-          <div className="grid grid-cols-3 gap-2 mb-3 text-center">
-            <div className="terminal-window p-2">
-              <div className="text-lg font-pixel text-matrix-green">{kept}</div>
-              <div className="text-[10px] text-matrix-green/40">KEPT</div>
-            </div>
-            <div className="terminal-window p-2">
-              <div className="text-lg font-pixel text-neon-pink">{broken}</div>
-              <div className="text-[10px] text-matrix-green/40">BROKEN</div>
-            </div>
-            <div className="terminal-window p-2">
-              <div className="text-lg font-pixel text-yellow-500">{partial}</div>
-              <div className="text-[10px] text-matrix-green/40">PARTIAL</div>
-            </div>
+        <div className="grid grid-cols-3 gap-2 mb-3 text-center">
+          <div className="terminal-window p-2">
+            <div className="text-lg font-pixel text-matrix-green">{kept}</div>
+            <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Campaign promises where their voting record shows clear follow-through. Determined by AI analysis matching votes to stated commitments.">KEPT</MetricTooltip></div>
           </div>
+          <div className="terminal-window p-2">
+            <div className="text-lg font-pixel text-neon-pink">{broken}</div>
+            <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Campaign promises that their voting record contradicts. They said one thing on the campaign trail but voted the opposite way.">BROKEN</MetricTooltip></div>
+          </div>
+          <div className="terminal-window p-2">
+            <div className="text-lg font-pixel text-yellow-500">{partial}</div>
+            <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Campaign promises with mixed signals — some votes support it, others don't. May also indicate the promise hasn't come to a vote yet.">PARTIAL</MetricTooltip></div>
+          </div>
+        </div>
+      )}
+    </>
+  );
 
+  return (
+    <CollapsibleSection
+      title="PROMISES vs. VOTES"
+      summary={summaryParts.join(" — ")}
+      source="AI-analyzed campaign platform"
+      alwaysVisible={alwaysVisibleContent}
+    >
+      {promises.length > 0 && (
+        <div className="space-y-3 mt-2">
           {platformSummary && (
-            <div className="terminal-window p-3 mb-3">
+            <div className="terminal-window p-3">
               <p className="text-sm text-matrix-green/80 leading-relaxed">{platformSummary}</p>
             </div>
           )}
 
-          {/* Promise cards */}
           <div className="space-y-2">
             {sorted.map((promise, i) => {
               const style = ALIGNMENT_STYLES[promise.alignment];
@@ -292,8 +302,8 @@ export default function PlatformTracker({ promises, platformSummary, partisanDep
               );
             })}
           </div>
-        </>
+        </div>
       )}
-    </div>
+    </CollapsibleSection>
   );
 }

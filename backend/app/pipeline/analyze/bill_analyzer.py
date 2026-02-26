@@ -158,14 +158,13 @@ POLICY_TAXONOMY = {
 
 POLICY_AREAS = ", ".join(POLICY_TAXONOMY.keys())
 
-SEED_PROCEDURAL_DESCRIPTIONS = [
-    "naming of room", "naming of building",
-    "commemorating", "honoring the life",
-    "designating the week", "designating the month",
-    "electing a member", "relative to the death",
-    "fixing the daily hour", "authorizing the use of the rotunda",
-    "making technical corrections",
-]
+_PROCEDURAL_PROTOTYPE = (
+    "naming building commemorating honoring designating week month "
+    "electing member relative to death fixing daily hour authorizing rotunda "
+    "technical corrections renaming post office awarding medal tribute memorial "
+    "congressional record adjournment quorum call cloture motion to table"
+)
+_procedural_emb: np.ndarray | None = None
 
 POLICY_IMPACTED_GROUPS: dict[str, list[str]] = {
     "LABOR": ["workers", "unions", "employers", "small businesses"],
@@ -221,16 +220,23 @@ def _augmented_embedding_classify(text: str) -> str:
 # "pro" = bill supports/expands the policy area
 # "anti" = bill restricts/opposes the policy area
 # "neutral" = directional intent is ambiguous
-_ACTION_PATTERNS: list[tuple[list[str], str, str]] = [
-    (["ban", "prohibit", "restrict", "limit", "block"], "restrict {area} activities", "anti"),
-    (["protect", "strengthen", "expand", "extend", "increase"], "strengthen {area} protections", "pro"),
-    (["repeal", "eliminate", "remove", "defund", "rescind"], "roll back {area} measures", "anti"),
-    (["reform", "modernize", "update", "overhaul"], "reform {area} policy", "neutral"),
-    (["fund", "appropriate", "authorize spending", "invest"], "fund {area} programs", "pro"),
-    (["establish", "create", "institute"], "establish new {area} measures", "pro"),
-    (["require", "mandate"], "mandate {area} requirements", "pro"),
-    (["reauthorize"], "reauthorize {area} programs", "pro"),
-]
+_STANCE_PROTOTYPES = {
+    "pro": (
+        "protect strengthen expand extend increase fund invest establish create "
+        "mandate require reauthorize support promote enhance authorize appropriation "
+        "improve safeguard guarantee"
+    ),
+    "anti": (
+        "ban prohibit restrict limit block repeal eliminate remove defund rescind "
+        "cut reduce rollback revoke abolish dismantle oppose curtail suspend "
+        "withdraw terminate"
+    ),
+    "neutral": (
+        "reform modernize update overhaul study review assess examine reauthorize "
+        "amend modify restructure reorganize transition"
+    ),
+}
+_stance_embs: dict[str, np.ndarray] | None = None
 
 _policy_embeddings: dict[str, np.ndarray] = {}
 _industry_embeddings: dict[str, np.ndarray] = {}
@@ -281,14 +287,31 @@ def _get_industry_embeddings() -> dict[str, np.ndarray]:
 EMBEDDING_CONFIDENCE_THRESHOLD = 0.25
 
 
-def _is_procedural_seed_match(text: str) -> bool:
-    """Check if text matches seed procedural descriptions.
+def _is_procedural_seed_match(text: str, threshold: float = 0.30) -> bool:
+    """Check if text is procedural via embedding similarity to the procedural prototype.
 
-    This is the cold-start fallback for when the reference corpus is empty.
-    As the corpus grows, this becomes less important — kNN handles it.
+    Uses cosine similarity (Reimers & Gurevych 2019) instead of keyword
+    substring matching. The procedural prototype captures the semantic
+    signature of ceremonial/administrative bills.
     """
-    lower = text.lower()
-    return any(seed in lower for seed in SEED_PROCEDURAL_DESCRIPTIONS)
+    global _procedural_emb
+    if not text or len(text.strip()) < 5:
+        return True
+
+    from app.pipeline.vector_store import get_embedding_model
+    model = get_embedding_model()
+
+    if _procedural_emb is None:
+        emb = model.encode([_PROCEDURAL_PROTOTYPE], show_progress_bar=False)[0]
+        _procedural_emb = emb / np.linalg.norm(emb)
+
+    query_emb = model.encode([text[:300]], show_progress_bar=False)[0]
+    norm = np.linalg.norm(query_emb)
+    if norm > 0:
+        query_emb = query_emb / norm
+
+    score = float(np.dot(query_emb, _procedural_emb))
+    return score >= threshold
 
 
 def classify_policy_area(
@@ -358,6 +381,82 @@ def classify_policy_area(
     return best_area, best_score
 
 
+MULTI_AREA_SECONDARY_THRESHOLD = 0.20
+MULTI_AREA_GAP_RATIO = 0.70
+
+
+def classify_policy_areas_multi(
+    text: str,
+    bill_id: str | None = None,
+    db_session: Session | None = None,
+    max_areas: int = 4,
+) -> list[dict]:
+    """Classify ALL relevant policy areas for a bill using embedding similarity.
+
+    Real legislation rarely addresses a single policy dimension. The
+    Comparative Agendas Project (Baumgartner & Jones 1993, 2002) codes
+    bills with both a primary and secondary topic; Adler & Wilkerson
+    (2012, "Congress and the Politics of Problem Solving") show that
+    most major bills span 2-4 policy domains.
+
+    Returns a list of {area, confidence} dicts ordered by confidence,
+    where:
+      - The first entry is the primary area (same as classify_policy_area)
+      - Additional entries are secondary areas whose embedding similarity
+        exceeds MULTI_AREA_SECONDARY_THRESHOLD and whose confidence is
+        at least MULTI_AREA_GAP_RATIO of the primary area's confidence.
+
+    The gap-ratio filter prevents low-confidence noise from inflating
+    the area count. A bill about healthcare (0.72) that also touches
+    taxes (0.55) will get both, but a faint procedural echo (0.22)
+    won't appear.
+    """
+    if not text or len(text.strip()) < 5:
+        return [{"area": "PROCEDURAL", "confidence": 0.0}]
+
+    primary_area, primary_conf = classify_policy_area(
+        text, bill_id=bill_id, db_session=db_session,
+    )
+
+    if primary_area == "PROCEDURAL" and primary_conf >= 0.9:
+        return [{"area": "PROCEDURAL", "confidence": primary_conf}]
+
+    from app.pipeline.vector_store import get_embedding_model
+    model = get_embedding_model()
+    policy_embs = _get_policy_embeddings()
+
+    query_emb = model.encode([text[:500]], show_progress_bar=False)[0]
+    query_emb = query_emb / np.linalg.norm(query_emb)
+
+    scored: list[tuple[str, float]] = []
+    for area, area_emb in policy_embs.items():
+        if area == "PROCEDURAL":
+            continue
+        score = float(np.dot(query_emb, area_emb))
+        scored.append((area, score))
+
+    scored.sort(key=lambda x: x[1], reverse=True)
+
+    if not scored:
+        return [{"area": primary_area, "confidence": primary_conf}]
+
+    top_score = scored[0][1]
+    threshold = max(
+        MULTI_AREA_SECONDARY_THRESHOLD,
+        top_score * MULTI_AREA_GAP_RATIO,
+    )
+
+    areas: list[dict] = []
+    for area, score in scored[:max_areas]:
+        if score >= threshold or area == primary_area:
+            areas.append({"area": area, "confidence": round(score, 4)})
+
+    if not any(a["area"] == primary_area for a in areas):
+        areas.insert(0, {"area": primary_area, "confidence": primary_conf})
+
+    return areas
+
+
 # ── Industry classification for bills (embeddings) ──────────────
 
 
@@ -389,8 +488,27 @@ def classify_affected_industries(text: str, top_n: int = 3) -> list[str]:
 # ── Stance and narrative derivation (keyword + template) ─────────
 
 
+def _get_stance_embeddings() -> dict[str, np.ndarray]:
+    """Cache and return stance prototype embeddings."""
+    global _stance_embs
+    if _stance_embs is not None:
+        return _stance_embs
+
+    from app.pipeline.vector_store import get_embedding_model
+    model = get_embedding_model()
+
+    _stance_embs = {}
+    for direction, proto in _STANCE_PROTOTYPES.items():
+        emb = model.encode([proto], show_progress_bar=False)[0]
+        _stance_embs[direction] = emb / np.linalg.norm(emb)
+    return _stance_embs
+
+
 def derive_stance(bill_name: str, summary: str, policy_area: str) -> tuple[str, str]:
     """Derive a brief stance description and direction from bill name and summary.
+
+    Uses embedding cosine similarity against stance direction prototypes
+    (pro/anti/neutral) instead of keyword pattern matching.
 
     Returns:
         (stance_text, stance_direction) where direction is "pro", "anti", or "neutral".
@@ -398,29 +516,40 @@ def derive_stance(bill_name: str, summary: str, policy_area: str) -> tuple[str, 
         "anti" = bill restricts/opposes the policy area (Nay = supporting)
         "neutral" = directional intent is ambiguous
     """
-    text = bill_name.lower()
     area = policy_area.lower().replace("_", " ")
 
-    # Try keyword patterns first to get structured direction
-    matched_direction = "neutral"
-    matched_desc: str | None = None
-    for keywords, template, direction in _ACTION_PATTERNS:
-        if any(w in text for w in keywords):
-            matched_desc = template.format(area=area)
-            matched_direction = direction
-            break
+    from app.pipeline.vector_store import get_embedding_model
+    model = get_embedding_model()
+    stance_embs = _get_stance_embeddings()
 
-    # Prefer summary first sentence for display text
+    query_text = bill_name
+    if summary and len(summary) > 30:
+        query_text = f"{bill_name} {summary[:200]}"
+
+    query_emb = model.encode([query_text[:300]], show_progress_bar=False)[0]
+    norm = np.linalg.norm(query_emb)
+    if norm > 0:
+        query_emb = query_emb / norm
+
+    best_dir = "neutral"
+    best_score = 0.0
+    for direction, emb in stance_embs.items():
+        score = float(np.dot(query_emb, emb))
+        if score > best_score:
+            best_score = score
+            best_dir = direction
+
+    if best_score < 0.20 or (best_dir != "neutral" and best_score - 0.0 < 0.05):
+        best_dir = "neutral"
+
     if summary and len(summary) > 30:
         first_sentence = summary.split(".")[0].strip()
         first_sentence = re.sub(r"<[^>]+>", "", first_sentence).strip()
         if len(first_sentence) > 20:
-            return first_sentence[:150], matched_direction
+            return first_sentence[:150], best_dir
 
-    if matched_desc:
-        return matched_desc, matched_direction
-
-    return f"{area} legislation", "neutral"
+    direction_labels = {"pro": "strengthen", "anti": "restrict", "neutral": "reform"}
+    return f"{direction_labels[best_dir]} {area} policy", best_dir
 
 
 def _direction_to_stance_vote(direction: str) -> str | None:
@@ -456,20 +585,28 @@ def _make_public_impact(policy_area: str, groups: list[str]) -> str:
 async def classify_all_bills(
     bills: list[dict], db_session: Any | None = None
 ) -> list[dict]:
-    """Classify bills using adaptive tiered classification (zero LLM calls).
+    """Classify bills using adaptive tiered multi-area classification.
+
+    Each bill receives multiple policy area classifications reflecting
+    the reality that legislation typically spans 2-4 policy domains
+    (Adler & Wilkerson 2012). Party alignment is computed per-area and
+    aggregated with confidence weights, producing a nuanced alignment
+    score rather than a binary party label.
 
     Tiers: reference corpus kNN → embedding similarity → augmented re-embed.
-    Party alignment is determined by analyzing what the bill DOES relative
-    to each party's platform positions, not by vote tallies.
     """
     if not bills:
         return []
 
-    from app.pipeline.analyze.party_platform import classify_party_alignment
+    from app.pipeline.analyze.party_platform import (
+        classify_party_alignment,
+        classify_party_alignment_multi,
+    )
 
-    logger.info("Classifying %d bills (adaptive, zero LLM)...", len(bills))
+    logger.info("Classifying %d bills (adaptive multi-area, zero LLM)...", len(bills))
     classified = []
     procedural_count = 0
+    multi_area_count = 0
 
     for b in bills:
         summary = (b.get("summary") or b.get("billName", ""))[:300]
@@ -478,32 +615,64 @@ async def classify_all_bills(
         bill_text = f"{bill_name} {summary}"
         bill_date = _extract_bill_date(b.get("actions", []))
 
-        policy_area, confidence = classify_policy_area(
+        areas = classify_policy_areas_multi(
             bill_text, bill_id=bill_id, db_session=db_session,
         )
+        policy_area = areas[0]["area"]
+        confidence = areas[0]["confidence"]
+
         if policy_area == "PROCEDURAL" and confidence < 1.0:
-            name_area, _ = classify_policy_area(bill_name)
-            if name_area != "PROCEDURAL":
-                policy_area = name_area
+            name_areas = classify_policy_areas_multi(bill_name)
+            if name_areas[0]["area"] != "PROCEDURAL":
+                areas = name_areas
+                policy_area = areas[0]["area"]
                 confidence = 0.5
 
         if policy_area == "PROCEDURAL" and confidence >= 0.9:
             proc = _make_procedural(b)
             proc["date"] = bill_date
+            proc["policyAreas"] = [{"area": "PROCEDURAL", "confidence": confidence, "party": "bipartisan"}]
+            proc["partyAlignmentWeight"] = 0.0
             classified.append(proc)
             procedural_count += 1
         else:
             if policy_area == "PROCEDURAL":
                 policy_area = _augmented_embedding_classify(bill_text)
+                areas = [{"area": policy_area, "confidence": confidence}]
             industries = classify_affected_industries(bill_text)
             stance_text, stance_direction = derive_stance(b["billName"], summary, policy_area)
             stance_vote = _direction_to_stance_vote(stance_direction)
-            groups = POLICY_IMPACTED_GROUPS.get(policy_area, ["general public"])[:3]
+
+            all_groups: list[str] = []
+            for a in areas:
+                for g in POLICY_IMPACTED_GROUPS.get(a["area"], []):
+                    if g not in all_groups:
+                        all_groups.append(g)
+            groups = all_groups[:5]
+
             description = _clean_summary(summary, b["billName"])
 
-            content_alignment = classify_party_alignment(
-                bill_text, policy_area, stance_direction,
+            multi_alignment = classify_party_alignment_multi(
+                bill_text, areas, stance_direction,
             )
+
+            content_alignment = multi_alignment["overall"]
+            alignment_weight = multi_alignment["weight"]
+
+            area_parties = {
+                a["area"]: a["party"] for a in multi_alignment["areas"]
+            }
+            policy_areas_enriched = [
+                {
+                    "area": a["area"],
+                    "confidence": a["confidence"],
+                    "party": area_parties.get(a["area"], "bipartisan"),
+                }
+                for a in areas
+            ]
+
+            if len(areas) > 1:
+                multi_area_count += 1
 
             classified.append({
                 "billId": bill_id,
@@ -512,6 +681,7 @@ async def classify_all_bills(
                 "date": bill_date,
                 "description": description,
                 "policyArea": policy_area,
+                "policyAreas": policy_areas_enriched,
                 "stance": stance_direction,
                 "stanceText": stance_text,
                 "stanceVote": stance_vote,
@@ -520,6 +690,7 @@ async def classify_all_bills(
                 "publicImpact": _make_public_impact(policy_area, groups),
                 "affectedIndustries": industries,
                 "partyLeaning": content_alignment,
+                "partyAlignmentWeight": alignment_weight,
             })
 
         _record_if_possible(db_session, bill_id, bill_text, policy_area, confidence)
@@ -527,8 +698,8 @@ async def classify_all_bills(
     _validate_classifications(classified)
     substantive = len(classified) - procedural_count
     logger.info(
-        "Classified %d/%d bills (%d substantive, %d procedural)",
-        len(classified), len(bills), substantive, procedural_count,
+        "Classified %d/%d bills (%d substantive, %d procedural, %d multi-area)",
+        len(classified), len(bills), substantive, procedural_count, multi_area_count,
     )
     return classified
 
@@ -536,22 +707,22 @@ async def classify_all_bills(
 async def classify_recent_votes(
     roll_calls: list[dict], db_session: Any | None = None
 ) -> list[dict]:
-    """Classify recent roll call votes using adaptive tiered classification.
+    """Classify recent roll call votes using adaptive multi-area classification.
 
     Key design: the Senate.gov question field describes the *parliamentary
     mechanism* ("On the Cloture Motion"), not the bill's policy content.
     We use learned motion type classification to separate the mechanism
-    from the content, then classify the bill on its own merit.
-
-    Party alignment is content-based: determined by what the bill does
-    relative to each party's platform positions.
+    from the content, then classify the bill on its own merit with
+    multi-area support.
     """
     if not roll_calls:
         return []
 
-    logger.info("Classifying %d recent votes (adaptive, zero LLM)...", len(roll_calls))
+    logger.info("Classifying %d recent votes (adaptive multi-area, zero LLM)...", len(roll_calls))
     from app.pipeline.analyze.bill_learning import classify_motion_type
-    from app.pipeline.analyze.party_platform import classify_party_alignment
+    from app.pipeline.analyze.party_platform import (
+        classify_party_alignment_multi,
+    )
 
     classified = []
     procedural_count = 0
@@ -570,6 +741,8 @@ async def classify_recent_votes(
         description = name
         bill_content = name
 
+        proc_areas = [{"area": "PROCEDURAL", "confidence": 0.95, "party": "bipartisan"}]
+
         if motion_type == "nomination" and "nominat" in name.lower():
             classified.append({
                 "billId": bill_id,
@@ -577,6 +750,8 @@ async def classify_recent_votes(
                 "date": vote_date,
                 "description": description,
                 "policyArea": "PROCEDURAL",
+                "policyAreas": proc_areas,
+                "partyAlignmentWeight": 0.0,
                 "stance": "nomination",
                 "stanceVote": None,
                 "impactedGroups": [],
@@ -589,9 +764,11 @@ async def classify_recent_votes(
             _record_if_possible(db_session, bill_id, bill_content, "PROCEDURAL", 0.95)
             continue
 
-        policy_area, confidence = classify_policy_area(
+        areas = classify_policy_areas_multi(
             bill_content, bill_id=bill_id, db_session=db_session,
         )
+        policy_area = areas[0]["area"]
+        confidence = areas[0]["confidence"]
 
         if policy_area == "PROCEDURAL" and confidence >= 0.9:
             classified.append({
@@ -600,6 +777,8 @@ async def classify_recent_votes(
                 "date": vote_date,
                 "description": description,
                 "policyArea": "PROCEDURAL",
+                "policyAreas": proc_areas,
+                "partyAlignmentWeight": 0.0,
                 "stance": "procedural",
                 "stanceVote": None,
                 "impactedGroups": [],
@@ -612,14 +791,36 @@ async def classify_recent_votes(
         else:
             if policy_area == "PROCEDURAL":
                 policy_area = _augmented_embedding_classify(bill_content)
+                areas = [{"area": policy_area, "confidence": confidence}]
             industries = classify_affected_industries(bill_content)
             stance_text, stance_direction = derive_stance(name, question, policy_area)
             stance_vote = _direction_to_stance_vote(stance_direction)
-            groups = POLICY_IMPACTED_GROUPS.get(policy_area, ["general public"])[:3]
 
-            content_alignment = classify_party_alignment(
-                bill_content, policy_area, stance_direction,
+            all_groups: list[str] = []
+            for a in areas:
+                for g in POLICY_IMPACTED_GROUPS.get(a["area"], []):
+                    if g not in all_groups:
+                        all_groups.append(g)
+            groups = all_groups[:5]
+
+            multi_alignment = classify_party_alignment_multi(
+                bill_content, areas, stance_direction,
             )
+
+            content_alignment = multi_alignment["overall"]
+            alignment_weight = multi_alignment["weight"]
+
+            area_parties = {
+                a["area"]: a["party"] for a in multi_alignment["areas"]
+            }
+            policy_areas_enriched = [
+                {
+                    "area": a["area"],
+                    "confidence": a["confidence"],
+                    "party": area_parties.get(a["area"], "bipartisan"),
+                }
+                for a in areas
+            ]
 
             classified.append({
                 "billId": bill_id,
@@ -627,6 +828,8 @@ async def classify_recent_votes(
                 "date": vote_date,
                 "description": description,
                 "policyArea": policy_area,
+                "policyAreas": policy_areas_enriched,
+                "partyAlignmentWeight": alignment_weight,
                 "stance": stance_direction,
                 "stanceText": stance_text,
                 "stanceVote": stance_vote,

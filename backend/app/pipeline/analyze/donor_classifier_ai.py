@@ -60,6 +60,8 @@ from app.models import LearnedClassification
 from app.pipeline.analyze.nn_classifier import (
     classify_batch_nn,
     normalize_learning_store,
+    cross_validate_donor_types,
+    normalize_donor_type,
     DONOR_TYPE_PROTOTYPES,
 )
 from app.pipeline.transform.industry_classifier import (
@@ -71,12 +73,14 @@ from app.pipeline.transform.industry_classifier import (
 
 logger = logging.getLogger(__name__)
 
-# FEC contributor entity_type codes → donor types
+# FEC contributor entity_type codes → donor types.
+# "COM" (generic committee) is deliberately excluded: it is ambiguous and
+# defers to the embedding classifier which can distinguish corporate
+# employee PACs from purely political PACs (see classify_donor_type_from_fec).
 FEC_ENTITY_TYPE_MAP = {
     "CCM": "CandidateAffiliated",
-    "CAN": "CandidateAffiliated",
+    "CAN": "Self-Funded",
     "PAC": "PAC",
-    "COM": "PAC",
     "ORG": "Org/Employees",
     "IND": "Org/Employees",
     "PTY": "Party/Ideological",
@@ -84,14 +88,37 @@ FEC_ENTITY_TYPE_MAP = {
 
 AFFILIATED_RECEIPT_TYPES = {"18G", "18H", "18K", "18J", "22G", "22H"}
 
-# Minimal safety-net: payment processors that must always be skipped.
-# These are financial conduits (not actual donors) and misclassifying
-# them would pollute every senator's donor list.
-SKIP_NAMES = {"WINRED", "ACTBLUE", "ANEDOT"}
+_PAYMENT_PROCESSOR_PROTOTYPE = (
+    "ActBlue is a Democratic fundraising payment processor. "
+    "WinRed is a Republican fundraising payment processor. "
+    "Anedot is an online donation processing platform. "
+    "These are financial technology intermediary conduit services "
+    "that process political contributions, not actual donors."
+)
+
+_EMPLOYER_SKIP_PROTOTYPE = (
+    "self-employed self employed retired homemaker student unemployed "
+    "not employed disabled information requested none not applicable "
+    "requested per best efforts N/A"
+)
+
+_FUND_TRANSFER_PROTOTYPE = (
+    "transfer between committees redesignation reattribution refund "
+    "earmark conduit joint fundraising redistribution accounting "
+    "adjustment internal bookkeeping transfer from"
+)
 
 # Embedding prototypes for semantic donor-type classification.
-# Each description captures the semantic signature of a donor category
-# so the embedding model can generalize to unseen entities.
+#
+# Each description defines a donor category via natural-language exemplars.
+# The embedding model (Sentence-BERT; Reimers & Gurevych 2019) maps both the
+# prototype and the query name into the same dense space; cosine similarity
+# then performs zero-shot classification (Yin, Hay & Roth 2019).
+#
+# Prototype design follows the "description-anchored" approach from Pushp &
+# Srivastava (2017, "Train Once, Test Anywhere"): mixing semantic descriptions
+# with exemplar entity names gives the embedding model both conceptual and
+# lexical anchors, improving generalization to unseen entities.
 _CANDIDATE_AFFILIATED_PROTOTYPE = (
     "candidate personal campaign committee senator victory fund "
     "friends of for senate for congress reelect leadership pac "
@@ -104,13 +131,38 @@ _PARTY_PROTOTYPE = (
     "ideological super PAC political action crossroads"
 )
 _ORG_EMPLOYEES_PROTOTYPE = (
-    "corporation company business employees organization firm "
-    "group LLC LLP inc bank hospital university hotel "
-    "airline insurance manufacturing construction"
+    "corporation company business employees organization firm enterprise "
+    "group LLC LLP LP inc corp bank hospital university hotel "
+    "airline insurance manufacturing construction properties enterprises "
+    "solutions services associates investments holdings development "
+    "industries international systems technologies "
+    "credit union savings bank federal credit union mutual savings "
+    "professional corporation medical group dental practice law firm "
+    "consulting firm engineering company real estate agency brokerage"
 )
 _PAC_PROTOTYPE = (
-    "political action committee PAC fund committee league caucus "
-    "association political contributions campaign donations"
+    "political action committee PAC political fund league caucus "
+    "association political contributions campaign donations "
+    "good government committee voluntary political"
+)
+# Prototype for FEC data quality noise: individual names, occupation titles,
+# and employment status strings that leak through as "donor" names when the
+# FEC contributor_employer or contributor_name field contains non-organization
+# values. Embedding similarity naturally generalizes beyond exact string
+# matches to catch misspellings and variants (e.g. "SELF-EMPIOYED").
+_SELF_FUNDED_PROTOTYPE = (
+    "candidate personal loan self-funded personal contribution own money "
+    "candidate committee self-financing personal funds senator governor "
+    "candidate self-contribution individual candidate donor"
+)
+_SKIP_PROTOTYPE = (
+    "individual person self employed retired homemaker student unemployed "
+    "not employed disabled information requested none "
+    "director president attorney physician consultant manager executive "
+    "engineer lawyer owner partner farmer dentist surgeon realtor professor "
+    "accountant officer broker agent nurse teacher principal technician "
+    "administrator analyst clerk secretary receptionist operator supervisor "
+    "job title occupation profession employment status"
 )
 
 _SEMANTIC_PROTOTYPES = {
@@ -118,6 +170,8 @@ _SEMANTIC_PROTOTYPES = {
     "Party/Ideological": _PARTY_PROTOTYPE,
     "Org/Employees": _ORG_EMPLOYEES_PROTOTYPE,
     "PAC": _PAC_PROTOTYPE,
+    "Self-Funded": _SELF_FUNDED_PROTOTYPE,
+    "SKIP": _SKIP_PROTOTYPE,
 }
 
 _semantic_embeddings: dict[str, np.ndarray] | None = None
@@ -144,12 +198,21 @@ def classify_donor_type_semantic(
     name: str,
     candidate_name: str | None = None,
     threshold: float = 0.35,
+    skip_threshold: float = 0.45,
 ) -> str | None:
-    """Classify donor type using embedding similarity against prototypes.
+    """Classify donor type using embedding cosine similarity against prototypes.
 
-    For candidate-affiliated detection, also generates a dynamic template
-    using the candidate's last name so the model can detect entities like
-    "Sullivan Victory" or "Cruz for Senate" without hardcoded patterns.
+    Uses description-anchored zero-shot classification (Pushp & Srivastava
+    2017): each donor category is represented by a natural-language prototype,
+    and the query name is classified to the most similar prototype above a
+    minimum similarity threshold.
+
+    The SKIP category (individual/occupation/FEC noise) requires a higher
+    similarity threshold to avoid false positives on ambiguous short names.
+
+    For candidate-affiliated detection, dynamically generates a personalized
+    template using the candidate's last name so the model can detect entities
+    like "Sullivan Victory" or "Cruz for Senate" without hardcoded patterns.
     """
     if not name or len(name.strip()) < 3:
         return None
@@ -165,17 +228,33 @@ def classify_donor_type_semantic(
     best_score = threshold
 
     for dtype, emb in type_embs.items():
+        effective_threshold = skip_threshold if dtype == "SKIP" else threshold
         score = float(np.dot(query_emb, emb))
-        if score > best_score:
+        if score > best_score and score >= effective_threshold:
             best_score = score
             best_type = dtype
 
-    # Dynamic candidate-affiliated check: if the senator's last name
-    # appears in the donor name, generate a personalized template and
-    # check similarity. This generalizes to any senator.
-    if candidate_name:
+    # Dynamic candidate-affiliated / self-funded check using mathematical
+    # similarity metrics instead of hardcoded string comparisons.
+    #
+    # Self-funded: detected via SequenceMatcher ratio (Ratcliff & Obershelp
+    # 1988) between donor and candidate names — a normalised edit-distance
+    # metric in [0, 1] that handles spelling variations and middle names.
+    #
+    # CandidateAffiliated: detected via embedding cosine similarity between
+    # the donor name and a dynamically generated candidate campaign template.
+    if candidate_name and len(candidate_name.strip()) > 3:
+        from difflib import SequenceMatcher
+
+        cand_norm = candidate_name.upper().strip()
+        name_upper = name.upper().strip()
+
+        name_sim = SequenceMatcher(None, name_upper, cand_norm).ratio()
+        if name_sim >= 0.60:
+            return "Self-Funded"
+
         last_name = candidate_name.split(",")[0].strip().upper()
-        if len(last_name) > 2 and last_name in name.upper():
+        if len(last_name) > 2:
             template = (
                 f"{last_name} senate campaign victory fund committee "
                 f"friends of {last_name} for senate reelect {last_name}"
@@ -186,19 +265,6 @@ def classify_donor_type_semantic(
             if affil_score > 0.30:
                 return "CandidateAffiliated"
 
-            # Also detect personal contributions: "LAST, FIRST MIDDLE"
-            name_upper = name.upper().strip()
-            donor_parts = [p.strip() for p in name_upper.split(",")]
-            cand_parts = [p.strip() for p in candidate_name.upper().split(",")]
-            if len(donor_parts) >= 2 and len(cand_parts) >= 2:
-                if donor_parts[0] == cand_parts[0]:
-                    cand_tokens = set(cand_parts[1].split())
-                    donor_tokens = set(
-                        donor_parts[1].replace("'", "").replace('"', "").split()
-                    )
-                    if cand_tokens & donor_tokens:
-                        return "CandidateAffiliated"
-
     return best_type
 
 
@@ -208,21 +274,152 @@ def classify_donor_type_from_fec(receipt: dict) -> str | None:
     Uses entity_type (contributor's entity kind) and receipt_type (transfer
     category) — NOT committee.committee_type, which describes the *receiving*
     campaign committee and would misclassify every donor.
+
+    For entity_type "COM" (generic committee), returns None to defer to the
+    semantic embedding classifier (tier 2). FEC "COM" is ambiguous — it
+    covers both purely political PACs and corporate employee PACs. The
+    embedding classifier distinguishes these based on the entity name's
+    semantic similarity to Org/Employees vs PAC prototypes.
+
+    Entity types with unambiguous mappings (PAC, ORG, IND, CCM, CAN, PTY)
+    are returned directly since they carry higher-confidence FEC metadata.
     """
     receipt_type = receipt.get("receipt_type") or ""
     if receipt_type in AFFILIATED_RECEIPT_TYPES:
         return "CandidateAffiliated"
 
     entity_type = receipt.get("entity_type") or ""
-    if entity_type and entity_type in FEC_ENTITY_TYPE_MAP:
+    if not entity_type:
+        return None
+
+    # "COM" is ambiguous — defer to embedding-based classification
+    if entity_type == "COM":
+        return None
+
+    if entity_type in FEC_ENTITY_TYPE_MAP:
         return FEC_ENTITY_TYPE_MAP[entity_type]
 
     return None
 
 
-def is_skip_entity(name_upper: str) -> bool:
-    """Check if a donor is a payment processor that should be skipped."""
-    return any(skip in name_upper for skip in SKIP_NAMES)
+_skip_emb_cache: dict[str, np.ndarray] = {}
+
+
+def _get_skip_prototype_embedding(prototype_key: str, prototype_text: str) -> np.ndarray:
+    """Get or compute a cached embedding for a skip prototype."""
+    if prototype_key not in _skip_emb_cache:
+        from app.pipeline.vector_store import get_embedding_model
+        model = get_embedding_model()
+        emb = model.encode([prototype_text], show_progress_bar=False)[0]
+        _skip_emb_cache[prototype_key] = emb / np.linalg.norm(emb)
+    return _skip_emb_cache[prototype_key]
+
+
+def is_skip_entity(name_upper: str, threshold: float = 0.30) -> bool:
+    """Check if a donor is a payment processor via embedding similarity.
+
+    Compares the entity name against the payment processor semantic
+    prototype using cosine similarity (Reimers & Gurevych 2019).
+    """
+    if not name_upper or len(name_upper.strip()) < 2:
+        return False
+
+    from app.pipeline.vector_store import get_embedding_model
+    model = get_embedding_model()
+    proto_emb = _get_skip_prototype_embedding("payment", _PAYMENT_PROCESSOR_PROTOTYPE)
+    query_emb = model.encode([name_upper], show_progress_bar=False)[0]
+    norm = np.linalg.norm(query_emb)
+    if norm > 0:
+        query_emb = query_emb / norm
+    score = float(np.dot(query_emb, proto_emb))
+    return score >= threshold
+
+
+def classify_skip_names_batch(
+    names: list[str],
+    prototype_key: str = "payment",
+    prototype_text: str | None = None,
+    threshold: float = 0.50,
+) -> set[str]:
+    """Batch-classify names against a skip prototype via embedding similarity.
+
+    Args:
+        names: List of names to check.
+        prototype_key: Cache key for the prototype embedding.
+        prototype_text: Natural-language prototype (defaults to payment processor).
+        threshold: Minimum cosine similarity to classify as skip.
+
+    Returns:
+        Set of names (uppercased) that should be skipped.
+    """
+    if not names:
+        return set()
+
+    if prototype_text is None:
+        prototype_text = _PAYMENT_PROCESSOR_PROTOTYPE
+
+    from app.pipeline.vector_store import get_embedding_model
+    model = get_embedding_model()
+    proto_emb = _get_skip_prototype_embedding(prototype_key, prototype_text)
+
+    _BATCH = 256
+    all_embs = []
+    for start in range(0, len(names), _BATCH):
+        batch = names[start:start + _BATCH]
+        embs = model.encode(batch, show_progress_bar=False, batch_size=min(64, len(batch)))
+        all_embs.append(embs)
+
+    query_embs = np.vstack(all_embs)
+    norms = np.linalg.norm(query_embs, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    query_embs = query_embs / norms
+
+    scores = query_embs @ proto_emb
+    return {
+        names[i].upper().strip()
+        for i in range(len(names))
+        if scores[i] >= threshold
+    }
+
+
+def classify_employer_skips_batch(employer_names: list[str], threshold: float = 0.24) -> set[str]:
+    """Batch-classify employer names against employment-status skip prototype.
+
+    Detects FEC employer-field values that are not real organizations
+    (e.g. 'RETIRED', 'SELF-EMPLOYED', 'INFORMATION REQUESTED').
+    """
+    if not employer_names:
+        return set()
+    short_skips = {n.upper().strip() for n in employer_names if n and len(n.strip()) <= 3}
+    valid = [n for n in employer_names if n and len(n.strip()) > 3]
+    if not valid:
+        return short_skips
+    return short_skips | classify_skip_names_batch(
+        valid,
+        prototype_key="employer_skip",
+        prototype_text=_EMPLOYER_SKIP_PROTOTYPE,
+        threshold=threshold,
+    )
+
+
+def classify_transfer_memos_batch(memo_texts: list[str], threshold: float = 0.28) -> set[str]:
+    """Batch-classify memo texts against fund-transfer prototype.
+
+    Detects FEC memo_text values indicating internal fund transfers,
+    redesignations, or reattributions that should be excluded from
+    donor aggregation.
+    """
+    if not memo_texts:
+        return set()
+    valid = [m for m in memo_texts if m and len(m.strip()) >= 3]
+    if not valid:
+        return set()
+    return classify_skip_names_batch(
+        valid,
+        prototype_key="fund_transfer",
+        prototype_text=_FUND_TRANSFER_PROTOTYPE,
+        threshold=threshold,
+    )
 
 
 async def classify_donors_hybrid(
@@ -316,7 +513,7 @@ async def classify_donors_hybrid(
 
         learned = known_from_db.get(name_upper, {})
         if "donor_type" in learned and "industry" in learned:
-            donor_type = learned["donor_type"]
+            donor_type = normalize_donor_type(learned["donor_type"])
             industry = learned["industry"]
             source_type = "learned"
             tier_stats["learned"] += 1
@@ -362,6 +559,12 @@ async def classify_donors_hybrid(
                 industry = emb_hit[0] if emb_hit else "OTHER"
                 if industry != "OTHER":
                     tier_stats["embedding"] += 1
+
+        # Handle SKIP from any tier (payment processors, semantic individual
+        # detection, or learned store)
+        if donor_type == "SKIP":
+            results[name_upper] = {"type": "SKIP", "industry": "OTHER", "skip": True}
+            continue
 
         if donor_type and industry and industry != "OTHER":
             results[name_upper] = {
@@ -434,6 +637,7 @@ def _classify_remaining_via_nn(
     logger.info("kNN classifying %d unique donors (deduped from %d)...", len(query_names), len(donors))
 
     normalize_learning_store(db_session)
+    cross_validate_donor_types(db_session)
 
     industry_results = classify_batch_nn(
         query_names, db_session, entity_type="industry",
@@ -452,7 +656,7 @@ def _classify_remaining_via_nn(
         name = donor["name"]
         name_upper = name.upper().strip()
         industry = industry_results.get(name, "OTHER")
-        dtype = type_results.get(name, "Org/Employees")
+        dtype = normalize_donor_type(type_results.get(name, "Org/Employees"))
 
         all_results[name_upper] = {"type": dtype, "industry": industry}
 

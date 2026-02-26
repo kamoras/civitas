@@ -27,6 +27,10 @@ GREEN_FE_PORT=3001; GREEN_BE_PORT=8001
 FE_SLOT_FILE="$PROJECT_DIR/.deploy-frontend-slot"
 BE_SLOT_FILE="$PROJECT_DIR/.deploy-backend-slot"
 
+# Read LLM_BACKEND from .env (default: ollama)
+LLM_BACKEND=$(grep -E '^LLM_BACKEND=' .env 2>/dev/null | cut -d= -f2 | tr -d '"' | tr -d "'" || true)
+LLM_BACKEND="${LLM_BACKEND:-ollama}"
+
 # ── Helpers ──────────────────────────────────────────────────────────
 slot_port_fe() { [[ "$1" == "blue" ]] && echo $BLUE_FE_PORT || echo $GREEN_FE_PORT; }
 slot_port_be() { [[ "$1" == "blue" ]] && echo $BLUE_BE_PORT || echo $GREEN_BE_PORT; }
@@ -367,7 +371,7 @@ deploy_backend() {
     --add-host=host.docker.internal:host-gateway \
     -e DATABASE_URL=sqlite:////data/modern-punk.db \
     -e OLLAMA_BASE_URL=http://mp-ollama:11434 \
-    -e LLM_BACKEND=llama-server \
+    -e LLM_BACKEND="${LLM_BACKEND}" \
     -e LLAMA_SERVER_URL=http://host.docker.internal:8070 \
     -v "${VOLUME_DATA}:/data" \
     -v /sys/class/net/eth0/statistics:/host/net/eth0:ro \
@@ -451,7 +455,7 @@ FE_ACTIVE_PORT=$(slot_port_fe "$(read_slot "$FE_SLOT_FILE")")
 BE_ACTIVE_PORT=$(slot_port_be "$(read_slot "$BE_SLOT_FILE")")
 
 # Ensure LLM backend is running
-if [ "${LLM_BACKEND:-llama-server}" = "llama-server" ]; then
+if [ "${LLM_BACKEND}" = "llama-server" ]; then
   if ! curl -sf http://localhost:8070/health >/dev/null 2>&1; then
     log "Starting llama-server via systemd..."
     sudo systemctl start llama-server 2>/dev/null || true

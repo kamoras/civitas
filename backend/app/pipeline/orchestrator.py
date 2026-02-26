@@ -30,14 +30,17 @@ from app.models import (
     LobbyingMatch,
     PipelineRun,
     Senator,
+    SponsoredBill,
 )
 
 # Fetch modules
 from app.pipeline.fetch.congress import (
     fetch_bill,
     fetch_bill_actions,
+    fetch_bill_cosponsors,
     fetch_bill_summaries,
     fetch_member_detail,
+    fetch_member_sponsored,
     fetch_recent_roll_calls,
     fetch_roll_call_vote,
     fetch_senator_platform_text,
@@ -96,6 +99,8 @@ PIPELINE_STEPS = [
     ("fetch_bill_details",   "fetch",     "Fetch bill details"),
     ("fetch_roll_calls",     "fetch",     "Fetch roll call votes"),
     ("fetch_recent_rcs",     "fetch",     "Fetch recent roll calls"),
+    ("fetch_cosponsors",     "fetch",     "Fetch bill cosponsors"),
+    ("fetch_sponsored",      "fetch",     "Fetch sponsored legislation"),
     ("fetch_fec",            "fetch",     "Fetch FEC financial data"),
     ("fetch_platforms",      "fetch",     "Fetch platform text"),
     ("fetch_floor_remarks",  "fetch",     "Fetch floor remarks"),
@@ -104,7 +109,11 @@ PIPELINE_STEPS = [
     ("embed_bills",          "analyze",   "Embed bills in vector DB"),
     ("classify_donors",      "analyze",   "Classify donors"),
     ("prepare_senators",     "analyze",   "Prepare senator data"),
+    ("sponsorship_analysis", "analyze",   "Sponsorship leadership & ideology (SVD/PageRank)"),
     ("analyze_senators",     "analyze",   "Analyze senators (LLM)"),
+    ("explore_documents",    "explore",   "Ingest explore documents"),
+    ("justice_scorecards",   "justices",  "Score SCOTUS justices"),
+    ("president_scorecards", "presidents", "Score presidents"),
     ("finalize",             "finalize",  "Finalize & save"),
 ]
 
@@ -193,21 +202,21 @@ def upsert_senator(db: Session, data: dict) -> None:
     senator_fields = {
         "id": senator_id,
         "bioguide_id": data.get("bioguideId"),
-        "name": data.get("name", ""),
-        "state": data.get("state", ""),
-        "party": data.get("party", "I"),
-        "years_in_office": data.get("yearsInOffice", 0),
-        "initials": data.get("initials", ""),
-        "punk_nickname": data.get("punkNickname", "TBD"),
-        "score_funding_independence": corruption.get("fundingIndependence", 0),
-        "score_promise_persistence": corruption.get("promisePersistence", 0),
-        "score_independent_voting": corruption.get("independentVoting", 0),
-        "score_funding_diversity": corruption.get("fundingDiversity", 0),
-        "total_raised": funding.get("totalRaised", 0),
-        "total_from_pacs": funding.get("totalFromPACs", 0),
-        "small_donor_percentage": funding.get("smallDonorPercentage", 0),
-        "voting_summary": data.get("votingRecord", {}).get("votingSummary", ""),
-        "platform_summary": data.get("platformSummary", ""),
+        "name": data.get("name") or "",
+        "state": data.get("state") or "",
+        "party": data.get("party") or "I",
+        "years_in_office": data.get("yearsInOffice") or 0,
+        "initials": data.get("initials") or "",
+        "punk_nickname": data.get("punkNickname") or "TBD",
+        "score_funding_independence": corruption.get("fundingIndependence") or 0,
+        "score_promise_persistence": corruption.get("promisePersistence") or 0,
+        "score_independent_voting": corruption.get("independentVoting") or 0,
+        "score_funding_diversity": corruption.get("fundingDiversity") or 0,
+        "total_raised": funding.get("totalRaised") or 0,
+        "total_from_pacs": funding.get("totalFromPACs") or 0,
+        "small_donor_percentage": funding.get("smallDonorPercentage") or 0,
+        "voting_summary": (data.get("votingRecord") or {}).get("votingSummary") or "",
+        "platform_summary": data.get("platformSummary") or "",
         "updated_at": datetime.utcnow(),
     }
 
@@ -233,10 +242,10 @@ def upsert_senator(db: Session, data: dict) -> None:
         db.add(
             Donor(
                 senator_id=senator_id,
-                name=donor_data.get("name", "Unknown"),
-                total=donor_data.get("total", 0),
-                type=donor_data.get("type", "PAC"),
-                industry=donor_data.get("industry", "OTHER"),
+                name=donor_data.get("name") or "Unknown",
+                total=donor_data.get("total") or 0,
+                type=donor_data.get("type") or "PAC",
+                industry=donor_data.get("industry") or "OTHER",
                 rank=rank,
                 pac_sponsor=donor_data.get("pacSponsor"),
                 pac_industry=donor_data.get("pacIndustry"),
@@ -249,10 +258,10 @@ def upsert_senator(db: Session, data: dict) -> None:
         db.add(
             IndustryDonation(
                 senator_id=senator_id,
-                industry=ind_data.get("industry", "OTHER"),
-                name=ind_data.get("name", "Other"),
-                total=ind_data.get("total", 0),
-                percentage=ind_data.get("percentage", 0),
+                industry=ind_data.get("industry") or "OTHER",
+                name=ind_data.get("name") or "Other",
+                total=ind_data.get("total") or 0,
+                percentage=ind_data.get("percentage") or 0,
             )
         )
 
@@ -264,32 +273,34 @@ def upsert_senator(db: Session, data: dict) -> None:
         (v, "recent") for v in voting_record.get("recentVotes", [])
     ]
     for vote_data, category in all_vote_entries:
-        impacted = vote_data.get("impactedGroups", [])
-        affected = vote_data.get("affectedIndustries", [])
+        impacted = vote_data.get("impactedGroups") or []
+        affected = vote_data.get("affectedIndustries") or []
         db.add(
             KeyVote(
                 senator_id=senator_id,
-                bill_name=vote_data.get("billName", "Unknown Bill"),
-                bill_id=vote_data.get("billId", ""),
-                date=vote_data.get("date", ""),
-                vote=vote_data.get("vote", "Not Voting"),
-                policy_area=vote_data.get("policyArea", "PROCEDURAL"),
-                stance=vote_data.get("stance", "neutral"),
+                bill_name=vote_data.get("billName") or "Unknown Bill",
+                bill_id=vote_data.get("billId") or "",
+                date=vote_data.get("date") or "",
+                vote=vote_data.get("vote") or "Not Voting",
+                policy_area=vote_data.get("policyArea") or "PROCEDURAL",
+                policy_areas=json.dumps(vote_data.get("policyAreas") or []),
+                party_alignment_weight=vote_data.get("partyAlignmentWeight") or 0.0,
+                stance=vote_data.get("stance") or "neutral",
                 stance_vote=vote_data.get("stanceVote"),
                 impacted_groups=json.dumps(impacted if isinstance(impacted, list) else []),
                 affected_industries=json.dumps(affected if isinstance(affected, list) else []),
                 pro_business_vote=vote_data.get("proBusinessVote"),
-                classification=vote_data.get("classification", "mixed"),
-                description=vote_data.get("description", ""),
-                corporate_interest=vote_data.get("corporateInterest", ""),
-                public_impact=vote_data.get("publicImpact", ""),
+                classification=vote_data.get("classification") or "mixed",
+                description=vote_data.get("description") or "",
+                corporate_interest=vote_data.get("corporateInterest") or "",
+                public_impact=vote_data.get("publicImpact") or "",
                 relevant_donors=json.dumps(
-                    vote_data.get("relevantDonors", [])
+                    vote_data.get("relevantDonors") or []
                 ),
-                relevant_donor_total=vote_data.get("relevantDonorTotal", 0),
+                relevant_donor_total=vote_data.get("relevantDonorTotal") or 0,
                 party_leaning=vote_data.get("partyLeaning"),
                 voted_with_party=vote_data.get("votedWithParty"),
-                vote_category=vote_data.get("voteCategory", category),
+                vote_category=vote_data.get("voteCategory") or category,
                 key_vote_reasoning=vote_data.get("keyVoteReasoning"),
             )
         )
@@ -299,17 +310,15 @@ def upsert_senator(db: Session, data: dict) -> None:
         db.add(
             LobbyingMatch(
                 senator_id=senator_id,
-                lobbyist_org=match_data.get("lobbyistOrg", "Unknown"),
-                industry=match_data.get("industry", "OTHER"),
-                lobbying_spend=match_data.get("lobbyingSpend", 0),
-                donation_to_senator=match_data.get("donationToSenator", 0),
+                lobbyist_org=match_data.get("lobbyistOrg") or "Unknown",
+                industry=match_data.get("industry") or "OTHER",
+                lobbying_spend=match_data.get("lobbyingSpend") or 0,
+                donation_to_senator=match_data.get("donationToSenator") or 0,
                 bills_influenced=json.dumps(
-                    match_data.get("billsInfluenced", [])
+                    match_data.get("billsInfluenced") or []
                 ),
-                senator_vote_aligned=match_data.get(
-                    "senatorVoteAligned", False
-                ),
-                description=match_data.get("description", ""),
+                senator_vote_aligned=match_data.get("senatorVoteAligned"),
+                description=match_data.get("description") or "",
             )
         )
 
@@ -321,14 +330,36 @@ def upsert_senator(db: Session, data: dict) -> None:
         db.add(
             CampaignPromise(
                 senator_id=senator_id,
-                promise_text=promise_data.get("promiseText", ""),
-                category=promise_data.get("category", "other"),
-                alignment=promise_data.get("alignment", "unclear"),
+                promise_text=promise_data.get("promiseText") or "",
+                category=promise_data.get("category") or "other",
+                alignment=promise_data.get("alignment") or "unclear",
                 related_votes=json.dumps(
-                    promise_data.get("relatedVotes", [])
+                    promise_data.get("relatedVotes") or []
                 ),
-                analysis=promise_data.get("analysis", ""),
+                analysis=promise_data.get("analysis") or "",
                 party_alignment=promise_data.get("partyAlignment"),
+            )
+        )
+
+    # Add sponsored bills
+    db.query(SponsoredBill).filter(
+        SponsoredBill.senator_id == senator_id
+    ).delete()
+    for sp_data in data.get("sponsoredBills", []):
+        db.add(
+            SponsoredBill(
+                senator_id=senator_id,
+                bill_id=sp_data.get("billId") or "",
+                title=sp_data.get("title") or "",
+                introduced_date=sp_data.get("introducedDate") or "",
+                latest_action=sp_data.get("latestAction") or "",
+                latest_action_date=sp_data.get("latestActionDate") or "",
+                policy_area=sp_data.get("policyArea") or "",
+                policy_areas=json.dumps(sp_data.get("policyAreas") or []),
+                party_leaning=sp_data.get("partyLeaning"),
+                congress=sp_data.get("congress") or 0,
+                bill_type=sp_data.get("billType") or "",
+                is_law=sp_data.get("isLaw") or False,
             )
         )
 
@@ -336,6 +367,14 @@ def upsert_senator(db: Session, data: dict) -> None:
     partisan_depth_data = data.get("partisanDepth")
     if partisan_depth_data and existing:
         existing.partisan_depth = json.dumps(partisan_depth_data)
+
+    # Save sponsorship analysis scores (PageRank leadership + SVD ideology)
+    if existing:
+        ls = data.get("leadershipScore")
+        existing.leadership_score = ls if ls is not None else None
+        ids = data.get("ideologyScore")
+        existing.ideology_score = ids if ids is not None else None
+        existing.sponsorship_description = data.get("sponsorshipDescription") or ""
 
     db.flush()
 
@@ -525,8 +564,10 @@ async def run_full_pipeline(
                 if bill:
                     sponsors = bill.get("sponsors", [])
                     sponsor_party = None
+                    sponsor_bioguide = None
                     if sponsors:
                         sponsor_party = sponsors[0].get("party")
+                        sponsor_bioguide = sponsors[0].get("bioguideId")
 
                     bills_data.append(
                         {
@@ -541,6 +582,7 @@ async def run_full_pipeline(
                             "fullText": full_text or "",
                             "actions": actions or [],
                             "sponsorParty": sponsor_party,
+                            "sponsorBioguide": sponsor_bioguide,
                         }
                     )
                 progress.update("fetch_bill_details", done=bill_idx + 1)
@@ -628,6 +670,84 @@ async def run_full_pipeline(
                 recent_rc_map[rc_id] = rc
             logger.info("Total unique recent roll calls: %d", len(recent_roll_calls))
             progress.complete("fetch_recent_rcs", detail=f"{len(recent_roll_calls)} unique")
+
+            # 1d.3 Fetch cosponsors for significant bills.
+            # Cosponsorship is a proactive signal of political alignment —
+            # a senator chooses to endorse a bill by cosponsoring it. Combined
+            # with the bill's sponsor party, this builds a per-senator
+            # cosponsorship profile for caucus inference (Fowler 2006).
+            logger.info("Fetching bill cosponsors for cosponsorship analysis...")
+            progress.begin("fetch_cosponsors", total=len(bills_data))
+            # bill_id → list of cosponsor dicts (each has bioguideId, party)
+            cosponsors_map: dict[str, list[dict]] = {}
+            for cs_idx, bill_ref in enumerate(bills_data):
+                bill_id = bill_ref.get("billId", "")
+                # Parse bill type and number from the composite ID (e.g. "S.123")
+                parts = bill_id.split(".")
+                if len(parts) == 2:
+                    cosponsors = await fetch_bill_cosponsors(
+                        client, db,
+                        bill_ref["congress"],
+                        parts[0].lower(),
+                        int(parts[1]),
+                    )
+                    if cosponsors:
+                        cosponsors_map[bill_id] = cosponsors
+                progress.update("fetch_cosponsors", done=cs_idx + 1)
+            total_cosponsors = sum(len(v) for v in cosponsors_map.values())
+            logger.info(
+                "Cosponsors fetched for %d/%d bills (%d total cosponsorships)",
+                len(cosponsors_map), len(bills_data), total_cosponsors,
+            )
+            progress.complete(
+                "fetch_cosponsors",
+                detail=f"{len(cosponsors_map)} bills, {total_cosponsors} cosponsorships",
+            )
+
+            # Build per-senator cosponsorship profiles: for each senator, count
+            # how many D-sponsored vs R-sponsored bills they cosponsored.
+            cosponsorship_profiles: dict[str, dict] = {}
+            for bill_ref in bills_data:
+                bill_id = bill_ref.get("billId", "")
+                sponsor_party = bill_ref.get("sponsorParty")
+                if not sponsor_party or sponsor_party not in ("D", "R"):
+                    continue
+                for cosponsor in cosponsors_map.get(bill_id, []):
+                    bio_id = cosponsor.get("bioguideId", "")
+                    if not bio_id:
+                        continue
+                    profile = cosponsorship_profiles.setdefault(
+                        bio_id, {"d_cosponsored": 0, "r_cosponsored": 0},
+                    )
+                    if sponsor_party == "D":
+                        profile["d_cosponsored"] += 1
+                    else:
+                        profile["r_cosponsored"] += 1
+            logger.info(
+                "Cosponsorship profiles built for %d senators",
+                len(cosponsorship_profiles),
+            )
+
+            # 1d.4 Fetch each senator's sponsored legislation.
+            logger.info("Fetching sponsored legislation...")
+            progress.begin("fetch_sponsored", total=len(senators))
+            sponsored_map: dict[str, list[dict]] = {}
+            for sp_idx, senator in enumerate(senators):
+                bio_id = senator.get("bioguideId", "")
+                if bio_id:
+                    raw_sponsored = await fetch_member_sponsored(client, db, bio_id)
+                    if raw_sponsored:
+                        sponsored_map[bio_id] = raw_sponsored
+                progress.update("fetch_sponsored", done=sp_idx + 1)
+            total_sponsored = sum(len(v) for v in sponsored_map.values())
+            logger.info(
+                "Sponsored legislation fetched for %d senators (%d total bills)",
+                len(sponsored_map), total_sponsored,
+            )
+            progress.complete(
+                "fetch_sponsored",
+                detail=f"{len(sponsored_map)} senators, {total_sponsored} bills",
+            )
 
             # 1e. Fetch FEC data for each senator
             logger.info("Fetching FEC financial data...")
@@ -738,7 +858,8 @@ async def run_full_pipeline(
             logger.info("=== FETCH COMPLETE (fetch-only mode) ===")
             for sk in ("classify_bills", "classify_recent", "embed_bills",
                         "classify_donors", "prepare_senators", "analyze_senators",
-                        "explore_documents", "justice_scorecards", "finalize"):
+                        "explore_documents", "justice_scorecards",
+                        "president_scorecards", "finalize"):
                 progress.skip(sk, detail="fetch-only mode")
             elapsed = time.time() - start_time
             pipeline_run.status = "completed"
@@ -838,15 +959,10 @@ async def run_full_pipeline(
             logger.error("Bill embedding failed: %s — vector search will be unavailable this run", e)
             progress.complete("embed_bills", detail="failed")
 
-        # 3a.3 Hybrid donor classification (FEC metadata → rules → embeddings → LLM)
+        # 3a.3 Hybrid donor classification (FEC metadata → rules → embeddings → kNN)
         logger.info("Collecting unique donors for hybrid classification...")
         progress.begin("classify_donors")
         all_donor_entries: list[dict] = []
-        skip_employers = {
-            "NONE", "N/A", "SELF-EMPLOYED", "SELF EMPLOYED", "RETIRED",
-            "NOT EMPLOYED", "SELF", "HOMEMAKER", "INFORMATION REQUESTED",
-            "STUDENT", "UNEMPLOYED", "DISABLED",
-        }
         for senator in senators:
             fec = fec_data.get(senator["id"])
             if not fec:
@@ -866,7 +982,7 @@ async def run_full_pipeline(
                     })
             for r in fec.get("receipts") or []:
                 employer = (r.get("contributor_employer") or "").strip()
-                if employer and employer.upper() not in skip_employers:
+                if employer:
                     all_donor_entries.append({
                         "name": employer,
                         "amount": r.get("contribution_receipt_amount", 0) or 0,
@@ -930,9 +1046,12 @@ async def run_full_pipeline(
                 else:
                     funding = senator.get("funding", {})
 
-                # Extract senator's last name for vote matching
-                name_parts = senator["name"].split()
-                last_name = name_parts[-1] if name_parts else ""
+                # Use the pre-extracted last name that handles multi-word
+                # surnames (e.g. "Cortez Masto", "Van Hollen") and accents.
+                last_name = senator.get("lastNameForVoteMatch", "")
+                if not last_name:
+                    name_parts = senator["name"].split()
+                    last_name = name_parts[-1] if name_parts else ""
                 if not last_name:
                     logger.warning(
                         "Senator %s has no parseable last name — vote matching will be skipped",
@@ -970,28 +1089,63 @@ async def run_full_pipeline(
                 # Pass both key bills and recent roll calls to normalize_votes
                 # so all tracked votes contribute to the policy breakdown
                 all_classified = classified_bills + classified_recent
+                senator_cosponsor_profile = cosponsorship_profiles.get(
+                    senator.get("bioguideId", ""),
+                )
                 voting_record = normalize_votes(
                     senator.get("bioguideId", ""),
                     all_classified,
                     senator_votes,
                     senator_party=senator.get("party", "I"),
+                    cosponsorship_profile=senator_cosponsor_profile,
                 )
 
                 # Normalize recent votes for display in the UI
+                # Pass effective_party so Independents get correct party alignment
                 recent_senator_votes = normalize_recent_votes(
                     classified_recent,
                     recent_rc_map,
                     last_name,
                     senator["state"],
                     senator.get("party", "I"),
+                    effective_party=voting_record.get("effectiveParty"),
                 )
                 voting_record["recentVotes"] = recent_senator_votes
+
+                # Collect this senator's sponsored bills
+                bio_id = senator.get("bioguideId", "")
+                raw_sponsored = sponsored_map.get(bio_id, [])
+                senator_sponsored: list[dict] = []
+                for sp in raw_sponsored:
+                    title = sp.get("title", "")
+                    if not title:
+                        continue
+                    bill_type = sp.get("type", "")
+                    bill_number = sp.get("number", "")
+                    bill_id = f"{bill_type}.{bill_number}" if bill_type and bill_number else ""
+                    latest = sp.get("latestAction") or {}
+                    pa = sp.get("policyArea") or {}
+                    became_law = "becameLaw" in (latest.get("text") or "").lower() or (
+                        "Public Law" in (latest.get("text") or "")
+                    )
+                    senator_sponsored.append({
+                        "billId": bill_id,
+                        "title": title,
+                        "introducedDate": sp.get("introducedDate", ""),
+                        "latestAction": latest.get("text", ""),
+                        "latestActionDate": latest.get("actionDate", ""),
+                        "policyArea": pa.get("name", ""),
+                        "congress": sp.get("congress", 0),
+                        "billType": bill_type,
+                        "isLaw": became_law,
+                    })
 
                 senator_prepared.append(
                     {
                         "senator": senator,
                         "funding": funding,
                         "votingRecord": voting_record,
+                        "sponsoredBills": senator_sponsored,
                     }
                 )
                 progress.update("prepare_senators", done=prep_idx + 1)
@@ -1004,6 +1158,38 @@ async def run_full_pipeline(
                 progress.update("prepare_senators", done=prep_idx + 1)
 
         progress.complete("prepare_senators", detail=f"{len(senator_prepared)} ready, {fail_count} failed")
+
+        # 3f. Sponsorship analysis: PageRank leadership + SVD ideology
+        from app.pipeline.analyze.sponsorship_analysis import (
+            compute_ideology_scores,
+            compute_leadership_scores,
+            describe_senator_position,
+        )
+        progress.begin("sponsorship_analysis")
+        senator_bio_ids = {
+            s.get("bioguideId", "")
+            for s in senators
+            if s.get("bioguideId")
+        }
+        senator_party_map = {
+            s.get("bioguideId", ""): s.get("party", "")
+            for s in senators
+            if s.get("bioguideId")
+        }
+        leadership_scores = compute_leadership_scores(
+            bills_data, cosponsors_map, senator_bio_ids, senator_party_map,
+        )
+        ideology_scores = compute_ideology_scores(
+            bills_data, cosponsors_map, senator_bio_ids, senator_party_map,
+        )
+        logger.info(
+            "Sponsorship analysis: %d leadership scores, %d ideology scores",
+            len(leadership_scores), len(ideology_scores),
+        )
+        progress.complete(
+            "sponsorship_analysis",
+            detail=f"{len(leadership_scores)} leadership, {len(ideology_scores)} ideology",
+        )
 
         _flush = get_llm_stats()
         pipeline_run.llm_calls = _flush["total_calls"]
@@ -1082,10 +1268,13 @@ async def run_full_pipeline(
                 lobbying_matches = analysis.get("lobbyingMatches", [])
 
                 # Match Congressional Record floor remarks to this senator
-                name_parts = senator["name"].split()
-                senator_last_name = name_parts[-1].upper() if name_parts else ""
+                senator_last_name = senator.get("lastNameForVoteMatch", "")
+                if not senator_last_name:
+                    fp = senator["name"].split()
+                    senator_last_name = fp[-1] if fp else ""
+                senator_last_name_upper = senator_last_name.upper()
                 senator_floor_remarks = all_floor_remarks.get(
-                    senator_last_name, []
+                    senator_last_name_upper, []
                 )
                 floor_advocacy = analyze_floor_advocacy(
                     senator_floor_remarks,
@@ -1138,9 +1327,12 @@ async def run_full_pipeline(
                 result["platformSummary"] = platform_data.get("platformSummary", "")
 
                 from app.pipeline.analyze.party_platform import analyze_partisan_depth
+                senator_ideology = ideology_scores.get(senator.get("bioguideId", ""))
                 partisan_profile = analyze_partisan_depth(
                     platform_data.get("campaignPromises", []),
                     senator.get("party", ""),
+                    voting_record=voting_record,
+                    ideology_score=senator_ideology,
                 )
                 result["partisanDepth"] = partisan_profile
                 if partisan_profile.get("totalPositions", 0) > 0:
@@ -1151,6 +1343,61 @@ async def run_full_pipeline(
                         partisan_profile["totalPositions"],
                         partisan_profile["crossPartyCount"],
                     )
+
+                # Classify policy areas for this senator's sponsored bills
+                from app.pipeline.analyze.bill_analyzer import classify_policy_areas_multi
+                from app.pipeline.analyze.party_platform import classify_party_alignment_multi
+                raw_sponsored = prepared.get("sponsoredBills", [])
+                classified_sponsored: list[dict] = []
+                for sp in raw_sponsored:
+                    title = sp.get("title", "")
+                    api_policy = sp.get("policyArea", "")
+                    if api_policy:
+                        sp["policyArea"] = api_policy.upper().replace(" ", "_")
+                    if title and len(title) > 10:
+                        areas = classify_policy_areas_multi(title, db_session=db)
+                        if areas:
+                            alignment = classify_party_alignment_multi(
+                                title, areas, "pro",
+                            )
+                            sp["policyAreas"] = [
+                                {
+                                    "area": a["area"],
+                                    "confidence": a["confidence"],
+                                    "party": {
+                                        pa["area"]: pa["party"]
+                                        for pa in alignment.get("areas", [])
+                                    }.get(a["area"], "bipartisan"),
+                                }
+                                for a in areas
+                            ]
+                            sp["partyLeaning"] = alignment.get("overall", "bipartisan")
+                            if not sp["policyArea"] and areas:
+                                sp["policyArea"] = areas[0]["area"]
+                    classified_sponsored.append(sp)
+                result["sponsoredBills"] = classified_sponsored
+                if classified_sponsored:
+                    logger.info(
+                        "    sponsored bills: %d (%d became law)",
+                        len(classified_sponsored),
+                        sum(1 for s in classified_sponsored if s.get("isLaw")),
+                    )
+
+                bio_id = senator.get("bioguideId", "")
+                l_score = leadership_scores.get(bio_id)
+                i_score = ideology_scores.get(bio_id)
+                result["leadershipScore"] = round(l_score, 4) if l_score is not None else None
+                result["ideologyScore"] = round(i_score, 4) if i_score is not None else None
+                if l_score is not None and i_score is not None:
+                    result["sponsorshipDescription"] = describe_senator_position(
+                        i_score, l_score, senator.get("party", ""),
+                    )
+                    logger.info(
+                        "    sponsorship: leadership=%.2f ideology=%.2f (%s)",
+                        l_score, i_score, result["sponsorshipDescription"],
+                    )
+                else:
+                    result["sponsorshipDescription"] = None
 
                 results.append(result)
                 success_count += 1
@@ -1174,6 +1421,7 @@ async def run_full_pipeline(
                 progress.update("analyze_senators", done=senator_idx + 1)
             except Exception:
                 logger.exception("  Failed for %s", senator["name"])
+                db.rollback()
                 fail_count += 1
                 results.append(senator)
                 pipeline_run.senators_failed = fail_count
@@ -1230,7 +1478,30 @@ async def run_full_pipeline(
             progress.complete("justice_scorecards", detail="failed")
 
         # ========================================
-        # PHASE 6: FINALIZE
+        # PHASE 6: PRESIDENTS
+        # ========================================
+        pipeline_run.current_phase = "presidents"
+        pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
+        db.commit()
+        logger.info("--- Phase 6: PRESIDENTS ---")
+        progress.begin("president_scorecards")
+        president_result: dict = {}
+        try:
+            from app.pipeline.president_pipeline import run_president_pipeline
+            president_db = SessionLocal()
+            try:
+                president_result = await run_president_pipeline(president_db)
+            finally:
+                president_db.close()
+            presidents_updated = president_result.get("updated", 0)
+            logger.info("President pipeline updated %d presidents", presidents_updated)
+            progress.complete("president_scorecards", detail=f"{presidents_updated} updated")
+        except Exception as e:
+            logger.exception("President pipeline failed: %s — continuing", e)
+            progress.complete("president_scorecards", detail="failed")
+
+        # ========================================
+        # PHASE 7: FINALIZE
         # ========================================
         pipeline_run.current_phase = "finalize"
         pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
@@ -1279,6 +1550,7 @@ async def run_full_pipeline(
     except BaseException as e:
         logger.exception("Pipeline failed: %s", e)
         try:
+            db.rollback()
             pipeline_run.status = "failed"
             pipeline_run.completed_at = datetime.utcnow()
             pipeline_run.error_message = str(e)[:500]

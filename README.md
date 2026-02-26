@@ -1,11 +1,12 @@
 # Civitas — Political Representation Tracker
 
 Civitas is an open-data AI/ML platform that aggregates data from official
-U.S. government sources into a unified transparency scorecard for elected
-officials. Voting records, campaign finance, floor speeches, and stated
-platforms are analyzed using embedding-based classification, content-based
-party alignment, and deterministic scoring — all running locally on a
-Raspberry Pi 5 with zero external API calls to cloud AI services.
+U.S. government sources into unified transparency scorecards for senators,
+presidents, and Supreme Court justices. Voting records, campaign finance,
+floor speeches, judicial opinions, and stated platforms are analyzed using
+embedding-based classification, content-based party alignment, and
+deterministic scoring — all running locally on a Raspberry Pi 5 with zero
+external API calls to cloud AI services.
 
 ## Architecture
 
@@ -28,33 +29,57 @@ AI APIs, no data leaves the device.
 
 ### Data Pipeline
 
-The pipeline runs nightly (or manually triggered) in 5 phases:
+The pipeline runs nightly (or manually triggered) in phases:
 
 1. **FETCH** — Pull senator info, bills (with sponsor party), roll-call
-   votes, floor speeches, and FEC financial data from Congress.gov,
-   Senate.gov, GovInfo, and FEC APIs
+   votes, floor speeches, FEC financial data, Supreme Court cases, and
+   presidential records from Congress.gov, Senate.gov, GovInfo, FEC,
+   Oyez/SCOTUS, BLS, and Federal Register APIs
 2. **TRANSFORM** — Normalize financial records, classify industries and
-   donor types using FEC metadata and deterministic rules
-3. **ANALYZE** — Classify bill policy areas and party alignment via
-   embeddings (zero LLM), classify remaining donors via kNN,
-   cross-reference donors with votes, analyze campaign promises (LLM),
-   generate per-senator narratives (LLM)
-4. **SCORE** — Compute four representation sub-scores from real data
-   using deterministic, auditable formulas
-5. **ASSEMBLE + SAVE** — Build senator scorecards and persist to database
+   donor types using FEC metadata and embedding similarity
+3. **ANALYZE** — Classify bill policy areas, stance direction, and party
+   alignment via embeddings (zero LLM); compute legislative leadership
+   (PageRank) and ideology (SVD) from cosponsorship networks; classify
+   donors via kNN; cross-reference donors with votes; analyze campaign
+   promises (LLM); generate per-senator narratives (LLM); score Supreme
+   Court justice impartiality
+4. **SCORE** — Compute representation sub-scores from real data using
+   deterministic, auditable formulas with Bayesian shrinkage
+5. **ASSEMBLE + SAVE** — Build scorecards and persist to database
 
-### Classification Strategy
+### Classification Strategy — Zero Hardcoded Rules
 
-The pipeline uses a tiered classification strategy that reserves expensive
-techniques for cases where cheaper methods fail, following the computational
-parsimony principle from Jurafsky & Martin (2023):
+Every classification decision in the pipeline is made mathematically.
+There are no hardcoded keyword lists, regex patterns, suffix checks, or
+if/else string-matching heuristics. The pipeline uses a tiered strategy
+following computational parsimony (Jurafsky & Martin 2023):
 
 | Tier | Technique | Speed | Used For |
 |------|-----------|-------|----------|
 | 1 | FEC metadata / learning store exact match | Instant | Donor types, previously classified bills and donors |
-| 2 | Sentence-transformer embeddings (cosine similarity) | Fast | Bill policy areas, industry classification, party alignment, semantic search |
+| 2 | Sentence-transformer embeddings (cosine similarity) | Fast | Bill policy areas, industry, party alignment, donor types, stance direction, procedural detection, skip entity detection, employer filtering, memo transfer detection |
+| 2b | SVD / PageRank on cosponsorship matrix | Fast | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
 | 3 | k-Nearest Neighbor in embedding space | Fast | Remaining unclassified donors (~5%), bill classification from reference corpus |
 | 4 | LLM (Qwen 2.5 1.5B via llama.cpp) | Slow | Narrative synthesis, promise analysis, PAC identification |
+
+Key embedding-based classification features:
+- **Semantic prototypes** define each category via natural-language
+  descriptions, not keyword lists. The embedding model matches entities
+  to the nearest prototype by cosine similarity.
+- **PAC decontextualization** detects "[Industry] PAC" naming patterns
+  via a PAC-context prototype and margin-based runner-up selection,
+  replacing regex suffix stripping.
+- **Self-funded detection** uses SequenceMatcher ratio (Ratcliff &
+  Obershelp 1988) for fuzzy name similarity instead of exact string matching.
+- **Batch skip detection** classifies employer names and memo texts
+  against skip prototypes in vectorized batches for performance.
+- **Semantic category normalization** maps stale/unknown category labels
+  to valid industries via embedding similarity, replacing a hardcoded
+  alias table.
+- **Stance direction** is derived from embedding similarity against
+  pro/anti/neutral action prototypes instead of keyword patterns.
+- **Procedural bill detection** uses embedding similarity against a
+  procedural prototype instead of substring matching.
 
 A persistent learning store (SQLite) accumulates labeled classifications
 across pipeline runs. A vector reference corpus (ChromaDB) grows with
@@ -78,8 +103,9 @@ sentence-embedding space:
 4. Vote tallies refine (not override) the content-based classification
 5. Sponsor party data serves as supervised ground truth for adaptive learning
 
-This follows the manifesto analysis tradition (Budge et al. 2001; Laver,
-Benoit & Garry 2003) extended to individual bills.
+Independent senators have their caucus party inferred mathematically from
+voting patterns (proportion of votes aligning with each party), ensuring
+they are scored fairly against the party they actually caucus with.
 
 ### Academic Grounding
 
@@ -95,10 +121,15 @@ Key algorithmic decisions and their academic backing:
 | Bayesian shrinkage for promise scores | Prevents inflation when few promises are evaluable | Efron & Morris 1975 |
 | Cook PVI adjustment for independence | Raw party-break rates mislead without constituency context | Carson et al. 2010 |
 | Donation-vote correlation ≠ causation | Methodological caution in interpreting funding influence | Ansolabehere et al. 2003 |
+| Fuzzy name matching for self-funded detection | SequenceMatcher handles spelling variations, middle names | Ratcliff & Obershelp 1988 |
+| PageRank for legislative leadership | Cosponsorship network centrality measures peer influence | Brin & Page 1998; Tauberer 2012 |
+| SVD ideology as Bayesian prior for partisan depth | Behavioral ideological signal regularizes sparse vote data | Poole & Rosenthal 1985; Efron & Morris 1975 |
 
 See the [Methodology page](/about) for full details and inline citations.
 
-## Scoring Methodology
+## Scoring
+
+### Senate Scores
 
 Each senator receives four sub-scores (0-100, higher = better):
 
@@ -108,6 +139,26 @@ Each senator receives four sub-scores (0-100, higher = better):
 | **Promise Persistence** | 25% | Campaign commitments kept + floor advocacy + participation | Naurin 2011; Martin 2011 |
 | **Independent Voting** | 25% | Party-line breaks (state-adjusted) + donor independence | Carson et al. 2010 |
 | **Funding Diversity** | 25% | Donor traceability + industry diversity (inverse HHI) | Rhoades 1993 |
+
+Additional senator metrics (not scored, informational):
+
+| Metric | What It Measures | Technique |
+|--------|------------------|-----------|
+| **Leadership Score** | Legislative influence — how many peers cosponsor this senator's bills | PageRank on cosponsorship graph (Brin & Page 1998) |
+| **Ideology Score** | Behavioral ideological position derived from cosponsorship patterns | SVD on cosponsorship matrix (Tauberer 2012) |
+| **Partisan Depth** | How deeply aligned with their party across policy areas | Content-based voting analysis with SVD ideology as Bayesian prior |
+
+### Supreme Court Justice Scores
+
+Each justice is scored on impartiality and ideological consistency based
+on case-level voting data from the Oyez Project and Supreme Court APIs.
+
+### Presidential Scores
+
+Presidents are scored on five dimensions (Independence, Follow-Through,
+Public Mandate, Effectiveness, Competence) using a mix of live API data
+(BLS employment, Federal Register executive orders) and historical
+records (C-SPAN Historians Survey, Gallup approval data, BEA GDP).
 
 All scores default to 50 when data is insufficient. No LLM input is used
 in score calculation — formulas are deterministic and auditable.
@@ -222,41 +273,45 @@ docker compose run --rm --no-deps backend python -m pytest tests/ -v \
 modern-punk/
 ├── backend/
 │   ├── app/
-│   │   ├── api/              # FastAPI route handlers
+│   │   ├── api/              # FastAPI route handlers (senators, presidents, justices, explore, admin)
+│   │   ├── services/         # Business logic (senator_service with paginated votes)
 │   │   ├── pipeline/
-│   │   │   ├── fetch/        # Congress.gov, FEC, GovInfo, Senate.gov clients
-│   │   │   ├── transform/    # Data normalization + industry classifier
-│   │   │   ├── analyze/      # Bill, donor, party alignment, scoring
-│   │   │   │   ├── bill_analyzer.py       # Embedding-based bill classification
-│   │   │   │   ├── bill_learning.py       # Adaptive kNN reference corpus
-│   │   │   │   ├── party_platform.py      # Content-based party alignment
-│   │   │   │   ├── nn_classifier.py       # kNN donor classifier
-│   │   │   │   ├── donor_classifier_ai.py # Tiered donor classification
-│   │   │   │   ├── policy_alignment.py    # Industry↔policy area mapping
-│   │   │   │   ├── cross_reference.py     # Per-senator LLM narrative
-│   │   │   │   ├── score_calculator.py    # Deterministic scoring formulas
-│   │   │   │   └── ollama_client.py       # LLM backend abstraction
+│   │   │   ├── fetch/        # API clients (Congress.gov, FEC, GovInfo, Senate.gov, Oyez, BLS, Federal Register)
+│   │   │   ├── transform/    # Data normalization + embedding-based industry classifier
+│   │   │   ├── analyze/      # Bill, donor, party alignment, scoring, justice scorecards
+│   │   │   │   ├── bill_analyzer.py          # Embedding-based bill classification + stance
+│   │   │   │   ├── bill_learning.py          # Adaptive kNN reference corpus
+│   │   │   │   ├── party_platform.py         # Content-based party alignment + partisan depth
+│   │   │   │   ├── nn_classifier.py          # kNN donor classifier + category normalization
+│   │   │   │   ├── donor_classifier_ai.py    # Tiered donor classification + batch skip
+│   │   │   │   ├── sponsorship_analysis.py   # PageRank leadership + SVD ideology
+│   │   │   │   ├── policy_alignment.py       # Industry↔policy area mapping
+│   │   │   │   ├── cross_reference.py        # Per-senator LLM narrative
+│   │   │   │   ├── score_calculator.py       # Deterministic scoring formulas
+│   │   │   │   └── ollama_client.py          # LLM backend abstraction
 │   │   │   ├── assemble/     # Senator scorecard builder + validator
 │   │   │   ├── vector_store.py  # ChromaDB + sentence-transformer
 │   │   │   └── orchestrator.py  # Pipeline control flow
-│   │   ├── models.py         # SQLAlchemy ORM (Senator, KeyVote, LearnedClassification)
+│   │   ├── models.py         # SQLAlchemy ORM (Senator, KeyVote, Justice, JusticeVote, etc.)
+│   │   ├── schemas.py        # Pydantic response schemas (incl. PaginatedVotesSchema)
 │   │   ├── database.py       # DB engine + session management
 │   │   └── config.py         # Pydantic settings from .env
-│   ├── tests/
+│   ├── tests/                # 345 tests (pytest)
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/app/              # Next.js app router pages
 │   │   ├── about/            # Methodology page with full citations
 │   │   ├── explore/          # Semantic search over government documents
-│   │   ├── scorecard/        # Senator scorecards
-│   │   ├── leaderboard/      # Rankings
-│   │   └── admin/            # Pipeline control panel
-│   ├── src/components/       # React components
+│   │   ├── scorecard/        # Senator, president, and justice scorecards
+│   │   ├── leaderboard/      # Rankings across all branches
+│   │   └── admin/            # Pipeline control panel with granular progress
+│   ├── src/components/       # React components (checker with MetricTooltips, president, justice, explore, effects)
 │   └── Dockerfile
 ├── deploy.sh                 # Blue/green zero-downtime deploy
 ├── docker-compose.yml
 ├── .env.example
+├── AGENTS.md                 # Project design principles and developer guide
 └── README.md
 ```
 
@@ -289,6 +344,10 @@ Key references:
 - Reimers, N. & Gurevych, I. (2019). Sentence-BERT. *EMNLP 2019*, 3982-3992.
 - Snell, J. et al. (2017). Prototypical Networks for Few-Shot Learning. *NeurIPS 2017*, 4077-4087.
 - Stratmann, T. (2005). Some Talk: Money in Politics. *Public Choice*, 124(1-2), 135-156.
+- Tauberer, J. (2012). *Open Government Data*. GovTrack.us ideology/leadership methodology.
+- Brin, S. & Page, L. (1998). The Anatomy of a Large-Scale Hypertextual Web Search Engine. *Proc. WWW 1998*.
+
+See the [Methodology page](/about) for full details and inline citations.
 
 ## License
 

@@ -292,6 +292,12 @@ body {
     0 0 21px #ff00ff;
 }
 
+.neon-yellow {
+  text-shadow:
+    0 0 7px #ffff00,
+    0 0 10px #ffff00;
+}
+
 /* ===== ASCII DIVIDER ===== */
 .ascii-divider {
   text-align: center;

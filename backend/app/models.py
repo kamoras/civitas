@@ -46,6 +46,10 @@ class Senator(Base):
     platform_summary: Mapped[str] = mapped_column(Text, default="")
     partisan_depth: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    leadership_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ideology_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sponsorship_description: Mapped[str] = mapped_column(String, default="")
+
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -54,13 +58,14 @@ class Senator(Base):
     key_votes: Mapped[list["KeyVote"]] = relationship(back_populates="senator", cascade="all, delete-orphan")
     lobbying_matches: Mapped[list["LobbyingMatch"]] = relationship(back_populates="senator", cascade="all, delete-orphan")
     campaign_promises: Mapped[list["CampaignPromise"]] = relationship(back_populates="senator", cascade="all, delete-orphan")
+    sponsored_bills: Mapped[list["SponsoredBill"]] = relationship(back_populates="senator", cascade="all, delete-orphan")
 
 
 class Donor(Base):
     __tablename__ = "donors"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    senator_id: Mapped[str] = mapped_column(String, ForeignKey("senators.id", ondelete="CASCADE"), nullable=False)
+    senator_id: Mapped[str] = mapped_column(String, ForeignKey("senators.id", ondelete="CASCADE"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     total: Mapped[float] = mapped_column(Float, default=0.0)
     type: Mapped[str] = mapped_column(String, nullable=False)
@@ -77,7 +82,7 @@ class IndustryDonation(Base):
     __tablename__ = "industry_donations"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    senator_id: Mapped[str] = mapped_column(String, ForeignKey("senators.id", ondelete="CASCADE"), nullable=False)
+    senator_id: Mapped[str] = mapped_column(String, ForeignKey("senators.id", ondelete="CASCADE"), nullable=False, index=True)
     industry: Mapped[str] = mapped_column(String, nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
     total: Mapped[float] = mapped_column(Float, default=0.0)
@@ -90,13 +95,15 @@ class KeyVote(Base):
     __tablename__ = "key_votes"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    senator_id: Mapped[str] = mapped_column(String, ForeignKey("senators.id", ondelete="CASCADE"), nullable=False)
+    senator_id: Mapped[str] = mapped_column(String, ForeignKey("senators.id", ondelete="CASCADE"), nullable=False, index=True)
     bill_name: Mapped[str] = mapped_column(String, nullable=False)
     bill_id: Mapped[str] = mapped_column(String, nullable=False)
     date: Mapped[str] = mapped_column(String, nullable=False)
     vote: Mapped[str] = mapped_column(String, nullable=False)
     # New policy stance fields
     policy_area: Mapped[str] = mapped_column(String, default="PROCEDURAL")
+    policy_areas: Mapped[str] = mapped_column(Text, default="[]")  # JSON: [{area, confidence, party}]
+    party_alignment_weight: Mapped[float] = mapped_column(Float, default=0.0)
     stance: Mapped[str] = mapped_column(String, default="neutral")
     stance_vote: Mapped[str | None] = mapped_column(String, nullable=True)  # "Yea" or "Nay"
     impacted_groups: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
@@ -127,7 +134,7 @@ class LobbyingMatch(Base):
     lobbying_spend: Mapped[float] = mapped_column(Float, default=0.0)
     donation_to_senator: Mapped[float] = mapped_column(Float, default=0.0)
     bills_influenced: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
-    senator_vote_aligned: Mapped[bool] = mapped_column(Boolean, default=False)
+    senator_vote_aligned: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=None)
     description: Mapped[str] = mapped_column(Text, default="")
 
     senator: Mapped["Senator"] = relationship(back_populates="lobbying_matches")
@@ -146,6 +153,26 @@ class CampaignPromise(Base):
     party_alignment: Mapped[str | None] = mapped_column(String, nullable=True)  # "R", "D", "bipartisan"
 
     senator: Mapped["Senator"] = relationship(back_populates="campaign_promises")
+
+
+class SponsoredBill(Base):
+    __tablename__ = "sponsored_bills"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    senator_id: Mapped[str] = mapped_column(String, ForeignKey("senators.id", ondelete="CASCADE"), nullable=False)
+    bill_id: Mapped[str] = mapped_column(String, nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    introduced_date: Mapped[str] = mapped_column(String, default="")
+    latest_action: Mapped[str] = mapped_column(Text, default="")
+    latest_action_date: Mapped[str] = mapped_column(String, default="")
+    policy_area: Mapped[str] = mapped_column(String, default="")
+    policy_areas: Mapped[str] = mapped_column(Text, default="[]")  # JSON: [{area, confidence, party}]
+    party_leaning: Mapped[str | None] = mapped_column(String, nullable=True)  # "R", "D", "bipartisan"
+    congress: Mapped[int] = mapped_column(Integer, default=0)
+    bill_type: Mapped[str] = mapped_column(String, default="")
+    is_law: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    senator: Mapped["Senator"] = relationship(back_populates="sponsored_bills")
 
 
 class President(Base):

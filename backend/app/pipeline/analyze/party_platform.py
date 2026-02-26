@@ -528,6 +528,114 @@ def classify_party_alignment(
     return content_party
 
 
+def classify_party_alignment_multi(
+    bill_text: str,
+    policy_areas: list[dict],
+    stance_direction: str,
+) -> dict:
+    """Determine per-area party alignment and weighted aggregate for multi-area bills.
+
+    Real legislation spans multiple policy domains (Adler & Wilkerson 2012).
+    A bill touching HEALTHCARE and TAXES may align with D on healthcare
+    (expanding coverage) but R on taxes (certain deductions). A senator's
+    vote on such a bill represents a nuanced position, not a binary party
+    choice.
+
+    Per-area alignment uses the same nearest-centroid classifier as
+    classify_party_alignment. The aggregate uses confidence-weighted voting:
+    each area's alignment vote is weighted by its embedding confidence,
+    following the weighted-expert framework in Clemen (1989, "Combining
+    Forecasts: A Review and Annotated Bibliography," Intl J Forecasting 5:4).
+
+    Returns:
+        {
+            "overall": "R" | "D" | "bipartisan",
+            "weight": float 0-1 (how strongly the bill leans toward the overall party),
+            "areas": [{"area": str, "party": str, "confidence": float}, ...]
+        }
+    """
+    _ensure_platform_embeddings()
+
+    if not policy_areas or all(a["area"] == "PROCEDURAL" for a in policy_areas):
+        return {
+            "overall": "bipartisan",
+            "weight": 0.0,
+            "areas": [],
+        }
+
+    from app.pipeline.vector_store import get_embedding_model
+    model = get_embedding_model()
+
+    query_emb = model.encode([bill_text[:500]], show_progress_bar=False)[0]
+    query_emb = query_emb / np.linalg.norm(query_emb)
+
+    area_results: list[dict] = []
+    r_weight = 0.0
+    d_weight = 0.0
+
+    for pa in policy_areas:
+        area = pa["area"]
+        area_conf = pa.get("confidence", 0.5)
+
+        if area == "PROCEDURAL":
+            continue
+
+        r_policy_emb = _r_embeddings.get(area)
+        d_policy_emb = _d_embeddings.get(area)
+
+        if r_policy_emb is not None and d_policy_emb is not None:
+            r_score = float(np.dot(query_emb, r_policy_emb))
+            d_score = float(np.dot(query_emb, d_policy_emb))
+        else:
+            r_score = float(np.dot(query_emb, _r_aggregate))
+            d_score = float(np.dot(query_emb, _d_aggregate))
+
+        margin = abs(r_score - d_score)
+
+        if margin < 0.03:
+            party = "bipartisan"
+        elif margin < 0.06:
+            party = "bipartisan"
+        else:
+            party = "R" if r_score > d_score else "D"
+            if stance_direction == "anti":
+                party = "D" if party == "R" else "R"
+
+        area_results.append({
+            "area": area,
+            "party": party,
+            "confidence": round(area_conf, 4),
+        })
+
+        if party == "R":
+            r_weight += area_conf
+        elif party == "D":
+            d_weight += area_conf
+
+    if not area_results:
+        return {"overall": "bipartisan", "weight": 0.0, "areas": []}
+
+    total_partisan_weight = r_weight + d_weight
+    if total_partisan_weight < 0.01:
+        return {"overall": "bipartisan", "weight": 0.0, "areas": area_results}
+
+    if r_weight > d_weight:
+        overall = "R"
+        weight = r_weight / total_partisan_weight
+    elif d_weight > r_weight:
+        overall = "D"
+        weight = d_weight / total_partisan_weight
+    else:
+        overall = "bipartisan"
+        weight = 0.5
+
+    return {
+        "overall": overall,
+        "weight": round(weight, 4),
+        "areas": area_results,
+    }
+
+
 def classify_party_alignment_batch(
     bills: list[dict],
 ) -> dict[str, str]:
@@ -683,21 +791,31 @@ def record_sponsor_alignment(
 def analyze_partisan_depth(
     promises: list[dict],
     senator_party: str,
+    voting_record: dict | None = None,
+    ideology_score: float | None = None,
 ) -> dict:
-    """Analyze a senator's platform positions to measure partisan depth.
+    """Analyze a senator's partisan depth from voting record + platform positions.
 
-    Each campaign promise is classified by its policy area and then
-    compared to both party's platform positions on that area. The result
-    is an aggregate profile showing how deeply a senator's stated
-    positions align with their party vs. the opposing party.
+    Primary signal: the senator's actual votes on bills with known party
+    alignment (party_leaning).  Each vote on a D-leaning or R-leaning bill
+    is a direct behavioral observation of partisan positioning — far more
+    reliable than platform text analysis.
 
-    This extends the manifesto analysis approach (Budge et al. 2001)
-    to individual senator platforms: rather than scoring entire party
-    manifestos, we score each stated position and aggregate.
+    Secondary signal: campaign promises, analyzed via embedding similarity
+    to party platform positions (manifesto analysis approach, Budge et al.
+    2001).  These enrich the profile but cannot override the vote signal.
+
+    Tertiary signal: SVD-derived ideology score from cosponsorship patterns
+    (Tauberer 2012, adapted from Poole & Rosenthal 1985).  This serves as
+    a Bayesian prior — with sparse vote data it has more influence, with
+    rich vote data the observations dominate.
 
     Args:
         promises: List of dicts with at least 'promiseText' and 'category'.
         senator_party: "R", "D", or "I".
+        voting_record: Dict with 'keyVotes' and/or 'recentVotes' lists.
+        ideology_score: 0.0 (far left) to 1.0 (far right) from SVD on
+            cosponsorship matrix, or None if unavailable.
 
     Returns:
         Dict with:
@@ -708,67 +826,11 @@ def analyze_partisan_depth(
           totalPositions: int
           policyBreakdown: list of per-area alignment dicts
     """
-    if not promises:
-        return {
-            "overallLean": 0.0,
-            "overallParty": "centrist",
-            "depth": "centrist",
-            "crossPartyCount": 0,
-            "totalPositions": 0,
-            "policyBreakdown": [],
-        }
+    area_alignments = _alignments_from_votes(voting_record or {})
 
-    _ensure_platform_embeddings()
-
-    from app.pipeline.vector_store import get_embedding_model
-    from app.pipeline.analyze.bill_analyzer import classify_policy_area
-    model = get_embedding_model()
-
-    area_alignments: list[dict] = []
-
-    for p in promises:
-        text = p.get("promiseText", "")
-        if not text or len(text.strip()) < 10:
-            continue
-
-        category = (p.get("category") or "other").upper()
-        policy_area, _ = classify_policy_area(text)
-        if policy_area == "PROCEDURAL":
-            policy_area = _map_category_to_policy(category)
-
-        query_emb = model.encode([text[:300]], show_progress_bar=False)[0]
-        norm = np.linalg.norm(query_emb)
-        if norm > 0:
-            query_emb = query_emb / norm
-
-        r_emb = _r_embeddings.get(policy_area)
-        d_emb = _d_embeddings.get(policy_area)
-
-        if r_emb is not None and d_emb is not None:
-            r_score = float(np.dot(query_emb, r_emb))
-            d_score = float(np.dot(query_emb, d_emb))
-        else:
-            r_score = float(np.dot(query_emb, _r_aggregate))
-            d_score = float(np.dot(query_emb, _d_aggregate))
-
-        margin = r_score - d_score
-        if abs(margin) < 0.03:
-            alignment = "bipartisan"
-            strength = 0.0
-        elif margin > 0:
-            alignment = "R"
-            strength = min(margin / 0.15, 1.0)
-        else:
-            alignment = "D"
-            strength = min(abs(margin) / 0.15, 1.0)
-
-        area_alignments.append({
-            "area": policy_area,
-            "alignment": alignment,
-            "strength": round(strength, 2),
-            "lean": round(margin, 4),
-            "text": text[:100],
-        })
+    promise_alignments = _alignments_from_promises(promises or [])
+    if promise_alignments:
+        area_alignments.extend(promise_alignments)
 
     if not area_alignments:
         return {
@@ -781,11 +843,40 @@ def analyze_partisan_depth(
         }
 
     leans = [a["lean"] for a in area_alignments]
-    overall_lean = sum(leans) / len(leans)
+    vote_lean = sum(leans) / len(leans)
+
+    # Bayesian blend: SVD cosponsorship ideology as prior, vote/promise
+    # observations as likelihood.  Prior weight decreases as data grows,
+    # following the shrinkage pattern used elsewhere in the scoring
+    # pipeline (count confidence = min(n/threshold, 1.0)).
+    # We count partisan votes (not policy areas) to measure data richness,
+    # because 10 votes in one area is strong evidence.
+    if ideology_score is not None:
+        ideology_lean = (ideology_score - 0.5) * 2.0  # map [0,1] → [-1,+1]
+        vr = voting_record or {}
+        all_v = (vr.get("keyVotes") or []) + (vr.get("recentVotes") or [])
+        partisan_vote_count = sum(
+            1 for v in all_v
+            if isinstance(v, dict) and v.get("vote") in ("Yea", "Nay")
+        )
+        data_confidence = min(partisan_vote_count / 15.0, 1.0)
+        prior_weight = 1.0 - data_confidence
+        overall_lean = data_confidence * vote_lean + prior_weight * ideology_lean
+    else:
+        overall_lean = vote_lean
+
+    eval_party = senator_party
+    if senator_party == "I":
+        d_count = sum(1 for a in area_alignments if a["alignment"] == "D")
+        r_count = sum(1 for a in area_alignments if a["alignment"] == "R")
+        if d_count > r_count:
+            eval_party = "D"
+        elif r_count > d_count:
+            eval_party = "R"
 
     cross_party = 0
-    if senator_party in ("R", "D"):
-        opposite = "D" if senator_party == "R" else "R"
+    if eval_party in ("R", "D"):
+        opposite = "D" if eval_party == "R" else "R"
         cross_party = sum(
             1 for a in area_alignments
             if a["alignment"] == opposite
@@ -827,6 +918,161 @@ def analyze_partisan_depth(
             for a in breakdown
         ],
     }
+
+
+def _alignments_from_votes(voting_record: dict) -> list[dict]:
+    """Derive per-policy-area partisan alignments from actual votes.
+
+    Uses multi-area bill data when available: each bill may span multiple
+    policy areas (e.g. a bill touching HEALTHCARE and TAXES), each with
+    its own per-area party alignment.  A senator's Yea/Nay on the bill
+    registers as a signal in each area separately, weighted by the area's
+    confidence.  This follows Adler & Wilkerson (2012) in treating
+    legislation as multi-dimensional.
+
+    Fallback: when `policyAreas` is absent, uses the single `policyArea`
+    with the bill's overall `partyLeaning`.
+
+    Votes are weighted: voting FOR a party-leaning bill = +weight for
+    that party, voting AGAINST = +weight for the opposing party.
+    """
+    from collections import defaultdict
+
+    all_votes = (voting_record.get("keyVotes") or []) + (
+        voting_record.get("recentVotes") or []
+    )
+    if not all_votes:
+        return []
+
+    area_counts: dict[str, dict[str, float]] = defaultdict(
+        lambda: {"d": 0.0, "r": 0.0}
+    )
+
+    for v in all_votes:
+        if not isinstance(v, dict):
+            continue
+        vote = v.get("vote", "")
+        if vote not in ("Yea", "Nay"):
+            continue
+
+        multi_areas = v.get("policyAreas") or []
+        if multi_areas and isinstance(multi_areas, list):
+            for pa in multi_areas:
+                if not isinstance(pa, dict):
+                    continue
+                area = pa.get("area", "")
+                if not area or area == "PROCEDURAL":
+                    continue
+                area_party = pa.get("party", "")
+                if area_party not in ("D", "R"):
+                    continue
+                conf = pa.get("confidence", 0.5)
+
+                if vote == "Yea":
+                    area_counts[area][area_party.lower()] += conf
+                else:
+                    opposite = "r" if area_party == "D" else "d"
+                    area_counts[area][opposite] += conf
+        else:
+            party_leaning = v.get("partyLeaning") or v.get("party_leaning", "")
+            if party_leaning not in ("D", "R"):
+                continue
+            area = v.get("policyArea") or v.get("policy_area", "")
+            if not area or area == "PROCEDURAL":
+                continue
+
+            if vote == "Yea":
+                area_counts[area][party_leaning.lower()] += 1.0
+            else:
+                opposite = "r" if party_leaning == "D" else "d"
+                area_counts[area][opposite] += 1.0
+
+    alignments: list[dict] = []
+    for area, counts in area_counts.items():
+        d_ct = counts["d"]
+        r_ct = counts["r"]
+        total = d_ct + r_ct
+        if total < 2:
+            continue
+
+        lean = (r_ct - d_ct) / total
+        if abs(lean) < 0.10:
+            alignment = "bipartisan"
+            strength = 0.0
+        elif lean > 0:
+            alignment = "R"
+            strength = min(abs(lean), 1.0)
+        else:
+            alignment = "D"
+            strength = min(abs(lean), 1.0)
+
+        alignments.append({
+            "area": area,
+            "alignment": alignment,
+            "strength": round(strength, 2),
+            "lean": round(lean, 4),
+        })
+
+    return alignments
+
+
+def _alignments_from_promises(promises: list[dict]) -> list[dict]:
+    """Derive partisan alignments from campaign promise text via embedding similarity."""
+    if not promises:
+        return []
+
+    _ensure_platform_embeddings()
+
+    from app.pipeline.vector_store import get_embedding_model
+    from app.pipeline.analyze.bill_analyzer import classify_policy_area
+    model = get_embedding_model()
+
+    alignments: list[dict] = []
+
+    for p in promises:
+        text = p.get("promiseText", "")
+        if not text or len(text.strip()) < 10:
+            continue
+
+        category = (p.get("category") or "other").upper()
+        policy_area, _ = classify_policy_area(text)
+        if policy_area == "PROCEDURAL":
+            policy_area = _map_category_to_policy(category)
+
+        query_emb = model.encode([text[:300]], show_progress_bar=False)[0]
+        norm = np.linalg.norm(query_emb)
+        if norm > 0:
+            query_emb = query_emb / norm
+
+        r_emb = _r_embeddings.get(policy_area)
+        d_emb = _d_embeddings.get(policy_area)
+
+        if r_emb is not None and d_emb is not None:
+            r_score = float(np.dot(query_emb, r_emb))
+            d_score = float(np.dot(query_emb, d_emb))
+        else:
+            r_score = float(np.dot(query_emb, _r_aggregate))
+            d_score = float(np.dot(query_emb, _d_aggregate))
+
+        margin = r_score - d_score
+        if abs(margin) < 0.03:
+            alignment = "bipartisan"
+            strength = 0.0
+        elif margin > 0:
+            alignment = "R"
+            strength = min(margin / 0.15, 1.0)
+        else:
+            alignment = "D"
+            strength = min(abs(margin) / 0.15, 1.0)
+
+        alignments.append({
+            "area": policy_area,
+            "alignment": alignment,
+            "strength": round(strength, 2),
+            "lean": round(margin, 4),
+        })
+
+    return alignments
 
 
 _CATEGORY_POLICY_MAP: dict[str, str] = {

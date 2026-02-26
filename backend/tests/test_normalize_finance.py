@@ -18,7 +18,7 @@ class TestCandidateAffiliation:
             "CRUZ, RAPHAEL EDWARD TED",
             candidate_name="CRUZ, RAFAEL EDWARD (TED)",
         )
-        assert result == "CandidateAffiliated"
+        assert result == "Self-Funded"
 
     def test_unrelated_pac(self):
         result = classify_donor_type_semantic(

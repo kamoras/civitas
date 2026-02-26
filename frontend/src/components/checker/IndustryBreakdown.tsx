@@ -24,9 +24,8 @@ export default function IndustryBreakdown({ industries, donors }: IndustryBreakd
 
   return (
     <div>
-      <div className="flex items-baseline justify-between mb-3">
-        <h3 className="text-lg text-neon-cyan neon-cyan">{">"} FOLLOW THE MONEY</h3>
-        <span className="text-[10px] text-matrix-green/50">Source: opensecrets.org/industries</span>
+      <div className="text-[10px] text-matrix-green/50 mb-3">
+        Where this senator&apos;s money comes from, classified by industry using AI embedding similarity. Click an industry to see individual donors.
       </div>
       <div className="space-y-2">
         {sorted.map((ind) => {

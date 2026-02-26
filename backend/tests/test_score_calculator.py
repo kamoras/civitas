@@ -229,12 +229,16 @@ class TestPromisePersistence:
 
     def test_all_kept(self):
         promises = [{"alignment": "kept"}, {"alignment": "kept"}, {"alignment": "kept"}]
-        assert _calc_promise_persistence({}, "D", promises) == 100
+        score = _calc_promise_persistence({}, "D", promises)
+        # With 3 promises, count_conf = 3/5 = 0.6 causes Bayesian shrinkage
+        # toward 50, so score won't reach 100
+        assert 70 <= score <= 95
 
     def test_all_broken(self):
         promises = [{"alignment": "broken"}, {"alignment": "broken"}]
         score = _calc_promise_persistence({}, "D", promises)
-        assert score <= 10
+        # With 2 promises, count_conf = 2/5 = 0.4 causes heavy shrinkage
+        assert score <= 45
 
     def test_mixed(self):
         promises = [

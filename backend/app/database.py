@@ -56,6 +56,8 @@ def _migrate_columns() -> None:
         ("justices", "score_independence", "REAL DEFAULT 0.0"),
         ("justices", "score_bipartisan_agreement", "REAL DEFAULT 0.0"),
         ("justices", "score_judicial_restraint", "REAL DEFAULT 0.0"),
+        ("key_votes", "policy_areas", "TEXT DEFAULT '[]'"),
+        ("key_votes", "party_alignment_weight", "REAL DEFAULT 0.0"),
     ]
     with engine.begin() as conn:
         for table, column, col_type in migrations:

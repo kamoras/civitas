@@ -27,17 +27,23 @@ class TestFECTypeClassification:
         "entity_type, expected",
         [
             ("PAC", "PAC"),
-            ("COM", "PAC"),
             ("ORG", "Org/Employees"),
             ("IND", "Org/Employees"),
             ("CCM", "CandidateAffiliated"),
-            ("CAN", "CandidateAffiliated"),
+            ("CAN", "Self-Funded"),
             ("PTY", "Party/Ideological"),
         ],
     )
     def test_known_entity_types(self, entity_type, expected):
         receipt = {"entity_type": entity_type}
         assert classify_donor_type_from_fec(receipt) == expected
+
+    def test_com_defers_to_semantic_classifier(self):
+        """COM (generic committee) is ambiguous — returns None to defer to
+        embedding-based classification which can distinguish corporate
+        employee PACs from purely political PACs."""
+        receipt = {"entity_type": "COM"}
+        assert classify_donor_type_from_fec(receipt) is None
 
     def test_affiliated_receipt_types(self):
         for rt in ("18G", "18H", "18K", "18J", "22G", "22H"):
@@ -52,8 +58,7 @@ class TestFECTypeClassification:
         assert classify_donor_type_from_fec({}) is None
 
     def test_fec_entity_type_map_covers_expected_codes(self):
-        assert len(FEC_ENTITY_TYPE_MAP) == 7
-
+        assert len(FEC_ENTITY_TYPE_MAP) == 6
 
 class TestSkipDetection:
     """Tier 2: Payment processor skip detection."""
@@ -73,12 +78,13 @@ class TestSkipDetection:
 class TestSemanticClassification:
     """Tier 2: Embedding-based semantic donor type classification."""
 
-    def test_candidate_affiliated_personal_contribution(self):
+    def test_candidate_self_funded_personal_contribution(self):
+        """When donor name matches the candidate's name, it's a self-funded contribution."""
         result = classify_donor_type_semantic(
             "CRUZ, RAPHAEL EDWARD TED",
             candidate_name="CRUZ, RAFAEL EDWARD (TED)",
         )
-        assert result == "CandidateAffiliated"
+        assert result == "Self-Funded"
 
     def test_returns_none_for_empty_name(self):
         assert classify_donor_type_semantic("") is None

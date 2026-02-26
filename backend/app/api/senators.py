@@ -7,6 +7,7 @@ from app.database import get_db
 from app.services.senator_service import (
     get_leaderboard,
     get_senator_by_id,
+    get_senator_votes,
     get_senators_by_state,
     get_states_with_counts,
 )
@@ -199,6 +200,22 @@ def _build_highlights(senator) -> list[str]:
 
     hints.sort(key=lambda x: x[0], reverse=True)
     return [text for _, text in hints]
+
+
+@router.get("/senators/{senator_id}/votes")
+def get_votes(
+    senator_id: str,
+    category: str = Query("recent", pattern="^(recent|key)$"),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(15, ge=1, le=100),
+    filter: str = Query("all", pattern="^(all|yea|nay|against-party)$"),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Return paginated votes for a senator."""
+    result = get_senator_votes(db, senator_id, category, page, per_page, filter)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Senator not found")
+    return _cached_json(result.model_dump(by_alias=True), max_age=120)
 
 
 @router.get("/senators/{senator_id}")

@@ -17,8 +17,13 @@ def _determine_party_alignment(
 ) -> bool | None:
     """Determine if a senator voted with or against their party.
 
+    For Independents, uses their inferred caucus party (see
+    _infer_caucus_party). This ensures that senators like Sanders (I-VT)
+    and King (I-ME) — who caucus with Democrats — are measured against
+    the D party line rather than being excluded entirely.
+
     Args:
-        senator_party: "R", "D", or "I"
+        senator_party: "R", "D", or "I" (Independents use inferred caucus)
         vote: "Yea", "Nay", or "Not Voting"
         party_leaning: "R", "D", "bipartisan", or None
 
@@ -28,15 +33,160 @@ def _determine_party_alignment(
     if vote == "Not Voting" or not party_leaning or party_leaning == "bipartisan":
         return None
 
-    if senator_party == "I":
-        return None  # Independents don't have a party line
+    effective_party = senator_party
+    if effective_party == "I":
+        return None  # caller must resolve caucus first
 
-    # If the bill leans toward the senator's party, voting Yea = with party
-    # If the bill leans toward the other party, voting Nay = with party
-    if senator_party == party_leaning:
+    if effective_party == party_leaning:
         return vote == "Yea"
     else:
         return vote == "Nay"
+
+
+def _infer_caucus_from_votes(
+    bill_classifications: list[dict],
+    senator_votes: dict[str, str],
+) -> tuple[str | None, int, int]:
+    """Infer caucus party from roll-call voting patterns.
+
+    Returns:
+        (party_or_None, d_support_count, r_support_count)
+    """
+    d_support = 0
+    r_support = 0
+
+    for bill in bill_classifications:
+        party_leaning = bill.get("partyLeaning")
+        if not party_leaning or party_leaning == "bipartisan":
+            continue
+
+        bill_id = bill.get("billId", "")
+        vote = senator_votes.get(bill_id, "")
+        vote_upper = vote.upper()
+        is_yea = vote_upper in ("YEA", "AYE", "YES")
+        is_nay = vote_upper in ("NAY", "NO")
+
+        if not is_yea and not is_nay:
+            continue
+
+        if party_leaning == "D":
+            if is_yea:
+                d_support += 1
+            else:
+                r_support += 1
+        elif party_leaning == "R":
+            if is_yea:
+                r_support += 1
+            else:
+                d_support += 1
+
+    total = d_support + r_support
+    if total < 5:
+        return None, d_support, r_support
+
+    if d_support > r_support:
+        return "D", d_support, r_support
+    elif r_support > d_support:
+        return "R", d_support, r_support
+    return None, d_support, r_support
+
+
+def _infer_caucus_from_cosponsorship(
+    cosponsorship_profile: dict,
+) -> tuple[str | None, int, int]:
+    """Infer caucus party from cosponsorship patterns.
+
+    Cosponsorship is a proactive signal — a senator chooses to cosponsor a
+    bill, making it a stronger alignment indicator than voting, which is
+    subject to whip pressure and tactical compromises (Fowler 2006,
+    "Legislative Cosponsorship Networks," Social Networks 28:4).
+
+    Args:
+        cosponsorship_profile: {"d_cosponsored": int, "r_cosponsored": int}
+
+    Returns:
+        (party_or_None, d_count, r_count)
+    """
+    d_count = cosponsorship_profile.get("d_cosponsored", 0)
+    r_count = cosponsorship_profile.get("r_cosponsored", 0)
+    total = d_count + r_count
+
+    if total < 3:
+        return None, d_count, r_count
+
+    if d_count > r_count:
+        return "D", d_count, r_count
+    elif r_count > d_count:
+        return "R", d_count, r_count
+    return None, d_count, r_count
+
+
+def _infer_caucus_party(
+    bill_classifications: list[dict],
+    senator_votes: dict[str, str],
+    cosponsorship_profile: dict | None = None,
+) -> str | None:
+    """Infer an Independent senator's caucus party from behavior.
+
+    Combines two independent signals via weighted evidence fusion:
+      1. Roll-call voting patterns (how they vote on party-line bills)
+      2. Cosponsorship patterns (which party's bills they actively endorse)
+
+    Cosponsorship is weighted more heavily because it's a voluntary act of
+    endorsement — free of whip pressure and procedural constraints that
+    affect voting. Following Fowler (2006), cosponsorship networks reveal
+    genuine policy alignment better than roll-call votes alone.
+
+    When signals agree, confidence is high. When they disagree, the stronger
+    signal (by count) wins, but requires a larger margin.
+
+    Returns:
+        "R" or "D" if a clear pattern exists, None otherwise.
+    """
+    vote_party, vote_d, vote_r = _infer_caucus_from_votes(
+        bill_classifications, senator_votes,
+    )
+
+    cosponsor_party: str | None = None
+    cosponsor_d = 0
+    cosponsor_r = 0
+    if cosponsorship_profile:
+        cosponsor_party, cosponsor_d, cosponsor_r = (
+            _infer_caucus_from_cosponsorship(cosponsorship_profile)
+        )
+
+    # Weighted evidence fusion: cosponsorship gets 1.5x weight because
+    # it's a proactive endorsement, not a constrained binary choice.
+    combined_d = vote_d + cosponsor_d * 1.5
+    combined_r = vote_r + cosponsor_r * 1.5
+    combined_total = combined_d + combined_r
+
+    if combined_total < 5:
+        return vote_party  # fall back to votes-only inference
+
+    if combined_d > combined_r:
+        result = "D"
+    elif combined_r > combined_d:
+        result = "R"
+    else:
+        return None
+
+    if vote_party and cosponsor_party and vote_party != cosponsor_party:
+        # Signals disagree — require a stronger margin to commit.
+        margin = abs(combined_d - combined_r) / combined_total
+        if margin < 0.2:
+            logger.warning(
+                "Caucus signals disagree (votes=%s, cosponsorship=%s, "
+                "margin=%.2f) — insufficient confidence",
+                vote_party, cosponsor_party, margin,
+            )
+            return None
+
+    logger.info(
+        "Caucus inference: %s (votes: %dD/%dR, cosponsorship: %dD/%dR)",
+        result, vote_d, vote_r, cosponsor_d, cosponsor_r,
+    )
+    return result
 
 
 def normalize_votes(
@@ -44,6 +194,7 @@ def normalize_votes(
     bill_classifications: list[dict],
     senator_votes: dict[str, str],
     senator_party: str = "I",
+    cosponsorship_profile: dict | None = None,
 ) -> dict:
     """Normalize voting data for a senator.
 
@@ -56,6 +207,8 @@ def normalize_votes(
         bill_classifications: LLM-classified bills with vote data.
         senator_votes: Map of billId -> senator's vote on that bill.
         senator_party: Senator's party ("R", "D", "I").
+        cosponsorship_profile: {"d_cosponsored": int, "r_cosponsored": int}
+            for caucus inference (optional).
 
     Returns:
         Normalized voting record.
@@ -64,6 +217,19 @@ def normalize_votes(
     voted_with_party = 0
     voted_against_party = 0
     total_tracked = 0
+
+    # For Independents, infer their caucus party from voting + cosponsorship
+    effective_party = senator_party
+    if senator_party == "I":
+        inferred = _infer_caucus_party(
+            bill_classifications, senator_votes, cosponsorship_profile,
+        )
+        if inferred:
+            effective_party = inferred
+            logger.info(
+                "Inferred caucus party for Independent: %s",
+                inferred,
+            )
 
     # Policy area breakdown: {area: {total, withStance, againstStance}}
     area_stats: dict[str, dict] = {}
@@ -119,10 +285,10 @@ def normalize_votes(
                 else:
                     donor_opposed_votes += 1
 
-        # Party alignment
+        # Party alignment (uses effective_party for Independents)
         party_leaning = bill.get("partyLeaning")
         party_aligned = _determine_party_alignment(
-            senator_party, normalized_vote, party_leaning
+            effective_party, normalized_vote, party_leaning
         )
         if party_aligned is True:
             voted_with_party += 1
@@ -135,6 +301,8 @@ def normalize_votes(
             "date": bill.get("date", ""),
             "vote": normalized_vote,
             "policyArea": policy_area,
+            "policyAreas": bill.get("policyAreas", []),
+            "partyAlignmentWeight": bill.get("partyAlignmentWeight", 0.0),
             "stance": bill.get("stance", "neutral"),
             "stanceVote": stance_vote,
             "impactedGroups": bill.get("impactedGroups", []),
@@ -183,6 +351,7 @@ def normalize_votes(
         "votedWithPartyCount": voted_with_party,
         "votedAgainstPartyCount": voted_against_party,
         "partyLoyaltyPct": party_loyalty_pct,
+        "effectiveParty": effective_party,
         "votingSummary": "",
         "recentVotes": [],
         "keyVotes": key_votes,
@@ -195,6 +364,7 @@ def normalize_recent_votes(
     senator_last_name: str,
     senator_state: str,
     senator_party: str,
+    effective_party: str | None = None,
 ) -> list[dict]:
     """Normalize recent roll call votes for a senator.
 
@@ -204,10 +374,12 @@ def normalize_recent_votes(
         senator_last_name: Senator's last name for vote matching.
         senator_state: Senator's state code.
         senator_party: Senator's party.
+        effective_party: Inferred caucus party for Independents (from normalize_votes).
 
     Returns:
         List of normalized vote dicts for the senator.
     """
+    party_for_alignment = effective_party or senator_party
     votes = []
     for bill in classified_recent:
         bill_id = bill.get("billId", "")
@@ -234,7 +406,7 @@ def normalize_recent_votes(
 
         party_leaning = bill.get("partyLeaning")
         party_aligned = _determine_party_alignment(
-            senator_party, normalized_vote, party_leaning
+            party_for_alignment, normalized_vote, party_leaning
         )
 
         votes.append({
@@ -242,12 +414,12 @@ def normalize_recent_votes(
             "billId": bill_id,
             "date": bill.get("date", ""),
             "vote": normalized_vote,
-            # New policy stance fields
             "policyArea": bill.get("policyArea", "PROCEDURAL"),
+            "policyAreas": bill.get("policyAreas", []),
+            "partyAlignmentWeight": bill.get("partyAlignmentWeight", 0.0),
             "stance": bill.get("stance", "neutral"),
             "stanceVote": bill.get("stanceVote"),
             "impactedGroups": bill.get("impactedGroups", []),
-            # Legacy fields
             "proBusinessVote": bill.get("proBusinessVote"),
             "classification": bill.get("classification", "mixed"),
             "description": bill.get("description", ""),
@@ -312,11 +484,13 @@ def extract_senator_vote(
     """Extract a senator's vote from roll call vote data.
 
     Matches by last name + state since senate.gov XML doesn't include bioguideId.
+    Handles multi-word last names (e.g. "Cortez Masto", "Van Hollen") and
+    accented characters (e.g. "Luján" vs "Lujan") via Unicode normalization.
 
     Args:
         roll_call_data: Parsed roll call vote data from senate.gov.
         bioguide_id: Senator's Bioguide ID (unused, kept for signature compat).
-        last_name: Senator's last name for matching.
+        last_name: Senator's last name for matching (may be multi-word).
         state: Senator's state code for matching.
 
     Returns:
@@ -325,16 +499,24 @@ def extract_senator_vote(
     if not roll_call_data or not roll_call_data.get("members"):
         return None
 
-    # Match by last name + state
     if last_name and state:
+        target = _normalize_for_match(last_name)
+        state_upper = state.upper()
         for member in roll_call_data["members"]:
-            if (
-                member.get("lastName", "").upper() == last_name.upper()
-                and member.get("state", "").upper() == state.upper()
-            ):
+            if member.get("state", "").upper() != state_upper:
+                continue
+            member_ln = _normalize_for_match(member.get("lastName", ""))
+            if member_ln == target:
                 return member.get("voteCast") or None
 
     return None
+
+
+def _normalize_for_match(text: str) -> str:
+    """Normalize a name for comparison: strip accents and uppercase."""
+    import unicodedata
+    nfkd = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in nfkd if not unicodedata.combining(c)).upper()
 
 
 def find_senate_roll_call(actions: list[dict] | None) -> dict | None:

@@ -26,8 +26,10 @@ _BROKEN_RE = re.compile(
 )
 from app.schemas import (
     CampaignPromiseSchema,
+    PaginatedVotesSchema,
     PartisanDepthSchema,
     PolicyAlignmentSchema,
+    PolicyAreaDetail,
     RepresentationScoreSchema,
     DonorSchema,
     FundingSchema,
@@ -37,7 +39,9 @@ from app.schemas import (
     LobbyingMatchSchema,
     PolicyBreakdownSchema,
     SenatorSchema,
+    SponsoredBillSchema,
     StateCountSchema,
+    VoteCountsSchema,
     VotingRecordSchema,
 )
 
@@ -122,32 +126,25 @@ _PROMISE_ARTIFACT_RE = re.compile(
 )
 
 def _fixup_donor_type(donor_name: str, donor_type: str, senator_name: str) -> str:
-    """Read-time safety-net for donor types persisted before embedding classifier.
+    """Read-time safety net for donor types.
 
-    Uses the same semantic classifier from the pipeline to correct
-    already-persisted data that was classified with hardcoded patterns.
-    Only runs when the donor_type looks suspicious (PAC without PAC keywords).
+    Lightweight string-only checks that avoid loading the embedding model.
+    Full semantic classification happens at pipeline write time; this only
+    catches obvious cases where a company name was persisted as "PAC".
     """
     if donor_type != "PAC":
         return donor_type
 
     name_upper = donor_name.upper()
-    has_pac_keywords = any(
-        sig in name_upper for sig in ("PAC", "COMMITTEE", "FUND", "LEAGUE", "CAUCUS")
-    )
-    if has_pac_keywords:
+    if any(sig in name_upper for sig in ("PAC", "COMMITTEE", "FUND", "LEAGUE", "CAUCUS")):
         return donor_type
 
-    try:
-        from app.pipeline.analyze.donor_classifier_ai import classify_donor_type_semantic
-        cand_name = ",".join(senator_name.split()[::-1]) if senator_name else ""
-        sem_type = classify_donor_type_semantic(donor_name, candidate_name=cand_name)
-        if sem_type and sem_type != "PAC":
-            return sem_type
-    except Exception:
-        pass
+    if senator_name:
+        last = senator_name.split()[-1].upper()
+        if last in name_upper:
+            return "CandidateAffiliated"
 
-    return donor_type
+    return "Org/Employees"
 
 
 def _filter_promises(campaign_promises: list) -> list[CampaignPromiseSchema]:
@@ -238,6 +235,42 @@ def _filter_promises(campaign_promises: list) -> list[CampaignPromiseSchema]:
     return result
 
 
+def _build_sponsored_bills(sponsored_bills: list) -> list[SponsoredBillSchema]:
+    """Convert ORM SponsoredBill records to schema objects, sorted by date."""
+    result: list[SponsoredBillSchema] = []
+    for sb in sponsored_bills:
+        raw_areas = []
+        if getattr(sb, "policy_areas", None):
+            try:
+                raw_areas = json.loads(sb.policy_areas)
+            except (json.JSONDecodeError, TypeError):
+                raw_areas = []
+        areas = [
+            PolicyAreaDetail(
+                area=a.get("area", ""),
+                confidence=a.get("confidence", 0.0),
+                party=a.get("party", "bipartisan"),
+            )
+            for a in raw_areas
+            if a.get("area")
+        ]
+        result.append(SponsoredBillSchema(
+            bill_id=sb.bill_id,
+            title=sb.title,
+            introduced_date=sb.introduced_date or "",
+            latest_action=sb.latest_action or "",
+            latest_action_date=sb.latest_action_date or "",
+            policy_area=sb.policy_area or "",
+            policy_areas=areas,
+            party_leaning=sb.party_leaning,
+            congress=sb.congress or 0,
+            bill_type=sb.bill_type or "",
+            is_law=sb.is_law or False,
+        ))
+    result.sort(key=lambda x: x.introduced_date, reverse=True)
+    return result
+
+
 def _parse_partisan_depth(raw: str | None) -> PartisanDepthSchema | None:
     """Deserialize JSON partisan depth profile stored on the senator row."""
     if not raw:
@@ -271,6 +304,7 @@ def _senator_eager_options():
         selectinload(Senator.key_votes),
         selectinload(Senator.lobbying_matches),
         selectinload(Senator.campaign_promises),
+        selectinload(Senator.sponsored_bills),
     ]
 
 
@@ -344,28 +378,6 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
     party_total = voted_with + voted_against
     party_loyalty_pct = round(voted_with / party_total * 100, 1) if party_total > 0 else 0.0
 
-    def _build_vote_schema(v):
-        return KeyVoteSchema(
-            bill_name=v.bill_name,
-            bill_id=v.bill_id,
-            date=v.date,
-            vote=v.vote,
-            policy_area=v.policy_area or "PROCEDURAL",
-            stance=v.stance or "neutral",
-            stance_vote=v.stance_vote,
-            impacted_groups=json.loads(v.impacted_groups) if v.impacted_groups else [],
-            affected_industries=json.loads(v.affected_industries) if getattr(v, "affected_industries", None) else [],
-            description=v.description,
-            corporate_interest=v.corporate_interest,
-            public_impact=v.public_impact,
-            relevant_donors=json.loads(v.relevant_donors) if v.relevant_donors else [],
-            relevant_donor_total=v.relevant_donor_total,
-            party_leaning=v.party_leaning,
-            voted_with_party=v.voted_with_party,
-            vote_category=v.vote_category or "key",
-            key_vote_reasoning=v.key_vote_reasoning,
-        )
-
     # 6. Assemble the nested schema
     initials = _compute_initials(senator.name) or senator.initials
     return SenatorSchema(
@@ -420,8 +432,8 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
             voted_against_party_count=voted_against,
             party_loyalty_pct=party_loyalty_pct,
             voting_summary=senator.voting_summary or "",
-            recent_votes=[_build_vote_schema(v) for v in recent_votes_db],
-            key_votes=[_build_vote_schema(v) for v in key_votes_db],
+            recent_vote_count=len(recent_votes_db),
+            key_vote_count=len(key_votes_db),
         ),
         lobbying_matches=[
             LobbyingMatchSchema(
@@ -438,6 +450,10 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
         campaign_promises=_filter_promises(campaign_promises),
         platform_summary=_clean_platform_summary(senator.platform_summary),
         partisan_depth=_parse_partisan_depth(senator.partisan_depth),
+        sponsored_bills=_build_sponsored_bills(senator.sponsored_bills),
+        leadership_score=senator.leadership_score,
+        ideology_score=senator.ideology_score,
+        sponsorship_description=getattr(senator, "sponsorship_description", "") or "",
     )
 
 
@@ -642,24 +658,24 @@ def upsert_senator(db: Session, senator_data: dict) -> Senator:
     for lm in senator_data.get("lobbyingMatches", []):
         db.add(LobbyingMatch(
             senator_id=sid,
-            lobbyist_org=lm["lobbyistOrg"],
-            industry=lm["industry"],
-            lobbying_spend=lm["lobbyingSpend"],
-            donation_to_senator=lm["donationToSenator"],
-            bills_influenced=json.dumps(lm.get("billsInfluenced", [])),
-            senator_vote_aligned=lm.get("senatorVoteAligned", False),
-            description=lm.get("description", ""),
+            lobbyist_org=lm.get("lobbyistOrg") or "Unknown",
+            industry=lm.get("industry") or "OTHER",
+            lobbying_spend=lm.get("lobbyingSpend") or 0,
+            donation_to_senator=lm.get("donationToSenator") or 0,
+            bills_influenced=json.dumps(lm.get("billsInfluenced") or []),
+            senator_vote_aligned=lm.get("senatorVoteAligned"),
+            description=lm.get("description") or "",
         ))
 
     db.query(CampaignPromise).filter(CampaignPromise.senator_id == sid).delete()
     for cp in senator_data.get("campaignPromises", []):
         db.add(CampaignPromise(
             senator_id=sid,
-            promise_text=cp.get("promiseText", ""),
-            category=cp.get("category", "other"),
-            alignment=cp.get("alignment", "unclear"),
-            related_votes=json.dumps(cp.get("relatedVotes", [])),
-            analysis=cp.get("analysis", ""),
+            promise_text=cp.get("promiseText") or "",
+            category=cp.get("category") or "other",
+            alignment=cp.get("alignment") or "unclear",
+            related_votes=json.dumps(cp.get("relatedVotes") or []),
+            analysis=cp.get("analysis") or "",
             party_alignment=cp.get("partyAlignment"),
         ))
 
@@ -670,3 +686,94 @@ def upsert_senator(db: Session, senator_data: dict) -> Senator:
     db.commit()
     db.refresh(existing)
     return existing
+
+
+def get_senator_votes(
+    db: Session,
+    senator_id: str,
+    category: str = "recent",
+    page: int = 1,
+    per_page: int = 15,
+    vote_filter: str = "all",
+) -> PaginatedVotesSchema | None:
+    """Return paginated, filterable votes for a senator."""
+    senator = db.query(Senator).filter(Senator.id == senator_id).first()
+    if senator is None:
+        return None
+
+    base_q = db.query(KeyVote).filter(
+        KeyVote.senator_id == senator_id,
+        KeyVote.vote_category == category,
+    )
+
+    count_all = base_q.count()
+    count_yea = base_q.filter(KeyVote.vote == "Yea").count()
+    count_nay = base_q.filter(KeyVote.vote == "Nay").count()
+    count_against = base_q.filter(KeyVote.voted_with_party == False).count()  # noqa: E712
+    counts = VoteCountsSchema(all=count_all, yea=count_yea, nay=count_nay, against_party=count_against)
+
+    query = base_q
+    if vote_filter == "yea":
+        query = query.filter(KeyVote.vote == "Yea")
+    elif vote_filter == "nay":
+        query = query.filter(KeyVote.vote == "Nay")
+    elif vote_filter == "against-party":
+        query = query.filter(KeyVote.voted_with_party == False)  # noqa: E712
+
+    total = query.count()
+    total_pages = max(1, -(-total // per_page))
+    page = max(1, min(page, total_pages))
+
+    votes_db = query.order_by(KeyVote.date.desc()).offset((page - 1) * per_page).limit(per_page).all()
+
+    def _build(v: KeyVote) -> KeyVoteSchema:
+        raw_areas = []
+        if getattr(v, "policy_areas", None):
+            try:
+                raw_areas = json.loads(v.policy_areas)
+            except (json.JSONDecodeError, TypeError):
+                raw_areas = []
+
+        policy_area_details = [
+            PolicyAreaDetail(
+                area=a.get("area", ""),
+                confidence=a.get("confidence", 0.0),
+                party=a.get("party", "bipartisan"),
+            )
+            for a in raw_areas
+            if isinstance(a, dict)
+        ]
+
+        return KeyVoteSchema(
+            bill_name=v.bill_name,
+            bill_id=v.bill_id,
+            date=v.date,
+            vote=v.vote,
+            policy_area=v.policy_area or "PROCEDURAL",
+            policy_areas=policy_area_details,
+            party_alignment_weight=getattr(v, "party_alignment_weight", 0.0) or 0.0,
+            stance=v.stance or "neutral",
+            stance_vote=v.stance_vote,
+            impacted_groups=json.loads(v.impacted_groups) if v.impacted_groups else [],
+            affected_industries=json.loads(v.affected_industries) if getattr(v, "affected_industries", None) else [],
+            description=v.description,
+            corporate_interest=v.corporate_interest,
+            public_impact=v.public_impact,
+            relevant_donors=json.loads(v.relevant_donors) if v.relevant_donors else [],
+            relevant_donor_total=v.relevant_donor_total,
+            party_leaning=v.party_leaning,
+            voted_with_party=v.voted_with_party,
+            vote_category=v.vote_category or "key",
+            key_vote_reasoning=v.key_vote_reasoning,
+        )
+
+    return PaginatedVotesSchema(
+        votes=[_build(v) for v in votes_db],
+        total=total,
+        page=page,
+        per_page=per_page,
+        total_pages=total_pages,
+        category=category,
+        filter=vote_filter,
+        counts=counts,
+    )

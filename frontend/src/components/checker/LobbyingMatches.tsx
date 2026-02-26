@@ -11,11 +11,10 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
 
   return (
     <div>
-      <div className="flex items-baseline justify-between mb-3">
-        <h3 className="text-lg text-neon-pink neon-pink">{">"} DONOR-VOTE CONNECTIONS</h3>
-        <span className="text-[10px] text-matrix-green/50">fec.gov/data</span>
+      <div className="text-[10px] text-matrix-green/50 mb-3">
+        Cases where a donor to this senator also had interests in legislation the senator voted on.
+        A connection does not prove influence — it highlights where money and votes intersect.
       </div>
-
       <div className="space-y-4">
         {matches.map((match, i) => (
           <div key={i} className="terminal-window p-4 border-l-2 border-l-neon-cyan/30">

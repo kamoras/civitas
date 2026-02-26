@@ -75,15 +75,23 @@ export default function AboutPage() {
           <Section title="OUR APPROACH">
             <P>
               Civitas is an open-data AI/ML platform that aggregates data from official
-              U.S. government sources into a unified transparency scorecard for elected
-              officials. Every score is computed from publicly available federal records.
-              We do not editorialize, endorse, or oppose any candidate or party.
+              U.S. government sources into unified transparency scorecards for senators,
+              presidents, and Supreme Court justices. Every score is computed from publicly
+              available federal records. We do not editorialize, endorse, or oppose any
+              candidate or party.
             </P>
             <P>
               Scores reflect observable behavior — voting patterns, funding sources,
               legislative activity — not ideology. A senator who votes with their party 100%
               of the time receives a lower independence score regardless of whether they are
               a Democrat or Republican. The system is designed to be structurally non-partisan.
+            </P>
+            <P>
+              Every metric on the scorecard includes a <em className="text-matrix-green/80">[?]
+              tooltip</em> explaining what it measures and how to interpret it. Hover on
+              desktop or tap on mobile. We believe no number should be presented without
+              context — if you see a metric, you should be able to understand what it means
+              and where it came from.
             </P>
             <P>
               When data is missing or insufficient, scores default to a neutral 50 out of 100.
@@ -195,6 +203,72 @@ export default function AboutPage() {
             </div>
           </Section>
 
+          {/* ── Sponsorship Analysis ── */}
+          <Section title="SPONSORSHIP ANALYSIS (LEADERSHIP &amp; IDEOLOGY)">
+            <P>
+              Beyond the four scored metrics, each senator receives two informational
+              metrics derived from cosponsorship networks — the pattern of which senators
+              sign onto each other&apos;s bills. These metrics are not part of the Representation
+              Score but provide additional context about a senator&apos;s role and positioning.
+            </P>
+
+            <div className="space-y-4 mt-4">
+              <div>
+                <Label>Legislative Leadership (0-100)</Label>
+                <P>
+                  Measures legislative influence using the PageRank algorithm
+                  <Cite id="32">Brin &amp; Page 1998</Cite>
+                  applied to cosponsorship networks. When Senator A cosponsors Senator B&apos;s
+                  bill, that creates a directed link in the network. PageRank computes
+                  centrality: a senator whose bills attract many cosponsors — especially from
+                  other influential senators — receives a higher score. This mirrors
+                  GovTrack&apos;s leadership methodology.
+                  <Cite id="33">Tauberer 2012</Cite>
+                </P>
+                <P>
+                  The algorithm uses power iteration with a damping factor of 0.85 and
+                  converges in ~50 iterations. Raw PageRank values are rescaled to [0, 1]
+                  using a logarithmic transformation to compress the heavy-tailed distribution,
+                  then displayed as 0-100.
+                </P>
+              </div>
+
+              <div>
+                <Label>Ideology Score (0-1)</Label>
+                <P>
+                  Computes a behavioral ideological position using Singular Value Decomposition
+                  (SVD) on the cosponsorship matrix, following Tauberer (2012).
+                  <Cite id="33">Tauberer 2012</Cite>
+                  The second singular vector (first is trivially related to overall activity)
+                  captures the primary ideological dimension — the axis along which senators
+                  most differ in who they cosponsor. This is analogous to DW-NOMINATE
+                  <Cite id="20">Poole &amp; Rosenthal 1985</Cite>
+                  but derived from cosponsorship patterns rather than roll-call votes.
+                </P>
+                <P>
+                  The ideology score is oriented so that lower values correspond to progressive
+                  positions and higher values to conservative positions, calibrated by checking
+                  the mean score of each party. It serves as a Bayesian prior for the partisan
+                  depth calculation: when a senator has few recorded votes, the ideology score
+                  regularizes the estimate; as vote data accumulates, the prior weight drops
+                  to zero.
+                  <Cite id="19">Efron &amp; Morris 1975</Cite>
+                </P>
+              </div>
+
+              <div>
+                <Label>Sponsorship Description</Label>
+                <P>
+                  Combines the leadership and ideology scores into a human-readable label
+                  (e.g., &quot;progressive Democratic leader&quot; or &quot;conservative Republican
+                  backbencher&quot;). The label encodes three dimensions: ideological position
+                  (progressive/moderate/conservative), party affiliation, and influence tier
+                  (leader/rank-and-file/backbencher).
+                </P>
+              </div>
+            </div>
+          </Section>
+
           {/* ── President Metrics ── */}
           <Section title="PRESIDENTIAL SCORECARD METRICS">
             <P>
@@ -258,6 +332,23 @@ export default function AboutPage() {
                 </P>
               </div>
             </div>
+          </Section>
+
+          {/* ── Supreme Court ── */}
+          <Section title="SUPREME COURT JUSTICE SCORECARDS">
+            <P>
+              Justices are scored on impartiality and ideological consistency using
+              case-level voting data from the Oyez Project and official Supreme Court
+              records. Case opinions link directly to the official supremecourt.gov
+              slip opinion PDFs.
+            </P>
+            <P>
+              Justice scoring evaluates whether a justice applies consistent legal
+              principles across cases or shifts positions based on the political
+              valence of the parties involved. This is analogous to the independence
+              metric used for senators but adapted to the judicial context where party
+              loyalty is replaced by jurisprudential consistency.
+            </P>
           </Section>
 
           {/* ── Party Alignment ── */}
@@ -384,8 +475,10 @@ export default function AboutPage() {
                   policy area scheme used by Congress.gov. The approach follows the text-as-data
                   paradigm reviewed in Grimmer &amp; Stewart (2013).
                   <Cite id="27">Grimmer &amp; Stewart 2013</Cite>
-                  Stance derivation (pro/anti/neutral) uses action-verb patterns following
-                  the Comparative Agendas Project coding scheme.
+                  Stance derivation (pro/anti/neutral) uses embedding cosine similarity
+                  against direction prototypes — the bill text is compared to semantic
+                  signatures of supportive, restrictive, and reform-oriented legislative
+                  language, following the Comparative Agendas Project coding tradition.
                   <Cite id="28">Baumgartner &amp; Jones 1993</Cite>
                   Zero LLM calls are used for bill classification.
                 </P>
@@ -540,11 +633,12 @@ export default function AboutPage() {
               <div>
                 <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">WHY THESE TECHNIQUES WERE CHOSEN</h3>
                 <P>
-                  We follow a strict hierarchy: structured data first, then deterministic rules,
-                  then embedding models, then LLM — reserving each more expensive technique only
-                  for tasks the cheaper ones cannot handle. This reflects the principle that
-                  simpler models should be preferred when they achieve comparable accuracy,
-                  a finding consistently supported in applied NLP research.
+              We follow a strict hierarchy: structured metadata first, then embedding
+                  similarity, then kNN, then LLM — reserving each more expensive technique only
+                  for tasks the cheaper ones cannot handle. The pipeline contains zero hardcoded
+                  keyword lists, regex patterns, or string-matching heuristics for classification
+                  decisions. Every classification is made mathematically via embedding cosine
+                  similarity against natural-language prototypes.
                   <Cite id="12">Jurafsky &amp; Martin 2023</Cite>
                 </P>
                 <P>
@@ -624,6 +718,12 @@ export default function AboutPage() {
               <Row label="Congressional Record (GovInfo)" value="Senate and House floor proceedings — speaker-attributed transcripts from daily CREC packages" />
               <Row label="Federal Register" value="Executive orders, presidential memoranda, and proclamations with full text and metadata" />
               <Row label="Semantic Search" value="Documents embedded with all-MiniLM-L6-v2 into ChromaDB for dense passage retrieval" />
+            </div>
+
+            <div className="space-y-2 mt-6">
+              <h3 className="text-xs text-matrix-green/50 tracking-widest">SUPREME COURT DATA</h3>
+              <Row label="Oyez Project API" value="Case metadata, justice votes, oral argument transcripts, and decision breakdowns" />
+              <Row label="supremecourt.gov" value="Official slip opinion PDFs linked directly from case records" />
             </div>
 
             <div className="space-y-2 mt-6">
@@ -725,15 +825,20 @@ export default function AboutPage() {
           <Section title="TECHNICAL STACK">
             <div className="space-y-2">
               <Row label="Hardware" value="Raspberry Pi 5 (16GB), NVMe SSD" />
-              <Row label="Backend" value="Python, FastAPI, SQLAlchemy, SQLite" />
-              <Row label="Frontend" value="Next.js 14, React, Tailwind CSS" />
+              <Row label="Backend" value="Python 3.12, FastAPI, SQLAlchemy, SQLite" />
+              <Row label="Frontend" value="Next.js 14, React 18, TypeScript, Tailwind CSS" />
               <Row label="Embedding Model" value="all-MiniLM-L6-v2 (22M params, sentence-transformers)" />
               <Row label="LLM Runtime" value="llama.cpp (native ARM build), Qwen 2.5 1.5B" />
               <Row label="Vector Database" value="ChromaDB (persistent, local)" />
-              <Row label="Containers" value="Docker Compose (blue/green zero-downtime deploy)" />
+              <Row label="Containers" value="Docker Compose (blue/green zero-downtime deploy via nginx)" />
               <Row label="Pipeline Schedule" value="Nightly at 3:00 AM via APScheduler" />
               <Row label="Data Caching" value="72-hour TTL with persistent SQLite cache" />
               <Row label="Learning Store" value="SQLite table for persistent classification memory" />
+              <Row label="API Pagination" value="Server-side paginated voting records with filter support" />
+              <Row label="Sponsorship Analysis" value="PageRank (leadership) + SVD (ideology) on cosponsorship matrix" />
+              <Row label="Classification" value="Zero hardcoded rules — all classifications via embedding similarity or kNN" />
+              <Row label="Metric Tooltips" value="Every scorecard metric has a [?] tooltip explaining what it measures" />
+              <Row label="Branches Covered" value="Senate (100), Presidents (historical + modern), Supreme Court (9 justices)" />
             </div>
           </Section>
 
@@ -832,6 +937,12 @@ export default function AboutPage() {
               </Ref>
               <Ref id="31">
                 Laver, M., Benoit, K., &amp; Garry, J. (2003). Extracting Policy Positions from Political Texts Using Words as Data. <em className="text-matrix-green/60">American Political Science Review</em>, 97(2), 311-331. doi:10.1017/S0003055403000698
+              </Ref>
+              <Ref id="32">
+                Brin, S. &amp; Page, L. (1998). The Anatomy of a Large-Scale Hypertextual Web Search Engine. <em className="text-matrix-green/60">Proceedings of the 7th International World Wide Web Conference</em>, 107-117.
+              </Ref>
+              <Ref id="33">
+                Tauberer, J. (2012). <em className="text-matrix-green/60">Open Government Data: The Book</em>. GovTrack.us methodology for ideology and leadership scoring via cosponsorship analysis. govtrack.us/about/analysis
               </Ref>
             </ol>
           </Section>

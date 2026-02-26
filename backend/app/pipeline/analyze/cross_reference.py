@@ -81,7 +81,10 @@ def select_key_votes(
         score = 1.0
         if v.get("votedWithParty") is False:
             score += 3.0
-        if v.get("policyArea", "") in donor_policies:
+        vote_areas = {
+            a.get("area") for a in v.get("policyAreas", [])
+        } or {v.get("policyArea", "")}
+        if vote_areas & donor_policies:
             score += 2.0
         scored.append((score, v["billId"]))
 

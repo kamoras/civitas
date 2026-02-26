@@ -55,8 +55,9 @@ INDUSTRY_DESCRIPTIONS: dict[str, str] = {
     ),
     "INSURANCE": (
         "insurance underwriting coverage premiums actuarial health insurance property casualty. "
-        "Anthem Cigna Humana UnitedHealth Aetna Blue Cross Blue Shield MetLife Aflac Progressive "
-        "Allstate State Farm Geico mutual life benefit plan underwriter indemnity"
+        "Anthem Cigna Humana UnitedHealth Aetna Blue Cross Blue Shield BCBS MetLife Aflac Progressive "
+        "Allstate State Farm Geico mutual life benefit plan underwriter indemnity "
+        "Hartford Nationwide Liberty Mutual Travelers USAA"
     ),
     "OIL_GAS": (
         "oil gas petroleum drilling fracking pipeline fossil fuel refinery crude natural gas. "
@@ -69,11 +70,12 @@ INDUSTRY_DESCRIPTIONS: dict[str, str] = {
         "naval army air force Pentagon"
     ),
     "FINANCE": (
-        "banking investment securities hedge fund private equity venture capital financial services. "
-        "Wall Street asset management brokerage wealth management credit lending. "
-        "Credit union savings bank savings & loan community bank federal credit union mutual savings. "
+        "banking investment securities hedge private equity venture capital. "
+        "Wall Street asset management brokerage wealth management credit lending mortgage. "
+        "Credit union savings bank federal credit union mutual savings. "
         "Goldman Sachs Morgan Stanley JPMorgan Citigroup Bank of America Wells Fargo BlackRock "
-        "Fidelity Vanguard Raymond James Chain Bridge"
+        "Fidelity Vanguard Raymond James BB&T Truist PNC Capital One TD Bank "
+        "financial services fiduciary trading derivatives bonds equities"
     ),
     "REAL_ESTATE": (
         "real estate property housing mortgage realty homebuilder REIT commercial property development. "
@@ -86,7 +88,7 @@ INDUSTRY_DESCRIPTIONS: dict[str, str] = {
     ),
     "TELECOM": (
         "telecommunications wireless broadband cable internet service provider cellular network satellite. "
-        "AT&T Verizon T-Mobile Comcast Charter"
+        "AT&T Verizon T-Mobile Comcast Charter Sprint CenturyLink Windstream"
     ),
     "AGRIBUSINESS": (
         "agriculture farming crop livestock dairy grain agribusiness ranching fertilizer seed. "
@@ -104,9 +106,14 @@ INDUSTRY_DESCRIPTIONS: dict[str, str] = {
     ),
     "LAWYERS": (
         "law firm attorney legal litigation counsel solicitor legal services LLP PLLC. "
-        "Skadden Jones Day Kirkland Latham Sidley Covington Greenberg law office attorneys at law"
+        "Skadden Jones Day Kirkland Latham Sidley Covington Greenberg law office attorneys at law. "
+        "Brownstein Hyatt Simpson Thacher DLA Piper Baker McKenzie Hogan Lovells "
+        "White & Case Gibson Dunn Sullivan Cromwell Cleary Gottlieb Blank Rome Howrey"
     ),
-    "LOBBYISTS": "lobbying government relations public affairs advocacy political consulting Akin Gump Brownstein",
+    "LOBBYISTS": (
+        "lobbying government relations public affairs advocacy influence. "
+        "Akin Gump Squire Patton Boggs BGR Group Invariant LLC Holland Knight lobbying firm"
+    ),
     "GAMBLING": "casino gambling gaming sports betting lottery wagering Las Vegas Sands MGM Wynn Caesars",
     "GUNS": (
         "firearm gun rifle ammunition weapons manufacturer second amendment. "
@@ -133,29 +140,23 @@ INDUSTRY_DESCRIPTIONS: dict[str, str] = {
     "POLITICAL": (
         "political party campaign committee victory fund leadership fund election. "
         "National committee DSCC NRSC Democratic Republican senatorial congressional. "
-        "Emily's List Club for Growth campaign services digital strategy voter contact"
+        "Emily's List Club for Growth campaign services digital strategy voter contact. "
+        "action fund victory committee joint fundraising state victory friends of "
+        "for senate for congress reelect senate majority PAC super PAC "
+        "political action committee grassroots advocacy votes voters ballot"
     ),
 }
 
 
-def _strip_pac_suffix(name: str) -> str:
-    """Remove 'PAC' suffix from org names to improve embedding classification.
-
-    Entity names like 'XYZ CREDIT UNION PAC' get misclassified as POLITICAL
-    because the word 'PAC' dominates the embedding. Stripping it lets the
-    semantic content ('credit union') drive classification.
-    """
-    import re
-    return re.sub(
-        r"\s+(?:PAC|POLITICAL ACTION COMMITTEE|POLITICAL ACTION)\s*$",
-        "",
-        name.strip(),
-        flags=re.IGNORECASE,
-    ).strip()
-
+_PAC_NAMING_PROTOTYPE = (
+    "political action committee PAC employees PAC good government fund "
+    "political fund voluntary contributions committee"
+)
 
 _embeddings_cache: dict[str, np.ndarray] = {}
+_pac_naming_emb: np.ndarray | None = None
 SIMILARITY_THRESHOLD = 0.30
+POLITICAL_MARGIN = 0.06
 
 
 def clear_industry_embedding_cache() -> None:
@@ -178,6 +179,55 @@ def _get_industry_embeddings() -> dict[str, np.ndarray]:
     return _embeddings_cache
 
 
+def _get_pac_naming_embedding() -> np.ndarray:
+    """Cache and return the PAC naming context prototype embedding."""
+    global _pac_naming_emb
+    if _pac_naming_emb is not None:
+        return _pac_naming_emb
+    from app.pipeline.vector_store import get_embedding_model
+    model = get_embedding_model()
+    emb = model.encode([_PAC_NAMING_PROTOTYPE], show_progress_bar=False)[0]
+    _pac_naming_emb = emb / np.linalg.norm(emb)
+    return _pac_naming_emb
+
+
+def _decontextualize_political(
+    query_emb: np.ndarray,
+    scored: list[tuple[str, float]],
+) -> tuple[str, float]:
+    """If POLITICAL wins, check whether the entity is an industry-PAC.
+
+    Many entities are named "[Industry] PAC" — the word PAC pulls them
+    toward POLITICAL in embedding space. If the entity has high cosine
+    similarity to the PAC naming context prototype AND a non-POLITICAL
+    runner-up is above threshold and within margin, prefer the runner-up.
+
+    This is a mathematical decontextualization approach: instead of
+    regex-stripping the PAC suffix, we detect the PAC naming pattern
+    semantically and adjust the ranking accordingly.
+    """
+    if not scored or scored[0][0] != "POLITICAL":
+        return scored[0] if scored else ("OTHER", 0.0)
+
+    political_score = scored[0][1]
+
+    pac_emb = _get_pac_naming_embedding()
+    pac_context_score = float(np.dot(query_emb, pac_emb))
+
+    if pac_context_score < 0.35:
+        return scored[0]
+
+    for industry, score in scored[1:]:
+        if score >= SIMILARITY_THRESHOLD and political_score - score < POLITICAL_MARGIN:
+            logger.debug(
+                "PAC decontextualization: POLITICAL(%.3f) -> %s(%.3f), pac_ctx=%.3f",
+                political_score, industry, score, pac_context_score,
+            )
+            return industry, score
+
+    return scored[0]
+
+
 def classify_industry(org_name: str | None) -> str:
     """Classify a single org name using embedding cosine similarity.
 
@@ -191,6 +241,10 @@ def classify_industry(org_name: str | None) -> str:
 def classify_industry_with_provenance(org_name: str | None) -> tuple[str, dict]:
     """Classify and return provenance metadata (top scores, matched anchor).
 
+    Uses embedding cosine similarity against industry description prototypes.
+    When POLITICAL wins, applies mathematical decontextualization to detect
+    "[Industry] PAC" naming patterns and prefer the true industry.
+
     Returns:
         (industry_code, metadata_dict) where metadata_dict contains
         top_match, top_score, runner_up, runner_up_score.
@@ -198,17 +252,15 @@ def classify_industry_with_provenance(org_name: str | None) -> tuple[str, dict]:
     if not org_name or len(org_name.strip()) < 2:
         return "OTHER", {}
 
-    clean_name = _strip_pac_suffix(org_name)
-    if len(clean_name.strip()) < 2:
-        clean_name = org_name
-
     from app.pipeline.vector_store import get_embedding_model
 
     industry_embs = _get_industry_embeddings()
     model = get_embedding_model()
 
-    query_emb = model.encode([clean_name], show_progress_bar=False)[0]
-    query_emb = query_emb / np.linalg.norm(query_emb)
+    query_emb = model.encode([org_name], show_progress_bar=False)[0]
+    norm = np.linalg.norm(query_emb)
+    if norm > 0:
+        query_emb = query_emb / norm
 
     scored: list[tuple[str, float]] = []
     for industry, ind_emb in industry_embs.items():
@@ -216,7 +268,7 @@ def classify_industry_with_provenance(org_name: str | None) -> tuple[str, dict]:
         scored.append((industry, score))
     scored.sort(key=lambda x: x[1], reverse=True)
 
-    best_industry, best_score = scored[0] if scored else ("OTHER", 0.0)
+    best_industry, best_score = _decontextualize_political(query_emb, scored)
     if best_score < SIMILARITY_THRESHOLD:
         best_industry = "OTHER"
 
@@ -244,14 +296,11 @@ def classify_industries_batch_scored(org_names: list[str]) -> dict[str, tuple[st
 
     results: dict[str, tuple[str, float]] = {}
 
-    needs_embedding: list[tuple[int, str, str]] = []
+    needs_embedding: list[tuple[int, str]] = []
     for i, name in enumerate(org_names):
         if not name or len(name.strip()) < 2:
             continue
-        clean = _strip_pac_suffix(name)
-        if len(clean.strip()) < 2:
-            clean = name
-        needs_embedding.append((i, name, clean))
+        needs_embedding.append((i, name))
 
     if not needs_embedding:
         return results
@@ -261,14 +310,15 @@ def classify_industries_batch_scored(org_names: list[str]) -> dict[str, tuple[st
     industry_embs = _get_industry_embeddings()
     ind_keys = list(industry_embs.keys())
     ind_matrix = np.stack([industry_embs[k] for k in ind_keys])
+    pac_emb = _get_pac_naming_embedding()
 
     model = get_embedding_model()
-    clean_names = [clean for _, _, clean in needs_embedding]
+    raw_names = [name for _, name in needs_embedding]
 
     _ENCODE_BATCH = 256
     all_embeddings = []
-    for start in range(0, len(clean_names), _ENCODE_BATCH):
-        batch = clean_names[start : start + _ENCODE_BATCH]
+    for start in range(0, len(raw_names), _ENCODE_BATCH):
+        batch = raw_names[start : start + _ENCODE_BATCH]
         embs = model.encode(batch, show_progress_bar=False, batch_size=min(64, len(batch)))
         all_embeddings.append(embs)
     query_embs = np.vstack(all_embeddings)
@@ -277,12 +327,27 @@ def classify_industries_batch_scored(org_names: list[str]) -> dict[str, tuple[st
     query_embs = query_embs / norms
 
     scores = query_embs @ ind_matrix.T
-    best_indices = np.argmax(scores, axis=1)
-    best_scores = scores[np.arange(len(scores)), best_indices]
+    pac_ctx_scores = query_embs @ pac_emb
 
-    for j, (_, name, _) in enumerate(needs_embedding):
-        if best_scores[j] > SIMILARITY_THRESHOLD:
-            results[name] = (ind_keys[best_indices[j]], float(best_scores[j]))
+    political_idx = ind_keys.index("POLITICAL") if "POLITICAL" in ind_keys else -1
+
+    for j, (_, name) in enumerate(needs_embedding):
+        row_scores = scores[j]
+        best_idx = int(np.argmax(row_scores))
+        best_score = float(row_scores[best_idx])
+        best_industry = ind_keys[best_idx]
+
+        if best_industry == "POLITICAL" and political_idx >= 0 and pac_ctx_scores[j] >= 0.35:
+            sorted_idx = np.argsort(row_scores)[::-1]
+            for k in sorted_idx[1:]:
+                runner_score = float(row_scores[k])
+                if runner_score >= SIMILARITY_THRESHOLD and best_score - runner_score < POLITICAL_MARGIN:
+                    best_industry = ind_keys[k]
+                    best_score = runner_score
+                    break
+
+        if best_score > SIMILARITY_THRESHOLD:
+            results[name] = (best_industry, best_score)
 
     logger.info(
         "Batch classified %d org names (%d matched via embedding)",

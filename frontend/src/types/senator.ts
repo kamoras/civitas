@@ -1,3 +1,17 @@
+export interface SponsoredBill {
+  billId: string;
+  title: string;
+  introducedDate: string;
+  latestAction: string;
+  latestActionDate: string;
+  policyArea: string;
+  policyAreas: PolicyAreaDetail[];
+  partyLeaning: "R" | "D" | "bipartisan" | null;
+  congress: number;
+  billType: string;
+  isLaw: boolean;
+}
+
 export interface Senator {
   id: string;
   name: string;
@@ -23,12 +37,16 @@ export interface Senator {
   campaignPromises: CampaignPromise[];
   platformSummary: string;
   partisanDepth: PartisanDepth | null;
+  sponsoredBills: SponsoredBill[];
+  leadershipScore: number | null;
+  ideologyScore: number | null;
+  sponsorshipDescription: string;
 }
 
 export interface Donor {
   name: string;
   total: number;
-  type: "PAC" | "Individual" | "SuperPAC" | "Org/Employees" | "Party/Ideological" | "CandidateAffiliated";
+  type: "PAC" | "Individual" | "SuperPAC" | "Org/Employees" | "Party/Ideological" | "CandidateAffiliated" | "Self-Funded";
   industry: string;
   pacSponsor: string | null;
   pacIndustry: string | null;
@@ -59,8 +77,32 @@ export interface VotingRecord {
   votedAgainstPartyCount: number;
   partyLoyaltyPct: number;
   votingSummary: string;
-  recentVotes: KeyVote[];
-  keyVotes: KeyVote[];
+  recentVoteCount: number;
+  keyVoteCount: number;
+}
+
+export interface VoteCounts {
+  all: number;
+  yea: number;
+  nay: number;
+  againstParty: number;
+}
+
+export interface PaginatedVotes {
+  votes: KeyVote[];
+  total: number;
+  page: number;
+  perPage: number;
+  totalPages: number;
+  category: string;
+  filter: string;
+  counts: VoteCounts;
+}
+
+export interface PolicyAreaDetail {
+  area: string;
+  confidence: number;
+  party: "R" | "D" | "bipartisan";
 }
 
 export interface KeyVote {
@@ -69,6 +111,8 @@ export interface KeyVote {
   date: string;
   vote: "Yea" | "Nay" | "Not Voting";
   policyArea: string;
+  policyAreas: PolicyAreaDetail[];
+  partyAlignmentWeight: number;
   stance: string;
   stanceVote: "Yea" | "Nay" | null;
   impactedGroups: string[];

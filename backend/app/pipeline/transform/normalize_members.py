@@ -2,6 +2,7 @@
 
 import logging
 import re
+import unicodedata
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -87,19 +88,21 @@ def normalize_members(
         if not senate_term and m.get("chamber") != "Senate":
             continue
 
-        name = m.get("name") or f"{m.get('firstName', '')} {m.get('lastName', '')}"
+        raw_name = m.get("name") or f"{m.get('firstName', '')} {m.get('lastName', '')}"
         state = _extract_state_code(m, detail)
         party = _normalize_party(m.get("partyName") or m.get("party"))
         years_in_office = _calculate_years_in_office(m, detail)
 
+        last_name_for_match = _extract_last_name(raw_name)
+
         # Generate ID from raw name for backward compatibility with DB records
-        raw_parts = name.split()
+        raw_parts = raw_name.split()
         raw_last = re.sub(r"[^a-z]", "", raw_parts[-1].lower()) if raw_parts else ""
         raw_first = re.sub(r"[^a-z]", "", raw_parts[0].lower()) if raw_parts else ""
         senator_id = f"{raw_last}-{raw_first}"
 
         # Clean name to "First Last" order for display and initials
-        name = _clean_name(name)
+        name = _clean_name(raw_name)
         name_parts = name.split()
 
         # Initials: first letter of first name + first letter of last name
@@ -115,6 +118,7 @@ def normalize_members(
             "bioguideId": m.get("bioguideId", ""),
             "id": senator_id,
             "name": name,
+            "lastNameForVoteMatch": last_name_for_match,
             "state": state,
             "party": party,
             "yearsInOffice": years_in_office,
@@ -148,6 +152,30 @@ def normalize_members(
         })
 
     return results
+
+
+def _extract_last_name(name: str) -> str:
+    """Extract the multi-word last name from Congress.gov name format.
+
+    Congress.gov returns "LastName, FirstName MiddleName" — the part
+    before the comma preserves multi-word last names like "Cortez Masto",
+    "Van Hollen", "Blunt Rochester".  Accented characters are normalized
+    to ASCII for matching against Senate.gov roll call XML (which drops
+    accents, e.g. "Luján" → "Lujan").
+    """
+    if "," in name:
+        last = name.split(",", 1)[0].strip()
+    else:
+        parts = name.split()
+        last = parts[-1] if parts else name
+
+    return _strip_accents(last)
+
+
+def _strip_accents(text: str) -> str:
+    """Remove diacritical marks (NFD decomposition, strip combining chars)."""
+    nfkd = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in nfkd if not unicodedata.combining(c))
 
 
 def _clean_name(name: str) -> str:

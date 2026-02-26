@@ -19,6 +19,9 @@ const PHASE_LABELS: Record<string, string> = {
   fetch: "FETCHING DATA",
   transform: "TRANSFORMING",
   analyze: "ANALYZING",
+  explore: "EXPLORE DOCS",
+  justices: "SCOTUS",
+  presidents: "PRESIDENTS",
   finalize: "FINALIZING",
 };
 
@@ -154,7 +157,7 @@ function LoginScreen({
   );
 }
 
-const PHASE_ORDER = ["fetch", "transform", "analyze", "finalize"] as const;
+const PHASE_ORDER = ["fetch", "transform", "analyze", "explore", "justices", "presidents", "finalize"] as const;
 
 function ElapsedTimer({ startedAt }: { startedAt: string | null | undefined }) {
   const [elapsed, setElapsed] = useState("");
@@ -852,6 +855,7 @@ function AdminDashboardView({
   } | null>(null);
 
   const wasRunningRef = useRef(false);
+  const triggerTimeRef = useRef<number>(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const triggerMsgTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -881,7 +885,8 @@ function AdminDashboardView({
       const s = await fetchAdminPipelineStatus(token);
       setPipelineStatus(s);
 
-      if (!s.isRunning && wasRunningRef.current) {
+      const inGracePeriod = Date.now() - triggerTimeRef.current < 10000;
+      if (!s.isRunning && wasRunningRef.current && !inGracePeriod) {
         const lastStatus = s.lastRun?.status ?? "completed";
         setCompletionBanner({
           status: lastStatus === "failed" ? "failed" : "completed",
@@ -890,7 +895,11 @@ function AdminDashboardView({
         setTimeout(() => setCompletionBanner(null), 15000);
         loadDashboard();
       }
-      wasRunningRef.current = s.isRunning;
+      if (s.isRunning) {
+        wasRunningRef.current = true;
+      } else if (!inGracePeriod) {
+        wasRunningRef.current = false;
+      }
     } catch {}
   }, [token, loadDashboard]);
 
@@ -932,6 +941,7 @@ function AdminDashboardView({
         fetchOnly: type === "fetch",
       });
       setTriggerMsg(r.message);
+      triggerTimeRef.current = Date.now();
       setPipelineStatus((prev) => (prev ? { ...prev, isRunning: true } : prev));
       wasRunningRef.current = true;
 

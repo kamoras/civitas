@@ -128,7 +128,7 @@ class TestValidateSenator:
         assert result["funding"]["totalFromPACs"] == 0
         assert result["funding"]["smallDonorPercentage"] == 0
 
-    def test_invalid_donor_type_defaults_to_pac(self):
+    def test_invalid_donor_type_defaults_to_org_employees(self):
         senator = _make_senator(funding={
             "totalRaised": 100_000,
             "totalFromPACs": 0,
@@ -139,10 +139,10 @@ class TestValidateSenator:
             "industryBreakdown": [],
         })
         result = validate_senator(senator)
-        assert result["funding"]["topDonors"][0]["type"] == "PAC"
+        assert result["funding"]["topDonors"][0]["type"] == "Org/Employees"
 
     def test_valid_donor_types_preserved(self):
-        valid_types = ["PAC", "Individual", "SuperPAC", "Org/Employees", "Party/Ideological", "CandidateAffiliated"]
+        valid_types = ["PAC", "Individual", "SuperPAC", "Org/Employees", "Party/Ideological", "CandidateAffiliated", "Self-Funded"]
         for dt in valid_types:
             senator = _make_senator(funding={
                 "totalRaised": 100_000,

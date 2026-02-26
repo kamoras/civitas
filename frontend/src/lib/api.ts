@@ -1,4 +1,4 @@
-import { LeaderboardEntry, Senator } from "@/types/senator";
+import { LeaderboardEntry, PaginatedVotes, Senator } from "@/types/senator";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 import type { Justice, JusticeLeaderboardEntry } from "@/types/justice";
 
@@ -31,6 +31,20 @@ export async function fetchStates(): Promise<StateInfo[]> {
 export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
   const res = await fetch(`${API_BASE}/senators/leaderboard`);
   if (!res.ok) throw new Error(`Failed to load leaderboard: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchSenatorVotes(
+  senatorId: string,
+  options?: { category?: "recent" | "key"; page?: number; perPage?: number; filter?: string },
+): Promise<PaginatedVotes> {
+  const params = new URLSearchParams();
+  if (options?.category) params.set("category", options.category);
+  if (options?.page) params.set("page", String(options.page));
+  if (options?.perPage) params.set("per_page", String(options.perPage));
+  if (options?.filter) params.set("filter", options.filter);
+  const res = await fetch(`${API_BASE}/senators/${senatorId}/votes?${params}`);
+  if (!res.ok) throw new Error(`Failed to load votes: ${res.status}`);
   return res.json();
 }
 

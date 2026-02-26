@@ -2,21 +2,22 @@
 
 ## Project Overview
 
-Civitas is an AI/ML political transparency platform that scores U.S. senators on
-how well they represent constituents. It aggregates voting records, campaign
-finance, floor speeches, and stated platforms from official government sources,
-then analyzes them using embedding-based classification, content-based party
-alignment, and deterministic scoring. Everything runs locally on a Raspberry Pi 5
-with zero cloud AI calls.
+Civitas is an AI/ML political transparency platform that scores U.S. senators,
+presidents, and Supreme Court justices on how well they represent constituents.
+It aggregates voting records, campaign finance, floor speeches, judicial opinions,
+and stated platforms from official government sources, then analyzes them using
+embedding-based classification, content-based party alignment, and deterministic
+scoring. Everything runs locally on a Raspberry Pi 5 with zero cloud AI calls.
 
 ## Architecture
 
-- **Frontend**: Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS — port 3000
-- **Backend**: FastAPI (Python 3.12), SQLAlchemy ORM, SQLite — port 8000
+- **Frontend**: Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS — port 3000/3001
+- **Backend**: FastAPI (Python 3.12), SQLAlchemy ORM, SQLite — port 8000/8001
 - **LLM**: Qwen 2.5 1.5B via llama.cpp (native ARM, port 8070) or Ollama (Docker, port 11434)
 - **Embeddings**: sentence-transformers (all-MiniLM-L6-v2), runs in-process
 - **Vector Store**: ChromaDB for semantic search document store
-- **Deployment**: Docker Compose, blue/green zero-downtime via `deploy.sh`, nginx reverse proxy
+- **Deployment**: Docker Compose, blue/green zero-downtime via `deploy.sh`, nginx reverse proxy with caching
+- **Branches covered**: Senate (100 senators), Presidents (historical + modern), Supreme Court (9 justices)
 
 All services, models, and data run on-device. No data leaves the Raspberry Pi.
 
@@ -26,31 +27,31 @@ All services, models, and data run on-device. No data leaves the Raspberry Pi.
 modern-punk/
 ├── backend/
 │   ├── app/
-│   │   ├── api/                 # FastAPI route handlers
+│   │   ├── api/                 # FastAPI route handlers (senators, presidents, justices, explore, admin, health)
+│   │   ├── services/            # Business logic (senator_service with paginated vote API)
 │   │   ├── pipeline/
-│   │   │   ├── fetch/           # API clients (Congress.gov, FEC, GovInfo, Senate.gov)
-│   │   │   ├── transform/       # Data normalization, industry/donor classification
-│   │   │   ├── analyze/         # Bill analysis, scoring, cross-referencing, LLM narratives
+│   │   │   ├── fetch/           # API clients (Congress.gov, FEC, GovInfo, Senate.gov, Oyez, BLS, Federal Register)
+│   │   │   ├── transform/       # Data normalization, embedding-based industry classification
+│   │   │   ├── analyze/         # Bill analysis, scoring, cross-referencing, LLM narratives, justice scoring
 │   │   │   ├── assemble/        # Scorecard builder + validator
 │   │   │   ├── orchestrator.py  # Pipeline control flow (FETCH→TRANSFORM→ANALYZE→ASSEMBLE+SAVE)
 │   │   │   └── vector_store.py  # ChromaDB + sentence-transformer model management
-│   │   ├── services/            # Business logic layer between API and DB
-│   │   ├── models.py            # SQLAlchemy ORM models
-│   │   ├── schemas.py           # Pydantic response schemas
+│   │   ├── models.py            # SQLAlchemy ORM (Senator, KeyVote, Justice, JusticeVote, President, etc.)
+│   │   ├── schemas.py           # Pydantic response schemas (incl. PaginatedVotesSchema)
 │   │   ├── database.py          # DB engine + session management
 │   │   ├── config.py            # Pydantic settings from .env
 │   │   ├── config_definitions.py # Enums, weights, industry codes (single source of truth)
 │   │   └── main.py              # FastAPI app with lifespan hooks
-│   ├── tests/                   # pytest test suite
+│   ├── tests/                   # 345 pytest tests
 │   ├── requirements.txt
 │   ├── pytest.ini
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
 │   │   ├── app/                 # Next.js App Router pages (about, admin, explore, leaderboard, scorecard)
-│   │   ├── components/          # React components
+│   │   ├── components/          # React components (checker, president, justice, explore, effects)
 │   │   ├── hooks/               # Custom React hooks
-│   │   ├── lib/                 # API client, utilities
+│   │   ├── lib/                 # API client (with paginated vote fetching), utilities
 │   │   └── types/               # TypeScript type definitions
 │   ├── package.json
 │   └── Dockerfile
@@ -58,49 +59,151 @@ modern-punk/
 ├── docker-compose.dev.yml
 ├── deploy.sh                    # Blue/green zero-downtime deployment
 ├── .env.example                 # Template for environment variables
+├── AGENTS.md                    # This file — project design principles and developer guide
 └── README.md
 ```
 
 ## Core Design Principles
 
-### 1. ML/AI over hardcoded rules
+### 1. Dynamic learning and mathematical methods — never hardcoded rules
 
-Classification decisions (donor industry, bill policy area, party alignment,
-donor type) must use embedding-based similarity, kNN, or LLM — not regex
-patterns or keyword lookups. Hardcoded string matching is acceptable only for
-**preprocessing** (e.g., stripping "PAC" suffix from entity names before
-embedding) but never for making classification decisions.
+**All classifications and metrics in the data pipeline must be computed
+mathematically and via learning.** This is the foundational principle of the
+project. Hardcoded text is acceptable only as an absolute last resort for
+documented data-format conventions (e.g., FEC form values like
+"SELF-EMPLOYED"), never for classification decisions.
 
-The tiered classification strategy reserves expensive techniques for cases
-where cheaper methods fail:
+When you encounter a classification problem (donor type, industry, bill
+policy area, party alignment, junk name detection, skip entity detection,
+stance direction, procedural detection, etc.), the solution must use one
+of these approaches:
+
+- **Embedding cosine similarity** against natural-language prototype
+  descriptions (zero-shot classification; Yin, Hay & Roth 2019)
+- **Batch embedding similarity** for filtering large sets (employer names,
+  memo texts) against skip prototypes — vectorized for performance
+- **k-Nearest Neighbor voting** in sentence-transformer embedding space
+  (Cover & Hart 1967), using the learning store as the reference set
+- **Fuzzy string similarity** via SequenceMatcher ratio (Ratcliff &
+  Obershelp 1988) for name-matching tasks like self-funded detection
+- **Margin-based decontextualization** for cases like "[Industry] PAC"
+  where a secondary signal (e.g., PAC naming context) can be detected
+  semantically and the runner-up classification preferred
+- **Self-training** via the learning store (Yarowsky 1995): high-confidence
+  classifications become labeled examples for future runs
+- **Statistical formulas** with Bayesian shrinkage for scoring metrics
+- **LLM inference** for narrative generation, summarization, and promise
+  evaluation — tasks that require natural language understanding
+
+**Never add hardcoded keyword lists, regex patterns, suffix checks, or
+if/else string-matching heuristics to make classification decisions.** If you
+find yourself writing `if name in {"DIRECTOR", "PRESIDENT"}: skip`, stop —
+that should be an embedding similarity check against a prototype. If you need
+to distinguish corporate PACs from political PACs, that should be the semantic
+classifier, not a set of business suffixes. If you need to strip "PAC" from
+entity names, that should be margin-based decontextualization using an
+embedding-based PAC naming context detector.
+
+The correct way to handle a new classification need:
+
+1. Define a natural-language prototype description that captures the semantic
+   signature of the category
+2. Add it to the relevant prototype dict (e.g., `_SEMANTIC_PROTOTYPES`,
+   `INDUSTRY_DESCRIPTIONS`, `DONOR_TYPE_PROTOTYPES`, `_STANCE_PROTOTYPES`)
+3. Let the embedding model do the classification via cosine similarity
+4. Calibrate thresholds empirically by checking scores against known examples
+5. The learning store will accumulate results over time, improving accuracy
+
+Prototype descriptions are the **input** to the mathematical classification
+system, not hardcoded rules. They define what the embedding model searches
+for in the same way that training labels define what a supervised model
+learns — they are the minimal human knowledge that seeds the system.
+
+#### Classification tier strategy
+
+The tiered strategy follows computational parsimony (Jurafsky & Martin 2023):
+use the cheapest sufficient method first, reserving expensive techniques for
+the residual.
 
 | Tier | Technique | Used For |
 |------|-----------|----------|
-| 1 | FEC metadata / learning store exact match | Donor types, previously seen entities |
-| 2 | Sentence-transformer embeddings (cosine similarity) | Industry classification, bill policy, party alignment |
+| 1 | FEC structured metadata / learning store | Unambiguous entity types, previously classified entities |
+| 2 | Sentence-transformer cosine similarity | Industry, donor type, bill policy, party alignment, stance direction, procedural detection, skip entity detection, employer filtering, memo transfer detection, category normalization |
+| 2b | SVD / PageRank on cosponsorship matrix | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
 | 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills |
-| 4 | LLM (Qwen 2.5 1.5B) | Narrative synthesis, promise analysis |
+| 4 | LLM (Qwen 2.5 1.5B) | Narrative synthesis, promise analysis, summaries |
+
+When FEC metadata is ambiguous (e.g., entity_type "COM" could be a corporate
+employee PAC or a purely political PAC), the system defers to tier 2
+(embedding similarity) rather than guessing. Each tier can only promote to
+the next — never skip tiers or substitute hardcoded rules.
 
 ### 2. Self-correcting learning store
 
 The persistent learning store (SQLite `learned_classifications` table)
-accumulates labeled classifications across pipeline runs. When the embedding
-model disagrees with a cached entry at high confidence, the embedding result
-overrides the stale entry. This keeps the store self-correcting as industry
-descriptions improve — no manual data cleanup needed.
+accumulates labeled classifications across pipeline runs, implementing a form
+of self-training (Yarowsky 1995, ACL). High-confidence classifications from
+prior runs become labeled examples for future runs, reducing latency and
+improving accuracy over time without manual intervention.
+
+When the embedding model disagrees with a cached entry at high confidence,
+the embedding result overrides the stale entry. This keeps the store
+self-correcting as prototype descriptions improve — no manual data cleanup
+needed.
+
+The `normalize_learning_store()` function runs at the start of the kNN phase
+to fix case inconsistencies. Stale or hallucinated category labels (e.g.,
+"LEGAL", "SPORTS") are mapped to valid industries via embedding cosine
+similarity against the industry description prototypes — there is no hardcoded
+alias table. This prevents label fragmentation from diluting kNN vote weights.
 
 ### 3. Deterministic, auditable scoring
 
 The four representation sub-scores (Funding Independence, Promise Persistence,
-Independent Voting, Funding Diversity) use transparent formulas with no LLM
-input. Missing data yields a neutral 50, never 0 or 100. Score formulas live
-in `score_calculator.py` with inline academic citations.
+Independent Voting, Funding Diversity) use transparent statistical formulas
+with no LLM input. All formulas include inline academic citations.
+
+Key mathematical properties:
+- **Bayesian shrinkage**: Scores regress toward 50 when data is sparse (e.g.,
+  a senator with 1 campaign promise gets a score near 50, not 0 or 100)
+- **Count confidence**: `min(n / threshold, 1.0)` ensures minimum sample
+  sizes before trusting extreme scores
+- **State-adjusted baselines**: Independent voting scores account for Cook
+  PVI (partisan lean of the state) so voting with party in a deep-red/blue
+  state is not penalized the same as in a swing state
+- **Shannon entropy**: Funding diversity uses information-theoretic entropy
+  to measure concentration across industry sources
 
 ### 4. Content-based party alignment
 
 Party alignment for bills is determined by what the bill does (embedding
 similarity to party platform positions), not how senators voted on it. Vote
-tallies refine but do not override the content-based signal.
+tallies refine but do not override the content-based signal, because senators
+trade votes, face whip pressure, and make tactical compromises that don't
+reflect the bill's actual ideological alignment.
+
+Partisan depth (how strongly a senator leans D or R) is computed primarily
+from the senator's actual voting record: for each policy area, the ratio of
+Yea/Nay votes on D-leaning vs R-leaning bills determines the area's alignment.
+Campaign promise text analysis is a secondary enrichment signal.  This follows
+Poole & Rosenthal (1985) in using roll-call data as the primary indicator of
+ideological position.
+
+When available, the SVD-derived ideology score (from tier 2b sponsorship
+analysis) serves as a Bayesian prior for the partisan depth calculation.
+The prior weight decreases as the senator accumulates more vote data:
+`data_confidence = min(partisan_vote_count / 15, 1.0)`. With 15+ votes,
+the ideology prior has zero weight; with fewer votes, it regularizes the
+estimate toward the senator's revealed cosponsorship ideology (Efron &
+Morris 1975).
+
+### 4a. Vote matching for multi-word names
+
+Senate.gov roll call XML uses multi-word last names (e.g. "Cortez Masto",
+"Van Hollen", "Blunt Rochester").  The pipeline extracts the original last
+name from the Congress.gov "LastName, FirstName" format during member
+normalization and stores it as `lastNameForVoteMatch`.  Unicode accents are
+stripped (NFD decomposition) so "Luján" matches "Lujan" in the XML.
 
 ### 5. Config as single source of truth
 
@@ -114,16 +217,22 @@ The pipeline runs nightly (configurable via `PIPELINE_CRON_SCHEDULE`) or can
 be triggered manually via `POST /api/admin/pipeline/trigger`. It executes in
 4 phases defined in `orchestrator.py`:
 
-1. **FETCH** — Pull senators, bills, roll-call votes, floor speeches, FEC
-   financial data from Congress.gov, Senate.gov, GovInfo, and FEC APIs
+1. **FETCH** — Pull senators, bills, roll-call votes, bill cosponsors, floor
+   speeches, FEC financial data, Supreme Court cases, presidential records
+   from Congress.gov, Senate.gov, GovInfo, FEC, Oyez, BLS, and Federal
+   Register APIs
 2. **TRANSFORM** — Normalize financial records, classify industries and donor
-   types using FEC metadata + embeddings
-3. **ANALYZE** — Classify bill policy areas and party alignment via embeddings,
-   classify remaining donors via kNN, cross-reference donors with votes,
-   analyze campaign promises (LLM), generate per-senator narratives (LLM),
-   compute four representation sub-scores
-4. **ASSEMBLE + SAVE** — Build senator scorecards, validate via
-   `assemble/validator.py`, persist to SQLite
+   types using FEC metadata + embedding similarity, batch-detect skip employers
+   and transfer memos via embedding prototypes
+3. **ANALYZE** — Classify bill policy areas, stance direction, and party
+   alignment via embeddings; detect procedural bills via embedding similarity;
+   compute legislative leadership (PageRank) and ideology (SVD) from
+   cosponsorship networks; classify remaining donors via kNN; cross-reference
+   donors with votes; analyze campaign promises (LLM); generate per-senator
+   narratives (LLM); compute representation sub-scores; score Supreme Court
+   justice impartiality
+4. **ASSEMBLE + SAVE** — Build scorecards for senators, presidents, and
+   justices; validate via `assemble/validator.py`; persist to SQLite
 
 Each senator is processed independently. The pipeline uses `PipelineRun`
 records to track progress and supports resumption.
@@ -168,10 +277,6 @@ Test configuration is in `backend/pytest.ini`. Async tests use
 `asyncio_mode = auto`. Tests marked `@pytest.mark.slow` load the
 sentence-transformer model (~10s startup).
 
-**Note:** `test_bill_analyzer.py` has an unrelated import issue
-(`PROCEDURAL_KEYWORDS`) — exclude it with `--ignore=tests/test_bill_analyzer.py`
-if it blocks the rest of the suite.
-
 ### Environment variables
 
 See `.env.example` for all options. Key variables:
@@ -203,19 +308,25 @@ SQLAlchemy ORM models are in `backend/app/models.py`. Key tables: `senators`,
 |------|-------|
 | Pipeline orchestration | `backend/app/pipeline/orchestrator.py` |
 | Scoring formulas | `backend/app/pipeline/analyze/score_calculator.py` |
-| Industry classification (embeddings) | `backend/app/pipeline/transform/industry_classifier.py` |
-| Donor type classification (tiered) | `backend/app/pipeline/analyze/donor_classifier_ai.py` |
-| Bill policy area + party alignment | `backend/app/pipeline/analyze/bill_analyzer.py`, `party_platform.py` |
-| kNN classifier | `backend/app/pipeline/analyze/nn_classifier.py` |
+| Industry classification (embeddings + PAC decontextualization) | `backend/app/pipeline/transform/industry_classifier.py` |
+| Donor type classification (tiered + batch skip detection) | `backend/app/pipeline/analyze/donor_classifier_ai.py` |
+| Bill policy area + stance derivation (embedding-based) | `backend/app/pipeline/analyze/bill_analyzer.py` |
+| Party alignment (content-based) + partisan depth | `backend/app/pipeline/analyze/party_platform.py` |
+| Caucus inference (votes + cosponsorship) | `backend/app/pipeline/transform/normalize_votes.py` |
+| kNN classifier + inverse-freq balancing | `backend/app/pipeline/analyze/nn_classifier.py` |
+| Sponsorship analysis (PageRank leadership + SVD ideology) | `backend/app/pipeline/analyze/sponsorship_analysis.py` |
+| Multi-word last name extraction + vote matching | `backend/app/pipeline/transform/normalize_members.py` |
 | LLM narrative generation | `backend/app/pipeline/analyze/cross_reference.py` |
 | Donor-vote cross-referencing | `backend/app/pipeline/analyze/policy_alignment.py` |
-| Finance normalization | `backend/app/pipeline/transform/normalize_finance.py` |
+| Finance normalization (embedding-based skip detection) | `backend/app/pipeline/transform/normalize_finance.py` |
 | Data validation | `backend/app/pipeline/assemble/validator.py` |
 | Enums, weights, industry codes | `backend/app/config_definitions.py` |
-| API routes | `backend/app/api/` (senators, admin, explore, health, etc.) |
+| Senator service + paginated votes | `backend/app/services/senator_service.py` |
+| API routes | `backend/app/api/` (senators, presidents, justices, admin, explore, health) |
 | Frontend pages | `frontend/src/app/` (scorecard, leaderboard, explore, about, admin) |
-| Frontend API client | `frontend/src/lib/api.ts` |
+| Frontend API client (incl. paginated vote fetching) | `frontend/src/lib/api.ts` |
 | Frontend types | `frontend/src/types/` |
+| Metric explanations (tooltips on all scorecard metrics) | `frontend/src/components/checker/MetricTooltip.tsx` |
 
 ## Conventions
 
@@ -228,6 +339,12 @@ SQLAlchemy ORM models are in `backend/app/models.py`. Key tables: `senators`,
 - All pipeline modules use dependency injection for DB sessions
 - Never store secrets in source code — all credentials come from `.env` via `pydantic-settings`
 - Use parameterized queries via SQLAlchemy ORM; never concatenate user input into SQL
+- **Read path must stay lightweight**: never load the embedding model or LLM on
+  API read requests (GET endpoints). All ML inference happens at pipeline write
+  time. The `senator_service.py` read path uses only string operations and ORM
+  queries with `selectinload` for eager loading. Foreign key columns on child
+  tables (`donors.senator_id`, `key_votes.senator_id`, etc.) must have
+  `index=True` for acceptable query performance.
 
 ### Frontend (TypeScript)
 
@@ -236,6 +353,10 @@ SQLAlchemy ORM models are in `backend/app/models.py`. Key tables: `senators`,
 - Tailwind CSS for styling
 - API calls go through `src/lib/api.ts`
 - Dynamic configuration fetched from `GET /api/config` — never hardcode industry codes, score weights, or category labels
+- Every metric shown on scorecards has a `MetricTooltip` component providing
+  plain-English explanation (hover on desktop, tap on mobile). When adding new
+  metrics, always add a corresponding tooltip so users can understand what they
+  are seeing. The component is at `src/components/checker/MetricTooltip.tsx`.
 
 ### Testing
 

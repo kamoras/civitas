@@ -16,18 +16,12 @@ import logging
 from app.pipeline.transform.industry_classifier import classify_with_learning
 from app.pipeline.analyze.donor_classifier_ai import (
     classify_donor_type_semantic,
+    classify_employer_skips_batch,
+    classify_transfer_memos_batch,
     is_skip_entity,
 )
 
 logger = logging.getLogger(__name__)
-
-SKIP_EMPLOYERS = {
-    "NONE", "N/A", "SELF-EMPLOYED", "SELF EMPLOYED", "RETIRED",
-    "NOT EMPLOYED", "SELF", "HOMEMAKER", "INFORMATION REQUESTED",
-    "STUDENT", "UNEMPLOYED", "DISABLED", "NOT APPLICABLE", "REQUESTED",
-    "INFORMATION REQUESTED PER BEST EFFORTS",
-    "INFORMATION REQUESTED PER BEST EFFO", "INFO REQUESTED",
-}
 
 
 def normalize_finance(
@@ -131,6 +125,23 @@ def build_top_donors(
     donor_map: dict[str, dict] = {}
     ai_classifications = ai_classifications or {}
 
+    # Pre-compute embedding-based skip sets for employers and memo texts.
+    # This replaces hardcoded SKIP_EMPLOYERS and keyword-based memo filtering
+    # with semantic similarity against learned prototypes.
+    unique_employers = list({
+        (r.get("contributor_employer") or "").upper().strip()
+        for r in individual_receipts
+        if (r.get("contributor_employer") or "").strip()
+    })
+    skip_employer_set = classify_employer_skips_batch(unique_employers)
+
+    unique_memos = list({
+        (r.get("memo_text") or "").upper().strip()
+        for r in pac_receipts
+        if (r.get("memo_text") or "").strip()
+    })
+    transfer_memo_set = classify_transfer_memos_batch(unique_memos)
+
     def _classify_fallback(name: str, name_upper: str) -> tuple[str, str]:
         """Embedding-based fallback for donors not in AI classifications."""
         dtype = classify_donor_type_semantic(
@@ -166,8 +177,8 @@ def build_top_donors(
 
         name_upper = name.upper().strip()
 
-        memo_text = (r.get("memo_text") or "").upper()
-        if any(kw in memo_text for kw in ("TRANSFER", "REDESIGNATION", "REATTRIBUTION")):
+        memo_upper = (r.get("memo_text") or "").upper().strip()
+        if memo_upper and memo_upper in transfer_memo_set:
             continue
 
         donor_type, industry, skip = _get_classification(name, name_upper)
@@ -183,7 +194,7 @@ def build_top_donors(
     # 2. Individual contributions grouped by employer
     for r in individual_receipts:
         employer = (r.get("contributor_employer") or "").upper().strip()
-        if not employer or employer in SKIP_EMPLOYERS:
+        if not employer or employer in skip_employer_set:
             continue
 
         ai_class = ai_classifications.get(employer)
@@ -272,6 +283,14 @@ def _build_industry_breakdown(
             "total": small_individual_total,
         }
 
+    # Pre-compute employer skip set for this breakdown (same approach as build_top_donors)
+    unique_employers_bd = list({
+        (r.get("contributor_employer") or "").upper().strip()
+        for r in individual_receipts
+        if (r.get("contributor_employer") or "").strip()
+    })
+    skip_employer_bd = classify_employer_skips_batch(unique_employers_bd)
+
     def _get_industry(name: str, name_upper: str) -> str:
         ai_class = ai_classifications.get(name_upper)
         if ai_class:
@@ -307,7 +326,7 @@ def _build_industry_breakdown(
     employer_totals: dict[str, float] = {}
     for r in individual_receipts:
         employer = (r.get("contributor_employer") or "").upper().strip()
-        if not employer or employer in SKIP_EMPLOYERS:
+        if not employer or employer in skip_employer_bd:
             continue
         employer_totals[employer] = employer_totals.get(employer, 0) + (
             r.get("contribution_receipt_amount", 0) or 0

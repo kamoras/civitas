@@ -22,7 +22,7 @@ class CamelModel(BaseModel):
 class DonorSchema(CamelModel):
     name: str
     total: float
-    type: Literal["PAC", "Individual", "SuperPAC", "Org/Employees", "Party/Ideological", "CandidateAffiliated"]
+    type: Literal["PAC", "Individual", "SuperPAC", "Org/Employees", "Party/Ideological", "CandidateAffiliated", "Self-Funded"]
     industry: str = "OTHER"
     pac_sponsor: str | None = None
     pac_industry: str | None = None
@@ -50,12 +50,20 @@ class PolicyBreakdownSchema(CamelModel):
     against_stance: int
 
 
+class PolicyAreaDetail(CamelModel):
+    area: str
+    confidence: float
+    party: str = "bipartisan"
+
+
 class KeyVoteSchema(CamelModel):
     bill_name: str
     bill_id: str
     date: str
     vote: Literal["Yea", "Nay", "Not Voting"]
     policy_area: str = "PROCEDURAL"
+    policy_areas: list[PolicyAreaDetail] = []
+    party_alignment_weight: float = 0.0
     stance: str = "neutral"
     stance_vote: Literal["Yea", "Nay"] | None = None
     impacted_groups: list[str] = []
@@ -89,8 +97,26 @@ class VotingRecordSchema(CamelModel):
     voted_against_party_count: int = 0
     party_loyalty_pct: float = 0.0
     voting_summary: str = ""
-    recent_votes: list[KeyVoteSchema] = []
-    key_votes: list[KeyVoteSchema] = []
+    recent_vote_count: int = 0
+    key_vote_count: int = 0
+
+
+class VoteCountsSchema(CamelModel):
+    all: int
+    yea: int
+    nay: int
+    against_party: int
+
+
+class PaginatedVotesSchema(CamelModel):
+    votes: list[KeyVoteSchema]
+    total: int
+    page: int
+    per_page: int
+    total_pages: int
+    category: str
+    filter: str
+    counts: VoteCountsSchema
 
 
 class LobbyingMatchSchema(CamelModel):
@@ -127,6 +153,20 @@ class CampaignPromiseSchema(CamelModel):
     party_alignment: Literal["R", "D", "bipartisan"] | None = None
 
 
+class SponsoredBillSchema(CamelModel):
+    bill_id: str
+    title: str
+    introduced_date: str = ""
+    latest_action: str = ""
+    latest_action_date: str = ""
+    policy_area: str = ""
+    policy_areas: list[PolicyAreaDetail] = []
+    party_leaning: Literal["R", "D", "bipartisan"] | None = None
+    congress: int = 0
+    bill_type: str = ""
+    is_law: bool = False
+
+
 class SenatorSchema(CamelModel):
     id: str
     name: str
@@ -141,6 +181,10 @@ class SenatorSchema(CamelModel):
     campaign_promises: list[CampaignPromiseSchema] = []
     platform_summary: str = ""
     partisan_depth: PartisanDepthSchema | None = None
+    sponsored_bills: list[SponsoredBillSchema] = []
+    leadership_score: float | None = None
+    ideology_score: float | None = None
+    sponsorship_description: str = ""
 
 
 class LeaderboardEntrySchema(CamelModel):

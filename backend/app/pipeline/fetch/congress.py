@@ -274,6 +274,28 @@ async def fetch_bill_actions(
     return results
 
 
+async def fetch_bill_cosponsors(
+    client: httpx.AsyncClient,
+    db: Session,
+    congress: int,
+    bill_type: str,
+    bill_number: int,
+) -> list[dict]:
+    """Fetch cosponsors for a bill (includes bioguideId, party, state)."""
+    cache_key = f"bill-cosponsors-{congress}-{bill_type}-{bill_number}"
+    cached = api_cache_get(db, "congress", cache_key)
+    if cached is not None:
+        return cached
+
+    data = await _fetch_with_retry(
+        client,
+        f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type}/{bill_number}/cosponsors?limit=250",
+    )
+    results = (data or {}).get("cosponsors", [])
+    api_cache_set(db, "congress", cache_key, results)
+    return results
+
+
 async def fetch_bill_summaries(
     client: httpx.AsyncClient,
     db: Session,
