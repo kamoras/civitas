@@ -1,112 +1,53 @@
 """Analyze Senate floor speeches for advocacy alignment with campaign promises.
 
-Purely algorithmic — **zero LLM calls**.  Uses keyword matching to determine
-which policy categories a senator is actively discussing on the Senate floor.
-This captures "effort" that voting records miss: in a gridlocked Senate, a
-senator who can't get bills passed but keeps raising their promised issues
-on the floor is still trying to represent their constituents.
+Purely algorithmic — **zero LLM calls**.  Uses embedding cosine similarity
+against policy area descriptions to determine which categories a senator is
+actively discussing on the Senate floor.  This captures "effort" that voting
+records miss: in a gridlocked Senate, a senator who can't get bills passed
+but keeps raising their promised issues on the floor is still trying to
+represent their constituents.
 
-The output feeds into the Promise Persistence score as a 20% advocacy bonus.
+The output feeds into the Promise Persistence score as a 15% advocacy bonus.
+
+All classification is embedding-based — no hardcoded keyword lists.  Each
+floor remark is embedded and compared against the policy-area anchors
+defined in ``policy_alignment.POLICY_ANCHORS`` (which are the same anchors
+used for industry↔policy similarity), following the zero-shot nearest-
+centroid classification pattern (Rocchio 1971; Reimers & Gurevych 2019).
 """
 
 import logging
-import re
+
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# Keywords for each platform/promise category (all lowercase).
-# Matching is substring-based against the combined title + speech text.
-_CATEGORY_KEYWORDS: dict[str, set[str]] = {
-    "healthcare": {
-        "health", "healthcare", "medical", "hospital", "drug", "prescription",
-        "medicare", "medicaid", "insurance", "affordable care", "pharmaceutical",
-        "patient", "vaccine", "mental health", "opioid", "nursing", "physician",
-    },
-    "economy": {
-        "economy", "economic", "jobs", "employment", "wage", "inflation",
-        "recession", "growth", "business", "tax", "fiscal", "budget",
-        "deficit", "debt", "spending",
-    },
-    "defense": {
-        "military", "defense", "pentagon", "troops", "veteran", "armed forces",
-        "national security", "terrorism", "homeland", "nato", "deployment",
-    },
-    "environment": {
-        "climate", "environment", "emission", "pollution", "clean energy",
-        "epa", "renewable", "solar", "wind", "carbon", "green",
-        "conservation", "wildfire", "water quality",
-    },
-    "immigration": {
-        "immigration", "immigrant", "border", "asylum", "refugee", "visa",
-        "deportation", "daca", "citizenship", "undocumented", "migrant",
-    },
-    "education": {
-        "education", "school", "student", "teacher", "college", "university",
-        "tuition", "student loan", "pell grant", "curriculum",
-    },
-    "labor": {
-        "labor", "worker", "union", "minimum wage",
-        "overtime", "workplace", "collective bargaining", "pension",
-        "retirement",
-    },
-    "justice": {
-        "justice", "crime", "criminal", "police", "prison", "sentencing",
-        "court", "judge", "law enforcement", "civil rights", "voting rights",
-    },
-    "guns": {
-        "gun", "firearm", "second amendment", "background check",
-        "assault weapon", "mass shooting", "ammunition",
-    },
-    "tech": {
-        "technology", "artificial intelligence", "data privacy", "cyber",
-        "broadband", "internet", "social media", "algorithm",
-    },
-    "finance": {
-        "wall street", "banking", "financial", "regulation", "dodd-frank",
-        "consumer protection", "credit", "mortgage", "interest rate",
-    },
-    "energy": {
-        "energy", "oil", "gas", "pipeline", "nuclear", "fossil fuel",
-        "electricity", "power grid", "fracking",
-    },
-    "trade": {
-        "trade", "tariff", "import", "export", "supply chain",
-        "manufacturing",
-    },
-    "welfare": {
-        "welfare", "snap", "food stamp", "social security", "disability",
-        "housing", "homelessness", "poverty", "child care",
-    },
-    "infrastructure": {
-        "infrastructure", "highway", "bridge", "road", "transit", "rail",
-        "airport", "water system", "construction",
-    },
-    "civil_rights": {
-        "civil rights", "discrimination", "equality", "racial",
-        "diversity", "equity", "hate crime",
-    },
-    "foreign_policy": {
-        "foreign policy", "diplomacy", "sanctions", "treaty",
-        "united nations", "china", "russia", "iran", "ukraine",
-        "international", "ambassador", "state department",
-    },
-}
-
-
-def _word_boundary_match(keyword: str, text: str) -> bool:
-    """Check if keyword appears as a whole word/phrase (not as a substring of another word)."""
-    return bool(re.search(r"\b" + re.escape(keyword) + r"\b", text))
+_SIMILARITY_THRESHOLD = 0.35
 
 
 def _classify_remark_categories(text: str) -> set[str]:
-    """Determine which policy categories a floor remark relates to."""
-    text_lower = text.lower()
+    """Determine which policy categories a floor remark relates to via embeddings."""
+    if not text or len(text.strip()) < 30:
+        return set()
+
+    from app.pipeline.analyze.policy_alignment import POLICY_ANCHORS, _embed, _embed_batch
+
+    anchor_keys = [k for k in POLICY_ANCHORS if k != "PROCEDURAL"]
+    anchor_texts = [POLICY_ANCHORS[k] for k in anchor_keys]
+
+    remark_emb = _embed(text[:500])
+    anchor_embs = _embed_batch(anchor_texts)
+
+    if anchor_embs.size == 0:
+        return set()
+
+    similarities = anchor_embs @ remark_emb
+
     matched: set[str] = set()
-    for category, keywords in _CATEGORY_KEYWORDS.items():
-        for kw in keywords:
-            if _word_boundary_match(kw, text_lower):
-                matched.add(category)
-                break
+    for i, sim in enumerate(similarities):
+        if float(sim) >= _SIMILARITY_THRESHOLD:
+            matched.add(anchor_keys[i].lower())
+
     return matched
 
 
@@ -124,12 +65,12 @@ def analyze_floor_advocacy(
 
     Returns:
         Dict with:
-            ``advocacyCoverage``: float (0–1), fraction of distinct promise
+            ``advocacyCoverage``: float (0-1), fraction of distinct promise
                 categories that have matching floor advocacy evidence.
             ``advocatedCategories``: list of all policy categories discussed
                 on the floor (may include categories beyond promises).
             ``totalRemarks``: int, total floor remarks for this senator.
-            ``remarksByCategory``: dict mapping category → remark count.
+            ``remarksByCategory``: dict mapping category -> remark count.
     """
     if not senator_remarks:
         return {
@@ -139,7 +80,6 @@ def analyze_floor_advocacy(
             "remarksByCategory": {},
         }
 
-    # Classify every remark by policy category
     category_counts: dict[str, int] = {}
     for remark in senator_remarks:
         text = remark.get("text", "")
@@ -148,7 +88,6 @@ def analyze_floor_advocacy(
         for cat in categories:
             category_counts[cat] = category_counts.get(cat, 0) + 1
 
-    # Determine which *promise* categories have floor advocacy evidence
     promise_categories: set[str] = set()
     for p in campaign_promises:
         cat = p.get("category", "other")

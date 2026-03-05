@@ -18,6 +18,33 @@ def clamp(value: float, min_val: int = 0, max_val: int = 100) -> int:
     return max(min_val, min(max_val, round(value)))
 
 
+def _validate_vote(v: dict, default_category: str = "recent") -> dict:
+    """Validate and normalize a single vote dict."""
+    return {
+        "billName": v.get("billName", "Unknown Bill"),
+        "billId": v.get("billId", ""),
+        "date": v.get("date", ""),
+        "vote": (
+            v.get("vote")
+            if v.get("vote") in VALID_VOTES
+            else "Not Voting"
+        ),
+        "policyArea": v.get("policyArea", "PROCEDURAL"),
+        "policyAreas": v.get("policyAreas", []),
+        "partyAlignmentWeight": v.get("partyAlignmentWeight", 0.0),
+        "stance": v.get("stance", "neutral"),
+        "description": v.get("description", ""),
+        "partyLeaning": (
+            v.get("partyLeaning")
+            if v.get("partyLeaning") in ("R", "D", "bipartisan")
+            else None
+        ),
+        "votedWithParty": v.get("votedWithParty"),
+        "voteCategory": v.get("voteCategory", default_category),
+        "keyVoteReasoning": v.get("keyVoteReasoning"),
+    }
+
+
 def validate_senator(senator: dict) -> dict:
     """
     Validate and fix a senator record to match the Senator type.
@@ -118,110 +145,16 @@ def validate_senator(senator: dict) -> dict:
     vr = senator.get("votingRecord") or {}
     senator["votingRecord"] = {
         "totalVotes": max(0, vr.get("totalVotes", 0)),
-        "scoreableVotes": max(0, vr.get("scoreableVotes", 0)),
-        "donorAlignedVotes": max(0, vr.get("donorAlignedVotes", 0)),
-        "donorOpposedVotes": max(0, vr.get("donorOpposedVotes", 0)),
-        "policyBreakdown": vr.get("policyBreakdown", []),
         "votingSummary": vr.get("votingSummary", ""),
         "votedWithPartyCount": max(0, vr.get("votedWithPartyCount", 0)),
         "votedAgainstPartyCount": max(0, vr.get("votedAgainstPartyCount", 0)),
         "partyLoyaltyPct": max(0.0, vr.get("partyLoyaltyPct", 0.0)),
         "recentVotes": [
-            {
-                "billName": v.get("billName", "Unknown Bill"),
-                "billId": v.get("billId", ""),
-                "date": v.get("date", ""),
-                "vote": (
-                    v.get("vote")
-                    if v.get("vote") in VALID_VOTES
-                    else "Not Voting"
-                ),
-                "policyArea": v.get("policyArea", "PROCEDURAL"),
-                "stance": v.get("stance", "neutral"),
-                "stanceVote": (
-                    v.get("stanceVote")
-                    if v.get("stanceVote") in ("Yea", "Nay")
-                    else None
-                ),
-                "impactedGroups": (
-                    v["impactedGroups"]
-                    if isinstance(v.get("impactedGroups"), list)
-                    else []
-                ),
-                "affectedIndustries": (
-                    v["affectedIndustries"]
-                    if isinstance(v.get("affectedIndustries"), list)
-                    else []
-                ),
-                "description": v.get("description", ""),
-                "corporateInterest": v.get("corporateInterest", ""),
-                "publicImpact": v.get("publicImpact", ""),
-                "relevantDonors": (
-                    v["relevantDonors"]
-                    if isinstance(v.get("relevantDonors"), list)
-                    else []
-                ),
-                "relevantDonorTotal": max(
-                    0, round(v.get("relevantDonorTotal", 0))
-                ),
-                "partyLeaning": (
-                    v.get("partyLeaning")
-                    if v.get("partyLeaning") in ("R", "D", "bipartisan")
-                    else None
-                ),
-                "votedWithParty": v.get("votedWithParty"),
-                "voteCategory": v.get("voteCategory", "recent"),
-                "keyVoteReasoning": v.get("keyVoteReasoning"),
-            }
+            _validate_vote(v, "recent")
             for v in (vr.get("recentVotes") or [])
         ],
         "keyVotes": [
-            {
-                "billName": v.get("billName", "Unknown Bill"),
-                "billId": v.get("billId", ""),
-                "date": v.get("date", ""),
-                "vote": (
-                    v.get("vote")
-                    if v.get("vote") in VALID_VOTES
-                    else "Not Voting"
-                ),
-                "policyArea": v.get("policyArea", "PROCEDURAL"),
-                "stance": v.get("stance", "neutral"),
-                "stanceVote": (
-                    v.get("stanceVote")
-                    if v.get("stanceVote") in ("Yea", "Nay")
-                    else None
-                ),
-                "impactedGroups": (
-                    v["impactedGroups"]
-                    if isinstance(v.get("impactedGroups"), list)
-                    else []
-                ),
-                "affectedIndustries": (
-                    v["affectedIndustries"]
-                    if isinstance(v.get("affectedIndustries"), list)
-                    else []
-                ),
-                "description": v.get("description", ""),
-                "corporateInterest": v.get("corporateInterest", ""),
-                "publicImpact": v.get("publicImpact", ""),
-                "relevantDonors": (
-                    v["relevantDonors"]
-                    if isinstance(v.get("relevantDonors"), list)
-                    else []
-                ),
-                "relevantDonorTotal": max(
-                    0, round(v.get("relevantDonorTotal", 0))
-                ),
-                "partyLeaning": (
-                    v.get("partyLeaning")
-                    if v.get("partyLeaning") in ("R", "D", "bipartisan")
-                    else None
-                ),
-                "votedWithParty": v.get("votedWithParty"),
-                "voteCategory": v.get("voteCategory", "recent"),
-                "keyVoteReasoning": v.get("keyVoteReasoning"),
-            }
+            _validate_vote(v, "key")
             for v in (vr.get("keyVotes") or [])
         ],
     }

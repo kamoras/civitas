@@ -736,7 +736,6 @@ def _store_donor_learning(
                 "match_metadata": meta_json,
                 "learned_at": datetime.utcnow(),
             },
-            where=(LearnedClassification.confidence <= confidence),
         )
         db_session.execute(stmt)
         _seen_this_run[key] = confidence

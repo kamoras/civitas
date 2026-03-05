@@ -43,9 +43,12 @@ def _make_senator(**overrides) -> SenatorSchema:
         ),
         voting_record=VotingRecordSchema(
             total_votes=50,
-            scoreable_votes=10,
-            donor_aligned_votes=5,
-            donor_opposed_votes=5,
+            voted_with_party_count=30,
+            voted_against_party_count=20,
+            party_loyalty_pct=60.0,
+            voting_summary="",
+            recent_vote_count=25,
+            key_vote_count=25,
         ),
         lobbying_matches=[],
         campaign_promises=[],
@@ -143,48 +146,6 @@ class TestFundingHighlights:
         )
         highlights = _build_highlights(senator)
         match = [h for h in highlights if "Friends of Doe" in h]
-        assert len(match) == 0
-
-
-class TestVotingHighlights:
-
-    def test_high_donor_alignment_flagged(self):
-        senator = _make_senator(
-            voting_record=VotingRecordSchema(
-                total_votes=50,
-                scoreable_votes=10,
-                donor_aligned_votes=8,
-                donor_opposed_votes=2,
-            )
-        )
-        highlights = _build_highlights(senator)
-        match = [h for h in highlights if "align with donor" in h.lower()]
-        assert len(match) == 1
-
-    def test_low_donor_alignment_flagged(self):
-        senator = _make_senator(
-            voting_record=VotingRecordSchema(
-                total_votes=50,
-                scoreable_votes=10,
-                donor_aligned_votes=2,
-                donor_opposed_votes=8,
-            )
-        )
-        highlights = _build_highlights(senator)
-        match = [h for h in highlights if "rarely favor donors" in h.lower()]
-        assert len(match) == 1
-
-    def test_no_scoreable_votes_no_highlight(self):
-        senator = _make_senator(
-            voting_record=VotingRecordSchema(
-                total_votes=50,
-                scoreable_votes=0,
-                donor_aligned_votes=0,
-                donor_opposed_votes=0,
-            )
-        )
-        highlights = _build_highlights(senator)
-        match = [h for h in highlights if "donor" in h.lower() and "align" in h.lower()]
         assert len(match) == 0
 
 

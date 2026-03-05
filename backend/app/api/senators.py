@@ -126,26 +126,8 @@ def _build_highlights(senator) -> list[str]:
         )))
 
     # --- Voting highlights ---
-    scoreable = voting.scoreable_votes or 0
-    aligned = voting.donor_aligned_votes or 0
-    opposed = voting.donor_opposed_votes or 0
-    if scoreable > 0:
-        aligned_pct = round(aligned / scoreable * 100)
-        if aligned_pct > 70:
-            hints.append((8, (
-                f"Votes frequently align with donor interests: "
-                f"{aligned} of {scoreable} scoreable votes ({aligned_pct}%) "
-                f"went in their donors' favor."
-            )))
-        elif aligned_pct < 30 and scoreable >= 3:
-            hints.append((8, (
-                f"Votes rarely favor donors: Only {aligned} of {scoreable} "
-                f"scoreable votes ({aligned_pct}%) aligned with donor interests."
-            )))
-    if opposed > 2:
-        hints.append((4, (
-            f"Went against donor interests {opposed} times on tracked votes."
-        )))
+    # (Donor-alignment voting highlights removed: VotingRecord no longer has
+    # scoreable_votes, donor_aligned_votes, or donor_opposed_votes.)
 
     # --- Lobbying matches ---
     matches = senator.lobbying_matches or []

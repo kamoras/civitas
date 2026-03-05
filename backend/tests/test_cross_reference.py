@@ -109,19 +109,23 @@ class TestIndustryPolicySimilarity:
 class TestExtractPlatformTopics:
 
     def test_splits_multiline(self):
-        text = "Fight climate change\nLower drug costs\nReform immigration"
+        text = (
+            "Fight climate change through clean energy investment\n"
+            "Lower prescription drug costs for American seniors\n"
+            "Comprehensive immigration reform and border security"
+        )
         topics = _extract_platform_topics(text)
         assert len(topics) >= 2
 
     def test_strips_bullet_markers(self):
-        text = "• Fight climate change and invest in green energy\n- Lower drug costs for seniors"
+        text = "• Fight climate change and invest in green energy\n- Lower drug costs for seniors and families"
         topics = _extract_platform_topics(text)
         for t in topics:
             assert not t.startswith("•")
             assert not t.startswith("-")
 
     def test_max_topics_capped(self):
-        text = "\n".join(f"Topic number {i} about something important" for i in range(20))
+        text = "\n".join(f"Topic number {i} about something important in our country" for i in range(20))
         topics = _extract_platform_topics(text, max_topics=4)
         assert len(topics) <= 4
 
@@ -134,9 +138,19 @@ class TestExtractPlatformTopics:
         assert len(topics) >= 1
 
     def test_short_lines_skipped(self):
-        text = "Short\nAlso short\nThis is a meaningful line about healthcare reform policy"
+        text = "Short\nAlso short\nThis is a meaningful line about healthcare reform and policy changes"
         topics = _extract_platform_topics(text)
         assert len(topics) == 1
+
+    def test_nav_junk_rejected(self):
+        text = (
+            "Senator Murphy Facebook Senator Murphy Instagram\n"
+            "Website Search Open Website Search\n"
+            "Comprehensive healthcare reform and prescription drug pricing"
+        )
+        topics = _extract_platform_topics(text)
+        assert len(topics) == 1
+        assert "healthcare" in topics[0].lower()
 
 
 # ── Key vote selection ───────────────────────────────────────────

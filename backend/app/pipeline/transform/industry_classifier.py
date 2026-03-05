@@ -497,13 +497,12 @@ def _store_classification(
         .first()
     )
     if existing:
-        if confidence >= existing.confidence:
-            existing.value = value
-            existing.confidence = confidence
-            existing.source = source
-            existing.model_version = get_model_version() if source in ("embedding", "nn") else None
-            existing.match_metadata = meta_json
-            existing.learned_at = datetime.utcnow()
+        existing.value = value
+        existing.confidence = confidence
+        existing.source = source
+        existing.model_version = get_model_version() if source in ("embedding", "nn") else None
+        existing.match_metadata = meta_json
+        existing.learned_at = datetime.utcnow()
     else:
         db_session.add(LearnedClassification(
             entity_name=entity_name,

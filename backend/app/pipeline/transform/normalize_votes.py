@@ -231,12 +231,6 @@ def normalize_votes(
                 inferred,
             )
 
-    # Policy area breakdown: {area: {total, withStance, againstStance}}
-    area_stats: dict[str, dict] = {}
-    # Donor-alignment tracking: how often votes favor bills with industry ties
-    donor_aligned_votes = 0
-    donor_opposed_votes = 0
-
     for bill in bill_classifications:
         vote = senator_votes.get(bill.get("billId", ""))
         if not vote:
@@ -255,35 +249,6 @@ def normalize_votes(
             normalized_vote = "Nay"
 
         policy_area = bill.get("policyArea", "PROCEDURAL")
-        stance_vote = bill.get("stanceVote")
-
-        # Track policy area breakdown for non-procedural, scoreable votes
-        if (
-            stance_vote
-            and normalized_vote != "Not Voting"
-            and policy_area != "PROCEDURAL"
-        ):
-            if policy_area not in area_stats:
-                area_stats[policy_area] = {
-                    "total": 0, "withStance": 0, "againstStance": 0,
-                }
-            area_stats[policy_area]["total"] += 1
-
-            voted_with_stance = normalized_vote == stance_vote
-            if voted_with_stance:
-                area_stats[policy_area]["withStance"] += 1
-            else:
-                area_stats[policy_area]["againstStance"] += 1
-
-            # Donor-alignment: votes on bills that have identifiable industry
-            # stakeholders. This replaces the old binary corporate/consumer count.
-            affected_industries = bill.get("affectedIndustries") or []
-            corporate_interest = bill.get("corporateInterest", "")
-            if bool(affected_industries) or bool(corporate_interest):
-                if voted_with_stance:
-                    donor_aligned_votes += 1
-                else:
-                    donor_opposed_votes += 1
 
         # Party alignment (uses effective_party for Independents)
         party_leaning = bill.get("partyLeaning")
@@ -304,14 +269,7 @@ def normalize_votes(
             "policyAreas": bill.get("policyAreas", []),
             "partyAlignmentWeight": bill.get("partyAlignmentWeight", 0.0),
             "stance": bill.get("stance", "neutral"),
-            "stanceVote": stance_vote,
-            "impactedGroups": bill.get("impactedGroups", []),
-            "affectedIndustries": bill.get("affectedIndustries", []),
             "description": bill.get("description", ""),
-            "corporateInterest": bill.get("corporateInterest", ""),
-            "publicImpact": bill.get("publicImpact", ""),
-            "relevantDonors": [],
-            "relevantDonorTotal": 0,
             "partyLeaning": party_leaning,
             "votedWithParty": party_aligned,
             "voteCategory": "recent",
@@ -325,29 +283,8 @@ def normalize_votes(
         else 0.0
     )
 
-    # Build policy area breakdown list sorted by vote count
-    policy_breakdown = sorted(
-        [
-            {
-                "policyArea": area,
-                "totalVotes": stats["total"],
-                "withStance": stats["withStance"],
-                "againstStance": stats["againstStance"],
-            }
-            for area, stats in area_stats.items()
-        ],
-        key=lambda x: x["totalVotes"],
-        reverse=True,
-    )
-
-    scoreable = donor_aligned_votes + donor_opposed_votes
-
     return {
         "totalVotes": total_tracked,
-        "scoreableVotes": scoreable,
-        "donorAlignedVotes": donor_aligned_votes,
-        "donorOpposedVotes": donor_opposed_votes,
-        "policyBreakdown": policy_breakdown,
         "votedWithPartyCount": voted_with_party,
         "votedAgainstPartyCount": voted_against_party,
         "partyLoyaltyPct": party_loyalty_pct,
@@ -418,15 +355,7 @@ def normalize_recent_votes(
             "policyAreas": bill.get("policyAreas", []),
             "partyAlignmentWeight": bill.get("partyAlignmentWeight", 0.0),
             "stance": bill.get("stance", "neutral"),
-            "stanceVote": bill.get("stanceVote"),
-            "impactedGroups": bill.get("impactedGroups", []),
-            "proBusinessVote": bill.get("proBusinessVote"),
-            "classification": bill.get("classification", "mixed"),
             "description": bill.get("description", ""),
-            "corporateInterest": bill.get("corporateInterest", ""),
-            "publicImpact": bill.get("publicImpact", ""),
-            "relevantDonors": [],
-            "relevantDonorTotal": 0,
             "partyLeaning": party_leaning,
             "votedWithParty": party_aligned,
             "voteCategory": "recent",

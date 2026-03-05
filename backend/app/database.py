@@ -34,31 +34,10 @@ def _migrate_columns() -> None:
 
     SQLAlchemy's create_all does not ALTER existing tables, so we handle
     lightweight column additions here for development convenience.
+    After a full data reset + schema rebuild, this list can be empty.
     """
     inspector = inspect(engine)
-    migrations: list[tuple[str, str, str]] = [
-        ("key_votes", "affected_industries", "TEXT"),
-        ("pipeline_runs", "current_phase", "TEXT"),
-        ("pipeline_runs", "senators_total", "INTEGER DEFAULT 0"),
-        ("senators", "approval_rating", "REAL"),
-        ("senators", "disapproval_rating", "REAL"),
-        ("senators", "approval_source", "TEXT"),
-        ("presidents", "score_agency_alignment", "REAL DEFAULT 0.0"),
-        ("explore_documents", "agency_name", "TEXT"),
-        ("explore_documents", "comment_url", "TEXT"),
-        ("explore_documents", "comments_close_on", "TEXT"),
-        ("learned_classifications", "model_version", "TEXT"),
-        ("learned_classifications", "match_metadata", "TEXT"),
-        ("senators", "partisan_depth", "TEXT"),
-        ("campaign_promises", "party_alignment", "TEXT"),
-        ("pipeline_runs", "progress_detail", "TEXT"),
-        ("justices", "score_consistency", "REAL DEFAULT 0.0"),
-        ("justices", "score_independence", "REAL DEFAULT 0.0"),
-        ("justices", "score_bipartisan_agreement", "REAL DEFAULT 0.0"),
-        ("justices", "score_judicial_restraint", "REAL DEFAULT 0.0"),
-        ("key_votes", "policy_areas", "TEXT DEFAULT '[]'"),
-        ("key_votes", "party_alignment_weight", "REAL DEFAULT 0.0"),
-    ]
+    migrations: list[tuple[str, str, str]] = []
     with engine.begin() as conn:
         for table, column, col_type in migrations:
             if not inspector.has_table(table):
@@ -92,6 +71,62 @@ def init_db() -> None:
         seed_presidents(db)
     finally:
         db.close()
+
+
+def reset_all_data() -> dict:
+    """Drop all pipeline-generated data and start fresh.
+
+    Truncates every table except the schema itself, resets ChromaDB
+    collections, and re-seeds static reference data (presidents).
+    Returns a summary of what was cleared.
+    """
+    from app import models  # noqa: F401
+
+    summary: dict[str, int] = {}
+    db = SessionLocal()
+    try:
+        for model_cls in [
+            models.Donor,
+            models.IndustryDonation,
+            models.KeyVote,
+            models.LobbyingMatch,
+            models.CampaignPromise,
+            models.SponsoredBill,
+            models.JusticeVote,
+            models.LearnedClassification,
+            models.ApiCache,
+            models.AnalysisCache,
+            models.ExploreDocument,
+            models.PipelineRun,
+            models.Senator,
+            models.Justice,
+            models.President,
+        ]:
+            table = model_cls.__tablename__
+            count = db.query(model_cls).count()
+            summary[table] = count
+            db.query(model_cls).delete()
+        db.commit()
+    finally:
+        db.close()
+
+    try:
+        from app.pipeline.vector_store import reset_vector_db
+        reset_vector_db()
+        summary["chromadb_collections"] = 2
+    except Exception as exc:
+        logger.warning("ChromaDB reset failed: %s", exc)
+        summary["chromadb_error"] = str(exc)
+
+    from app.services.president_service import seed_presidents
+    db = SessionLocal()
+    try:
+        seed_presidents(db)
+    finally:
+        db.close()
+
+    logger.info("Full data reset complete: %s", summary)
+    return summary
 
 
 def get_db() -> Generator[Session, None, None]:

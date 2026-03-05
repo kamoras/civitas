@@ -291,8 +291,8 @@ class TestPromisePersistence:
             "advocatedCategories": ["healthcare", "economy"],
             "remarksByCategory": {"healthcare": 15, "economy": 10},
         }
-        score_with = _calc_promise_persistence({}, "D", promises, None, advocacy)
-        score_without = _calc_promise_persistence({}, "D", promises, None, None)
+        score_with = _calc_promise_persistence({}, "D", promises, advocacy)
+        score_without = _calc_promise_persistence({}, "D", promises, None)
         assert score_with > score_without
 
     def test_participation_folded_in(self):
@@ -348,7 +348,7 @@ class TestCalculateScoresIntegration:
             "campaignPromises": [],
         }
 
-        scores = calculate_scores(senator, None)
+        scores = calculate_scores(senator)
 
         assert "fundingIndependence" in scores
         assert "promisePersistence" in scores
@@ -371,7 +371,7 @@ class TestCalculateScoresIntegration:
             "state": "DC",
             "campaignPromises": [],
         }
-        scores = calculate_scores(senator, None)
+        scores = calculate_scores(senator)
         for key, value in scores.items():
             assert 40 <= value <= 60, (
                 f"{key} = {value}; empty data should yield neutral scores"

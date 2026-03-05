@@ -64,13 +64,13 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
+_NOMINATION_NAME_RE = re.compile(
+    r"(?:,\s*of\s+\w+,?\s+to\s+be\s)"
+    r"|(?:\bto\s+be\s+(?:United\s+States|an?\s+(?:Assistant|Associate|Under))\b)"
+    r"|(?:\bnominat(?:ion|ed|ee)\b)",
+    re.IGNORECASE,
+)
 
-INDUSTRY_CODES = {
-    "PHARMA", "INSURANCE", "OIL_GAS", "DEFENSE", "FINANCE", "REAL_ESTATE",
-    "TECH", "TELECOM", "AGRIBUSINESS", "ENERGY", "CONSTRUCTION", "TRANSPORT",
-    "LAWYERS", "LOBBYISTS", "GAMBLING", "GUNS", "TOBACCO", "CRYPTO",
-    "PRIVATE_PRISON", "OTHER",
-}
 
 POLICY_TAXONOMY = {
     "LABOR": (
@@ -166,24 +166,6 @@ _PROCEDURAL_PROTOTYPE = (
 )
 _procedural_emb: np.ndarray | None = None
 
-POLICY_IMPACTED_GROUPS: dict[str, list[str]] = {
-    "LABOR": ["workers", "unions", "employers", "small businesses"],
-    "DEFENSE": ["military personnel", "defense contractors", "veterans", "taxpayers"],
-    "GUNS": ["gun owners", "public safety advocates", "firearms industry", "law enforcement"],
-    "HEALTHCARE": ["patients", "healthcare workers", "insurance industry", "hospitals"],
-    "ENVIRONMENT": ["local communities", "energy companies", "farmers", "wildlife"],
-    "TAXES": ["taxpayers", "businesses", "low-income households", "investors"],
-    "IMMIGRATION": ["immigrants", "border communities", "employers", "asylum seekers"],
-    "EDUCATION": ["students", "teachers", "universities", "families"],
-    "FINANCIAL": ["consumers", "banks", "investors", "small businesses"],
-    "ENERGY": ["energy consumers", "utility companies", "renewable energy sector", "fossil fuel workers"],
-    "TECH": ["tech companies", "consumers", "privacy advocates", "small businesses"],
-    "JUSTICE": ["incarcerated individuals", "law enforcement", "communities of color", "courts"],
-    "TRADE": ["domestic manufacturers", "consumers", "exporters", "agricultural sector"],
-    "WELFARE": ["low-income families", "social workers", "taxpayers", "homeless individuals"],
-    "PROCEDURAL": [],
-}
-
 def _augmented_embedding_classify(text: str) -> str:
     """Second-pass embedding classification with augmented context.
 
@@ -239,13 +221,11 @@ _STANCE_PROTOTYPES = {
 _stance_embs: dict[str, np.ndarray] | None = None
 
 _policy_embeddings: dict[str, np.ndarray] = {}
-_industry_embeddings: dict[str, np.ndarray] = {}
 
 
 def clear_bill_embedding_cache() -> None:
     """Clear cached bill/policy embeddings (call between pipeline runs)."""
     _policy_embeddings.clear()
-    _industry_embeddings.clear()
 
 
 def _get_policy_embeddings() -> dict[str, np.ndarray]:
@@ -261,24 +241,6 @@ def _get_policy_embeddings() -> dict[str, np.ndarray]:
         _policy_embeddings[area] = emb / np.linalg.norm(emb)
 
     return _policy_embeddings
-
-
-def _get_industry_embeddings() -> dict[str, np.ndarray]:
-    """Pre-compute embeddings for industry descriptions (for bill→industry matching)."""
-    if _industry_embeddings:
-        return _industry_embeddings
-
-    from app.pipeline.transform.industry_classifier import INDUSTRY_DESCRIPTIONS
-    from app.pipeline.vector_store import get_embedding_model
-    model = get_embedding_model()
-
-    for industry, description in INDUSTRY_DESCRIPTIONS.items():
-        if industry not in INDUSTRY_CODES:
-            continue
-        emb = model.encode([description], show_progress_bar=False)[0]
-        _industry_embeddings[industry] = emb / np.linalg.norm(emb)
-
-    return _industry_embeddings
 
 
 # ── Policy area classification (embeddings) ──────────────────────
@@ -457,35 +419,7 @@ def classify_policy_areas_multi(
     return areas
 
 
-# ── Industry classification for bills (embeddings) ──────────────
-
-
-INDUSTRY_SIMILARITY_THRESHOLD = 0.32
-
-
-def classify_affected_industries(text: str, top_n: int = 3) -> list[str]:
-    """Classify which industries a bill affects using embedding similarity."""
-    if not text or len(text.strip()) < 10:
-        return []
-
-    from app.pipeline.vector_store import get_embedding_model
-    model = get_embedding_model()
-    industry_embs = _get_industry_embeddings()
-
-    query_emb = model.encode([text[:500]], show_progress_bar=False)[0]
-    query_emb = query_emb / np.linalg.norm(query_emb)
-
-    scores = []
-    for industry, ind_emb in industry_embs.items():
-        score = float(np.dot(query_emb, ind_emb))
-        if score > INDUSTRY_SIMILARITY_THRESHOLD:
-            scores.append((industry, score))
-
-    scores.sort(key=lambda x: x[1], reverse=True)
-    return [industry for industry, _ in scores[:top_n]]
-
-
-# ── Stance and narrative derivation (keyword + template) ─────────
+# ── Stance derivation (embedding-based) ──────────────────────────
 
 
 def _get_stance_embeddings() -> dict[str, np.ndarray]:
@@ -552,33 +486,6 @@ def derive_stance(bill_name: str, summary: str, policy_area: str) -> tuple[str, 
     return f"{direction_labels[best_dir]} {area} policy", best_dir
 
 
-def _direction_to_stance_vote(direction: str) -> str | None:
-    """Convert a stance direction to the expected vote for *supporting* the policy.
-
-    "pro" bills expand/strengthen the policy area -> Yea supports the area.
-    "anti" bills restrict/roll back the policy area -> Nay supports the area.
-    "neutral" -> None (ambiguous).
-    """
-    if direction == "pro":
-        return "Yea"
-    if direction == "anti":
-        return "Nay"
-    return None
-
-
-def _make_corporate_interest(policy_area: str, industries: list[str]) -> str:
-    if not industries:
-        return f"May affect businesses in the {policy_area.lower().replace('_', ' ')} sector"
-    names = [i.lower().replace("_", " ") for i in industries[:2]]
-    return f"Relevant to {' and '.join(names)} industry interests"
-
-
-def _make_public_impact(policy_area: str, groups: list[str]) -> str:
-    if not groups:
-        return f"Affects the general public through {policy_area.lower().replace('_', ' ')} policy"
-    return f"Impacts {', '.join(groups[:2])}"
-
-
 # ── Main classification functions ────────────────────────────────
 
 
@@ -609,10 +516,9 @@ async def classify_all_bills(
     multi_area_count = 0
 
     for b in bills:
-        summary = (b.get("summary") or b.get("billName", ""))[:300]
         bill_name = b["billName"]
         bill_id = b["billId"]
-        bill_text = f"{bill_name} {summary}"
+        bill_text = _build_classification_text(b)
         bill_date = _extract_bill_date(b.get("actions", []))
 
         areas = classify_policy_areas_multi(
@@ -639,16 +545,7 @@ async def classify_all_bills(
             if policy_area == "PROCEDURAL":
                 policy_area = _augmented_embedding_classify(bill_text)
                 areas = [{"area": policy_area, "confidence": confidence}]
-            industries = classify_affected_industries(bill_text)
-            stance_text, stance_direction = derive_stance(b["billName"], summary, policy_area)
-            stance_vote = _direction_to_stance_vote(stance_direction)
-
-            all_groups: list[str] = []
-            for a in areas:
-                for g in POLICY_IMPACTED_GROUPS.get(a["area"], []):
-                    if g not in all_groups:
-                        all_groups.append(g)
-            groups = all_groups[:5]
+            _stance_text, stance_direction = derive_stance(b["billName"], summary, policy_area)
 
             description = _clean_summary(summary, b["billName"])
 
@@ -683,12 +580,6 @@ async def classify_all_bills(
                 "policyArea": policy_area,
                 "policyAreas": policy_areas_enriched,
                 "stance": stance_direction,
-                "stanceText": stance_text,
-                "stanceVote": stance_vote,
-                "impactedGroups": groups,
-                "corporateInterest": _make_corporate_interest(policy_area, industries),
-                "publicImpact": _make_public_impact(policy_area, groups),
-                "affectedIndustries": industries,
                 "partyLeaning": content_alignment,
                 "partyAlignmentWeight": alignment_weight,
             })
@@ -743,7 +634,13 @@ async def classify_recent_votes(
 
         proc_areas = [{"area": "PROCEDURAL", "confidence": 0.95, "party": "bipartisan"}]
 
-        if motion_type == "nomination" and "nominat" in name.lower():
+        is_nomination = (
+            motion_type == "nomination"
+            or bill_id.startswith("PN")
+            or _NOMINATION_NAME_RE.search(name) is not None
+        )
+
+        if is_nomination:
             classified.append({
                 "billId": bill_id,
                 "billName": name,
@@ -753,11 +650,6 @@ async def classify_recent_votes(
                 "policyAreas": proc_areas,
                 "partyAlignmentWeight": 0.0,
                 "stance": "nomination",
-                "stanceVote": None,
-                "impactedGroups": [],
-                "corporateInterest": "",
-                "publicImpact": "",
-                "affectedIndustries": [],
                 "partyLeaning": "bipartisan",
             })
             procedural_count += 1
@@ -780,11 +672,6 @@ async def classify_recent_votes(
                 "policyAreas": proc_areas,
                 "partyAlignmentWeight": 0.0,
                 "stance": "procedural",
-                "stanceVote": None,
-                "impactedGroups": [],
-                "corporateInterest": "",
-                "publicImpact": "",
-                "affectedIndustries": [],
                 "partyLeaning": "bipartisan",
             })
             procedural_count += 1
@@ -792,16 +679,7 @@ async def classify_recent_votes(
             if policy_area == "PROCEDURAL":
                 policy_area = _augmented_embedding_classify(bill_content)
                 areas = [{"area": policy_area, "confidence": confidence}]
-            industries = classify_affected_industries(bill_content)
-            stance_text, stance_direction = derive_stance(name, question, policy_area)
-            stance_vote = _direction_to_stance_vote(stance_direction)
-
-            all_groups: list[str] = []
-            for a in areas:
-                for g in POLICY_IMPACTED_GROUPS.get(a["area"], []):
-                    if g not in all_groups:
-                        all_groups.append(g)
-            groups = all_groups[:5]
+            _stance_text, stance_direction = derive_stance(name, question, policy_area)
 
             multi_alignment = classify_party_alignment_multi(
                 bill_content, areas, stance_direction,
@@ -831,12 +709,6 @@ async def classify_recent_votes(
                 "policyAreas": policy_areas_enriched,
                 "partyAlignmentWeight": alignment_weight,
                 "stance": stance_direction,
-                "stanceText": stance_text,
-                "stanceVote": stance_vote,
-                "impactedGroups": groups,
-                "corporateInterest": _make_corporate_interest(policy_area, industries),
-                "publicImpact": _make_public_impact(policy_area, groups),
-                "affectedIndustries": industries,
                 "partyLeaning": content_alignment,
             })
 
@@ -852,6 +724,46 @@ async def classify_recent_votes(
 
 
 # ── Helpers ──────────────────────────────────────────────────────
+
+
+def _build_classification_text(b: dict) -> str:
+    """Build semantically rich text for bill classification.
+
+    Bills with uninformative short titles (named after people, acronyms)
+    carry almost no policy signal for the embedding model.  This function
+    assembles the richest available text from multiple sources:
+
+      1. Bill name (always present)
+      2. Official title from Congress.gov (e.g., 'A bill to prevent the
+         purchase of ammunition by prohibited purchasers')
+      3. CRS policy area (e.g., 'Crime and Law Enforcement')
+      4. Summary text (when available)
+      5. First portion of full bill text (fallback when summary is thin)
+
+    The assembled text is truncated to 500 characters to fit within the
+    sentence-transformer's effective context window.
+    """
+    parts = [b["billName"]]
+
+    official_title = b.get("officialTitle", "")
+    if official_title and official_title.lower() != b["billName"].lower():
+        parts.append(official_title)
+
+    crs_area = b.get("crsPolicyArea", "")
+    if crs_area:
+        parts.append(crs_area)
+
+    summary = b.get("summary", "")
+    if summary and len(summary.strip()) > 20:
+        clean = re.sub(r"<[^>]+>", "", summary).strip()
+        parts.append(clean[:300])
+
+    if len(" ".join(parts)) < 60:
+        full_text = b.get("fullText", "")
+        if full_text and len(full_text.strip()) > 30:
+            parts.append(full_text[:300])
+
+    return " ".join(parts)[:500]
 
 
 def _extract_bill_date(actions: list[dict]) -> str:
@@ -878,11 +790,6 @@ def _make_procedural(b: dict) -> dict:
         "description": b["billName"],
         "policyArea": "PROCEDURAL",
         "stance": "procedural",
-        "stanceVote": None,
-        "impactedGroups": [],
-        "corporateInterest": "",
-        "publicImpact": "",
-        "affectedIndustries": [],
         "partyLeaning": "bipartisan",
     }
 
@@ -929,12 +836,6 @@ def _validate_classifications(bills: list[dict]) -> None:
         bill["stance"] = bill["stance"].strip().lower()
         if bill["stance"] not in ("pro", "anti", "neutral", "procedural", "nomination"):
             bill["stance"] = "neutral"
-
-        if bill.get("stanceVote") not in ("Yea", "Nay"):
-            bill["stanceVote"] = None
-
-        if not isinstance(bill.get("impactedGroups"), list):
-            bill["impactedGroups"] = []
 
         if bill.get("partyLeaning") not in ("R", "D", "bipartisan"):
             bill["partyLeaning"] = "bipartisan"

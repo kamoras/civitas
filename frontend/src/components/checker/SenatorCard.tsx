@@ -124,11 +124,11 @@ export default function SenatorCard({ senator }: SenatorCardProps) {
 
         {/* ── Quick Stats ── always visible */}
         <div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-center">
-            <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2">
+          <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-center">
+            <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2 min-w-0">
               {senator.partisanDepth && senator.partisanDepth.totalPositions > 0 ? (
                 <>
-                  <div className={`text-lg font-pixel ${
+                  <div className={`text-sm sm:text-lg font-pixel truncate ${
                     senator.partisanDepth.depth === "deep" ? "text-neon-pink"
                     : senator.partisanDepth.depth === "cross-cutting" ? "text-neon-cyan"
                     : senator.partisanDepth.depth === "moderate" ? "text-yellow-500"
@@ -139,55 +139,55 @@ export default function SenatorCard({ senator }: SenatorCardProps) {
                     : senator.partisanDepth.depth === "moderate" ? "MOD"
                     : "CTR"}
                   </div>
-                  <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="How strongly this senator's positions align with their party. DEEP = strong loyalist, MOD = moderate, CTR = centrist, XCUT = frequently crosses party lines.">PARTISAN</MetricTooltip></div>
+                  <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="How strongly this senator's votes align with their party. Derived from roll-call votes, not stated positions. DEEP = strong loyalist, MOD = moderate, CTR = centrist, XCUT = frequently crosses party lines.">PARTISAN</MetricTooltip></div>
                 </>
               ) : (
                 <>
-                  <div className="text-lg font-pixel text-matrix-green/30">&mdash;</div>
-                  <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="How strongly this senator's positions align with their party. DEEP = strong loyalist, MOD = moderate, CTR = centrist, XCUT = frequently crosses party lines.">PARTISAN</MetricTooltip></div>
+                  <div className="text-sm sm:text-lg font-pixel text-matrix-green/30">&mdash;</div>
+                  <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="How strongly this senator's votes align with their party. Derived from roll-call votes, not stated positions. DEEP = strong loyalist, MOD = moderate, CTR = centrist, XCUT = frequently crosses party lines.">PARTISAN</MetricTooltip></div>
                 </>
               )}
             </div>
-            <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2">
+            <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2 min-w-0">
               {senator.leadershipScore != null ? (
                 <>
-                  <div className={`text-lg font-pixel ${
+                  <div className={`text-sm sm:text-lg font-pixel truncate ${
                     senator.leadershipScore > 0.75 ? "text-neon-yellow"
                     : senator.leadershipScore < 0.25 ? "text-matrix-green/40"
                     : "text-matrix-green"
                   }`}>
                     {Math.round(senator.leadershipScore * 100)}
                   </div>
-                  <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Legislative influence score (0–100) based on PageRank of cosponsorship networks. Higher = more senators cosponsor this senator's bills.">LEADERSHIP</MetricTooltip></div>
+                  <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Legislative influence score (0–100) based on PageRank of cosponsorship networks. Higher = more senators cosponsor this senator's bills.">LEADER</MetricTooltip></div>
                 </>
               ) : (
                 <>
-                  <div className="text-lg font-pixel text-matrix-green/30">&mdash;</div>
-                  <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Legislative influence score (0–100) based on PageRank of cosponsorship networks. Higher = more senators cosponsor this senator's bills.">LEADERSHIP</MetricTooltip></div>
+                  <div className="text-sm sm:text-lg font-pixel text-matrix-green/30">&mdash;</div>
+                  <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Legislative influence score (0–100) based on PageRank of cosponsorship networks. Higher = more senators cosponsor this senator's bills.">LEADER</MetricTooltip></div>
                 </>
               )}
             </div>
-            <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2">
-              <div className="text-lg font-pixel text-neon-cyan">
+            <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2 min-w-0">
+              <div className="text-sm sm:text-lg font-pixel text-neon-cyan truncate">
                 {formatCurrency(senator.funding.totalRaised)}
               </div>
-              <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Total campaign contributions received this cycle from all sources (individuals, PACs, and self-funding). Source: FEC filings.">TOTAL RAISED</MetricTooltip></div>
+              <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Total campaign contributions received this cycle from all sources (individuals, PACs, and self-funding). Source: FEC filings.">RAISED</MetricTooltip></div>
             </div>
-            <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2">
-              <div className="text-lg font-pixel text-neon-pink">
+            <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2 min-w-0">
+              <div className="text-sm sm:text-lg font-pixel text-neon-pink truncate">
                 {formatCurrency(senator.funding.totalFromPACs)}
               </div>
-              <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Money received from Political Action Committees — organizations that pool contributions from members to donate to campaigns. Includes corporate, labor, and ideological PACs.">FROM PACs</MetricTooltip></div>
+              <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Money received from Political Action Committees — organizations that pool contributions from members to donate to campaigns. Includes corporate, labor, and ideological PACs.">PACs</MetricTooltip></div>
             </div>
-            <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2">
-              <div className="text-lg font-pixel text-red-500">{pacPercent}%</div>
-              <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="What percentage of total funds come from PACs rather than individual donors. Higher % = more reliance on organized interest group money.">PAC FUNDED</MetricTooltip></div>
+            <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2 min-w-0">
+              <div className="text-sm sm:text-lg font-pixel text-red-500 truncate">{pacPercent}%</div>
+              <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="What percentage of total funds come from PACs rather than individual donors. Higher % = more reliance on organized interest group money.">PAC %</MetricTooltip></div>
             </div>
-            <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2">
-              <div className="text-lg font-pixel text-matrix-green">
+            <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2 min-w-0">
+              <div className="text-sm sm:text-lg font-pixel text-matrix-green truncate">
                 {senator.funding.smallDonorPercentage}%
               </div>
-              <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Percentage of funds from individual donations under $200. Higher = more grassroots support from everyday people vs. large donors.">SMALL DONORS</MetricTooltip></div>
+              <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Percentage of funds from individual donations under $200. Higher = more grassroots support from everyday people vs. large donors.">SMALL $</MetricTooltip></div>
             </div>
           </div>
           <div className="text-[10px] text-matrix-green/50 mt-2 text-right">

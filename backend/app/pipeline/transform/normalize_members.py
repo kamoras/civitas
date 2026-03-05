@@ -142,10 +142,6 @@ def normalize_members(
             },
             "votingRecord": {
                 "totalVotes": 0,
-                "scoreableVotes": 0,
-                "donorAlignedVotes": 0,
-                "donorOpposedVotes": 0,
-                "policyBreakdown": [],
                 "keyVotes": [],
             },
             "lobbyingMatches": [],

@@ -60,19 +60,8 @@ export interface IndustryDonation {
   percentage: number;
 }
 
-export interface PolicyBreakdown {
-  policyArea: string;
-  totalVotes: number;
-  withStance: number;
-  againstStance: number;
-}
-
 export interface VotingRecord {
   totalVotes: number;
-  scoreableVotes: number;
-  donorAlignedVotes: number;
-  donorOpposedVotes: number;
-  policyBreakdown: PolicyBreakdown[];
   votedWithPartyCount: number;
   votedAgainstPartyCount: number;
   partyLoyaltyPct: number;
@@ -114,14 +103,7 @@ export interface KeyVote {
   policyAreas: PolicyAreaDetail[];
   partyAlignmentWeight: number;
   stance: string;
-  stanceVote: "Yea" | "Nay" | null;
-  impactedGroups: string[];
-  affectedIndustries: string[];
   description: string;
-  corporateInterest: string;
-  publicImpact: string;
-  relevantDonors: string[];
-  relevantDonorTotal: number;
   partyLeaning: "R" | "D" | "bipartisan" | null;
   votedWithParty: boolean | null;
   voteCategory: "recent" | "key";

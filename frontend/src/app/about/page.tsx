@@ -564,6 +564,16 @@ export default function AboutPage() {
                   prior runs become labeled examples for kNN and reference corpus retrieval in
                   future runs. The system literally gets better each time the pipeline runs.
                 </P>
+                <P>
+                  To prevent stale data from persisting when analysis algorithms are updated,
+                  the pipeline implements <em className="text-matrix-green/80">version-aware
+                  artifact management</em>. At the start of each run, a SHA-256 fingerprint of
+                  all analysis source files is compared to the stored hash from the previous run.
+                  If the code is unchanged, all learning data is preserved to promote self-training.
+                  If the code has changed, stale artifacts (LLM results, learned classifications,
+                  kNN reference corpus) are automatically cleared so updated algorithms start fresh.
+                  The API cache (raw data from government APIs) is never cleared.
+                </P>
               </div>
 
               <div>
@@ -833,7 +843,8 @@ export default function AboutPage() {
               <Row label="Containers" value="Docker Compose (blue/green zero-downtime deploy via nginx)" />
               <Row label="Pipeline Schedule" value="Nightly at 3:00 AM via APScheduler" />
               <Row label="Data Caching" value="72-hour TTL with persistent SQLite cache" />
-              <Row label="Learning Store" value="SQLite table for persistent classification memory" />
+              <Row label="Learning Store" value="SQLite table for persistent classification memory, version-aware invalidation on code change" />
+              <Row label="Pipeline Optimization" value="Producer-consumer threading: embedding prefetch overlaps LLM inference, context compression for prompts" />
               <Row label="API Pagination" value="Server-side paginated voting records with filter support" />
               <Row label="Sponsorship Analysis" value="PageRank (leadership) + SVD (ideology) on cosponsorship matrix" />
               <Row label="Classification" value="Zero hardcoded rules — all classifications via embedding similarity or kNN" />

@@ -139,6 +139,20 @@ DONOR_TYPE_HOLDOUT: list[tuple[str, str, str | None]] = [
 ]
 
 
+BILL_PARTY_ALIGNMENT_HOLDOUT: list[tuple[str, str, str, str]] = [
+    # (bill_text, policy_area, stance, expected_party)
+    ("Jaime's Law to restrict the sale and transfer of ammunition", "GUNS", "anti", "D"),
+    ("A bill to ban assault weapons and high-capacity magazines", "GUNS", "anti", "D"),
+    ("Universal background check legislation for all gun purchases", "GUNS", "pro", "D"),
+    ("Concealed carry reciprocity act expanding gun rights", "GUNS", "pro", "R"),
+    ("Clean energy investment and emissions reduction targets", "ENVIRONMENT", "pro", "D"),
+    ("Expand domestic oil and gas production drilling permits", "ENERGY", "pro", "R"),
+    ("Expand Medicare and public healthcare coverage", "HEALTHCARE", "pro", "D"),
+    ("Path to citizenship for Dreamers and DACA recipients", "IMMIGRATION", "pro", "D"),
+    ("Secure the border with increased border patrol and wall funding", "IMMIGRATION", "pro", "R"),
+]
+
+
 BILL_STANCE_HOLDOUT: list[tuple[str, str, str]] = [
     # (bill_name, policy_area, expected_direction)
     ("A bill to ban assault weapons", "GUNS", "anti"),
@@ -329,6 +343,61 @@ class TestBillStanceQuality:
             f"Stance accuracy {metrics['accuracy']:.1%} below 85% threshold. "
             f"Failures:\n" + "\n".join(failures)
         )
+
+
+class TestBillPartyAlignmentQuality:
+    """Evaluate party alignment for bills with known partisan direction.
+
+    These bills have clear partisan alignment based on their content and
+    stance direction. The classifier must use both the bill text and the
+    stance signal to correctly identify the aligning party.
+    """
+
+    def test_party_alignment_accuracy(self):
+        from app.pipeline.analyze.party_platform import classify_party_alignment
+
+        predictions = []
+        labels = []
+        failures = []
+
+        for bill_text, policy_area, stance, expected in BILL_PARTY_ALIGNMENT_HOLDOUT:
+            result = classify_party_alignment(bill_text, policy_area, stance)
+            predictions.append(result)
+            labels.append(expected)
+            if result != expected and result != "bipartisan":
+                failures.append(
+                    f"  {bill_text[:50]}: predicted={result}, expected={expected}"
+                )
+
+        correct = sum(
+            1 for p, l in zip(predictions, labels) if p == l or p == "bipartisan"
+        )
+        accuracy = correct / len(labels) if labels else 0.0
+
+        if failures:
+            print("\n  Party Alignment Misclassifications:")
+            for f in failures:
+                print(f)
+            print()
+
+        assert accuracy >= 0.75, (
+            f"Party alignment accuracy {accuracy:.1%} below 75% threshold. "
+            f"Failures:\n" + "\n".join(failures)
+        )
+
+    def test_gun_control_never_republican(self):
+        """Gun control bills must never classify as Republican."""
+        from app.pipeline.analyze.party_platform import classify_party_alignment
+
+        gun_control_bills = [
+            (t, a, s) for t, a, s, e in BILL_PARTY_ALIGNMENT_HOLDOUT
+            if a == "GUNS" and e == "D"
+        ]
+        for bill_text, policy_area, stance in gun_control_bills:
+            result = classify_party_alignment(bill_text, policy_area, stance)
+            assert result != "R", (
+                f"Gun control bill '{bill_text[:50]}' classified as R"
+            )
 
 
 class TestPolicyAreaClassificationQuality:

@@ -107,14 +107,10 @@ function VoteCard({
                 {a.area}
               </span>
             ))
-          ) : vote.stanceVote && (
+          ) : vote.policyArea && vote.policyArea !== "PROCEDURAL" && (
             <span
-              className={`text-[10px] px-1.5 py-0.5 border ${
-                vote.vote === vote.stanceVote
-                  ? "text-neon-yellow/70 border-neon-yellow/30 bg-neon-yellow/5"
-                  : "text-matrix-green/50 border-matrix-green/30 bg-matrix-green/5"
-              }`}
-              title={vote.vote === vote.stanceVote ? `Voted for ${vote.stance}` : `Voted against ${vote.stance}`}
+              className="text-[10px] px-1.5 py-0.5 border text-neon-yellow/70 border-neon-yellow/30 bg-neon-yellow/5"
+              title={vote.policyArea}
             >
               {vote.policyArea}
             </span>
@@ -238,41 +234,6 @@ function VoteCard({
                   Alignment weight: {Math.round(vote.partyAlignmentWeight * 100)}% of areas lean {vote.partyLeaning}
                 </div>
               )}
-              {vote.impactedGroups && vote.impactedGroups.length > 0 && (
-                <div className="text-xs text-matrix-green/70">
-                  Impacted: {vote.impactedGroups.join(", ")}
-                </div>
-              )}
-              {vote.affectedIndustries && vote.affectedIndustries.length > 0 && (
-                <div className="text-xs text-neon-pink/60 mt-1">
-                  Industries: {vote.affectedIndustries.join(", ").replace(/_/g, " ")}
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
-            {vote.corporateInterest && (
-              <div className="bg-red-500/5 border border-red-500/20 p-2">
-                <div className="text-xs text-red-500/60 mb-1">INDUSTRY INTEREST</div>
-                <div className="text-xs text-red-400">{vote.corporateInterest}</div>
-              </div>
-            )}
-            {vote.publicImpact && (
-              <div className="bg-neon-cyan/5 border border-neon-cyan/20 p-2">
-                <div className="text-xs text-neon-cyan/60 mb-1">PUBLIC IMPACT</div>
-                <div className="text-xs text-neon-cyan/80">{vote.publicImpact}</div>
-              </div>
-            )}
-          </div>
-          {vote.relevantDonors.length > 0 && (
-            <div className="bg-neon-pink/5 border border-neon-pink/20 p-2">
-              <div className="text-xs text-neon-pink/60 mb-1">
-                RELATED DONORS: {vote.relevantDonors.join(", ")}
-              </div>
-              <div className="text-xs text-neon-pink">
-                TOTAL FROM THESE DONORS: {formatCurrency(vote.relevantDonorTotal)}
-              </div>
             </div>
           )}
         </div>
@@ -461,60 +422,10 @@ function PaginatedVoteList({
   );
 }
 
-function PolicyBreakdownChart({ votingRecord }: { votingRecord: VotingRecordType }) {
-  const breakdown = votingRecord.policyBreakdown || [];
-  if (breakdown.length === 0) return null;
-
-  const maxVotes = Math.max(...breakdown.map((b) => b.totalVotes), 1);
-
-  return (
-    <div className="terminal-window p-3">
-      <div className="text-xs text-neon-cyan/60 mb-2 font-pixel">VOTES BY POLICY AREA</div>
-      <div className="space-y-1.5">
-        {breakdown.map((area) => {
-          const withPct = area.totalVotes > 0 ? Math.round((area.withStance / area.totalVotes) * 100) : 0;
-          return (
-            <div key={area.policyArea} className="text-xs">
-              <div className="flex justify-between mb-0.5">
-                <span className="text-matrix-green/70">{area.policyArea}</span>
-                <span className="text-matrix-green/40">
-                  {area.totalVotes} votes
-                </span>
-              </div>
-              <div className="h-2 bg-matrix-dark-green/30 border border-matrix-green/10 flex overflow-hidden">
-                <div
-                  className="h-full bg-neon-yellow/60"
-                  style={{ width: `${(area.withStance / maxVotes) * 100}%` }}
-                  title={`${area.withStance} with stance (${withPct}%)`}
-                />
-                <div
-                  className="h-full bg-neon-cyan/40"
-                  style={{ width: `${(area.againstStance / maxVotes) * 100}%` }}
-                  title={`${area.againstStance} against stance`}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <div className="flex gap-4 mt-2 text-[10px] text-matrix-green/50">
-        <span className="flex items-center gap-1">
-          <span className="inline-block w-2 h-2 bg-neon-yellow/60" />
-          <MetricTooltip text="Votes where this senator sided with the bill's stated policy goal, as determined by AI analysis of the bill text.">with stance</MetricTooltip>
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block w-2 h-2 bg-neon-cyan/40" />
-          <MetricTooltip text="Votes where this senator opposed the bill's stated policy goal.">against stance</MetricTooltip>
-        </span>
-      </div>
-    </div>
-  );
-}
 
 export default function VotingRecord({ senatorId, votingRecord }: VotingRecordProps) {
   const {
     totalVotes,
-    scoreableVotes,
     partyLoyaltyPct,
     votingSummary,
     recentVoteCount,
@@ -543,7 +454,7 @@ export default function VotingRecord({ senatorId, votingRecord }: VotingRecordPr
         <div className="text-xl font-pixel text-neon-yellow">{partyIndependencePct}%</div>
         <div className="text-matrix-green/40 text-xs"><MetricTooltip text="How often this senator votes against their own party. Higher = more willingness to break from party leadership on roll-call votes.">INDEPENDENT</MetricTooltip></div>
         <div className="text-[10px] text-matrix-green/50">
-          {votedAgainstPartyCount} of {partyTotal || scoreableVotes} broke party line
+          {votedAgainstPartyCount} of {partyTotal} broke party line
         </div>
       </div>
     </div>
@@ -563,8 +474,6 @@ export default function VotingRecord({ senatorId, votingRecord }: VotingRecordPr
           <span><span className="text-ind-purple font-pixel">BP</span> = Bipartisan bill</span>
           <span><span className="text-neon-pink font-bold">AGAINST PARTY</span> = voted against own party</span>
         </div>
-        <PolicyBreakdownChart votingRecord={votingRecord} />
-
         {keyVoteCount > 0 && (
           <div>
             <div className="text-xs text-neon-cyan/60 mb-2 font-pixel">

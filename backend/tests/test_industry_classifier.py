@@ -140,7 +140,7 @@ class TestLearningStore:
         assert stored.value == "FINANCE"
         assert stored.confidence == 0.9
 
-    def test_lower_confidence_does_not_overwrite(self, db_session):
+    def test_latest_classification_always_overwrites(self, db_session):
         db_session.add(LearnedClassification(
             entity_name="TEST CORP",
             entity_type="industry",
@@ -158,7 +158,7 @@ class TestLearningStore:
             .filter(LearnedClassification.entity_name == "TEST CORP")
             .first()
         )
-        assert stored.value == "FINANCE"
+        assert stored.value == "TECH"
 
 
 @pytest.mark.slow

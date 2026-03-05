@@ -14,6 +14,8 @@ Uses SQLAlchemy sessions for persistence and PipelineRun records to track progre
 
 import json
 import logging
+import queue
+import threading
 import time
 from datetime import datetime
 
@@ -39,6 +41,7 @@ from app.pipeline.fetch.congress import (
     fetch_bill_actions,
     fetch_bill_cosponsors,
     fetch_bill_summaries,
+    fetch_bill_titles,
     fetch_member_detail,
     fetch_member_sponsored,
     fetch_recent_roll_calls,
@@ -75,10 +78,11 @@ from app.pipeline.analyze.party_platform import clear_platform_cache, initialize
 from app.pipeline.vector_store import (
     check_model_version,
     embed_bills,
+    get_chroma_client,
     invalidate_on_model_change,
     _write_model_version,
 )
-from app.pipeline.analyze.cross_reference import analyze_senator_batch
+from app.pipeline.analyze.cross_reference import analyze_senator_batch, precompute_senator_analysis
 from app.pipeline.analyze.donor_classifier_ai import classify_donors_hybrid
 from app.pipeline.analyze.ollama_client import get_llm_stats, reset_client, reset_stats
 from app.pipeline.analyze.policy_alignment import clear_alignment_cache
@@ -89,6 +93,25 @@ from app.pipeline.analyze.score_calculator import calculate_scores
 from app.pipeline.assemble.senator_builder import build_senator
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_official_title(titles: list[dict]) -> str:
+    """Extract the official descriptive title from Congress.gov title data.
+
+    The official title (titleTypeCode 6) is the full legislative description
+    (e.g., 'A bill to prevent the purchase of ammunition by prohibited
+    purchasers') as opposed to the short display title (e.g., 'Jaime's Law').
+    This provides the embedding classifier with semantically rich text for
+    bills that have uninformative short names.
+    """
+    for t in titles:
+        if t.get("titleTypeCode") == 6:
+            return t.get("title", "")
+    for t in titles:
+        title_type = (t.get("titleType") or "").lower()
+        if "official" in title_type:
+            return t.get("title", "")
+    return ""
 
 
 PIPELINE_STEPS = [
@@ -273,8 +296,6 @@ def upsert_senator(db: Session, data: dict) -> None:
         (v, "recent") for v in voting_record.get("recentVotes", [])
     ]
     for vote_data, category in all_vote_entries:
-        impacted = vote_data.get("impactedGroups") or []
-        affected = vote_data.get("affectedIndustries") or []
         db.add(
             KeyVote(
                 senator_id=senator_id,
@@ -286,18 +307,7 @@ def upsert_senator(db: Session, data: dict) -> None:
                 policy_areas=json.dumps(vote_data.get("policyAreas") or []),
                 party_alignment_weight=vote_data.get("partyAlignmentWeight") or 0.0,
                 stance=vote_data.get("stance") or "neutral",
-                stance_vote=vote_data.get("stanceVote"),
-                impacted_groups=json.dumps(impacted if isinstance(impacted, list) else []),
-                affected_industries=json.dumps(affected if isinstance(affected, list) else []),
-                pro_business_vote=vote_data.get("proBusinessVote"),
-                classification=vote_data.get("classification") or "mixed",
                 description=vote_data.get("description") or "",
-                corporate_interest=vote_data.get("corporateInterest") or "",
-                public_impact=vote_data.get("publicImpact") or "",
-                relevant_donors=json.dumps(
-                    vote_data.get("relevantDonors") or []
-                ),
-                relevant_donor_total=vote_data.get("relevantDonorTotal") or 0,
                 party_leaning=vote_data.get("partyLeaning"),
                 voted_with_party=vote_data.get("votedWithParty"),
                 vote_category=vote_data.get("voteCategory") or category,
@@ -408,6 +418,142 @@ def _acquire_pipeline_lock(db: Session) -> PipelineRun | None:
     return pipeline_run
 
 
+def _compute_analysis_code_hash() -> str:
+    """SHA-256 fingerprint of all analysis-relevant source files.
+
+    Covers pipeline modules (analyze, transform, assemble, orchestrator,
+    vector_store, cache) and config_definitions.py (weights, prototypes,
+    industry codes).  Excludes fetch modules — raw data retrieval does not
+    affect how that data is classified or scored.
+    """
+    import hashlib
+    import pathlib
+
+    app_dir = pathlib.Path(__file__).resolve().parent.parent  # app/
+    paths: list[pathlib.Path] = []
+    for p in sorted((app_dir / "pipeline").rglob("*.py")):
+        if "/fetch/" not in str(p):
+            paths.append(p)
+    cfg = app_dir / "config_definitions.py"
+    if cfg.exists():
+        paths.append(cfg)
+
+    h = hashlib.sha256()
+    for p in sorted(paths):
+        h.update(p.read_bytes())
+    return h.hexdigest()[:16]
+
+
+def _clear_analysis_artifacts(db: Session) -> None:
+    """Purge analysis artifacts only when pipeline code has changed.
+
+    Computes a SHA-256 fingerprint of all analysis source files and
+    compares it to the fingerprint stored from the last pipeline run.
+
+    Same code  → preserves learning store, analysis cache, and ChromaDB
+                 reference corpus so the self-training system accumulates
+                 knowledge across runs.
+    Changed    → clears all three persistence layers so updated algorithms
+                 start fresh without stale classifications or narratives.
+
+    The API cache (raw Congress.gov / FEC / GovInfo responses) is never
+    cleared — it reflects source data, not processing logic.
+    """
+    from app.models import AnalysisCache, ApiCache, LearnedClassification
+
+    current_hash = _compute_analysis_code_hash()
+
+    stored_entry = (
+        db.query(ApiCache)
+        .filter(ApiCache.tier == "_internal", ApiCache.cache_key == "analysis_code_hash")
+        .first()
+    )
+    stored_hash = json.loads(stored_entry.data_json) if stored_entry else None
+
+    if stored_hash == current_hash:
+        logger.info(
+            "Pipeline code unchanged (hash=%s) — preserving learning data",
+            current_hash,
+        )
+        return
+
+    n_analysis = db.query(AnalysisCache).delete()
+    n_learned = db.query(LearnedClassification).delete()
+    db.commit()
+
+    n_bills = 0
+    try:
+        client = get_chroma_client()
+        try:
+            coll = client.get_collection(name="bills")
+            n_bills = coll.count()
+            client.delete_collection(name="bills")
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+    from app.pipeline.cache import api_cache_set
+    api_cache_set(db, "_internal", "analysis_code_hash", current_hash)
+
+    logger.info(
+        "Pipeline code changed (%s -> %s) — cleared %d cached LLM results, "
+        "%d learned classifications, %d reference bills",
+        stored_hash or "none", current_hash, n_analysis, n_learned, n_bills,
+    )
+
+
+def _build_analysis_input(prepared: dict, platform_texts: dict) -> dict:
+    """Build the analysis input dict for a senator's embedding pre-computation."""
+    senator = prepared["senator"]
+    funding = prepared["funding"]
+    voting_record = prepared["votingRecord"]
+    all_votes = (voting_record.get("keyVotes") or []) + (
+        voting_record.get("recentVotes") or []
+    )
+    return {
+        "senator": senator,
+        "donors": funding.get("topDonors", []),
+        "keyVotes": voting_record.get("keyVotes", []),
+        "allVotes": all_votes,
+        "platformText": platform_texts.get(senator["id"], ""),
+        "sponsoredBills": prepared.get("sponsoredBills", []),
+    }
+
+
+def _embedding_producer(
+    senator_prepared: list[dict],
+    platform_texts: dict[str, str],
+    prefetch_queue: "queue.Queue[tuple[int, dict, dict | None] | None]",
+) -> None:
+    """Librarian thread: pre-computes embedding analyses ahead of LLM calls.
+
+    Runs the sentence-transformer model to analyze lobbying matches, key
+    votes, and promise alignments for each senator. Results are placed in
+    the prefetch queue for the main thread (Analyst) to consume.
+
+    The queue's maxsize=3 bounds memory to ~3 senators' worth of
+    precomputed data (~2MB). The Librarian stays ~2-3 senators ahead
+    of the Analyst, so the LLM never waits for embedding results.
+
+    Thread safety: sentence-transformers releases the GIL during torch
+    ops, so the Librarian's CPU work overlaps with the main thread's
+    I/O wait on the llama-server HTTP response.
+    """
+    for idx, prepared in enumerate(senator_prepared):
+        try:
+            analysis_input = _build_analysis_input(prepared, platform_texts)
+            precomputed = precompute_senator_analysis(analysis_input)
+            prefetch_queue.put((idx, analysis_input, precomputed))
+        except Exception as e:
+            logger.warning(
+                "Prefetch failed for %s: %s — will compute inline",
+                prepared["senator"]["name"], e,
+            )
+            prefetch_queue.put((idx, None, None))
+    prefetch_queue.put(None)
+
+
 async def run_full_pipeline(
     senator_filter: str | None = None,
     fetch_only: bool = False,
@@ -427,8 +573,6 @@ async def run_full_pipeline(
     reset_client()
 
     # Clear in-memory caches from prior runs to bound memory usage.
-    # Note: the ChromaDB reference corpus and learning store persist across
-    # runs intentionally — they're the adaptive learning mechanism.
     clear_alignment_cache()
     clear_bill_embedding_cache()
     clear_reference_cache()
@@ -437,6 +581,12 @@ async def run_full_pipeline(
     clear_industry_embedding_cache()
 
     db: Session = SessionLocal()
+
+    # Purge all analysis-derived data from prior runs so updated
+    # algorithms always produce fresh results. Preserves the API cache
+    # (raw Congress.gov / FEC / GovInfo responses) since those reflect
+    # source data, not our processing logic.
+    _clear_analysis_artifacts(db)
 
     # Verify embedding model version — invalidate stored embeddings on change
     if not check_model_version():
@@ -555,6 +705,9 @@ async def run_full_pipeline(
                 actions = await fetch_bill_actions(
                     client, db, bill_ref["congress"], bill_ref["type"], bill_ref["number"]
                 )
+                titles = await fetch_bill_titles(
+                    client, db, bill_ref["congress"], bill_ref["type"], bill_ref["number"]
+                )
 
                 # Fetch full bill text from GovInfo
                 full_text = await fetch_bill_text(
@@ -569,6 +722,9 @@ async def run_full_pipeline(
                         sponsor_party = sponsors[0].get("party")
                         sponsor_bioguide = sponsors[0].get("bioguideId")
 
+                    official_title = _extract_official_title(titles)
+                    crs_policy_area = (bill.get("policyArea") or {}).get("name", "")
+
                     bills_data.append(
                         {
                             "billId": f"{bill_ref['type'].upper()}.{bill_ref['number']}",
@@ -579,6 +735,8 @@ async def run_full_pipeline(
                                 if summaries
                                 else bill.get("title", "")
                             ),
+                            "officialTitle": official_title,
+                            "crsPolicyArea": crs_policy_area,
                             "fullText": full_text or "",
                             "actions": actions or [],
                             "sponsorParty": sponsor_party,
@@ -749,6 +907,45 @@ async def run_full_pipeline(
                 detail=f"{len(sponsored_map)} senators, {total_sponsored} bills",
             )
 
+            # 1d.5 Fetch official titles for sponsored bills with short names.
+            # Bills named after people (e.g., "Jaime's Law") or acronyms
+            # (e.g., "ARMAS Act") carry no policy signal for the embedding
+            # classifier. The official title from the titles endpoint
+            # (e.g., "A bill to prevent the purchase of ammunition...")
+            # provides the semantic content needed for accurate classification.
+            short_title_bills: dict[str, tuple[int, str, int]] = {}
+            for sp_bills in sponsored_map.values():
+                for sp in sp_bills:
+                    title = sp.get("title", "")
+                    bill_type = sp.get("type", "")
+                    bill_number = sp.get("number", "")
+                    congress = sp.get("congress", 0)
+                    if (
+                        title and len(title) < 50
+                        and bill_type and bill_number and congress
+                    ):
+                        bid = f"{bill_type}.{bill_number}"
+                        if bid not in short_title_bills:
+                            short_title_bills[bid] = (
+                                congress, bill_type.lower(), int(bill_number),
+                            )
+
+            official_titles_map: dict[str, str] = {}
+            if short_title_bills:
+                logger.info(
+                    "Fetching official titles for %d short-title sponsored bills...",
+                    len(short_title_bills),
+                )
+                for bid, (cg, bt, bn) in short_title_bills.items():
+                    titles = await fetch_bill_titles(client, db, cg, bt, bn)
+                    official = _extract_official_title(titles)
+                    if official:
+                        official_titles_map[bid] = official
+                logger.info(
+                    "Official titles fetched for %d/%d bills",
+                    len(official_titles_map), len(short_title_bills),
+                )
+
             # 1e. Fetch FEC data for each senator
             logger.info("Fetching FEC financial data...")
             progress.begin("fetch_fec", total=len(senators))
@@ -882,6 +1079,15 @@ async def run_full_pipeline(
         db.commit()
         logger.info("--- Phase 3: ANALYZE ---")
 
+        # Invalidate stale bill classifications from prior runs where the
+        # bill was classified with insufficient text (e.g., person-name
+        # titles like "Jaime's Law" with no summary/official title).  This
+        # forces reclassification with the richer text we now provide.
+        from app.pipeline.analyze.bill_learning import invalidate_thin_classifications
+        n_invalidated = invalidate_thin_classifications(db)
+        if n_invalidated:
+            clear_reference_cache()
+
         # 3a. Classify bills using embeddings (zero LLM calls)
         logger.info("Classifying key bills (embedding-based)...")
         progress.begin("classify_bills", total=len(bills_data))
@@ -938,14 +1144,18 @@ async def run_full_pipeline(
         pipeline_run.bills_classified = len(classified_bills) + len(classified_recent)
         db.commit()
 
-        # Override partyLeaning for recent votes too, using the roll call member data.
+        # Refine content-based party alignment for recent votes with vote data.
+        # Uses the same blended approach as key bills: content analysis is
+        # the primary signal, vote tallies validate or adjust.
         for rc in classified_recent:
             rc_id = rc.get("billId", "")
             roll_call_data = recent_rc_map.get(rc_id)
             if roll_call_data:
                 computed_split = compute_party_split(roll_call_data)
                 if computed_split:
-                    rc["partyLeaning"] = computed_split
+                    rc["partyLeaning"] = refine_with_vote_data(
+                        rc.get("partyLeaning", "bipartisan"), computed_split,
+                    )
 
         # 3a.3 Embed classified bills in vector database for semantic search
         logger.info("Embedding bills in vector database...")
@@ -1198,19 +1408,44 @@ async def run_full_pipeline(
         pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
         db.commit()
 
-        logger.info("Processing %d senators (1 LLM call each)...", len(senator_prepared))
+        logger.info(
+            "Processing %d senators (producer-consumer: embedding prefetch + LLM)...",
+            len(senator_prepared),
+        )
+
+        # Start the "Librarian" prefetch thread: pre-computes embedding
+        # analyses (lobbying matches, key votes, promise alignment) in a
+        # background thread while the "Analyst" (main thread) waits for
+        # the LLM HTTP response. On a Pi 5, this overlaps ~2-4s of
+        # embedding work per senator with the ~15-30s LLM call, saving
+        # 200-400s across 100 senators.
+        prefetch_q: queue.Queue[tuple[int, dict, dict | None] | None] = queue.Queue(maxsize=3)
+        producer = threading.Thread(
+            target=_embedding_producer,
+            args=(senator_prepared, platform_texts, prefetch_q),
+            name="embedding-prefetch",
+            daemon=True,
+        )
+        producer.start()
 
         progress.begin("analyze_senators", total=len(senator_prepared))
-        for senator_idx, prepared in enumerate(senator_prepared):
+        for senator_idx in range(len(senator_prepared)):
+            prefetch_item = prefetch_q.get()
+            if prefetch_item is None:
+                break
+            _pfx_idx, analysis_input, precomputed = prefetch_item
+
+            prepared = senator_prepared[senator_idx]
             senator = prepared["senator"]
             funding = prepared["funding"]
             voting_record = prepared["votingRecord"]
 
             logger.info(
-                "  [%d/%d] %s",
+                "  [%d/%d] %s%s",
                 senator_idx + 1,
                 len(senator_prepared),
                 senator["name"],
+                " (prefetched)" if precomputed else "",
             )
             progress.update("analyze_senators", done=senator_idx, detail=senator["name"])
 
@@ -1219,17 +1454,13 @@ async def run_full_pipeline(
                     voting_record.get("recentVotes") or []
                 )
 
+                if not analysis_input:
+                    analysis_input = _build_analysis_input(prepared, platform_texts)
+
                 analysis_results = await analyze_senator_batch(
-                    [
-                        {
-                            "senator": senator,
-                            "donors": funding.get("topDonors") or [],
-                            "keyVotes": voting_record.get("keyVotes") or [],
-                            "allVotes": all_votes,
-                            "platformText": platform_texts.get(senator["id"], ""),
-                        }
-                    ],
+                    [analysis_input],
                     db_session=db,
+                    precomputed=precomputed,
                 )
                 analysis = analysis_results[0] if analysis_results else {}
                 platform_data = {
@@ -1262,7 +1493,16 @@ async def run_full_pipeline(
                     ]
 
                 voting_record["keyVotes"] = final_key_votes
-                voting_record["recentVotes"] = final_recent_votes
+                # Preserve the actual recent roll call votes (from
+                # normalize_recent_votes) alongside the key bill leftovers.
+                # Without this, analyze_partisan_depth only sees the few
+                # key bill votes and misses the bulk of the voting record.
+                actual_recent = voting_record.get("recentVotes") or []
+                leftover_ids = {v["billId"] for v in final_recent_votes}
+                merged_recent = final_recent_votes + [
+                    v for v in actual_recent if v["billId"] not in leftover_ids
+                ]
+                voting_record["recentVotes"] = merged_recent
                 voting_record["votingSummary"] = analysis.get("votingSummary", "")
 
                 lobbying_matches = analysis.get("lobbyingMatches", [])
@@ -1296,7 +1536,6 @@ async def run_full_pipeline(
                 }
                 corruption_score = calculate_scores(
                     temp_senator,
-                    {"flipFlopScore": analysis.get("flipFlopScore", 25)},
                     floor_advocacy=floor_advocacy,
                 )
 
@@ -1344,7 +1583,10 @@ async def run_full_pipeline(
                         partisan_profile["crossPartyCount"],
                     )
 
-                # Classify policy areas for this senator's sponsored bills
+                # Classify policy areas for this senator's sponsored bills.
+                # Builds the richest possible text for the embedding model:
+                # official title (from pre-fetched titles), CRS policy area,
+                # and the short display title.
                 from app.pipeline.analyze.bill_analyzer import classify_policy_areas_multi
                 from app.pipeline.analyze.party_platform import classify_party_alignment_multi
                 raw_sponsored = prepared.get("sponsoredBills", [])
@@ -1352,13 +1594,21 @@ async def run_full_pipeline(
                 for sp in raw_sponsored:
                     title = sp.get("title", "")
                     api_policy = sp.get("policyArea", "")
+                    bill_id = sp.get("billId", "")
                     if api_policy:
                         sp["policyArea"] = api_policy.upper().replace(" ", "_")
-                    if title and len(title) > 10:
-                        areas = classify_policy_areas_multi(title, db_session=db)
+                    parts = [title]
+                    official = official_titles_map.get(bill_id, "")
+                    if official and official.lower() != title.lower():
+                        parts.append(official)
+                    if api_policy:
+                        parts.append(api_policy)
+                    classify_text = " ".join(parts)
+                    if classify_text and len(classify_text) > 10:
+                        areas = classify_policy_areas_multi(classify_text, db_session=db)
                         if areas:
                             alignment = classify_party_alignment_multi(
-                                title, areas, "pro",
+                                classify_text, areas, "pro",
                             )
                             sp["policyAreas"] = [
                                 {
@@ -1429,6 +1679,8 @@ async def run_full_pipeline(
                 pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
                 db.commit()
                 progress.update("analyze_senators", done=senator_idx + 1)
+
+        producer.join(timeout=5)
 
         progress.complete(
             "analyze_senators",

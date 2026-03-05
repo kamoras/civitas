@@ -4,6 +4,7 @@ services:
       context: ./backend
     volumes:
       - ./backend/app:/app/app
+      - ./backend/tests:/app/tests
       - app_data:/data
     environment:
       - PIPELINE_LOG_LEVEL=debug

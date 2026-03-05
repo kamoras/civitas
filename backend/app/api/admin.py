@@ -492,6 +492,33 @@ async def admin_trigger_pipeline(
     }
 
 
+@router.post("/data/reset", dependencies=[Depends(require_admin)])
+async def admin_reset_data(db: Session = Depends(get_db)):
+    """Wipe all pipeline-generated data for a clean start.
+
+    Clears every table (senators, votes, donors, learning store, caches,
+    ChromaDB), then re-seeds static reference data. The next pipeline run
+    will rebuild everything from scratch with the latest code.
+    """
+    from app.api.pipeline import _is_pipeline_running
+
+    if _is_pipeline_running(db):
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot reset while the pipeline is running",
+        )
+
+    from app.database import reset_all_data
+
+    summary = reset_all_data()
+    total_rows = sum(v for k, v in summary.items() if isinstance(v, int))
+    return {
+        "status": "reset_complete",
+        "rowsDeleted": total_rows,
+        "details": summary,
+    }
+
+
 @router.get("/classification/health", dependencies=[Depends(require_admin)])
 async def admin_classification_health(db: Session = Depends(get_db)):
     """Classification system health metrics for monitoring adaptive learning."""

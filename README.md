@@ -47,6 +47,16 @@ The pipeline runs nightly (or manually triggered) in phases:
    deterministic, auditable formulas with Bayesian shrinkage
 5. **ASSEMBLE + SAVE** — Build scorecards and persist to database
 
+The analyze phase uses a **producer-consumer pattern** to overlap
+embedding work with LLM inference. A background "Librarian" thread
+pre-computes all embedding-based analyses (lobbying matches, key vote
+selection, promise alignment, platform topic extraction) for the next
+senator while the main "Analyst" thread waits for the LLM HTTP response.
+On a Pi 5, this overlaps ~2-4s of embedding work per senator with the
+~15-30s LLM call, saving 200-400s across 100 senators. LLM prompts
+use **context compression**: platform text is distilled into concise
+policy topic bullets rather than raw scraped text.
+
 ### Classification Strategy — Zero Hardcoded Rules
 
 Every classification decision in the pipeline is made mathematically.
@@ -86,6 +96,16 @@ across pipeline runs. A vector reference corpus (ChromaDB) grows with
 each run. Together they implement a retrieval-augmented classification
 (RAC) pattern: past decisions inform future ones, reducing both latency
 and error rate over time (Lewis et al. 2020).
+
+**Version-aware artifact management** ensures that updated analysis
+algorithms always produce fresh results. At pipeline start, a SHA-256
+fingerprint of all analysis source files is compared to the stored hash
+from the last run. If the code is unchanged, all learning data persists
+to promote self-training. If the code has changed, stale analysis
+artifacts (LLM cache, learned classifications, kNN reference corpus)
+are automatically cleared so updated algorithms start clean. The API
+cache (raw Congress.gov / FEC / GovInfo responses) is never cleared —
+it reflects source data, not processing logic.
 
 ### Party Alignment (Content-Based)
 
@@ -296,7 +316,7 @@ modern-punk/
 │   │   ├── schemas.py        # Pydantic response schemas (incl. PaginatedVotesSchema)
 │   │   ├── database.py       # DB engine + session management
 │   │   └── config.py         # Pydantic settings from .env
-│   ├── tests/                # 345 tests (pytest)
+│   ├── tests/                # 359 tests (pytest)
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/

@@ -115,7 +115,6 @@ def clamp(value: float, min_val: int = 0, max_val: int = 100) -> int:
 
 def calculate_scores(
     senator: dict,
-    flip_flop_result: dict | None = None,
     floor_advocacy: dict | None = None,
 ) -> dict:
     """
@@ -134,7 +133,6 @@ def calculate_scores(
             voting_record,
             senator.get("party", "I"),
             senator.get("campaignPromises", []),
-            flip_flop_result,
             floor_advocacy,
         ),
         "independentVoting": _calc_independent_voting(
@@ -190,7 +188,6 @@ def _calc_promise_persistence(
     voting_record: dict,
     party: str,
     campaign_promises: list[dict] | None = None,
-    flip_flop_result: dict | None = None,
     floor_advocacy: dict | None = None,
 ) -> int:
     """

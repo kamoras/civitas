@@ -96,77 +96,79 @@ R_PLATFORM_POSITIONS: dict[str, str] = {
     "TAXES": (
         "reduce taxes, cut tax rates, lower corporate tax, repeal estate tax, "
         "reduce government spending, balanced budget amendment, limit IRS, "
-        "oppose tax increases, supply-side economics, reduce deficit through cuts"
+        "preserve low tax rates, supply-side economics, reduce deficit through cuts"
     ),
     "HEALTHCARE": (
         "market-based healthcare reform, health savings accounts, repeal ACA mandates, "
         "reduce healthcare regulation, competition across state lines, "
-        "block Medicaid expansion, oppose single-payer, patient choice, "
+        "voluntary private insurance, patient choice, "
         "reduce prescription drug regulation, tort reform"
     ),
     "ENVIRONMENT": (
         "energy independence, reduce EPA regulations, approve drilling permits, "
         "approve pipeline construction, support clean coal, expand nuclear energy, "
-        "oppose carbon tax, reduce environmental compliance burden, "
+        "market-based environmental solutions, reduce environmental compliance burden, "
         "withdraw from climate agreements, support fossil fuel industry"
     ),
     "DEFENSE": (
         "increase defense spending, strong military readiness, missile defense, "
         "support veterans benefits, military modernization, "
-        "oppose defense cuts, strengthen national security, "
-        "counter China and Russia, expand military capability"
+        "maintain defense budget, strengthen national security, "
+        "counter China and Russia, expand military capability, "
+        "support arms sales to allies, streamline defense exports"
     ),
     "GUNS": (
-        "protect second amendment rights, oppose gun control legislation, "
-        "support concealed carry reciprocity, oppose assault weapons ban, "
-        "oppose magazine capacity limits, support gun manufacturer liability protection, "
-        "oppose red flag laws, arm teachers"
+        "protect second amendment rights, defend gun ownership and access to firearms, "
+        "support concealed carry reciprocity, preserve access to ammunition and magazines, "
+        "support gun manufacturer liability protection, "
+        "arm teachers for self-defense, expand firearm freedoms, "
+        "castle doctrine, stand your ground laws, deregulate firearms"
     ),
     "IMMIGRATION": (
         "secure the border, build border wall, reduce illegal immigration, "
-        "merit-based legal immigration, oppose amnesty, "
+        "merit-based legal immigration, enforcement-first approach, "
         "increase border patrol funding, end sanctuary cities, "
-        "oppose DACA expansion, mandatory E-Verify"
+        "end DACA, mandatory E-Verify"
     ),
     "EDUCATION": (
         "school choice, charter schools, voucher programs, "
-        "reduce federal education mandates, oppose Common Core, "
+        "reduce federal education mandates, local curriculum control, "
         "parental rights in curriculum, reduce Department of Education, "
-        "oppose student loan forgiveness"
+        "personal responsibility for student debt"
     ),
     "FINANCIAL": (
         "reduce banking regulation, repeal Dodd-Frank provisions, "
         "reduce CFPB authority, support cryptocurrency innovation, "
-        "oppose financial transaction tax, reduce compliance burden"
+        "free market financial activity, reduce compliance burden"
     ),
     "ENERGY": (
         "energy independence, expand domestic production, reduce energy regulation, "
-        "support nuclear power, oppose renewable energy mandates, "
-        "reduce utility regulation, oppose Green New Deal"
+        "support nuclear power, market-driven energy mix, "
+        "reduce utility regulation, fossil fuel production"
     ),
     "JUSTICE": (
-        "tough on crime, support law enforcement funding, oppose defund police, "
+        "tough on crime, support law enforcement funding, back the blue, "
         "mandatory minimum sentences, support death penalty, "
-        "oppose bail reform, expand executive authority"
+        "keep cash bail, expand executive authority"
     ),
     "TRADE": (
         "fair trade enforcement, tariffs on China, renegotiate trade deals, "
-        "protect domestic manufacturing, oppose unfair trade practices, "
-        "bilateral trade agreements"
+        "protect domestic manufacturing, trade reciprocity, "
+        "bilateral trade agreements, support defense exports to allies"
     ),
     "WELFARE": (
         "work requirements for benefits, reduce welfare spending, "
         "reform Social Security, reduce entitlement growth, "
-        "block-grant federal programs to states, oppose benefit expansion"
+        "block-grant federal programs to states, self-sufficiency over dependency"
     ),
     "LABOR": (
         "right-to-work legislation, reduce union power, "
-        "oppose minimum wage increase, reduce workplace regulation, "
-        "oppose paid family leave mandates, support gig economy flexibility"
+        "market-determined wages, reduce workplace regulation, "
+        "voluntary employer benefits, support gig economy flexibility"
     ),
     "TECH": (
-        "reduce tech regulation, oppose Section 230 changes, "
-        "support innovation, oppose government surveillance expansion, "
+        "reduce tech regulation, maintain platform liability protections, "
+        "support innovation, limit government digital overreach, "
         "reduce data privacy mandates, support AI development"
     ),
 }
@@ -196,13 +198,17 @@ D_PLATFORM_POSITIONS: dict[str, str] = {
         "reduce nuclear weapons, support veterans, "
         "oppose unnecessary military interventions, "
         "close overseas bases, end forever wars, "
-        "military sexual assault reform"
+        "military sexual assault reform, "
+        "regulate arms sales and exports, arms trade oversight, "
+        "human rights conditions on military transfers"
     ),
     "GUNS": (
         "universal background checks, assault weapons ban, "
         "red flag laws, gun violence prevention, "
         "limit magazine capacity, close gun show loophole, "
-        "fund gun violence research, repeal liability protections"
+        "fund gun violence research, repeal gun manufacturer liability protections, "
+        "regulate ammunition sales and transfers, restrict access to firearms, "
+        "mandatory waiting periods, safe storage requirements"
     ),
     "IMMIGRATION": (
         "path to citizenship, protect DACA and Dreamers, "
@@ -237,7 +243,8 @@ D_PLATFORM_POSITIONS: dict[str, str] = {
     "TRADE": (
         "labor standards in trade agreements, environmental protections in trade, "
         "oppose unfair trade practices, support worker adjustment assistance, "
-        "multilateral trade agreements"
+        "multilateral trade agreements, "
+        "regulate arms exports, human rights conditions on foreign sales"
     ),
     "WELFARE": (
         "expand social safety net, increase SNAP benefits, "
@@ -462,6 +469,28 @@ def _ensure_platform_embeddings() -> None:
     initialize_platform_embeddings(db=None)
 
 
+def _stance_conditioned_query(bill_text: str, stance_direction: str) -> str:
+    """Construct a stance-conditioned query for embedding classification.
+
+    Sentence-transformer models struggle with antonymy and negation
+    (Ettinger 2020, "What BERT Is Not: Lessons from a New Suite of
+    Psycholinguistic Diagnostics for Language Models").  A bill that
+    "restricts ammunition" and a platform that "defends access to
+    ammunition" share most semantic content, making cosine similarity
+    unreliable for distinguishing pro from anti stances.
+
+    By prepending a directional prefix, we shift the query embedding
+    toward the region of semantic space that matches the bill's
+    legislative intent, allowing the nearest-centroid classifier to
+    assign the correct party alignment.
+    """
+    if stance_direction == "pro":
+        return f"legislation to support and strengthen: {bill_text[:480]}"
+    if stance_direction == "anti":
+        return f"legislation to restrict and limit: {bill_text[:480]}"
+    return bill_text[:500]
+
+
 def classify_party_alignment(
     bill_text: str,
     policy_area: str,
@@ -470,21 +499,31 @@ def classify_party_alignment(
     """Determine which party's platform a bill aligns with based on content.
 
     Implements a nearest-centroid classifier (Rocchio 1971) in
-    sentence-embedding space. Each party's position on each policy area
-    is a centroid; the bill is assigned to the party whose centroid it
-    is most similar to. Cosine similarity serves as the distance metric,
-    following standard practice for high-dimensional text representations
-    (Reimers & Gurevych 2019, Sentence-BERT).
+    sentence-embedding space with stance-conditioned query construction.
+    Each party's position on each policy area is a centroid; the bill is
+    assigned to the party whose centroid it is most similar to.
 
-    The stance direction (pro/anti) disambiguates policy-area overlap:
-    both parties have "healthcare" positions, but a bill that expands
-    coverage (pro) aligns with D while one that deregulates (anti) aligns
-    with R. This encodes the saliency-plus-direction model from Laver &
-    Garry (2000).
+    Stance conditioning (Reimers & Gurevych 2019, Sentence-BERT)
+    ---------------------------------------------------------------
+    The stance direction (pro/anti/neutral) is used to construct a
+    directionally explicit query embedding.  Sentence-transformer models
+    are weak at capturing negation/antonymy — "oppose gun control" and
+    "gun control" embed nearly identically (Ettinger 2020, "What BERT Is
+    Not").  Rather than relying on the embedding model to distinguish
+    pro-X from anti-X, we prepend a stance-appropriate prefix that makes
+    the bill's legislative direction explicit:
 
-    Margin thresholds (0.03 / 0.06) were empirically calibrated against
-    bills with known single-party sponsorship in the 117th-119th
-    Congresses. Bills below both thresholds are labeled "bipartisan."
+      pro  → "legislation to support and strengthen: ..."
+      anti → "legislation to restrict and limit: ..."
+
+    This shifts the query embedding toward the correct party's centroid
+    without hardcoded party-stance mappings.  The platform descriptions
+    are written in directionally positive language (what each party WANTS),
+    so a "restrict" prefix naturally aligns with the party that wants
+    restrictions in that policy area.
+
+    Margin thresholds were empirically calibrated against bills with known
+    single-party sponsorship in the 117th-119th Congresses.
 
     Returns "R", "D", or "bipartisan".
     """
@@ -493,7 +532,8 @@ def classify_party_alignment(
     from app.pipeline.vector_store import get_embedding_model
     model = get_embedding_model()
 
-    query_emb = model.encode([bill_text[:500]], show_progress_bar=False)[0]
+    query_text = _stance_conditioned_query(bill_text, stance_direction)
+    query_emb = model.encode([query_text], show_progress_bar=False)[0]
     query_emb = query_emb / np.linalg.norm(query_emb)
 
     r_score = 0.0
@@ -511,21 +551,10 @@ def classify_party_alignment(
 
     margin = abs(r_score - d_score)
 
-    if margin < 0.03:
-        return "bipartisan"
-
-    if r_score > d_score:
-        content_party = "R"
-    else:
-        content_party = "D"
-
-    if stance_direction == "anti" and policy_area != "PROCEDURAL":
-        content_party = "D" if content_party == "R" else "R"
-
     if margin < 0.06:
         return "bipartisan"
 
-    return content_party
+    return "R" if r_score > d_score else "D"
 
 
 def classify_party_alignment_multi(
@@ -542,10 +571,12 @@ def classify_party_alignment_multi(
     choice.
 
     Per-area alignment uses the same nearest-centroid classifier as
-    classify_party_alignment. The aggregate uses confidence-weighted voting:
-    each area's alignment vote is weighted by its embedding confidence,
-    following the weighted-expert framework in Clemen (1989, "Combining
-    Forecasts: A Review and Annotated Bibliography," Intl J Forecasting 5:4).
+    classify_party_alignment, with stance-conditioned query construction
+    and directional platform descriptions.  The aggregate uses
+    confidence-weighted voting: each area's alignment vote is weighted
+    by its embedding confidence, following the weighted-expert framework
+    in Clemen (1989, "Combining Forecasts: A Review and Annotated
+    Bibliography," Intl J Forecasting 5:4).
 
     Returns:
         {
@@ -566,7 +597,8 @@ def classify_party_alignment_multi(
     from app.pipeline.vector_store import get_embedding_model
     model = get_embedding_model()
 
-    query_emb = model.encode([bill_text[:500]], show_progress_bar=False)[0]
+    query_text = _stance_conditioned_query(bill_text, stance_direction)
+    query_emb = model.encode([query_text], show_progress_bar=False)[0]
     query_emb = query_emb / np.linalg.norm(query_emb)
 
     area_results: list[dict] = []
@@ -592,14 +624,10 @@ def classify_party_alignment_multi(
 
         margin = abs(r_score - d_score)
 
-        if margin < 0.03:
-            party = "bipartisan"
-        elif margin < 0.06:
+        if margin < 0.06:
             party = "bipartisan"
         else:
             party = "R" if r_score > d_score else "D"
-            if stance_direction == "anti":
-                party = "D" if party == "R" else "R"
 
         area_results.append({
             "area": area,
@@ -655,7 +683,10 @@ def classify_party_alignment_batch(
     from app.pipeline.vector_store import get_embedding_model
     model = get_embedding_model()
 
-    texts = [b.get("billName", "")[:500] for b in bills]
+    texts = [
+        _stance_conditioned_query(b.get("billName", ""), b.get("stance", "neutral"))
+        for b in bills
+    ]
     embs = model.encode(texts, show_progress_bar=False, batch_size=min(64, len(texts)))
     norms = np.linalg.norm(embs, axis=1, keepdims=True)
     norms[norms == 0] = 1.0
@@ -685,16 +716,11 @@ def classify_party_alignment_batch(
 
         margin = abs(r_score - d_score)
 
-        if margin < 0.03:
+        if margin < 0.06:
             results[bill_id] = "bipartisan"
             continue
 
-        content_party = "R" if r_score > d_score else "D"
-
-        if stance == "anti":
-            content_party = "D" if content_party == "R" else "R"
-
-        results[bill_id] = content_party if margin >= 0.06 else "bipartisan"
+        results[bill_id] = "R" if r_score > d_score else "D"
 
     dist = Counter(results.values())
     logger.info(
@@ -783,7 +809,6 @@ def record_sponsor_alignment(
             "match_metadata": meta,
             "learned_at": datetime.utcnow(),
         },
-        where=(LearnedClassification.confidence <= confidence),
     )
     db.execute(stmt)
 
@@ -890,13 +915,30 @@ def analyze_partisan_depth(
         overall_party = "D"
 
     abs_lean = abs(overall_lean)
-    cross_ratio = cross_party / len(area_alignments) if area_alignments else 0
 
+    # Strength-weighted cross-party ratio: a weak opposite-party signal
+    # (e.g. strength 0.19) contributes less than a strong one (0.8+).
+    # This prevents reliably partisan senators from being labeled
+    # "cross-cutting" due to several barely-opposite positions.
+    if area_alignments and eval_party in ("R", "D"):
+        opposite = "D" if eval_party == "R" else "R"
+        cross_weight = sum(
+            a["strength"] for a in area_alignments if a["alignment"] == opposite
+        )
+        total_weight = sum(a["strength"] for a in area_alignments)
+        cross_ratio = cross_weight / total_weight if total_weight > 0 else 0.0
+    else:
+        cross_ratio = 0.0
+
+    # Depth thresholds calibrated against the observed lean distribution
+    # (D: -0.30 to -0.05, R: +0.10 to +0.43) so that known moderates
+    # (Collins ~0.10, Murkowski ~0.14) land in "moderate" while clearly
+    # partisan senators (0.20+) land in "deep."
     if cross_ratio > 0.3:
         depth = "cross-cutting"
-    elif abs_lean > 0.08:
+    elif abs_lean > 0.20:
         depth = "deep"
-    elif abs_lean > 0.04:
+    elif abs_lean > 0.10:
         depth = "moderate"
     else:
         depth = "centrist"

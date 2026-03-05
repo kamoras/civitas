@@ -186,21 +186,6 @@ class TestValidateSenator:
         result = validate_senator(senator)
         assert result["votingRecord"]["keyVotes"][0]["vote"] == "Not Voting"
 
-    def test_invalid_stance_vote_set_to_none(self):
-        senator = _make_senator(votingRecord={
-            "totalVotes": 1,
-            "scoreableVotes": 0,
-            "donorAlignedVotes": 0,
-            "donorOpposedVotes": 0,
-            "policyBreakdown": [],
-            "keyVotes": [
-                {"billName": "Bill", "billId": "HR.1", "date": "2025-01-01",
-                 "vote": "Yea", "policyArea": "HEALTHCARE", "stance": "reform",
-                 "stanceVote": "Maybe"},
-            ],
-        })
-        result = validate_senator(senator)
-        assert result["votingRecord"]["keyVotes"][0]["stanceVote"] is None
 
     def test_lobbying_match_industry_validated(self):
         senator = _make_senator(lobbyingMatches=[
@@ -242,34 +227,3 @@ class TestValidateSenator:
         result = validate_senator(senator)
         assert result["lobbyingMatches"] == []
 
-    def test_impacted_groups_non_list_fixed(self):
-        senator = _make_senator(votingRecord={
-            "totalVotes": 1,
-            "scoreableVotes": 0,
-            "donorAlignedVotes": 0,
-            "donorOpposedVotes": 0,
-            "policyBreakdown": [],
-            "keyVotes": [
-                {"billName": "Bill", "billId": "HR.1", "date": "2025-01-01",
-                 "vote": "Yea", "policyArea": "HEALTHCARE", "stance": "reform",
-                 "stanceVote": "Yea", "impactedGroups": "everyone"},
-            ],
-        })
-        result = validate_senator(senator)
-        assert result["votingRecord"]["keyVotes"][0]["impactedGroups"] == []
-
-    def test_affected_industries_non_list_fixed(self):
-        senator = _make_senator(votingRecord={
-            "totalVotes": 1,
-            "scoreableVotes": 0,
-            "donorAlignedVotes": 0,
-            "donorOpposedVotes": 0,
-            "policyBreakdown": [],
-            "keyVotes": [
-                {"billName": "Bill", "billId": "HR.1", "date": "2025-01-01",
-                 "vote": "Yea", "policyArea": "HEALTHCARE", "stance": "reform",
-                 "stanceVote": "Yea", "affectedIndustries": "PHARMA"},
-            ],
-        })
-        result = validate_senator(senator)
-        assert result["votingRecord"]["keyVotes"][0]["affectedIndustries"] == []

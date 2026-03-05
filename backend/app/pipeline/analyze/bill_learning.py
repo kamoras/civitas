@@ -222,9 +222,77 @@ def record_classification(
             "match_metadata": meta,
             "learned_at": datetime.utcnow(),
         },
-        where=(LearnedClassification.confidence <= confidence),
     )
     db.execute(stmt)
+
+
+def invalidate_thin_classifications(db: Session, min_text_length: int = 40) -> int:
+    """Remove learning store entries classified with insufficient text.
+
+    Bills with very short text_prefix (e.g., person-name titles like
+    'Jaime's Law') were classified with almost no semantic signal. Now
+    that we enrich classification text with official titles and CRS
+    policy areas, these stale entries should be removed so the enriched
+    text gets a fresh classification.
+
+    Also purges corresponding entries from the ChromaDB reference corpus
+    so the kNN classifier doesn't return stale labels.
+
+    Returns the number of invalidated entries.
+    """
+    rows = (
+        db.query(LearnedClassification)
+        .filter(
+            LearnedClassification.entity_type == ENTITY_BILL_POLICY,
+        )
+        .all()
+    )
+
+    stale_ids: list[str] = []
+    for row in rows:
+        try:
+            meta = json.loads(row.match_metadata or "{}")
+        except (json.JSONDecodeError, TypeError):
+            meta = {}
+        text_prefix = meta.get("text_prefix", "")
+        if len(text_prefix.strip()) < min_text_length:
+            stale_ids.append(row.entity_name)
+
+    if not stale_ids:
+        return 0
+
+    db.query(LearnedClassification).filter(
+        LearnedClassification.entity_name.in_(stale_ids),
+        LearnedClassification.entity_type == ENTITY_BILL_POLICY,
+    ).delete(synchronize_session="fetch")
+    db.commit()
+
+    _purge_reference_entries(stale_ids)
+
+    logger.info(
+        "Invalidated %d thin bill classifications (text < %d chars)",
+        len(stale_ids), min_text_length,
+    )
+    return len(stale_ids)
+
+
+def _purge_reference_entries(bill_ids: list[str]) -> None:
+    """Remove specific entries from the ChromaDB reference corpus."""
+    if not bill_ids:
+        return
+    try:
+        from app.pipeline.vector_store import get_chroma_client
+        client = get_chroma_client()
+        collection = client.get_collection(name="bills")
+        existing = collection.get(ids=bill_ids)
+        ids_to_delete = [
+            bid for bid in existing["ids"]
+        ] if existing and existing["ids"] else []
+        if ids_to_delete:
+            collection.delete(ids=ids_to_delete)
+            logger.info("Purged %d stale entries from reference corpus", len(ids_to_delete))
+    except Exception:
+        pass
 
 
 def classify_motion_type(question: str) -> str:

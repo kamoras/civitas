@@ -318,6 +318,35 @@ async def fetch_bill_summaries(
     return results
 
 
+async def fetch_bill_titles(
+    client: httpx.AsyncClient,
+    db: Session,
+    congress: int,
+    bill_type: str,
+    bill_number: int,
+) -> list[dict]:
+    """Fetch all titles for a bill, including the official descriptive title.
+
+    Congress.gov bills have multiple title types: display title (short name
+    like 'Jaime's Law'), official title ('A bill to prevent the purchase of
+    ammunition by prohibited purchasers'), and short titles as introduced/
+    passed.  The official title (titleTypeCode 6) provides the most
+    descriptive text for semantic classification.
+    """
+    cache_key = f"bill-titles-{congress}-{bill_type}-{bill_number}"
+    cached = api_cache_get(db, "congress", cache_key)
+    if cached is not None:
+        return cached
+
+    data = await _fetch_with_retry(
+        client,
+        f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type}/{bill_number}/titles",
+    )
+    results = (data or {}).get("titles", [])
+    api_cache_set(db, "congress", cache_key, results)
+    return results
+
+
 async def fetch_roll_call_vote(
     client: httpx.AsyncClient,
     db: Session,

@@ -143,7 +143,6 @@ def embed_bills(bills: list[dict]) -> None:
             - description: summary
             - policyArea: policy domain
             - stance: specific position
-            - impactedGroups: affected groups
             - congress: congress number
     """
     if not bills:
@@ -164,18 +163,14 @@ def embed_bills(bills: list[dict]) -> None:
     ids = []
 
     for bill in bills:
-        # Rich text: combine title, description, policy area, stance, impacted groups
         policy_area = bill.get("policyArea", "")
         stance = bill.get("stance", "")
-        groups = bill.get("impactedGroups", [])
-        groups_str = ", ".join(groups) if isinstance(groups, list) else ""
 
         text = (
             f"{bill.get('billName', '')} "
             f"{bill.get('description', '')} "
             f"Policy: {policy_area}. "
-            f"Stance: {stance}. "
-            f"Affects: {groups_str}"
+            f"Stance: {stance}."
         ).strip()
 
         documents.append(text)

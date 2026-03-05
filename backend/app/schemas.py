@@ -43,13 +43,6 @@ class RepresentationScoreSchema(CamelModel):
     funding_diversity: float
 
 
-class PolicyBreakdownSchema(CamelModel):
-    policy_area: str
-    total_votes: int
-    with_stance: int
-    against_stance: int
-
-
 class PolicyAreaDetail(CamelModel):
     area: str
     confidence: float
@@ -65,14 +58,7 @@ class KeyVoteSchema(CamelModel):
     policy_areas: list[PolicyAreaDetail] = []
     party_alignment_weight: float = 0.0
     stance: str = "neutral"
-    stance_vote: Literal["Yea", "Nay"] | None = None
-    impacted_groups: list[str] = []
-    affected_industries: list[str] = []
-    description: str
-    corporate_interest: str
-    public_impact: str
-    relevant_donors: list[str]
-    relevant_donor_total: float
+    description: str = ""
     party_leaning: Literal["R", "D", "bipartisan"] | None = None
     voted_with_party: bool | None = None
     vote_category: Literal["recent", "key"] = "key"
@@ -89,10 +75,6 @@ class FundingSchema(CamelModel):
 
 class VotingRecordSchema(CamelModel):
     total_votes: int
-    scoreable_votes: int = 0
-    donor_aligned_votes: int = 0
-    donor_opposed_votes: int = 0
-    policy_breakdown: list[PolicyBreakdownSchema] = []
     voted_with_party_count: int = 0
     voted_against_party_count: int = 0
     party_loyalty_pct: float = 0.0

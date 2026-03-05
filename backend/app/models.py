@@ -23,24 +23,9 @@ class Senator(Base):
     score_independent_voting: Mapped[float] = mapped_column(Float, default=0.0)
     score_funding_diversity: Mapped[float] = mapped_column(Float, default=0.0)
 
-    # Legacy columns (kept for migration safety)
-    score_transparency: Mapped[float] = mapped_column(Float, default=0.0)
-    score_accessibility: Mapped[float] = mapped_column(Float, default=0.0)
-
-    # Legacy columns (kept for migration safety, will be dropped later)
-    score_corporate_funding: Mapped[float] = mapped_column(Float, default=0.0)
-    score_lobbyist_alignment: Mapped[float] = mapped_column(Float, default=0.0)
-    score_industry_concentration: Mapped[float] = mapped_column(Float, default=0.0)
-    score_flip_flop_index: Mapped[float] = mapped_column(Float, default=0.0)
-    score_revolving_door: Mapped[float] = mapped_column(Float, default=0.0)
-
     total_raised: Mapped[float] = mapped_column(Float, default=0.0)
     total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)
     small_donor_percentage: Mapped[float] = mapped_column(Float, default=0.0)
-    # Legacy columns (kept for migration safety, will be dropped later)
-    approval_rating: Mapped[float | None] = mapped_column(Float, nullable=True)
-    disapproval_rating: Mapped[float | None] = mapped_column(Float, nullable=True)
-    approval_source: Mapped[str | None] = mapped_column(String, nullable=True)
 
     voting_summary: Mapped[str] = mapped_column(Text, default="")
     platform_summary: Mapped[str] = mapped_column(Text, default="")
@@ -100,22 +85,11 @@ class KeyVote(Base):
     bill_id: Mapped[str] = mapped_column(String, nullable=False)
     date: Mapped[str] = mapped_column(String, nullable=False)
     vote: Mapped[str] = mapped_column(String, nullable=False)
-    # New policy stance fields
     policy_area: Mapped[str] = mapped_column(String, default="PROCEDURAL")
     policy_areas: Mapped[str] = mapped_column(Text, default="[]")  # JSON: [{area, confidence, party}]
     party_alignment_weight: Mapped[float] = mapped_column(Float, default=0.0)
     stance: Mapped[str] = mapped_column(String, default="neutral")
-    stance_vote: Mapped[str | None] = mapped_column(String, nullable=True)  # "Yea" or "Nay"
-    impacted_groups: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
-    affected_industries: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array
-    # Legacy fields (kept for transition)
-    pro_business_vote: Mapped[str | None] = mapped_column(String, nullable=True)
-    classification: Mapped[str] = mapped_column(String, nullable=False, default="mixed")
     description: Mapped[str] = mapped_column(Text, default="")
-    corporate_interest: Mapped[str] = mapped_column(Text, default="")
-    public_impact: Mapped[str] = mapped_column(Text, default="")
-    relevant_donors: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
-    relevant_donor_total: Mapped[float] = mapped_column(Float, default=0.0)
     party_leaning: Mapped[str | None] = mapped_column(String, nullable=True)  # "R", "D", "bipartisan"
     voted_with_party: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     vote_category: Mapped[str] = mapped_column(String, default="key")  # "recent" or "key"

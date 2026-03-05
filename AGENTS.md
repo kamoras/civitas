@@ -42,7 +42,7 @@ modern-punk/
 │   │   ├── config.py            # Pydantic settings from .env
 │   │   ├── config_definitions.py # Enums, weights, industry codes (single source of truth)
 │   │   └── main.py              # FastAPI app with lifespan hooks
-│   ├── tests/                   # 345 pytest tests
+│   ├── tests/                   # 359 pytest tests
 │   ├── requirements.txt
 │   ├── pytest.ini
 │   └── Dockerfile
@@ -138,7 +138,7 @@ employee PAC or a purely political PAC), the system defers to tier 2
 (embedding similarity) rather than guessing. Each tier can only promote to
 the next — never skip tiers or substitute hardcoded rules.
 
-### 2. Self-correcting learning store
+### 2. Self-correcting learning store with version-aware invalidation
 
 The persistent learning store (SQLite `learned_classifications` table)
 accumulates labeled classifications across pipeline runs, implementing a form
@@ -146,10 +146,23 @@ of self-training (Yarowsky 1995, ACL). High-confidence classifications from
 prior runs become labeled examples for future runs, reducing latency and
 improving accuracy over time without manual intervention.
 
-When the embedding model disagrees with a cached entry at high confidence,
-the embedding result overrides the stale entry. This keeps the store
-self-correcting as prototype descriptions improve — no manual data cleanup
-needed.
+**Version-aware artifact management** prevents stale data from persisting
+when analysis code changes. At pipeline start, `_compute_analysis_code_hash()`
+computes a SHA-256 fingerprint of all analysis-relevant source files
+(everything in `app/pipeline/` except `fetch/`, plus `config_definitions.py`).
+This fingerprint is compared to the stored hash from the last pipeline run:
+
+- **Same hash** → all learning data is preserved (learning store, analysis
+  cache, ChromaDB reference corpus). The self-training system accumulates
+  knowledge across same-version runs.
+- **Different hash** → all three persistence layers are cleared so updated
+  algorithms start fresh. The API cache (raw Congress.gov / FEC / GovInfo
+  responses) is never cleared — it reflects source data, not processing logic.
+
+The learning store upserts always overwrite prior entries (no confidence
+guards), ensuring the current run's classifications take precedence. Within
+a single pipeline run, this is harmless because learning store lookups
+short-circuit re-classification of already-seen entities.
 
 The `normalize_learning_store()` function runs at the start of the kNN phase
 to fix case inconsistencies. Stale or hallucinated category labels (e.g.,
@@ -236,6 +249,16 @@ be triggered manually via `POST /api/admin/pipeline/trigger`. It executes in
 
 Each senator is processed independently. The pipeline uses `PipelineRun`
 records to track progress and supports resumption.
+
+The ANALYZE phase uses a **producer-consumer pattern** to overlap embedding
+work with LLM inference. A background "Librarian" thread
+(`_embedding_producer` in `orchestrator.py`) pre-computes all embedding-based
+analyses for the next senator via `precompute_senator_analysis()` in
+`cross_reference.py`, while the main "Analyst" thread waits for the LLM HTTP
+response. Results flow through a bounded `queue.Queue(maxsize=3)`. On a Pi 5,
+this overlaps ~2-4s of embedding work with ~15-30s LLM calls. LLM prompts use
+**context compression**: platform text is distilled into concise policy topic
+bullets via `_extract_platform_topics()` rather than feeding raw scraped text.
 
 ## Development
 
