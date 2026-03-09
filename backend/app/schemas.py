@@ -169,6 +169,12 @@ class SenatorSchema(CamelModel):
     sponsorship_description: str = ""
 
 
+class ScoreTrendSchema(CamelModel):
+    direction: Literal["up", "down", "stable", "new"] = "new"
+    change: float = 0.0
+    previous_score: float | None = None
+
+
 class LeaderboardEntrySchema(CamelModel):
     id: str
     name: str
@@ -181,6 +187,7 @@ class LeaderboardEntrySchema(CamelModel):
     total_from_pacs: float
     small_donor_percentage: float
     top_industry: str | None = None
+    trend: ScoreTrendSchema = ScoreTrendSchema()
 
 
 # --- Pipeline / Health schemas ---
@@ -314,3 +321,77 @@ class JusticeLeaderboardEntry(CamelModel):
     majority_pct: float = 0.0
     dissent_pct: float = 0.0
     cross_bloc_pct: float = 0.0
+
+
+# ── Action Center ─────────────────────────────────────────────────
+
+class RelatedExploreDoc(CamelModel):
+    id: int
+    title: str
+    doc_type: str
+    date: str
+    url: str | None = None
+
+
+class RelatedSenator(CamelModel):
+    id: str
+    name: str
+    state: str
+    party: Literal["D", "R", "I"]
+    overall_score: float
+    leadership_score: float | None = None
+
+
+class ActionItemSchema(CamelModel):
+    text: str
+    type: str = "general"
+    url: str | None = None
+
+
+class RelatedBillSchema(CamelModel):
+    name: str
+    id: str
+    url: str
+
+
+class ActionIssueSchema(CamelModel):
+    id: int
+    date: str
+    rank: int
+    title: str
+    summary: str
+    facts: list[str] = []
+    actions: list[ActionItemSchema] = []
+    source_urls: list[str] = []
+    source_names: list[str] = []
+    policy_areas: list[str] = []
+    related_bills: list[RelatedBillSchema] = []
+    related_explore_docs: list[RelatedExploreDoc] = []
+    related_senators: list[RelatedSenator] = []
+
+
+class MonitorUpdateSchema(CamelModel):
+    id: int
+    date: str
+    summary: str
+    source_url: str
+    source_name: str
+    article_title: str
+
+
+class NationalMonitorSchema(CamelModel):
+    id: int
+    slug: str
+    title: str
+    description: str
+    category: str
+    status: str
+    policy_areas: list[str] = []
+    created_at: str
+    updated_at: str
+    last_article_date: str | None = None
+    update_count: int = 0
+
+
+class NationalMonitorDetailSchema(NationalMonitorSchema):
+    updates: list[MonitorUpdateSchema] = []

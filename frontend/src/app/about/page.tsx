@@ -59,7 +59,7 @@ export default function AboutPage() {
     <>
       <MatrixRain />
       <Navbar />
-      <main id="main-content" className="pt-24 pb-16 px-4">
+      <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
         <div className="max-w-3xl mx-auto">
           <div className="text-center mb-10">
             <h1 className="font-pixel text-xl sm:text-3xl text-matrix-green tracking-widest mb-2">
@@ -96,10 +96,17 @@ export default function AboutPage() {
             <P>
               When data is missing or insufficient, scores default to a neutral 50 out of 100.
               No politician is penalized for something we cannot measure, and no politician
-              receives a perfect score without evidence. This implements Bayesian shrinkage
+              receives a perfect score without evidence.               This implements Bayesian shrinkage
               toward a neutral prior — a standard statistical technique for preventing
               extreme estimates from small samples.
               <Cite id="19">Efron &amp; Morris 1975</Cite>
+            </P>
+            <P>
+              The Action Center extends this mission to daily civic engagement. It
+              automatically surfaces trending issues from news analysis, provides objective
+              summaries free of editorial opinion, and recommends non-partisan actions
+              citizens can take to participate in their government — without assuming which
+              side of any issue the reader supports.
             </P>
           </Section>
 
@@ -349,6 +356,83 @@ export default function AboutPage() {
               metric used for senators but adapted to the judicial context where party
               loyalty is replaced by jurisprudential consistency.
             </P>
+          </Section>
+
+          {/* ── Action Center ── */}
+          <Section title="ACTION CENTER">
+            <P>
+              The Action Center surfaces the most important civic issues of the day
+              using automated news analysis. It is designed to inform, not persuade —
+              every summary is non-partisan and presents facts without editorial framing.
+            </P>
+
+            <div className="space-y-4 mt-4">
+              <div>
+                <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">NEWS ANALYSIS PIPELINE</h3>
+                <P>
+                  RSS feeds from editorially independent, low-bias news sources (NPR Politics,
+                  PBS NewsHour, The Hill, AP News) are parsed hourly. Each article is filtered
+                  for U.S. policy relevance using embedding cosine similarity against policy
+                  area prototypes — the same sentence-transformer model used throughout the
+                  platform. Articles that pass the relevance threshold are clustered by semantic
+                  similarity to group coverage of the same story across sources.
+                </P>
+              </div>
+
+              <div>
+                <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">TRENDING TOPIC INTEGRATION</h3>
+                <P>
+                  Clusters are ranked using a weighted combination of coverage breadth (40%) —
+                  how many independent sources cover the story — and trending relevance (60%) —
+                  whether the topic aligns with what the public is actively discussing. Trending
+                  signals are drawn from Google Trends and policy-relevant Reddit communities,
+                  cross-referenced with the news clusters via embedding similarity.
+                </P>
+              </div>
+
+              <div>
+                <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">NON-PARTISAN SUMMARIZATION</h3>
+                <P>
+                  The top-ranked issues are summarized by the LLM with explicit instructions
+                  to present objective facts, avoid opinion or editorial framing, and recommend
+                  actions that do not assume which side of an issue the reader supports.
+                  Recommended actions include contacting representatives, attending public
+                  hearings, and reviewing primary source documents — not advocating for or
+                  against any policy position.
+                </P>
+              </div>
+
+              <div>
+                <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">CROSS-REFERENCING</h3>
+                <P>
+                  When a ranked politician is involved in a trending issue, the Action Center
+                  links directly to their scorecard. Related government documents from the
+                  Explore database are matched using semantic search. Source articles include
+                  direct links to the original reporting.
+                </P>
+              </div>
+
+              <div>
+                <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">GOVERNMENT ACTIVITY TABS</h3>
+                <P>
+                  Dedicated tabs for Senate, House, and Executive branches display the most
+                  recent government documents — floor speeches, executive orders, proposed
+                  rules, and notices — pulled directly from the Explore database, providing
+                  a quick overview of each branch&apos;s latest activity.
+                </P>
+              </div>
+
+              <div>
+                <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">INTERACTIVE GLOBAL NEWS MAP</h3>
+                <P>
+                  The World tab features a 3D interactive globe that visualizes U.S.-related
+                  international news coverage. Countries mentioned in current news feeds are
+                  highlighted with points scaled by article count. Clicking a country shows
+                  recent headlines about U.S. relations with that nation, linking to the
+                  original source articles.
+                </P>
+              </div>
+            </div>
           </Section>
 
           {/* ── Party Alignment ── */}
@@ -850,6 +934,10 @@ export default function AboutPage() {
               <Row label="Classification" value="Zero hardcoded rules — all classifications via embedding similarity or kNN" />
               <Row label="Metric Tooltips" value="Every scorecard metric has a [?] tooltip explaining what it measures" />
               <Row label="Branches Covered" value="Senate (100), Presidents (historical + modern), Supreme Court (9 justices)" />
+              <Row label="Action Center" value="Hourly news analysis: RSS parsing, embedding-based relevance filtering, article clustering, trending topic ranking, LLM summarization" />
+              <Row label="News Sources" value="NPR Politics, PBS NewsHour, The Hill, AP News — editorially independent, low-bias sources" />
+              <Row label="Trending Integration" value="Google Trends RSS + Reddit policy subreddits, cross-referenced via embedding similarity" />
+              <Row label="Globe Visualization" value="react-globe.gl — interactive 3D globe for international news mapping" />
             </div>
           </Section>
 

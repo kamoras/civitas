@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { KeyVote, PaginatedVotes, VoteCounts, VotingRecord as VotingRecordType } from "@/types/senator";
-import { formatCurrency } from "@/lib/formatting";
 import { voteSourceUrl } from "@/lib/sources";
 import { fetchSenatorVotes } from "@/lib/api";
 import CollapsibleSection from "./CollapsibleSection";
@@ -256,6 +255,7 @@ function VoteFilter({
   return (
     <button
       onClick={onClick}
+      aria-pressed={active}
       className={`text-[10px] px-2 py-1 border font-terminal transition-all ${
         active
           ? "text-matrix-green border-matrix-green/40 bg-matrix-green/10"
@@ -303,6 +303,7 @@ function Pagination({
           <button
             key={p}
             onClick={() => onPageChange(p)}
+            aria-current={p === page ? "page" : undefined}
             className={`text-xs w-7 h-7 font-terminal border transition-all ${
               p === page
                 ? "text-matrix-green border-matrix-green/40 bg-matrix-green/10"
@@ -377,7 +378,7 @@ function PaginatedVoteList({
 
   if (!data && loading) {
     return (
-      <div className="terminal-window p-4 text-center">
+      <div className="terminal-window p-4 text-center" role="status" aria-live="polite">
         <span className="text-matrix-green/50 text-sm animate-pulse">Loading votes...</span>
       </div>
     );
@@ -385,7 +386,7 @@ function PaginatedVoteList({
 
   if (error) {
     return (
-      <div className="terminal-window p-4 text-center">
+      <div className="terminal-window p-4 text-center" role="alert">
         <span className="text-red-400 text-sm">{error}</span>
       </div>
     );

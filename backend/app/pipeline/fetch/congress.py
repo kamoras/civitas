@@ -193,6 +193,46 @@ async def fetch_senators(
     return members
 
 
+async def fetch_representatives(
+    client: httpx.AsyncClient, db: Session
+) -> list[dict]:
+    """Fetch all current House representatives from Congress.gov."""
+    cached = api_cache_get(db, "congress", "representatives-list")
+    if cached is not None:
+        return cached
+
+    logger.info("Fetching representatives from Congress.gov...")
+    all_members: list[dict] = []
+    offset = 0
+    limit = 250
+
+    while True:
+        data = await _fetch_with_retry(
+            client,
+            f"{CONGRESS_API_BASE}/member?currentMember=true&limit={limit}&offset={offset}",
+        )
+        if not data or not data.get("members"):
+            break
+        all_members.extend(data["members"])
+        if len(data["members"]) < limit:
+            break
+        offset += limit
+
+    members = []
+    for m in all_members:
+        terms_obj = m.get("terms") or {}
+        terms_list = terms_obj.get("item", []) if isinstance(terms_obj, dict) else []
+        if not terms_list:
+            continue
+        most_recent = max(terms_list, key=lambda t: t.get("startYear", 0))
+        if most_recent.get("chamber") == "House of Representatives":
+            members.append(m)
+
+    logger.info("Fetched %d representatives (from %d total members)", len(members), len(all_members))
+    api_cache_set(db, "congress", "representatives-list", members)
+    return members
+
+
 async def fetch_member_detail(
     client: httpx.AsyncClient, db: Session, bioguide_id: str
 ) -> dict | None:
@@ -214,19 +254,31 @@ async def fetch_member_detail(
 async def fetch_member_sponsored(
     client: httpx.AsyncClient, db: Session, bioguide_id: str
 ) -> list[dict]:
-    """Fetch a member's sponsored legislation."""
-    cache_key = f"member-sponsored-{bioguide_id}"
+    """Fetch a member's sponsored legislation with pagination."""
+    cache_key = f"member-sponsored-v2-{bioguide_id}"
     cached = api_cache_get(db, "congress", cache_key)
     if cached is not None:
         return cached
 
-    data = await _fetch_with_retry(
-        client,
-        f"{CONGRESS_API_BASE}/member/{bioguide_id}/sponsored-legislation?limit=50",
-    )
-    results = (data or {}).get("sponsoredLegislation", [])
-    api_cache_set(db, "congress", cache_key, results)
-    return results
+    all_results: list[dict] = []
+    offset = 0
+    page_size = 250
+    max_pages = 4
+
+    for _ in range(max_pages):
+        data = await _fetch_with_retry(
+            client,
+            f"{CONGRESS_API_BASE}/member/{bioguide_id}"
+            f"/sponsored-legislation?limit={page_size}&offset={offset}",
+        )
+        page = (data or {}).get("sponsoredLegislation", [])
+        all_results.extend(page)
+        if len(page) < page_size:
+            break
+        offset += page_size
+
+    api_cache_set(db, "congress", cache_key, all_results)
+    return all_results
 
 
 async def fetch_bill(
@@ -543,6 +595,171 @@ async def fetch_recent_roll_calls(
             results.append(roll_data)
 
     logger.info("Fetched %d recent roll calls", len(results))
+    api_cache_set(db, "congress", cache_key, results)
+    return results
+
+
+async def fetch_house_roll_call_vote(
+    client: httpx.AsyncClient,
+    db: Session,
+    year: int,
+    roll_call_number: int,
+) -> dict | None:
+    """Fetch House roll call vote from clerk.house.gov XML feed."""
+    cache_key = f"rollcall-house-{year}-{roll_call_number}"
+    cached = api_cache_get(db, "congress", cache_key)
+    if cached is not None:
+        return cached
+
+    await _rate_limiter.acquire()
+    padded_roll = str(roll_call_number)
+    url = f"https://clerk.house.gov/evs/{year}/roll{padded_roll}.xml"
+
+    try:
+        logger.debug("House Clerk vote: %s", url)
+        resp = await client.get(url, timeout=30.0)
+        if resp.status_code != 200:
+            logger.warning(
+                "House roll call not found: %d-%d (%d)",
+                year, roll_call_number, resp.status_code,
+            )
+            return None
+
+        result = parse_house_vote_xml(resp.text, year, roll_call_number)
+        if result:
+            api_cache_set(db, "congress", cache_key, result)
+        return result
+    except Exception as e:
+        logger.error(
+            "Failed to fetch House roll call %d-%d: %s",
+            year, roll_call_number, str(e),
+        )
+        return None
+
+
+def parse_house_vote_xml(
+    xml_text: str, year: int, roll_number: int
+) -> dict | None:
+    """Parse House Clerk roll call vote XML into a structured object."""
+    try:
+        root = etree.fromstring(xml_text.encode("utf-8"))
+    except etree.XMLSyntaxError:
+        return None
+
+    vote_metadata = root.find("vote-metadata")
+    if vote_metadata is None:
+        return None
+
+    def _meta_text(tag: str) -> str:
+        el = vote_metadata.find(tag)
+        return (el.text or "").strip() if el is not None else ""
+
+    congress_str = _meta_text("congress")
+    session_str = _meta_text("session")
+    question = _meta_text("vote-question")
+    legis_num = _meta_text("legis-num")
+    vote_desc = _meta_text("vote-desc")
+
+    vote_data = root.find("vote-data")
+    if vote_data is None:
+        return None
+
+    members: list[dict] = []
+    for rv in vote_data.iter("recorded-vote"):
+        legislator = rv.find("legislator")
+        vote_el = rv.find("vote")
+        if legislator is None or vote_el is None:
+            continue
+
+        members.append({
+            "bioguideId": legislator.get("name-id", ""),
+            "lastName": legislator.get("sort-field", ""),
+            "firstName": legislator.text or "",
+            "party": legislator.get("party", ""),
+            "state": legislator.get("state", ""),
+            "voteCast": (vote_el.text or "").strip(),
+        })
+
+    if not members:
+        return None
+
+    return {
+        "year": year,
+        "congress": int(congress_str) if congress_str.isdigit() else 0,
+        "session": int(session_str) if session_str.isdigit() else 0,
+        "rollNumber": roll_number,
+        "voteTitle": vote_desc or legis_num,
+        "voteDate": "",
+        "question": question,
+        "documentTitle": vote_desc or legis_num,
+        "documentName": legis_num,
+        "members": members,
+        "chamber": "House",
+    }
+
+
+async def fetch_recent_house_roll_calls(
+    client: httpx.AsyncClient,
+    db: Session,
+    year: int = 2025,
+    count: int = 15,
+) -> list[dict]:
+    """Fetch the last `count` House roll calls for a given year.
+
+    Probes clerk.house.gov starting from a high roll number, working
+    backward until valid votes are found.
+    """
+    cache_key = f"recent-house-rollcalls-{year}-{count}"
+    cached = api_cache_get(db, "congress", cache_key)
+    if cached is not None:
+        return cached
+
+    logger.info("Discovering recent House roll calls (year=%d)...", year)
+
+    import asyncio
+
+    highest_valid = 0
+
+    for probe in [700, 500, 400, 300, 200, 100, 50, 25, 10]:
+        url = f"https://clerk.house.gov/evs/{year}/roll{probe}.xml"
+        await _rate_limiter.acquire()
+        try:
+            resp = await client.get(url, timeout=15.0)
+            if resp.status_code == 200:
+                highest_valid = max(highest_valid, probe)
+                break
+        except Exception:
+            continue
+
+    if highest_valid == 0:
+        logger.warning("No recent House roll calls found for year %d", year)
+        return []
+
+    check = highest_valid + 1
+    while check <= highest_valid + 50:
+        url = f"https://clerk.house.gov/evs/{year}/roll{check}.xml"
+        await _rate_limiter.acquire()
+        try:
+            resp = await client.get(url, timeout=10.0)
+            if resp.status_code == 200:
+                highest_valid = check
+                check += 1
+            else:
+                break
+        except Exception:
+            break
+
+    logger.info("Highest House roll call found: %d", highest_valid)
+
+    results: list[dict] = []
+    for roll in range(highest_valid, max(0, highest_valid - count - 5), -1):
+        if len(results) >= count:
+            break
+        roll_data = await fetch_house_roll_call_vote(client, db, year, roll)
+        if roll_data:
+            results.append(roll_data)
+
+    logger.info("Fetched %d recent House roll calls", len(results))
     api_cache_set(db, "congress", cache_key, results)
     return results
 

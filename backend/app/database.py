@@ -30,22 +30,44 @@ class Base(DeclarativeBase):
 
 
 def _migrate_columns() -> None:
-    """Add any missing nullable columns to existing tables.
+    """Align existing tables with current ORM models.
 
     SQLAlchemy's create_all does not ALTER existing tables, so we handle
-    lightweight column additions here for development convenience.
-    After a full data reset + schema rebuild, this list can be empty.
+    lightweight column additions and legacy column drops here.
     """
     inspector = inspect(engine)
-    migrations: list[tuple[str, str, str]] = []
+    additions: list[tuple[str, str, str]] = [
+        ("action_issues", "related_senators", "TEXT DEFAULT '[]'"),
+    ]
+
+    drops: list[tuple[str, str]] = [
+        ("key_votes", "impacted_groups"),
+        ("key_votes", "classification"),
+        ("key_votes", "corporate_interest"),
+        ("key_votes", "public_impact"),
+        ("key_votes", "relevant_donors"),
+        ("key_votes", "relevant_donor_total"),
+        ("key_votes", "stance_vote"),
+        ("key_votes", "pro_business_vote"),
+        ("key_votes", "affected_industries"),
+    ]
+
     with engine.begin() as conn:
-        for table, column, col_type in migrations:
+        for table, column, col_type in additions:
             if not inspector.has_table(table):
                 continue
             existing = {c["name"] for c in inspector.get_columns(table)}
             if column not in existing:
                 logger.info("Adding column %s.%s", table, column)
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
+
+        for table, column in drops:
+            if not inspector.has_table(table):
+                continue
+            existing = {c["name"] for c in inspector.get_columns(table)}
+            if column in existing:
+                logger.info("Dropping legacy column %s.%s", table, column)
+                conn.execute(text(f"ALTER TABLE {table} DROP COLUMN {column}"))
 
 
 def init_db() -> None:
@@ -92,13 +114,24 @@ def reset_all_data() -> dict:
             models.LobbyingMatch,
             models.CampaignPromise,
             models.SponsoredBill,
+            models.RepDonor,
+            models.RepIndustryDonation,
+            models.RepKeyVote,
+            models.RepLobbyingMatch,
+            models.RepCampaignPromise,
+            models.RepSponsoredBill,
             models.JusticeVote,
+            models.MonitorUpdate,
+            models.NationalMonitor,
             models.LearnedClassification,
             models.ApiCache,
             models.AnalysisCache,
             models.ExploreDocument,
+            models.ScoreSnapshot,
+            models.DailyTheme,
             models.PipelineRun,
             models.Senator,
+            models.Representative,
             models.Justice,
             models.President,
         ]:

@@ -69,15 +69,23 @@ export default function MatrixRain() {
       animationId = requestAnimationFrame(draw);
     };
 
-    // Check for reduced motion preference
-    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-    if (!prefersReducedMotion) {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (!mq.matches) {
       draw();
     }
 
+    const handler = () => {
+      if (mq.matches) {
+        cancelAnimationFrame(animationId);
+      } else {
+        draw();
+      }
+    };
+    mq.addEventListener("change", handler);
+
     return () => {
       cancelAnimationFrame(animationId);
+      mq.removeEventListener("change", handler);
       window.removeEventListener("resize", resize);
     };
   }, []);

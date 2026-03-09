@@ -17,6 +17,15 @@ export default function TypewriterText({
 }: TypewriterTextProps) {
   const [displayed, setDisplayed] = useState("");
   const [started, setStarted] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReducedMotion(mq.matches);
+    const handler = () => setReducedMotion(mq.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
 
   useEffect(() => {
     const startTimer = setTimeout(() => setStarted(true), startDelay);
@@ -24,6 +33,10 @@ export default function TypewriterText({
   }, [startDelay]);
 
   useEffect(() => {
+    if (reducedMotion) {
+      setDisplayed(text);
+      return;
+    }
     if (!started) return;
 
     let i = 0;
@@ -37,13 +50,15 @@ export default function TypewriterText({
     }, speed);
 
     return () => clearInterval(interval);
-  }, [text, speed, started]);
+  }, [text, speed, started, reducedMotion]);
 
   return (
     <span className={className} aria-label={text}>
       <span aria-hidden="true">
         {displayed}
-        <span className="animate-blink text-matrix-green">_</span>
+        {!reducedMotion && (
+          <span className="animate-blink text-matrix-green">_</span>
+        )}
       </span>
     </span>
   );

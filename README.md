@@ -2,7 +2,10 @@
 
 Civitas is an open-data AI/ML platform that aggregates data from official
 U.S. government sources into unified transparency scorecards for senators,
-presidents, and Supreme Court justices. Voting records, campaign finance,
+presidents, and Supreme Court justices. It also features an Action Center
+that surfaces trending civic issues from news analysis, provides non-partisan
+summaries with recommended citizen actions, and includes an interactive 3D
+global news map. Voting records, campaign finance,
 floor speeches, judicial opinions, and stated platforms are analyzed using
 embedding-based classification, content-based party alignment, and
 deterministic scoring — all running locally on a Raspberry Pi 5 with zero
@@ -46,6 +49,20 @@ The pipeline runs nightly (or manually triggered) in phases:
 4. **SCORE** — Compute representation sub-scores from real data using
    deterministic, auditable formulas with Bayesian shrinkage
 5. **ASSEMBLE + SAVE** — Build scorecards and persist to database
+
+### Action Center Pipeline
+
+The Action Center runs hourly (separate from the main nightly pipeline) to
+surface trending civic issues:
+
+1. **FETCH** — Parse RSS feeds from low-bias sources (NPR, PBS, The Hill, AP)
+   and fetch trending topics from Google Trends and Reddit
+2. **FILTER** — Embedding similarity filters articles for U.S. policy relevance
+3. **CLUSTER** — Group related articles across sources
+4. **RANK** — Score clusters by coverage breadth (40%) and trending relevance (60%)
+5. **SUMMARIZE** — LLM generates non-partisan summary, key facts, and
+   recommended citizen actions for top issues
+6. **ENRICH** — Cross-reference with senator scorecards and explore documents
 
 The analyze phase uses a **producer-consumer pattern** to overlap
 embedding work with LLM inference. A background "Librarian" thread
@@ -293,10 +310,10 @@ docker compose run --rm --no-deps backend python -m pytest tests/ -v \
 modern-punk/
 ├── backend/
 │   ├── app/
-│   │   ├── api/              # FastAPI route handlers (senators, presidents, justices, explore, admin)
+│   │   ├── api/              # FastAPI route handlers (senators, presidents, justices, explore, action, admin)
 │   │   ├── services/         # Business logic (senator_service with paginated votes)
 │   │   ├── pipeline/
-│   │   │   ├── fetch/        # API clients (Congress.gov, FEC, GovInfo, Senate.gov, Oyez, BLS, Federal Register)
+│   │   │   ├── fetch/        # API clients (Congress.gov, FEC, GovInfo, Senate.gov, Oyez, BLS, Federal Register, news RSS)
 │   │   │   ├── transform/    # Data normalization + embedding-based industry classifier
 │   │   │   ├── analyze/      # Bill, donor, party alignment, scoring, justice scorecards
 │   │   │   │   ├── bill_analyzer.py          # Embedding-based bill classification + stance
@@ -307,6 +324,7 @@ modern-punk/
 │   │   │   │   ├── sponsorship_analysis.py   # PageRank leadership + SVD ideology
 │   │   │   │   ├── policy_alignment.py       # Industry↔policy area mapping
 │   │   │   │   ├── cross_reference.py        # Per-senator LLM narrative
+│   │   │   │   ├── action_center.py          # News analysis + LLM summarization for Action Center
 │   │   │   │   ├── score_calculator.py       # Deterministic scoring formulas
 │   │   │   │   └── ollama_client.py          # LLM backend abstraction
 │   │   │   ├── assemble/     # Senator scorecard builder + validator
@@ -322,11 +340,12 @@ modern-punk/
 ├── frontend/
 │   ├── src/app/              # Next.js app router pages
 │   │   ├── about/            # Methodology page with full citations
+│   │   ├── action/           # Action Center with tabbed interface (issues, branches, globe)
 │   │   ├── explore/          # Semantic search over government documents
 │   │   ├── scorecard/        # Senator, president, and justice scorecards
 │   │   ├── leaderboard/      # Rankings across all branches
 │   │   └── admin/            # Pipeline control panel with granular progress
-│   ├── src/components/       # React components (checker with MetricTooltips, president, justice, explore, effects)
+│   ├── src/components/       # React components (action, checker, president, justice, explore, home, effects)
 │   └── Dockerfile
 ├── deploy.sh                 # Blue/green zero-downtime deploy
 ├── docker-compose.yml

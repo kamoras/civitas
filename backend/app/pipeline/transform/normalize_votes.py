@@ -448,6 +448,68 @@ def _normalize_for_match(text: str) -> str:
     return "".join(c for c in nfkd if not unicodedata.combining(c)).upper()
 
 
+def extract_representative_vote(
+    roll_call_data: dict | None,
+    bioguide_id: str,
+    last_name: str | None = None,
+    state: str | None = None,
+) -> str | None:
+    """Extract a representative's vote from House roll call data.
+
+    House Clerk XML includes bioguide IDs, so we prefer matching on that.
+    Falls back to last_name + state like the Senate matcher.
+    """
+    if not roll_call_data or not roll_call_data.get("members"):
+        return None
+
+    if bioguide_id:
+        for member in roll_call_data["members"]:
+            if member.get("bioguideId") == bioguide_id:
+                return member.get("voteCast") or None
+
+    if last_name and state:
+        target = _normalize_for_match(last_name)
+        state_upper = state.upper()
+        for member in roll_call_data["members"]:
+            if member.get("state", "").upper() != state_upper:
+                continue
+            member_ln = _normalize_for_match(member.get("lastName", ""))
+            if member_ln == target:
+                return member.get("voteCast") or None
+
+    return None
+
+
+def find_house_roll_call(actions: list[dict] | None) -> dict | None:
+    """Try to find the House roll call vote for a bill from its actions.
+
+    Returns:
+        Dict with year and rollCallNumber keys, or None.
+    """
+    if not actions:
+        return None
+
+    for action in actions:
+        text = (action.get("text") or "").lower()
+        if (
+            "passed house" in text
+            or "house agreed" in text
+            or "roll no" in text
+        ) and action.get("recordedVotes"):
+            for rv in action["recordedVotes"]:
+                if rv.get("chamber") == "House" and rv.get("rollNumber"):
+                    url = rv.get("url", "")
+                    import re
+                    year_match = re.search(r"/evs/(\d{4})/", url)
+                    year = int(year_match.group(1)) if year_match else 2025
+                    return {
+                        "year": year,
+                        "rollCallNumber": rv.get("rollNumber"),
+                    }
+
+    return None
+
+
 def find_senate_roll_call(actions: list[dict] | None) -> dict | None:
     """Try to find the Senate roll call vote for a bill from its actions.
 

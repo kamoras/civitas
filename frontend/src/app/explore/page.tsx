@@ -255,7 +255,7 @@ export default function ExplorePage() {
     <>
       <MatrixRain />
       <Navbar />
-      <main id="main-content" className="pt-24 pb-16 px-4">
+      <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
         <div className="max-w-4xl mx-auto">
           {/* Header */}
           <div className="text-center mb-8">
@@ -284,7 +284,7 @@ export default function ExplorePage() {
           {/* Search form */}
           <form onSubmit={handleSubmit} className="mb-6">
             <div className="terminal-window">
-              <div className="terminal-titlebar">
+              <div className="terminal-titlebar" aria-hidden="true">
                 <span className="terminal-dot red" />
                 <span className="terminal-dot yellow" />
                 <span className="terminal-dot green" />
@@ -414,7 +414,7 @@ export default function ExplorePage() {
 
           {/* Error */}
           {error && (
-            <div className="text-center py-8">
+            <div className="text-center py-8" role="alert">
               <p className="text-neon-pink/70 text-sm">{error}</p>
               <p className="text-matrix-green/50 text-xs mt-2">
                 The explore pipeline runs automatically on startup. Try again in a few minutes.
@@ -424,7 +424,7 @@ export default function ExplorePage() {
 
           {/* Loading */}
           {loading && (
-            <div className="text-center py-12">
+            <div className="text-center py-12" role="status" aria-live="polite">
               <div className="inline-block border border-matrix-green/20 rounded px-6 py-3">
                 <span className="text-matrix-green/60 text-sm font-terminal animate-pulse">
                   Searching government records...

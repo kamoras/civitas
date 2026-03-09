@@ -300,7 +300,10 @@ def _build_industry_breakdown(
 
     def _should_skip_for_breakdown(name_upper: str) -> bool:
         ai_class = ai_classifications.get(name_upper)
-        if ai_class and (ai_class.get("skip") or ai_class.get("type") == "CandidateAffiliated"):
+        if ai_class and (
+            ai_class.get("skip")
+            or ai_class.get("type") in ("CandidateAffiliated", "Self-Funded")
+        ):
             return True
         if is_skip_entity(name_upper):
             return True

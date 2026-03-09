@@ -24,6 +24,7 @@ from app.models import (
     LobbyingMatch,
     PipelineRun,
     President,
+    Representative,
     Senator,
 )
 
@@ -361,6 +362,21 @@ async def admin_dashboard(db: Session = Depends(get_db)):
     except Exception:
         llm_stats = {}
 
+    from app.main import PROCESS_STARTED_AT
+
+    first_run = (
+        db.query(PipelineRun.started_at)
+        .order_by(PipelineRun.started_at.asc())
+        .limit(1)
+        .scalar()
+    )
+
+    uptime_info: dict = {
+        "processStartedAt": PROCESS_STARTED_AT,
+        "firstPipelineRun": first_run.isoformat() if first_run else None,
+        "totalRestarts": total_runs,
+    }
+
     return {
         "system": {
             "database": db_status,
@@ -371,6 +387,7 @@ async def admin_dashboard(db: Session = Depends(get_db)):
             "vectorDb": vector_db_stats,
         },
         "host": _read_system_stats(),
+        "uptime": uptime_info,
         "data": data_counts,
         "pipeline": pipeline_info,
         "llm": llm_stats,
@@ -490,6 +507,24 @@ async def admin_trigger_pipeline(
         "senatorFilter": senator,
         "fetchOnly": fetch_only,
     }
+
+
+@router.post("/pipeline/trigger-house", dependencies=[Depends(require_admin)])
+async def admin_trigger_house_pipeline(db: Session = Depends(get_db)):
+    """Trigger a House representative pipeline run."""
+    from app.pipeline.house_pipeline import run_house_pipeline
+
+    def _run_in_thread():
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(run_house_pipeline())
+        except BaseException:
+            logger.exception("House pipeline run failed")
+        finally:
+            loop.close()
+
+    threading.Thread(target=_run_in_thread, daemon=True, name="house-pipeline-run").start()
+    return {"message": "House pipeline triggered"}
 
 
 @router.post("/data/reset", dependencies=[Depends(require_admin)])

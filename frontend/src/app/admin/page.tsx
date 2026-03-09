@@ -13,6 +13,7 @@ import {
   type HostStats,
   type PipelineRunInfo,
   type PipelineStepInfo,
+  type UptimeInfo,
 } from "@/lib/api";
 
 const PHASE_LABELS: Record<string, string> = {
@@ -51,7 +52,8 @@ function formatDuration(seconds: number | null | undefined): string {
 }
 
 function parseUTC(iso: string): Date {
-  return new Date(iso.endsWith("Z") ? iso : iso + "Z");
+  if (iso.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(iso)) return new Date(iso);
+  return new Date(iso + "Z");
 }
 
 function formatTime(iso: string | null | undefined): string {
@@ -291,7 +293,14 @@ function StepProgressMini({ step }: { step: PipelineStepInfo }) {
   const pct = Math.round((done / step.total) * 100);
   return (
     <div className="mt-1">
-      <div className="w-full h-1 bg-matrix-green/10 rounded-full overflow-hidden">
+      <div
+        className="w-full h-1 bg-matrix-green/10 rounded-full overflow-hidden"
+        role="progressbar"
+        aria-valuenow={pct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={`${step.label} progress`}
+      >
         <div
           className={`h-full rounded-full transition-all duration-500 ${
             step.status === "active" ? "bg-neon-cyan/70" : "bg-matrix-green/50"
@@ -369,6 +378,7 @@ function PipelineProgressBar({ status }: { status: AdminPipelineStatus }) {
           aria-valuenow={overallPct}
           aria-valuemin={0}
           aria-valuemax={100}
+          aria-label="Pipeline overall progress"
         >
           <div
             className="h-full bg-neon-cyan transition-all duration-700"
@@ -490,10 +500,12 @@ function UsageBar({
   pct,
   warnAt = 75,
   critAt = 90,
+  ariaLabel,
 }: {
   pct: number;
   warnAt?: number;
   critAt?: number;
+  ariaLabel: string;
 }) {
   const color =
     pct >= critAt
@@ -501,8 +513,16 @@ function UsageBar({
       : pct >= warnAt
         ? "bg-neon-yellow"
         : "bg-matrix-green";
+  const value = Math.min(Math.round(pct), 100);
   return (
-    <div className="w-full h-1.5 bg-matrix-green/10 rounded-sm overflow-hidden">
+    <div
+      className="w-full h-1.5 bg-matrix-green/10 rounded-sm overflow-hidden"
+      role="progressbar"
+      aria-valuenow={value}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-label={ariaLabel}
+    >
       <div
         className={`h-full ${color} transition-all duration-700`}
         style={{ width: `${Math.min(pct, 100)}%` }}
@@ -519,6 +539,143 @@ function formatUptime(seconds: number | null | undefined): string {
   if (d > 0) return `${d}d ${h}h`;
   if (h > 0) return `${h}h ${m}m`;
   return `${m}m`;
+}
+
+// --- Uptime Tracker ---
+function UptimeTracker({
+  uptime,
+  hostUptime,
+}: {
+  uptime?: UptimeInfo;
+  hostUptime?: number | null;
+}) {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const processStart = uptime?.processStartedAt
+    ? parseUTC(uptime.processStartedAt).getTime()
+    : null;
+  const appUptimeSec = processStart ? Math.max(0, Math.floor((now - processStart) / 1000)) : null;
+
+  const firstRun = uptime?.firstPipelineRun
+    ? parseUTC(uptime.firstPipelineRun).getTime()
+    : null;
+  const totalServiceDays = firstRun
+    ? Math.max(1, Math.floor((now - firstRun) / 86400000))
+    : null;
+
+  function tickingUptime(seconds: number): string {
+    const d = Math.floor(seconds / 86400);
+    const h = Math.floor((seconds % 86400) / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    const pad = (n: number) => String(n).padStart(2, "0");
+    if (d > 0) return `${d}d ${pad(h)}:${pad(m)}:${pad(s)}`;
+    return `${pad(h)}:${pad(m)}:${pad(s)}`;
+  }
+
+  return (
+    <div className="terminal-window mb-6">
+      <div className="terminal-titlebar" aria-hidden="true">
+        <span className="terminal-dot red" />
+        <span className="terminal-dot yellow" />
+        <span className="terminal-dot green" />
+        <span className="ml-3 text-white/40 text-xs font-terminal">uptime_tracker</span>
+        <span className="ml-auto text-white/20 text-[10px] font-terminal mr-2">
+          live
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-matrix-green ml-1 animate-pulse" />
+        </span>
+      </div>
+      <div className="p-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* App Uptime — large ticking counter */}
+          <div className="sm:col-span-2">
+            <div className="text-[10px] font-pixel text-matrix-green/50 tracking-wider mb-2">
+              APPLICATION UPTIME
+            </div>
+            <div className="font-terminal text-2xl sm:text-3xl text-neon-cyan tabular-nums tracking-wider">
+              {appUptimeSec != null ? tickingUptime(appUptimeSec) : "—"}
+            </div>
+            <div className="text-[10px] font-terminal text-matrix-green/40 mt-1.5">
+              {uptime?.processStartedAt
+                ? `started ${formatTime(uptime.processStartedAt)}`
+                : "unknown start time"}
+            </div>
+          </div>
+
+          {/* Sidebar stats */}
+          <div className="space-y-3">
+            <div>
+              <div className="text-[10px] font-pixel text-matrix-green/50 tracking-wider mb-0.5">
+                HOST UPTIME
+              </div>
+              <div className="font-terminal text-sm text-matrix-green tabular-nums">
+                {hostUptime != null ? tickingUptime(hostUptime) : "—"}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] font-pixel text-matrix-green/50 tracking-wider mb-0.5">
+                SERVICE AGE
+              </div>
+              <div className="font-terminal text-sm text-matrix-green">
+                {totalServiceDays != null
+                  ? `${totalServiceDays} day${totalServiceDays !== 1 ? "s" : ""}`
+                  : "—"}
+              </div>
+              <div className="text-[10px] font-terminal text-matrix-green/30 mt-0.5">
+                {uptime?.firstPipelineRun
+                  ? `since ${formatTime(uptime.firstPipelineRun)}`
+                  : ""}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Uptime bar visualization */}
+        {appUptimeSec != null && (
+          <div className="mt-4 pt-3 border-t border-matrix-green/10">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[10px] font-pixel text-matrix-green/40">SESSION HEALTH</span>
+              <span className="text-[10px] font-terminal text-matrix-green/60 tabular-nums">
+                {appUptimeSec >= 86400
+                  ? `${Math.floor(appUptimeSec / 86400)}d`
+                  : appUptimeSec >= 3600
+                    ? `${Math.floor(appUptimeSec / 3600)}h`
+                    : `${Math.floor(appUptimeSec / 60)}m`}{" "}
+                since last deploy
+              </span>
+            </div>
+            <div
+              className="w-full h-2 bg-matrix-green/10 rounded-sm overflow-hidden"
+              role="progressbar"
+              aria-valuenow={Math.min(100, Math.round((appUptimeSec / 86400) * 100))}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label="Session health since last deploy"
+            >
+              <div
+                className="h-full bg-neon-cyan/60 rounded-sm transition-all duration-1000"
+                style={{
+                  width: `${Math.min(100, (appUptimeSec / 86400) * 100)}%`,
+                }}
+              />
+            </div>
+            <div className="flex justify-between text-[9px] font-terminal text-matrix-green/25 mt-0.5">
+              <span>0h</span>
+              <span>6h</span>
+              <span>12h</span>
+              <span>18h</span>
+              <span>24h</span>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // --- System Monitor ---
@@ -606,7 +763,7 @@ function SystemMonitor({
                   : "—"}
               </span>
             </div>
-            <UsageBar pct={loadPct} />
+            <UsageBar pct={loadPct} ariaLabel="CPU load percentage" />
             <div className="text-[10px] text-matrix-green/40 font-terminal mt-1 tabular-nums">
               {stats.loadAvg
                 ? `${stats.loadAvg[0].toFixed(1)} · ${stats.loadAvg[1].toFixed(1)} · ${stats.loadAvg[2].toFixed(1)}`
@@ -624,7 +781,7 @@ function SystemMonitor({
                 {stats.memUsedPct}%
               </span>
             </div>
-            <UsageBar pct={stats.memUsedPct} />
+            <UsageBar pct={stats.memUsedPct} ariaLabel="Memory usage percentage" />
             <div className="text-[10px] text-matrix-green/40 font-terminal mt-1 tabular-nums">
               {formatBytes(stats.memUsedBytes)} / {formatBytes(stats.memTotalBytes)}
             </div>
@@ -640,7 +797,7 @@ function SystemMonitor({
                 {stats.diskUsedPct}%
               </span>
             </div>
-            <UsageBar pct={stats.diskUsedPct} warnAt={80} critAt={95} />
+            <UsageBar pct={stats.diskUsedPct} warnAt={80} critAt={95} ariaLabel="Disk usage percentage" />
             <div className="text-[10px] text-matrix-green/40 font-terminal mt-1 tabular-nums">
               {formatBytes(stats.diskFreeBytes)} free
             </div>
@@ -657,7 +814,7 @@ function SystemMonitor({
               </span>
             </div>
             {stats.cpuTempC != null && (
-              <UsageBar pct={(stats.cpuTempC / 85) * 100} warnAt={76} critAt={94} />
+              <UsageBar pct={(stats.cpuTempC / 85) * 100} warnAt={76} critAt={94} ariaLabel="CPU temperature" />
             )}
             <div className="text-[10px] text-matrix-green/40 font-terminal mt-1">
               uptime {formatUptime(stats.uptimeSeconds)}
@@ -683,7 +840,14 @@ function SystemMonitor({
                   </span>
                 </div>
                 {netRate && (
-                  <div className="w-full h-1 rounded-full bg-matrix-green/10 mt-0.5">
+                  <div
+                    className="w-full h-1 rounded-full bg-matrix-green/10 mt-0.5"
+                    role="progressbar"
+                    aria-valuenow={Math.min(100, Math.round((netRate.rx / (1024 * 1024)) * 10))}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label="Network receive rate"
+                  >
                     <div
                       className="h-full rounded-full bg-matrix-green/50 transition-all duration-500"
                       style={{ width: `${Math.min(100, (netRate.rx / (1024 * 1024)) * 10)}%` }}
@@ -699,7 +863,14 @@ function SystemMonitor({
                   </span>
                 </div>
                 {netRate && (
-                  <div className="w-full h-1 rounded-full bg-matrix-green/10 mt-0.5">
+                  <div
+                    className="w-full h-1 rounded-full bg-matrix-green/10 mt-0.5"
+                    role="progressbar"
+                    aria-valuenow={Math.min(100, Math.round((netRate.tx / (1024 * 1024)) * 10))}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label="Network transmit rate"
+                  >
                     <div
                       className="h-full rounded-full bg-neon-blue/50 transition-all duration-500"
                       style={{ width: `${Math.min(100, (netRate.tx / (1024 * 1024)) * 10)}%` }}
@@ -989,6 +1160,8 @@ function AdminDashboardView({
         {/* Completion banner */}
         {completionBanner && (
           <div
+            role="status"
+            aria-live="polite"
             className={`mb-6 border rounded p-4 flex items-center justify-between ${
               completionBanner.status === "completed"
                 ? "border-matrix-green/60 bg-matrix-green/10"
@@ -1025,6 +1198,9 @@ function AdminDashboardView({
             <PipelineProgressBar status={pipelineStatus} />
           </div>
         )}
+
+        {/* Uptime Tracker */}
+        <UptimeTracker uptime={d?.uptime} hostUptime={d?.host?.uptimeSeconds} />
 
         {/* System Monitor */}
         <SystemMonitor token={token} initialStats={d?.host} />
@@ -1132,8 +1308,12 @@ function AdminDashboardView({
                 </p>
               </div>
               {triggerMsg && (
-                <div className="mt-3 p-2 border border-matrix-green/30 rounded bg-matrix-green/10
-                                animate-[fadeIn_0.3s_ease-out]">
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="mt-3 p-2 border border-matrix-green/30 rounded bg-matrix-green/10
+                                animate-[fadeIn_0.3s_ease-out]"
+                >
                   <p className="text-matrix-green text-xs font-terminal font-bold">
                     ✓ {triggerMsg}
                   </p>
@@ -1143,8 +1323,12 @@ function AdminDashboardView({
                 </div>
               )}
               {triggerError && (
-                <div className="mt-3 p-2 border border-neon-pink/30 rounded bg-neon-pink/10
-                                animate-[fadeIn_0.3s_ease-out]">
+                <div
+                  role="alert"
+                  aria-live="polite"
+                  className="mt-3 p-2 border border-neon-pink/30 rounded bg-neon-pink/10
+                                animate-[fadeIn_0.3s_ease-out]"
+                >
                   <p className="text-neon-pink text-xs font-terminal font-bold">
                     ✗ {triggerError}
                   </p>
@@ -1248,7 +1432,14 @@ function AdminDashboardView({
                                 {col.count.toLocaleString()}
                               </span>
                             </div>
-                            <div className="w-full h-1.5 bg-matrix-green/10 rounded-full overflow-hidden mb-2">
+                            <div
+                              className="w-full h-1.5 bg-matrix-green/10 rounded-full overflow-hidden mb-2"
+                              role="progressbar"
+                              aria-valuenow={pct}
+                              aria-valuemin={0}
+                              aria-valuemax={100}
+                              aria-label={`${col.name} vector count`}
+                            >
                               <div
                                 className="h-full bg-matrix-green/60 rounded-full transition-all"
                                 style={{ width: `${Math.max(pct, 2)}%` }}
@@ -1356,7 +1547,14 @@ function AdminDashboardView({
                                         {(count as number).toLocaleString()} ({pct}%)
                                       </span>
                                     </div>
-                                    <div className="w-full h-1 bg-matrix-green/10 rounded-full overflow-hidden">
+                                    <div
+                                      className="w-full h-1 bg-matrix-green/10 rounded-full overflow-hidden"
+                                      role="progressbar"
+                                      aria-valuenow={pct}
+                                      aria-valuemin={0}
+                                      aria-valuemax={100}
+                                      aria-label={`${source} classifications`}
+                                    >
                                       <div
                                         className="h-full bg-neon-cyan/50 rounded-full"
                                         style={{ width: `${Math.max(pct, 1)}%` }}
@@ -1383,7 +1581,14 @@ function AdminDashboardView({
                                         {(count as number).toLocaleString()} ({pct}%)
                                       </span>
                                     </div>
-                                    <div className="w-full h-1 bg-matrix-green/10 rounded-full overflow-hidden">
+                                    <div
+                                      className="w-full h-1 bg-matrix-green/10 rounded-full overflow-hidden"
+                                      role="progressbar"
+                                      aria-valuenow={pct}
+                                      aria-valuemin={0}
+                                      aria-valuemax={100}
+                                      aria-label={`${type} classifications`}
+                                    >
                                       <div
                                         className="h-full bg-matrix-green/40 rounded-full"
                                         style={{ width: `${Math.max(pct, 1)}%` }}

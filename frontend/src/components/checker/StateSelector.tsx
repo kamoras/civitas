@@ -18,6 +18,7 @@ export default function StateSelector({ selectedState, onSelect }: StateSelector
           id="state-select"
           value={selectedState}
           onChange={(e) => onSelect(e.target.value)}
+          autoComplete="address-level1"
           className="appearance-none bg-crt-black border-2 border-matrix-green text-matrix-green font-terminal text-xl px-6 py-3 pr-12 cursor-pointer focus:outline-none focus:border-neon-cyan focus:shadow-[0_0_15px_rgba(0,255,255,0.3)] transition-all"
         >
           <option value="">-- CHOOSE STATE --</option>
@@ -27,7 +28,7 @@ export default function StateSelector({ selectedState, onSelect }: StateSelector
             </option>
           ))}
         </select>
-        <div className="absolute right-3 top-1/2 -translate-y-1/2 text-matrix-green pointer-events-none">
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 text-matrix-green pointer-events-none" aria-hidden="true">
           ▼
         </div>
       </div>

@@ -144,10 +144,17 @@ export interface CampaignPromise {
   partyAlignment: "R" | "D" | "bipartisan" | null;
 }
 
+export interface ScoreTrend {
+  direction: "up" | "down" | "stable" | "new";
+  change: number;
+  previousScore: number | null;
+}
+
 export interface LeaderboardEntry {
   id: string;
   name: string;
   state: string;
+  district?: number;
   party: "D" | "R" | "I";
   yearsInOffice: number;
   initials: string;
@@ -156,4 +163,5 @@ export interface LeaderboardEntry {
   totalFromPacs: number;
   smallDonorPercentage: number;
   topIndustry: string | null;
+  trend?: ScoreTrend;
 }

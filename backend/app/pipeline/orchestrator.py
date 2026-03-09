@@ -31,6 +31,7 @@ from app.models import (
     KeyVote,
     LobbyingMatch,
     PipelineRun,
+    ScoreSnapshot,
     Senator,
     SponsoredBill,
 )
@@ -387,6 +388,43 @@ def upsert_senator(db: Session, data: dict) -> None:
         existing.sponsorship_description = data.get("sponsorshipDescription") or ""
 
     db.flush()
+
+
+def _record_score_snapshots(db: Session) -> None:
+    """Snapshot today's scores for all senators so we can compute trends."""
+    from app.config_definitions import SCORE_WEIGHTS
+
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    existing = db.query(ScoreSnapshot).filter(
+        ScoreSnapshot.entity_type == "senator",
+        ScoreSnapshot.date == today,
+    ).first()
+    if existing:
+        db.query(ScoreSnapshot).filter(
+            ScoreSnapshot.entity_type == "senator",
+            ScoreSnapshot.date == today,
+        ).delete()
+
+    senators = db.query(Senator).all()
+    for s in senators:
+        overall = (
+            s.score_funding_independence * SCORE_WEIGHTS["fundingIndependence"]
+            + s.score_promise_persistence * SCORE_WEIGHTS["promisePersistence"]
+            + s.score_independent_voting * SCORE_WEIGHTS["independentVoting"]
+            + s.score_funding_diversity * SCORE_WEIGHTS["fundingDiversity"]
+        )
+        db.add(ScoreSnapshot(
+            entity_type="senator",
+            entity_id=s.id,
+            date=today,
+            overall_score=round(overall, 2),
+            score_1=s.score_funding_independence,
+            score_2=s.score_promise_persistence,
+            score_3=s.score_independent_voting,
+            score_4=s.score_funding_diversity,
+        ))
+    db.commit()
+    logger.info("Recorded score snapshots for %d senators on %s", len(senators), today)
 
 
 def _acquire_pipeline_lock(db: Session) -> PipelineRun | None:
@@ -913,6 +951,7 @@ async def run_full_pipeline(
             # classifier. The official title from the titles endpoint
             # (e.g., "A bill to prevent the purchase of ammunition...")
             # provides the semantic content needed for accurate classification.
+            min_congress_for_titles = 116
             short_title_bills: dict[str, tuple[int, str, int]] = {}
             for sp_bills in sponsored_map.values():
                 for sp in sp_bills:
@@ -922,7 +961,8 @@ async def run_full_pipeline(
                     congress = sp.get("congress", 0)
                     if (
                         title and len(title) < 50
-                        and bill_type and bill_number and congress
+                        and bill_type and bill_number
+                        and congress >= min_congress_for_titles
                     ):
                         bid = f"{bill_type}.{bill_number}"
                         if bid not in short_title_bills:
@@ -1369,6 +1409,71 @@ async def run_full_pipeline(
 
         progress.complete("prepare_senators", detail=f"{len(senator_prepared)} ready, {fail_count} failed")
 
+        # 3f. Enrich cosponsorship data with senators' own sponsored bills
+        # The significant-bills cosponsorship matrix (33 bills) is too sparse
+        # for 100 senators. Sample each senator's recent sponsored bills
+        # (118th-119th Congress) and fetch their cosponsors to build a richer
+        # senator-senator cosponsorship graph for SVD ideology and PageRank.
+        sponsored_bills_for_cosponsor: list[dict] = []
+        max_per_senator = 10
+        min_congress = 118
+        for prep in senator_prepared:
+            senator = prep["senator"]
+            bio_id = senator.get("bioguideId", "")
+            party = senator.get("party", "")
+            if not bio_id:
+                continue
+            recent_sp = [
+                sp for sp in prep.get("sponsoredBills", [])
+                if sp.get("congress", 0) >= min_congress
+                and sp.get("billId")
+            ]
+            for sp in recent_sp[:max_per_senator]:
+                sponsored_bills_for_cosponsor.append({
+                    "billId": sp["billId"],
+                    "congress": sp["congress"],
+                    "sponsorBioguide": bio_id,
+                    "sponsorParty": party,
+                })
+
+        if sponsored_bills_for_cosponsor:
+            logger.info(
+                "Enriching cosponsorship data: fetching cosponsors for %d recent sponsored bills...",
+                len(sponsored_bills_for_cosponsor),
+            )
+            progress.begin("fetch_sponsored_cosponsors", total=len(sponsored_bills_for_cosponsor))
+            enriched_count = 0
+            async with httpx.AsyncClient() as enrich_client:
+                for sc_idx, sp_bill in enumerate(sponsored_bills_for_cosponsor):
+                    bill_id = sp_bill["billId"]
+                    if bill_id in cosponsors_map:
+                        progress.update("fetch_sponsored_cosponsors", done=sc_idx + 1)
+                        continue
+                    parts = bill_id.split(".")
+                    if len(parts) == 2:
+                        cosponsors = await fetch_bill_cosponsors(
+                            enrich_client, db,
+                            sp_bill["congress"],
+                            parts[0].lower(),
+                            int(parts[1]),
+                        )
+                        if cosponsors:
+                            cosponsors_map[bill_id] = cosponsors
+                            enriched_count += 1
+                    progress.update("fetch_sponsored_cosponsors", done=sc_idx + 1)
+            enriched_total = sum(len(v) for v in cosponsors_map.values())
+            logger.info(
+                "Cosponsorship enrichment: added %d bills (%d total cosponsorships now)",
+                enriched_count, enriched_total,
+            )
+            progress.complete(
+                "fetch_sponsored_cosponsors",
+                detail=f"{enriched_count} new bills, {enriched_total} total cosponsorships",
+            )
+            all_bills_for_analysis = bills_data + sponsored_bills_for_cosponsor
+        else:
+            all_bills_for_analysis = bills_data
+
         # 3f. Sponsorship analysis: PageRank leadership + SVD ideology
         from app.pipeline.analyze.sponsorship_analysis import (
             compute_ideology_scores,
@@ -1387,10 +1492,10 @@ async def run_full_pipeline(
             if s.get("bioguideId")
         }
         leadership_scores = compute_leadership_scores(
-            bills_data, cosponsors_map, senator_bio_ids, senator_party_map,
+            all_bills_for_analysis, cosponsors_map, senator_bio_ids, senator_party_map,
         )
         ideology_scores = compute_ideology_scores(
-            bills_data, cosponsors_map, senator_bio_ids, senator_party_map,
+            all_bills_for_analysis, cosponsors_map, senator_bio_ids, senator_party_map,
         )
         logger.info(
             "Sponsorship analysis: %d leadership scores, %d ideology scores",
@@ -1758,6 +1863,9 @@ async def run_full_pipeline(
         pipeline_run.current_phase = "finalize"
         pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
         db.commit()
+
+        _record_score_snapshots(db)
+
         logger.info("--- Phase 6: FINALIZE ---")
         progress.begin("finalize")
 

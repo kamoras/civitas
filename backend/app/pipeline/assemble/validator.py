@@ -184,7 +184,8 @@ def validate_senator(senator: dict) -> dict:
     ]
 
     # Strip internal/pipeline-only fields not needed in the final output
-    for _internal_key in ("bioguideId",):
+    # Keep bioguideId — needed for DB storage and downstream lookups
+    for _internal_key in ("officialWebsiteUrl", "lastNameForVoteMatch"):
         senator.pop(_internal_key, None)
 
     if warnings:

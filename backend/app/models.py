@@ -149,6 +149,150 @@ class SponsoredBill(Base):
     senator: Mapped["Senator"] = relationship(back_populates="sponsored_bills")
 
 
+class Representative(Base):
+    """U.S. House of Representatives member with representation scores."""
+    __tablename__ = "representatives"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    bioguide_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    state: Mapped[str] = mapped_column(String(2), nullable=False, index=True)
+    district: Mapped[int] = mapped_column(Integer, default=0)
+    party: Mapped[str] = mapped_column(String(1), nullable=False)
+    years_in_office: Mapped[int] = mapped_column(Integer, default=0)
+    initials: Mapped[str] = mapped_column(String(4), default="")
+
+    score_funding_independence: Mapped[float] = mapped_column(Float, default=0.0)
+    score_promise_persistence: Mapped[float] = mapped_column(Float, default=0.0)
+    score_independent_voting: Mapped[float] = mapped_column(Float, default=0.0)
+    score_funding_diversity: Mapped[float] = mapped_column(Float, default=0.0)
+
+    total_raised: Mapped[float] = mapped_column(Float, default=0.0)
+    total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)
+    small_donor_percentage: Mapped[float] = mapped_column(Float, default=0.0)
+
+    voting_summary: Mapped[str] = mapped_column(Text, default="")
+    platform_summary: Mapped[str] = mapped_column(Text, default="")
+    partisan_depth: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    leadership_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ideology_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sponsorship_description: Mapped[str] = mapped_column(String, default="")
+
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    donors: Mapped[list["RepDonor"]] = relationship(back_populates="representative", cascade="all, delete-orphan")
+    industry_donations: Mapped[list["RepIndustryDonation"]] = relationship(back_populates="representative", cascade="all, delete-orphan")
+    key_votes: Mapped[list["RepKeyVote"]] = relationship(back_populates="representative", cascade="all, delete-orphan")
+    lobbying_matches: Mapped[list["RepLobbyingMatch"]] = relationship(back_populates="representative", cascade="all, delete-orphan")
+    campaign_promises: Mapped[list["RepCampaignPromise"]] = relationship(back_populates="representative", cascade="all, delete-orphan")
+    sponsored_bills: Mapped[list["RepSponsoredBill"]] = relationship(back_populates="representative", cascade="all, delete-orphan")
+
+
+class RepDonor(Base):
+    __tablename__ = "rep_donors"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    representative_id: Mapped[str] = mapped_column(String, ForeignKey("representatives.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    total: Mapped[float] = mapped_column(Float, default=0.0)
+    type: Mapped[str] = mapped_column(String, nullable=False)
+    rank: Mapped[int] = mapped_column(Integer, default=0)
+    industry: Mapped[str] = mapped_column(String, default="OTHER")
+    pac_sponsor: Mapped[str | None] = mapped_column(String, nullable=True)
+    pac_industry: Mapped[str | None] = mapped_column(String, nullable=True)
+    pac_analysis: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    representative: Mapped["Representative"] = relationship(back_populates="donors")
+
+
+class RepIndustryDonation(Base):
+    __tablename__ = "rep_industry_donations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    representative_id: Mapped[str] = mapped_column(String, ForeignKey("representatives.id", ondelete="CASCADE"), nullable=False, index=True)
+    industry: Mapped[str] = mapped_column(String, nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    total: Mapped[float] = mapped_column(Float, default=0.0)
+    percentage: Mapped[float] = mapped_column(Float, default=0.0)
+
+    representative: Mapped["Representative"] = relationship(back_populates="industry_donations")
+
+
+class RepKeyVote(Base):
+    __tablename__ = "rep_key_votes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    representative_id: Mapped[str] = mapped_column(String, ForeignKey("representatives.id", ondelete="CASCADE"), nullable=False, index=True)
+    bill_name: Mapped[str] = mapped_column(String, nullable=False)
+    bill_id: Mapped[str] = mapped_column(String, nullable=False)
+    date: Mapped[str] = mapped_column(String, nullable=False)
+    vote: Mapped[str] = mapped_column(String, nullable=False)
+    policy_area: Mapped[str] = mapped_column(String, default="PROCEDURAL")
+    policy_areas: Mapped[str] = mapped_column(Text, default="[]")
+    party_alignment_weight: Mapped[float] = mapped_column(Float, default=0.0)
+    stance: Mapped[str] = mapped_column(String, default="neutral")
+    description: Mapped[str] = mapped_column(Text, default="")
+    party_leaning: Mapped[str | None] = mapped_column(String, nullable=True)
+    voted_with_party: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    vote_category: Mapped[str] = mapped_column(String, default="key")
+    key_vote_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    representative: Mapped["Representative"] = relationship(back_populates="key_votes")
+
+
+class RepLobbyingMatch(Base):
+    __tablename__ = "rep_lobbying_matches"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    representative_id: Mapped[str] = mapped_column(String, ForeignKey("representatives.id", ondelete="CASCADE"), nullable=False)
+    lobbyist_org: Mapped[str] = mapped_column(String, nullable=False)
+    industry: Mapped[str] = mapped_column(String, nullable=False)
+    lobbying_spend: Mapped[float] = mapped_column(Float, default=0.0)
+    donation_to_representative: Mapped[float] = mapped_column(Float, default=0.0)
+    bills_influenced: Mapped[str] = mapped_column(Text, default="[]")
+    representative_vote_aligned: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=None)
+    description: Mapped[str] = mapped_column(Text, default="")
+
+    representative: Mapped["Representative"] = relationship(back_populates="lobbying_matches")
+
+
+class RepCampaignPromise(Base):
+    __tablename__ = "rep_campaign_promises"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    representative_id: Mapped[str] = mapped_column(String, ForeignKey("representatives.id", ondelete="CASCADE"), nullable=False)
+    promise_text: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[str] = mapped_column(String, nullable=False)
+    alignment: Mapped[str] = mapped_column(String, default="unclear")
+    related_votes: Mapped[str] = mapped_column(Text, default="[]")
+    analysis: Mapped[str] = mapped_column(Text, default="")
+    party_alignment: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    representative: Mapped["Representative"] = relationship(back_populates="campaign_promises")
+
+
+class RepSponsoredBill(Base):
+    __tablename__ = "rep_sponsored_bills"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    representative_id: Mapped[str] = mapped_column(String, ForeignKey("representatives.id", ondelete="CASCADE"), nullable=False)
+    bill_id: Mapped[str] = mapped_column(String, nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    introduced_date: Mapped[str] = mapped_column(String, default="")
+    latest_action: Mapped[str] = mapped_column(Text, default="")
+    latest_action_date: Mapped[str] = mapped_column(String, default="")
+    policy_area: Mapped[str] = mapped_column(String, default="")
+    policy_areas: Mapped[str] = mapped_column(Text, default="[]")
+    party_leaning: Mapped[str | None] = mapped_column(String, nullable=True)
+    congress: Mapped[int] = mapped_column(Integer, default=0)
+    bill_type: Mapped[str] = mapped_column(String, default="")
+    is_law: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    representative: Mapped["Representative"] = relationship(back_populates="sponsored_bills")
+
+
 class President(Base):
     __tablename__ = "presidents"
 
@@ -270,6 +414,51 @@ class ExploreDocument(Base):
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
 
 
+class ActionIssue(Base):
+    """Daily action center issues derived from news + legislative activity."""
+    __tablename__ = "action_issues"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    date: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
+    rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, default="")
+    facts: Mapped[str] = mapped_column(Text, default="[]")
+    actions: Mapped[str] = mapped_column(Text, default="[]")
+    source_urls: Mapped[str] = mapped_column(Text, default="[]")
+    source_names: Mapped[str] = mapped_column(Text, default="[]")
+    policy_areas: Mapped[str] = mapped_column(Text, default="[]")
+    related_bill_ids: Mapped[str] = mapped_column(Text, default="[]")
+    related_explore_ids: Mapped[str] = mapped_column(Text, default="[]")
+    related_senators: Mapped[str] = mapped_column(Text, default="[]")
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
+
+class ScoreSnapshot(Base):
+    """Daily score snapshot for tracking leaderboard trends over time."""
+    __tablename__ = "score_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    entity_type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)  # "senator", "president", "justice"
+    entity_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    date: Mapped[str] = mapped_column(String(10), nullable=False, index=True)  # YYYY-MM-DD
+    overall_score: Mapped[float] = mapped_column(Float, nullable=False)
+    score_1: Mapped[float] = mapped_column(Float, default=0.0)
+    score_2: Mapped[float] = mapped_column(Float, default=0.0)
+    score_3: Mapped[float] = mapped_column(Float, default=0.0)
+    score_4: Mapped[float] = mapped_column(Float, default=0.0)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
+
+class DailyTheme(Base):
+    """Daily visual theme for the Action Center, generated from top issues."""
+    __tablename__ = "daily_themes"
+
+    date: Mapped[str] = mapped_column(String(10), primary_key=True)
+    theme_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
+
 class LearnedClassification(Base):
     """Persistent learning store for entity classifications.
 
@@ -288,6 +477,41 @@ class LearnedClassification(Base):
     model_version: Mapped[str | None] = mapped_column(String, nullable=True)  # embedding model that produced this
     match_metadata: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON: top scores, matched anchors
     learned_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
+
+class NationalMonitor(Base):
+    """An ongoing national concern tracked over time (wars, crises, etc.)."""
+    __tablename__ = "national_monitors"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    slug: Mapped[str] = mapped_column(String(200), nullable=False, unique=True, index=True)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="")
+    category: Mapped[str] = mapped_column(String(50), default="general")
+    status: Mapped[str] = mapped_column(String(20), default="active", index=True)
+    policy_areas: Mapped[str] = mapped_column(Text, default="[]")
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_article_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
+
+    updates = relationship("MonitorUpdate", back_populates="monitor",
+                           cascade="all, delete-orphan", order_by="desc(MonitorUpdate.date)")
+
+
+class MonitorUpdate(Base):
+    """A dated development in a monitored national concern, sourced from articles."""
+    __tablename__ = "monitor_updates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    monitor_id: Mapped[int] = mapped_column(Integer, ForeignKey("national_monitors.id"), index=True)
+    date: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    source_url: Mapped[str] = mapped_column(String(1000), nullable=False)
+    source_name: Mapped[str] = mapped_column(String(200), default="")
+    article_title: Mapped[str] = mapped_column(String(500), default="")
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
+    monitor = relationship("NationalMonitor", back_populates="updates")
 
 
 class ApiCache(Base):

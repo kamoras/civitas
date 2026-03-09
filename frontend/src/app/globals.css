@@ -301,7 +301,7 @@ body {
 /* ===== ASCII DIVIDER ===== */
 .ascii-divider {
   text-align: center;
-  color: #333;
+  color: #555;
   font-family: var(--font-vt323), monospace;
   font-size: 0.75rem;
   overflow: hidden;
@@ -321,8 +321,7 @@ body {
   }
 
   * {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
+    animation: none !important;
     transition-duration: 0.01ms !important;
   }
 }

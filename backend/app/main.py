@@ -85,8 +85,14 @@ def _invalidate_orphaned_pipelines() -> None:
         db.close()
 
 
+PROCESS_STARTED_AT: str | None = None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    global PROCESS_STARTED_AT
+    from datetime import datetime, timezone
+    PROCESS_STARTED_AT = datetime.now(timezone.utc).isoformat()
     init_db()
     _invalidate_orphaned_pipelines()
     start_scheduler()

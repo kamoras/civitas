@@ -14,11 +14,14 @@ export default function Navbar() {
   }, []);
 
   return (
-    <nav
-      aria-label="Main navigation"
+    <header
+      role="banner"
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
         scrolled || menuOpen ? "bg-[#0a0a0a] backdrop-blur-sm" : "bg-transparent"
       } border-b border-matrix-green/20`}
+    >
+    <nav
+      aria-label="Main navigation"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
         <Link
@@ -30,18 +33,21 @@ export default function Navbar() {
 
         {/* Desktop nav */}
         <div className="hidden sm:flex items-center gap-6 text-lg">
-          <Link href="/" className="text-matrix-green/70 hover:text-matrix-green transition-colors">
-            {"> HOME"}
+          <Link
+            href="/action"
+            className="text-neon-cyan/70 hover:text-neon-cyan transition-colors font-pixel text-sm"
+          >
+            {"> ACTION CENTER"}
           </Link>
           <Link
             href="/scorecard"
-            className="text-neon-pink/70 hover:text-neon-pink transition-colors"
+            className="text-matrix-green/70 hover:text-matrix-green transition-colors"
           >
             {"> SCORECARD"}
           </Link>
           <Link
             href="/leaderboard"
-            className="text-neon-yellow/70 hover:text-neon-yellow transition-colors"
+            className="text-matrix-green/70 hover:text-matrix-green transition-colors"
           >
             {"> LEADERBOARD"}
           </Link>
@@ -53,7 +59,7 @@ export default function Navbar() {
           </Link>
           <Link
             href="/about"
-            className="text-neon-cyan/70 hover:text-neon-cyan transition-colors"
+            className="text-matrix-green/50 hover:text-matrix-green transition-colors"
           >
             {"> ABOUT"}
           </Link>
@@ -63,7 +69,7 @@ export default function Navbar() {
         <button
           className="sm:hidden text-matrix-green text-2xl"
           onClick={() => setMenuOpen(!menuOpen)}
-          aria-label="Navigation menu"
+          aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
           aria-expanded={menuOpen}
           aria-controls="mobile-menu"
         >
@@ -75,36 +81,31 @@ export default function Navbar() {
       {menuOpen && (
         <div
           id="mobile-menu"
-          role="menu"
           className="sm:hidden bg-[#0a0a0a] border-t border-matrix-green/20 px-4 py-6 flex flex-col gap-4 text-xl"
         >
           <Link
-            href="/"
-            role="menuitem"
-            className="text-matrix-green/70 hover:text-matrix-green transition-colors"
+            href="/action"
+            className="text-neon-cyan/70 hover:text-neon-cyan transition-colors font-pixel text-base"
             onClick={() => setMenuOpen(false)}
           >
-            {"> HOME"}
+            {"> ACTION CENTER"}
           </Link>
           <Link
             href="/scorecard"
-            role="menuitem"
-            className="text-neon-pink/70 hover:text-neon-pink transition-colors"
+            className="text-matrix-green/70 hover:text-matrix-green transition-colors"
             onClick={() => setMenuOpen(false)}
           >
             {"> SCORECARD"}
           </Link>
           <Link
             href="/leaderboard"
-            role="menuitem"
-            className="text-neon-yellow/70 hover:text-neon-yellow transition-colors"
+            className="text-matrix-green/70 hover:text-matrix-green transition-colors"
             onClick={() => setMenuOpen(false)}
           >
             {"> LEADERBOARD"}
           </Link>
           <Link
             href="/explore"
-            role="menuitem"
             className="text-matrix-green/70 hover:text-matrix-green transition-colors"
             onClick={() => setMenuOpen(false)}
           >
@@ -112,8 +113,7 @@ export default function Navbar() {
           </Link>
           <Link
             href="/about"
-            role="menuitem"
-            className="text-neon-cyan/70 hover:text-neon-cyan transition-colors"
+            className="text-matrix-green/50 hover:text-matrix-green transition-colors"
             onClick={() => setMenuOpen(false)}
           >
             {"> ABOUT"}
@@ -121,5 +121,6 @@ export default function Navbar() {
         </div>
       )}
     </nav>
+    </header>
   );
 }

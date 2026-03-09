@@ -281,7 +281,7 @@ def _positions_from_sponsored_bills(
     substantive = [
         b for b in sponsored_bills
         if b.get("title")
-        and b.get("policyArea", "").upper() not in ("PROCEDURAL", "")
+        and (b.get("policyArea") or "").upper() not in ("PROCEDURAL", "")
         and len(b.get("title", "")) > 15
     ]
     if not substantive:
@@ -511,15 +511,17 @@ async def _narrative_analysis(
     prompt += "}"
 
     result = call_llm(
-        prompt_version="senator-narrative-v10",
+        prompt_version="senator-narrative-v11",
         system_prompt=(
-            "You are a factual political analyst producing NARRATIVE SUMMARIES only. Rules:\n"
-            "1. NEVER make classification decisions — those are pre-computed.\n"
-            "2. NEVER restate obvious facts (e.g. 'X received funding from Y').\n"
-            "3. NEVER fabricate or hallucinate. If you don't know, say 'unclear'.\n"
-            "4. For PAC analysis: explain what policy agenda the PAC advances.\n"
-            "5. Be factual, non-partisan, and concise.\n"
-            "Return ONLY valid JSON."
+            "You summarize U.S. senator data into short JSON fields. Rules:\n"
+            "1. Use ONLY the data provided. NEVER invent facts.\n"
+            "2. votingSummary: 2 sentences on voting patterns from the KEY VOTES data. "
+            "Mention specific policy areas and whether they vote with/against party.\n"
+            "3. platformSummary: 1 sentence listing their top policy priorities.\n"
+            "4. pacAnalysis: what industry/cause each PAC represents.\n"
+            "5. Use the senator's actual name. Never say 'Against Party' or 'member of party X' — "
+            "say 'voted against their party' or 'broke with Democrats/Republicans'.\n"
+            "6. Return ONLY valid JSON, no markdown."
         ),
         user_prompt=prompt,
         cache_key={
@@ -528,7 +530,7 @@ async def _narrative_analysis(
             "voteCount": len(substantive),
             "keyIds": sorted(key_vote_ids),
             "platformLen": len(platform_text),
-            "v": 10,
+            "v": 11,
         },
         db_session=db_session,
         max_tokens=1200,
@@ -590,12 +592,16 @@ _ERROR_PAGE_SIGS = re.compile(
 _SCRAPE_ARTIFACT_SIGS = re.compile(
     r"(?:Skip to (?:primary navigation|main content|content)|"
     r"× Close Mobile Nav|How Can \w+ Help|"
-    r"Send \w+ A Message|Scheduling Requests|"
+    r"Send \w+ A Message|Scheduling Requests?|"
     r"HELP WITH A FEDERAL AGENCY|Schedule a Tour|"
     r"Flag Request|Appropriations & CDS|"
     r"Toggle (?:navigation|submenu)|Menu Menu|"
     r"your? browser does not support|twitter feed|"
     r"javascript|cookie\s+(?:policy|preferences)|"
-    r"Contact\s+(?:Form|Us|Senator)|Newsletter\s+Sign)",
+    r"Contact\s+(?:Form|Us|Senator)|Newsletter\s+Sign|"
+    r"Close\s+Search|Main\s+Navigation|Breadcrumb|"
+    r"Select\s+your\s+state|Enter\s+zip\s+code|"
+    r"Official\s+Website\s+of\s+(?:Senator|U\.?S\.?)|"
+    r"^\s*Share\s+(?:on|via)\s|Social\s+Media\s+Links)",
     re.IGNORECASE,
 )

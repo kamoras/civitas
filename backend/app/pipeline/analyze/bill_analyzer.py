@@ -520,6 +520,7 @@ async def classify_all_bills(
         bill_id = b["billId"]
         bill_text = _build_classification_text(b)
         bill_date = _extract_bill_date(b.get("actions", []))
+        summary = b.get("summary", "")
 
         areas = classify_policy_areas_multi(
             bill_text, bill_id=bill_id, db_session=db_session,

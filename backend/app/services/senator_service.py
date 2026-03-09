@@ -4,7 +4,7 @@ import re
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import CampaignPromise, Donor, IndustryDonation, KeyVote, LobbyingMatch, Senator
+from app.models import CampaignPromise, Donor, IndustryDonation, KeyVote, LobbyingMatch, ScoreSnapshot, Senator
 
 _FILLER_RE = re.compile(
     r"has received funding from|(?:^|[,.])\s*a political PAC"
@@ -36,6 +36,7 @@ from app.schemas import (
     IndustryDonationSchema,
     KeyVoteSchema,
     LeaderboardEntrySchema,
+    ScoreTrendSchema,
     LobbyingMatchSchema,
     SenatorSchema,
     SponsoredBillSchema,
@@ -448,6 +449,8 @@ def get_states_with_counts(db: Session) -> list[StateCountSchema]:
     ]
 
 
+from datetime import datetime, timedelta
+
 from app.config_definitions import SCORE_WEIGHTS
 
 _FIELD_TO_WEIGHT_KEY = {
@@ -457,13 +460,72 @@ _FIELD_TO_WEIGHT_KEY = {
     "score_funding_diversity":    "fundingDiversity",
 }
 
+_TREND_LOOKBACK_DAYS = 7
+_TREND_THRESHOLD = 0.5
+
+
+def _compute_trend_map(db: Session) -> dict[str, ScoreTrendSchema]:
+    """Compare latest snapshots to the best available prior snapshot.
+
+    Prefers a snapshot from ~7 days ago; falls back to the oldest available
+    snapshot that is at least 1 day older than the latest.
+    """
+    today = datetime.utcnow().date()
+    target_date = today - timedelta(days=_TREND_LOOKBACK_DAYS)
+
+    latest_snapshots = (
+        db.query(ScoreSnapshot)
+        .filter(
+            ScoreSnapshot.entity_type == "senator",
+            ScoreSnapshot.date == today.isoformat(),
+        )
+        .all()
+    )
+
+    if not latest_snapshots:
+        return {}
+
+    yesterday = (today - timedelta(days=1)).isoformat()
+    older_snapshots = (
+        db.query(ScoreSnapshot)
+        .filter(
+            ScoreSnapshot.entity_type == "senator",
+            ScoreSnapshot.date <= min(target_date.isoformat(), yesterday),
+        )
+        .order_by(ScoreSnapshot.date.desc())
+        .all()
+    )
+
+    older_map: dict[str, float] = {}
+    for snap in older_snapshots:
+        if snap.entity_id not in older_map:
+            older_map[snap.entity_id] = snap.overall_score
+
+    result: dict[str, ScoreTrendSchema] = {}
+    for snap in latest_snapshots:
+        prev = older_map.get(snap.entity_id)
+        if prev is None:
+            result[snap.entity_id] = ScoreTrendSchema(direction="new", change=0.0)
+        else:
+            change = round(snap.overall_score - prev, 2)
+            if change > _TREND_THRESHOLD:
+                direction = "up"
+            elif change < -_TREND_THRESHOLD:
+                direction = "down"
+            else:
+                direction = "stable"
+            result[snap.entity_id] = ScoreTrendSchema(
+                direction=direction,
+                change=change,
+                previous_score=prev,
+            )
+    return result
+
 
 def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
     """Return all senators ranked by weighted representation score (higher = better representative)."""
     senators = db.query(Senator).all()
 
-    # Build top-industry map: senator_id -> industry name with highest total
-    # Query all donations sorted by total desc; keep first seen per senator
     top_industry_map: dict[str, str] = {}
     ind_rows = (
         db.query(IndustryDonation.senator_id, IndustryDonation.name)
@@ -474,13 +536,15 @@ def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
         if senator_id not in top_industry_map:
             top_industry_map[senator_id] = name
 
+    trend_map = _compute_trend_map(db)
+
     def _weighted_score(s: Senator) -> float:
         return sum(
             getattr(s, db_field, 0) * SCORE_WEIGHTS[weight_key]
             for db_field, weight_key in _FIELD_TO_WEIGHT_KEY.items()
         )
 
-    senators.sort(key=_weighted_score, reverse=True)  # descending: best representatives (highest score) first
+    senators.sort(key=_weighted_score, reverse=True)
 
     return [
         LeaderboardEntrySchema(
@@ -500,6 +564,7 @@ def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
             total_from_pacs=s.total_from_pacs,
             small_donor_percentage=s.small_donor_percentage,
             top_industry=top_industry_map.get(s.id),
+            trend=trend_map.get(s.id, ScoreTrendSchema()),
         )
         for s in senators
     ]

@@ -7,7 +7,10 @@ presidents, and Supreme Court justices on how well they represent constituents.
 It aggregates voting records, campaign finance, floor speeches, judicial opinions,
 and stated platforms from official government sources, then analyzes them using
 embedding-based classification, content-based party alignment, and deterministic
-scoring. Everything runs locally on a Raspberry Pi 5 with zero cloud AI calls.
+scoring. It also features an Action Center that surfaces trending civic issues
+from news feeds, provides non-partisan summaries and recommended actions, and
+includes an interactive global news map. Everything runs locally on a Raspberry
+Pi 5 with zero cloud AI calls.
 
 ## Architecture
 
@@ -18,6 +21,7 @@ scoring. Everything runs locally on a Raspberry Pi 5 with zero cloud AI calls.
 - **Vector Store**: ChromaDB for semantic search document store
 - **Deployment**: Docker Compose, blue/green zero-downtime via `deploy.sh`, nginx reverse proxy with caching
 - **Branches covered**: Senate (100 senators), Presidents (historical + modern), Supreme Court (9 justices)
+- **News Feeds**: RSS parsing (NPR, PBS, The Hill, AP) + Google Trends + Reddit trending for Action Center
 
 All services, models, and data run on-device. No data leaves the Raspberry Pi.
 
@@ -27,7 +31,7 @@ All services, models, and data run on-device. No data leaves the Raspberry Pi.
 modern-punk/
 ├── backend/
 │   ├── app/
-│   │   ├── api/                 # FastAPI route handlers (senators, presidents, justices, explore, admin, health)
+│   │   ├── api/                 # FastAPI route handlers (senators, presidents, justices, explore, action, admin, health)
 │   │   ├── services/            # Business logic (senator_service with paginated vote API)
 │   │   ├── pipeline/
 │   │   │   ├── fetch/           # API clients (Congress.gov, FEC, GovInfo, Senate.gov, Oyez, BLS, Federal Register)
@@ -48,8 +52,8 @@ modern-punk/
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
-│   │   ├── app/                 # Next.js App Router pages (about, admin, explore, leaderboard, scorecard)
-│   │   ├── components/          # React components (checker, president, justice, explore, effects)
+│   │   ├── app/                 # Next.js App Router pages (action, about, admin, explore, leaderboard, scorecard)
+│   │   ├── components/          # React components (action, checker, president, justice, explore, home, effects)
 │   │   ├── hooks/               # Custom React hooks
 │   │   ├── lib/                 # API client (with paginated vote fetching), utilities
 │   │   └── types/               # TypeScript type definitions
@@ -131,7 +135,7 @@ the residual.
 | 2 | Sentence-transformer cosine similarity | Industry, donor type, bill policy, party alignment, stance direction, procedural detection, skip entity detection, employer filtering, memo transfer detection, category normalization |
 | 2b | SVD / PageRank on cosponsorship matrix | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
 | 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills |
-| 4 | LLM (Qwen 2.5 1.5B) | Narrative synthesis, promise analysis, summaries |
+| 4 | LLM (Qwen 2.5 1.5B) | Narrative synthesis, promise analysis, summaries, action center issue summarization |
 
 When FEC metadata is ambiguous (e.g., entity_type "COM" could be a corporate
 employee PAC or a purely political PAC), the system defers to tier 2
@@ -247,6 +251,13 @@ be triggered manually via `POST /api/admin/pipeline/trigger`. It executes in
 4. **ASSEMBLE + SAVE** — Build scorecards for senators, presidents, and
    justices; validate via `assemble/validator.py`; persist to SQLite
 
+In addition to the main pipeline, the **Action Center pipeline** runs hourly to
+surface trending civic issues. It fetches RSS feeds from low-bias news sources,
+filters articles for U.S. policy relevance using embedding similarity, clusters
+related articles, incorporates trending topics from Google Trends and Reddit,
+and uses the LLM to generate non-partisan summaries with recommended citizen
+actions. Results are stored in the `action_issues` table.
+
 Each senator is processed independently. The pipeline uses `PipelineRun`
 records to track progress and supports resumption.
 
@@ -323,7 +334,7 @@ sudo sqlite3 /var/lib/docker/volumes/modern-punk_app_data/_data/modern-punk.db
 SQLAlchemy ORM models are in `backend/app/models.py`. Key tables: `senators`,
 `key_votes`, `donors`, `industry_donations`, `campaign_promises`,
 `lobbying_matches`, `learned_classifications`, `explore_documents`,
-`pipeline_runs`.
+`action_issues`, `pipeline_runs`.
 
 ## Key Modules — Where to Find Things
 
@@ -340,16 +351,22 @@ SQLAlchemy ORM models are in `backend/app/models.py`. Key tables: `senators`,
 | Sponsorship analysis (PageRank leadership + SVD ideology) | `backend/app/pipeline/analyze/sponsorship_analysis.py` |
 | Multi-word last name extraction + vote matching | `backend/app/pipeline/transform/normalize_members.py` |
 | LLM narrative generation | `backend/app/pipeline/analyze/cross_reference.py` |
+| Action Center analysis (news → issues) | `backend/app/pipeline/analyze/action_center.py` |
+| News feed fetching (RSS) | `backend/app/pipeline/fetch/news_feeds.py` |
+| Trending topic fetching | `backend/app/pipeline/fetch/trending.py` |
 | Donor-vote cross-referencing | `backend/app/pipeline/analyze/policy_alignment.py` |
 | Finance normalization (embedding-based skip detection) | `backend/app/pipeline/transform/normalize_finance.py` |
 | Data validation | `backend/app/pipeline/assemble/validator.py` |
 | Enums, weights, industry codes | `backend/app/config_definitions.py` |
 | Senator service + paginated votes | `backend/app/services/senator_service.py` |
-| API routes | `backend/app/api/` (senators, presidents, justices, admin, explore, health) |
-| Frontend pages | `frontend/src/app/` (scorecard, leaderboard, explore, about, admin) |
+| Action Center API | `backend/app/api/action.py` |
+| API routes | `backend/app/api/` (senators, presidents, justices, admin, explore, action, health) |
+| Frontend pages | `frontend/src/app/` (action, scorecard, leaderboard, explore, about, admin) |
 | Frontend API client (incl. paginated vote fetching) | `frontend/src/lib/api.ts` |
 | Frontend types | `frontend/src/types/` |
 | Metric explanations (tooltips on all scorecard metrics) | `frontend/src/components/checker/MetricTooltip.tsx` |
+| Interactive globe component | `frontend/src/components/action/GlobeTab.tsx` |
+| Homepage action preview | `frontend/src/components/home/ActionPreview.tsx` |
 
 ## Conventions
 

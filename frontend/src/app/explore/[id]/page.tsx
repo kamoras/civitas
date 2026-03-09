@@ -476,7 +476,7 @@ export default function ExploreDetailPage() {
       <>
         <MatrixRain />
         <Navbar />
-        <main id="main-content" className="pt-24 pb-16 px-4">
+        <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
           <div className="max-w-3xl mx-auto text-center py-20">
             <span className="text-matrix-green font-terminal animate-pulse">
               Loading document...
@@ -493,7 +493,7 @@ export default function ExploreDetailPage() {
       <>
         <MatrixRain />
         <Navbar />
-        <main id="main-content" className="pt-24 pb-16 px-4">
+        <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
           <div className="max-w-3xl mx-auto text-center py-20">
             <p className="text-neon-pink text-sm mb-4">{error || "Document not found"}</p>
             <Link
@@ -528,7 +528,7 @@ export default function ExploreDetailPage() {
     <>
       <MatrixRain />
       <Navbar />
-      <main id="main-content" className="pt-24 pb-16 px-4">
+      <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
         <div className="max-w-3xl mx-auto">
           {/* Back link */}
           <Link

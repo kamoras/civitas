@@ -150,6 +150,147 @@ def normalize_members(
     return results
 
 
+def normalize_house_members(
+    members: list[dict], member_details: dict[str, dict] | None = None
+) -> list[dict]:
+    """Normalize Congress.gov member data into base representative records.
+
+    Same structure as normalize_members but filters for House chamber
+    and extracts the district number.
+    """
+    if member_details is None:
+        member_details = {}
+
+    results = []
+    for m in members:
+        detail = member_details.get(m.get("bioguideId", ""), {})
+        detail_terms_obj = detail.get("terms") or {}
+        detail_terms = detail_terms_obj.get("item", []) if isinstance(detail_terms_obj, dict) else (
+            detail_terms_obj if isinstance(detail_terms_obj, list) else []
+        )
+        member_terms_obj = m.get("terms") or {}
+        member_terms = member_terms_obj.get("item", []) if isinstance(member_terms_obj, dict) else []
+        all_terms = detail_terms + member_terms
+        if not all_terms:
+            continue
+        most_recent = max(all_terms, key=lambda t: t.get("startYear", 0))
+        if most_recent.get("chamber") != "House of Representatives":
+            continue
+
+        raw_name = m.get("name") or f"{m.get('firstName', '')} {m.get('lastName', '')}"
+        state = _extract_state_code(m, detail)
+        party = _normalize_party(m.get("partyName") or m.get("party"))
+
+        district = _extract_district(m, detail)
+        years_in_office = _calculate_house_years(m, detail)
+
+        last_name_for_match = _extract_last_name(raw_name)
+
+        raw_parts = raw_name.split()
+        raw_last = re.sub(r"[^a-z]", "", raw_parts[-1].lower()) if raw_parts else ""
+        raw_first = re.sub(r"[^a-z]", "", raw_parts[0].lower()) if raw_parts else ""
+        rep_id = f"{raw_last}-{raw_first}"
+
+        name = _clean_name(raw_name)
+        name_parts = name.split()
+        initials = ""
+        if len(name_parts) >= 2:
+            initials = name_parts[0][0].upper() + name_parts[-1][0].upper()
+        elif name_parts:
+            initials = name_parts[0][0].upper()
+
+        official_url = (detail.get("officialWebsiteUrl") or "").rstrip("/")
+
+        results.append({
+            "bioguideId": m.get("bioguideId", ""),
+            "id": rep_id,
+            "name": name,
+            "lastNameForVoteMatch": last_name_for_match,
+            "state": state,
+            "district": district,
+            "party": party,
+            "yearsInOffice": years_in_office,
+            "initials": initials,
+            "officialWebsiteUrl": official_url,
+            "punkNickname": "",
+            "representationScore": {
+                "fundingIndependence": 0,
+                "promisePersistence": 0,
+                "independentVoting": 0,
+                "transparency": 0,
+                "accessibility": 0,
+            },
+            "funding": {
+                "totalRaised": 0,
+                "totalFromPACs": 0,
+                "smallDonorPercentage": 0,
+                "topDonors": [],
+                "industryBreakdown": [],
+            },
+            "votingRecord": {
+                "totalVotes": 0,
+                "keyVotes": [],
+            },
+            "lobbyingMatches": [],
+        })
+
+    return results
+
+
+def _extract_district(member: dict, detail: dict) -> int:
+    """Extract the congressional district number from member data."""
+    detail_terms_obj = detail.get("terms") or {}
+    detail_terms = detail_terms_obj.get("item", []) if isinstance(detail_terms_obj, dict) else (
+        detail_terms_obj if isinstance(detail_terms_obj, list) else []
+    )
+    member_terms_obj = member.get("terms") or {}
+    member_terms = member_terms_obj.get("item", []) if isinstance(member_terms_obj, dict) else []
+    terms = detail_terms + member_terms
+    house_terms = [t for t in terms if t.get("chamber") == "House of Representatives"]
+    if house_terms:
+        sorted_terms = sorted(house_terms, key=lambda t: t.get("startYear", 0), reverse=True)
+        district = sorted_terms[0].get("district")
+        if district is not None:
+            try:
+                return int(district)
+            except (ValueError, TypeError):
+                pass
+    d = member.get("district")
+    if d is not None:
+        try:
+            return int(d)
+        except (ValueError, TypeError):
+            pass
+    return 0
+
+
+def _calculate_house_years(member: dict, detail: dict) -> int:
+    """Calculate years in office from House term data."""
+    detail_terms_obj = detail.get("terms") or {}
+    detail_terms_items = detail_terms_obj.get("item", []) if isinstance(detail_terms_obj, dict) else (
+        detail_terms_obj if isinstance(detail_terms_obj, list) else []
+    )
+    member_terms_obj = member.get("terms") or {}
+    member_terms_items = member_terms_obj.get("item", []) if isinstance(member_terms_obj, dict) else []
+    terms = detail_terms_items + member_terms_items
+    house_terms = [t for t in terms if t.get("chamber") == "House of Representatives"]
+
+    if house_terms:
+        sorted_terms = sorted(house_terms, key=lambda t: t.get("startYear", 9999))
+        first_year = sorted_terms[0].get("startYear")
+        if first_year:
+            return datetime.now().year - first_year
+
+    depiction = member.get("depiction") or {}
+    attribution = depiction.get("attribution", "")
+    if attribution:
+        match = re.search(r"since (\d{4})", attribution)
+        if match:
+            return datetime.now().year - int(match.group(1))
+
+    return 0
+
+
 def _extract_last_name(name: str) -> str:
     """Extract the multi-word last name from Congress.gov name format.
 

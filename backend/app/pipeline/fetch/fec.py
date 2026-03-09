@@ -78,48 +78,50 @@ async def _fetch_with_retry(
 
 
 async def find_candidate(
-    client: httpx.AsyncClient, db: Session, name: str, state: str
+    client: httpx.AsyncClient, db: Session, name: str, state: str,
+    office: str = "S", district: str | None = None,
 ) -> dict | None:
-    """Search for a Senate candidate in FEC data.
+    """Search for a candidate in FEC data.
 
     Args:
-        name: Senator name
+        name: Candidate name
         state: Two-letter state code
+        office: "S" for Senate, "H" for House
+        district: Two-digit district code (House only)
 
     Returns:
         Best matching candidate record, or None.
     """
-    cache_key = f"candidate-search-{re.sub(r'\\s+', '_', name)}-{state}"
+    district_suffix = f"-{district}" if district else ""
+    cache_key = f"candidate-search-{re.sub(r'\\s+', '_', name)}-{state}-{office}{district_suffix}"
     cached = api_cache_get(db, "fec", cache_key)
     if cached is not None:
         return cached
 
-    # FEC search uses last name
     name_parts = name.split()
     last_name = name_parts[-1] if name_parts else name
 
-    data = await _fetch_with_retry(
-        client,
-        f"{FEC_API_BASE}/candidates/search/?name={quote(last_name)}&state={state}&office=S&per_page=20",
-    )
+    query = f"{FEC_API_BASE}/candidates/search/?name={quote(last_name)}&state={state}&office={office}&per_page=20"
+    if district:
+        query += f"&district={district}"
+
+    data = await _fetch_with_retry(client, query)
 
     if not data or not data.get("results"):
-        logger.warning("No FEC candidate found for %s (%s)", name, state)
+        logger.warning("No FEC candidate found for %s (%s, %s)", name, state, office)
         api_cache_set(db, "fec", cache_key, None)
         return None
 
-    # Try to match by full name
     results = data["results"]
     match = None
     for c in results:
         c_name = (c.get("name") or "").upper()
-        # FEC uses "LASTNAME, FIRSTNAME" format
         if all(part.upper() in c_name for part in name_parts):
             match = c
             break
 
     if match is None:
-        match = results[0]  # Fallback to first result
+        match = results[0]
 
     logger.debug(
         "FEC candidate match for %s: %s (%s)",

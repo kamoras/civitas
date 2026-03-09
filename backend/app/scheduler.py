@@ -7,6 +7,8 @@ from apscheduler.triggers.cron import CronTrigger
 
 from app.config import settings
 from app.pipeline.orchestrator import run_full_pipeline
+from app.pipeline.house_pipeline import run_house_pipeline
+from app.pipeline.analyze.action_center import refresh_action_issues
 
 logger = logging.getLogger(__name__)
 
@@ -28,12 +30,27 @@ def _nightly_pipeline() -> None:
             result = loop.run_until_complete(run_full_pipeline())
             if result.get("status") == "skipped":
                 logger.info("Pipeline skipped — another instance is already running")
+            else:
+                logger.info("Senate pipeline done — starting House pipeline")
+                loop.run_until_complete(run_house_pipeline())
         except BaseException:
             logger.exception("Nightly pipeline failed")
         finally:
             loop.close()
 
     threading.Thread(target=_run, daemon=True, name="nightly-pipeline").start()
+
+
+def _hourly_action_refresh() -> None:
+    """Refresh the action center in a background thread."""
+    def _run():
+        try:
+            count = refresh_action_issues()
+            logger.info("Action center hourly refresh: %d issues", count)
+        except Exception:
+            logger.exception("Action center refresh failed")
+
+    threading.Thread(target=_run, daemon=True, name="action-refresh").start()
 
 
 def start_scheduler() -> None:
@@ -58,8 +75,16 @@ def start_scheduler() -> None:
     )
 
     scheduler.add_job(_nightly_pipeline, trigger, id="pipeline_run", replace_existing=True)
+
+    scheduler.add_job(
+        _hourly_action_refresh,
+        CronTrigger(minute="15"),
+        id="action_refresh",
+        replace_existing=True,
+    )
+
     scheduler.start()
-    logger.info("Scheduler started with cron: %s", settings.PIPELINE_CRON_SCHEDULE)
+    logger.info("Scheduler started with cron: %s (+ hourly action refresh at :15)", settings.PIPELINE_CRON_SCHEDULE)
 
 
 def stop_scheduler() -> None:

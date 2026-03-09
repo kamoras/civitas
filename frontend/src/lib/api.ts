@@ -1,6 +1,7 @@
 import { LeaderboardEntry, PaginatedVotes, Senator } from "@/types/senator";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 import type { Justice, JusticeLeaderboardEntry } from "@/types/justice";
+import type { ActionIssuesResponse } from "@/types/action";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -31,6 +32,78 @@ export async function fetchStates(): Promise<StateInfo[]> {
 export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
   const res = await fetch(`${API_BASE}/senators/leaderboard`);
   if (!res.ok) throw new Error(`Failed to load leaderboard: ${res.status}`);
+  return res.json();
+}
+
+// --- House Representatives ---
+
+export interface RepStateInfo {
+  code: string;
+  name: string;
+  repCount: number;
+}
+
+export async function fetchRepStates(): Promise<RepStateInfo[]> {
+  const res = await fetch(`${API_BASE}/representatives/states`);
+  if (!res.ok) throw new Error(`Failed to load rep states: ${res.status}`);
+  return res.json();
+}
+
+export interface PaginatedReps {
+  entries: Senator[];
+  total: number;
+  page: number;
+  perPage: number;
+  totalPages: number;
+}
+
+export async function fetchRepresentativesByState(
+  state: string,
+  page: number = 1,
+  perPage: number = 10,
+): Promise<PaginatedReps> {
+  const res = await fetch(`${API_BASE}/representatives?state=${state}&page=${page}&per_page=${perPage}`);
+  if (!res.ok) throw new Error(`Failed to load representatives: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchRepresentative(repId: string): Promise<Senator> {
+  const res = await fetch(`${API_BASE}/representatives/${repId}`);
+  if (!res.ok) throw new Error(`Representative not found: ${res.status}`);
+  return res.json();
+}
+
+export interface PaginatedLeaderboard {
+  entries: LeaderboardEntry[];
+  total: number;
+  page: number;
+  perPage: number;
+  totalPages: number;
+}
+
+export async function fetchRepLeaderboard(
+  page: number = 1,
+  perPage: number = 50,
+  party?: string,
+): Promise<PaginatedLeaderboard> {
+  const params = new URLSearchParams({ page: String(page), per_page: String(perPage) });
+  if (party) params.set("party", party);
+  const res = await fetch(`${API_BASE}/representatives/leaderboard?${params}`);
+  if (!res.ok) throw new Error(`Failed to load house leaderboard: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchRepVotes(
+  repId: string,
+  options?: { category?: "recent" | "key"; page?: number; perPage?: number; filter?: string },
+): Promise<PaginatedVotes> {
+  const params = new URLSearchParams();
+  if (options?.category) params.set("category", options.category);
+  if (options?.page) params.set("page", String(options.page));
+  if (options?.perPage) params.set("per_page", String(options.perPage));
+  if (options?.filter) params.set("filter", options.filter);
+  const res = await fetch(`${API_BASE}/representatives/${repId}/votes?${params}`);
+  if (!res.ok) throw new Error(`Failed to load votes: ${res.status}`);
   return res.json();
 }
 
@@ -391,6 +464,12 @@ export interface VectorDbStats {
   error?: string;
 }
 
+export interface UptimeInfo {
+  processStartedAt: string | null;
+  firstPipelineRun: string | null;
+  totalRestarts: number;
+}
+
 export interface AdminDashboard {
   system: {
     database: string;
@@ -401,6 +480,7 @@ export interface AdminDashboard {
     vectorDb?: VectorDbStats;
   };
   host?: HostStats;
+  uptime?: UptimeInfo;
   data: Record<string, number>;
   pipeline: {
     isRunning: boolean;
@@ -482,4 +562,138 @@ export async function fetchConfig(): Promise<AppConfig> {
     // Fall through to defaults
   }
   return DEFAULT_CONFIG;
+}
+
+
+export async function fetchActionIssues(date?: string): Promise<ActionIssuesResponse> {
+  const params = date ? `?date=${date}` : "";
+  const res = await fetch(`${API_BASE}/action/issues${params}`);
+  if (!res.ok) throw new Error(`Failed to load action issues: ${res.status}`);
+  return res.json();
+}
+
+export interface BranchDocument {
+  id: number;
+  title: string;
+  docType: string;
+  date: string;
+  url: string;
+  chamber: string;
+  summary: string;
+  politicianName: string;
+}
+
+export interface BranchRecentResponse {
+  branch: string;
+  documents: BranchDocument[];
+  count: number;
+}
+
+export async function fetchRecentByBranch(branch: string, limit = 15): Promise<BranchRecentResponse> {
+  const res = await fetch(`${API_BASE}/action/recent/${branch}?limit=${limit}`);
+  if (!res.ok) throw new Error(`Failed to load ${branch} documents: ${res.status}`);
+  return res.json();
+}
+
+export interface CountryArticle {
+  title: string;
+  url: string;
+  source: string;
+  date: string;
+}
+
+export interface CountryNews {
+  country: string;
+  lat: number;
+  lng: number;
+  articleCount: number;
+  articles: CountryArticle[];
+}
+
+export interface CountryNewsResponse {
+  countries: CountryNews[];
+}
+
+export async function fetchCountryNews(): Promise<CountryNewsResponse> {
+  const res = await fetch(`${API_BASE}/action/country-news`);
+  if (!res.ok) throw new Error(`Failed to load country news: ${res.status}`);
+  return res.json();
+}
+
+export interface ElectionSenator {
+  id: string;
+  name: string;
+  party: string;
+  overallScore: number;
+  leadershipScore: number | null;
+  yearsInOffice: number;
+  upForElection: boolean;
+}
+
+export interface ElectionState {
+  state: string;
+  hasSenateRace: boolean;
+  hasHouseRace: boolean;
+  houseDistricts: number;
+  senators: ElectionSenator[];
+}
+
+export interface ElectionInfo {
+  nextElection: {
+    date: string;
+    type: string;
+    year: number;
+    daysUntil: number;
+    isElectionDay: boolean;
+    isElectionSeason: boolean;
+  };
+  senateSeatsUp: number;
+  houseSeatsUp: number;
+  states: ElectionState[];
+}
+
+export async function fetchElectionInfo(): Promise<ElectionInfo> {
+  const res = await fetch(`${API_BASE}/action/elections`);
+  if (!res.ok) throw new Error(`Failed to load election info: ${res.status}`);
+  return res.json();
+}
+
+
+export interface MonitorUpdate {
+  id: number;
+  date: string;
+  summary: string;
+  sourceUrl: string;
+  sourceName: string;
+  articleTitle: string;
+}
+
+export interface NationalMonitor {
+  id: number;
+  slug: string;
+  title: string;
+  description: string;
+  category: string;
+  status: string;
+  policyAreas: string[];
+  createdAt: string;
+  updatedAt: string;
+  lastArticleDate: string | null;
+  updateCount: number;
+}
+
+export interface NationalMonitorDetail extends NationalMonitor {
+  updates: MonitorUpdate[];
+}
+
+export async function fetchMonitors(): Promise<{ monitors: NationalMonitor[] }> {
+  const res = await fetch(`${API_BASE}/action/monitors`);
+  if (!res.ok) throw new Error(`Failed to load monitors: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchMonitorDetail(slug: string): Promise<NationalMonitorDetail> {
+  const res = await fetch(`${API_BASE}/action/monitors/${encodeURIComponent(slug)}`);
+  if (!res.ok) throw new Error(`Failed to load monitor: ${res.status}`);
+  return res.json();
 }

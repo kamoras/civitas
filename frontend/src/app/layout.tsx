@@ -52,7 +52,7 @@ export default function RootLayout({
         <ConfigProvider>
           <a
             href="#main-content"
-            className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[10000] focus:bg-crt-black focus:text-matrix-green focus:border-2 focus:border-matrix-green focus:px-4 focus:py-2 focus:text-lg focus:font-terminal"
+            className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:top-2 focus-visible:left-2 focus-visible:z-[10000] focus-visible:bg-crt-black focus-visible:text-matrix-green focus-visible:border-2 focus-visible:border-matrix-green focus-visible:px-4 focus-visible:py-2 focus-visible:text-lg focus-visible:font-terminal"
           >
             Skip to main content
           </a>

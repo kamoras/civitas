@@ -7,18 +7,6 @@ export default function Footer() {
   return (
     <footer className="border-t border-matrix-green/20 bg-crt-black/80 py-8 px-4">
       <div className="max-w-4xl mx-auto flex flex-col items-center gap-6">
-        {/* Coming soon teaser */}
-        <div className="terminal-window max-w-sm w-full p-4 text-center">
-          <div className="text-neon-pink/60 font-pixel text-[10px] mb-1">
-            COMING SOON FROM CIVITAS
-          </div>
-          <div className="text-matrix-green/50 text-sm space-y-1">
-            <div>{">"} House Rep Tracker</div>
-            <div>{">"} Lobbying Timeline Visualizer</div>
-            <div>{">"} Corporate Influence Scorecards</div>
-          </div>
-        </div>
-
         {/* Links */}
         <nav aria-label="Footer navigation" className="flex flex-wrap justify-center gap-4 text-lg">
           <Link

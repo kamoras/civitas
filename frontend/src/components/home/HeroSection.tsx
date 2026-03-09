@@ -6,11 +6,11 @@ import TypewriterText from "@/components/effects/TypewriterText";
 import Marquee from "@/components/effects/Marquee";
 
 const MARQUEE_ITEMS = [
-  "100 senators scored on funding independence, promise persistence, voting record, transparency, and accessibility",
-  "47 presidents ranked from Washington to today using historian surveys and live economic data",
+  "Action Center: today's top policy issues sourced from nonpartisan media with concrete citizen actions",
+  "100 senators scored on funding independence, promise persistence, voting record, and more",
   "All data sourced from public federal records: FEC, Congress.gov, GovInfo, Federal Register, BLS",
   "AI analysis runs locally on a Raspberry Pi 5 -- no cloud APIs, no data leaves the device",
-  "Search Senate floor speeches, House proceedings, executive orders, and proclamations on the Explore page",
+  "Trending topics from social media cross-referenced with news coverage to surface what matters most",
   "Nightly pipeline processes campaign finance, voting records, and Congressional Record transcripts",
 ];
 
@@ -34,11 +34,11 @@ export default function HeroSection() {
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4 mb-16">
-        <Link href="/scorecard" className="btn-retro">
-          [ CHECK YOUR REPRESENTATIVES ]
+        <Link href="/action" className="btn-retro">
+          [ ACTION CENTER ]
         </Link>
-        <Link href="/explore" className="btn-retro btn-retro-pink">
-          [ EXPLORE ISSUES ]
+        <Link href="/scorecard" className="btn-retro btn-retro-pink">
+          [ SCORECARDS ]
         </Link>
       </div>
 

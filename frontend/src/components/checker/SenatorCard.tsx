@@ -108,7 +108,7 @@ export default function SenatorCard({ senator }: SenatorCardProps) {
                 rel="noopener noreferrer"
                 className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
               >
-                [FEC FILINGS]
+                [FEC FILINGS]<span className="sr-only"> (opens in new tab)</span>
               </a>
               <a
                 href={`https://www.congress.gov/member/${senator.name.toLowerCase().replace(/\s+/g, "-")}`}
@@ -116,7 +116,7 @@ export default function SenatorCard({ senator }: SenatorCardProps) {
                 rel="noopener noreferrer"
                 className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
               >
-                [CONGRESS.GOV]
+                [CONGRESS.GOV]<span className="sr-only"> (opens in new tab)</span>
               </a>
             </div>
           </div>
@@ -124,11 +124,11 @@ export default function SenatorCard({ senator }: SenatorCardProps) {
 
         {/* ── Quick Stats ── always visible */}
         <div>
-          <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-center">
-            <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2 min-w-0">
+          <div className="flex flex-wrap gap-2 text-center">
+            <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2 flex-1 basis-[calc(33%-0.5rem)] sm:basis-auto sm:min-w-[5rem]">
               {senator.partisanDepth && senator.partisanDepth.totalPositions > 0 ? (
                 <>
-                  <div className={`text-sm sm:text-lg font-pixel truncate ${
+                  <div className={`text-sm sm:text-lg font-pixel whitespace-nowrap ${
                     senator.partisanDepth.depth === "deep" ? "text-neon-pink"
                     : senator.partisanDepth.depth === "cross-cutting" ? "text-neon-cyan"
                     : senator.partisanDepth.depth === "moderate" ? "text-yellow-500"
@@ -148,10 +148,10 @@ export default function SenatorCard({ senator }: SenatorCardProps) {
                 </>
               )}
             </div>
-            <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2 min-w-0">
+            <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2 flex-1 basis-[calc(33%-0.5rem)] sm:basis-auto sm:min-w-[5rem]">
               {senator.leadershipScore != null ? (
                 <>
-                  <div className={`text-sm sm:text-lg font-pixel truncate ${
+                  <div className={`text-sm sm:text-lg font-pixel whitespace-nowrap ${
                     senator.leadershipScore > 0.75 ? "text-neon-yellow"
                     : senator.leadershipScore < 0.25 ? "text-matrix-green/40"
                     : "text-matrix-green"
@@ -167,24 +167,24 @@ export default function SenatorCard({ senator }: SenatorCardProps) {
                 </>
               )}
             </div>
-            <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2 min-w-0">
-              <div className="text-sm sm:text-lg font-pixel text-neon-cyan truncate">
+            <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2 flex-1 basis-[calc(33%-0.5rem)] sm:basis-auto sm:min-w-[5rem]">
+              <div className="text-sm sm:text-lg font-pixel text-neon-cyan whitespace-nowrap">
                 {formatCurrency(senator.funding.totalRaised)}
               </div>
               <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Total campaign contributions received this cycle from all sources (individuals, PACs, and self-funding). Source: FEC filings.">RAISED</MetricTooltip></div>
             </div>
-            <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2 min-w-0">
-              <div className="text-sm sm:text-lg font-pixel text-neon-pink truncate">
+            <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2 flex-1 basis-[calc(33%-0.5rem)] sm:basis-auto sm:min-w-[5rem]">
+              <div className="text-sm sm:text-lg font-pixel text-neon-pink whitespace-nowrap">
                 {formatCurrency(senator.funding.totalFromPACs)}
               </div>
               <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Money received from Political Action Committees — organizations that pool contributions from members to donate to campaigns. Includes corporate, labor, and ideological PACs.">PACs</MetricTooltip></div>
             </div>
-            <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2 min-w-0">
-              <div className="text-sm sm:text-lg font-pixel text-red-500 truncate">{pacPercent}%</div>
+            <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2 flex-1 basis-[calc(33%-0.5rem)] sm:basis-auto sm:min-w-[5rem]">
+              <div className="text-sm sm:text-lg font-pixel text-red-500 whitespace-nowrap">{pacPercent}%</div>
               <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="What percentage of total funds come from PACs rather than individual donors. Higher % = more reliance on organized interest group money.">PAC %</MetricTooltip></div>
             </div>
-            <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2 min-w-0">
-              <div className="text-sm sm:text-lg font-pixel text-matrix-green truncate">
+            <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2 flex-1 basis-[calc(33%-0.5rem)] sm:basis-auto sm:min-w-[5rem]">
+              <div className="text-sm sm:text-lg font-pixel text-matrix-green whitespace-nowrap">
                 {senator.funding.smallDonorPercentage}%
               </div>
               <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Percentage of funds from individual donations under $200. Higher = more grassroots support from everyday people vs. large donors.">SMALL $</MetricTooltip></div>
@@ -233,7 +233,7 @@ export default function SenatorCard({ senator }: SenatorCardProps) {
                             rel="noopener noreferrer"
                             className="hover:text-neon-cyan underline underline-offset-2 decoration-matrix-green/30 hover:decoration-neon-cyan/50 transition-colors"
                           >
-                            {donor.name}
+                            {donor.name}<span className="sr-only"> (opens in new tab)</span>
                           </a>
                         ) : (
                           donor.name
