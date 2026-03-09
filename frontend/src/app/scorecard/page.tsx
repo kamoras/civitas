@@ -42,29 +42,31 @@ function ScorecardContent() {
             <BranchSelector selected={branch} onChange={setBranch} />
           </div>
 
-          {branch === "senate" && (
-            <Suspense fallback={null}>
-              <CheckerClient />
-            </Suspense>
-          )}
+          <div id={`branch-panel-${branch}`} role="tabpanel" aria-labelledby={`branch-tab-${branch}`}>
+            {branch === "senate" && (
+              <Suspense fallback={null}>
+                <CheckerClient />
+              </Suspense>
+            )}
 
-          {branch === "president" && (
-            <Suspense fallback={null}>
-              <PresidentClient />
-            </Suspense>
-          )}
+            {branch === "president" && (
+              <Suspense fallback={null}>
+                <PresidentClient />
+              </Suspense>
+            )}
 
-          {branch === "scotus" && (
-            <Suspense fallback={null}>
-              <JusticeClient />
-            </Suspense>
-          )}
+            {branch === "scotus" && (
+              <Suspense fallback={null}>
+                <JusticeClient />
+              </Suspense>
+            )}
 
-          {branch === "house" && (
-            <Suspense fallback={null}>
-              <HouseCheckerClient />
-            </Suspense>
-          )}
+            {branch === "house" && (
+              <Suspense fallback={null}>
+                <HouseCheckerClient />
+              </Suspense>
+            )}
+          </div>
         </div>
       </main>
       <Footer />

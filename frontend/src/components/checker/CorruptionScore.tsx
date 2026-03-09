@@ -34,6 +34,11 @@ const SUB_SCORES: {
     label: "Funding Diversity",
     description: "Is their funding spread across many industries, or dominated by a few? Uses Shannon entropy to measure concentration. Higher = more diverse funding sources.",
   },
+  {
+    key: "legislativeEffectiveness",
+    label: "Legislative Effectiveness",
+    description: "How effective is this senator at advancing legislation? Based on bill passage rates, cosponsorship influence, and ability to move bills through the process.",
+  },
 ];
 
 function ScoreBar({
@@ -104,7 +109,7 @@ export default function CorruptionScore({ breakdown }: RepresentationScoreProps)
         <div className={`text-5xl sm:text-6xl font-pixel ${colorClass}`}>{overall}</div>
         <div className="pb-2">
           <div className="text-xs text-matrix-green/40">
-            <MetricTooltip text="Weighted average of 4 sub-scores measuring how well this senator represents constituents. Based on funding sources, promise follow-through, voting independence, and funding diversity. 100 = ideal representation, 0 = none. Scores near 50 mean limited data.">
+            <MetricTooltip text="Weighted average of 5 sub-scores measuring how well this senator represents constituents. Based on funding sources, promise follow-through, voting independence, funding diversity, and legislative effectiveness. 100 = ideal representation, 0 = none. Scores near 50 mean limited data.">
               REPRESENTATION SCORECARD
             </MetricTooltip>
           </div>

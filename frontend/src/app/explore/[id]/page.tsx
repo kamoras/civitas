@@ -238,10 +238,11 @@ function CommentsSection({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                 <div>
-                  <label className="text-[10px] font-pixel text-matrix-green/40 block mb-1">
+                  <label htmlFor="comment-name" className="text-[10px] font-pixel text-matrix-green/40 block mb-1">
                     YOUR NAME
                   </label>
                   <input
+                    id="comment-name"
                     type="text"
                     value={submitterName}
                     onChange={(e) => setSubmitterName(e.target.value)}
@@ -253,10 +254,11 @@ function CommentsSection({
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-pixel text-matrix-green/40 block mb-1">
-                    ORGANIZATION <span className="text-matrix-green/20">(OPTIONAL)</span>
+                  <label htmlFor="comment-org" className="text-[10px] font-pixel text-matrix-green/40 block mb-1">
+                    ORGANIZATION <span className="text-matrix-green/30">(OPTIONAL)</span>
                   </label>
                   <input
+                    id="comment-org"
                     type="text"
                     value={organization}
                     onChange={(e) => setOrganization(e.target.value)}
@@ -270,10 +272,11 @@ function CommentsSection({
               </div>
 
               <div className="mb-3">
-                <label className="text-[10px] font-pixel text-matrix-green/40 block mb-1">
+                <label htmlFor="comment-text" className="text-[10px] font-pixel text-matrix-green/40 block mb-1">
                   YOUR COMMENT
                 </label>
                 <textarea
+                  id="comment-text"
                   value={commentText}
                   onChange={(e) => setCommentText(e.target.value)}
                   placeholder="Share your perspective on this proposed rule or regulation..."

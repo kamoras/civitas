@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     PIPELINE_CRON_SCHEDULE: str = "0 3 * * *"
     PIPELINE_TRIGGER_TOKEN: str = ""
     ADMIN_TOKEN: str = ""
+    CORS_ORIGINS: str = ""
     CONGRESS_RPS: float = 1.2
     FEC_RPS: float = 0.25
     GOVINFO_RPS: float = 1.0

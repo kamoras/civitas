@@ -292,6 +292,7 @@ function Pagination({
       <button
         onClick={() => onPageChange(page - 1)}
         disabled={page === 1}
+        aria-label="Previous page"
         className="text-xs px-2 py-1 font-terminal text-matrix-green/60 hover:text-matrix-green disabled:text-matrix-green/20 disabled:cursor-not-allowed"
       >
         &lt; PREV
@@ -300,9 +301,10 @@ function Pagination({
         p === "..." ? (
           <span key={`dot-${i}`} className="text-matrix-green/30 text-xs px-1">...</span>
         ) : (
-          <button
+            <button
             key={p}
             onClick={() => onPageChange(p)}
+            aria-label={`Page ${p}`}
             aria-current={p === page ? "page" : undefined}
             className={`text-xs w-7 h-7 font-terminal border transition-all ${
               p === page
@@ -317,6 +319,7 @@ function Pagination({
       <button
         onClick={() => onPageChange(page + 1)}
         disabled={page === totalPages}
+        aria-label="Next page"
         className="text-xs px-2 py-1 font-terminal text-matrix-green/60 hover:text-matrix-green disabled:text-matrix-green/20 disabled:cursor-not-allowed"
       >
         NEXT &gt;

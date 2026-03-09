@@ -3,10 +3,11 @@ import type { PresidentialScore } from "@/types/president";
 import type { JusticeScore } from "@/types/justice";
 
 const DEFAULT_WEIGHTS: Record<string, number> = {
-  fundingIndependence: 0.30,
-  promisePersistence: 0.25,
-  independentVoting: 0.25,
-  fundingDiversity: 0.20,
+  fundingIndependence: 0.25,
+  promisePersistence: 0.20,
+  independentVoting: 0.20,
+  fundingDiversity: 0.15,
+  legislativeEffectiveness: 0.20,
 };
 
 export function calculateOverallScore(
@@ -16,10 +17,11 @@ export function calculateOverallScore(
   if (!breakdown) return 0;
   const w = weights ?? DEFAULT_WEIGHTS;
   return Math.round(
-    (breakdown.fundingIndependence ?? 0) * (w.fundingIndependence ?? 0.30) +
-      (breakdown.promisePersistence ?? 0) * (w.promisePersistence ?? 0.25) +
-      (breakdown.independentVoting ?? 0) * (w.independentVoting ?? 0.25) +
-      (breakdown.fundingDiversity ?? 0) * (w.fundingDiversity ?? 0.20)
+    (breakdown.fundingIndependence ?? 0) * (w.fundingIndependence ?? 0.25) +
+      (breakdown.promisePersistence ?? 0) * (w.promisePersistence ?? 0.20) +
+      (breakdown.independentVoting ?? 0) * (w.independentVoting ?? 0.20) +
+      (breakdown.fundingDiversity ?? 0) * (w.fundingDiversity ?? 0.15) +
+      (breakdown.legislativeEffectiveness ?? 0) * (w.legislativeEffectiveness ?? 0.20)
   );
 }
 

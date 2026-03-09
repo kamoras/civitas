@@ -41,6 +41,7 @@ class RepresentationScoreSchema(CamelModel):
     promise_persistence: float
     independent_voting: float
     funding_diversity: float
+    legislative_effectiveness: float = 0.0
 
 
 class PolicyAreaDetail(CamelModel):
@@ -368,6 +369,7 @@ class ActionIssueSchema(CamelModel):
     related_bills: list[RelatedBillSchema] = []
     related_explore_docs: list[RelatedExploreDoc] = []
     related_senators: list[RelatedSenator] = []
+    related_monitor_slugs: list[str] = []
 
 
 class MonitorUpdateSchema(CamelModel):
@@ -395,3 +397,13 @@ class NationalMonitorSchema(CamelModel):
 
 class NationalMonitorDetailSchema(NationalMonitorSchema):
     updates: list[MonitorUpdateSchema] = []
+
+
+class TimelineEntrySchema(CamelModel):
+    date: str
+    title: str
+    summary: str
+    policy_areas: list[str] = []
+    source_url: str | None = None
+    source_name: str | None = None
+    monitor_slug: str | None = None

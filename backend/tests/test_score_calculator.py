@@ -1,4 +1,4 @@
-"""Tests for the four representation sub-score calculations."""
+"""Tests for the five representation sub-score calculations."""
 
 import pytest
 
@@ -6,6 +6,7 @@ from app.pipeline.analyze.score_calculator import (
     _calc_funding_diversity,
     _calc_funding_independence,
     _calc_independent_voting,
+    _calc_legislative_effectiveness,
     _calc_promise_persistence,
     calculate_scores,
     clamp,
@@ -37,7 +38,7 @@ class TestFundingIndependence:
             "topDonors": [{"total": 100} for _ in range(10)],
         }
         score = _calc_funding_independence(funding)
-        assert score >= 90
+        assert score >= 85
 
     def test_fully_pac_funded_concentrated(self):
         funding = {
@@ -45,7 +46,7 @@ class TestFundingIndependence:
             "totalFromPACs": 1_000_000,
             "topDonors": [{"total": 500_000}],
         }
-        assert _calc_funding_independence(funding) < 30
+        assert _calc_funding_independence(funding) < 20
 
     def test_balanced_funding(self):
         funding = {
@@ -54,7 +55,7 @@ class TestFundingIndependence:
             "topDonors": [{"total": 20_000} for _ in range(10)],
         }
         score = _calc_funding_independence(funding)
-        assert 50 <= score <= 80
+        assert 50 <= score <= 90
 
     def test_no_funding_data(self):
         assert _calc_funding_independence({}) == 50
@@ -68,7 +69,7 @@ class TestFundingIndependence:
             "topDonors": [{"total": 800_000}],
         }
         score = _calc_funding_independence(funding)
-        assert score < 70
+        assert score < 50
 
     def test_many_pacs_but_diversified(self):
         """High PAC ratio but spread across many small PACs."""
@@ -78,7 +79,24 @@ class TestFundingIndependence:
             "topDonors": [{"total": 10_000} for _ in range(10)],
         }
         score = _calc_funding_independence(funding)
-        assert score <= 60  # penalized for PAC dependency
+        assert score <= 50
+
+    def test_amplified_penalties_create_spread(self):
+        """Different PAC ratios should produce meaningfully different scores."""
+        funding_low_pac = {
+            "totalRaised": 1_000_000,
+            "totalFromPACs": 50_000,
+            "topDonors": [{"total": 5_000} for _ in range(10)],
+        }
+        funding_high_pac = {
+            "totalRaised": 1_000_000,
+            "totalFromPACs": 300_000,
+            "topDonors": [{"total": 20_000} for _ in range(10)],
+        }
+        score_low = _calc_funding_independence(funding_low_pac)
+        score_high = _calc_funding_independence(funding_high_pac)
+        assert score_low > score_high
+        assert score_low - score_high >= 10
 
 
 class TestIndependentVoting:
@@ -99,7 +117,7 @@ class TestIndependentVoting:
 
     def test_high_party_independence(self):
         record = {
-            "keyVotes": self._make_votes(with_party=80, against_party=20),
+            "keyVotes": self._make_votes(with_party=70, against_party=30),
             "recentVotes": [],
         }
         score = _calc_independent_voting(
@@ -160,11 +178,7 @@ class TestIndependentVoting:
         assert abs(score_with_energy - score_just_other) <= 5
 
     def test_deep_red_state_senator_not_penalized(self):
-        """A Republican in a deep red state voting with the party should score OK.
-
-        The state lean adjustment lowers the independence threshold, so
-        even small break rates in safe states are considered independent.
-        """
+        """A Republican in a deep red state voting with the party should score OK."""
         record = {
             "keyVotes": self._make_votes(with_party=95, against_party=5),
             "recentVotes": [],
@@ -178,6 +192,22 @@ class TestIndependentVoting:
             record, [], funding, state="NV", party="R"
         )
         assert score_deep_red > score_swing
+
+    def test_two_stage_curve_creates_spread(self):
+        """Different independence levels should produce meaningfully different scores."""
+        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
+        scores = []
+        for against in [0, 5, 10, 20, 40]:
+            record = {
+                "keyVotes": self._make_votes(with_party=100 - against, against_party=against),
+                "recentVotes": [],
+            }
+            scores.append(_calc_independent_voting(record, [], funding))
+        # Scores should be monotonically increasing
+        for i in range(1, len(scores)):
+            assert scores[i] >= scores[i - 1]
+        # And there should be meaningful spread
+        assert scores[-1] - scores[0] >= 25
 
 
 class TestFundingDiversity:
@@ -230,14 +260,11 @@ class TestPromisePersistence:
     def test_all_kept(self):
         promises = [{"alignment": "kept"}, {"alignment": "kept"}, {"alignment": "kept"}]
         score = _calc_promise_persistence({}, "D", promises)
-        # With 3 promises, count_conf = 3/5 = 0.6 causes Bayesian shrinkage
-        # toward 50, so score won't reach 100
         assert 70 <= score <= 95
 
     def test_all_broken(self):
         promises = [{"alignment": "broken"}, {"alignment": "broken"}]
         score = _calc_promise_persistence({}, "D", promises)
-        # With 2 promises, count_conf = 2/5 = 0.4 causes heavy shrinkage
         assert score <= 45
 
     def test_mixed(self):
@@ -259,12 +286,12 @@ class TestPromisePersistence:
         score_inflated = _calc_promise_persistence({}, "D", promises_inflated)
         score_genuine = _calc_promise_persistence({}, "D", promises_genuine)
         assert score_inflated < score_genuine
-        assert score_inflated < 70  # should be pulled toward 50
+        assert score_inflated < 70
 
     def test_all_unclear_returns_neutral(self):
         promises = [{"alignment": "unclear"}, {"alignment": "unclear"}]
         score = _calc_promise_persistence({}, "D", promises)
-        assert 45 <= score <= 60  # near neutral, participation component may shift slightly
+        assert 45 <= score <= 60
 
     def test_no_data_returns_neutral(self):
         score = _calc_promise_persistence({}, "D", None)
@@ -312,10 +339,66 @@ class TestPromisePersistence:
         assert score_active > score_absent
 
 
+class TestLegislativeEffectiveness:
+    """Higher score = more bills passed, higher leadership, more active sponsorship."""
+
+    def test_no_data_returns_neutral(self):
+        score = _calc_legislative_effectiveness([], None)
+        assert score == 50
+
+    def test_no_bills_with_leadership(self):
+        """Leadership alone should shift score above 50."""
+        score = _calc_legislative_effectiveness([], 0.8)
+        assert score > 50
+
+    def test_prolific_but_no_passage(self):
+        """Many bills introduced but none advanced — moderate score from volume only."""
+        bills = [
+            {"title": f"Bill {i}", "isLaw": False, "latestAction": "Introduced"}
+            for i in range(50)
+        ]
+        score = _calc_legislative_effectiveness(bills, None)
+        assert 30 <= score <= 55
+
+    def test_high_passage_rate(self):
+        """Bills that became law should boost the score significantly."""
+        bills = [
+            {"title": "Good Bill", "isLaw": True, "latestAction": "Became public law"},
+            {"title": "Also Good", "isLaw": True, "latestAction": "Became public law"},
+            {"title": "Decent", "isLaw": False, "latestAction": "Passed Senate"},
+        ] + [
+            {"title": f"Bill {i}", "isLaw": False, "latestAction": "Introduced"}
+            for i in range(10)
+        ]
+        score = _calc_legislative_effectiveness(bills, 0.5)
+        assert score >= 60
+
+    def test_leadership_matters(self):
+        """Higher PageRank leadership should produce higher score."""
+        bills = [{"title": f"B{i}", "isLaw": False, "latestAction": "Introduced"} for i in range(20)]
+        score_low = _calc_legislative_effectiveness(bills, 0.1)
+        score_high = _calc_legislative_effectiveness(bills, 0.9)
+        assert score_high > score_low
+
+    def test_advancement_keywords(self):
+        """Bills that passed committee or chamber should count as advanced."""
+        bills = [
+            {"title": "B1", "isLaw": False, "latestAction": "Ordered to be reported"},
+            {"title": "B2", "isLaw": False, "latestAction": "Placed on calendar"},
+            {"title": "B3", "isLaw": False, "latestAction": "Introduced"},
+        ]
+        score_advanced = _calc_legislative_effectiveness(bills, None)
+        score_none = _calc_legislative_effectiveness(
+            [{"title": f"B{i}", "isLaw": False, "latestAction": "Introduced"} for i in range(3)],
+            None,
+        )
+        assert score_advanced > score_none
+
+
 class TestCalculateScoresIntegration:
     """Full calculate_scores integration."""
 
-    def test_returns_all_four_scores(self):
+    def test_returns_all_five_scores(self):
         senator = {
             "funding": {
                 "totalRaised": 1_000_000,
@@ -342,6 +425,10 @@ class TestCalculateScoresIntegration:
                 {"senatorVoteAligned": True},
                 {"senatorVoteAligned": False},
             ],
+            "sponsoredBills": [
+                {"title": "Bill 1", "isLaw": True, "latestAction": "Became law"},
+                {"title": "Bill 2", "isLaw": False, "latestAction": "Introduced"},
+            ],
             "yearsInOffice": 12,
             "party": "D",
             "state": "NY",
@@ -354,6 +441,7 @@ class TestCalculateScoresIntegration:
         assert "promisePersistence" in scores
         assert "independentVoting" in scores
         assert "fundingDiversity" in scores
+        assert "legislativeEffectiveness" in scores
         assert "transparency" not in scores
         assert "accessibility" not in scores
 
@@ -366,6 +454,7 @@ class TestCalculateScoresIntegration:
             "funding": {},
             "votingRecord": {},
             "lobbyingMatches": [],
+            "sponsoredBills": [],
             "yearsInOffice": 0,
             "party": "D",
             "state": "DC",

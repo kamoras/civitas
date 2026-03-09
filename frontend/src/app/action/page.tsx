@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState, useCallback } from "react";
+import { Suspense, useEffect, useMemo, useState, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -8,10 +8,9 @@ import MatrixRain from "@/components/effects/MatrixRain";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import GlitchText from "@/components/effects/GlitchText";
-import { fetchActionIssues, fetchRecentByBranch, fetchMonitors, fetchMonitorDetail } from "@/lib/api";
-import type { NationalMonitor, NationalMonitorDetail } from "@/lib/api";
+import { fetchActionIssues } from "@/lib/api";
+import { safeHref } from "@/lib/formatting";
 import type { ActionIssue, ActionIssuesResponse, ActionItem, DailyTheme } from "@/types/action";
-import type { BranchDocument } from "@/lib/api";
 import { STATES } from "@/data/states";
 
 const GlobeTab = dynamic(() => import("@/components/action/GlobeTab"), {
@@ -32,6 +31,22 @@ const ElectionsTab = dynamic(() => import("@/components/action/ElectionsTab"), {
   ),
 });
 
+const MonitorsTab = dynamic(() => import("./MonitorsTab"), {
+  loading: () => (
+    <div className="flex items-center justify-center py-24">
+      <div className="text-amber-400 animate-pulse font-pixel text-sm">{">"} SCANNING NATIONAL CONCERNS...</div>
+    </div>
+  ),
+});
+
+const TimelineTab = dynamic(() => import("./TimelineTab"), {
+  loading: () => (
+    <div className="flex items-center justify-center py-24">
+      <div className="text-purple-400 animate-pulse font-pixel text-sm">{">"} LOADING TIMELINE...</div>
+    </div>
+  ),
+});
+
 const PARTY_COLORS: Record<string, string> = {
   D: "text-dem-blue",
   R: "text-rep-red",
@@ -44,7 +59,7 @@ const PARTY_BORDER: Record<string, string> = {
   I: "border-ind-purple/30",
 };
 
-type Tab = "issues" | "monitors" | "elections" | "senate" | "house" | "executive" | "world";
+type Tab = "issues" | "monitors" | "timeline" | "elections" | "world";
 
 const ACTION_TYPE_META: Record<string, { label: string; labelWithState: string; url: string; urlWithState?: (s: string) => string }> = {
   contact_senator: {
@@ -194,14 +209,14 @@ function ActionItemCard({
         <div className="flex items-center gap-2 flex-wrap">
           {isInternal ? (
             <Link
-              href={url}
+              href={safeHref(url) || "#"}
               className="text-[10px] font-pixel text-neon-cyan/70 hover:text-neon-cyan border border-neon-cyan/30 hover:border-neon-cyan/60 px-2 py-1 transition-colors flex items-center gap-1"
             >
               {stateLabel} →
             </Link>
           ) : (
             <a
-              href={url}
+              href={safeHref(url) || "#"}
               target="_blank"
               rel="noopener noreferrer"
               className="text-[10px] font-pixel text-neon-cyan/70 hover:text-neon-cyan border border-neon-cyan/30 hover:border-neon-cyan/60 px-2 py-1 transition-colors flex items-center gap-1"
@@ -218,12 +233,10 @@ function ActionItemCard({
 
 const TABS: { id: Tab; label: string; color: string }[] = [
   { id: "issues", label: "ISSUES", color: "text-neon-cyan border-neon-cyan" },
-  { id: "monitors", label: "MONITORS", color: "text-amber-400 border-amber-400" },
   { id: "elections", label: "ELECTIONS", color: "text-neon-yellow border-neon-yellow" },
-  { id: "senate", label: "SENATE", color: "text-neon-yellow/70 border-neon-yellow/70" },
-  { id: "house", label: "HOUSE", color: "text-neon-pink border-neon-pink" },
-  { id: "executive", label: "EXECUTIVE", color: "text-orange-400 border-orange-400" },
+  { id: "monitors", label: "MONITORS", color: "text-amber-400 border-amber-400" },
   { id: "world", label: "WORLD", color: "text-green-400 border-green-400" },
+  { id: "timeline", label: "TIMELINE", color: "text-purple-400 border-purple-400" },
 ];
 
 function PolicyBadge({ area, themed = false }: { area: string; themed?: boolean }) {
@@ -238,7 +251,7 @@ function SourceBadge({ name, url }: { name: string; url?: string }) {
   if (url) {
     return (
       <a
-        href={url}
+        href={safeHref(url) || "#"}
         target="_blank"
         rel="noopener noreferrer"
         className="text-[10px] px-1.5 py-0.5 border border-matrix-green/20 text-matrix-green/50 hover:text-neon-cyan hover:border-neon-cyan/30 transition-colors"
@@ -286,16 +299,35 @@ function SenatorChips({ issue }: { issue: ActionIssue }) {
   );
 }
 
+function MonitorLinks({ slugs, onNavigate }: { slugs?: string[]; onNavigate?: (tab: Tab) => void }) {
+  if (!slugs || slugs.length === 0) return null;
+  return (
+    <div className="flex items-center gap-2 flex-wrap mb-4">
+      <span className="font-pixel text-[10px] text-amber-400/50">TRACKING:</span>
+      {slugs.map((slug) => (
+        <button
+          key={slug}
+          onClick={() => onNavigate?.("monitors")}
+          className="text-[10px] font-pixel px-2 py-0.5 border border-amber-400/30 text-amber-400/70 hover:text-amber-400 hover:border-amber-400/60 transition-colors bg-amber-400/5"
+        >
+          {slug.replace(/-/g, " ").slice(0, 40)}
+          {slug.length > 40 ? "…" : ""}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function HeroIssue({
   issue,
   userState,
   themed = false,
-  theme,
+  onNavigate,
 }: {
   issue: ActionIssue;
   userState: string | null;
   themed?: boolean;
-  theme?: DailyTheme | null;
+  onNavigate?: (tab: Tab) => void;
 }) {
   const panelClass = themed
     ? "theme-hero-panel terminal-window border p-6 sm:p-8"
@@ -320,12 +352,6 @@ function HeroIssue({
         <span className={`font-pixel text-xs px-2 py-1 border ${themed ? "theme-tag" : "text-neon-cyan/60 bg-neon-cyan/10 border-neon-cyan/30"}`}>
           TOP ISSUE
         </span>
-        {themed && theme?.mood && (
-          <span className="theme-mood-badge font-pixel">
-            <span className="theme-mood-dot" aria-hidden="true" />
-            {theme.mood}
-          </span>
-        )}
         <span className="text-xs text-matrix-green/40">{issue.date}</span>
       </div>
 
@@ -347,6 +373,8 @@ function HeroIssue({
           ))}
         </div>
       )}
+
+      <MonitorLinks slugs={issue.relatedMonitorSlugs} onNavigate={onNavigate} />
 
       <SenatorChips issue={issue} />
 
@@ -462,9 +490,11 @@ function HeroIssue({
 function SecondaryIssue({
   issue,
   userState,
+  onNavigate,
 }: {
   issue: ActionIssue;
   userState: string | null;
+  onNavigate?: (tab: Tab) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -501,6 +531,8 @@ function SecondaryIssue({
           <p className="text-matrix-green/80 text-sm leading-relaxed">
             {issue.summary}
           </p>
+
+          <MonitorLinks slugs={issue.relatedMonitorSlugs} onNavigate={onNavigate} />
 
           {issue.facts.length > 0 && (
             <div>
@@ -717,208 +749,56 @@ function ThemeStyleInjector({ theme }: { theme: DailyTheme }) {
   return <style dangerouslySetInnerHTML={{ __html: baseCss + "\n" + customCss }} />;
 }
 
-function MonitorsTab() {
-  const [monitors, setMonitors] = useState<NationalMonitor[]>([]);
-  const [selected, setSelected] = useState<NationalMonitorDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const detailRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    fetchMonitors()
-      .then((d) => setMonitors(d.monitors))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
-
-  const openMonitor = useCallback((slug: string) => {
-    setDetailLoading(true);
-    fetchMonitorDetail(slug)
-      .then((d) => {
-        setSelected(d);
-        setTimeout(() => {
-          detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-        }, 100);
-      })
-      .catch(() => {})
-      .finally(() => setDetailLoading(false));
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <div className="text-amber-400 animate-pulse font-pixel text-sm">
-          {">"} SCANNING NATIONAL CONCERNS...
-        </div>
-      </div>
-    );
-  }
-
-  if (monitors.length === 0) {
-    return (
-      <div className="terminal-window max-w-lg mx-auto p-8 text-center space-y-4">
-        <div className="font-pixel text-sm text-amber-400/80">NO ACTIVE MONITORS</div>
-        <p className="text-matrix-green/50 text-sm">
-          National monitors are automatically created when an issue persists across
-          multiple days in the news cycle. Check back as the system identifies
-          ongoing concerns.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="text-center text-[10px] text-matrix-green/40 font-pixel mb-2">
-        ONGOING NATIONAL CONCERNS — AUTO-DETECTED FROM RECURRING NEWS PATTERNS
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {monitors.map((m) => (
-          <button
-            key={m.slug}
-            onClick={() => openMonitor(m.slug)}
-            className={`terminal-window p-4 text-left transition-colors hover:border-amber-400/30 ${
-              selected?.slug === m.slug ? "border-amber-400/50" : ""
-            }`}
-            aria-label={`View monitor: ${m.title}`}
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  m.status === "active" ? "bg-green-400" : "bg-amber-400/50"
-                }`}
-                aria-label={m.status === "active" ? "Active" : "Watching"}
-              />
-              <span className="font-pixel text-[10px] text-amber-400/60 uppercase">
-                {m.category}
-              </span>
-            </div>
-            <h3 className="font-pixel text-sm text-matrix-green mb-1 leading-relaxed">
-              {m.title}
-            </h3>
-            <div className="flex items-center gap-3 text-[10px] text-matrix-green/40">
-              <span>{m.updateCount} update{m.updateCount !== 1 ? "s" : ""}</span>
-              {m.lastArticleDate && (
-                <span>latest: {m.lastArticleDate}</span>
-              )}
-              <span>tracking since {m.createdAt}</span>
-            </div>
-          </button>
-        ))}
-      </div>
-
-      {detailLoading && (
-        <div className="flex items-center justify-center py-8">
-          <div className="text-amber-400 animate-pulse font-pixel text-sm">
-            {">"} LOADING TIMELINE...
-          </div>
-        </div>
-      )}
-
-      {selected && !detailLoading && (
-        <div
-          ref={detailRef}
-          className="terminal-window border-t-2 border-t-amber-400/50 p-5 sm:p-6 scroll-mt-4"
-          role="region"
-          aria-label={`Monitor: ${selected.title}`}
-        >
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="font-pixel text-base sm:text-lg text-amber-400">
-                {selected.title}
-              </h3>
-              <div className="flex items-center gap-2 mt-1">
-                <span
-                  className={`text-[10px] font-pixel px-2 py-0.5 border ${
-                    selected.status === "active"
-                      ? "border-green-400/30 text-green-400/80"
-                      : "border-amber-400/30 text-amber-400/60"
-                  }`}
-                >
-                  {selected.status.toUpperCase()}
-                </span>
-                {selected.policyAreas.map((area) => (
-                  <span
-                    key={area}
-                    className="text-[10px] font-pixel px-2 py-0.5 border border-neon-yellow/30 text-neon-yellow/80"
-                  >
-                    {area}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <button
-              onClick={() => setSelected(null)}
-              className="text-matrix-green/40 hover:text-matrix-green font-pixel text-xs"
-              aria-label="Close monitor detail"
-            >
-              [CLOSE]
-            </button>
-          </div>
-
-          <p className="text-matrix-green/70 text-sm mb-6 leading-relaxed">
-            {selected.description}
-          </p>
-
-          <h4 className="font-pixel text-sm text-amber-400/80 mb-4">
-            {">"} TIMELINE ({selected.updates.length} updates)
-          </h4>
-
-          <div className="relative pl-4 border-l border-amber-400/20 space-y-4">
-            {selected.updates.map((update) => (
-              <div key={update.id} className="relative">
-                <div
-                  className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-amber-400/40 border border-amber-400/60"
-                  aria-hidden="true"
-                />
-                <div className="text-[10px] text-matrix-green/40 font-pixel mb-1">
-                  {update.date}
-                  {update.sourceName && (
-                    <span className="ml-2 text-matrix-green/30">via {update.sourceName}</span>
-                  )}
-                </div>
-                <p className="text-sm text-matrix-green/80 leading-relaxed mb-1">
-                  {update.summary}
-                </p>
-                <a
-                  href={update.sourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[10px] text-neon-cyan/60 hover:text-neon-cyan transition-colors"
-                >
-                  {update.articleTitle || "Source"} <span aria-hidden="true">↗</span>
-                  <span className="sr-only"> (opens in new tab)</span>
-                </a>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function IssuesTab({
   userState,
   setUserState,
+  onNavigate,
+  initialDate,
 }: {
   userState: string | null;
   setUserState: (s: string | null) => void;
+  onNavigate?: (tab: Tab) => void;
+  initialDate?: string | null;
 }) {
   const [data, setData] = useState<ActionIssuesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [showStatePicker, setShowStatePicker] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<string | null>(initialDate || null);
 
-  useEffect(() => {
-    fetchActionIssues()
-      .then((d) => {
-        setData(d);
-      })
+  const loadIssues = useCallback((date?: string) => {
+    setLoading(true);
+    fetchActionIssues(date)
+      .then((d) => setData(d))
       .catch(() => {})
       .finally(() => setLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    loadIssues(initialDate || undefined);
+  }, [loadIssues, initialDate]);
+
+  const availableDates = useMemo(() => data?.availableDates || [], [data?.availableDates]);
+  const currentDate = selectedDate || data?.date || null;
+  const currentIdx = currentDate ? availableDates.indexOf(currentDate) : 0;
+
+  const goToPrev = useCallback(() => {
+    if (currentIdx < availableDates.length - 1) {
+      const d = availableDates[currentIdx + 1];
+      setSelectedDate(d);
+      loadIssues(d);
+    }
+  }, [currentIdx, availableDates, loadIssues]);
+
+  const goToNext = useCallback(() => {
+    if (currentIdx > 0) {
+      const d = availableDates[currentIdx - 1];
+      setSelectedDate(d);
+      loadIssues(d);
+    } else if (currentIdx === 0 && selectedDate) {
+      setSelectedDate(null);
+      loadIssues();
+    }
+  }, [currentIdx, availableDates, selectedDate, loadIssues]);
 
   const theme = data?.theme;
 
@@ -946,6 +826,40 @@ function IssuesTab({
     <div className="space-y-6">
       {theme && <ThemeStyleInjector theme={theme} />}
 
+      {/* Date navigation */}
+      {availableDates.length > 1 && (
+        <div className="flex items-center justify-center gap-4 font-pixel text-xs">
+          <button
+            onClick={goToPrev}
+            disabled={currentIdx >= availableDates.length - 1}
+            className="text-matrix-green/60 hover:text-matrix-green disabled:text-matrix-green/20 disabled:cursor-not-allowed transition-colors"
+            aria-label="Previous day"
+          >
+            {"<"} PREV
+          </button>
+          <span className="text-matrix-green/80 px-3 py-1 border border-matrix-green/20 bg-matrix-green/5 min-w-[110px] text-center">
+            {currentDate || "—"}
+          </span>
+          <button
+            onClick={goToNext}
+            disabled={currentIdx <= 0 && !selectedDate}
+            className="text-matrix-green/60 hover:text-matrix-green disabled:text-matrix-green/20 disabled:cursor-not-allowed transition-colors"
+            aria-label="Next day"
+          >
+            NEXT {">"}
+          </button>
+          {selectedDate && (
+            <button
+              onClick={() => { setSelectedDate(null); loadIssues(); }}
+              className="text-neon-cyan/60 hover:text-neon-cyan transition-colors ml-1"
+              aria-label="Jump to present"
+            >
+              [LATEST]
+            </button>
+          )}
+        </div>
+      )}
+
       {/* State selector bar */}
       <div className="flex items-center justify-between terminal-window p-3">
         <div className="flex items-center gap-2">
@@ -972,7 +886,7 @@ function IssuesTab({
       {/* Themed divider line above hero */}
       {theme && <div className="theme-section-line" aria-hidden="true" />}
 
-      <HeroIssue issue={heroIssue} userState={userState} themed={!!theme} theme={theme} />
+      <HeroIssue issue={heroIssue} userState={userState} themed={!!theme} onNavigate={onNavigate} />
 
       {secondaryIssues.length > 0 && (
         <div>
@@ -982,7 +896,7 @@ function IssuesTab({
           </h2>
           <div className="space-y-3">
             {secondaryIssues.map((issue) => (
-              <SecondaryIssue key={issue.id} issue={issue} userState={userState} />
+              <SecondaryIssue key={issue.id} issue={issue} userState={userState} onNavigate={onNavigate} />
             ))}
           </div>
         </div>
@@ -1007,89 +921,7 @@ function IssuesTab({
   );
 }
 
-const DOC_TYPE_COLORS: Record<string, string> = {
-  "Senate Floor Speech": "text-neon-yellow",
-  "House Floor Speech": "text-neon-pink",
-  "Executive Order": "text-orange-400",
-  "Proclamation": "text-orange-300",
-  "Proposed Rule": "text-neon-cyan",
-  "Final Rule": "text-green-400",
-  "Notice": "text-matrix-green",
-};
-
-function BranchTab({ branch }: { branch: string }) {
-  const [docs, setDocs] = useState<BranchDocument[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchRecentByBranch(branch)
-      .then((data) => setDocs(data.documents))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [branch]);
-
-  if (loading) {
-    return (
-      <div className="terminal-window max-w-md mx-auto p-6 text-center" role="status" aria-live="polite">
-        <div className="text-neon-cyan animate-pulse text-lg">
-          {">"} LOADING {branch.toUpperCase()} ACTIVITY...
-        </div>
-      </div>
-    );
-  }
-
-  if (docs.length === 0) {
-    return (
-      <div className="terminal-window max-w-md mx-auto p-6 text-center" role="status" aria-live="polite">
-        <div className="text-matrix-green/50 text-lg">No recent activity found.</div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      {docs.map((doc) => (
-        <div key={doc.id} className="terminal-window p-4 hover:border-matrix-green/30 transition-colors">
-          <div className="flex items-start gap-3">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap mb-1.5">
-                <span className={`text-[10px] font-pixel ${DOC_TYPE_COLORS[doc.docType] || "text-matrix-green"}`}>
-                  {doc.docType.toUpperCase()}
-                </span>
-                <span className="text-[10px] text-matrix-green/30">{doc.date}</span>
-                {doc.politicianName && (
-                  <span className="text-[10px] text-matrix-green/40">— {doc.politicianName}</span>
-                )}
-              </div>
-              {doc.url ? (
-                <a
-                  href={doc.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-matrix-green/80 hover:text-neon-cyan transition-colors leading-relaxed"
-                >
-                  {doc.title}
-                </a>
-              ) : (
-                <Link
-                  href={`/explore/${doc.id}`}
-                  className="text-sm text-matrix-green/80 hover:text-neon-cyan transition-colors leading-relaxed"
-                >
-                  {doc.title}
-                </Link>
-              )}
-              {doc.summary && (
-                <p className="text-[11px] text-matrix-green/40 mt-1 line-clamp-2">{doc.summary}</p>
-              )}
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-const VALID_TABS = new Set<string>(["issues", "monitors", "elections", "senate", "house", "executive", "world"]);
+const VALID_TABS = new Set<string>(["issues", "monitors", "timeline", "elections", "world"]);
 
 export default function ActionPage() {
   return (
@@ -1185,12 +1017,10 @@ function ActionPageInner() {
             aria-labelledby={`tab-${activeTab}`}
             tabIndex={0}
           >
-            {activeTab === "issues" && <IssuesTab userState={userState} setUserState={setUserState} />}
+            {activeTab === "issues" && <IssuesTab userState={userState} setUserState={setUserState} onNavigate={setActiveTab} initialDate={searchParams.get("date")} />}
             {activeTab === "monitors" && <MonitorsTab />}
+            {activeTab === "timeline" && <TimelineTab />}
             {activeTab === "elections" && <ElectionsTab />}
-            {activeTab === "senate" && <BranchTab branch="senate" />}
-            {activeTab === "house" && <BranchTab branch="house" />}
-            {activeTab === "executive" && <BranchTab branch="executive" />}
             {activeTab === "world" && <GlobeTab />}
           </div>
         </div>

@@ -1,17 +1,50 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 50);
     window.addEventListener("scroll", onScroll);
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  const closeMenu = useCallback(() => {
+    setMenuOpen(false);
+    toggleRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        closeMenu();
+        return;
+      }
+      if (e.key !== "Tab" || !menuRef.current) return;
+      const focusable = menuRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled])'
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [menuOpen, closeMenu]);
 
   return (
     <header
@@ -67,8 +100,9 @@ export default function Navbar() {
 
         {/* Mobile hamburger */}
         <button
+          ref={toggleRef}
           className="sm:hidden text-matrix-green text-2xl"
-          onClick={() => setMenuOpen(!menuOpen)}
+          onClick={() => menuOpen ? closeMenu() : setMenuOpen(true)}
           aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
           aria-expanded={menuOpen}
           aria-controls="mobile-menu"
@@ -80,41 +114,44 @@ export default function Navbar() {
       {/* Mobile menu */}
       {menuOpen && (
         <div
+          ref={menuRef}
           id="mobile-menu"
+          role="dialog"
+          aria-label="Navigation menu"
           className="sm:hidden bg-[#0a0a0a] border-t border-matrix-green/20 px-4 py-6 flex flex-col gap-4 text-xl"
         >
           <Link
             href="/action"
             className="text-neon-cyan/70 hover:text-neon-cyan transition-colors font-pixel text-base"
-            onClick={() => setMenuOpen(false)}
+            onClick={closeMenu}
           >
             {"> ACTION CENTER"}
           </Link>
           <Link
             href="/scorecard"
             className="text-matrix-green/70 hover:text-matrix-green transition-colors"
-            onClick={() => setMenuOpen(false)}
+            onClick={closeMenu}
           >
             {"> SCORECARD"}
           </Link>
           <Link
             href="/leaderboard"
             className="text-matrix-green/70 hover:text-matrix-green transition-colors"
-            onClick={() => setMenuOpen(false)}
+            onClick={closeMenu}
           >
             {"> LEADERBOARD"}
           </Link>
           <Link
             href="/explore"
             className="text-matrix-green/70 hover:text-matrix-green transition-colors"
-            onClick={() => setMenuOpen(false)}
+            onClick={closeMenu}
           >
             {"> EXPLORE"}
           </Link>
           <Link
             href="/about"
             className="text-matrix-green/50 hover:text-matrix-green transition-colors"
-            onClick={() => setMenuOpen(false)}
+            onClick={closeMenu}
           >
             {"> ABOUT"}
           </Link>

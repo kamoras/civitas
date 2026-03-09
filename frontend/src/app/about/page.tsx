@@ -76,9 +76,9 @@ export default function AboutPage() {
             <P>
               Civitas is an open-data AI/ML platform that aggregates data from official
               U.S. government sources into unified transparency scorecards for senators,
-              presidents, and Supreme Court justices. Every score is computed from publicly
-              available federal records. We do not editorialize, endorse, or oppose any
-              candidate or party.
+              House representatives, presidents, and Supreme Court justices. Every score
+              is computed from publicly available federal records. We do not editorialize,
+              endorse, or oppose any candidate or party.
             </P>
             <P>
               Scores reflect observable behavior — voting patterns, funding sources,
@@ -113,7 +113,7 @@ export default function AboutPage() {
           {/* ── Senate Metrics ── */}
           <Section title="SENATE SCORECARD METRICS">
             <P>
-              Each senator receives four sub-scores on a 0-100 scale, weighted into an
+              Each senator receives five sub-scores on a 0-100 scale, weighted into an
               overall Representation Score. Higher is better.
             </P>
 
@@ -136,7 +136,7 @@ export default function AboutPage() {
               </div>
 
               <div>
-                <Label>Promise Persistence (25%)</Label>
+                <Label>Promise Persistence (20%)</Label>
                 <P>
                   Tracks whether a senator&apos;s voting record aligns with their stated campaign
                   promises. Platform text is extracted from official senate.gov websites and
@@ -164,7 +164,7 @@ export default function AboutPage() {
               </div>
 
               <div>
-                <Label>Independent Voting (25%)</Label>
+                <Label>Independent Voting (20%)</Label>
                 <P>
                   Measures willingness to break with party leadership on votes that are not
                   explained by constituent interests. We identify state-relevant policy areas
@@ -193,7 +193,7 @@ export default function AboutPage() {
               </div>
 
               <div>
-                <Label>Funding Diversity (25%)</Label>
+                <Label>Funding Diversity (15%)</Label>
                 <P>
                   Evaluates how traceable and diverse a senator&apos;s funding sources are.
                   The score blends donor traceability (50%) — the fraction of funding from
@@ -207,7 +207,37 @@ export default function AboutPage() {
                   constituent support.
                 </P>
               </div>
+
+              <div>
+                <Label>Legislative Effectiveness (20%)</Label>
+                <P>
+                  Measures how effective a senator is at advancing legislation. The score
+                  combines bill passage rates, cosponsorship network influence (PageRank),
+                  and ability to move bills through committee and floor consideration.
+                  Higher scores indicate senators who successfully shepherd bills into law
+                  and attract bipartisan cosponsorship.
+                </P>
+              </div>
             </div>
+          </Section>
+
+          {/* ── House Representatives ── */}
+          <Section title="HOUSE REPRESENTATIVE SCORECARDS">
+            <P>
+              All 435 House representatives are scored using the same four-metric
+              framework as the Senate: Funding Independence, Promise Persistence,
+              Independent Voting, and Funding Diversity. The data sources (FEC,
+              Congress.gov, GovInfo) and classification techniques are identical,
+              ensuring consistent, comparable scores across both chambers.
+            </P>
+            <P>
+              House members are sourced from the same Congress.gov API and FEC
+              endpoints. The pipeline processes representatives in the same nightly
+              run as senators, using the same embedding-based classification,
+              content-based party alignment, and deterministic scoring formulas.
+              The House leaderboard supports pagination and party filtering to
+              navigate the larger membership.
+            </P>
           </Section>
 
           {/* ── Sponsorship Analysis ── */}
@@ -415,10 +445,45 @@ export default function AboutPage() {
               <div>
                 <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">GOVERNMENT ACTIVITY TABS</h3>
                 <P>
-                  Dedicated tabs for Senate, House, and Executive branches display the most
-                  recent government documents — floor speeches, executive orders, proposed
-                  rules, and notices — pulled directly from the Explore database, providing
-                  a quick overview of each branch&apos;s latest activity.
+                  Dedicated tabs for all three branches of government — Legislative (Senate
+                  and House), Executive, and Judicial — display the most recent government
+                  documents: floor speeches, executive orders, proposed rules, court opinions,
+                  and notices, pulled directly from the Explore database.
+                </P>
+              </div>
+
+              <div>
+                <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">NATIONAL MONITORS</h3>
+                <P>
+                  When an issue persists in the news across multiple days, the system
+                  automatically creates a National Monitor — a dedicated tracking page
+                  for that ongoing concern. Monitors build a sourced timeline of
+                  developments, detect when separate news stories are facets of the same
+                  underlying event using embedding similarity, and merge duplicate
+                  monitors automatically. Monitors transition to &quot;watching&quot; status
+                  when coverage subsides and reactivate when new developments appear.
+                </P>
+              </div>
+
+              <div>
+                <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">YEAR-IN-REVIEW TIMELINE</h3>
+                <P>
+                  Each day&apos;s top issue is permanently recorded in a timeline that
+                  accumulates throughout the calendar year. The Timeline tab provides
+                  a month-by-month chronological view of what mattered most, with
+                  top policy themes calculated for each month and the year as a whole.
+                  At year&apos;s end, this becomes a complete &quot;Year in Review&quot; of the
+                  issues that shaped civic life.
+                </P>
+              </div>
+
+              <div>
+                <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">ELECTIONS TAB</h3>
+                <P>
+                  The Elections tab displays upcoming election dates, Senate races with
+                  incumbent scores linked to their scorecards, and an interactive U.S.
+                  map for selecting states. State-specific information helps users
+                  understand their local races in the context of national trends.
                 </P>
               </div>
 
@@ -427,8 +492,8 @@ export default function AboutPage() {
                 <P>
                   The World tab features a 3D interactive globe that visualizes U.S.-related
                   international news coverage. Countries mentioned in current news feeds are
-                  highlighted with points scaled by article count. Clicking a country shows
-                  recent headlines about U.S. relations with that nation, linking to the
+                  highlighted with points scaled by article count. Clicking a country scrolls
+                  to recent headlines about U.S. relations with that nation, linking to the
                   original source articles.
                 </P>
               </div>
@@ -716,7 +781,7 @@ export default function AboutPage() {
               <div>
                 <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">WHAT AI DOES NOT DO</h3>
                 <div className="space-y-2">
-                  <Row label="Score calculation" value="All four sub-scores use deterministic formulas with no LLM input. The math is fully auditable." />
+                  <Row label="Score calculation" value="All five sub-scores use deterministic formulas with no LLM input. The math is fully auditable." />
                   <Row label="Bill classification" value="Policy areas, party alignment, and stance are all embedding-based — no LLM in the loop." />
                   <Row label="Donor classification" value="FEC metadata + embeddings + kNN handle all donor and industry classification." />
                   <Row label="Data fabrication" value="The LLM only analyzes data already fetched from official APIs. It does not generate or invent facts." />
@@ -933,8 +998,8 @@ export default function AboutPage() {
               <Row label="Sponsorship Analysis" value="PageRank (leadership) + SVD (ideology) on cosponsorship matrix" />
               <Row label="Classification" value="Zero hardcoded rules — all classifications via embedding similarity or kNN" />
               <Row label="Metric Tooltips" value="Every scorecard metric has a [?] tooltip explaining what it measures" />
-              <Row label="Branches Covered" value="Senate (100), Presidents (historical + modern), Supreme Court (9 justices)" />
-              <Row label="Action Center" value="Hourly news analysis: RSS parsing, embedding-based relevance filtering, article clustering, trending topic ranking, LLM summarization" />
+              <Row label="Branches Covered" value="Senate (100), House (435), Presidents (historical + modern), Supreme Court (9 justices)" />
+              <Row label="Action Center" value="Hourly news analysis with national monitors for ongoing concerns and year-in-review timeline tracking" />
               <Row label="News Sources" value="NPR Politics, PBS NewsHour, The Hill, AP News — editorially independent, low-bias sources" />
               <Row label="Trending Integration" value="Google Trends RSS + Reddit policy subreddits, cross-referenced via embedding similarity" />
               <Row label="Globe Visualization" value="react-globe.gl — interactive 3D globe for international news mapping" />

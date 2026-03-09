@@ -6,7 +6,7 @@ export default function NotFound() {
   return (
     <>
       <MatrixRain />
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 text-center">
+      <main className="min-h-screen flex flex-col items-center justify-center px-4 text-center">
         <GlitchText
           text="404"
           as="h1"
@@ -22,7 +22,7 @@ export default function NotFound() {
         <Link href="/" className="btn-retro">
           [ RETURN TO BASE ]
         </Link>
-      </div>
+      </main>
     </>
   );
 }

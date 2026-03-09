@@ -6,11 +6,11 @@ import TypewriterText from "@/components/effects/TypewriterText";
 import Marquee from "@/components/effects/Marquee";
 
 const MARQUEE_ITEMS = [
-  "Action Center: today's top policy issues sourced from nonpartisan media with concrete citizen actions",
-  "100 senators scored on funding independence, promise persistence, voting record, and more",
+  "Action Center: today's top policy issues with national monitors tracking ongoing concerns",
+  "535 members of Congress scored: 100 senators + 435 House representatives",
   "All data sourced from public federal records: FEC, Congress.gov, GovInfo, Federal Register, BLS",
   "AI analysis runs locally on a Raspberry Pi 5 -- no cloud APIs, no data leaves the device",
-  "Trending topics from social media cross-referenced with news coverage to surface what matters most",
+  "National monitors auto-detect recurring issues and build a year-in-review timeline",
   "Nightly pipeline processes campaign finance, voting records, and Congressional Record transcripts",
 ];
 

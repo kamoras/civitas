@@ -582,6 +582,7 @@ function LeaderboardContent() {
           <BranchSelector selected={branch} onChange={setBranch} />
         </div>
 
+        <div id={`branch-panel-${branch}`} role="tabpanel" aria-labelledby={`branch-tab-${branch}`}>
         {branch === "president" && <PresidentLeaderboard entries={presEntries} loading={presLoading} error={error} />}
 
         {branch === "scotus" && <JusticeLeaderboard entries={justiceEntries} loading={justiceLoading} error={error} />}
@@ -849,12 +850,13 @@ function LeaderboardContent() {
         {/* Footer note */}
         {!loading && !error && displayed.length > 0 && (
           <p className="mt-4 text-center text-matrix-green/50 text-xs">
-            Higher score = better constituent representation. Computed from: funding independence (30%) +
-            promise persistence (25%) + independent voting (25%) + funding diversity (20%).
-            Click any row to view full profile.
+            Higher score = better constituent representation. Computed from: funding independence (25%) +
+            promise persistence (20%) + independent voting (20%) + funding diversity (15%) +
+            legislative effectiveness (20%). Click any row to view full profile.
           </p>
         )}
         </>}
+        </div>
       </div>
     </main>
   );

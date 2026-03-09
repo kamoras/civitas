@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import secrets
 import threading
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Query
@@ -85,7 +86,7 @@ async def trigger_pipeline(
         raise HTTPException(status_code=503, detail="Pipeline trigger token not configured")
 
     expected = f"Bearer {settings.PIPELINE_TRIGGER_TOKEN}"
-    if authorization != expected:
+    if not authorization or not secrets.compare_digest(authorization, expected):
         raise HTTPException(status_code=401, detail="Invalid or missing authorization token")
 
     if _is_pipeline_running(db):

@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import secrets
 import threading
 from datetime import datetime
 
@@ -13,19 +14,34 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models import (
+    ActionIssue,
     AnalysisCache,
     ApiCache,
     CampaignPromise,
+    DailyTheme,
     Donor,
     ExploreDocument,
     IndustryDonation,
+    Justice,
+    JusticeVote,
     KeyVote,
     LearnedClassification,
     LobbyingMatch,
+    MonitorUpdate,
+    NationalMonitor,
     PipelineRun,
     President,
+    RepCampaignPromise,
+    RepDonor,
+    RepIndustryDonation,
+    RepKeyVote,
+    RepLobbyingMatch,
+    RepSponsoredBill,
     Representative,
+    ScoreSnapshot,
     Senator,
+    SponsoredBill,
+    TimelineEntry,
 )
 
 logger = logging.getLogger(__name__)
@@ -42,7 +58,7 @@ def require_admin(authorization: str | None = Header(default=None)) -> None:
     if not token:
         raise HTTPException(status_code=503, detail="Admin token not configured")
     expected = f"Bearer {token}"
-    if authorization != expected:
+    if not authorization or not secrets.compare_digest(authorization, expected):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
@@ -271,14 +287,31 @@ async def admin_dashboard(db: Session = Depends(get_db)):
     # --- Data counts ---
     data_counts = {
         "senators": db.query(func.count(Senator.id)).scalar() or 0,
+        "senatorDonors": db.query(func.count(Donor.id)).scalar() or 0,
+        "senatorIndustryDonations": db.query(func.count(IndustryDonation.id)).scalar() or 0,
+        "senatorVotes": db.query(func.count(KeyVote.id)).scalar() or 0,
+        "senatorLobbyingMatches": db.query(func.count(LobbyingMatch.id)).scalar() or 0,
+        "senatorPromises": db.query(func.count(CampaignPromise.id)).scalar() or 0,
+        "senatorBills": db.query(func.count(SponsoredBill.id)).scalar() or 0,
+        "representatives": db.query(func.count(Representative.id)).scalar() or 0,
+        "repDonors": db.query(func.count(RepDonor.id)).scalar() or 0,
+        "repIndustryDonations": db.query(func.count(RepIndustryDonation.id)).scalar() or 0,
+        "repVotes": db.query(func.count(RepKeyVote.id)).scalar() or 0,
+        "repLobbyingMatches": db.query(func.count(RepLobbyingMatch.id)).scalar() or 0,
+        "repPromises": db.query(func.count(RepCampaignPromise.id)).scalar() or 0,
+        "repBills": db.query(func.count(RepSponsoredBill.id)).scalar() or 0,
         "presidents": db.query(func.count(President.id)).scalar() or 0,
-        "donors": db.query(func.count(Donor.id)).scalar() or 0,
-        "industryDonations": db.query(func.count(IndustryDonation.id)).scalar() or 0,
-        "keyVotes": db.query(func.count(KeyVote.id)).scalar() or 0,
-        "lobbyingMatches": db.query(func.count(LobbyingMatch.id)).scalar() or 0,
-        "campaignPromises": db.query(func.count(CampaignPromise.id)).scalar() or 0,
+        "justices": db.query(func.count(Justice.id)).scalar() or 0,
+        "justiceVotes": db.query(func.count(JusticeVote.id)).scalar() or 0,
         "exploreDocuments": db.query(func.count(ExploreDocument.id)).scalar() or 0,
+        "actionIssues": db.query(func.count(ActionIssue.id)).scalar() or 0,
+        "nationalMonitors": db.query(func.count(NationalMonitor.id)).scalar() or 0,
+        "monitorUpdates": db.query(func.count(MonitorUpdate.id)).scalar() or 0,
+        "timelineEntries": db.query(func.count(TimelineEntry.id)).scalar() or 0,
+        "dailyThemes": db.query(func.count(DailyTheme.id)).scalar() or 0,
+        "scoreSnapshots": db.query(func.count(ScoreSnapshot.id)).scalar() or 0,
         "learnedClassifications": db.query(func.count(LearnedClassification.entity_name)).scalar() or 0,
+        "pipelineRuns": db.query(func.count(PipelineRun.id)).scalar() or 0,
         "apiCacheEntries": db.query(func.count(ApiCache.cache_key)).scalar() or 0,
         "analysisCacheEntries": db.query(func.count(AnalysisCache.input_hash)).scalar() or 0,
     }

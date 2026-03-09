@@ -66,14 +66,19 @@ export default function WakeUpSection() {
             className="font-pixel text-sm sm:text-xl md:text-2xl text-neon-pink"
           />
           <p className="text-matrix-green/40 text-sm mt-3">
-            Three branches of government. Public data only. Updated nightly.
+            Senate. House of Representatives. Presidents. Supreme Court. Public data only.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
           <StatCard
             value="100"
             label="Senators scored across 5 representation metrics using FEC, Congress.gov, and GovInfo data"
+            source="Source: FEC + Congress.gov + GovInfo APIs"
+          />
+          <StatCard
+            value="435"
+            label="House representatives scored with the same transparency framework applied to the Senate"
             source="Source: FEC + Congress.gov + GovInfo APIs"
           />
           <StatCard
@@ -82,9 +87,9 @@ export default function WakeUpSection() {
             source="Source: Federal Register + BLS + C-SPAN Historians Survey"
           />
           <StatCard
-            value="3"
-            label="Branches of government searchable through the Explore feature — Senate, House, and Executive"
-            source="Source: Congressional Record + Federal Register"
+            value="9"
+            label="Supreme Court justices scored on impartiality and ideological consistency from case data"
+            source="Source: Oyez Project + supremecourt.gov"
           />
         </div>
 

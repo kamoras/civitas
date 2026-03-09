@@ -236,6 +236,7 @@ def upsert_senator(db: Session, data: dict) -> None:
         "score_promise_persistence": corruption.get("promisePersistence") or 0,
         "score_independent_voting": corruption.get("independentVoting") or 0,
         "score_funding_diversity": corruption.get("fundingDiversity") or 0,
+        "score_legislative_effectiveness": corruption.get("legislativeEffectiveness") or 0,
         "total_raised": funding.get("totalRaised") or 0,
         "total_from_pacs": funding.get("totalFromPACs") or 0,
         "small_donor_percentage": funding.get("smallDonorPercentage") or 0,
@@ -412,6 +413,7 @@ def _record_score_snapshots(db: Session) -> None:
             + s.score_promise_persistence * SCORE_WEIGHTS["promisePersistence"]
             + s.score_independent_voting * SCORE_WEIGHTS["independentVoting"]
             + s.score_funding_diversity * SCORE_WEIGHTS["fundingDiversity"]
+            + s.score_legislative_effectiveness * SCORE_WEIGHTS["legislativeEffectiveness"]
         )
         db.add(ScoreSnapshot(
             entity_type="senator",
@@ -422,6 +424,7 @@ def _record_score_snapshots(db: Session) -> None:
             score_2=s.score_promise_persistence,
             score_3=s.score_independent_voting,
             score_4=s.score_funding_diversity,
+            score_5=s.score_legislative_effectiveness,
         ))
     db.commit()
     logger.info("Recorded score snapshots for %d senators on %s", len(senators), today)
@@ -1632,12 +1635,14 @@ async def run_full_pipeline(
                         len(floor_advocacy["advocatedCategories"]),
                     )
 
+                bio_id_for_score = senator.get("bioguideId", "")
                 temp_senator = {
                     **senator,
                     "funding": funding,
                     "votingRecord": voting_record,
                     "lobbyingMatches": lobbying_matches,
                     "campaignPromises": platform_data.get("campaignPromises", []),
+                    "leadershipScore": leadership_scores.get(bio_id_for_score),
                 }
                 corruption_score = calculate_scores(
                     temp_senator,

@@ -18,3 +18,16 @@ export function formatPercent(value: number): string {
 export function formatNumber(value: number): string {
   return value.toLocaleString();
 }
+
+const SAFE_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
+
+export function safeHref(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const parsed = new URL(url, "https://placeholder.invalid");
+    if (SAFE_PROTOCOLS.has(parsed.protocol)) return url;
+  } catch {
+    /* malformed URL */
+  }
+  return undefined;
+}

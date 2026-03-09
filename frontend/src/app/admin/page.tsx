@@ -958,6 +958,8 @@ function LastRunSteps({ steps }: { steps?: PipelineStepInfo[] | null }) {
     <div className="mt-4 border-t border-matrix-green/15 pt-3">
       <button
         onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        aria-label={`Step breakdown, ${steps.length} steps`}
         className="text-[10px] font-pixel text-matrix-green/50 hover:text-matrix-green/80 transition-colors"
       >
         {expanded ? "▼" : "▶"} STEP BREAKDOWN ({steps.length} steps)
@@ -1001,6 +1003,115 @@ function LastRunSteps({ steps }: { steps?: PipelineStepInfo[] | null }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// --- Data Inventory ---
+const INVENTORY_SECTIONS: { label: string; keys: { key: string; label: string }[] }[] = [
+  {
+    label: "SENATE",
+    keys: [
+      { key: "senators", label: "SENATORS" },
+      { key: "senatorDonors", label: "DONORS" },
+      { key: "senatorIndustryDonations", label: "INDUSTRY $" },
+      { key: "senatorVotes", label: "VOTES" },
+      { key: "senatorLobbyingMatches", label: "LOBBY MATCHES" },
+      { key: "senatorPromises", label: "PROMISES" },
+      { key: "senatorBills", label: "BILLS" },
+    ],
+  },
+  {
+    label: "HOUSE",
+    keys: [
+      { key: "representatives", label: "REPS" },
+      { key: "repDonors", label: "DONORS" },
+      { key: "repIndustryDonations", label: "INDUSTRY $" },
+      { key: "repVotes", label: "VOTES" },
+      { key: "repLobbyingMatches", label: "LOBBY MATCHES" },
+      { key: "repPromises", label: "PROMISES" },
+      { key: "repBills", label: "BILLS" },
+    ],
+  },
+  {
+    label: "EXECUTIVE & JUDICIARY",
+    keys: [
+      { key: "presidents", label: "PRESIDENTS" },
+      { key: "justices", label: "JUSTICES" },
+      { key: "justiceVotes", label: "JUSTICE VOTES" },
+    ],
+  },
+  {
+    label: "ACTION CENTER",
+    keys: [
+      { key: "actionIssues", label: "ISSUES" },
+      { key: "nationalMonitors", label: "MONITORS" },
+      { key: "monitorUpdates", label: "MONITOR UPDATES" },
+      { key: "timelineEntries", label: "TIMELINE ENTRIES" },
+      { key: "dailyThemes", label: "DAILY THEMES" },
+      { key: "exploreDocuments", label: "EXPLORE DOCS" },
+    ],
+  },
+  {
+    label: "SYSTEM",
+    keys: [
+      { key: "scoreSnapshots", label: "SCORE SNAPSHOTS" },
+      { key: "learnedClassifications", label: "LEARNED CLASSES" },
+      { key: "pipelineRuns", label: "PIPELINE RUNS" },
+      { key: "apiCacheEntries", label: "API CACHE" },
+      { key: "analysisCacheEntries", label: "ANALYSIS CACHE" },
+    ],
+  },
+];
+
+function DataInventory({ data }: { data: Record<string, number> }) {
+  const total = Object.values(data).reduce((s, n) => s + n, 0);
+
+  return (
+    <div className="p-4 space-y-4">
+      <div className="flex items-center justify-between mb-1">
+        <span className="font-pixel text-[10px] text-matrix-green/40 tracking-widest">
+          TOTAL RECORDS
+        </span>
+        <span className="font-terminal text-sm text-matrix-green">
+          {total.toLocaleString()}
+        </span>
+      </div>
+      {INVENTORY_SECTIONS.map((section) => {
+        const sectionTotal = section.keys.reduce(
+          (s, { key }) => s + (data[key] ?? 0),
+          0,
+        );
+        if (sectionTotal === 0 && section.label !== "SYSTEM") return null;
+        return (
+          <div key={section.label}>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="font-pixel text-[10px] text-purple-400/70 tracking-widest">
+                {section.label}
+              </span>
+              <span className="text-[10px] font-terminal text-matrix-green/30">
+                {sectionTotal.toLocaleString()}
+              </span>
+              <div className="flex-1 border-t border-matrix-green/10" />
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+              {section.keys.map(({ key, label }) => (
+                <div
+                  key={key}
+                  className="border border-matrix-green/15 rounded p-2.5 text-center"
+                >
+                  <div className="text-base font-terminal text-matrix-green">
+                    {(data[key] ?? 0).toLocaleString()}
+                  </div>
+                  <div className="text-[9px] font-pixel text-matrix-green/50 tracking-wider mt-0.5">
+                    {label}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1140,7 +1251,7 @@ function AdminDashboardView({
   const d = dashboard;
 
   return (
-    <div className="min-h-screen bg-crt-black text-matrix-green px-4 py-8">
+    <main className="min-h-screen bg-crt-black text-matrix-green px-4 py-8">
       <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
@@ -1149,6 +1260,7 @@ function AdminDashboardView({
           </h1>
           <button
             onClick={onLogout}
+            aria-label="Log out of admin"
             className="text-[10px] font-pixel text-neon-pink/60 hover:text-neon-pink
                        border border-neon-pink/30 hover:border-neon-pink/60
                        px-3 py-1 rounded transition-colors"
@@ -1346,24 +1458,7 @@ function AdminDashboardView({
             <span className="terminal-dot green" />
             <span className="ml-3 text-white/40 text-xs font-terminal">data_inventory</span>
           </div>
-          <div className="p-4">
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {d &&
-                Object.entries(d.data).map(([key, count]) => (
-                  <div
-                    key={key}
-                    className="border border-matrix-green/15 rounded p-3 text-center"
-                  >
-                    <div className="text-lg font-terminal text-matrix-green">
-                      {count.toLocaleString()}
-                    </div>
-                    <div className="text-[10px] font-pixel text-matrix-green/50 tracking-wider mt-1">
-                      {key.replace(/([A-Z])/g, " $1").toUpperCase().trim()}
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </div>
+          {d && <DataInventory data={d.data} />}
         </div>
 
         {/* Vector DB & ML Metrics */}
@@ -1798,7 +1893,7 @@ function AdminDashboardView({
           </button>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
 

@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import Globe from "react-globe.gl";
 import { fetchCountryNews } from "@/lib/api";
+import { safeHref } from "@/lib/formatting";
 import type { CountryNews } from "@/lib/api";
 
 export default function GlobeTab() {
@@ -152,7 +153,7 @@ export default function GlobeTab() {
                 className="border-l-2 border-l-green-400/30 pl-3"
               >
                 <a
-                  href={article.url}
+                  href={safeHref(article.url) || "#"}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-sm text-matrix-green/80 hover:text-neon-cyan transition-colors leading-relaxed"

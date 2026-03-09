@@ -38,6 +38,10 @@ def _migrate_columns() -> None:
     inspector = inspect(engine)
     additions: list[tuple[str, str, str]] = [
         ("action_issues", "related_senators", "TEXT DEFAULT '[]'"),
+        ("action_issues", "related_monitor_slugs", "TEXT DEFAULT '[]'"),
+        ("senators", "score_legislative_effectiveness", "REAL DEFAULT 0.0"),
+        ("representatives", "score_legislative_effectiveness", "REAL DEFAULT 0.0"),
+        ("score_snapshots", "score_5", "REAL DEFAULT 0.0"),
     ]
 
     drops: list[tuple[str, str]] = [
@@ -70,12 +74,36 @@ def _migrate_columns() -> None:
                 conn.execute(text(f"ALTER TABLE {table} DROP COLUMN {column}"))
 
 
+def _ensure_indexes() -> None:
+    """Create indexes on FK columns that may pre-date the index=True addition."""
+    desired = [
+        ("ix_lobbying_matches_senator_id", "lobbying_matches", "senator_id"),
+        ("ix_campaign_promises_senator_id", "campaign_promises", "senator_id"),
+        ("ix_sponsored_bills_senator_id", "sponsored_bills", "senator_id"),
+        ("ix_rep_lobbying_matches_rep_id", "rep_lobbying_matches", "representative_id"),
+        ("ix_rep_campaign_promises_rep_id", "rep_campaign_promises", "representative_id"),
+        ("ix_rep_sponsored_bills_rep_id", "rep_sponsored_bills", "representative_id"),
+    ]
+    inspector = inspect(engine)
+    with engine.begin() as conn:
+        for idx_name, table, column in desired:
+            if not inspector.has_table(table):
+                continue
+            existing = {idx["name"] for idx in inspector.get_indexes(table)}
+            if idx_name not in existing:
+                logger.info("Creating index %s on %s(%s)", idx_name, table, column)
+                conn.execute(text(
+                    f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table} ({column})"
+                ))
+
+
 def init_db() -> None:
     """Create all tables defined in models and apply lightweight migrations."""
     from app import models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
     _migrate_columns()
+    _ensure_indexes()
 
     if "sqlite" in settings.DATABASE_URL:
         with engine.connect() as conn:
@@ -123,6 +151,7 @@ def reset_all_data() -> dict:
             models.JusticeVote,
             models.MonitorUpdate,
             models.NationalMonitor,
+            models.TimelineEntry,
             models.LearnedClassification,
             models.ApiCache,
             models.AnalysisCache,

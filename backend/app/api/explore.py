@@ -1,8 +1,10 @@
 """Explore API — semantic search over government activity documents."""
 
+import asyncio
 import logging
+import secrets
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
@@ -31,7 +33,8 @@ async def search_explore(
     Returns matching documents ranked by relevance (default) or date.
     """
     fetch_limit = limit * 3 if commentable else limit
-    results = search_explore_documents(
+    results = await asyncio.to_thread(
+        search_explore_documents,
         query=q,
         n_results=fetch_limit,
         doc_type=doc_type,
@@ -242,12 +245,26 @@ async def post_document_comment(
     return JSONResponse(content=result, status_code=status_code)
 
 
+_summary_timestamps: dict[int, float] = {}
+_SUMMARY_COOLDOWN = 30.0
+
 @router.post("/{doc_id}/summary")
 async def get_explore_document_summary(
     doc_id: int,
     db: Session = Depends(get_db),
 ):
     """Generate an AI summary of a government document."""
+    import time
+    now = time.monotonic()
+    last = _summary_timestamps.get(doc_id, 0)
+    if now - last < _SUMMARY_COOLDOWN:
+        raise HTTPException(status_code=429, detail="Please wait before requesting another summary")
+    _summary_timestamps[doc_id] = now
+
+    if len(_summary_timestamps) > 500:
+        cutoff = now - _SUMMARY_COOLDOWN * 2
+        _summary_timestamps.clear()
+
     from app.pipeline.analyze.ollama_client import call_llm
     from app.pipeline.analyze.prompts import explore_document_summary_prompt
 
@@ -292,11 +309,13 @@ async def get_explore_document_summary(
 @router.post("/pipeline/trigger")
 async def trigger_explore_pipeline(
     background_tasks: BackgroundTasks,
-    token: str = Query(""),
+    authorization: str | None = Header(default=None),
 ):
     """Trigger the explore document ingestion pipeline."""
-    if settings.PIPELINE_TRIGGER_TOKEN and token != settings.PIPELINE_TRIGGER_TOKEN:
-        raise HTTPException(status_code=403, detail="Invalid token")
+    if settings.PIPELINE_TRIGGER_TOKEN:
+        expected = f"Bearer {settings.PIPELINE_TRIGGER_TOKEN}"
+        if not authorization or not secrets.compare_digest(authorization, expected):
+            raise HTTPException(status_code=403, detail="Invalid token")
 
     background_tasks.add_task(_run_explore_pipeline)
     return {"status": "started"}

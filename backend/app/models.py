@@ -22,6 +22,7 @@ class Senator(Base):
     score_promise_persistence: Mapped[float] = mapped_column(Float, default=0.0)
     score_independent_voting: Mapped[float] = mapped_column(Float, default=0.0)
     score_funding_diversity: Mapped[float] = mapped_column(Float, default=0.0)
+    score_legislative_effectiveness: Mapped[float] = mapped_column(Float, default=0.0)
 
     total_raised: Mapped[float] = mapped_column(Float, default=0.0)
     total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)
@@ -102,7 +103,7 @@ class LobbyingMatch(Base):
     __tablename__ = "lobbying_matches"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    senator_id: Mapped[str] = mapped_column(String, ForeignKey("senators.id", ondelete="CASCADE"), nullable=False)
+    senator_id: Mapped[str] = mapped_column(String, ForeignKey("senators.id", ondelete="CASCADE"), nullable=False, index=True)
     lobbyist_org: Mapped[str] = mapped_column(String, nullable=False)
     industry: Mapped[str] = mapped_column(String, nullable=False)
     lobbying_spend: Mapped[float] = mapped_column(Float, default=0.0)
@@ -118,7 +119,7 @@ class CampaignPromise(Base):
     __tablename__ = "campaign_promises"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    senator_id: Mapped[str] = mapped_column(String, ForeignKey("senators.id", ondelete="CASCADE"), nullable=False)
+    senator_id: Mapped[str] = mapped_column(String, ForeignKey("senators.id", ondelete="CASCADE"), nullable=False, index=True)
     promise_text: Mapped[str] = mapped_column(Text, nullable=False)
     category: Mapped[str] = mapped_column(String, nullable=False)  # e.g. "healthcare", "economy", "defense"
     alignment: Mapped[str] = mapped_column(String, default="unclear")  # "kept", "broken", "partial", "unclear"
@@ -133,7 +134,7 @@ class SponsoredBill(Base):
     __tablename__ = "sponsored_bills"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    senator_id: Mapped[str] = mapped_column(String, ForeignKey("senators.id", ondelete="CASCADE"), nullable=False)
+    senator_id: Mapped[str] = mapped_column(String, ForeignKey("senators.id", ondelete="CASCADE"), nullable=False, index=True)
     bill_id: Mapped[str] = mapped_column(String, nullable=False)
     title: Mapped[str] = mapped_column(Text, nullable=False)
     introduced_date: Mapped[str] = mapped_column(String, default="")
@@ -166,6 +167,7 @@ class Representative(Base):
     score_promise_persistence: Mapped[float] = mapped_column(Float, default=0.0)
     score_independent_voting: Mapped[float] = mapped_column(Float, default=0.0)
     score_funding_diversity: Mapped[float] = mapped_column(Float, default=0.0)
+    score_legislative_effectiveness: Mapped[float] = mapped_column(Float, default=0.0)
 
     total_raised: Mapped[float] = mapped_column(Float, default=0.0)
     total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)
@@ -246,7 +248,7 @@ class RepLobbyingMatch(Base):
     __tablename__ = "rep_lobbying_matches"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    representative_id: Mapped[str] = mapped_column(String, ForeignKey("representatives.id", ondelete="CASCADE"), nullable=False)
+    representative_id: Mapped[str] = mapped_column(String, ForeignKey("representatives.id", ondelete="CASCADE"), nullable=False, index=True)
     lobbyist_org: Mapped[str] = mapped_column(String, nullable=False)
     industry: Mapped[str] = mapped_column(String, nullable=False)
     lobbying_spend: Mapped[float] = mapped_column(Float, default=0.0)
@@ -262,7 +264,7 @@ class RepCampaignPromise(Base):
     __tablename__ = "rep_campaign_promises"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    representative_id: Mapped[str] = mapped_column(String, ForeignKey("representatives.id", ondelete="CASCADE"), nullable=False)
+    representative_id: Mapped[str] = mapped_column(String, ForeignKey("representatives.id", ondelete="CASCADE"), nullable=False, index=True)
     promise_text: Mapped[str] = mapped_column(Text, nullable=False)
     category: Mapped[str] = mapped_column(String, nullable=False)
     alignment: Mapped[str] = mapped_column(String, default="unclear")
@@ -277,7 +279,7 @@ class RepSponsoredBill(Base):
     __tablename__ = "rep_sponsored_bills"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    representative_id: Mapped[str] = mapped_column(String, ForeignKey("representatives.id", ondelete="CASCADE"), nullable=False)
+    representative_id: Mapped[str] = mapped_column(String, ForeignKey("representatives.id", ondelete="CASCADE"), nullable=False, index=True)
     bill_id: Mapped[str] = mapped_column(String, nullable=False)
     title: Mapped[str] = mapped_column(Text, nullable=False)
     introduced_date: Mapped[str] = mapped_column(String, default="")
@@ -431,6 +433,7 @@ class ActionIssue(Base):
     related_bill_ids: Mapped[str] = mapped_column(Text, default="[]")
     related_explore_ids: Mapped[str] = mapped_column(Text, default="[]")
     related_senators: Mapped[str] = mapped_column(Text, default="[]")
+    related_monitor_slugs: Mapped[str] = mapped_column(Text, default="[]")
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
 
 
@@ -447,6 +450,7 @@ class ScoreSnapshot(Base):
     score_2: Mapped[float] = mapped_column(Float, default=0.0)
     score_3: Mapped[float] = mapped_column(Float, default=0.0)
     score_4: Mapped[float] = mapped_column(Float, default=0.0)
+    score_5: Mapped[float] = mapped_column(Float, default=0.0)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
 
 
@@ -477,6 +481,21 @@ class LearnedClassification(Base):
     model_version: Mapped[str | None] = mapped_column(String, nullable=True)  # embedding model that produced this
     match_metadata: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON: top scores, matched anchors
     learned_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
+
+class TimelineEntry(Base):
+    """Permanent record of each day's top issue for year-in-review tracking."""
+    __tablename__ = "timeline_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    date: Mapped[str] = mapped_column(String(10), nullable=False, unique=True, index=True)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, default="")
+    policy_areas: Mapped[str] = mapped_column(Text, default="[]")
+    source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    source_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    monitor_slug: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
 
 
 class NationalMonitor(Base):

@@ -2,10 +2,10 @@
 
 Civitas is an open-data AI/ML platform that aggregates data from official
 U.S. government sources into unified transparency scorecards for senators,
-presidents, and Supreme Court justices. It also features an Action Center
-that surfaces trending civic issues from news analysis, provides non-partisan
-summaries with recommended citizen actions, and includes an interactive 3D
-global news map. Voting records, campaign finance,
+House representatives, presidents, and Supreme Court justices. It also
+features an Action Center that surfaces trending civic issues from news
+analysis, auto-detects ongoing national concerns as trackable monitors,
+and builds a year-in-review timeline. Voting records, campaign finance,
 floor speeches, judicial opinions, and stated platforms are analyzed using
 embedding-based classification, content-based party alignment, and
 deterministic scoring — all running locally on a Raspberry Pi 5 with zero
@@ -34,10 +34,10 @@ AI APIs, no data leaves the device.
 
 The pipeline runs nightly (or manually triggered) in phases:
 
-1. **FETCH** — Pull senator info, bills (with sponsor party), roll-call
-   votes, floor speeches, FEC financial data, Supreme Court cases, and
-   presidential records from Congress.gov, Senate.gov, GovInfo, FEC,
-   Oyez/SCOTUS, BLS, and Federal Register APIs
+1. **FETCH** — Pull senator and House representative info, bills (with
+   sponsor party), roll-call votes, floor speeches, FEC financial data,
+   Supreme Court cases, and presidential records from Congress.gov,
+   Senate.gov, GovInfo, FEC, Oyez/SCOTUS, BLS, and Federal Register APIs
 2. **TRANSFORM** — Normalize financial records, classify industries and
    donor types using FEC metadata and embedding similarity
 3. **ANALYZE** — Classify bill policy areas, stance direction, and party
@@ -62,7 +62,11 @@ surface trending civic issues:
 4. **RANK** — Score clusters by coverage breadth (40%) and trending relevance (60%)
 5. **SUMMARIZE** — LLM generates non-partisan summary, key facts, and
    recommended citizen actions for top issues
-6. **ENRICH** — Cross-reference with senator scorecards and explore documents
+6. **ENRICH** — Cross-reference with senator/rep scorecards and explore documents
+7. **MONITORS** — Detect recurring topics across days and create/update
+   National Monitors; merge duplicate monitors via embedding similarity
+8. **TIMELINE** — Record each day's top issue as a permanent timeline entry
+   for year-in-review tracking
 
 The analyze phase uses a **producer-consumer pattern** to overlap
 embedding work with LLM inference. A background "Librarian" thread
@@ -166,9 +170,9 @@ See the [Methodology page](/about) for full details and inline citations.
 
 ## Scoring
 
-### Senate Scores
+### Senate & House Scores
 
-Each senator receives four sub-scores (0-100, higher = better):
+Each senator and House representative receives four sub-scores (0-100, higher = better):
 
 | Metric | Weight | What It Measures | Key Reference |
 |--------|--------|------------------|---------------|
@@ -176,6 +180,9 @@ Each senator receives four sub-scores (0-100, higher = better):
 | **Promise Persistence** | 25% | Campaign commitments kept + floor advocacy + participation | Naurin 2011; Martin 2011 |
 | **Independent Voting** | 25% | Party-line breaks (state-adjusted) + donor independence | Carson et al. 2010 |
 | **Funding Diversity** | 25% | Donor traceability + industry diversity (inverse HHI) | Rhoades 1993 |
+
+House representatives use the same scoring framework, data sources, and
+classification pipeline as senators, ensuring comparable scores across chambers.
 
 Additional senator metrics (not scored, informational):
 
@@ -310,8 +317,8 @@ docker compose run --rm --no-deps backend python -m pytest tests/ -v \
 modern-punk/
 ├── backend/
 │   ├── app/
-│   │   ├── api/              # FastAPI route handlers (senators, presidents, justices, explore, action, admin)
-│   │   ├── services/         # Business logic (senator_service with paginated votes)
+│   │   ├── api/              # FastAPI route handlers (senators, representatives, presidents, justices, explore, action, admin)
+│   │   ├── services/         # Business logic (senator_service, representative_service with paginated votes)
 │   │   ├── pipeline/
 │   │   │   ├── fetch/        # API clients (Congress.gov, FEC, GovInfo, Senate.gov, Oyez, BLS, Federal Register, news RSS)
 │   │   │   ├── transform/    # Data normalization + embedding-based industry classifier
@@ -324,13 +331,13 @@ modern-punk/
 │   │   │   │   ├── sponsorship_analysis.py   # PageRank leadership + SVD ideology
 │   │   │   │   ├── policy_alignment.py       # Industry↔policy area mapping
 │   │   │   │   ├── cross_reference.py        # Per-senator LLM narrative
-│   │   │   │   ├── action_center.py          # News analysis + LLM summarization for Action Center
+│   │   │   │   ├── action_center.py          # News analysis, LLM summarization, national monitors, timeline
 │   │   │   │   ├── score_calculator.py       # Deterministic scoring formulas
 │   │   │   │   └── ollama_client.py          # LLM backend abstraction
 │   │   │   ├── assemble/     # Senator scorecard builder + validator
 │   │   │   ├── vector_store.py  # ChromaDB + sentence-transformer
 │   │   │   └── orchestrator.py  # Pipeline control flow
-│   │   ├── models.py         # SQLAlchemy ORM (Senator, KeyVote, Justice, JusticeVote, etc.)
+│   │   ├── models.py         # SQLAlchemy ORM (Senator, Representative, KeyVote, Justice, NationalMonitor, TimelineEntry, etc.)
 │   │   ├── schemas.py        # Pydantic response schemas (incl. PaginatedVotesSchema)
 │   │   ├── database.py       # DB engine + session management
 │   │   └── config.py         # Pydantic settings from .env
@@ -340,10 +347,10 @@ modern-punk/
 ├── frontend/
 │   ├── src/app/              # Next.js app router pages
 │   │   ├── about/            # Methodology page with full citations
-│   │   ├── action/           # Action Center with tabbed interface (issues, branches, globe)
+│   │   ├── action/           # Action Center (issues, monitors, timeline, elections, branches, globe)
 │   │   ├── explore/          # Semantic search over government documents
-│   │   ├── scorecard/        # Senator, president, and justice scorecards
-│   │   ├── leaderboard/      # Rankings across all branches
+│   │   ├── scorecard/        # Senator, representative, president, and justice scorecards
+│   │   ├── leaderboard/      # Rankings across all branches (House paginated)
 │   │   └── admin/            # Pipeline control panel with granular progress
 │   ├── src/components/       # React components (action, checker, president, justice, explore, home, effects)
 │   └── Dockerfile

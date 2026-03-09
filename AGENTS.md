@@ -3,14 +3,15 @@
 ## Project Overview
 
 Civitas is an AI/ML political transparency platform that scores U.S. senators,
-presidents, and Supreme Court justices on how well they represent constituents.
-It aggregates voting records, campaign finance, floor speeches, judicial opinions,
-and stated platforms from official government sources, then analyzes them using
-embedding-based classification, content-based party alignment, and deterministic
-scoring. It also features an Action Center that surfaces trending civic issues
-from news feeds, provides non-partisan summaries and recommended actions, and
-includes an interactive global news map. Everything runs locally on a Raspberry
-Pi 5 with zero cloud AI calls.
+House representatives, presidents, and Supreme Court justices on how well they
+represent constituents. It aggregates voting records, campaign finance, floor
+speeches, judicial opinions, and stated platforms from official government
+sources, then analyzes them using embedding-based classification, content-based
+party alignment, and deterministic scoring. It also features an Action Center
+that surfaces trending civic issues from news feeds, auto-detects ongoing
+national concerns as trackable monitors, builds a year-in-review timeline, and
+provides non-partisan summaries with recommended actions. Everything runs
+locally on a Raspberry Pi 5 with zero cloud AI calls.
 
 ## Architecture
 
@@ -20,8 +21,9 @@ Pi 5 with zero cloud AI calls.
 - **Embeddings**: sentence-transformers (all-MiniLM-L6-v2), runs in-process
 - **Vector Store**: ChromaDB for semantic search document store
 - **Deployment**: Docker Compose, blue/green zero-downtime via `deploy.sh`, nginx reverse proxy with caching
-- **Branches covered**: Senate (100 senators), Presidents (historical + modern), Supreme Court (9 justices)
+- **Branches covered**: Senate (100 senators), House (435 representatives), Presidents (historical + modern), Supreme Court (9 justices)
 - **News Feeds**: RSS parsing (NPR, PBS, The Hill, AP) + Google Trends + Reddit trending for Action Center
+- **Action Center**: National monitors (auto-detected ongoing concerns), year-in-review timeline, elections tab, dynamic theme styling
 
 All services, models, and data run on-device. No data leaves the Raspberry Pi.
 
@@ -31,8 +33,8 @@ All services, models, and data run on-device. No data leaves the Raspberry Pi.
 modern-punk/
 ├── backend/
 │   ├── app/
-│   │   ├── api/                 # FastAPI route handlers (senators, presidents, justices, explore, action, admin, health)
-│   │   ├── services/            # Business logic (senator_service with paginated vote API)
+│   │   ├── api/                 # FastAPI route handlers (senators, representatives, presidents, justices, explore, action, admin, health)
+│   │   ├── services/            # Business logic (senator_service, representative_service with paginated vote APIs)
 │   │   ├── pipeline/
 │   │   │   ├── fetch/           # API clients (Congress.gov, FEC, GovInfo, Senate.gov, Oyez, BLS, Federal Register)
 │   │   │   ├── transform/       # Data normalization, embedding-based industry classification
@@ -40,7 +42,7 @@ modern-punk/
 │   │   │   ├── assemble/        # Scorecard builder + validator
 │   │   │   ├── orchestrator.py  # Pipeline control flow (FETCH→TRANSFORM→ANALYZE→ASSEMBLE+SAVE)
 │   │   │   └── vector_store.py  # ChromaDB + sentence-transformer model management
-│   │   ├── models.py            # SQLAlchemy ORM (Senator, KeyVote, Justice, JusticeVote, President, etc.)
+│   │   ├── models.py            # SQLAlchemy ORM (Senator, Representative, KeyVote, Justice, NationalMonitor, TimelineEntry, etc.)
 │   │   ├── schemas.py           # Pydantic response schemas (incl. PaginatedVotesSchema)
 │   │   ├── database.py          # DB engine + session management
 │   │   ├── config.py            # Pydantic settings from .env
@@ -52,7 +54,7 @@ modern-punk/
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
-│   │   ├── app/                 # Next.js App Router pages (action, about, admin, explore, leaderboard, scorecard)
+│   │   ├── app/                 # Next.js App Router pages (action [issues/monitors/timeline/elections/branches/globe], about, admin, explore, leaderboard, scorecard)
 │   │   ├── components/          # React components (action, checker, president, justice, explore, home, effects)
 │   │   ├── hooks/               # Custom React hooks
 │   │   ├── lib/                 # API client (with paginated vote fetching), utilities
@@ -234,10 +236,10 @@ The pipeline runs nightly (configurable via `PIPELINE_CRON_SCHEDULE`) or can
 be triggered manually via `POST /api/admin/pipeline/trigger`. It executes in
 4 phases defined in `orchestrator.py`:
 
-1. **FETCH** — Pull senators, bills, roll-call votes, bill cosponsors, floor
-   speeches, FEC financial data, Supreme Court cases, presidential records
-   from Congress.gov, Senate.gov, GovInfo, FEC, Oyez, BLS, and Federal
-   Register APIs
+1. **FETCH** — Pull senators, House representatives, bills, roll-call votes,
+   bill cosponsors, floor speeches, FEC financial data, Supreme Court cases,
+   presidential records from Congress.gov, Senate.gov, GovInfo, FEC, Oyez,
+   BLS, and Federal Register APIs
 2. **TRANSFORM** — Normalize financial records, classify industries and donor
    types using FEC metadata + embedding similarity, batch-detect skip employers
    and transfer memos via embedding prototypes
@@ -257,6 +259,16 @@ filters articles for U.S. policy relevance using embedding similarity, clusters
 related articles, incorporates trending topics from Google Trends and Reddit,
 and uses the LLM to generate non-partisan summaries with recommended citizen
 actions. Results are stored in the `action_issues` table.
+
+After issues are committed, the Action Center pipeline also:
+- **Saves a timeline entry** for each day's #1 issue (permanent record for
+  year-in-review tracking, stored in `timeline_entries` table)
+- **Updates national monitors** — recurring topics that appear across multiple
+  days are auto-detected and tracked in `national_monitors` with sourced
+  timeline updates in `monitor_updates`. Existing monitors are deduplicated
+  by embedding similarity; dormant monitors are marked "watching"
+- **Generates dynamic styling** — LLM describes a visual concept for the
+  day's theme (SVG watermark + accent colors), applied deterministically
 
 Each senator is processed independently. The pipeline uses `PipelineRun`
 records to track progress and supports resumption.
@@ -332,9 +344,10 @@ sudo sqlite3 /var/lib/docker/volumes/modern-punk_app_data/_data/modern-punk.db
 ```
 
 SQLAlchemy ORM models are in `backend/app/models.py`. Key tables: `senators`,
-`key_votes`, `donors`, `industry_donations`, `campaign_promises`,
-`lobbying_matches`, `learned_classifications`, `explore_documents`,
-`action_issues`, `pipeline_runs`.
+`representatives`, `key_votes`, `donors`, `industry_donations`,
+`campaign_promises`, `lobbying_matches`, `learned_classifications`,
+`explore_documents`, `action_issues`, `national_monitors`, `monitor_updates`,
+`timeline_entries`, `pipeline_runs`.
 
 ## Key Modules — Where to Find Things
 
@@ -351,17 +364,19 @@ SQLAlchemy ORM models are in `backend/app/models.py`. Key tables: `senators`,
 | Sponsorship analysis (PageRank leadership + SVD ideology) | `backend/app/pipeline/analyze/sponsorship_analysis.py` |
 | Multi-word last name extraction + vote matching | `backend/app/pipeline/transform/normalize_members.py` |
 | LLM narrative generation | `backend/app/pipeline/analyze/cross_reference.py` |
-| Action Center analysis (news → issues) | `backend/app/pipeline/analyze/action_center.py` |
+| Action Center analysis (news → issues → monitors → timeline) | `backend/app/pipeline/analyze/action_center.py` |
 | News feed fetching (RSS) | `backend/app/pipeline/fetch/news_feeds.py` |
 | Trending topic fetching | `backend/app/pipeline/fetch/trending.py` |
 | Donor-vote cross-referencing | `backend/app/pipeline/analyze/policy_alignment.py` |
+| Representative service + paginated votes | `backend/app/services/representative_service.py` |
 | Finance normalization (embedding-based skip detection) | `backend/app/pipeline/transform/normalize_finance.py` |
 | Data validation | `backend/app/pipeline/assemble/validator.py` |
 | Enums, weights, industry codes | `backend/app/config_definitions.py` |
 | Senator service + paginated votes | `backend/app/services/senator_service.py` |
 | Action Center API | `backend/app/api/action.py` |
-| API routes | `backend/app/api/` (senators, presidents, justices, admin, explore, action, health) |
-| Frontend pages | `frontend/src/app/` (action, scorecard, leaderboard, explore, about, admin) |
+| Representative API routes | `backend/app/api/representatives.py` |
+| API routes | `backend/app/api/` (senators, representatives, presidents, justices, admin, explore, action, health) |
+| Frontend pages | `frontend/src/app/` (action [issues/monitors/timeline/elections/branches/globe], scorecard, leaderboard, explore, about, admin) |
 | Frontend API client (incl. paginated vote fetching) | `frontend/src/lib/api.ts` |
 | Frontend types | `frontend/src/types/` |
 | Metric explanations (tooltips on all scorecard metrics) | `frontend/src/components/checker/MetricTooltip.tsx` |
@@ -381,10 +396,21 @@ SQLAlchemy ORM models are in `backend/app/models.py`. Key tables: `senators`,
 - Use parameterized queries via SQLAlchemy ORM; never concatenate user input into SQL
 - **Read path must stay lightweight**: never load the embedding model or LLM on
   API read requests (GET endpoints). All ML inference happens at pipeline write
-  time. The `senator_service.py` read path uses only string operations and ORM
-  queries with `selectinload` for eager loading. Foreign key columns on child
-  tables (`donors.senator_id`, `key_votes.senator_id`, etc.) must have
-  `index=True` for acceptable query performance.
+  time. The `senator_service.py` and `representative_service.py` read paths use
+  only string operations and ORM queries with `selectinload` for eager loading.
+  Foreign key columns on child tables (`donors.senator_id`,
+  `key_votes.senator_id`, etc.) must have `index=True` for acceptable query
+  performance.
+- **Performance conventions for concurrent users**:
+  - Use `selectinload()` for relationship eager loading to avoid N+1 queries
+  - Batch related-entity lookups (collect IDs, query with `.in_()`, map back)
+  - Wrap blocking I/O (`fetch_news_articles`, embedding model calls) with
+    `await asyncio.to_thread()` to keep the event loop non-blocking
+  - Set `Cache-Control` headers on relatively static endpoints (config,
+    leaderboards, action issues) to enable browser and nginx proxy caching
+  - Backend runs with `--workers 2` in production to use multiple CPU cores
+  - Nginx applies rate limiting (`limit_req_zone`) and proxy caching for
+    Action Center endpoints
 
 ### Frontend (TypeScript)
 
@@ -397,6 +423,10 @@ SQLAlchemy ORM models are in `backend/app/models.py`. Key tables: `senators`,
   plain-English explanation (hover on desktop, tap on mobile). When adding new
   metrics, always add a corresponding tooltip so users can understand what they
   are seeing. The component is at `src/components/checker/MetricTooltip.tsx`.
+- Large tab components are code-split with `next/dynamic` to reduce initial
+  bundle size (e.g., Action Center tabs load on demand). Use in-memory
+  `cachedFetch` from `src/lib/api.ts` for API calls that benefit from
+  client-side TTL caching.
 
 ### Testing
 

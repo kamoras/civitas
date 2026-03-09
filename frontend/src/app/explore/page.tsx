@@ -308,7 +308,7 @@ export default function ExplorePage() {
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="What issue are you concerned about?"
                     className="flex-1 bg-transparent text-matrix-green text-sm font-terminal
-                               placeholder:text-matrix-green/40 outline-none caret-matrix-green"
+                               placeholder:text-matrix-green/40 outline-none focus-visible:ring-1 focus-visible:ring-neon-cyan/50 caret-matrix-green"
                     autoFocus
                   />
                   <button
@@ -376,6 +376,7 @@ export default function ExplorePage() {
               <button
                 onClick={handleCommentToggle}
                 aria-pressed={commentableOnly}
+                aria-label="Show only documents open for public comment"
                 className={`text-xs px-4 py-1.5 rounded border transition-colors flex items-center gap-2 ${
                   commentableOnly
                     ? "border-emerald-500/60 text-emerald-400 bg-emerald-500/10"
@@ -384,7 +385,7 @@ export default function ExplorePage() {
               >
                 <span className={`inline-block w-1.5 h-1.5 rounded-full ${
                   commentableOnly ? "bg-emerald-400" : "bg-matrix-green/30"
-                }`} />
+                }`} aria-hidden="true" />
                 Open for Public Comment
               </button>
             </div>

@@ -5,7 +5,7 @@ services:
     image: ollama/ollama:latest
     container_name: mp-ollama
     ports:
-      - "11434:11434"
+      - "127.0.0.1:11434:11434"
     volumes:
       - ollama_data:/root/.ollama
     environment:
@@ -33,7 +33,7 @@ services:
       dockerfile: Dockerfile
     container_name: mp-backend
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     env_file: .env
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -61,7 +61,7 @@ services:
       dockerfile: Dockerfile
     container_name: mp-frontend
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=/api
     depends_on:

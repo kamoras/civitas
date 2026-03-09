@@ -5,6 +5,24 @@ import type { ActionIssuesResponse } from "@/types/action";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
+const _fetchCache = new Map<string, { data: unknown; expiry: number }>();
+
+async function cachedFetch<T>(url: string, ttlMs: number): Promise<T> {
+  const now = Date.now();
+  const hit = _fetchCache.get(url);
+  if (hit && hit.expiry > now) return hit.data as T;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+  const data: T = await res.json();
+  _fetchCache.set(url, { data, expiry: now + ttlMs });
+  if (_fetchCache.size > 100) {
+    _fetchCache.forEach((entry, key) => {
+      if (entry.expiry <= now) _fetchCache.delete(key);
+    });
+  }
+  return data;
+}
+
 export async function fetchSenatorsByState(state: string): Promise<Senator[]> {
   const res = await fetch(`${API_BASE}/senators?state=${state}`);
   if (!res.ok) throw new Error(`Failed to load senators: ${res.status}`);
@@ -24,15 +42,11 @@ export interface StateInfo {
 }
 
 export async function fetchStates(): Promise<StateInfo[]> {
-  const res = await fetch(`${API_BASE}/senators/states`);
-  if (!res.ok) throw new Error(`Failed to load states: ${res.status}`);
-  return res.json();
+  return cachedFetch(`${API_BASE}/senators/states`, 120_000);
 }
 
 export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
-  const res = await fetch(`${API_BASE}/senators/leaderboard`);
-  if (!res.ok) throw new Error(`Failed to load leaderboard: ${res.status}`);
-  return res.json();
+  return cachedFetch(`${API_BASE}/senators/leaderboard`, 120_000);
 }
 
 // --- House Representatives ---
@@ -44,9 +58,7 @@ export interface RepStateInfo {
 }
 
 export async function fetchRepStates(): Promise<RepStateInfo[]> {
-  const res = await fetch(`${API_BASE}/representatives/states`);
-  if (!res.ok) throw new Error(`Failed to load rep states: ${res.status}`);
-  return res.json();
+  return cachedFetch(`${API_BASE}/representatives/states`, 120_000);
 }
 
 export interface PaginatedReps {
@@ -144,10 +156,10 @@ export interface AppConfig {
 const DEFAULT_CONFIG: AppConfig = {
   scoreWeights: {
     fundingIndependence: 0.25,
-    promisePersistence: 0.25,
-    independentVoting: 0.25,
-    transparency: 0.15,
-    accessibility: 0.10,
+    promisePersistence: 0.20,
+    independentVoting: 0.20,
+    fundingDiversity: 0.15,
+    legislativeEffectiveness: 0.20,
   },
   presidentScoreWeights: {
     independence: 0.20,
@@ -590,9 +602,7 @@ export interface BranchRecentResponse {
 }
 
 export async function fetchRecentByBranch(branch: string, limit = 15): Promise<BranchRecentResponse> {
-  const res = await fetch(`${API_BASE}/action/recent/${branch}?limit=${limit}`);
-  if (!res.ok) throw new Error(`Failed to load ${branch} documents: ${res.status}`);
-  return res.json();
+  return cachedFetch(`${API_BASE}/action/recent/${branch}?limit=${limit}`, 120_000);
 }
 
 export interface CountryArticle {
@@ -623,6 +633,7 @@ export async function fetchCountryNews(): Promise<CountryNewsResponse> {
 export interface ElectionSenator {
   id: string;
   name: string;
+  state: string;
   party: string;
   overallScore: number;
   leadershipScore: number | null;
@@ -653,9 +664,7 @@ export interface ElectionInfo {
 }
 
 export async function fetchElectionInfo(): Promise<ElectionInfo> {
-  const res = await fetch(`${API_BASE}/action/elections`);
-  if (!res.ok) throw new Error(`Failed to load election info: ${res.status}`);
-  return res.json();
+  return cachedFetch(`${API_BASE}/action/elections`, 3_600_000);
 }
 
 
@@ -687,13 +696,51 @@ export interface NationalMonitorDetail extends NationalMonitor {
 }
 
 export async function fetchMonitors(): Promise<{ monitors: NationalMonitor[] }> {
-  const res = await fetch(`${API_BASE}/action/monitors`);
-  if (!res.ok) throw new Error(`Failed to load monitors: ${res.status}`);
-  return res.json();
+  return cachedFetch(`${API_BASE}/action/monitors`, 300_000);
 }
 
 export async function fetchMonitorDetail(slug: string): Promise<NationalMonitorDetail> {
-  const res = await fetch(`${API_BASE}/action/monitors/${encodeURIComponent(slug)}`);
-  if (!res.ok) throw new Error(`Failed to load monitor: ${res.status}`);
-  return res.json();
+  return cachedFetch(`${API_BASE}/action/monitors/${encodeURIComponent(slug)}`, 300_000);
+}
+
+
+export interface TimelineEntry {
+  date: string;
+  title: string;
+  summary: string;
+  policyAreas: string[];
+  sourceUrl: string | null;
+  sourceName: string | null;
+  monitorSlug: string | null;
+}
+
+export interface TimelineMonth {
+  month: number;
+  name: string;
+  entries: TimelineEntry[];
+  topThemes: [string, number][];
+}
+
+export interface UpcomingEvent {
+  date: string;
+  title: string;
+  description: string;
+  category: string;
+  link: string;
+  linkLabel: string;
+}
+
+export interface TimelineResponse {
+  year: number;
+  totalDays: number;
+  currentMonth: number;
+  topThemes: { area: string; count: number }[];
+  monitors: { slug: string; title: string; status: string; updateCount: number }[];
+  months: TimelineMonth[];
+  upcomingEvents: UpcomingEvent[];
+}
+
+export async function fetchTimeline(year?: number): Promise<TimelineResponse> {
+  const params = year ? `?year=${year}` : "";
+  return cachedFetch(`${API_BASE}/action/timeline${params}`, 300_000);
 }

@@ -267,6 +267,8 @@ async def run_house_pipeline() -> dict:
                     )
 
                     # Add recent votes
+                    rep_party = rep.get("party", "I")
+                    effective_party = voting_data.get("effectiveParty", rep_party)
                     for rv in recent_votes_list:
                         vote_direction = rv["vote"].upper()
                         normalized = "Not Voting"
@@ -274,6 +276,16 @@ async def run_house_pipeline() -> dict:
                             normalized = "Yea"
                         elif vote_direction in ("NAY", "NO"):
                             normalized = "Nay"
+
+                        party_leaning = rv.get("partyLeaning")
+                        voted_with_party = None
+                        if party_leaning and normalized in ("Yea", "Nay") and effective_party in ("D", "R"):
+                            is_yea = normalized == "Yea"
+                            if party_leaning == effective_party:
+                                voted_with_party = is_yea
+                            elif party_leaning in ("D", "R"):
+                                voted_with_party = not is_yea
+
                         voting_data["recentVotes"].append({
                             "billName": rv.get("billName", ""),
                             "billId": rv.get("billId", ""),
@@ -284,8 +296,8 @@ async def run_house_pipeline() -> dict:
                             "partyAlignmentWeight": rv.get("partyAlignmentWeight", 0.0),
                             "stance": rv.get("stance", "neutral"),
                             "description": rv.get("description", ""),
-                            "partyLeaning": rv.get("partyLeaning"),
-                            "votedWithParty": None,
+                            "partyLeaning": party_leaning,
+                            "votedWithParty": voted_with_party,
                             "voteCategory": "recent",
                             "keyVoteReasoning": None,
                         })
@@ -398,7 +410,8 @@ def _record_rep_snapshots(db: Session) -> None:
             r.score_funding_independence * SCORE_WEIGHTS["fundingIndependence"]
             + r.score_promise_persistence * SCORE_WEIGHTS["promisePersistence"]
             + r.score_independent_voting * SCORE_WEIGHTS["independentVoting"]
-            + r.score_funding_diversity * SCORE_WEIGHTS["fundingDiversity"],
+            + r.score_funding_diversity * SCORE_WEIGHTS["fundingDiversity"]
+            + r.score_legislative_effectiveness * SCORE_WEIGHTS["legislativeEffectiveness"],
             2,
         )
         existing = (
@@ -416,6 +429,7 @@ def _record_rep_snapshots(db: Session) -> None:
             existing.score_2 = r.score_promise_persistence
             existing.score_3 = r.score_independent_voting
             existing.score_4 = r.score_funding_diversity
+            existing.score_5 = r.score_legislative_effectiveness
         else:
             db.add(ScoreSnapshot(
                 entity_type="representative",
@@ -426,6 +440,7 @@ def _record_rep_snapshots(db: Session) -> None:
                 score_2=r.score_promise_persistence,
                 score_3=r.score_independent_voting,
                 score_4=r.score_funding_diversity,
+                score_5=r.score_legislative_effectiveness,
             ))
             count += 1
     db.commit()

@@ -1,6 +1,7 @@
 import { CampaignPromise, PartisanDepth } from "@/types/senator";
 import { useCategoryLabel, usePolicyLabel } from "@/hooks/useConfig";
 import { voteSourceUrl } from "@/lib/sources";
+import { safeHref } from "@/lib/formatting";
 import CollapsibleSection from "./CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
 
@@ -274,7 +275,7 @@ export default function PlatformTracker({ promises, platformSummary, partisanDep
                               return url ? (
                                 <a
                                   key={j}
-                                  href={url}
+                                  href={safeHref(url) || "#"}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="text-[10px] text-neon-cyan/50 hover:text-neon-cyan underline underline-offset-2 transition-colors"

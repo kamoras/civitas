@@ -65,6 +65,9 @@ proxy_cache_path /var/cache/nginx/civitas levels=1:2
     keys_zone=civitas_cache:10m max_size=256m inactive=30m
     use_temp_path=off;
 
+limit_req_zone \$binary_remote_addr zone=api_limit:10m rate=30r/s;
+limit_req_zone \$binary_remote_addr zone=search_limit:5m rate=5r/s;
+
 upstream frontend_app {
     server 127.0.0.1:${fe_port};
     keepalive 16;
@@ -82,6 +85,12 @@ server {
 
     access_log /var/log/nginx/modern-punk.access.log;
     error_log  /var/log/nginx/modern-punk.error.log;
+
+    # Security headers
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
 
     gzip on;
     gzip_vary on;
@@ -239,20 +248,6 @@ server {
         add_header X-Cache-Status \$upstream_cache_status;
     }
 
-    location = /api/explore {
-        proxy_pass http://backend_app;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_http_version 1.1;
-        proxy_set_header Connection "";
-        proxy_cache civitas_cache;
-        proxy_cache_valid 200 1m;
-        proxy_cache_use_stale error timeout updating http_500 http_502 http_503;
-        proxy_cache_lock on;
-        add_header X-Cache-Status \$upstream_cache_status;
-    }
-
     # -- Admin: local network only (returns 404 to public) --
 
     location /api/admin/ {
@@ -290,9 +285,99 @@ server {
         proxy_set_header Connection "";
     }
 
-    # -- Uncached API endpoints (mutations, AI summary) --
+    # -- Action Center API (cached, changes at most daily) --
+
+    location /api/action/issues {
+        proxy_pass http://backend_app;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_cache civitas_cache;
+        proxy_cache_valid 200 5m;
+        proxy_cache_use_stale error timeout updating http_500 http_502 http_503;
+        proxy_cache_lock on;
+        add_header X-Cache-Status \$upstream_cache_status;
+    }
+
+    location /api/action/elections {
+        proxy_pass http://backend_app;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_cache civitas_cache;
+        proxy_cache_valid 200 1h;
+        proxy_cache_use_stale error timeout updating http_500 http_502 http_503;
+        proxy_cache_lock on;
+        add_header X-Cache-Status \$upstream_cache_status;
+    }
+
+    location /api/action/monitors {
+        proxy_pass http://backend_app;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_cache civitas_cache;
+        proxy_cache_valid 200 5m;
+        proxy_cache_use_stale error timeout updating http_500 http_502 http_503;
+        proxy_cache_lock on;
+        add_header X-Cache-Status \$upstream_cache_status;
+    }
+
+    location /api/action/timeline {
+        proxy_pass http://backend_app;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_cache civitas_cache;
+        proxy_cache_valid 200 5m;
+        proxy_cache_use_stale error timeout updating http_500 http_502 http_503;
+        proxy_cache_lock on;
+        add_header X-Cache-Status \$upstream_cache_status;
+    }
+
+    location /api/action/country-news {
+        proxy_pass http://backend_app;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_cache civitas_cache;
+        proxy_cache_valid 200 10m;
+        proxy_cache_use_stale error timeout updating http_500 http_502 http_503;
+        proxy_cache_lock on;
+        add_header X-Cache-Status \$upstream_cache_status;
+    }
+
+    # -- Explore search (rate-limited, CPU-intensive) --
+
+    location = /api/explore {
+        limit_req zone=search_limit burst=10 nodelay;
+        proxy_pass http://backend_app;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_cache civitas_cache;
+        proxy_cache_valid 200 1m;
+        proxy_cache_use_stale error timeout updating http_500 http_502 http_503;
+        proxy_cache_lock on;
+        add_header X-Cache-Status \$upstream_cache_status;
+    }
+
+    # -- Other API endpoints (rate-limited) --
 
     location /api/ {
+        limit_req zone=api_limit burst=60 nodelay;
         proxy_pass http://backend_app;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -377,7 +462,7 @@ deploy_backend() {
     -v /sys/class/net/eth0/statistics:/host/net/eth0:ro \
     $(br=$(docker network inspect "$NETWORK" --format '{{.Id}}' 2>/dev/null | head -c 12); \
       [ -d "/sys/class/net/br-${br}/statistics" ] && echo "-v /sys/class/net/br-${br}/statistics:/host/net/docker-br:ro") \
-    -p "${new_port}:8000" \
+    -p "127.0.0.1:${new_port}:8000" \
     --memory=4g \
     --restart unless-stopped \
     modern-punk-backend:latest
@@ -427,7 +512,7 @@ deploy_frontend() {
     --name "$container_name" \
     --network "$NETWORK" \
     -e NEXT_PUBLIC_API_URL=/api \
-    -p "${new_port}:3000" \
+    -p "127.0.0.1:${new_port}:3000" \
     --memory=512m \
     --restart unless-stopped \
     modern-punk-frontend:latest

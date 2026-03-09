@@ -38,6 +38,7 @@ def _make_senator(**overrides):
             "promisePersistence": 55,
             "independentVoting": 70,
             "fundingDiversity": 65,
+            "legislativeEffectiveness": 50,
         },
         "funding": {
             "totalRaised": 1_000_000,
@@ -95,6 +96,7 @@ class TestValidateSenator:
             "promisePersistence": -20,
             "independentVoting": 50,
             "fundingDiversity": 200,
+            "legislativeEffectiveness": 110,
         })
         result = validate_senator(senator)
         scores = result["representationScore"]
@@ -102,6 +104,7 @@ class TestValidateSenator:
         assert scores["promisePersistence"] == 0
         assert scores["independentVoting"] == 50
         assert scores["fundingDiversity"] == 100
+        assert scores["legislativeEffectiveness"] == 100
 
     def test_missing_scores_default_to_zero(self):
         senator = _make_senator(representationScore={})

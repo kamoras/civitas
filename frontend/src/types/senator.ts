@@ -24,6 +24,7 @@ export interface Senator {
     promisePersistence: number;
     independentVoting: number;
     fundingDiversity: number;
+    legislativeEffectiveness: number;
   };
   funding: {
     totalRaised: number;

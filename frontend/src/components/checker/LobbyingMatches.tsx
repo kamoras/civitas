@@ -1,5 +1,5 @@
 import { LobbyingMatch } from "@/types/senator";
-import { formatCurrency } from "@/lib/formatting";
+import { formatCurrency, safeHref } from "@/lib/formatting";
 import { billUrl } from "@/lib/sources";
 
 interface LobbyingMatchesProps {
@@ -34,7 +34,7 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
                   return url ? (
                     <a
                       key={j}
-                      href={url}
+                      href={safeHref(url) || "#"}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-neon-cyan/60 hover:text-neon-cyan underline underline-offset-2 transition-colors"

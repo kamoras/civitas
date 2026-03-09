@@ -6,10 +6,11 @@ Backend modules import from here instead of defining their own copies.
 """
 
 SCORE_WEIGHTS: dict[str, float] = {
-    "fundingIndependence": 0.30,
-    "promisePersistence": 0.25,
-    "independentVoting": 0.25,
-    "fundingDiversity": 0.20,
+    "fundingIndependence": 0.25,
+    "promisePersistence": 0.20,
+    "independentVoting": 0.20,
+    "fundingDiversity": 0.15,
+    "legislativeEffectiveness": 0.20,
 }
 
 PRESIDENT_SCORE_WEIGHTS: dict[str, float] = {

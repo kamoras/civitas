@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { SponsoredBill } from "@/types/senator";
 import { billUrl } from "@/lib/sources";
+import { safeHref } from "@/lib/formatting";
 import CollapsibleSection from "./CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
 
@@ -75,7 +76,7 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
                     <div className="flex items-center gap-2 flex-wrap">
                       {url ? (
                         <a
-                          href={url}
+                          href={safeHref(url) || "#"}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-sm text-matrix-green/80 hover:text-neon-cyan transition-colors"

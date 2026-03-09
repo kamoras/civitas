@@ -41,6 +41,7 @@ export interface ActionIssue {
   relatedBills: RelatedBill[];
   relatedExploreDocs: RelatedExploreDoc[];
   relatedSenators: RelatedSenator[];
+  relatedMonitorSlugs?: string[];
 }
 
 export interface DailyTheme {
@@ -59,4 +60,5 @@ export interface ActionIssuesResponse {
   date: string | null;
   issues: ActionIssue[];
   theme?: DailyTheme | null;
+  availableDates?: string[];
 }

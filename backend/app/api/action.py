@@ -5,20 +5,22 @@ import json
 import logging
 import threading
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from sqlalchemy.orm import Session, selectinload
 
 from datetime import date
 
 from app.api.admin import require_admin
 from app.database import get_db
 from app.models import (
-    ActionIssue, DailyTheme, ExploreDocument, NationalMonitor, MonitorUpdate, Senator,
+    ActionIssue, DailyTheme, ExploreDocument,
+    NationalMonitor, MonitorUpdate, TimelineEntry, Senator,
 )
 from app.schemas import (
     ActionIssueSchema, ActionItemSchema, RelatedBillSchema,
     RelatedExploreDoc, RelatedSenator,
     NationalMonitorSchema, NationalMonitorDetailSchema, MonitorUpdateSchema,
+    TimelineEntrySchema,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,17 +36,21 @@ def _parse_json_field(raw: str, default: list | None = None) -> list:
         return default or []
 
 
-def _build_issue_response(issue: ActionIssue, db: Session) -> dict:
+def _build_issue_response(
+    issue: ActionIssue, db: Session,
+    explore_docs_map: dict[int, ExploreDocument] | None = None,
+) -> dict:
     explore_ids = _parse_json_field(issue.related_explore_ids)
     related_docs: list[dict] = []
     if explore_ids:
-        docs = (
-            db.query(ExploreDocument.id, ExploreDocument.title,
-                     ExploreDocument.doc_type, ExploreDocument.date,
-                     ExploreDocument.url)
-            .filter(ExploreDocument.id.in_(explore_ids))
-            .all()
-        )
+        if explore_docs_map is not None:
+            docs = [explore_docs_map[eid] for eid in explore_ids if eid in explore_docs_map]
+        else:
+            docs = (
+                db.query(ExploreDocument)
+                .filter(ExploreDocument.id.in_(explore_ids))
+                .all()
+            )
         related_docs = [
             RelatedExploreDoc(
                 id=d.id, title=d.title, doc_type=d.doc_type,
@@ -87,6 +93,10 @@ def _build_issue_response(issue: ActionIssue, db: Session) -> dict:
                 ).model_dump(by_alias=True)
             )
 
+    monitor_slugs = _parse_json_field(
+        getattr(issue, "related_monitor_slugs", "[]")
+    )
+
     return ActionIssueSchema(
         id=issue.id,
         date=issue.date,
@@ -101,14 +111,17 @@ def _build_issue_response(issue: ActionIssue, db: Session) -> dict:
         related_bills=related_bills,
         related_explore_docs=related_docs,
         related_senators=related_senators,
+        related_monitor_slugs=monitor_slugs,
     ).model_dump(by_alias=True)
 
 
 @router.get("/issues")
 async def get_action_issues(
+    response: Response,
     date: str | None = Query(None, description="Date in YYYY-MM-DD format; defaults to most recent"),
     db: Session = Depends(get_db),
 ):
+    response.headers["Cache-Control"] = "public, max-age=300"
     """Return the current day's action issues (or most recent available)."""
     if date:
         issues = (
@@ -145,10 +158,32 @@ async def get_action_issues(
         except (json.JSONDecodeError, TypeError):
             pass
 
+    available_dates = [
+        row[0] for row in
+        db.query(ActionIssue.date)
+        .distinct()
+        .order_by(ActionIssue.date.desc())
+        .limit(14)
+        .all()
+    ]
+
+    all_explore_ids: list[int] = []
+    for i in issues:
+        all_explore_ids.extend(_parse_json_field(i.related_explore_ids))
+    explore_docs_map: dict[int, ExploreDocument] = {}
+    if all_explore_ids:
+        docs = (
+            db.query(ExploreDocument)
+            .filter(ExploreDocument.id.in_(set(all_explore_ids)))
+            .all()
+        )
+        explore_docs_map = {d.id: d for d in docs}
+
     return {
         "date": issue_date,
-        "issues": [_build_issue_response(i, db) for i in issues],
+        "issues": [_build_issue_response(i, db, explore_docs_map) for i in issues],
         "theme": theme,
+        "availableDates": available_dates,
     }
 
 
@@ -161,10 +196,12 @@ _BRANCH_CHAMBERS = {
 
 @router.get("/recent/{branch}")
 async def get_recent_by_branch(
+    response: Response,
     branch: str,
     limit: int = Query(15, ge=1, le=50),
     db: Session = Depends(get_db),
 ):
+    response.headers["Cache-Control"] = "public, max-age=120"
     """Return the most recent explore documents for a government branch."""
     chambers = _BRANCH_CHAMBERS.get(branch.lower())
     if not chambers:
@@ -206,11 +243,12 @@ async def get_recent_by_branch(
 
 
 @router.get("/country-news")
-async def get_country_news():
+async def get_country_news(response: Response):
     """Return recent news articles grouped by country mentioned."""
+    response.headers["Cache-Control"] = "public, max-age=600"
     from app.pipeline.fetch.news_feeds import fetch_news_articles
 
-    articles = fetch_news_articles()
+    articles = await asyncio.to_thread(fetch_news_articles)
     countries = _extract_country_mentions(articles)
     return {"countries": countries}
 
@@ -388,8 +426,9 @@ _HOUSE_DISTRICTS: dict[str, int] = {
 
 
 @router.get("/elections")
-async def get_election_info(db: Session = Depends(get_db)):
+async def get_election_info(response: Response, db: Session = Depends(get_db)):
     """Return upcoming election info: dates, senate races, state data."""
+    response.headers["Cache-Control"] = "public, max-age=3600"
     today = date.today()
     election_day = _next_election_day(today)
     days_until = (election_day - today).days
@@ -416,7 +455,7 @@ async def get_election_info(db: Session = Depends(get_db)):
              s.score_independent_voting + s.score_funding_diversity) / 4, 1
         )
         entry = {
-            "id": s.id, "name": s.name, "party": s.party,
+            "id": s.id, "name": s.name, "state": s.state, "party": s.party,
             "overallScore": overall,
             "leadershipScore": round(s.leadership_score, 1) if s.leadership_score else None,
             "yearsInOffice": s.years_in_office,
@@ -510,10 +549,12 @@ def _monitor_to_schema(m: NationalMonitor, include_updates: bool = False):
 
 
 @router.get("/monitors")
-async def list_monitors(db: Session = Depends(get_db)):
+async def list_monitors(response: Response, db: Session = Depends(get_db)):
     """List all active and watching national monitors."""
+    response.headers["Cache-Control"] = "public, max-age=300"
     monitors = (
         db.query(NationalMonitor)
+        .options(selectinload(NationalMonitor.updates))
         .filter(NationalMonitor.status.in_(["active", "watching"]))
         .order_by(NationalMonitor.updated_at.desc())
         .all()
@@ -522,13 +563,180 @@ async def list_monitors(db: Session = Depends(get_db)):
 
 
 @router.get("/monitors/{slug}")
-async def get_monitor(slug: str, db: Session = Depends(get_db)):
+async def get_monitor(response: Response, slug: str, db: Session = Depends(get_db)):
     """Get full detail for a national monitor including timeline."""
+    response.headers["Cache-Control"] = "public, max-age=300"
     monitor = (
         db.query(NationalMonitor)
+        .options(selectinload(NationalMonitor.updates))
         .filter(NationalMonitor.slug == slug)
         .first()
     )
     if not monitor:
         raise HTTPException(status_code=404, detail="Monitor not found")
     return _monitor_to_schema(monitor, include_updates=True)
+
+
+_MONTH_NAMES = [
+    "", "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+]
+
+
+def _upcoming_civic_events(year: int, today: date) -> list[dict]:
+    """Return known upcoming civic events for the given year."""
+    events: list[dict] = []
+
+    election_day = _next_election_day(today)
+    if election_day.year == year and election_day >= today:
+        is_presidential = year % 4 == 0
+        label = "Presidential & Congressional" if is_presidential else "Midterm Congressional"
+        events.append({
+            "date": election_day.isoformat(),
+            "title": f"{label} Election Day",
+            "description": f"Federal election day — all 435 House seats"
+                           f"{', 33-34 Senate seats' if not is_presidential else ', 33-34 Senate seats, and the presidency'}"
+                           " are on the ballot.",
+            "category": "election",
+            "link": "/action?tab=elections",
+            "linkLabel": "View races & state info",
+        })
+
+    scotus_term_start = date(year, 10, 7)
+    if scotus_term_start.weekday() == 5:
+        scotus_term_start = date(year, 10, 9)
+    elif scotus_term_start.weekday() == 6:
+        scotus_term_start = date(year, 10, 8)
+    if scotus_term_start >= today and scotus_term_start.year == year:
+        events.append({
+            "date": scotus_term_start.isoformat(),
+            "title": f"Supreme Court {year}-{year + 1} Term Begins",
+            "description": "The Supreme Court begins its new term on the first Monday in October,"
+                           " hearing oral arguments and issuing opinions through June.",
+            "category": "scotus",
+            "link": "/scorecard?branch=scotus",
+            "linkLabel": "View justice scorecards",
+        })
+
+    if year % 2 == 1:
+        jan3 = date(year, 1, 3)
+        if jan3.weekday() == 6:
+            jan3 = date(year, 1, 4)
+        if jan3 >= today:
+            events.append({
+                "date": jan3.isoformat(),
+                "title": f"{_ordinal(year)} Congress Convenes",
+                "description": "New session of Congress begins. Newly elected members are sworn in"
+                               " and leadership elections take place.",
+                "category": "congress",
+                "link": "/leaderboard",
+                "linkLabel": "View congressional rankings",
+            })
+
+    if year % 4 == 1:
+        jan20 = date(year, 1, 20)
+        if jan20.weekday() == 6:
+            jan20 = date(year, 1, 21)
+        if jan20 >= today and jan20.year == year:
+            events.append({
+                "date": jan20.isoformat(),
+                "title": "Presidential Inauguration Day",
+                "description": "The president-elect is sworn into office at the U.S. Capitol.",
+                "category": "executive",
+                "link": "/scorecard?branch=president",
+                "linkLabel": "View presidential scorecards",
+            })
+
+    return sorted(events, key=lambda e: e["date"])
+
+
+def _ordinal(year: int) -> str:
+    n = (year - 1789) // 2 + 1
+    suffix = "th" if 11 <= n % 100 <= 13 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+@router.get("/timeline")
+async def get_timeline(
+    response: Response,
+    year: int | None = Query(None, description="Year (defaults to current)"),
+    db: Session = Depends(get_db),
+):
+    response.headers["Cache-Control"] = "public, max-age=300"
+    """Return the year's timeline: top daily issues grouped by month."""
+    if year is None:
+        year = date.today().year
+
+    entries = (
+        db.query(TimelineEntry)
+        .filter(TimelineEntry.date >= f"{year}-01-01", TimelineEntry.date <= f"{year}-12-31")
+        .order_by(TimelineEntry.date.asc())
+        .all()
+    )
+
+    months: dict[int, list[dict]] = {}
+    theme_counts: dict[str, int] = {}
+
+    for e in entries:
+        month_num = int(e.date[5:7])
+        entry = TimelineEntrySchema(
+            date=e.date,
+            title=e.title,
+            summary=e.summary,
+            policy_areas=_parse_json_field(e.policy_areas),
+            source_url=e.source_url,
+            source_name=e.source_name,
+            monitor_slug=e.monitor_slug,
+        ).model_dump(by_alias=True)
+        months.setdefault(month_num, []).append(entry)
+
+        for area in _parse_json_field(e.policy_areas):
+            theme_counts[area] = theme_counts.get(area, 0) + 1
+
+    sorted_themes = sorted(theme_counts.items(), key=lambda x: -x[1])
+    top_themes = [{"area": a, "count": c} for a, c in sorted_themes[:10]]
+
+    monitors = (
+        db.query(NationalMonitor)
+        .options(selectinload(NationalMonitor.updates))
+        .filter(
+            NationalMonitor.created_at >= f"{year}-01-01",
+        )
+        .order_by(NationalMonitor.created_at.asc())
+        .all()
+    )
+    active_monitors = [
+        {"slug": m.slug, "title": m.title, "status": m.status,
+         "updateCount": len(m.updates) if m.updates else 0}
+        for m in monitors
+    ]
+
+    monthly_data = []
+    for m_num in range(1, 13):
+        m_entries = months.get(m_num, [])
+        if not m_entries:
+            continue
+        m_themes: dict[str, int] = {}
+        for e in m_entries:
+            for area in e.get("policyAreas", []):
+                m_themes[area] = m_themes.get(area, 0) + 1
+        monthly_data.append({
+            "month": m_num,
+            "name": _MONTH_NAMES[m_num],
+            "entries": m_entries,
+            "topThemes": sorted(m_themes.items(), key=lambda x: -x[1])[:5],
+        })
+
+    current_month = date.today().month if year == date.today().year else 12
+    today = date.today()
+    civic_events = _upcoming_civic_events(year, today)
+
+    return {
+        "year": year,
+        "totalDays": len(entries),
+        "currentMonth": current_month,
+        "topThemes": top_themes,
+        "monitors": active_monitors,
+        "months": monthly_data,
+        "upcomingEvents": civic_events,
+    }

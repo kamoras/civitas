@@ -89,6 +89,7 @@ def validate_senator(senator: dict) -> dict:
         "promisePersistence": clamp(cs.get("promisePersistence", 0)),
         "independentVoting": clamp(cs.get("independentVoting", 0)),
         "fundingDiversity": clamp(cs.get("fundingDiversity", 0)),
+        "legislativeEffectiveness": clamp(cs.get("legislativeEffectiveness", 0)),
     }
 
     # Funding

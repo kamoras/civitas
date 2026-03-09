@@ -185,81 +185,84 @@ def _enrich_actions(
     source_names: list[str],
     related_senators: list[dict],
 ) -> list[dict]:
-    """Add specific URLs and refine text for each action using issue context.
+    """Add specific URLs to actions while preserving LLM-generated text.
 
-    Replaces generic fallback URLs with direct links derived from the issue's
-    resolved bills, news sources, and related senators.
+    The LLM produces specific action text (e.g., "Contact your senators about
+    the SAVE Act voter ID requirements"). This function adds direct URLs but
+    only overwrites text when the LLM produced something too generic to be
+    useful (e.g., "this issue", "this policy").
     """
     bill_url = resolved_bills[0]["url"] if resolved_bills else None
     bill_name = resolved_bills[0].get("name", "") if resolved_bills else ""
     primary_source = source_urls[0] if source_urls else None
     primary_source_name = source_names[0] if source_names else ""
     senator_names = [s["name"] for s in related_senators[:3]] if related_senators else []
-    senator_str = ", ".join(senator_names) if senator_names else ""
+
+    def _is_generic(text: str) -> bool:
+        lower = text.lower()
+        return any(p in lower for p in (
+            "this issue", "this policy", "this topic",
+            "the issue", "the policy", "related issue",
+        ))
 
     enriched: list[dict] = []
     for a in actions:
         a = dict(a)
         atype = a.get("type", "general")
+        text = a.get("text", "")
 
         if atype in ("contact_senator", "contact_representative"):
-            if senator_str:
-                a["text"] = (
-                    f"Contact your elected officials about {title}. "
-                    f"Key figures involved: {senator_str}"
-                )
-            else:
-                a["text"] = (
-                    f"Contact your elected officials to share your position on {title}"
-                )
-            a["url"] = "https://www.senate.gov/senators/senators-contact.htm"
+            if not a.get("url"):
+                if atype == "contact_senator":
+                    a["url"] = "https://www.senate.gov/senators/senators-contact.htm"
+                else:
+                    a["url"] = "https://www.house.gov/representatives/find-your-representative"
+            if _is_generic(text):
+                parts = [f"Contact your {'senators' if atype == 'contact_senator' else 'representative'} about {title}"]
+                if senator_names:
+                    parts.append(f"Key figures: {', '.join(senator_names)}")
+                a["text"] = ". ".join(parts)
 
         elif atype == "contact_whitehouse":
-            a["text"] = f"Contact the White House about {title}"
-            a["url"] = "https://www.whitehouse.gov/contact/"
+            if not a.get("url"):
+                a["url"] = "https://www.whitehouse.gov/contact/"
+            if _is_generic(text):
+                a["text"] = f"Contact the White House about {title}"
 
         elif atype == "track_legislation":
             if bill_url:
-                a["text"] = (
-                    f"Read the full text of the {bill_name} on Congress.gov"
-                    if bill_name else
-                    f"Read the related legislation on Congress.gov"
-                )
                 a["url"] = bill_url
-            elif primary_source:
-                a["text"] = (
-                    f"Read the full story from {primary_source_name}"
-                    if primary_source_name else
-                    f"Read the full coverage of {title}"
-                )
-                a["url"] = primary_source
-            else:
-                a["url"] = f"https://www.congress.gov/search?q={title[:80]}"
+                if _is_generic(text):
+                    a["text"] = (
+                        f"Read the full text of {bill_name} on Congress.gov"
+                        if bill_name else
+                        "Read the related legislation on Congress.gov"
+                    )
+            elif not a.get("url"):
+                if primary_source:
+                    a["url"] = primary_source
+                else:
+                    from urllib.parse import quote
+                    a["url"] = f"https://www.congress.gov/search?q={quote(title[:80])}"
 
         elif atype == "public_comment":
-            if primary_source:
-                a["text"] = (
-                    f"Read the original reporting on {title} from {primary_source_name}"
-                    if primary_source_name else
-                    f"Read the source reporting on {title}"
-                )
-                a["url"] = primary_source
-            else:
+            if not a.get("url"):
                 a["url"] = "https://www.regulations.gov"
 
         elif atype == "attend_hearing":
-            a["url"] = "https://townhallproject.com"
+            if not a.get("url"):
+                a["url"] = "https://townhallproject.com"
 
         elif atype == "register_vote":
-            a["url"] = "https://vote.gov"
+            if not a.get("url"):
+                a["url"] = "https://vote.gov"
 
         elif atype == "general":
-            if primary_source and not a.get("url"):
+            if not a.get("url") and primary_source:
                 a["url"] = primary_source
 
         enriched.append(a)
 
-    # Ensure no two actions point to the same URL
     seen_urls: set[str] = set()
     deduped: list[dict] = []
     secondary_sources = list(zip(source_urls, source_names))
@@ -269,8 +272,6 @@ def _enrich_actions(
             for su, sn in secondary_sources:
                 if su not in seen_urls:
                     a["url"] = su
-                    if a["type"] in ("public_comment", "track_legislation", "general"):
-                        a["text"] = f"Read related coverage from {sn}" if sn else a["text"]
                     break
         if a.get("url"):
             seen_urls.add(a["url"])
@@ -492,10 +493,14 @@ def _find_related_senators(
     matched: dict[str, dict] = {}
 
     def _make_entry(s) -> dict:
+        from app.config_definitions import SCORE_WEIGHTS
         overall = (
-            s.score_funding_independence + s.score_promise_persistence +
-            s.score_independent_voting + s.score_funding_diversity
-        ) / 4.0
+            s.score_funding_independence * SCORE_WEIGHTS["fundingIndependence"]
+            + s.score_promise_persistence * SCORE_WEIGHTS["promisePersistence"]
+            + s.score_independent_voting * SCORE_WEIGHTS["independentVoting"]
+            + s.score_funding_diversity * SCORE_WEIGHTS["fundingDiversity"]
+            + getattr(s, "score_legislative_effectiveness", 0) * SCORE_WEIGHTS["legislativeEffectiveness"]
+        )
         return {
             "id": s.id, "name": s.name, "state": s.state,
             "party": s.party, "overall_score": round(overall, 1),
@@ -1135,7 +1140,49 @@ def _darken(hex_color: str, darkness: float = 0.12) -> str:
         return "#0a0a0f"
 
 
-_MONITOR_SIM_THRESHOLD = 0.55
+def _save_timeline_entry(today: str, db: Session) -> None:
+    """Preserve today's #1 issue as a permanent timeline entry."""
+    from app.models import TimelineEntry
+
+    top_issue = (
+        db.query(ActionIssue)
+        .filter(ActionIssue.date == today, ActionIssue.rank == 1)
+        .first()
+    )
+    if not top_issue:
+        return
+
+    source_urls = json.loads(top_issue.source_urls or "[]")
+    source_names = json.loads(top_issue.source_names or "[]")
+    policy_areas = top_issue.policy_areas or "[]"
+    monitor_slugs = json.loads(
+        getattr(top_issue, "related_monitor_slugs", "[]") or "[]"
+    )
+
+    existing = db.query(TimelineEntry).filter(TimelineEntry.date == today).first()
+    if existing:
+        existing.title = top_issue.title
+        existing.summary = top_issue.summary[:500]
+        existing.policy_areas = policy_areas
+        existing.source_url = source_urls[0] if source_urls else None
+        existing.source_name = source_names[0] if source_names else None
+        existing.monitor_slug = monitor_slugs[0] if monitor_slugs else None
+    else:
+        db.add(TimelineEntry(
+            date=today,
+            title=top_issue.title,
+            summary=top_issue.summary[:500],
+            policy_areas=policy_areas,
+            source_url=source_urls[0] if source_urls else None,
+            source_name=source_names[0] if source_names else None,
+            monitor_slug=monitor_slugs[0] if monitor_slugs else None,
+        ))
+    db.commit()
+    logger.info("Timeline entry saved for %s: %s", today, top_issue.title[:60])
+
+
+_MONITOR_ISSUE_SIM = 0.50
+_MONITOR_MERGE_SIM = 0.55
 _MONITOR_MIN_DAYS = 2
 _MONITOR_LOOKBACK_DAYS = 14
 _MONITOR_DORMANT_DAYS = 7
@@ -1149,12 +1196,46 @@ def _slugify(text: str) -> str:
     return slug[:200]
 
 
+def _merge_monitors(keep: "NationalMonitor", absorb: "NationalMonitor",
+                    db: Session) -> None:
+    """Merge two monitors: move updates from `absorb` into `keep`, delete `absorb`."""
+    from app.models import MonitorUpdate
+
+    existing_keys = {
+        (u.date, u.source_url)
+        for u in db.query(MonitorUpdate).filter(
+            MonitorUpdate.monitor_id == keep.id
+        ).all()
+    }
+
+    for u in db.query(MonitorUpdate).filter(
+        MonitorUpdate.monitor_id == absorb.id
+    ).all():
+        if (u.date, u.source_url) not in existing_keys:
+            u.monitor_id = keep.id
+        else:
+            db.delete(u)
+
+    if absorb.last_article_date and (
+        not keep.last_article_date or absorb.last_article_date > keep.last_article_date
+    ):
+        keep.last_article_date = absorb.last_article_date
+
+    keep_areas = set(json.loads(keep.policy_areas or "[]"))
+    absorb_areas = set(json.loads(absorb.policy_areas or "[]"))
+    keep.policy_areas = json.dumps(sorted(keep_areas | absorb_areas))
+
+    logger.info("Merged monitor '%s' into '%s'", absorb.title, keep.title)
+    db.delete(absorb)
+
+
 def _update_national_monitors(today: str, db: Session) -> None:
     """Detect recurring topics and create/update national monitors.
 
     Uses embedding similarity to match today's issues to existing monitors
     and to detect new recurring topics from past days' issues.
-    Every monitor update traces to a specific source article.
+    Every monitor update traces to a specific source article — no LLM-generated
+    facts, only condensed summaries of sourced articles.
     """
     from app.models import NationalMonitor, MonitorUpdate
     from datetime import timedelta
@@ -1178,11 +1259,42 @@ def _update_national_monitors(today: str, db: Session) -> None:
     existing_monitors = db.query(NationalMonitor).all()
 
     today_embeddings = model.encode(
-        [f"{i.title}" for i in today_issues],
+        [i.title for i in today_issues],
         normalize_embeddings=True,
     )
 
-    # Match today's issues to existing monitors
+    # Step 1: Merge any existing monitors that are too similar to each other.
+    # This cleans up duplicates from prior runs (e.g. "Iran war oil supply"
+    # and "Oil prices spike from Iran conflict" are the same underlying event).
+    if len(existing_monitors) >= 2:
+        mon_embs = model.encode(
+            [f"{m.title} {m.description}" for m in existing_monitors],
+            normalize_embeddings=True,
+        )
+        merged_ids: set[int] = set()
+        for a_idx in range(len(existing_monitors)):
+            if existing_monitors[a_idx].id in merged_ids:
+                continue
+            for b_idx in range(a_idx + 1, len(existing_monitors)):
+                if existing_monitors[b_idx].id in merged_ids:
+                    continue
+                sim = float((mon_embs[a_idx] @ mon_embs[b_idx].T).item())
+                if sim >= _MONITOR_MERGE_SIM:
+                    keep = existing_monitors[a_idx]
+                    absorb = existing_monitors[b_idx]
+                    if len(keep.updates or []) < len(absorb.updates or []):
+                        keep, absorb = absorb, keep
+                    _merge_monitors(keep, absorb, db)
+                    merged_ids.add(absorb.id)
+
+        if merged_ids:
+            db.flush()
+            existing_monitors = db.query(NationalMonitor).all()
+
+    # Step 2: Match today's issues to existing monitors and add updates
+    matched_issues: set[int] = set()
+    issue_monitor_slugs: dict[int, list[str]] = {}
+
     if existing_monitors:
         monitor_embeddings = model.encode(
             [f"{m.title} {m.description}" for m in existing_monitors],
@@ -1192,38 +1304,51 @@ def _update_national_monitors(today: str, db: Session) -> None:
 
         for i, issue in enumerate(today_issues):
             for j, monitor in enumerate(existing_monitors):
-                if sims[i][j] >= _MONITOR_SIM_THRESHOLD:
-                    source_urls = json.loads(issue.source_urls or "[]")
-                    source_names = json.loads(issue.source_names or "[]")
-                    if not source_urls:
-                        continue
+                if sims[i][j] < _MONITOR_ISSUE_SIM:
+                    continue
 
-                    already_exists = (
-                        db.query(MonitorUpdate)
-                        .filter(
-                            MonitorUpdate.monitor_id == monitor.id,
-                            MonitorUpdate.date == today,
-                            MonitorUpdate.source_url == source_urls[0],
-                        )
-                        .first()
+                issue_monitor_slugs.setdefault(i, []).append(monitor.slug)
+
+                source_urls = json.loads(issue.source_urls or "[]")
+                source_names = json.loads(issue.source_names or "[]")
+                if not source_urls:
+                    matched_issues.add(i)
+                    continue
+
+                already_exists = (
+                    db.query(MonitorUpdate)
+                    .filter(
+                        MonitorUpdate.monitor_id == monitor.id,
+                        MonitorUpdate.date == today,
+                        MonitorUpdate.source_url == source_urls[0],
                     )
-                    if already_exists:
-                        continue
+                    .first()
+                )
+                if already_exists:
+                    matched_issues.add(i)
+                    continue
 
-                    db.add(MonitorUpdate(
-                        monitor_id=monitor.id,
-                        date=today,
-                        summary=issue.summary[:500],
-                        source_url=source_urls[0],
-                        source_name=source_names[0] if source_names else "",
-                        article_title=issue.title,
-                    ))
-                    monitor.last_article_date = today
-                    monitor.status = "active"
-                    logger.info("Monitor updated: '%s' <- '%s'",
-                                monitor.title, issue.title[:60])
+                db.add(MonitorUpdate(
+                    monitor_id=monitor.id,
+                    date=today,
+                    summary=issue.summary[:500],
+                    source_url=source_urls[0],
+                    source_name=source_names[0] if source_names else "",
+                    article_title=issue.title,
+                ))
+                monitor.last_article_date = today
+                monitor.status = "active"
+                matched_issues.add(i)
+                logger.info("Monitor updated: '%s' <- '%s'",
+                            monitor.title, issue.title[:60])
 
-    # Detect new recurring topics: compare today's issues against past issues
+    # Tag issues with their related monitor slugs
+    for i, issue in enumerate(today_issues):
+        slugs = issue_monitor_slugs.get(i, [])
+        if slugs:
+            issue.related_monitor_slugs = json.dumps(slugs)
+
+    # Step 3: Detect new recurring topics from unmatched issues
     cutoff_date = (
         datetime.strptime(today, "%Y-%m-%d") - timedelta(days=_MONITOR_LOOKBACK_DAYS)
     ).strftime("%Y-%m-%d")
@@ -1241,75 +1366,79 @@ def _update_national_monitors(today: str, db: Session) -> None:
         )
         sims = today_embeddings @ past_embeddings.T
 
-        existing_slugs = {m.slug for m in existing_monitors}
         all_monitors = db.query(NationalMonitor).all()
+        mon_embs = None
+        if all_monitors:
+            mon_embs = model.encode(
+                [f"{m.title} {m.description}" for m in all_monitors],
+                normalize_embeddings=True,
+            )
 
         for i, issue in enumerate(today_issues):
-            matched_dates = {today}
-            for j, past_issue in enumerate(past_issues):
-                if sims[i][j] >= _MONITOR_SIM_THRESHOLD:
-                    matched_dates.add(past_issue.date)
+            if existing_monitors and i in matched_issues:
+                continue
 
-            if len(matched_dates) >= _MONITOR_MIN_DAYS:
-                slug = _slugify(issue.title)
-                if slug in existing_slugs:
+            matched_dates = {today}
+            matched_past: list[ActionIssue] = []
+            for j, past_issue in enumerate(past_issues):
+                if sims[i][j] >= _MONITOR_ISSUE_SIM:
+                    matched_dates.add(past_issue.date)
+                    matched_past.append(past_issue)
+
+            if len(matched_dates) < _MONITOR_MIN_DAYS:
+                continue
+
+            if mon_embs is not None:
+                dup_sims = today_embeddings[i] @ mon_embs.T
+                if float(dup_sims.max()) >= _MONITOR_ISSUE_SIM:
                     continue
 
-                if all_monitors:
-                    mon_emb = model.encode(
-                        [f"{m.title} {m.description}" for m in all_monitors],
-                        normalize_embeddings=True,
-                    )
-                    dup_sims = today_embeddings[i] @ mon_emb.T
-                    if float(dup_sims.max()) >= _MONITOR_SIM_THRESHOLD:
-                        continue
+            slug = _slugify(issue.title)
+            source_urls = json.loads(issue.source_urls or "[]")
+            source_names = json.loads(issue.source_names or "[]")
+            policy_areas = json.loads(issue.policy_areas or "[]")
 
-                source_urls = json.loads(issue.source_urls or "[]")
-                source_names = json.loads(issue.source_names or "[]")
-                policy_areas = json.loads(issue.policy_areas or "[]")
+            monitor = NationalMonitor(
+                slug=slug,
+                title=issue.title,
+                description=issue.summary[:500],
+                category=policy_areas[0].lower() if policy_areas else "general",
+                status="active",
+                policy_areas=json.dumps(policy_areas),
+                last_article_date=today,
+            )
+            db.add(monitor)
+            db.flush()
 
-                monitor = NationalMonitor(
-                    slug=slug,
-                    title=issue.title,
-                    description=issue.summary[:500],
-                    category=policy_areas[0].lower() if policy_areas else "general",
-                    status="active",
-                    policy_areas=json.dumps(policy_areas),
-                    last_article_date=today,
-                )
-                db.add(monitor)
-                db.flush()
-
-                for past_issue in past_issues:
-                    p_emb = model.encode([past_issue.title], normalize_embeddings=True)
-                    sim = float((today_embeddings[i] @ p_emb.T).item())
-                    if sim >= _MONITOR_SIM_THRESHOLD:
-                        p_urls = json.loads(past_issue.source_urls or "[]")
-                        p_names = json.loads(past_issue.source_names or "[]")
-                        if p_urls:
-                            db.add(MonitorUpdate(
-                                monitor_id=monitor.id,
-                                date=past_issue.date,
-                                summary=past_issue.summary[:500],
-                                source_url=p_urls[0],
-                                source_name=p_names[0] if p_names else "",
-                                article_title=past_issue.title,
-                            ))
-
-                if source_urls:
+            seen_sources: set[str] = set()
+            for past_issue in matched_past:
+                p_urls = json.loads(past_issue.source_urls or "[]")
+                p_names = json.loads(past_issue.source_names or "[]")
+                if p_urls and p_urls[0] not in seen_sources:
                     db.add(MonitorUpdate(
                         monitor_id=monitor.id,
-                        date=today,
-                        summary=issue.summary[:500],
-                        source_url=source_urls[0],
-                        source_name=source_names[0] if source_names else "",
-                        article_title=issue.title,
+                        date=past_issue.date,
+                        summary=past_issue.summary[:500],
+                        source_url=p_urls[0],
+                        source_name=p_names[0] if p_names else "",
+                        article_title=past_issue.title,
                     ))
+                    seen_sources.add(p_urls[0])
 
-                existing_slugs.add(slug)
-                logger.info("New monitor created: '%s' (%d days)", issue.title, len(matched_dates))
+            if source_urls and source_urls[0] not in seen_sources:
+                db.add(MonitorUpdate(
+                    monitor_id=monitor.id,
+                    date=today,
+                    summary=issue.summary[:500],
+                    source_url=source_urls[0],
+                    source_name=source_names[0] if source_names else "",
+                    article_title=issue.title,
+                ))
 
-    # Mark monitors dormant if no updates in _MONITOR_DORMANT_DAYS
+            logger.info("New monitor created: '%s' (%d days)",
+                        issue.title, len(matched_dates))
+
+    # Step 4: Mark stale monitors as watching
     dormant_cutoff = (
         datetime.strptime(today, "%Y-%m-%d") - timedelta(days=_MONITOR_DORMANT_DAYS)
     ).strftime("%Y-%m-%d")
@@ -1487,6 +1616,10 @@ def _run_refresh(db: Session) -> int:
         issues_created += 1
 
     db.commit()
+
+    # Preserve today's #1 issue in the permanent timeline
+    if issues_created > 0:
+        _save_timeline_entry(today, db)
 
     # Stage 2: Generate daily visual theme from the top issues
     if issues_created > 0:

@@ -110,6 +110,7 @@ def build_rep_response(rep: Representative, db: Session):
             "promisePersistence": rep.score_promise_persistence,
             "independentVoting": rep.score_independent_voting,
             "fundingDiversity": rep.score_funding_diversity,
+            "legislativeEffectiveness": rep.score_legislative_effectiveness,
         },
         "funding": {
             "totalRaised": rep.total_raised,
@@ -250,6 +251,7 @@ _FIELD_TO_WEIGHT_KEY = {
     "score_promise_persistence":  "promisePersistence",
     "score_independent_voting":   "independentVoting",
     "score_funding_diversity":    "fundingDiversity",
+    "score_legislative_effectiveness": "legislativeEffectiveness",
 }
 
 _TREND_LOOKBACK_DAYS = 7
@@ -353,6 +355,7 @@ def get_rep_leaderboard(
                 "promisePersistence": r.score_promise_persistence,
                 "independentVoting": r.score_independent_voting,
                 "fundingDiversity": r.score_funding_diversity,
+                "legislativeEffectiveness": r.score_legislative_effectiveness,
             },
             "totalRaised": r.total_raised,
             "totalFromPACs": r.total_from_pacs,
@@ -396,6 +399,7 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
     existing.score_promise_persistence = cs.get("promisePersistence", 0)
     existing.score_independent_voting = cs.get("independentVoting", 0)
     existing.score_funding_diversity = cs.get("fundingDiversity", 0)
+    existing.score_legislative_effectiveness = cs.get("legislativeEffectiveness", 0)
 
     existing.total_raised = funding.get("totalRaised", 0)
     existing.total_from_pacs = funding.get("totalFromPACs", 0)
