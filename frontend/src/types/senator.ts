@@ -42,6 +42,10 @@ export interface Senator {
   leadershipScore: number | null;
   ideologyScore: number | null;
   sponsorshipDescription: string;
+  websiteUrl?: string;
+  contactFormUrl?: string;
+  officePhone?: string;
+  officeAddress?: string;
 }
 
 export interface Donor {

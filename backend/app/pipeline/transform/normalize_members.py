@@ -60,6 +60,8 @@ STATE_NAME_TO_CODE = {
     "Wyoming": "WY",
 }
 
+_VALID_STATE_CODES = set(STATE_NAME_TO_CODE.values())
+
 
 def normalize_members(
     members: list[dict], member_details: dict[str, dict] | None = None
@@ -113,6 +115,13 @@ def normalize_members(
             initials = name_parts[0][0].upper()
 
         official_url = (detail.get("officialWebsiteUrl") or "").rstrip("/")
+        addr_info = detail.get("addressInformation") or {}
+        office_address = (addr_info.get("officeAddress") or "").strip()
+        office_phone = (addr_info.get("phoneNumber") or "").strip()
+
+        contact_form = ""
+        if official_url:
+            contact_form = f"{official_url}/contact"
 
         results.append({
             "bioguideId": m.get("bioguideId", ""),
@@ -124,7 +133,9 @@ def normalize_members(
             "yearsInOffice": years_in_office,
             "initials": initials,
             "officialWebsiteUrl": official_url,
-            # These will be populated later
+            "officePhone": office_phone,
+            "officeAddress": office_address,
+            "contactFormUrl": contact_form,
             "punkNickname": "",
             "representationScore": {
                 "fundingIndependence": 0,
@@ -179,6 +190,12 @@ def normalize_house_members(
 
         raw_name = m.get("name") or f"{m.get('firstName', '')} {m.get('lastName', '')}"
         state = _extract_state_code(m, detail)
+
+        # Skip non-voting delegates (DC, PR, GU, VI, AS, MP) — only the 50
+        # states have voting House members (435 seats).
+        if state not in _VALID_STATE_CODES:
+            continue
+
         party = _normalize_party(m.get("partyName") or m.get("party"))
 
         district = _extract_district(m, detail)
@@ -200,6 +217,13 @@ def normalize_house_members(
             initials = name_parts[0][0].upper()
 
         official_url = (detail.get("officialWebsiteUrl") or "").rstrip("/")
+        addr_info = detail.get("addressInformation") or {}
+        office_address = (addr_info.get("officeAddress") or "").strip()
+        office_phone = (addr_info.get("phoneNumber") or "").strip()
+
+        contact_form = ""
+        if official_url:
+            contact_form = f"{official_url}/contact"
 
         results.append({
             "bioguideId": m.get("bioguideId", ""),
@@ -212,6 +236,9 @@ def normalize_house_members(
             "yearsInOffice": years_in_office,
             "initials": initials,
             "officialWebsiteUrl": official_url,
+            "officePhone": office_phone,
+            "officeAddress": office_address,
+            "contactFormUrl": contact_form,
             "punkNickname": "",
             "representationScore": {
                 "fundingIndependence": 0,

@@ -168,12 +168,16 @@ export default function ActionPreview() {
             <h3 className="font-pixel text-[10px] text-amber-400/60 tracking-widest text-center mb-4">
               NATIONAL MONITORS — ONGOING CONCERNS WE ARE TRACKING
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className={`grid gap-3 ${
+              activeMonitors.length <= 2
+                ? "grid-cols-1 sm:grid-cols-2 max-w-3xl mx-auto"
+                : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+            }`}>
               {activeMonitors.map((m) => (
                 <Link
                   key={m.slug}
                   href="/action?tab=monitors"
-                  className="terminal-window p-4 hover:border-amber-400/30 transition-colors group"
+                  className="terminal-window p-5 hover:border-amber-400/30 transition-colors group"
                 >
                   <div className="flex items-center gap-2 mb-2">
                     <span
@@ -184,9 +188,12 @@ export default function ActionPreview() {
                       {m.category}
                     </span>
                   </div>
-                  <h4 className="font-pixel text-xs text-matrix-green/80 group-hover:text-matrix-green leading-relaxed mb-2">
+                  <h4 className="font-pixel text-xs sm:text-sm text-matrix-green/80 group-hover:text-matrix-green leading-relaxed mb-2">
                     {m.title}
                   </h4>
+                  <p className="text-matrix-green/40 text-xs leading-relaxed mb-3 line-clamp-2">
+                    {m.description}
+                  </p>
                   <div className="flex items-center gap-3 text-[10px] text-matrix-green/40">
                     <span>{m.updateCount} update{m.updateCount !== 1 ? "s" : ""}</span>
                     <span>since {m.createdAt}</span>

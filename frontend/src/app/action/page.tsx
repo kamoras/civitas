@@ -10,6 +10,7 @@ import Footer from "@/components/layout/Footer";
 import GlitchText from "@/components/effects/GlitchText";
 import { fetchActionIssues } from "@/lib/api";
 import { safeHref } from "@/lib/formatting";
+import StancePulse from "@/components/action/StancePulse";
 import type { ActionIssue, ActionIssuesResponse, ActionItem, DailyTheme } from "@/types/action";
 import { STATES } from "@/data/states";
 
@@ -47,6 +48,14 @@ const TimelineTab = dynamic(() => import("./TimelineTab"), {
   ),
 });
 
+const MyRepsTab = dynamic(() => import("@/components/action/MyRepsTab"), {
+  loading: () => (
+    <div className="flex items-center justify-center py-24">
+      <div className="text-neon-pink animate-pulse font-pixel text-sm">{">"} LOADING REPRESENTATIVES...</div>
+    </div>
+  ),
+});
+
 const PARTY_COLORS: Record<string, string> = {
   D: "text-dem-blue",
   R: "text-rep-red",
@@ -59,7 +68,7 @@ const PARTY_BORDER: Record<string, string> = {
   I: "border-ind-purple/30",
 };
 
-type Tab = "issues" | "monitors" | "timeline" | "elections" | "world";
+type Tab = "issues" | "my-reps" | "monitors" | "timeline" | "elections" | "world";
 
 const ACTION_TYPE_META: Record<string, { label: string; labelWithState: string; url: string; urlWithState?: (s: string) => string }> = {
   contact_senator: {
@@ -233,6 +242,7 @@ function ActionItemCard({
 
 const TABS: { id: Tab; label: string; color: string }[] = [
   { id: "issues", label: "ISSUES", color: "text-neon-cyan border-neon-cyan" },
+  { id: "my-reps", label: "MY REPS", color: "text-neon-pink border-neon-pink" },
   { id: "elections", label: "ELECTIONS", color: "text-neon-yellow border-neon-yellow" },
   { id: "monitors", label: "MONITORS", color: "text-amber-400 border-amber-400" },
   { id: "world", label: "WORLD", color: "text-green-400 border-green-400" },
@@ -482,6 +492,12 @@ function HeroIssue({
           ))}
         </div>
       )}
+
+      <StancePulse
+        issueId={issue.id}
+        initialConcerned={issue.concernedCount || 0}
+        initialNotPriority={issue.notPriorityCount || 0}
+      />
     </div>
   );
 }
@@ -610,6 +626,12 @@ function SecondaryIssue({
               ))}
             </div>
           )}
+
+          <StancePulse
+            issueId={issue.id}
+            initialConcerned={issue.concernedCount || 0}
+            initialNotPriority={issue.notPriorityCount || 0}
+          />
         </div>
       )}
     </div>
@@ -934,7 +956,7 @@ function IssuesTab({
   );
 }
 
-const VALID_TABS = new Set<string>(["issues", "monitors", "timeline", "elections", "world"]);
+const VALID_TABS = new Set<string>(["issues", "my-reps", "monitors", "timeline", "elections", "world"]);
 function isValidTab(s: string | null): s is Tab {
   return s !== null && VALID_TABS.has(s);
 }
@@ -1051,6 +1073,7 @@ function ActionPageInner() {
               const url = d ? `/action?date=${d}` : "/action";
               router.replace(url, { scroll: false });
             }} />}
+            {activeTab === "my-reps" && <MyRepsTab userState={userState} setUserState={setUserState} />}
             {activeTab === "monitors" && <MonitorsTab />}
             {activeTab === "timeline" && <TimelineTab />}
             {activeTab === "elections" && <ElectionsTab />}

@@ -5,7 +5,8 @@ import json
 import logging
 import threading
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session, selectinload
 
 from datetime import date
@@ -112,6 +113,8 @@ def _build_issue_response(
         related_explore_docs=related_docs,
         related_senators=related_senators,
         related_monitor_slugs=monitor_slugs,
+        concerned_count=getattr(issue, "concerned_count", 0) or 0,
+        not_priority_count=getattr(issue, "not_priority_count", 0) or 0,
     ).model_dump(by_alias=True)
 
 
@@ -184,6 +187,42 @@ async def get_action_issues(
         "issues": [_build_issue_response(i, db, explore_docs_map) for i in issues],
         "theme": theme,
         "availableDates": available_dates,
+    }
+
+
+class PulseVoteRequest(BaseModel):
+    issue_id: int
+    stance: str
+
+    @field_validator("stance")
+    @classmethod
+    def validate_stance(cls, v: str) -> str:
+        if v not in ("concerned", "not_priority"):
+            raise ValueError("stance must be 'concerned' or 'not_priority'")
+        return v
+
+
+@router.post("/pulse")
+async def record_pulse_vote(
+    body: PulseVoteRequest,
+    db: Session = Depends(get_db),
+):
+    """Record an anonymous stance vote on an issue and return updated counts."""
+    issue = db.query(ActionIssue).filter(ActionIssue.id == body.issue_id).first()
+    if not issue:
+        raise HTTPException(status_code=404, detail="Issue not found")
+
+    if body.stance == "concerned":
+        issue.concerned_count = (issue.concerned_count or 0) + 1
+    else:
+        issue.not_priority_count = (issue.not_priority_count or 0) + 1
+    db.commit()
+    db.refresh(issue)
+
+    return {
+        "issueId": issue.id,
+        "concernedCount": issue.concerned_count or 0,
+        "notPriorityCount": issue.not_priority_count or 0,
     }
 
 
@@ -425,6 +464,98 @@ _HOUSE_DISTRICTS: dict[str, int] = {
 }
 
 
+@router.get("/my-reps")
+async def get_my_reps(
+    response: Response,
+    state: str = Query(..., min_length=2, max_length=2),
+    db: Session = Depends(get_db),
+):
+    """Return senators for a state with their connections to today's issues."""
+    response.headers["Cache-Control"] = "public, max-age=300"
+    state_upper = state.upper()
+
+    senators = (
+        db.query(
+            Senator.id, Senator.name, Senator.state, Senator.party,
+            Senator.score_funding_independence, Senator.score_promise_persistence,
+            Senator.score_independent_voting, Senator.score_funding_diversity,
+            Senator.score_legislative_effectiveness,
+            Senator.leadership_score, Senator.ideology_score,
+            Senator.years_in_office, Senator.punk_nickname, Senator.initials,
+        )
+        .filter(Senator.state == state_upper)
+        .all()
+    )
+
+    today_str = date.today().isoformat()
+    issues = (
+        db.query(ActionIssue)
+        .filter(ActionIssue.date == today_str)
+        .order_by(ActionIssue.rank)
+        .all()
+    )
+    if not issues:
+        latest_date = (
+            db.query(ActionIssue.date)
+            .order_by(ActionIssue.date.desc())
+            .first()
+        )
+        if latest_date:
+            issues = (
+                db.query(ActionIssue)
+                .filter(ActionIssue.date == latest_date[0])
+                .order_by(ActionIssue.rank)
+                .all()
+            )
+
+    senator_ids = {s.id for s in senators}
+    senator_issues: dict[str, list[dict]] = {sid: [] for sid in senator_ids}
+
+    for issue in issues:
+        rel_sens = _parse_json_field(getattr(issue, "related_senators", "[]"))
+        for rs in rel_sens:
+            if isinstance(rs, dict) and rs.get("id") in senator_ids:
+                senator_issues[rs["id"]].append({
+                    "id": issue.id,
+                    "rank": issue.rank,
+                    "title": issue.title,
+                    "policyAreas": _parse_json_field(issue.policy_areas),
+                })
+
+    result_senators = []
+    for s in senators:
+        overall = round(
+            (s.score_funding_independence + s.score_promise_persistence +
+             s.score_independent_voting + s.score_funding_diversity) / 4, 1
+        )
+        result_senators.append({
+            "id": s.id,
+            "name": s.name,
+            "state": s.state,
+            "party": s.party,
+            "initials": s.initials,
+            "punkNickname": s.punk_nickname,
+            "scores": {
+                "fundingIndependence": round(s.score_funding_independence, 1),
+                "promisePersistence": round(s.score_promise_persistence, 1),
+                "independentVoting": round(s.score_independent_voting, 1),
+                "fundingDiversity": round(s.score_funding_diversity, 1),
+                "legislativeEffectiveness": round(s.score_legislative_effectiveness, 1),
+                "overall": overall,
+            },
+            "leadershipScore": round(s.leadership_score, 1) if s.leadership_score else None,
+            "ideologyScore": round(s.ideology_score, 1) if s.ideology_score else None,
+            "yearsInOffice": s.years_in_office,
+            "connectedIssues": senator_issues.get(s.id, []),
+        })
+
+    return {
+        "state": state_upper,
+        "senators": result_senators,
+        "issueDate": issues[0].date if issues else None,
+    }
+
+
 @router.get("/elections")
 async def get_election_info(response: Response, db: Session = Depends(get_db)):
     """Return upcoming election info: dates, senate races, state data."""
@@ -538,6 +669,7 @@ def _monitor_to_schema(m: NationalMonitor, include_updates: bool = False):
             source_url=u.source_url,
             source_name=u.source_name,
             article_title=u.article_title,
+            created_at=u.created_at.isoformat() + "Z" if u.created_at else "",
         ).model_dump(by_alias=True)
         for u in (m.updates or [])
     ]

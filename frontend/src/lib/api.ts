@@ -1,7 +1,7 @@
 import { LeaderboardEntry, PaginatedVotes, Senator } from "@/types/senator";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 import type { Justice, JusticeLeaderboardEntry } from "@/types/justice";
-import type { ActionIssuesResponse } from "@/types/action";
+import type { ActionIssuesResponse, MyRepsResponse } from "@/types/action";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -585,6 +585,23 @@ export async function fetchActionIssues(date?: string): Promise<ActionIssuesResp
   return res.json();
 }
 
+export async function submitPulseVote(
+  issueId: number,
+  stance: "concerned" | "not_priority",
+): Promise<{ issueId: number; concernedCount: number; notPriorityCount: number }> {
+  const res = await fetch(`${API_BASE}/action/pulse`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ issue_id: issueId, stance }),
+  });
+  if (!res.ok) throw new Error(`Pulse vote failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchMyReps(state: string): Promise<MyRepsResponse> {
+  return cachedFetch(`${API_BASE}/action/my-reps?state=${encodeURIComponent(state)}`, 300_000);
+}
+
 export interface BranchDocument {
   id: number;
   title: string;
@@ -675,6 +692,7 @@ export interface MonitorUpdate {
   summary: string;
   sourceUrl: string;
   sourceName: string;
+  createdAt: string;
   articleTitle: string;
 }
 

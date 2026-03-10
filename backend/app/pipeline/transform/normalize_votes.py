@@ -480,6 +480,13 @@ def extract_representative_vote(
     return None
 
 
+def _unwrap_list(value: object) -> list[dict]:
+    """Normalize Congress.gov API responses that may be dicts with an 'item' key."""
+    if isinstance(value, dict):
+        return value.get("item", []) if "item" in value else []
+    return value if isinstance(value, list) else []
+
+
 def find_house_roll_call(actions: list[dict] | None) -> dict | None:
     """Try to find the House roll call vote for a bill from its actions.
 
@@ -489,18 +496,19 @@ def find_house_roll_call(actions: list[dict] | None) -> dict | None:
     if not actions:
         return None
 
-    for action in actions:
+    import re as _re
+
+    for action in (_unwrap_list(actions) if not isinstance(actions, list) else actions):
         text = (action.get("text") or "").lower()
         if (
             "passed house" in text
             or "house agreed" in text
             or "roll no" in text
         ) and action.get("recordedVotes"):
-            for rv in action["recordedVotes"]:
+            for rv in _unwrap_list(action["recordedVotes"]):
                 if rv.get("chamber") == "House" and rv.get("rollNumber"):
                     url = rv.get("url", "")
-                    import re
-                    year_match = re.search(r"/evs/(\d{4})/", url)
+                    year_match = _re.search(r"/evs/(\d{4})/", url)
                     year = int(year_match.group(1)) if year_match else 2025
                     return {
                         "year": year,
@@ -522,8 +530,7 @@ def find_senate_roll_call(actions: list[dict] | None) -> dict | None:
     if not actions:
         return None
 
-    for action in actions:
-        # Look for Senate roll call vote actions
+    for action in (_unwrap_list(actions) if not isinstance(actions, list) else actions):
         text = (action.get("text") or "").lower()
         if (
             "passed senate" in text
@@ -531,7 +538,7 @@ def find_senate_roll_call(actions: list[dict] | None) -> dict | None:
             or "cloture" in text
             or "roll call vote" in text
         ) and action.get("recordedVotes"):
-            for rv in action["recordedVotes"]:
+            for rv in _unwrap_list(action["recordedVotes"]):
                 if rv.get("chamber") == "Senate" and rv.get("rollNumber"):
                     return {
                         "congress": rv.get("congress"),

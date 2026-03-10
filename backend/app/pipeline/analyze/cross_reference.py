@@ -120,7 +120,7 @@ def _extract_platform_topics(platform_text: str, max_topics: int = 6) -> list[st
     lines = [
         ln.strip().lstrip("•-–—*123456789.)")
         for ln in platform_text.split("\n")
-        if ln.strip() and len(ln.strip()) > 20
+        if ln.strip() and len(ln.strip()) > 15
     ]
 
     topics = []
@@ -128,7 +128,7 @@ def _extract_platform_topics(platform_text: str, max_topics: int = 6) -> list[st
         cleaned = line.strip()
         if not cleaned or cleaned in topics:
             continue
-        if len(cleaned.split()) < 4:
+        if len(cleaned.split()) < 3:
             continue
         if _TOPIC_SKIP_RE.search(cleaned):
             continue
@@ -281,7 +281,7 @@ def _positions_from_sponsored_bills(
     substantive = [
         b for b in sponsored_bills
         if b.get("title")
-        and (b.get("policyArea") or "").upper() not in ("PROCEDURAL", "")
+        and (b.get("policyArea") or "").upper() != "PROCEDURAL"
         and len(b.get("title", "")) > 15
     ]
     if not substantive:

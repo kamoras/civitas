@@ -182,6 +182,10 @@ def build_rep_response(rep: Representative, _db: Session = None) -> dict:
         "leadershipScore": rep.leadership_score,
         "ideologyScore": rep.ideology_score,
         "sponsorshipDescription": rep.sponsorship_description or "",
+        "websiteUrl": getattr(rep, "website_url", "") or "",
+        "contactFormUrl": getattr(rep, "contact_form_url", "") or "",
+        "officePhone": getattr(rep, "office_phone", "") or "",
+        "officeAddress": getattr(rep, "office_address", "") or "",
     }
 
 
@@ -398,6 +402,10 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
     voting_record = rep_data.get("votingRecord", {})
     existing.voting_summary = voting_record.get("votingSummary", "")
     existing.platform_summary = rep_data.get("platformSummary", "")
+    existing.website_url = rep_data.get("officialWebsiteUrl") or ""
+    existing.contact_form_url = rep_data.get("contactFormUrl") or ""
+    existing.office_phone = rep_data.get("officePhone") or ""
+    existing.office_address = rep_data.get("officeAddress") or ""
 
     db.flush()
 

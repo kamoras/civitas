@@ -111,7 +111,7 @@ export default function HouseCheckerClient() {
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             {reps.map((rep) => (
-              <SenatorCard key={rep.id} senator={rep} />
+              <SenatorCard key={rep.id} senator={rep} chamber="house" />
             ))}
           </div>
 

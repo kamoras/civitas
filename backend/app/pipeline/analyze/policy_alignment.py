@@ -170,7 +170,7 @@ def compute_promise_vote_alignment(
     promise_text: str,
     votes: list[dict],
     max_related: int = 3,
-    relevance_threshold: float = 0.35,
+    relevance_threshold: float = 0.28,
 ) -> dict:
     """Determine if a senator's votes align with a campaign promise.
 
@@ -245,7 +245,6 @@ def compute_promise_vote_alignment(
 
         related_votes.append(bill_id)
 
-        # Alignment logic: deterministic, based on vote direction and bill stance
         # "pro" stance = bill favors the policy area
         # "anti" stance = bill opposes/restricts the policy area
         # Yea on pro-bill = supporting the policy = keeping a promise about it
@@ -261,11 +260,15 @@ def compute_promise_vote_alignment(
             else:
                 broken_signals += sim
         else:
-            # Neutral stance: use party alignment as a weak signal
-            if vote.get("votedWithParty") is False:
-                # Breaking with party on a related bill is notable but
-                # we can't determine direction without stance
-                pass
+            # Neutral stance: most legislation is affirmative in nature (creating
+            # or modifying programs), so Yea is a weak kept signal at half weight.
+            # This avoids discarding relevant votes just because stance
+            # classification was inconclusive.
+            half_sim = sim * 0.5
+            if vote_cast == "Yea":
+                kept_signals += half_sim
+            else:
+                broken_signals += half_sim
 
     if not related_votes:
         return {
@@ -279,10 +282,10 @@ def compute_promise_vote_alignment(
     if total_signal == 0:
         alignment = "unclear"
         confidence = 0.3
-    elif kept_signals > broken_signals * 1.5:
+    elif kept_signals > broken_signals * 1.3:
         alignment = "kept"
         confidence = min(kept_signals / total_signal, 1.0)
-    elif broken_signals > kept_signals * 1.5:
+    elif broken_signals > kept_signals * 1.3:
         alignment = "broken"
         confidence = min(broken_signals / total_signal, 1.0)
     elif total_signal > 0:

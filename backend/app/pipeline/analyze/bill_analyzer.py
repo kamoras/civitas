@@ -206,16 +206,18 @@ _STANCE_PROTOTYPES = {
     "pro": (
         "protect strengthen expand extend increase fund invest establish create "
         "mandate require reauthorize support promote enhance authorize appropriation "
-        "improve safeguard guarantee"
+        "improve safeguard guarantee ensure provide preserve advance empower "
+        "a bill to provide for the expansion and protection of rights and services"
     ),
     "anti": (
         "ban prohibit restrict limit block repeal eliminate remove defund rescind "
         "cut reduce rollback revoke abolish dismantle oppose curtail suspend "
-        "withdraw terminate"
+        "withdraw terminate penalize sanction end halt prevent stop "
+        "a bill to repeal and restrict regulations and reduce spending"
     ),
     "neutral": (
-        "reform modernize update overhaul study review assess examine reauthorize "
-        "amend modify restructure reorganize transition"
+        "reform modernize update overhaul study review assess examine "
+        "amend modify restructure reorganize transition rename designate"
     ),
 }
 _stance_embs: dict[str, np.ndarray] | None = None
@@ -465,16 +467,21 @@ def derive_stance(bill_name: str, summary: str, policy_area: str) -> tuple[str, 
     if norm > 0:
         query_emb = query_emb / norm
 
-    best_dir = "neutral"
-    best_score = 0.0
+    scores: dict[str, float] = {}
     for direction, emb in stance_embs.items():
-        score = float(np.dot(query_emb, emb))
-        if score > best_score:
-            best_score = score
-            best_dir = direction
+        scores[direction] = float(np.dot(query_emb, emb))
 
-    if best_score < 0.20 or (best_dir != "neutral" and best_score - 0.0 < 0.05):
+    best_dir = max(scores, key=scores.get)  # type: ignore[arg-type]
+    best_score = scores[best_dir]
+
+    # Require minimum absolute similarity to classify at all
+    if best_score < 0.10:
         best_dir = "neutral"
+    elif best_dir != "neutral":
+        # For pro/anti, require a margin over neutral to avoid false positives
+        neutral_score = scores.get("neutral", 0.0)
+        if best_score - neutral_score < 0.03:
+            best_dir = "neutral"
 
     if summary and len(summary) > 30:
         first_sentence = summary.split(".")[0].strip()
@@ -548,7 +555,7 @@ async def classify_all_bills(
                 areas = [{"area": policy_area, "confidence": confidence}]
             _stance_text, stance_direction = derive_stance(b["billName"], summary, policy_area)
 
-            description = _clean_summary(summary, b["billName"])
+            description = _clean_summary(summary, b["billName"], b.get("officialTitle", ""))
 
             multi_alignment = classify_party_alignment_multi(
                 bill_text, areas, stance_direction,
@@ -631,6 +638,10 @@ async def classify_recent_votes(
         motion_type = classify_motion_type(question) if question else "unknown"
 
         description = name
+        if question and question.lower() != name.lower() and len(question) > 15:
+            description = f"{name} — {question}"
+            if len(description) > 200:
+                description = description[:200].rsplit(" ", 1)[0] + "..."
         bill_content = name
 
         proc_areas = [{"area": "PROCEDURAL", "confidence": 0.95, "party": "bipartisan"}]
@@ -783,27 +794,42 @@ def _extract_bill_date(actions: list[dict]) -> str:
 
 
 def _make_procedural(b: dict) -> dict:
+    official = b.get("officialTitle", "")
+    desc = official if official and len(official) > 20 and official.lower() != b["billName"].lower() else b["billName"]
     return {
         "billId": b["billId"],
         "billName": b["billName"],
         "congress": b.get("congress", 0),
         "date": "",
-        "description": b["billName"],
+        "description": desc,
         "policyArea": "PROCEDURAL",
         "stance": "procedural",
         "partyLeaning": "bipartisan",
     }
 
 
-def _clean_summary(summary: str, fallback: str) -> str:
-    """Extract clean description from Congress.gov summary HTML."""
-    if not summary or len(summary.strip()) < 10:
-        return fallback
-    clean = re.sub(r"<[^>]+>", "", summary).strip()
-    if len(clean) > 200:
-        cut = clean[:200].rsplit(" ", 1)[0]
-        return cut + "..."
-    return clean or fallback
+def _clean_summary(summary: str, bill_name: str, official_title: str = "") -> str:
+    """Extract a meaningful description from CRS summary, official title, or bill name.
+
+    Prefers CRS summary (most detailed), then official title (e.g. "A bill
+    to prevent the purchase of ammunition by prohibited purchasers"), then
+    falls back to the bill short title.
+    """
+    if summary and len(summary.strip()) > 10:
+        clean = re.sub(r"<[^>]+>", "", summary).strip()
+        if len(clean) > 200:
+            cut = clean[:200].rsplit(" ", 1)[0]
+            return cut + "..."
+        if clean:
+            return clean
+
+    if official_title and len(official_title) > 20 and official_title.lower() != bill_name.lower():
+        if len(official_title) > 200:
+            cut = official_title[:200].rsplit(" ", 1)[0]
+            return cut + "..."
+        return official_title
+
+    return bill_name
 
 
 def _record_if_possible(

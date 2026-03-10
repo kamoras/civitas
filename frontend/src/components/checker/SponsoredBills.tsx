@@ -25,10 +25,21 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
   if (!bills || bills.length === 0) return null;
 
   const lawCount = bills.filter((b) => b.isLaw).length;
+  const advancedCount = bills.filter((b) => {
+    if (b.isLaw) return false;
+    const action = (b.latestAction || "").toLowerCase();
+    return (
+      action.includes("passed") ||
+      action.includes("agreed to") ||
+      action.includes("ordered to be reported") ||
+      action.includes("reported by")
+    );
+  }).length;
   const visible = showAll ? bills : bills.slice(0, INITIAL_VISIBLE);
 
   const summaryParts: string[] = [`${bills.length} bills`];
   if (lawCount > 0) summaryParts.push(`${lawCount} became law`);
+  if (advancedCount > 0) summaryParts.push(`${advancedCount} advancing`);
 
   return (
     <CollapsibleSection
@@ -37,7 +48,6 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
       source="congress.gov"
     >
       <div className="space-y-3">
-        {/* Quick stats */}
         <div className="grid grid-cols-3 gap-2 text-center text-sm">
           <div className="terminal-window p-2">
             <div className="text-xl font-pixel text-matrix-green">{bills.length}</div>
@@ -50,10 +60,10 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
             <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="How many of this senator's sponsored bills were signed into law. Most bills never pass — even 1 is notable.">BECAME LAW</MetricTooltip></div>
           </div>
           <div className="terminal-window p-2">
-            <div className="text-xl font-pixel text-neon-yellow">
-              {lawCount > 0 ? `${Math.round((lawCount / bills.length) * 100)}%` : "0%"}
+            <div className={`text-xl font-pixel ${advancedCount > 0 ? "text-neon-yellow" : "text-matrix-green/30"}`}>
+              {advancedCount}
             </div>
-            <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Percentage of sponsored bills that became law. The average senator has a ~3-5% success rate, so even low numbers can be typical.">SUCCESS RATE</MetricTooltip></div>
+            <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Bills that passed at least one chamber or were reported out of committee — meaningful legislative progress beyond introduction.">ADVANCING</MetricTooltip></div>
           </div>
         </div>
 

@@ -42,6 +42,35 @@ export interface ActionIssue {
   relatedExploreDocs: RelatedExploreDoc[];
   relatedSenators: RelatedSenator[];
   relatedMonitorSlugs?: string[];
+  concernedCount: number;
+  notPriorityCount: number;
+}
+
+export interface MyRepSenator {
+  id: string;
+  name: string;
+  state: string;
+  party: "D" | "R" | "I";
+  initials: string;
+  punkNickname: string;
+  scores: {
+    fundingIndependence: number;
+    promisePersistence: number;
+    independentVoting: number;
+    fundingDiversity: number;
+    legislativeEffectiveness: number;
+    overall: number;
+  };
+  leadershipScore: number | null;
+  ideologyScore: number | null;
+  yearsInOffice: number;
+  connectedIssues: { id: number; rank: number; title: string; policyAreas: string[] }[];
+}
+
+export interface MyRepsResponse {
+  state: string;
+  senators: MyRepSenator[];
+  issueDate: string | null;
 }
 
 export interface DailyTheme {

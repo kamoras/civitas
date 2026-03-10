@@ -3,7 +3,48 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchMonitors, fetchMonitorDetail } from "@/lib/api";
 import { safeHref } from "@/lib/formatting";
-import type { NationalMonitor, NationalMonitorDetail } from "@/lib/api";
+import type { MonitorUpdate, NationalMonitor, NationalMonitorDetail } from "@/lib/api";
+
+const RECENT_THRESHOLD_MS = 60 * 60 * 1000; // 1 hour
+
+function formatUpdateTime(update: MonitorUpdate): { timeLabel: string; isRecent: boolean } {
+  if (!update.createdAt) {
+    return { timeLabel: update.date, isRecent: false };
+  }
+  const created = new Date(update.createdAt);
+  if (isNaN(created.getTime())) {
+    return { timeLabel: update.date, isRecent: false };
+  }
+  const now = Date.now();
+  const ageMs = now - created.getTime();
+  const isRecent = ageMs >= 0 && ageMs < RECENT_THRESHOLD_MS;
+
+  const timeStr = created.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+  const dateStr = created.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+
+  const isToday = new Date().toDateString() === created.toDateString();
+  const yesterday = new Date(now - 86_400_000);
+  const isYesterday = yesterday.toDateString() === created.toDateString();
+
+  let timeLabel: string;
+  if (isToday) {
+    timeLabel = `Today at ${timeStr}`;
+  } else if (isYesterday) {
+    timeLabel = `Yesterday at ${timeStr}`;
+  } else {
+    timeLabel = `${dateStr} at ${timeStr}`;
+  }
+
+  return { timeLabel, isRecent };
+}
 
 export default function MonitorsTab() {
   const [monitors, setMonitors] = useState<NationalMonitor[]>([]);
@@ -169,32 +210,51 @@ export default function MonitorsTab() {
             {">"} TIMELINE ({selected.updates.length} updates)
           </h4>
 
-          <div className="relative pl-4 border-l border-amber-400/20 space-y-4">
-            {selected.updates.map((update) => (
-              <div key={update.id} className="relative">
-                <div
-                  className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-amber-400/40 border border-amber-400/60"
-                  aria-hidden="true"
-                />
-                <div className="text-[10px] text-matrix-green/40 font-pixel mb-1">
-                  {update.date}
-                  {update.sourceName && (
-                    <span className="ml-2 text-matrix-green/30">via {update.sourceName}</span>
-                  )}
+          <div className="relative pl-4 border-l border-amber-400/20 space-y-4" role="list">
+            {selected.updates.map((update) => {
+              const { timeLabel, isRecent } = formatUpdateTime(update);
+              return (
+                <div key={update.id} className="relative" role="listitem">
+                  <div
+                    className={`absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full border ${
+                      isRecent
+                        ? "bg-red-400 border-red-400 animate-pulse"
+                        : "bg-amber-400/40 border-amber-400/60"
+                    }`}
+                    aria-hidden="true"
+                  />
+                  <div className="flex items-center gap-2 mb-1">
+                    <time
+                      dateTime={update.createdAt || undefined}
+                      className="text-[10px] text-matrix-green/40 font-pixel"
+                    >
+                      {timeLabel}
+                    </time>
+                    {isRecent && (
+                      <span className="text-[9px] font-pixel px-1.5 py-0.5 bg-red-500/20 border border-red-400/40 text-red-400 animate-pulse">
+                        BREAKING
+                      </span>
+                    )}
+                    {update.sourceName && (
+                      <span className="text-[10px] text-matrix-green/30 font-pixel">
+                        via {update.sourceName}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-matrix-green/80 leading-relaxed mb-1">
+                    {update.summary}
+                  </p>
+                  <a
+                    href={safeHref(update.sourceUrl) || "#"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-neon-cyan/60 hover:text-neon-cyan transition-colors"
+                  >
+                    {update.articleTitle || "Source"} <span aria-hidden="true">↗</span>
+                  </a>
                 </div>
-                <p className="text-sm text-matrix-green/80 leading-relaxed mb-1">
-                  {update.summary}
-                </p>
-                <a
-                  href={safeHref(update.sourceUrl) || "#"}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[10px] text-neon-cyan/60 hover:text-neon-cyan transition-colors"
-                >
-                  {update.articleTitle || "Source"} <span aria-hidden="true">↗</span>
-                </a>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

@@ -36,6 +36,11 @@ class Senator(Base):
     ideology_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     sponsorship_description: Mapped[str] = mapped_column(String, default="")
 
+    website_url: Mapped[str] = mapped_column(String, default="")
+    contact_form_url: Mapped[str] = mapped_column(String, default="")
+    office_phone: Mapped[str] = mapped_column(String(20), default="")
+    office_address: Mapped[str] = mapped_column(String, default="")
+
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -180,6 +185,11 @@ class Representative(Base):
     leadership_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     ideology_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     sponsorship_description: Mapped[str] = mapped_column(String, default="")
+
+    website_url: Mapped[str] = mapped_column(String, default="")
+    contact_form_url: Mapped[str] = mapped_column(String, default="")
+    office_phone: Mapped[str] = mapped_column(String(20), default="")
+    office_address: Mapped[str] = mapped_column(String, default="")
 
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -434,6 +444,8 @@ class ActionIssue(Base):
     related_explore_ids: Mapped[str] = mapped_column(Text, default="[]")
     related_senators: Mapped[str] = mapped_column(Text, default="[]")
     related_monitor_slugs: Mapped[str] = mapped_column(Text, default="[]")
+    concerned_count: Mapped[int] = mapped_column(Integer, default=0)
+    not_priority_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
 
 

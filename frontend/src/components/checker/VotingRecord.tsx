@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { KeyVote, PaginatedVotes, VoteCounts, VotingRecord as VotingRecordType } from "@/types/senator";
 import { voteSourceUrl } from "@/lib/sources";
-import { fetchSenatorVotes } from "@/lib/api";
+import { fetchSenatorVotes, fetchRepVotes } from "@/lib/api";
 import CollapsibleSection from "./CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
 
@@ -12,6 +12,7 @@ const VOTES_PER_PAGE = 15;
 interface VotingRecordProps {
   senatorId: string;
   votingRecord: VotingRecordType;
+  chamber?: "senate" | "house";
 }
 
 const PARTY_BADGE: Record<string, { label: string; className: string }> = {
@@ -334,10 +335,12 @@ function PaginatedVoteList({
   senatorId,
   category,
   voteCount,
+  chamber = "senate",
 }: {
   senatorId: string;
   category: "recent" | "key";
   voteCount: number;
+  chamber?: "senate" | "house";
 }) {
   const [filter, setFilter] = useState<VoteFilterType>("all");
   const [data, setData] = useState<PaginatedVotes | null>(null);
@@ -348,7 +351,8 @@ function PaginatedVoteList({
     setLoading(true);
     setError(null);
     try {
-      const result = await fetchSenatorVotes(senatorId, {
+      const fetcher = chamber === "house" ? fetchRepVotes : fetchSenatorVotes;
+      const result = await fetcher(senatorId, {
         category,
         page: p,
         perPage: VOTES_PER_PAGE,
@@ -360,7 +364,7 @@ function PaginatedVoteList({
     } finally {
       setLoading(false);
     }
-  }, [senatorId, category]);
+  }, [senatorId, category, chamber]);
 
   useEffect(() => {
     if (voteCount > 0) {
@@ -427,7 +431,7 @@ function PaginatedVoteList({
 }
 
 
-export default function VotingRecord({ senatorId, votingRecord }: VotingRecordProps) {
+export default function VotingRecord({ senatorId, votingRecord, chamber = "senate" }: VotingRecordProps) {
   const {
     totalVotes,
     partyLoyaltyPct,
@@ -488,7 +492,7 @@ export default function VotingRecord({ senatorId, votingRecord }: VotingRecordPr
                 <p className="text-sm text-matrix-green/80 leading-relaxed">{votingSummary}</p>
               </div>
             )}
-            <PaginatedVoteList senatorId={senatorId} category="key" voteCount={keyVoteCount} />
+            <PaginatedVoteList senatorId={senatorId} category="key" voteCount={keyVoteCount} chamber={chamber} />
           </div>
         )}
 
@@ -497,7 +501,7 @@ export default function VotingRecord({ senatorId, votingRecord }: VotingRecordPr
             <div className="text-xs text-neon-cyan/60 mb-2 font-pixel">
               {">"} RECENT VOTES ({recentVoteCount})
             </div>
-            <PaginatedVoteList senatorId={senatorId} category="recent" voteCount={recentVoteCount} />
+            <PaginatedVoteList senatorId={senatorId} category="recent" voteCount={recentVoteCount} chamber={chamber} />
           </div>
         )}
       </div>

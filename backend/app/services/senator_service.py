@@ -405,6 +405,10 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
         leadership_score=senator.leadership_score,
         ideology_score=senator.ideology_score,
         sponsorship_description=getattr(senator, "sponsorship_description", "") or "",
+        website_url=getattr(senator, "website_url", "") or "",
+        contact_form_url=getattr(senator, "contact_form_url", "") or "",
+        office_phone=getattr(senator, "office_phone", "") or "",
+        office_address=getattr(senator, "office_address", "") or "",
     )
 
 

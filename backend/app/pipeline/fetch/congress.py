@@ -321,7 +321,9 @@ async def fetch_bill_actions(
         client,
         f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type}/{bill_number}/actions?limit=100",
     )
-    results = (data or {}).get("actions", [])
+    raw = (data or {}).get("actions", [])
+    # Congress.gov v3 may return {"count": N, "item": [...]} instead of a list
+    results = raw.get("item", []) if isinstance(raw, dict) else (raw or [])
     api_cache_set(db, "congress", cache_key, results)
     return results
 
@@ -343,7 +345,8 @@ async def fetch_bill_cosponsors(
         client,
         f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type}/{bill_number}/cosponsors?limit=250",
     )
-    results = (data or {}).get("cosponsors", [])
+    raw = (data or {}).get("cosponsors", [])
+    results = raw.get("item", []) if isinstance(raw, dict) else (raw or [])
     api_cache_set(db, "congress", cache_key, results)
     return results
 
@@ -365,7 +368,8 @@ async def fetch_bill_summaries(
         client,
         f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type}/{bill_number}/summaries",
     )
-    results = (data or {}).get("summaries", [])
+    raw = (data or {}).get("summaries", [])
+    results = raw.get("item", []) if isinstance(raw, dict) else (raw or [])
     api_cache_set(db, "congress", cache_key, results)
     return results
 
@@ -394,7 +398,8 @@ async def fetch_bill_titles(
         client,
         f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type}/{bill_number}/titles",
     )
-    results = (data or {}).get("titles", [])
+    raw = (data or {}).get("titles", [])
+    results = raw.get("item", []) if isinstance(raw, dict) else (raw or [])
     api_cache_set(db, "congress", cache_key, results)
     return results
 

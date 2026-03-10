@@ -167,7 +167,8 @@ async def run_house_pipeline() -> dict:
 
                 bills_for_classification.append({
                     "billId": bill_key,
-                    "billName": official_title or b["name"],
+                    "billName": b["name"],
+                    "officialTitle": official_title,
                     "congress": b["congress"],
                     "type": b["type"],
                     "summary": summary_text,

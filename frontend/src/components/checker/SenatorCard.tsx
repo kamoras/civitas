@@ -1,5 +1,6 @@
 import { Senator } from "@/types/senator";
 import { formatCurrency } from "@/lib/formatting";
+import { safeHref } from "@/lib/formatting";
 import { fecCommitteeSearchUrl } from "@/lib/sources";
 import CorruptionScore from "./CorruptionScore";
 import IndustryBreakdown from "./IndustryBreakdown";
@@ -14,6 +15,7 @@ import TerminalTitlebar from "@/components/TerminalTitlebar";
 
 interface SenatorCardProps {
   senator: Senator;
+  chamber?: "senate" | "house";
 }
 
 const PARTY_COLORS = {
@@ -55,7 +57,50 @@ function IndustrySummary({ senator }: { senator: Senator }) {
   );
 }
 
-export default function SenatorCard({ senator }: SenatorCardProps) {
+function ContactInfo({ senator }: { senator: Senator }) {
+  const hasContact = senator.contactFormUrl || senator.officePhone || senator.officeAddress;
+  if (!hasContact) return null;
+
+  return (
+    <div className="mt-3 p-3 border border-neon-cyan/15 bg-neon-cyan/5 space-y-2">
+      <div className="font-pixel text-[10px] text-neon-cyan/60 tracking-wider">
+        CONTACT YOUR REPRESENTATIVE
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        {senator.contactFormUrl && (
+          <a
+            href={safeHref(senator.contactFormUrl) || "#"}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-neon-cyan/30 text-neon-cyan/80 font-pixel text-[10px] hover:bg-neon-cyan/10 hover:border-neon-cyan/50 transition-colors"
+          >
+            SEND A MESSAGE <span aria-hidden="true">↗</span>
+          </a>
+        )}
+        {senator.officePhone && (
+          <a
+            href={`tel:${senator.officePhone.replace(/[^0-9+]/g, "")}`}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-matrix-green/20 text-matrix-green/60 font-pixel text-[10px] hover:bg-matrix-green/5 hover:border-matrix-green/30 transition-colors"
+          >
+            CALL: {senator.officePhone}
+          </a>
+        )}
+      </div>
+      {senator.officeAddress && (
+        <div className="text-[10px] text-matrix-green/40">
+          DC Office: {senator.officeAddress}
+        </div>
+      )}
+      {!senator.contactFormUrl && !senator.officePhone && (
+        <div className="text-[10px] text-matrix-green/30 italic">
+          Contact form not available — visit their official website for contact options.
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function SenatorCard({ senator, chamber = "senate" }: SenatorCardProps) {
   const pacPercentRaw = (senator.funding.totalFromPACs / senator.funding.totalRaised) * 100;
   const pacPercent =
     pacPercentRaw > 0 && pacPercentRaw < 1 ? "<1" : Math.round(pacPercentRaw).toString();
@@ -114,7 +159,18 @@ export default function SenatorCard({ senator }: SenatorCardProps) {
               >
                 [CONGRESS.GOV]
               </a>
+              {senator.websiteUrl && (
+                <a
+                  href={safeHref(senator.websiteUrl) || "#"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
+                >
+                  [OFFICIAL SITE]
+                </a>
+              )}
             </div>
+            <ContactInfo senator={senator} />
           </div>
         </div>
 
@@ -278,7 +334,7 @@ export default function SenatorCard({ senator }: SenatorCardProps) {
           <IndustryBreakdown industries={senator.funding.industryBreakdown} donors={senator.funding.topDonors} />
         </CollapsibleSection>
 
-        <VotingRecord senatorId={senator.id} votingRecord={senator.votingRecord} />
+        <VotingRecord senatorId={senator.id} votingRecord={senator.votingRecord} chamber={chamber} />
 
         {senator.sponsoredBills && senator.sponsoredBills.length > 0 && (
           <SponsoredBills bills={senator.sponsoredBills} />

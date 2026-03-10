@@ -168,6 +168,10 @@ class SenatorSchema(CamelModel):
     leadership_score: float | None = None
     ideology_score: float | None = None
     sponsorship_description: str = ""
+    website_url: str = ""
+    contact_form_url: str = ""
+    office_phone: str = ""
+    office_address: str = ""
 
 
 class ScoreTrendSchema(CamelModel):
@@ -370,6 +374,8 @@ class ActionIssueSchema(CamelModel):
     related_explore_docs: list[RelatedExploreDoc] = []
     related_senators: list[RelatedSenator] = []
     related_monitor_slugs: list[str] = []
+    concerned_count: int = 0
+    not_priority_count: int = 0
 
 
 class MonitorUpdateSchema(CamelModel):
@@ -379,6 +385,7 @@ class MonitorUpdateSchema(CamelModel):
     source_url: str
     source_name: str
     article_title: str
+    created_at: str = ""
 
 
 class NationalMonitorSchema(CamelModel):

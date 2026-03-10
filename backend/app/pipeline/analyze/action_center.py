@@ -62,7 +62,7 @@ CLUSTER_SIMILARITY_THRESHOLD = 0.65
 MAX_ISSUES = 4
 MIN_ARTICLES_PER_CLUSTER = 1
 
-ACTION_CENTER_PROMPT_VERSION = "action-v16"
+ACTION_CENTER_PROMPT_VERSION = "action-v17"
 
 _SYSTEM_PROMPT = """\
 You are a nonpartisan civic information analyst. You present facts without \
@@ -962,6 +962,35 @@ def _search_congress_bill(query: str) -> dict | None:
     return result
 
 
+_THEME_ICON_LIBRARY: dict[str, str] = {
+    "flag": "M4 2v20M4 4h12l-2 4 2 4H4",
+    "globe": "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM2 12h20M12 2c-3 3-4.5 7-4.5 10s1.5 7 4.5 10M12 2c3 3 4.5 7 4.5 10s-1.5 7-4.5 10",
+    "shield": "M12 2L3 7v5c0 5.5 3.8 10.7 9 12 5.2-1.3 9-6.5 9-12V7Z",
+    "gavel": "M14.5 2.5l7 7-1.4 1.4-7-7ZM3 21l5-5M7.5 9.5l7 7M2.5 14.5l7 7-1.4 1.4-7-7Z",
+    "money": "M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6",
+    "scales": "M12 2v20M2 7l10-3 10 3M4 7l-2 8c0 2.2 2 4 4 4s4-1.8 4-4L8 7M14 7l-2 8c0 2.2 2 4 4 4s4-1.8 4-4l-2-8",
+    "health": "M8 2h8v6h6v8h-6v6H8v-6H2v-8h6Z",
+    "lightning": "M13 2L3 14h8l-1 8 10-12h-8Z",
+    "fire": "M12 22c4.4 0 8-3.6 8-8 0-4-2.5-6-4-8-1.5-2-2-4-2-6-1 2-3.5 4-4 6-1 4-4 6-4 6 0 4.4 2.6 8 6 8Z",
+    "target": "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12ZM12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z",
+    "handshake": "M2 14l5-5 4 4 6-6 5 5M7 9l-5 5M20 12l-3 3",
+    "megaphone": "M3 11v3a1 1 0 0 0 1 1h2l5 5V6L6 11H4a1 1 0 0 0-1 0ZM16 8a4 4 0 0 1 0 8M19 5a8 8 0 0 1 0 14",
+    "warning": "M12 2L1 21h22ZM12 9v4M12 17h0",
+    "military": "M12 2l4 3h4v4l3 4-3 4v4h-4l-4 3-4-3H4v-4L1 13l3-4V5h4Z",
+    "capitol": "M2 20h20M4 20v-6h16v6M6 14v-4h12v4M10 10V6h4v4M12 6V2",
+    "vote": "M9 11l3 3L22 4M20 12v7a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h11",
+    "document": "M4 2h10l6 6v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2ZM14 2v6h6M8 13h8M8 17h8M8 9h4",
+    "oil": "M12 2c-4 4-8 6-8 12a8 8 0 0 0 16 0c0-6-4-8-8-12Z",
+    "atom": "M12 12m-1 0a1 1 0 1 0 2 0 1 1 0 1 0-2 0ZM12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10M12 2a15.3 15.3 0 0 0-4 10 15.3 15.3 0 0 0 4 10M2 12h20",
+    "chart": "M4 20V10M10 20V4M16 20v-6M22 20v-4",
+    "users": "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
+    "prison": "M4 2v20M20 2v20M8 2v20M12 2v20M16 2v20M2 12h20",
+    "plane": "M22 2L11 13M22 2l-7 20-4-9-9-4Z",
+    "factory": "M2 20V8l5 4V8l5 4V8l5 4V2h5v18Z",
+    "tree": "M12 22v-6M8 16l4-12 4 12H8ZM5 20l7-8 7 8H5Z",
+    "home": "M3 12l9-9 9 9M5 10v10h14V10",
+}
+
 _THEME_SYSTEM_PROMPT = """\
 You generate JSON. No explanation, no markdown, just a raw JSON object."""
 
@@ -971,17 +1000,33 @@ Today's #1 headline on a dark cyberpunk-themed civic news dashboard:
 Title: {title}
 Summary: {summary}
 
-Describe a simple SVG icon (24x24 viewBox) that represents this headline's \
-specific subject. The icon will appear as a faint watermark on the card.
+Choose an icon and colors that SPECIFICALLY represent this topic.
+
+Icon choices: {icon_list}
+
+Color guidance — pick colors that SYMBOLIZE the specific subject:
+- Foreign policy with Russia: use Russian flag colors (#ff0000 red, #0039a6 blue)
+- Foreign policy with China: use Chinese flag colors (#de2910 red, #ffde00 gold)
+- Foreign policy with Ukraine: use Ukrainian flag colors (#0057b8 blue, #ffd700 gold)
+- Foreign policy with Iran: use Iranian flag colors (#239f40 green, #da0000 red)
+- Military/defense: use olive/military green (#556b2f, #8b0000 dark red)
+- Economy/finance/trade: use gold/money green (#ffd700, #00c853)
+- Healthcare: use medical blue/red (#0077b6, #e63946)
+- Climate/environment: use earth green/sky blue (#2d6a4f, #48cae4)
+- Gun policy: use gunmetal/amber (#4a4a4a, #ff8f00)
+- Immigration: use warm amber/teal (#f4a261, #2a9d8f)
+- Supreme Court/justice: use judicial purple/gold (#6a0dad, #daa520)
+- Elections/voting: use patriotic red/blue (#b22234, #3c3b6e)
+- Technology/AI: use electric cyan/purple (#00ffff, #9d4edd)
+- Energy/oil: use petroleum black-gold/orange (#1a1a2e, #e76f51)
+DO NOT default to generic orange/purple. The colors must match the TOPIC.
 
 Return a JSON object:
-{{"tagline":"<3-6 word evocative tagline>",\
+{{"tagline":"<3-6 word evocative tagline about this specific topic>",\
 "mood":"<urgent|tense|volatile|hopeful|somber|charged|divided|uncertain>",\
-"accent":"<bright vibrant hex color tied to the subject — must glow on black>",\
-"accentAlt":"<complementary hex, different from accent>",\
-"svgPath":"<SVG path d= for a simple 24x24 icon. Use M L C Z A H V commands only. \
-Short, under 120 characters. Example shapes: star=M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z, \
-shield=M12 2L3 7v5c0 5.5 3.8 10.7 9 12 5.2-1.3 9-6.5 9-12V7z>"}}
+"icon":"<one of: {icon_list}>",\
+"accent":"<hex color that symbolizes the topic — see guidance above>",\
+"accentAlt":"<second hex color, complementary, also topic-specific>"}}
 
 JSON only:"""
 
@@ -991,13 +1036,14 @@ def _generate_daily_theme(
     today: str,
     db: Session,
 ) -> dict | None:
-    """Two-pass theme generation: concept then CSS."""
+    """Generate a topic-specific visual theme for the hero issue."""
     from app.pipeline.analyze.ollama_client import call_llm, extract_json
 
     if not issues:
         return None
 
     hero = issues[0]
+    icon_list = ", ".join(sorted(_THEME_ICON_LIBRARY.keys()))
 
     concept_result = call_llm(
         prompt_version=ACTION_CENTER_PROMPT_VERSION + "-theme-concept",
@@ -1005,10 +1051,11 @@ def _generate_daily_theme(
         user_prompt=_THEME_CONCEPT_TEMPLATE.format(
             title=hero.title,
             summary=hero.summary or "",
+            icon_list=icon_list,
         ),
         cache_key={"date": today, "type": "theme-concept", "title": hero.title},
         db_session=db,
-        max_tokens=1024,
+        max_tokens=512,
         num_ctx=4096,
     )
 
@@ -1030,7 +1077,12 @@ def _generate_daily_theme(
     tagline = re.sub(r'[^\w\s\-\'",.:!?/]', '', concept_result.get("tagline", "BREAKING"))[:60]
     raw_mood = concept_result.get("mood", "urgent")
     mood = raw_mood if raw_mood in _MOOD_VALID else "urgent"
-    svg_path = concept_result.get("svgPath", "")
+
+    icon_key = concept_result.get("icon", "globe")
+    if icon_key not in _THEME_ICON_LIBRARY:
+        icon_key = "globe"
+    svg_path = _THEME_ICON_LIBRARY[icon_key]
+
     accent = concept_result.get("accent", "#ff6644")
     accent_alt = concept_result.get("accentAlt", "#6644ff")
 
@@ -1045,11 +1097,11 @@ def _generate_daily_theme(
     glow = 0.7 if mood in ("urgent", "volatile", "charged") else 0.4
     speed = 2 if mood in ("urgent", "volatile") else 3
 
-    custom_css = _build_watermark_css(svg_path, accent)
+    custom_css = _build_watermark_css(svg_path, accent, accent_alt)
 
     logger.info(
-        "Theme: mood=%s accent=%s tagline='%s' svg=%d chars css=%d chars",
-        mood, accent, tagline, len(svg_path), len(custom_css),
+        "Theme: mood=%s icon=%s accent=%s/%s tagline='%s'",
+        mood, icon_key, accent, accent_alt, tagline,
     )
 
     result = {
@@ -1070,29 +1122,38 @@ def _generate_daily_theme(
     return result
 
 
-def _build_watermark_css(svg_path: str, accent: str) -> str:
-    """Build deterministic CSS for a subtle SVG watermark in the bottom-right.
+def _build_watermark_css(svg_path: str, accent: str, accent_alt: str) -> str:
+    """Build CSS for a prominent tiled SVG watermark across the hero panel.
 
-    The LLM provides the SVG path data; we handle all CSS/SVG construction
-    to guarantee valid output, correct URL encoding, and consistent styling.
+    Uses curated SVG path data from the icon library. Renders a subtle
+    repeating tile plus a larger accent icon in the bottom-right.
     """
     if not svg_path or len(svg_path) < 5:
         return ""
 
-    import re
     if not re.match(r'^[MLCZAHVSQTmlczahvsqt0-9.,\- ]+$', svg_path):
         return ""
 
     from urllib.parse import quote
 
-    hex_encoded = accent.replace("#", "%23")
-    svg = (
+    tile_svg = (
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
-        f'fill="none" stroke="{accent}" stroke-width="1.5" '
+        f'fill="none" stroke="{accent}" stroke-width="0.8" '
+        f'opacity="0.4" '
         f'stroke-linecap="round" stroke-linejoin="round">'
         f'<path d="{svg_path}"/></svg>'
     )
-    encoded_svg = quote(svg, safe='')
+    encoded_tile = quote(tile_svg, safe='')
+
+    hero_svg = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
+        f'fill="none" stroke="{accent_alt}" stroke-width="1.2" '
+        f'stroke-linecap="round" stroke-linejoin="round">'
+        f'<path d="{svg_path}"/></svg>'
+    )
+    encoded_hero = quote(hero_svg, safe='')
+
+    hex_encoded = accent.replace("#", "%23")
 
     return (
         ".theme-hero-panel::before {\n"
@@ -1101,12 +1162,25 @@ def _build_watermark_css(svg_path: str, accent: str) -> str:
         "  inset: 0;\n"
         "  pointer-events: none;\n"
         "  z-index: 0;\n"
-        f"  background-image: url(\"data:image/svg+xml,{encoded_svg}\");\n"
+        f"  background-image: url(\"data:image/svg+xml,{encoded_tile}\");\n"
+        "  background-repeat: repeat;\n"
+        "  background-size: 48px 48px;\n"
+        "  opacity: 0.035;\n"
+        "}\n"
+        ".theme-hero-panel::after {\n"
+        "  content: '';\n"
+        "  position: absolute;\n"
+        "  bottom: 12px;\n"
+        "  right: 12px;\n"
+        "  width: 120px;\n"
+        "  height: 120px;\n"
+        "  pointer-events: none;\n"
+        "  z-index: 1;\n"
+        f"  background-image: url(\"data:image/svg+xml,{encoded_hero}\");\n"
         "  background-repeat: no-repeat;\n"
-        "  background-position: bottom 16px right 16px;\n"
-        "  background-size: 72px 72px;\n"
-        "  opacity: 0.04;\n"
-        f"  filter: drop-shadow(0 0 6px {hex_encoded});\n"
+        "  background-size: contain;\n"
+        "  opacity: 0.08;\n"
+        f"  filter: drop-shadow(0 0 8px {hex_encoded});\n"
         "}\n"
     )
 

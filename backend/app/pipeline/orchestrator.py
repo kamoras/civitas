@@ -250,6 +250,10 @@ def upsert_senator(db: Session, data: dict) -> None:
         "small_donor_percentage": funding.get("smallDonorPercentage") or 0,
         "voting_summary": (data.get("votingRecord") or {}).get("votingSummary") or "",
         "platform_summary": data.get("platformSummary") or "",
+        "website_url": data.get("officialWebsiteUrl") or "",
+        "contact_form_url": data.get("contactFormUrl") or "",
+        "office_phone": data.get("officePhone") or "",
+        "office_address": data.get("officeAddress") or "",
         "updated_at": datetime.utcnow(),
     }
 
