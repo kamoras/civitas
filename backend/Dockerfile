@@ -12,13 +12,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 RUN groupadd -r civitas && useradd -r -g civitas -d /app civitas \
-    && mkdir -p /data && chown civitas:civitas /data
+    && mkdir -p /data /app/.cache && chown -R civitas:civitas /data /app/.cache
 
 EXPOSE 8000
 
 COPY <<'ENTRY' /entrypoint.sh
 #!/bin/sh
-chown -R civitas:civitas /data
+chown -R civitas:civitas /data /app/.cache
 exec gosu civitas "$@"
 ENTRY
 RUN chmod +x /entrypoint.sh
