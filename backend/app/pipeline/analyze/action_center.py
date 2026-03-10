@@ -91,15 +91,17 @@ Each action MUST name the specific topic from the articles — never say "this i
 or "this policy". Use the actual name of the bill, policy, or event. \
 Actions must be neutral — useful whether you agree OR disagree. \
 Never say "support" or "oppose" — the citizen decides their own stance. \
-Example: for articles about the SAVE Act: \
-[{{"text": "Contact your senators about the SAVE Act voter ID requirements", "type": "contact_senator"}}, \
-{{"text": "Attend a town hall to discuss the SAVE Act's impact on elections", "type": "attend_hearing"}}, \
-{{"text": "Read the full SAVE Act text on Congress.gov", "type": "track_legislation"}}]
+Example: if the articles are about a bill called the "Clean Water Act": \
+[{{"text": "Contact your senators about the Clean Water Act's new regulations", "type": "contact_senator"}}, \
+{{"text": "Attend a town hall to discuss the Clean Water Act's impact on your community", "type": "attend_hearing"}}, \
+{{"text": "Read the full Clean Water Act text on Congress.gov", "type": "track_legislation"}}] \
+CRITICAL: Do NOT copy this example. Write actions about the ACTUAL topic in the articles.
 - "bills": An array of any specific bills or acts mentioned in the articles. \
-For each bill, provide an object with "name" (the common name, e.g. "SAVE Act") \
+For each bill, provide an object with "name" (the common name) \
 and "id" (the bill number if mentioned anywhere in the articles, e.g. "HR.22" \
-or "S.1234", or null if not found). Look carefully for references like \
-"H.R. 22", "S. 100", etc. Only include bills actually named in the articles.
+or "S.100", or null if not found). Look carefully for references like \
+"H.R. 22", "S. 100", etc. Only include bills actually named in the articles. \
+If NO bills are mentioned, return an empty array [].
 Articles:
 {articles}
 
