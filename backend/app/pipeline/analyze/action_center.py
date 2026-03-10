@@ -1189,7 +1189,7 @@ def _save_timeline_entry(today: str, db: Session) -> None:
 
 _MONITOR_ISSUE_SIM = 0.55
 _MONITOR_ISSUE_TITLE_SIM = 0.40
-_MONITOR_MERGE_SIM = 0.55
+_MONITOR_MERGE_SIM = 0.50
 _MONITOR_MIN_DAYS = 2
 _MONITOR_LOOKBACK_DAYS = 14
 _MONITOR_DORMANT_DAYS = 7
@@ -1273,9 +1273,15 @@ def _update_national_monitors(today: str, db: Session) -> None:
     # Step 1: Merge any existing monitors that are too similar to each other.
     # This cleans up duplicates from prior runs (e.g. "Iran war oil supply"
     # and "Oil prices spike from Iran conflict" are the same underlying event).
+    # Uses both title+description and title-only similarity — merges if either
+    # exceeds threshold, since descriptions can diverge while titles stay close.
     if len(existing_monitors) >= 2:
         mon_embs = model.encode(
             [f"{m.title} {m.description}" for m in existing_monitors],
+            normalize_embeddings=True,
+        )
+        mon_title_embs = model.encode(
+            [m.title for m in existing_monitors],
             normalize_embeddings=True,
         )
         merged_ids: set[int] = set()
@@ -1285,8 +1291,9 @@ def _update_national_monitors(today: str, db: Session) -> None:
             for b_idx in range(a_idx + 1, len(existing_monitors)):
                 if existing_monitors[b_idx].id in merged_ids:
                     continue
-                sim = float((mon_embs[a_idx] @ mon_embs[b_idx].T).item())
-                if sim >= _MONITOR_MERGE_SIM:
+                full_sim = float((mon_embs[a_idx] @ mon_embs[b_idx].T).item())
+                title_sim = float((mon_title_embs[a_idx] @ mon_title_embs[b_idx].T).item())
+                if full_sim >= _MONITOR_MERGE_SIM or title_sim >= _MONITOR_MERGE_SIM:
                     keep = existing_monitors[a_idx]
                     absorb = existing_monitors[b_idx]
                     if len(keep.updates or []) < len(absorb.updates or []):
