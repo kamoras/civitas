@@ -1,16 +1,12 @@
 import MatrixRain from "@/components/effects/MatrixRain";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import TerminalTitlebar from "@/components/TerminalTitlebar";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="terminal-window mb-6">
-      <div className="terminal-titlebar">
-        <span className="terminal-dot red" />
-        <span className="terminal-dot yellow" />
-        <span className="terminal-dot green" />
-        <span className="ml-3 text-white/40 text-xs font-terminal">{title.toLowerCase().replace(/ /g, "_")}.txt</span>
-      </div>
+      <TerminalTitlebar title={`${title.toLowerCase().replace(/ /g, "_")}.txt`} />
       <div className="p-6 space-y-4">
         <h2 className="text-neon-cyan font-terminal text-sm tracking-widest">{title}</h2>
         {children}
@@ -224,9 +220,9 @@ export default function AboutPage() {
           {/* ── House Representatives ── */}
           <Section title="HOUSE REPRESENTATIVE SCORECARDS">
             <P>
-              All 435 House representatives are scored using the same four-metric
+              All 435 House representatives are scored using the same five-metric
               framework as the Senate: Funding Independence, Promise Persistence,
-              Independent Voting, and Funding Diversity. The data sources (FEC,
+              Independent Voting, Funding Diversity, and Legislative Effectiveness. The data sources (FEC,
               Congress.gov, GovInfo) and classification techniques are identical,
               ensuring consistent, comparable scores across both chambers.
             </P>
@@ -309,7 +305,7 @@ export default function AboutPage() {
           {/* ── President Metrics ── */}
           <Section title="PRESIDENTIAL SCORECARD METRICS">
             <P>
-              Presidents are scored on five dimensions, also 0-100 scale. Historical
+              Presidents are scored on six dimensions, also 0-100 scale. Historical
               presidents (pre-Clinton) use static scores derived from the C-SPAN
               Presidential Historians Survey, Gallup approval records, and BEA/BLS
               economic data. Recent presidents (Clinton onward) have scores partially
@@ -318,7 +314,7 @@ export default function AboutPage() {
 
             <div className="space-y-4 mt-4">
               <div>
-                <Label>Independence (20%)</Label>
+                <Label>Independence (15%)</Label>
                 <P>
                   Assesses cabinet and advisor independence from corporate and lobbyist
                   influence. Based on historical analysis of cabinet compositions — how
@@ -328,7 +324,7 @@ export default function AboutPage() {
               </div>
 
               <div>
-                <Label>Follow-Through (25%)</Label>
+                <Label>Follow-Through (20%)</Label>
                 <P>
                   Measures the ratio of campaign promises to executive and legislative
                   action. Based on historian assessments and promise-tracking analysis.
@@ -337,7 +333,7 @@ export default function AboutPage() {
               </div>
 
               <div>
-                <Label>Public Mandate (20%)</Label>
+                <Label>Public Mandate (15%)</Label>
                 <P>
                   Reflects approval trajectory and coalition retention. For modern
                   presidents (Truman onward), this is grounded in Gallup average approval
@@ -366,6 +362,17 @@ export default function AboutPage() {
                   presidential term. The score blends court success rate (40%), cabinet
                   stability (30%), and EO activity rate (30%), where a moderate rate of
                   executive action scores higher than extremes in either direction.
+                </P>
+              </div>
+
+              <div>
+                <Label>Agency Alignment (15%)</Label>
+                <P>
+                  Measures how well executive agency actions align with stated
+                  presidential priorities. Evaluates whether federal agencies
+                  pursue the policy agenda the president campaigned on, based on
+                  regulatory actions and executive directives. Currently uses
+                  curated seed data; automated regulatory tracking is planned.
                 </P>
               </div>
             </div>
@@ -400,8 +407,8 @@ export default function AboutPage() {
               <div>
                 <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">NEWS ANALYSIS PIPELINE</h3>
                 <P>
-                  RSS feeds from editorially independent, low-bias news sources (NPR Politics,
-                  PBS NewsHour, The Hill, AP News) are parsed hourly. Each article is filtered
+                  RSS feeds from editorially independent, low-bias news sources (AP News,
+                  NPR Politics, Reuters, PBS NewsHour) are parsed hourly. Each article is filtered
                   for U.S. policy relevance using embedding cosine similarity against policy
                   area prototypes — the same sentence-transformer model used throughout the
                   platform. Articles that pass the relevance threshold are clustered by semantic
@@ -1000,7 +1007,7 @@ export default function AboutPage() {
               <Row label="Metric Tooltips" value="Every scorecard metric has a [?] tooltip explaining what it measures" />
               <Row label="Branches Covered" value="Senate (100), House (435), Presidents (historical + modern), Supreme Court (9 justices)" />
               <Row label="Action Center" value="Hourly news analysis with national monitors for ongoing concerns and year-in-review timeline tracking" />
-              <Row label="News Sources" value="NPR Politics, PBS NewsHour, The Hill, AP News — editorially independent, low-bias sources" />
+              <Row label="News Sources" value="AP News, NPR Politics, Reuters, PBS NewsHour — editorially independent, low-bias wire services" />
               <Row label="Trending Integration" value="Google Trends RSS + Reddit policy subreddits, cross-referenced via embedding similarity" />
               <Row label="Globe Visualization" value="react-globe.gl — interactive 3D globe for international news mapping" />
             </div>

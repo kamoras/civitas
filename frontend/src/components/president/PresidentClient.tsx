@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import TerminalTitlebar from "@/components/TerminalTitlebar";
 import { fetchPresident, fetchPresidentLeaderboard } from "@/lib/api";
 import { calculatePresidentScore, getScoreColor, getScoreLabel } from "@/lib/corruption";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
@@ -85,14 +86,7 @@ function PresidentCard({ president }: { president: President }) {
 
   return (
     <div className="terminal-window">
-      <div className="terminal-titlebar" aria-hidden="true">
-        <span className="terminal-dot red" />
-        <span className="terminal-dot yellow" />
-        <span className="terminal-dot green" />
-        <span className="ml-3 text-white/40 text-xs font-terminal">
-          president_{president.number}.profile
-        </span>
-      </div>
+      <TerminalTitlebar title={`president_${president.number}.profile`} />
 
       <div className="p-6 space-y-6">
         {/* Header */}

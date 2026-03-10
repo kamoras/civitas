@@ -21,7 +21,8 @@ export default function CheckerClient() {
     if (!loading && targetSenator && stateSenators.length > 0) {
       const el = document.getElementById(`senator-${targetSenator}`);
       if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        el.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
       }
     }
   }, [loading, targetSenator, stateSenators]);

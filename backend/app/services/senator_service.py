@@ -296,7 +296,7 @@ def _parse_partisan_depth(raw: str | None) -> PartisanDepthSchema | None:
         return None
 
 
-def _senator_eager_options():
+def _senator_eager_options() -> list:
     """SQLAlchemy options to eager-load all senator relationships in one round-trip."""
     return [
         selectinload(Senator.donors),

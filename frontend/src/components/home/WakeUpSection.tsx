@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import GlitchText from "@/components/effects/GlitchText";
+import TerminalTitlebar from "@/components/TerminalTitlebar";
 
 interface StatCardProps {
   value: string;
@@ -32,14 +33,7 @@ function StatCard({ value, label, prefix = "", source }: StatCardProps) {
         visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
       }`}
     >
-      <div className="terminal-titlebar">
-        <div className="terminal-dot red" />
-        <div className="terminal-dot yellow" />
-        <div className="terminal-dot green" />
-        <span className="text-xs text-matrix-green/40 ml-2 font-mono truncate">
-          public_record.dat
-        </span>
-      </div>
+      <TerminalTitlebar title="public_record.dat" />
       <div className="p-4 sm:p-6 text-center">
         <div className="text-2xl sm:text-4xl md:text-5xl font-pixel text-neon-cyan neon-cyan mb-3 break-all">
           {prefix}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import TerminalTitlebar from "@/components/TerminalTitlebar";
 import {
   adminAuth,
   fetchAdminDashboard,
@@ -109,14 +110,7 @@ function LoginScreen({
     <div className="min-h-screen bg-crt-black flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="terminal-window">
-          <div className="terminal-titlebar" aria-hidden="true">
-            <span className="terminal-dot red" />
-            <span className="terminal-dot yellow" />
-            <span className="terminal-dot green" />
-            <span className="ml-3 text-white/40 text-xs font-terminal">
-              admin_auth.sh
-            </span>
-          </div>
+          <TerminalTitlebar title="admin_auth.sh" />
           <div className="p-6">
             <h1 className="font-pixel text-sm text-matrix-green tracking-widest mb-6 text-center">
               CIVITAS ADMIN
@@ -138,9 +132,11 @@ function LoginScreen({
                            text-matrix-green text-sm font-terminal placeholder:text-matrix-green/30
                            outline-none focus:border-matrix-green/60"
                 autoFocus
+                aria-invalid={!!error}
+                aria-describedby={error ? "admin-token-error" : undefined}
               />
               {error && (
-                <p className="text-neon-pink text-xs mt-2">{error}</p>
+                <p id="admin-token-error" className="text-neon-pink text-xs mt-2" role="alert">{error}</p>
               )}
               <button
                 type="submit"
@@ -580,16 +576,12 @@ function UptimeTracker({
 
   return (
     <div className="terminal-window mb-6">
-      <div className="terminal-titlebar" aria-hidden="true">
-        <span className="terminal-dot red" />
-        <span className="terminal-dot yellow" />
-        <span className="terminal-dot green" />
-        <span className="ml-3 text-white/40 text-xs font-terminal">uptime_tracker</span>
+      <TerminalTitlebar title="uptime_tracker">
         <span className="ml-auto text-white/20 text-[10px] font-terminal mr-2">
           live
           <span className="inline-block w-1.5 h-1.5 rounded-full bg-matrix-green ml-1 animate-pulse" />
         </span>
-      </div>
+      </TerminalTitlebar>
       <div className="p-4">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {/* App Uptime — large ticking counter */}
@@ -689,8 +681,6 @@ function SystemMonitor({
   const [stats, setStats] = useState<HostStats | null>(initialStats ?? null);
   const [netRate, setNetRate] = useState<{ rx: number; tx: number } | null>(null);
   const prevNetRef = useRef<{ rx: number; tx: number; time: number } | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   useEffect(() => {
     const poll = async () => {
       try {
@@ -714,10 +704,8 @@ function SystemMonitor({
       } catch {}
     };
     if (!initialStats) poll();
-    pollRef.current = setInterval(poll, 5000);
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
+    const id = setInterval(poll, 5000);
+    return () => clearInterval(id);
   }, [token, initialStats]);
 
   if (!stats) return null;
@@ -737,18 +725,12 @@ function SystemMonitor({
 
   return (
     <div className="terminal-window mb-6">
-      <div className="terminal-titlebar" aria-hidden="true">
-        <span className="terminal-dot red" />
-        <span className="terminal-dot yellow" />
-        <span className="terminal-dot green" />
-        <span className="ml-3 text-white/40 text-xs font-terminal">
-          system_monitor
-        </span>
+      <TerminalTitlebar title="system_monitor">
         <span className="ml-auto text-white/20 text-[10px] font-terminal mr-2">
           live
           <span className="inline-block w-1.5 h-1.5 rounded-full bg-matrix-green ml-1 animate-pulse" />
         </span>
-      </div>
+      </TerminalTitlebar>
       <div className="p-4">
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
           {/* CPU Load */}
@@ -1321,12 +1303,7 @@ function AdminDashboardView({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           {/* System Health */}
           <div className="terminal-window">
-            <div className="terminal-titlebar" aria-hidden="true">
-              <span className="terminal-dot red" />
-              <span className="terminal-dot yellow" />
-              <span className="terminal-dot green" />
-              <span className="ml-3 text-white/40 text-xs font-terminal">system_health</span>
-            </div>
+            <TerminalTitlebar title="system_health" />
             <div className="p-4 space-y-2 text-sm font-terminal">
               <div className="flex justify-between">
                 <span className="text-matrix-green/60">DATABASE</span>
@@ -1382,12 +1359,7 @@ function AdminDashboardView({
 
           {/* Pipeline Controls */}
           <div className="terminal-window">
-            <div className="terminal-titlebar" aria-hidden="true">
-              <span className="terminal-dot red" />
-              <span className="terminal-dot yellow" />
-              <span className="terminal-dot green" />
-              <span className="ml-3 text-white/40 text-xs font-terminal">pipeline_control</span>
-            </div>
+            <TerminalTitlebar title="pipeline_control" />
             <div className="p-4 space-y-3">
               <p className="text-matrix-green/50 text-xs font-terminal mb-2">
                 Trigger pipeline runs manually:
@@ -1452,24 +1424,14 @@ function AdminDashboardView({
 
         {/* Data Stats */}
         <div className="terminal-window mb-6">
-          <div className="terminal-titlebar" aria-hidden="true">
-            <span className="terminal-dot red" />
-            <span className="terminal-dot yellow" />
-            <span className="terminal-dot green" />
-            <span className="ml-3 text-white/40 text-xs font-terminal">data_inventory</span>
-          </div>
+          <TerminalTitlebar title="data_inventory" />
           {d && <DataInventory data={d.data} />}
         </div>
 
         {/* Vector DB & ML Metrics */}
         {d?.system.vectorDb && (
           <div className="terminal-window mb-6">
-            <div className="terminal-titlebar" aria-hidden="true">
-              <span className="terminal-dot red" />
-              <span className="terminal-dot yellow" />
-              <span className="terminal-dot green" />
-              <span className="ml-3 text-white/40 text-xs font-terminal">vector_db_metrics</span>
-            </div>
+            <TerminalTitlebar title="vector_db_metrics" />
             <div className="p-4 space-y-4">
               {d.system.vectorDb.status !== "ok" ? (
                 <p className="text-neon-pink text-xs font-terminal">
@@ -1760,12 +1722,7 @@ function AdminDashboardView({
         {/* Last Run Details */}
         {d?.pipeline.lastRun && (
           <div className="terminal-window mb-6">
-            <div className="terminal-titlebar" aria-hidden="true">
-              <span className="terminal-dot red" />
-              <span className="terminal-dot yellow" />
-              <span className="terminal-dot green" />
-              <span className="ml-3 text-white/40 text-xs font-terminal">last_run_detail</span>
-            </div>
+            <TerminalTitlebar title="last_run_detail" />
             <div className="p-4">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm font-terminal">
                 <div>
@@ -1849,12 +1806,7 @@ function AdminDashboardView({
         {/* LLM Stats */}
         {d?.llm && Object.keys(d.llm).length > 0 && (
           <div className="terminal-window mb-6">
-            <div className="terminal-titlebar" aria-hidden="true">
-              <span className="terminal-dot red" />
-              <span className="terminal-dot yellow" />
-              <span className="terminal-dot green" />
-              <span className="ml-3 text-white/40 text-xs font-terminal">llm_stats</span>
-            </div>
+            <TerminalTitlebar title="llm_stats" />
             <div className="p-4">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm font-terminal">
                 {Object.entries(d.llm).map(([key, val]) => (
@@ -1872,12 +1824,7 @@ function AdminDashboardView({
 
         {/* Pipeline History */}
         <div className="terminal-window mb-6">
-          <div className="terminal-titlebar" aria-hidden="true">
-            <span className="terminal-dot red" />
-            <span className="terminal-dot yellow" />
-            <span className="terminal-dot green" />
-            <span className="ml-3 text-white/40 text-xs font-terminal">pipeline_history</span>
-          </div>
+          <TerminalTitlebar title="pipeline_history" />
           <div className="p-4">
             <RunHistory runs={history} />
           </div>

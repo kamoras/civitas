@@ -38,7 +38,7 @@ export default function MetricTooltip({ text, children }: MetricTooltipProps) {
         onBlur={() => setOpen(false)}
         onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}
         className="ml-0.5 text-matrix-green/25 hover:text-matrix-green/60 transition-colors cursor-help text-[9px] leading-none align-super"
-        aria-label="More info"
+        aria-label={`More info: ${text.slice(0, 60)}${text.length > 60 ? "…" : ""}`}
         aria-describedby={open ? tooltipId : undefined}
       >
         [?]

@@ -48,8 +48,8 @@ NEWS_FEEDS: list[dict[str, str]] = [
         "url": "https://feeds.npr.org/1014/rss.xml",
     },
     {
-        "name": "The Hill",
-        "url": "https://thehill.com/feed/",
+        "name": "Reuters",
+        "url": "https://news.google.com/rss/search?q=site:reuters.com&hl=en-US&gl=US&ceid=US:en",
     },
     {
         "name": "PBS NewsHour",

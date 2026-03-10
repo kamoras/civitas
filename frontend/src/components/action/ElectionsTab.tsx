@@ -277,7 +277,7 @@ export default function ElectionsTab() {
               <span className="w-3 h-2 bg-neon-yellow/40 inline-block" /> SENATE + HOUSE
             </span>
             <span className="flex items-center gap-1.5 text-[10px] text-matrix-green/40">
-              <span className="w-3 h-2 inline-block" style={{ background: "rgba(255, 100, 200, 0.3)" }} /> HOUSE ONLY
+              <span className="w-3 h-2 inline-block bg-neon-pink/30" /> HOUSE ONLY
             </span>
           </div>
         </div>

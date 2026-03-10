@@ -1,9 +1,19 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef, useCallback } from "react";
 
+const NAV_LINKS: readonly { href: string; label: string; accent?: boolean }[] = [
+  { href: "/action", label: "ACTION CENTER", accent: true },
+  { href: "/scorecard", label: "SCORECARD" },
+  { href: "/leaderboard", label: "LEADERBOARD" },
+  { href: "/explore", label: "EXPLORE" },
+  { href: "/about", label: "ABOUT" },
+];
+
 export default function Navbar() {
+  const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -19,6 +29,12 @@ export default function Navbar() {
     setMenuOpen(false);
     toggleRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (!menuOpen || !menuRef.current) return;
+    const firstLink = menuRef.current.querySelector<HTMLElement>('a[href]');
+    firstLink?.focus();
+  }, [menuOpen]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -46,6 +62,8 @@ export default function Navbar() {
     return () => document.removeEventListener("keydown", onKey);
   }, [menuOpen, closeMenu]);
 
+  const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
+
   return (
     <header
       role="banner"
@@ -66,36 +84,27 @@ export default function Navbar() {
 
         {/* Desktop nav */}
         <div className="hidden sm:flex items-center gap-6 text-lg">
-          <Link
-            href="/action"
-            className="text-neon-cyan/70 hover:text-neon-cyan transition-colors font-pixel text-sm"
-          >
-            {"> ACTION CENTER"}
-          </Link>
-          <Link
-            href="/scorecard"
-            className="text-matrix-green/70 hover:text-matrix-green transition-colors"
-          >
-            {"> SCORECARD"}
-          </Link>
-          <Link
-            href="/leaderboard"
-            className="text-matrix-green/70 hover:text-matrix-green transition-colors"
-          >
-            {"> LEADERBOARD"}
-          </Link>
-          <Link
-            href="/explore"
-            className="text-matrix-green/70 hover:text-matrix-green transition-colors"
-          >
-            {"> EXPLORE"}
-          </Link>
-          <Link
-            href="/about"
-            className="text-matrix-green/50 hover:text-matrix-green transition-colors"
-          >
-            {"> ABOUT"}
-          </Link>
+          {NAV_LINKS.map(({ href, label, accent }) => {
+            const active = isActive(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                aria-current={active ? "page" : undefined}
+                className={
+                  active
+                    ? "text-neon-cyan transition-colors font-pixel text-sm neon-cyan"
+                    : accent
+                      ? "text-neon-cyan/70 hover:text-neon-cyan transition-colors font-pixel text-sm"
+                      : href === "/about"
+                        ? "text-matrix-green/50 hover:text-matrix-green transition-colors"
+                        : "text-matrix-green/70 hover:text-matrix-green transition-colors"
+                }
+              >
+                {`> ${label}`}
+              </Link>
+            );
+          })}
         </div>
 
         {/* Mobile hamburger */}
@@ -120,41 +129,28 @@ export default function Navbar() {
           aria-label="Navigation menu"
           className="sm:hidden bg-[#0a0a0a] border-t border-matrix-green/20 px-4 py-6 flex flex-col gap-4 text-xl"
         >
-          <Link
-            href="/action"
-            className="text-neon-cyan/70 hover:text-neon-cyan transition-colors font-pixel text-base"
-            onClick={closeMenu}
-          >
-            {"> ACTION CENTER"}
-          </Link>
-          <Link
-            href="/scorecard"
-            className="text-matrix-green/70 hover:text-matrix-green transition-colors"
-            onClick={closeMenu}
-          >
-            {"> SCORECARD"}
-          </Link>
-          <Link
-            href="/leaderboard"
-            className="text-matrix-green/70 hover:text-matrix-green transition-colors"
-            onClick={closeMenu}
-          >
-            {"> LEADERBOARD"}
-          </Link>
-          <Link
-            href="/explore"
-            className="text-matrix-green/70 hover:text-matrix-green transition-colors"
-            onClick={closeMenu}
-          >
-            {"> EXPLORE"}
-          </Link>
-          <Link
-            href="/about"
-            className="text-matrix-green/50 hover:text-matrix-green transition-colors"
-            onClick={closeMenu}
-          >
-            {"> ABOUT"}
-          </Link>
+          {NAV_LINKS.map(({ href, label, accent }) => {
+            const active = isActive(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                aria-current={active ? "page" : undefined}
+                onClick={closeMenu}
+                className={
+                  active
+                    ? "text-neon-cyan transition-colors font-pixel text-base neon-cyan"
+                    : accent
+                      ? "text-neon-cyan/70 hover:text-neon-cyan transition-colors font-pixel text-base"
+                      : href === "/about"
+                        ? "text-matrix-green/50 hover:text-matrix-green transition-colors"
+                        : "text-matrix-green/70 hover:text-matrix-green transition-colors"
+                }
+              >
+                {`> ${label}`}
+              </Link>
+            );
+          })}
         </div>
       )}
     </nav>

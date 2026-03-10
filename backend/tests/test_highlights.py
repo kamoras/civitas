@@ -210,6 +210,7 @@ class TestOverallScoreHighlights:
                 promise_persistence=85,
                 independent_voting=80,
                 funding_diversity=85,
+                legislative_effectiveness=85,
             )
         )
         highlights = _build_highlights(senator)
@@ -223,6 +224,7 @@ class TestOverallScoreHighlights:
                 promise_persistence=25,
                 independent_voting=30,
                 funding_diversity=20,
+                legislative_effectiveness=15,
             )
         )
         highlights = _build_highlights(senator)

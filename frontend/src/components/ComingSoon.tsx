@@ -1,5 +1,7 @@
 "use client";
 
+import TerminalTitlebar from "@/components/TerminalTitlebar";
+
 type ComingSoonBranch = "house";
 
 const COPY: Record<ComingSoonBranch, { title: string; lines: string[] }> = {
@@ -20,14 +22,7 @@ export default function ComingSoon({ branch }: { branch: ComingSoonBranch }) {
   return (
     <div className="flex flex-col items-center justify-center py-20 px-4">
       <div className="terminal-window max-w-lg w-full">
-        <div className="terminal-titlebar">
-          <span className="terminal-dot red" />
-          <span className="terminal-dot yellow" />
-          <span className="terminal-dot green" />
-          <span className="ml-3 text-white/40 text-xs font-terminal">
-            {branch}_tracker.exe
-          </span>
-        </div>
+        <TerminalTitlebar title={`${branch}_tracker.exe`} />
         <div className="p-6 sm:p-8 text-center space-y-6">
           <div className="text-neon-pink font-pixel text-xs sm:text-sm tracking-widest">
             {title}

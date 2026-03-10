@@ -166,7 +166,7 @@ def call_llm(
                 _cache_hits += 1
                 return cached
         except Exception:
-            pass
+            logger.debug("LLM cache lookup failed", exc_info=True)
         _cache_misses += 1
 
     estimated_prompt_tokens = (len(system_prompt) + len(user_prompt)) // 3
@@ -213,7 +213,7 @@ def call_llm(
                 try:
                     _cache_set_with_own_session(prompt_version, input_hash, parsed)
                 except Exception:
-                    pass
+                    logger.debug("LLM cache write failed", exc_info=True)
 
             return parsed
 

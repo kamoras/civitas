@@ -67,6 +67,7 @@ function EventCard({ event }: { event: UpcomingEvent }) {
 export default function TimelineTab() {
   const [data, setData] = useState<TimelineResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
   const [expandedMonth, setExpandedMonth] = useState<number | null>(null);
   const [showAll, setShowAll] = useState<Record<number, boolean>>({});
 
@@ -78,7 +79,7 @@ export default function TimelineTab() {
           setExpandedMonth(d.months[d.months.length - 1].month);
         }
       })
-      .catch(() => {})
+      .catch(() => setFetchError(true))
       .finally(() => setLoading(false));
   }, []);
 
@@ -102,6 +103,15 @@ export default function TimelineTab() {
         <div className="text-purple-400 animate-pulse font-pixel text-sm">
           {">"} LOADING TIMELINE...
         </div>
+      </div>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <div className="terminal-window max-w-lg mx-auto p-8 text-center space-y-4" role="alert">
+        <div className="font-pixel text-sm text-red-400">CONNECTION ERROR</div>
+        <p className="text-matrix-green/50 text-sm">Could not load timeline data.</p>
       </div>
     );
   }
@@ -279,7 +289,6 @@ export default function TimelineTab() {
                                 className="text-[10px] text-neon-cyan/50 hover:text-neon-cyan transition-colors"
                               >
                                 {entry.sourceName || "Source"} <span aria-hidden="true">↗</span>
-                                <span className="sr-only"> (opens in new tab)</span>
                               </a>
                             )}
                             {entry.monitorSlug && (

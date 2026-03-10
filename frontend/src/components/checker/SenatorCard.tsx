@@ -10,6 +10,7 @@ import PunkCommentary from "./PunkCommentary";
 import SponsoredBills from "./SponsoredBills";
 import CollapsibleSection from "./CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
+import TerminalTitlebar from "@/components/TerminalTitlebar";
 
 interface SenatorCardProps {
   senator: Senator;
@@ -65,12 +66,7 @@ export default function SenatorCard({ senator }: SenatorCardProps) {
 
   return (
     <div id={`senator-${senator.id}`} className={`terminal-window border-t-2 ${PARTY_BORDER[senator.party]}`}>
-      <div className="terminal-titlebar" aria-hidden="true">
-        <div className="terminal-dot red" />
-        <div className="terminal-dot yellow" />
-        <div className="terminal-dot green" />
-        <span className="text-xs text-matrix-green/40 ml-2 font-mono">{senator.id}.dat</span>
-      </div>
+      <TerminalTitlebar title={`${senator.id}.dat`} />
 
       <div className="p-4 sm:p-6 space-y-6">
         {/* ── Header ── always visible */}
@@ -108,7 +104,7 @@ export default function SenatorCard({ senator }: SenatorCardProps) {
                 rel="noopener noreferrer"
                 className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
               >
-                [FEC FILINGS]<span className="sr-only"> (opens in new tab)</span>
+                [FEC FILINGS]
               </a>
               <a
                 href={`https://www.congress.gov/member/${senator.name.toLowerCase().replace(/\s+/g, "-")}`}
@@ -116,7 +112,7 @@ export default function SenatorCard({ senator }: SenatorCardProps) {
                 rel="noopener noreferrer"
                 className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
               >
-                [CONGRESS.GOV]<span className="sr-only"> (opens in new tab)</span>
+                [CONGRESS.GOV]
               </a>
             </div>
           </div>
@@ -233,7 +229,7 @@ export default function SenatorCard({ senator }: SenatorCardProps) {
                             rel="noopener noreferrer"
                             className="hover:text-neon-cyan underline underline-offset-2 decoration-matrix-green/30 hover:decoration-neon-cyan/50 transition-colors"
                           >
-                            {donor.name}<span className="sr-only"> (opens in new tab)</span>
+                            {donor.name}
                           </a>
                         ) : (
                           donor.name

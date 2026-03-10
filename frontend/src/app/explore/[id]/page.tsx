@@ -6,6 +6,9 @@ import Link from "next/link";
 import MatrixRain from "@/components/effects/MatrixRain";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import { safeHref } from "@/lib/formatting";
+import { chamberColor, chamberBorder, chamberLabel } from "@/lib/chamber";
+import TerminalTitlebar from "@/components/TerminalTitlebar";
 import {
   fetchExploreDocument,
   fetchExploreDocumentSummary,
@@ -15,29 +18,6 @@ import {
   type ExploreDocumentSummary,
   type PublicComment,
 } from "@/lib/api";
-
-function chamberColor(chamber: string): string {
-  if (chamber === "Senate") return "text-neon-cyan";
-  if (chamber === "House") return "text-neon-pink";
-  if (chamber === "Executive") return "text-neon-yellow";
-  if (chamber === "Judicial") return "text-purple-400";
-  if (chamber === "Regulatory") return "text-orange-400";
-  return "text-matrix-green/60";
-}
-
-function chamberBorder(chamber: string): string {
-  if (chamber === "Senate") return "border-neon-cyan/30";
-  if (chamber === "House") return "border-neon-pink/30";
-  if (chamber === "Executive") return "border-neon-yellow/30";
-  if (chamber === "Judicial") return "border-purple-400/30";
-  if (chamber === "Regulatory") return "border-orange-400/30";
-  return "border-matrix-green/20";
-}
-
-function chamberLabel(chamber: string): string {
-  if (chamber === "Regulatory") return "AGENCY";
-  return chamber?.toUpperCase() || "GOV";
-}
 
 function formatDate(dateStr: string): string {
   if (!dateStr) return "";
@@ -174,14 +154,7 @@ function CommentsSection({
   return (
     <div className="mt-6">
       <div className="terminal-window">
-        <div className="terminal-titlebar" aria-hidden="true">
-          <span className="terminal-dot red" />
-          <span className="terminal-dot yellow" />
-          <span className="terminal-dot green" />
-          <span className="ml-3 text-white/40 text-xs font-terminal">
-            public_comments.sh
-          </span>
-        </div>
+        <TerminalTitlebar title="public_comments.sh" />
         <div className="p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-[10px] font-pixel text-matrix-green/50 tracking-wider">
@@ -218,11 +191,14 @@ function CommentsSection({
 
           {/* Submit Result Banner */}
           {submitResult && (
-            <div className={`mb-4 p-3 rounded border text-sm ${
-              submitResult.success
-                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                : "bg-red-500/10 border-red-500/30 text-red-400"
-            }`}>
+            <div
+              role="alert"
+              className={`mb-4 p-3 rounded border text-sm ${
+                submitResult.success
+                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                  : "bg-red-500/10 border-red-500/30 text-red-400"
+              }`}
+            >
               {submitResult.message}
             </div>
           )}
@@ -336,7 +312,7 @@ function CommentsSection({
               <p className="text-matrix-green/40 text-sm">{commentsError}</p>
               {commentsError === "API key not configured" && (
                 <a
-                  href={commentUrl}
+                  href={safeHref(commentUrl) || "#"}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-block mt-3 text-[10px] font-pixel text-neon-cyan/70 hover:text-neon-cyan transition-colors"
@@ -427,7 +403,7 @@ function CommentsSection({
           {commentsLoaded && (
             <div className="mt-4 pt-3 border-t border-matrix-green/10 text-center">
               <a
-                href={commentUrl}
+                href={safeHref(commentUrl) || "#"}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-[10px] font-pixel text-matrix-green/30 hover:text-matrix-green/60 transition-colors"
@@ -566,7 +542,7 @@ export default function ExploreDetailPage() {
                   </p>
                 </div>
                 <a
-                  href={doc.commentUrl}
+                  href={safeHref(doc.commentUrl) || "#"}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-sm font-pixel px-6 py-3 rounded
@@ -617,7 +593,7 @@ export default function ExploreDetailPage() {
               )}
               {sourceUrl && (
                 <a
-                  href={sourceUrl}
+                  href={safeHref(sourceUrl) || "#"}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-pixel text-[10px] text-matrix-green/40 hover:text-matrix-green transition-colors"
@@ -630,14 +606,7 @@ export default function ExploreDetailPage() {
 
           {/* AI Analysis section */}
           <div className="terminal-window mb-6">
-            <div className="terminal-titlebar" aria-hidden="true">
-              <span className="terminal-dot red" />
-              <span className="terminal-dot yellow" />
-              <span className="terminal-dot green" />
-              <span className="ml-3 text-white/40 text-xs font-terminal">
-                ai_analysis.sh
-              </span>
-            </div>
+            <TerminalTitlebar title="ai_analysis.sh" />
             <div className="p-5">
               {summaryLoading && (
                 <div className="text-center py-6">
@@ -696,14 +665,7 @@ export default function ExploreDetailPage() {
 
           {/* Document body */}
           <div className="terminal-window">
-            <div className="terminal-titlebar" aria-hidden="true">
-              <span className="terminal-dot red" />
-              <span className="terminal-dot yellow" />
-              <span className="terminal-dot green" />
-              <span className="ml-3 text-white/40 text-xs font-terminal">
-                document_content
-              </span>
-            </div>
+            <TerminalTitlebar title="document_content" />
             <div className="p-5">
               {doc.summary && doc.summary !== doc.body?.slice(0, 300) && (
                 <div className="mb-4 pb-4 border-b border-matrix-green/15">
@@ -748,7 +710,7 @@ export default function ExploreDetailPage() {
                 <>
                   {" "}—{" "}
                   <a
-                    href={sourceUrl}
+                    href={safeHref(sourceUrl) || "#"}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-matrix-green/40 hover:text-matrix-green underline transition-colors"

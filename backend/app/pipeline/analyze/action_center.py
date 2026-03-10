@@ -1022,15 +1022,19 @@ def _generate_daily_theme(
         logger.warning("Theme concept not a dict: %s", type(concept_result))
         return None
 
-    tagline = concept_result.get("tagline", "BREAKING")
-    mood = concept_result.get("mood", "urgent")
+    _HEX_RE = re.compile(r'^#[0-9a-fA-F]{6}$')
+    _MOOD_VALID = {"urgent", "tense", "volatile", "hopeful", "somber", "charged", "divided", "uncertain"}
+
+    tagline = re.sub(r'[^\w\s\-\'",.:!?/]', '', concept_result.get("tagline", "BREAKING"))[:60]
+    raw_mood = concept_result.get("mood", "urgent")
+    mood = raw_mood if raw_mood in _MOOD_VALID else "urgent"
     svg_path = concept_result.get("svgPath", "")
     accent = concept_result.get("accent", "#ff6644")
     accent_alt = concept_result.get("accentAlt", "#6644ff")
 
-    if not accent.startswith("#"):
+    if not _HEX_RE.match(accent):
         accent = "#ff6644"
-    if not accent_alt.startswith("#"):
+    if not _HEX_RE.match(accent_alt):
         accent_alt = "#6644ff"
 
     accent = _ensure_vibrant(accent)
@@ -1181,7 +1185,8 @@ def _save_timeline_entry(today: str, db: Session) -> None:
     logger.info("Timeline entry saved for %s: %s", today, top_issue.title[:60])
 
 
-_MONITOR_ISSUE_SIM = 0.50
+_MONITOR_ISSUE_SIM = 0.55
+_MONITOR_ISSUE_TITLE_SIM = 0.40
 _MONITOR_MERGE_SIM = 0.55
 _MONITOR_MIN_DAYS = 2
 _MONITOR_LOOKBACK_DAYS = 14
@@ -1300,11 +1305,24 @@ def _update_national_monitors(today: str, db: Session) -> None:
             [f"{m.title} {m.description}" for m in existing_monitors],
             normalize_embeddings=True,
         )
+        monitor_title_embeddings = model.encode(
+            [m.title for m in existing_monitors],
+            normalize_embeddings=True,
+        )
         sims = today_embeddings @ monitor_embeddings.T
+        title_sims = today_embeddings @ monitor_title_embeddings.T
 
         for i, issue in enumerate(today_issues):
             for j, monitor in enumerate(existing_monitors):
                 if sims[i][j] < _MONITOR_ISSUE_SIM:
+                    continue
+                if title_sims[i][j] < _MONITOR_ISSUE_TITLE_SIM:
+                    logger.debug(
+                        "Monitor link rejected (title_sim=%.3f < %.2f): "
+                        "issue='%s' monitor='%s'",
+                        title_sims[i][j], _MONITOR_ISSUE_TITLE_SIM,
+                        issue.title[:50], monitor.title[:50],
+                    )
                     continue
 
                 issue_monitor_slugs.setdefault(i, []).append(monitor.slug)
@@ -1617,11 +1635,16 @@ def _run_refresh(db: Session) -> int:
 
     db.commit()
 
+    # Stage 2: Auto-detect and update national monitors (must run before
+    # _save_timeline_entry so the top issue has related_monitor_slugs populated)
+    if issues_created > 0:
+        _update_national_monitors(today, db)
+
     # Preserve today's #1 issue in the permanent timeline
     if issues_created > 0:
         _save_timeline_entry(today, db)
 
-    # Stage 2: Generate daily visual theme from the top issues
+    # Stage 3: Generate daily visual theme from the top issues
     if issues_created > 0:
         created_issues = (
             db.query(ActionIssue)
@@ -1638,10 +1661,6 @@ def _run_refresh(db: Session) -> int:
             else:
                 db.add(DailyTheme(date=today, theme_json=json.dumps(theme)))
             db.commit()
-
-    # Stage 3: Auto-detect and update national monitors
-    if issues_created > 0:
-        _update_national_monitors(today, db)
 
     # Clean up issues older than 14 days
     from datetime import timedelta as _td

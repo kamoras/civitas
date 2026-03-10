@@ -22,7 +22,7 @@ locally on a Raspberry Pi 5 with zero cloud AI calls.
 - **Vector Store**: ChromaDB for semantic search document store
 - **Deployment**: Docker Compose, blue/green zero-downtime via `deploy.sh`, nginx reverse proxy with caching
 - **Branches covered**: Senate (100 senators), House (435 representatives), Presidents (historical + modern), Supreme Court (9 justices)
-- **News Feeds**: RSS parsing (NPR, PBS, The Hill, AP) + Google Trends + Reddit trending for Action Center
+- **News Feeds**: RSS parsing (AP, NPR, Reuters, PBS) + Google Trends + Reddit trending for Action Center
 - **Action Center**: National monitors (auto-detected ongoing concerns), year-in-review timeline, elections tab, dynamic theme styling
 
 All services, models, and data run on-device. No data leaves the Raspberry Pi.

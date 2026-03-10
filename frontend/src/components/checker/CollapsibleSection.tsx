@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 
 interface CollapsibleSectionProps {
   title: string;
@@ -26,6 +26,7 @@ export default function CollapsibleSection({
   children,
 }: CollapsibleSectionProps) {
   const [open, setOpen] = useState(defaultOpen);
+  const contentId = useId();
 
   return (
     <div>
@@ -33,6 +34,7 @@ export default function CollapsibleSection({
         onClick={() => setOpen(!open)}
         className="w-full flex items-baseline justify-between mb-3 group cursor-pointer"
         aria-expanded={open}
+        aria-controls={contentId}
       >
         <h3 className={`text-lg ${titleColor} flex items-center gap-2`}>
           <span className="text-matrix-green/40 text-sm font-mono group-hover:text-matrix-green transition-colors" aria-hidden="true">
@@ -54,7 +56,7 @@ export default function CollapsibleSection({
         </span>
       </button>
       {alwaysVisible}
-      {open && children}
+      {open && <div id={contentId}>{children}</div>}
     </div>
   );
 }

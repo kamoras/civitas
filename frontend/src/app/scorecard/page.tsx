@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import MatrixRain from "@/components/effects/MatrixRain";
 import Navbar from "@/components/layout/Navbar";
@@ -40,9 +41,17 @@ function ScorecardContent() {
 
           <div className="mb-10">
             <BranchSelector selected={branch} onChange={setBranch} />
+            <div className="text-center mt-3">
+              <Link
+                href={`/leaderboard?branch=${branch}`}
+                className="text-[10px] font-pixel text-matrix-green/40 hover:text-matrix-green/70 transition-colors"
+              >
+                {">"} VIEW FULL LEADERBOARD →
+              </Link>
+            </div>
           </div>
 
-          <div id={`branch-panel-${branch}`} role="tabpanel" aria-labelledby={`branch-tab-${branch}`}>
+          <div id={`branch-panel-${branch}`} role="tabpanel" aria-labelledby={`branch-tab-${branch}`} tabIndex={-1}>
             {branch === "senate" && (
               <Suspense fallback={null}>
                 <CheckerClient />

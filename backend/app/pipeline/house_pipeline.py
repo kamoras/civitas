@@ -10,7 +10,7 @@ Design choice: skip LLM narrative generation on the first pass because
 computed deterministically and don't need LLM calls.
 """
 
-import json
+
 import logging
 import time
 from datetime import datetime

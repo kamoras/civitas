@@ -38,17 +38,15 @@ from app.schemas import (
 )
 from app.services.senator_service import (
     STATE_NAMES,
-    _build_sponsored_bills,
     _clean_pac_sponsor,
     _clean_platform_summary,
     _compute_initials,
     _filter_promises,
     _fixup_donor_type,
-    _parse_partisan_depth,
 )
 
 
-def _rep_eager_options():
+def _rep_eager_options() -> list:
     return [
         selectinload(Representative.donors),
         selectinload(Representative.industry_donations),
@@ -59,15 +57,18 @@ def _rep_eager_options():
     ]
 
 
-class _RepSponsoredBillAdapter:
-    """Adapter to make RepSponsoredBill look like SponsoredBill for reuse."""
-    def __init__(self, sb):
-        self._sb = sb
-    def __getattr__(self, name):
-        return getattr(self._sb, name)
+def _build_areas(raw_str: str | None) -> list[dict]:
+    try:
+        raw = json.loads(raw_str) if raw_str else []
+    except (json.JSONDecodeError, TypeError):
+        raw = []
+    return [
+        {"area": a.get("area", ""), "confidence": a.get("confidence", 0.0), "party": a.get("party", "bipartisan")}
+        for a in raw if isinstance(a, dict) and a.get("area")
+    ]
 
 
-def build_rep_response(rep: Representative, db: Session):
+def build_rep_response(rep: Representative, _db: Session = None) -> dict:
     """Assemble a full response dict from Representative ORM model."""
     donors = sorted(rep.donors, key=lambda d: d.rank)
     industry_donations = sorted(rep.industry_donations, key=lambda d: d.total, reverse=True)
@@ -86,16 +87,6 @@ def build_rep_response(rep: Representative, db: Session):
     party_loyalty_pct = round(voted_with / party_total * 100, 1) if party_total > 0 else 0.0
 
     initials = _compute_initials(rep.name) or rep.initials
-
-    def _build_areas(raw_str):
-        try:
-            raw = json.loads(raw_str) if raw_str else []
-        except (json.JSONDecodeError, TypeError):
-            raw = []
-        return [
-            {"area": a.get("area", ""), "confidence": a.get("confidence", 0.0), "party": a.get("party", "bipartisan")}
-            for a in raw if isinstance(a, dict) and a.get("area")
-        ]
 
     return {
         "id": rep.id,
@@ -152,9 +143,9 @@ def build_rep_response(rep: Representative, db: Session):
                 "lobbyistOrg": lm.lobbyist_org,
                 "industry": lm.industry,
                 "lobbyingSpend": lm.lobbying_spend,
-                "donationToSenator": lm.donation_to_representative,
+                "donationToSenator": lm.donation_to_representative,  # key shared with senator schema
                 "billsInfluenced": json.loads(lm.bills_influenced) if lm.bills_influenced else [],
-                "senatorVoteAligned": lm.representative_vote_aligned,
+                "senatorVoteAligned": lm.representative_vote_aligned,  # key shared with senator schema
                 "description": lm.description,
             }
             for lm in lobbying_matches
@@ -526,16 +517,6 @@ def get_rep_votes(
     page = max(1, min(page, total_pages))
 
     votes_db = query.order_by(RepKeyVote.date.desc()).offset((page - 1) * per_page).limit(per_page).all()
-
-    def _build_areas(raw_str):
-        try:
-            raw = json.loads(raw_str) if raw_str else []
-        except (json.JSONDecodeError, TypeError):
-            raw = []
-        return [
-            {"area": a.get("area", ""), "confidence": a.get("confidence", 0.0), "party": a.get("party", "bipartisan")}
-            for a in raw if isinstance(a, dict)
-        ]
 
     return {
         "votes": [

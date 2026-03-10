@@ -34,6 +34,9 @@ export default function BranchSelector({ selected, onChange }: BranchSelectorPro
       }
       e.preventDefault();
       onChange(BRANCHES[next].key);
+      requestAnimationFrame(() => {
+        document.getElementById(`branch-panel-${BRANCHES[next].key}`)?.focus();
+      });
     },
     [selected, onChange],
   );

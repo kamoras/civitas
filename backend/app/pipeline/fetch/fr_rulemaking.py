@@ -66,11 +66,19 @@ _BOILERPLATE_END = re.compile(
 )
 
 
+_ALLOWED_HOSTS = {"www.federalregister.gov", "federalregister.gov"}
+
+
 async def _fetch_body_text(client: httpx.AsyncClient, url: str) -> str:
     """Fetch full-text HTML from Federal Register and extract plain text."""
     if not url:
         return ""
     try:
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        if parsed.hostname not in _ALLOWED_HOSTS or parsed.scheme != "https":
+            logger.debug("Rejected non-FR URL: %s", url[:100])
+            return ""
         resp = await client.get(url, timeout=30.0)
         if resp.status_code != 200:
             return ""

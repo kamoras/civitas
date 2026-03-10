@@ -9,13 +9,14 @@ export default function MonitorsTab() {
   const [monitors, setMonitors] = useState<NationalMonitor[]>([]);
   const [selected, setSelected] = useState<NationalMonitorDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const detailRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchMonitors()
       .then((d) => setMonitors(d.monitors))
-      .catch(() => {})
+      .catch(() => setFetchError(true))
       .finally(() => setLoading(false));
   }, []);
 
@@ -38,6 +39,21 @@ export default function MonitorsTab() {
         <div className="text-amber-400 animate-pulse font-pixel text-sm">
           {">"} SCANNING NATIONAL CONCERNS...
         </div>
+      </div>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <div className="terminal-window max-w-lg mx-auto p-8 text-center space-y-4" role="alert">
+        <div className="font-pixel text-sm text-red-400">CONNECTION ERROR</div>
+        <p className="text-matrix-green/50 text-sm">Could not load monitors.</p>
+        <button
+          onClick={() => { setFetchError(false); setLoading(true); fetchMonitors().then((d) => setMonitors(d.monitors)).catch(() => setFetchError(true)).finally(() => setLoading(false)); }}
+          className="text-neon-cyan font-pixel text-sm border border-neon-cyan/30 px-4 py-2 hover:bg-neon-cyan/10 transition-colors"
+        >
+          [RETRY]
+        </button>
       </div>
     );
   }
@@ -176,7 +192,6 @@ export default function MonitorsTab() {
                   className="text-[10px] text-neon-cyan/60 hover:text-neon-cyan transition-colors"
                 >
                   {update.articleTitle || "Source"} <span aria-hidden="true">↗</span>
-                  <span className="sr-only"> (opens in new tab)</span>
                 </a>
               </div>
             ))}

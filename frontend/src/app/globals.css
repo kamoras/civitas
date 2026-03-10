@@ -369,6 +369,25 @@ input:focus-visible {
   box-shadow: 0 0 8px rgba(0, 255, 255, 0.4);
 }
 
+/* ===== EXTERNAL LINK A11Y =====
+   Announce to screen readers that target="_blank" links open a new tab. */
+a[target="_blank"]::after {
+  content: " (opens in new tab)";
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+a[target="_blank"] {
+  position: relative;
+}
+
 /* ===== CUSTOM UTILITIES ===== */
 @layer utilities {
   .text-balance {

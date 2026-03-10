@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
+import TerminalTitlebar from "@/components/TerminalTitlebar";
 import MatrixRain from "@/components/effects/MatrixRain";
 import BranchSelector, { type Branch } from "@/components/BranchSelector";
 import { fetchLeaderboard, fetchRepLeaderboard, fetchPresidentLeaderboard, fetchJusticeLeaderboard } from "@/lib/api";
@@ -170,14 +171,7 @@ function PresidentLeaderboard({
   return (
     <>
       <div className="terminal-window overflow-hidden">
-        <div className="terminal-titlebar">
-          <span className="terminal-dot red" />
-          <span className="terminal-dot yellow" />
-          <span className="terminal-dot green" />
-          <span className="ml-3 text-white/40 text-xs font-terminal">
-            president_leaderboard.db — {entries.length} presidents
-          </span>
-        </div>
+        <TerminalTitlebar title={`president_leaderboard.db — ${entries.length} presidents`} />
 
         {/* Desktop table */}
         <div className="hidden md:block overflow-x-auto">
@@ -284,9 +278,9 @@ function PresidentLeaderboard({
       </div>
 
           <p className="mt-4 text-center text-matrix-green/50 text-xs">
-            Higher score = better constituent representation. Computed from: independence (20%) +
-            follow-through (25%) + public mandate (20%) + effectiveness (20%) +
-            competence (15%). Click any row to view full profile.
+            Higher score = better constituent representation. Computed from: independence (15%) +
+            follow-through (20%) + public mandate (15%) + effectiveness (20%) +
+            competence (15%) + agency alignment (15%). Click any row to view full profile.
           </p>
     </>
   );
@@ -329,14 +323,7 @@ function JusticeLeaderboard({
   return (
     <>
       <div className="terminal-window overflow-hidden">
-        <div className="terminal-titlebar">
-          <span className="terminal-dot red" />
-          <span className="terminal-dot yellow" />
-          <span className="terminal-dot green" />
-          <span className="ml-3 text-white/40 text-xs font-terminal">
-            scotus_leaderboard.db — {entries.length} justices
-          </span>
-        </div>
+        <TerminalTitlebar title={`scotus_leaderboard.db — ${entries.length} justices`} />
 
         {/* Desktop table */}
         <div className="hidden md:block overflow-x-auto">
@@ -582,7 +569,7 @@ function LeaderboardContent() {
           <BranchSelector selected={branch} onChange={setBranch} />
         </div>
 
-        <div id={`branch-panel-${branch}`} role="tabpanel" aria-labelledby={`branch-tab-${branch}`}>
+        <div id={`branch-panel-${branch}`} role="tabpanel" aria-labelledby={`branch-tab-${branch}`} tabIndex={-1}>
         {branch === "president" && <PresidentLeaderboard entries={presEntries} loading={presLoading} error={error} />}
 
         {branch === "scotus" && <JusticeLeaderboard entries={justiceEntries} loading={justiceLoading} error={error} />}
@@ -658,14 +645,7 @@ function LeaderboardContent() {
         {/* Table */}
         {!loading && !error && (
           <div className="terminal-window overflow-hidden">
-            <div className="terminal-titlebar">
-              <span className="terminal-dot red" />
-              <span className="terminal-dot yellow" />
-              <span className="terminal-dot green" />
-              <span className="ml-3 text-white/40 text-xs font-terminal">
-                {branch === "house" ? "house" : "senate"}_leaderboard.db — {branch === "house" ? `${houseTotal} representatives` : `${displayed.length} senators`}
-              </span>
-            </div>
+            <TerminalTitlebar title={`${branch === "house" ? "house" : "senate"}_leaderboard.db — ${branch === "house" ? `${houseTotal} representatives` : `${displayed.length} senators`}`} />
 
             {/* Desktop table */}
             <div className="hidden md:block overflow-x-auto">

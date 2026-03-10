@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import TerminalTitlebar from "@/components/TerminalTitlebar";
 import TypewriterText from "@/components/effects/TypewriterText";
 import { useEffect, useRef, useState } from "react";
 
@@ -42,12 +43,7 @@ export default function ManifestoSection() {
     <section className="py-24 px-4" ref={ref}>
       <div className="max-w-3xl mx-auto">
         <div className="terminal-window">
-          <div className="terminal-titlebar">
-            <div className="terminal-dot red" />
-            <div className="terminal-dot yellow" />
-            <div className="terminal-dot green" />
-            <span className="text-xs text-matrix-green/40 ml-2 font-mono">about.txt</span>
-          </div>
+          <TerminalTitlebar title="about.txt" />
           <div className="p-6 sm:p-8 min-h-[300px]">
             {visible ? (
               <div className="space-y-1">

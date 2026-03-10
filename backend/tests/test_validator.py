@@ -205,10 +205,10 @@ class TestValidateSenator:
         result = validate_senator(senator)
         assert result["lobbyingMatches"][0]["industry"] == "OTHER"
 
-    def test_bioguide_id_removed(self):
+    def test_bioguide_id_preserved(self):
         senator = _make_senator(bioguideId="B001230")
         result = validate_senator(senator)
-        assert "bioguideId" not in result
+        assert result["bioguideId"] == "B001230"
 
     def test_initials_generated_if_missing(self):
         senator = _make_senator(initials="", name="Ted Cruz")

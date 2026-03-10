@@ -55,7 +55,7 @@ The pipeline runs nightly (or manually triggered) in phases:
 The Action Center runs hourly (separate from the main nightly pipeline) to
 surface trending civic issues:
 
-1. **FETCH** — Parse RSS feeds from low-bias sources (NPR, PBS, The Hill, AP)
+1. **FETCH** — Parse RSS feeds from low-bias sources (AP, NPR, Reuters, PBS)
    and fetch trending topics from Google Trends and Reddit
 2. **FILTER** — Embedding similarity filters articles for U.S. policy relevance
 3. **CLUSTER** — Group related articles across sources

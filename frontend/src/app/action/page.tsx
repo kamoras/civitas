@@ -145,6 +145,7 @@ function StatePicker({
         onClick={() => onSelect(null)}
         className="text-[10px] font-pixel text-neon-cyan/60 hover:text-neon-cyan transition-colors"
         title="Change your state"
+        aria-label="Change your state"
       >
         [{userState}] ✕
       </button>
@@ -222,7 +223,6 @@ function ActionItemCard({
               className="text-[10px] font-pixel text-neon-cyan/70 hover:text-neon-cyan border border-neon-cyan/30 hover:border-neon-cyan/60 px-2 py-1 transition-colors flex items-center gap-1"
             >
               {site} <span aria-hidden="true">↗</span>
-              <span className="sr-only"> (opens in new tab)</span>
             </a>
           )}
         </div>
@@ -257,7 +257,6 @@ function SourceBadge({ name, url }: { name: string; url?: string }) {
         className="text-[10px] px-1.5 py-0.5 border border-matrix-green/20 text-matrix-green/50 hover:text-neon-cyan hover:border-neon-cyan/30 transition-colors"
       >
         {name} <span aria-hidden="true">↗</span>
-        <span className="sr-only"> (opens in new tab)</span>
       </a>
     );
   }
@@ -420,7 +419,7 @@ function HeroIssue({
             {issue.relatedBills.map((bill) => (
               <a
                 key={bill.id}
-                href={bill.url}
+                href={safeHref(bill.url) || "#"}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-3 p-3 border border-neon-yellow/20 bg-neon-yellow/5 hover:border-neon-yellow/40 hover:bg-neon-yellow/10 transition-all group"
@@ -453,7 +452,7 @@ function HeroIssue({
                 </span>
                 {doc.url ? (
                   <a
-                    href={doc.url}
+                    href={safeHref(doc.url) || "#"}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-neon-cyan/70 hover:text-neon-cyan transition-colors truncate"
@@ -570,7 +569,7 @@ function SecondaryIssue({
                 {issue.relatedBills.map((bill) => (
                   <a
                     key={bill.id}
-                    href={bill.url}
+                    href={safeHref(bill.url) || "#"}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-2 p-2 border border-neon-yellow/15 bg-neon-yellow/5 hover:border-neon-yellow/30 transition-colors text-sm"
@@ -754,22 +753,25 @@ function IssuesTab({
   setUserState,
   onNavigate,
   initialDate,
+  onDateChange,
 }: {
   userState: string | null;
   setUserState: (s: string | null) => void;
   onNavigate?: (tab: Tab) => void;
   initialDate?: string | null;
+  onDateChange?: (date: string | null) => void;
 }) {
   const [data, setData] = useState<ActionIssuesResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showStatePicker, setShowStatePicker] = useState(false);
+  const [fetchError, setFetchError] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(initialDate || null);
 
   const loadIssues = useCallback((date?: string) => {
     setLoading(true);
+    setFetchError(false);
     fetchActionIssues(date)
       .then((d) => setData(d))
-      .catch(() => {})
+      .catch(() => setFetchError(true))
       .finally(() => setLoading(false));
   }, []);
 
@@ -786,19 +788,22 @@ function IssuesTab({
       const d = availableDates[currentIdx + 1];
       setSelectedDate(d);
       loadIssues(d);
+      onDateChange?.(d);
     }
-  }, [currentIdx, availableDates, loadIssues]);
+  }, [currentIdx, availableDates, loadIssues, onDateChange]);
 
   const goToNext = useCallback(() => {
     if (currentIdx > 0) {
       const d = availableDates[currentIdx - 1];
       setSelectedDate(d);
       loadIssues(d);
+      onDateChange?.(d);
     } else if (currentIdx === 0 && selectedDate) {
       setSelectedDate(null);
       loadIssues();
+      onDateChange?.(null);
     }
-  }, [currentIdx, availableDates, selectedDate, loadIssues]);
+  }, [currentIdx, availableDates, selectedDate, loadIssues, onDateChange]);
 
   const theme = data?.theme;
 
@@ -806,6 +811,21 @@ function IssuesTab({
     return (
       <div className="terminal-window max-w-md mx-auto p-6 text-center" role="status" aria-live="polite">
         <div className="text-neon-cyan animate-pulse text-lg">{">"} SCANNING NEWS FEEDS...</div>
+      </div>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <div className="terminal-window max-w-lg mx-auto p-6 text-center" role="alert">
+        <div className="text-red-400 text-lg font-pixel mb-2">{">"} CONNECTION ERROR</div>
+        <p className="text-matrix-green/50 text-sm mb-4">Could not load today&apos;s issues.</p>
+        <button
+          onClick={() => loadIssues(selectedDate || undefined)}
+          className="text-neon-cyan font-pixel text-sm border border-neon-cyan/30 px-4 py-2 hover:bg-neon-cyan/10 transition-colors"
+        >
+          [RETRY]
+        </button>
       </div>
     );
   }
@@ -850,7 +870,7 @@ function IssuesTab({
           </button>
           {selectedDate && (
             <button
-              onClick={() => { setSelectedDate(null); loadIssues(); }}
+              onClick={() => { setSelectedDate(null); loadIssues(); onDateChange?.(null); }}
               className="text-neon-cyan/60 hover:text-neon-cyan transition-colors ml-1"
               aria-label="Jump to present"
             >
@@ -870,14 +890,8 @@ function IssuesTab({
             </span>
           )}
         </div>
-        {showStatePicker || !userState ? (
-          <StatePicker
-            userState={userState}
-            onSelect={(s) => {
-              setUserState(s);
-              if (s) setShowStatePicker(false);
-            }}
-          />
+        {!userState ? (
+          <StatePicker userState={userState} onSelect={setUserState} />
         ) : (
           <StatePicker userState={userState} onSelect={setUserState} compact />
         )}
@@ -908,8 +922,7 @@ function IssuesTab({
           <div className="inline-flex items-center gap-3">
             <div className="theme-data-strip w-12" />
             <span
-              className="text-[10px] font-pixel tracking-[0.2em] theme-accent-text"
-              style={{ opacity: 0.4 }}
+              className="text-[10px] font-pixel tracking-[0.2em] theme-accent-text opacity-40"
             >
               {theme.tagline.toUpperCase()}
             </span>
@@ -922,6 +935,9 @@ function IssuesTab({
 }
 
 const VALID_TABS = new Set<string>(["issues", "monitors", "timeline", "elections", "world"]);
+function isValidTab(s: string | null): s is Tab {
+  return s !== null && VALID_TABS.has(s);
+}
 
 export default function ActionPage() {
   return (
@@ -935,17 +951,31 @@ function ActionPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const initialTab = searchParams.get("tab");
+  const paramTab = searchParams.get("tab");
   const [activeTab, setActiveTabRaw] = useState<Tab>(
-    initialTab && VALID_TABS.has(initialTab) ? (initialTab as Tab) : "issues",
+    isValidTab(paramTab) ? paramTab : "issues",
   );
   const [userState, setUserState] = useUserState();
+
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (isValidTab(t) && t !== activeTab) {
+      setActiveTabRaw(t);
+    } else if (!t && activeTab !== "issues") {
+      setActiveTabRaw("issues");
+    }
+  // activeTab intentionally omitted: including it would re-trigger the effect
+  // on every user-initiated tab switch, creating a loop with setActiveTab.
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setActiveTab = useCallback(
     (tab: Tab) => {
       setActiveTabRaw(tab);
       const url = tab === "issues" ? "/action" : `/action?tab=${tab}`;
       router.replace(url, { scroll: false });
+      requestAnimationFrame(() => {
+        document.getElementById(`tabpanel-${tab}`)?.focus();
+      });
     },
     [router],
   );
@@ -1017,7 +1047,10 @@ function ActionPageInner() {
             aria-labelledby={`tab-${activeTab}`}
             tabIndex={0}
           >
-            {activeTab === "issues" && <IssuesTab userState={userState} setUserState={setUserState} onNavigate={setActiveTab} initialDate={searchParams.get("date")} />}
+            {activeTab === "issues" && <IssuesTab userState={userState} setUserState={setUserState} onNavigate={setActiveTab} initialDate={searchParams.get("date")} onDateChange={(d) => {
+              const url = d ? `/action?date=${d}` : "/action";
+              router.replace(url, { scroll: false });
+            }} />}
             {activeTab === "monitors" && <MonitorsTab />}
             {activeTab === "timeline" && <TimelineTab />}
             {activeTab === "elections" && <ElectionsTab />}

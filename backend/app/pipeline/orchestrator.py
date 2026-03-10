@@ -1,13 +1,14 @@
 """
 Pipeline orchestrator — unified data pipeline.
 
-The 6 phases:
+The 7 phases:
   1. FETCH      — congress, FEC, platforms, floor remarks
   2. TRANSFORM  — normalize members, votes, finance
   3. ANALYZE    — classify bills/donors, cross-reference, score
   4. EXPLORE    — ingest government documents for semantic search
   5. JUSTICES   — fetch and score Supreme Court justices
-  6. FINALIZE   — persist stats and mark complete
+  6. PRESIDENTS — fetch and score presidential records
+  7. FINALIZE   — persist stats and mark complete
 
 Uses SQLAlchemy sessions for persistence and PipelineRun records to track progress.
 """
@@ -141,6 +142,12 @@ PIPELINE_STEPS = [
     ("finalize",             "finalize",  "Finalize & save"),
 ]
 
+STALE_PIPELINE_TIMEOUT_S = 43200  # 12 hours
+MAX_SIGNIFICANT_BILLS = 100
+RECENT_RC_COUNT_PER_SESSION = 100
+RECENT_RC_SESSIONS = 4
+MIN_CONGRESS_FOR_BILL_TITLES = 116
+
 
 class ProgressTracker:
     """Track sub-step progress within a pipeline run and persist to the DB."""
@@ -208,6 +215,7 @@ class ProgressTracker:
         try:
             self._db.commit()
         except Exception:
+            logger.debug("Progress commit failed, rolling back", exc_info=True)
             self._db.rollback()
 
 
@@ -444,10 +452,10 @@ def _acquire_pipeline_lock(db: Session) -> PipelineRun | None:
     )
     if running:
         age = (datetime.utcnow() - running.started_at).total_seconds()
-        if age > 43200:  # 12 hours -- treat as stale
+        if age > STALE_PIPELINE_TIMEOUT_S:
             running.status = "stale"
             running.completed_at = datetime.utcnow()
-            running.error_message = "Marked stale: exceeded 2-hour timeout"
+            running.error_message = "Marked stale: exceeded 12-hour timeout"
             db.commit()
             logger.warning("Cleaned up stale pipeline run #%d (age: %ds)", running.id, int(age))
         else:
@@ -530,9 +538,9 @@ def _clear_analysis_artifacts(db: Session) -> None:
             n_bills = coll.count()
             client.delete_collection(name="bills")
         except Exception:
-            pass
+            logger.debug("No existing bills collection to clear")
     except Exception:
-        pass
+        logger.debug("ChromaDB not available for cache clear")
 
     from app.pipeline.cache import api_cache_set
     api_cache_set(db, "_internal", "analysis_code_hash", current_hash)
@@ -729,7 +737,7 @@ async def run_full_pipeline(
             # 1c. Dynamically discover significant bills
             logger.info("Discovering significant bills...")
             progress.begin("discover_bills")
-            discovered_bills = await fetch_significant_bills(client, db, max_bills=100)
+            discovered_bills = await fetch_significant_bills(client, db, max_bills=MAX_SIGNIFICANT_BILLS)
             logger.info("Found %d significant bills", len(discovered_bills))
             progress.complete("discover_bills", detail=f"{len(discovered_bills)} discovered")
 
@@ -821,7 +829,7 @@ async def run_full_pipeline(
             # to get a richer history — the 119th congress has many nomination votes
             # (classified "mixed"); the 118th had more substantive legislation.
             logger.info("Fetching recent Senate roll calls (multi-session)...")
-            progress.begin("fetch_recent_rcs", total=4)
+            progress.begin("fetch_recent_rcs", total=RECENT_RC_SESSIONS)
             all_recent_roll_calls: list[dict] = []
             seen_roll_ids: set[str] = set()
 
@@ -837,7 +845,7 @@ async def run_full_pipeline(
                     client, db,
                     congress=congress_num,
                     session_number=session_num,
-                    count=100,
+                    count=RECENT_RC_COUNT_PER_SESSION,
                 )
                 added = 0
                 for rc in session_rcs:
@@ -954,7 +962,7 @@ async def run_full_pipeline(
             # classifier. The official title from the titles endpoint
             # (e.g., "A bill to prevent the purchase of ammunition...")
             # provides the semantic content needed for accurate classification.
-            min_congress_for_titles = 116
+            min_congress_for_titles = MIN_CONGRESS_FOR_BILL_TITLES
             short_title_bills: dict[str, tuple[int, str, int]] = {}
             for sp_bills in sponsored_map.values():
                 for sp in sp_bills:
@@ -1169,7 +1177,7 @@ async def run_full_pipeline(
                 try:
                     record_sponsor_alignment(db, bill_id, bill_text, sponsor_party)
                 except Exception:
-                    pass
+                    logger.debug("Sponsor alignment failed for %s", bill_id, exc_info=True)
 
         # 3a.2 Classify recent roll call votes (embedding-based, zero LLM)
         classified_recent: list[dict] = []
@@ -1871,7 +1879,7 @@ async def run_full_pipeline(
 
         _record_score_snapshots(db)
 
-        logger.info("--- Phase 6: FINALIZE ---")
+        logger.info("--- Phase 7: FINALIZE ---")
         progress.begin("finalize")
 
         llm_stats = get_llm_stats()

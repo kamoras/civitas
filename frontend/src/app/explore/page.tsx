@@ -11,6 +11,9 @@ import {
   type ExploreResult,
   type ExploreStats,
 } from "@/lib/api";
+import { safeHref } from "@/lib/formatting";
+import { chamberColor, chamberBg, chamberLabel } from "@/lib/chamber";
+import TerminalTitlebar from "@/components/TerminalTitlebar";
 
 type ChamberFilter = "all" | "Senate" | "House" | "Executive" | "Judicial" | "Regulatory";
 
@@ -33,29 +36,6 @@ const SUGGESTED_QUERIES = [
   "student loan forgiveness",
   "Supreme Court constitutional rights",
 ];
-
-function chamberColor(chamber: string): string {
-  if (chamber === "Senate") return "text-neon-cyan";
-  if (chamber === "House") return "text-neon-pink";
-  if (chamber === "Executive") return "text-neon-yellow";
-  if (chamber === "Judicial") return "text-purple-400";
-  if (chamber === "Regulatory") return "text-orange-400";
-  return "text-matrix-green/60";
-}
-
-function chamberBg(chamber: string): string {
-  if (chamber === "Senate") return "border-neon-cyan/30 bg-neon-cyan/5";
-  if (chamber === "House") return "border-neon-pink/30 bg-neon-pink/5";
-  if (chamber === "Executive") return "border-neon-yellow/30 bg-neon-yellow/5";
-  if (chamber === "Judicial") return "border-purple-400/30 bg-purple-400/5";
-  if (chamber === "Regulatory") return "border-orange-400/30 bg-orange-400/5";
-  return "border-matrix-green/20 bg-matrix-green/5";
-}
-
-function chamberLabel(chamber: string): string {
-  if (chamber === "Regulatory") return "AGENCY";
-  return chamber?.toUpperCase() || "GOV";
-}
 
 function docTypeLabel(docType: string): string {
   return docType || "Document";
@@ -158,7 +138,7 @@ function ResultCard({
               : `${remaining} day${remaining !== 1 ? "s" : ""} left to comment`}
           </span>
           <a
-            href={result.commentUrl}
+            href={safeHref(result.commentUrl) || "#"}
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
@@ -284,14 +264,7 @@ export default function ExplorePage() {
           {/* Search form */}
           <form onSubmit={handleSubmit} className="mb-6">
             <div className="terminal-window">
-              <div className="terminal-titlebar" aria-hidden="true">
-                <span className="terminal-dot red" />
-                <span className="terminal-dot yellow" />
-                <span className="terminal-dot green" />
-                <span className="ml-3 text-white/40 text-xs font-terminal">
-                  query.sh
-                </span>
-              </div>
+              <TerminalTitlebar title="query.sh" />
               <div className="p-4">
                 <label htmlFor="explore-search" className="sr-only">
                   Search government records
@@ -314,6 +287,8 @@ export default function ExplorePage() {
                   <button
                     type="submit"
                     disabled={loading || !query.trim()}
+                    aria-busy={loading}
+                    aria-label={loading ? "Searching" : "Search"}
                     className="text-[10px] font-pixel text-neon-cyan/70 hover:text-neon-cyan
                                disabled:text-matrix-green/20 transition-colors shrink-0 px-2 py-1
                                border border-neon-cyan/30 hover:border-neon-cyan/60 disabled:border-matrix-green/10
@@ -418,7 +393,7 @@ export default function ExplorePage() {
             <div className="text-center py-8" role="alert">
               <p className="text-neon-pink/70 text-sm">{error}</p>
               <p className="text-matrix-green/50 text-xs mt-2">
-                The explore pipeline runs automatically on startup. Try again in a few minutes.
+                The explore pipeline runs nightly. Try again later or trigger a pipeline run from the admin panel.
               </p>
             </div>
           )}

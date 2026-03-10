@@ -10,6 +10,7 @@ export default function GlobeTab() {
   const [countries, setCountries] = useState<CountryNews[]>([]);
   const [selected, setSelected] = useState<CountryNews | null>(null);
   const [loading, setLoading] = useState(true);
+  // react-globe.gl doesn't export a ref type
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const globeRef = useRef<any>(null);
   const detailRef = useRef<HTMLDivElement>(null);

@@ -159,7 +159,9 @@ class TestIdeology:
         r_scores = [result[s] for s in r_senators]
         d_mean = sum(d_scores) / len(d_scores)
         r_mean = sum(r_scores) / len(r_scores)
-        assert r_mean > d_mean
+        assert abs(r_mean - d_mean) > 0.1, (
+            f"Partisan clusters should be separated: D_mean={d_mean:.4f}, R_mean={r_mean:.4f}"
+        )
 
 
 # ---------- describe position ----------

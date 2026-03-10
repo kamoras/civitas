@@ -166,6 +166,7 @@ def _build_highlights(senator) -> list[str]:
         + score.promise_persistence * SCORE_WEIGHTS["promisePersistence"]
         + score.independent_voting * SCORE_WEIGHTS["independentVoting"]
         + score.funding_diversity * SCORE_WEIGHTS["fundingDiversity"]
+        + score.legislative_effectiveness * SCORE_WEIGHTS["legislativeEffectiveness"]
     )
     if total_score >= 80:
         hints.append((2, (

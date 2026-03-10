@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import TerminalTitlebar from "@/components/TerminalTitlebar";
 import { fetchJustice, fetchJusticeLeaderboard } from "@/lib/api";
 import { calculateJusticeScore, getJusticeLabel, getScoreColor } from "@/lib/corruption";
 import type { Justice, JusticeLeaderboardEntry, JusticeScore } from "@/types/justice";
@@ -117,14 +118,7 @@ function JusticeCard({ justice }: { justice: Justice }) {
 
   return (
     <div className="terminal-window">
-      <div className="terminal-titlebar" aria-hidden="true">
-        <span className="terminal-dot red" />
-        <span className="terminal-dot yellow" />
-        <span className="terminal-dot green" />
-        <span className="ml-3 text-white/40 text-xs font-terminal">
-          justice_{justice.lastName.toLowerCase()}.profile
-        </span>
-      </div>
+      <TerminalTitlebar title={`justice_${justice.lastName.toLowerCase()}.profile`} />
 
       <div className="p-6 space-y-6">
         {/* Header */}
@@ -299,6 +293,7 @@ export default function JusticeClient() {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+  // Mount-only: selectedId excluded to avoid refetching the leaderboard on selection change.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
