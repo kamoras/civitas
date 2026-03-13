@@ -169,113 +169,140 @@ def get_related_policies(
 def compute_promise_vote_alignment(
     promise_text: str,
     votes: list[dict],
+    sponsored_bills: list[dict] | None = None,
     max_related: int = 3,
     relevance_threshold: float = 0.28,
+    bill_relevance_threshold: float = 0.40,
 ) -> dict:
-    """Determine if a senator's votes align with a campaign promise.
+    """Determine if a senator's actions align with a campaign promise.
 
-    Instead of asking an LLM "did they keep this promise?", we:
-    1. Embed the promise text
-    2. Embed each substantive vote's description
-    3. Find the most semantically similar votes
-    4. Use the vote direction (Yea/Nay) + bill stance (pro/anti) to
-       determine alignment deterministically
+    Evidence sources (all embedding-based, deterministic):
+      1. **Votes** (primary): Yea/Nay on semantically related bills,
+         weighted by stance direction. This is the strongest signal
+         because it's a public, recorded commitment.
+      2. **Sponsored bills** (supplementary): legislation the senator
+         introduced that advances the promise. Sponsorship is weaker
+         evidence than a vote (bills may stall, be symbolic, etc.)
+         so it's weighted at 0.5× vote evidence. It can only produce
+         "kept" signals — not sponsoring anything isn't evidence of
+         breaking a promise.
 
     Returns:
         {
             "alignment": "kept" | "broken" | "partial" | "unclear",
             "relatedVotes": [bill_ids],
+            "relatedBills": [bill_ids],
             "confidence": 0.0-1.0,
             "reasoning": "factual description of evidence"
         }
     """
-    if not promise_text or not votes:
-        return {
-            "alignment": "unclear",
-            "relatedVotes": [],
-            "confidence": 0.0,
-            "reasoning": "",
-        }
+    empty = {
+        "alignment": "unclear",
+        "relatedVotes": [],
+        "relatedBills": [],
+        "confidence": 0.0,
+        "reasoning": "",
+    }
+    if not promise_text:
+        return empty
+    if not votes and not sponsored_bills:
+        return empty
 
+    promise_emb = _embed(promise_text[:500])
+
+    # ── Vote evidence ──
     substantive = [
         v for v in votes
         if v.get("vote") in ("Yea", "Nay")
         and v.get("policyArea", "PROCEDURAL") != "PROCEDURAL"
-    ]
-    if not substantive:
+    ] if votes else []
+
+    related_votes: list[str] = []
+    kept_signals = 0.0
+    broken_signals = 0.0
+    reasons: list[str] = []
+
+    if substantive:
+        vote_texts = [
+            f"{v.get('billName', '')} {v.get('description', '')} {v.get('policyArea', '')}"
+            for v in substantive
+        ]
+        vote_embs = _embed_batch(vote_texts)
+
+        if vote_embs.size > 0:
+            similarities = vote_embs @ promise_emb
+            top_indices = np.argsort(similarities)[::-1][:max_related]
+
+            for idx in top_indices:
+                sim = float(similarities[idx])
+                if sim < relevance_threshold:
+                    continue
+
+                vote = substantive[idx]
+                vote_cast = vote["vote"]
+                stance = vote.get("stance", "neutral")
+                related_votes.append(vote["billId"])
+
+                if stance == "pro":
+                    if vote_cast == "Yea":
+                        kept_signals += sim
+                    else:
+                        broken_signals += sim
+                elif stance == "anti":
+                    if vote_cast == "Nay":
+                        kept_signals += sim
+                    else:
+                        broken_signals += sim
+                else:
+                    half_sim = sim * 0.5
+                    if vote_cast == "Yea":
+                        kept_signals += half_sim
+                    else:
+                        broken_signals += half_sim
+
+            for idx in top_indices[:2]:
+                if float(similarities[idx]) < relevance_threshold:
+                    continue
+                v = substantive[idx]
+                reasons.append(
+                    f"Voted {v['vote']} on {v.get('billName', v['billId'])} "
+                    f"({v.get('policyArea', 'N/A')})"
+                )
+
+    # ── Sponsored bill evidence ──
+    BILL_WEIGHT = 0.5
+    related_bills: list[str] = []
+
+    if sponsored_bills:
+        bill_texts = [
+            (b.get("officialTitle") or b.get("title", ""))[:300]
+            for b in sponsored_bills
+            if b.get("title")
+        ]
+        if bill_texts:
+            bill_embs = _embed_batch(bill_texts)
+            if bill_embs.size > 0:
+                bill_sims = bill_embs @ promise_emb
+                top_bill_idx = np.argsort(bill_sims)[::-1][:3]
+
+                for bidx in top_bill_idx:
+                    bsim = float(bill_sims[bidx])
+                    if bsim < bill_relevance_threshold:
+                        continue
+                    bill = sponsored_bills[bidx]
+                    related_bills.append(bill.get("billId", ""))
+                    kept_signals += bsim * BILL_WEIGHT
+                    reasons.append(
+                        f"Sponsored {bill.get('title', bill.get('billId', ''))[:80]}"
+                    )
+
+    if not related_votes and not related_bills:
         return {
             "alignment": "unclear",
             "relatedVotes": [],
+            "relatedBills": [],
             "confidence": 0.0,
-            "reasoning": "No substantive votes found in the legislative record.",
-        }
-
-    promise_emb = _embed(promise_text[:500])
-
-    vote_texts = [
-        f"{v.get('billName', '')} {v.get('description', '')} {v.get('policyArea', '')}"
-        for v in substantive
-    ]
-    vote_embs = _embed_batch(vote_texts)
-
-    if vote_embs.size == 0:
-        return {
-            "alignment": "unclear",
-            "relatedVotes": [],
-            "confidence": 0.0,
-            "reasoning": "",
-        }
-
-    similarities = vote_embs @ promise_emb
-    top_indices = np.argsort(similarities)[::-1][:max_related]
-
-    related_votes = []
-    kept_signals = 0
-    broken_signals = 0
-
-    for idx in top_indices:
-        sim = float(similarities[idx])
-        if sim < relevance_threshold:
-            continue
-
-        vote = substantive[idx]
-        bill_id = vote["billId"]
-        vote_cast = vote["vote"]
-        stance = vote.get("stance", "neutral")
-
-        related_votes.append(bill_id)
-
-        # "pro" stance = bill favors the policy area
-        # "anti" stance = bill opposes/restricts the policy area
-        # Yea on pro-bill = supporting the policy = keeping a promise about it
-        # Nay on pro-bill = opposing the policy = breaking a promise about it
-        if stance == "pro":
-            if vote_cast == "Yea":
-                kept_signals += sim
-            else:
-                broken_signals += sim
-        elif stance == "anti":
-            if vote_cast == "Nay":
-                kept_signals += sim
-            else:
-                broken_signals += sim
-        else:
-            # Neutral stance: most legislation is affirmative in nature (creating
-            # or modifying programs), so Yea is a weak kept signal at half weight.
-            # This avoids discarding relevant votes just because stance
-            # classification was inconclusive.
-            half_sim = sim * 0.5
-            if vote_cast == "Yea":
-                kept_signals += half_sim
-            else:
-                broken_signals += half_sim
-
-    if not related_votes:
-        return {
-            "alignment": "unclear",
-            "relatedVotes": [],
-            "confidence": 0.0,
-            "reasoning": "No votes found with sufficient relevance to this promise.",
+            "reasoning": "No votes or legislation found with sufficient relevance to this promise.",
         }
 
     total_signal = kept_signals + broken_signals
@@ -295,20 +322,10 @@ def compute_promise_vote_alignment(
         alignment = "unclear"
         confidence = 0.0
 
-    # Build factual reasoning citing specific votes
-    reasons = []
-    for idx in top_indices[:2]:
-        if float(similarities[idx]) < relevance_threshold:
-            continue
-        v = substantive[idx]
-        reasons.append(
-            f"Voted {v['vote']} on {v.get('billName', v['billId'])} "
-            f"({v.get('policyArea', 'N/A')})"
-        )
-
     return {
         "alignment": alignment,
         "relatedVotes": related_votes,
+        "relatedBills": related_bills,
         "confidence": round(confidence, 2),
         "reasoning": ". ".join(reasons) + "." if reasons else "",
     }

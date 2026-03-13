@@ -132,6 +132,7 @@ class CampaignPromiseSchema(CamelModel):
     category: str
     alignment: Literal["kept", "broken", "partial", "unclear"] = "unclear"
     related_votes: list[str] = []
+    related_bills: list[str] = []
     analysis: str = ""
     party_alignment: Literal["R", "D", "bipartisan"] | None = None
 

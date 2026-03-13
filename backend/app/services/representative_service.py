@@ -156,6 +156,7 @@ def build_rep_response(rep: Representative, _db: Session = None) -> dict:
                 "category": cp.category,
                 "alignment": cp.alignment,
                 "relatedVotes": json.loads(cp.related_votes) if cp.related_votes else [],
+                "relatedBills": json.loads(cp.related_bills) if cp.related_bills else [],
                 "analysis": cp.analysis,
                 "partyAlignment": cp.party_alignment,
             }
@@ -477,13 +478,37 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
             category=cp.get("category") or "other",
             alignment=cp.get("alignment") or "unclear",
             related_votes=json.dumps(cp.get("relatedVotes") or []),
+            related_bills=json.dumps(cp.get("relatedBills") or []),
             analysis=cp.get("analysis") or "",
             party_alignment=cp.get("partyAlignment"),
+        ))
+
+    db.query(RepSponsoredBill).filter(RepSponsoredBill.representative_id == rid).delete()
+    for sp_data in rep_data.get("sponsoredBills", []):
+        db.add(RepSponsoredBill(
+            representative_id=rid,
+            bill_id=sp_data.get("billId") or "",
+            title=sp_data.get("title") or "",
+            introduced_date=sp_data.get("introducedDate") or "",
+            latest_action=sp_data.get("latestAction") or "",
+            latest_action_date=sp_data.get("latestActionDate") or "",
+            policy_area=sp_data.get("policyArea") or "",
+            policy_areas=json.dumps(sp_data.get("policyAreas") or []),
+            party_leaning=sp_data.get("partyLeaning"),
+            congress=sp_data.get("congress") or 0,
+            bill_type=sp_data.get("billType") or "",
+            is_law=sp_data.get("isLaw") or False,
         ))
 
     partisan_depth_data = rep_data.get("partisanDepth")
     if partisan_depth_data:
         existing.partisan_depth = json.dumps(partisan_depth_data)
+
+    ls = rep_data.get("leadershipScore")
+    existing.leadership_score = ls if ls is not None else existing.leadership_score
+    ids = rep_data.get("ideologyScore")
+    existing.ideology_score = ids if ids is not None else existing.ideology_score
+    existing.sponsorship_description = rep_data.get("sponsorshipDescription") or existing.sponsorship_description
 
     db.commit()
     db.refresh(existing)

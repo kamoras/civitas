@@ -174,7 +174,7 @@ def precompute_senator_analysis(item: dict) -> dict:
 
     platform_topics: list[str] = []
     if platform_text and not _ERROR_PAGE_SIGS.search(platform_text):
-        platform_topics = _extract_platform_topics(platform_text, max_topics=4)
+        platform_topics = _extract_platform_topics(platform_text, max_topics=8)
 
     return {
         "lobbyingMatches": lobbying_matches,
@@ -189,7 +189,7 @@ async def analyze_senator_batch(
     db_session: Any | None = None,
     precomputed: dict | None = None,
 ) -> list[dict]:
-    """Analyze senators: embedding classification + LLM narrative summary.
+    """Analyze senators: embedding classification + LLM narrative + promise extraction.
 
     When precomputed data is provided (from precompute_senator_analysis),
     skips the embedding work and goes straight to the LLM narrative call.
@@ -200,8 +200,14 @@ async def analyze_senator_batch(
       - Key vote selection via donor↔policy similarity
       - Promise alignment via promise↔vote similarity
 
-    LLM (narrative only):
+    LLM:
       - Voting summary, key vote reasoning, PAC narrative, platform summary
+      - Campaign promise extraction from platform text (comprehension task)
+
+    After the LLM returns, extracted promises are aligned against the
+    voting record AND sponsored bills using embeddings (deterministic).
+    If the LLM produced promises, those are primary. The Librarian's
+    heuristic extraction from platform text serves as a fallback.
     """
     results: list[dict] = []
 
@@ -218,12 +224,12 @@ async def analyze_senator_batch(
         if precomputed:
             lobbying_matches = precomputed["lobbyingMatches"]
             key_vote_ids = precomputed["keyVoteIds"]
-            computed_promises = precomputed["computedPromises"]
+            fallback_promises = precomputed["computedPromises"]
             platform_topics = precomputed.get("platformTopics", [])
         else:
             lobbying_matches = detect_lobbying_matches(donors, all_votes) if has_data else []
             key_vote_ids = select_key_votes(all_votes, donors) if has_data else []
-            computed_promises = _compute_promise_alignments(
+            fallback_promises = _compute_promise_alignments(
                 platform_text, all_votes, sponsored_bills=sponsored_bills,
             )
             platform_topics = []
@@ -235,14 +241,24 @@ async def analyze_senator_batch(
                 all_votes=all_votes,
                 key_vote_ids=key_vote_ids,
                 platform_text=platform_text,
-                computed_promises=computed_promises,
+                computed_promises=fallback_promises,
                 db_session=db_session,
                 platform_topics=platform_topics,
             )
         else:
             llm_result = {}
 
-        final_promises = computed_promises if computed_promises else llm_result.get("campaignPromises", [])
+        # LLM-extracted promises are primary (higher quality, actual
+        # campaign commitments from platform text). Heuristic extraction
+        # from the Librarian is a fallback when the LLM doesn't produce any.
+        llm_extracted = llm_result.get("extractedPromises", [])
+        if llm_extracted:
+            final_promises = _align_llm_promises(
+                llm_extracted, all_votes,
+                sponsored_bills=sponsored_bills,
+            )
+        else:
+            final_promises = fallback_promises
 
         results.append({
             "senatorId": senator["id"],
@@ -259,76 +275,17 @@ async def analyze_senator_batch(
     return results
 
 
-def _positions_from_sponsored_bills(
-    sponsored_bills: list[dict],
-    all_votes: list[dict],
-    max_positions: int = 6,
-) -> list[dict]:
-    """Derive policy positions from bills the senator has sponsored.
-
-    Sponsored legislation is the most reliable signal of a senator's
-    priorities — they invested political capital to introduce these bills.
-    We match each bill against the voting record to see whether peers
-    supported the same policy area.
-    """
-    if not sponsored_bills:
-        return []
-
-    valid_categories = set(PLATFORM_CATEGORIES.keys())
-    from app.pipeline.analyze.party_platform import classify_party_alignment
-
-    # Filter to substantive bills (skip resolutions naming buildings, etc.)
-    substantive = [
-        b for b in sponsored_bills
-        if b.get("title")
-        and (b.get("policyArea") or "").upper() != "PROCEDURAL"
-        and len(b.get("title", "")) > 15
-    ]
-    if not substantive:
-        return []
-
-    # Deduplicate by policy area — take the most recent bill per area
-    seen_areas: dict[str, dict] = {}
-    for bill in substantive:
-        area = bill.get("policyArea", "OTHER")
-        if area not in seen_areas:
-            seen_areas[area] = bill
-
-    positions = []
-    for bill in list(seen_areas.values())[:max_positions]:
-        title = bill["title"]
-        topic_text = title
-
-        result = compute_promise_vote_alignment(topic_text, all_votes)
-        category = _classify_promise_category(topic_text, valid_categories)
-        party_align = classify_party_alignment(
-            topic_text[:300], category.upper(), "pro",
-        )
-
-        positions.append({
-            "promiseText": title[:250],
-            "category": category,
-            "alignment": result["alignment"],
-            "relatedVotes": result["relatedVotes"],
-            "analysis": result["reasoning"],
-            "confidence": result["confidence"],
-            "partyAlignment": party_align,
-        })
-
-    return positions
-
-
 def _positions_from_platform_text(
     platform_text: str,
     all_votes: list[dict],
-    existing_topics: set[str],
-    max_positions: int = 4,
+    sponsored_bills: list[dict] | None = None,
+    max_positions: int = 8,
 ) -> list[dict]:
-    """Extract supplementary positions from scraped platform text.
+    """Extract campaign promises from scraped platform text (heuristic fallback).
 
-    Only used when the text passes strict quality checks.  Topics that
-    are semantically redundant with already-found positions (from
-    sponsored bills) are skipped.
+    Used when the LLM does not return extracted promises. Splits platform
+    text into topic lines and evaluates each against the voting record
+    and sponsored legislation.
     """
     if not platform_text:
         return []
@@ -341,7 +298,7 @@ def _positions_from_platform_text(
         if len(platform_text) < 200:
             return []
 
-    topics = _extract_platform_topics(platform_text, max_topics=max_positions + 2)
+    topics = _extract_platform_topics(platform_text, max_topics=max_positions + 4)
     if not topics:
         return []
 
@@ -349,22 +306,26 @@ def _positions_from_platform_text(
     from app.pipeline.analyze.party_platform import classify_party_alignment
     from app.pipeline.analyze.policy_alignment import _embed, _embed_batch
 
-    # Deduplicate against existing positions from sponsored bills
-    if existing_topics:
-        existing_embs = _embed_batch(list(existing_topics))
-        filtered = []
-        for t in topics:
-            t_emb = _embed(t[:200])
-            if existing_embs.size > 0:
-                sims = existing_embs @ t_emb
-                if float(sims.max()) > 0.65:
-                    continue
-            filtered.append(t)
-        topics = filtered
+    import numpy as np
+    DEDUP_THRESHOLD = 0.70
+    selected_topics: list[str] = []
+    selected_embs: list[np.ndarray] = []
+    for t in topics:
+        t_emb = _embed(t[:200])
+        if selected_embs:
+            sims = np.array(selected_embs) @ t_emb
+            if float(sims.max()) > DEDUP_THRESHOLD:
+                continue
+        selected_topics.append(t)
+        selected_embs.append(t_emb)
+        if len(selected_topics) >= max_positions:
+            break
 
     promises = []
-    for topic in topics[:max_positions]:
-        result = compute_promise_vote_alignment(topic, all_votes)
+    for topic in selected_topics:
+        result = compute_promise_vote_alignment(
+            topic, all_votes, sponsored_bills=sponsored_bills,
+        )
         category = _classify_promise_category(topic, valid_categories)
         party_align = classify_party_alignment(
             topic[:300], category.upper(), "pro",
@@ -374,6 +335,7 @@ def _positions_from_platform_text(
             "category": category,
             "alignment": result["alignment"],
             "relatedVotes": result["relatedVotes"],
+            "relatedBills": result.get("relatedBills", []),
             "analysis": result["reasoning"],
             "confidence": result["confidence"],
             "partyAlignment": party_align,
@@ -382,30 +344,92 @@ def _positions_from_platform_text(
     return promises
 
 
+def _align_llm_promises(
+    extracted_promises: list[str],
+    all_votes: list[dict],
+    sponsored_bills: list[dict] | None = None,
+    existing_positions: list[dict] | None = None,
+    max_positions: int = 8,
+) -> list[dict]:
+    """Align LLM-extracted campaign promises against votes and legislation.
+
+    The LLM extracts specific policy commitments from platform text
+    (a comprehension/extraction task). This function then evaluates
+    each promise against the senator's voting record AND sponsored
+    bills using deterministic embedding-based alignment.
+
+    Deduplicates against existing positions to avoid double-counting
+    the same policy topic.
+    """
+    if not extracted_promises:
+        return []
+    if not all_votes and not sponsored_bills:
+        return []
+
+    from app.pipeline.analyze.policy_alignment import _embed, _embed_batch
+    from app.pipeline.analyze.party_platform import classify_party_alignment
+
+    valid_categories = set(PLATFORM_CATEGORIES.keys())
+
+    existing_texts = [p["promiseText"] for p in (existing_positions or [])]
+    existing_embs = _embed_batch(existing_texts) if existing_texts else None
+
+    import numpy as np
+    DEDUP_THRESHOLD = 0.65
+
+    positions = []
+    for promise_text in extracted_promises[:max_positions + 4]:
+        if len(promise_text.strip()) < 12:
+            continue
+
+        p_emb = _embed(promise_text[:300])
+        if existing_embs is not None and existing_embs.size > 0:
+            sims = existing_embs @ p_emb
+            if float(sims.max()) > DEDUP_THRESHOLD:
+                continue
+
+        result = compute_promise_vote_alignment(
+            promise_text, all_votes, sponsored_bills=sponsored_bills,
+        )
+        category = _classify_promise_category(promise_text, valid_categories)
+        party_align = classify_party_alignment(
+            promise_text[:300], category.upper(), "pro",
+        )
+
+        positions.append({
+            "promiseText": promise_text[:250],
+            "category": category,
+            "alignment": result["alignment"],
+            "relatedVotes": result["relatedVotes"],
+            "relatedBills": result.get("relatedBills", []),
+            "analysis": result["reasoning"],
+            "confidence": result["confidence"],
+            "partyAlignment": party_align,
+        })
+
+        if len(positions) >= max_positions:
+            break
+
+    return positions
+
+
 def _compute_promise_alignments(
     platform_text: str,
     all_votes: list[dict],
     sponsored_bills: list[dict] | None = None,
 ) -> list[dict]:
-    """Compute promise-vote alignment deterministically using embeddings.
+    """Extract promises from platform text and evaluate against actions.
 
-    Primary source: sponsored bills (structured, reliable).
-    Supplementary: scraped platform text (when quality passes filters).
+    Promises come from the senator's stated platform — what they said
+    they would do. Evaluation checks whether their voting record and
+    sponsored legislation align with those commitments.
 
-    For each position, finds semantically related votes and determines
-    alignment based on vote direction — no LLM opinion needed.
+    This is the heuristic fallback used by the Librarian thread. The
+    primary path uses LLM-extracted promises (in the Analyst thread).
     """
-    positions = _positions_from_sponsored_bills(
-        sponsored_bills or [], all_votes,
+    return _positions_from_platform_text(
+        platform_text, all_votes, sponsored_bills=sponsored_bills,
     )
-
-    existing_topics = {p["promiseText"] for p in positions}
-    platform_positions = _positions_from_platform_text(
-        platform_text, all_votes, existing_topics,
-    )
-    positions.extend(platform_positions)
-
-    return positions
 
 
 def _classify_promise_category(text: str, valid_categories: set[str]) -> str:
@@ -484,7 +508,11 @@ async def _narrative_analysis(
         for d in pac_donors[:5]
     )
 
-    # Build the narrative-only prompt
+    has_platform = bool(
+        platform_topics
+        or (platform_text and not _ERROR_PAGE_SIGS.search(platform_text))
+    )
+
     prompt = (
         f"Senator {senator['name']} ({senator['party']}-{senator['state']}).\n"
         f"DONORS: {donor_lines}\n"
@@ -493,9 +521,9 @@ async def _narrative_analysis(
     if pac_lines:
         prompt += f"PACs:\n{pac_lines}\n"
     if platform_topics:
-        prompt += "\nPLATFORM PRIORITIES:\n" + "\n".join(f"- {t}" for t in platform_topics[:4]) + "\n"
+        prompt += "\nPLATFORM PRIORITIES:\n" + "\n".join(f"- {t}" for t in platform_topics[:6]) + "\n"
     elif platform_text and not _ERROR_PAGE_SIGS.search(platform_text):
-        prompt += f"\nPLATFORM:\n{platform_text[:800]}\n"
+        prompt += f"\nPLATFORM:\n{platform_text[:1200]}\n"
 
     key_ids_str = ", ".join(f'"{k}"' for k in key_vote_ids[:5])
     prompt += (
@@ -506,12 +534,18 @@ async def _narrative_analysis(
         '"pacDetails":[{{"name":"PAC name","pacSponsor":"parent org or corporation behind the PAC",'
         '"pacIndustry":"industry","pacAnalysis":"1 sentence: what policy agenda does this PAC advance?"}}]'
     )
-    if platform_topics or (platform_text and not _ERROR_PAGE_SIGS.search(platform_text)):
+    if has_platform:
         prompt += ',"platformSummary":"1 sentence summary of platform"'
+        prompt += (
+            ',"extractedPromises":["<extract 4-8 specific policy commitments from the '
+            'PLATFORM section. Each should be a concrete position, e.g. '
+            "'Expand Medicare coverage to all Americans' not 'Healthcare'. "
+            "Only include promises explicitly stated in the platform text.>]"
+        )
     prompt += "}"
 
     result = call_llm(
-        prompt_version="senator-narrative-v11",
+        prompt_version="senator-narrative-v12",
         system_prompt=(
             "You summarize U.S. senator data into short JSON fields. Rules:\n"
             "1. Use ONLY the data provided. NEVER invent facts.\n"
@@ -519,9 +553,12 @@ async def _narrative_analysis(
             "Mention specific policy areas and whether they vote with/against party.\n"
             "3. platformSummary: 1 sentence listing their top policy priorities.\n"
             "4. pacAnalysis: what industry/cause each PAC represents.\n"
-            "5. Use the senator's actual name. Never say 'Against Party' or 'member of party X' — "
+            "5. extractedPromises: extract SPECIFIC policy commitments from the platform text. "
+            "Each promise should be a concrete, verifiable position (not just a topic name). "
+            "Use the senator's own framing from the platform text.\n"
+            "6. Use the senator's actual name. Never say 'Against Party' or 'member of party X' — "
             "say 'voted against their party' or 'broke with Democrats/Republicans'.\n"
-            "6. Return ONLY valid JSON, no markdown."
+            "7. Return ONLY valid JSON, no markdown."
         ),
         user_prompt=prompt,
         cache_key={
@@ -530,10 +567,10 @@ async def _narrative_analysis(
             "voteCount": len(substantive),
             "keyIds": sorted(key_vote_ids),
             "platformLen": len(platform_text),
-            "v": 11,
+            "v": 12,
         },
         db_session=db_session,
-        max_tokens=1200,
+        max_tokens=1500,
         num_ctx=4096,
     )
 
@@ -565,12 +602,21 @@ async def _narrative_analysis(
             "pacAnalysis": analysis,
         })
 
+    extracted_promises: list[str] = []
+    raw_promises = result.get("extractedPromises")
+    if isinstance(raw_promises, list):
+        for p in raw_promises:
+            text = str(p).strip() if p else ""
+            if text and len(text) > 10 and not text.startswith("<"):
+                extracted_promises.append(text[:250])
+
     return {
         "reasoning": reasoning,
         "votingSummary": str(result.get("votingSummary", ""))[:500],
         "pacDetails": pac_details,
         "platformSummary": str(result.get("platformSummary", ""))[:500],
-        "campaignPromises": [],  # handled by embedding engine, not LLM
+        "extractedPromises": extracted_promises,
+        "campaignPromises": [],
     }
 
 

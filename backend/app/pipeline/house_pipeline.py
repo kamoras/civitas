@@ -34,7 +34,6 @@ from app.pipeline.fetch.congress import (
     fetch_member_sponsored,
     fetch_recent_house_roll_calls,
     fetch_representatives,
-    fetch_senator_platform_text,
     fetch_significant_bills,
 )
 from app.pipeline.fetch.fec import (
@@ -209,6 +208,116 @@ async def run_house_pipeline() -> dict:
                     if split and not bill.get("partyLeaning"):
                         bill["partyLeaning"] = split
 
+            # ── PHASE 4b: SPONSORSHIP ANALYSIS (PageRank + SVD) ──
+            logger.info("--- House Phase 4b: SPONSORSHIP ANALYSIS ---")
+
+            from app.pipeline.analyze.sponsorship_analysis import (
+                compute_leadership_scores,
+                compute_ideology_scores,
+                describe_senator_position,
+            )
+
+            # Fetch cosponsors for significant bills to build the
+            # rep-rep cosponsorship graph. This reuses bills already
+            # fetched in Phase 3, keeping API calls manageable (~40).
+            cosponsors_map: dict[str, list[dict]] = {}
+            all_bills_for_analysis: list[dict] = []
+
+            for b in bills_data:
+                bill_key = f"{b['type'].upper()}.{b['number']}"
+                cosponsors = await fetch_bill_cosponsors(
+                    client, db, b["congress"], b["type"], b["number"],
+                )
+                if cosponsors:
+                    cosponsors_map[bill_key] = cosponsors
+                all_bills_for_analysis.append({
+                    "billId": bill_key,
+                    "congress": b["congress"],
+                    "sponsorBioguide": b.get("sponsorBioguide", ""),
+                    "sponsorParty": b.get("sponsorParty", ""),
+                })
+
+            # Enrich with per-rep sponsored bills (up to 5 per rep,
+            # recent Congress only) to make the cosponsorship matrix denser.
+            min_congress = settings.CURRENT_CONGRESS - 1
+            sponsored_for_cosponsor: list[dict] = []
+            for r in reps:
+                bio_id = r.get("bioguideId", "")
+                party = r.get("party", "")
+                if not bio_id:
+                    continue
+                sponsored = await fetch_member_sponsored(client, db, bio_id)
+                sp_list = []
+                for sp in (sponsored or []):
+                    if sp.get("congress", 0) >= min_congress:
+                        sp_type = (sp.get("type") or "hr").upper()
+                        sp_num = sp.get("number", "")
+                        sp_key = f"{sp_type}.{sp_num}"
+                        sp_list.append({
+                            "billId": sp_key,
+                            "title": sp.get("title", ""),
+                            "introducedDate": sp.get("introducedDate", ""),
+                            "latestAction": (sp.get("latestAction") or {}).get("text", ""),
+                            "latestActionDate": (sp.get("latestAction") or {}).get("actionDate", ""),
+                            "policyArea": "",
+                            "policyAreas": [],
+                            "partyLeaning": None,
+                            "congress": sp.get("congress", 0),
+                            "billType": sp.get("type", ""),
+                            "isLaw": "became public law" in (
+                                (sp.get("latestAction") or {}).get("text", "")
+                            ).lower(),
+                        })
+                r["sponsoredBills"] = sp_list[:50]
+                for sp_data in sp_list[:5]:
+                    sp_bill_id = sp_data["billId"]
+                    if sp_bill_id in cosponsors_map:
+                        continue
+                    parts = sp_bill_id.split(".")
+                    if len(parts) == 2:
+                        cosponsors = await fetch_bill_cosponsors(
+                            client, db,
+                            sp_data.get("congress", settings.CURRENT_CONGRESS),
+                            parts[0].lower(),
+                            int(parts[1]),
+                        )
+                        if cosponsors:
+                            cosponsors_map[sp_bill_id] = cosponsors
+                    sponsored_for_cosponsor.append({
+                        "billId": sp_bill_id,
+                        "congress": sp_data.get("congress", settings.CURRENT_CONGRESS),
+                        "sponsorBioguide": bio_id,
+                        "sponsorParty": party,
+                    })
+
+            all_bills_for_analysis.extend(sponsored_for_cosponsor)
+            total_cosponsors = sum(len(v) for v in cosponsors_map.values())
+            logger.info(
+                "Cosponsorship data: %d bills with cosponsors (%d total cosponsorships)",
+                len(cosponsors_map), total_cosponsors,
+            )
+
+            rep_bio_ids = {
+                r.get("bioguideId", "")
+                for r in reps
+                if r.get("bioguideId")
+            }
+            rep_party_map = {
+                r.get("bioguideId", ""): r.get("party", "")
+                for r in reps
+                if r.get("bioguideId")
+            }
+            leadership_scores = compute_leadership_scores(
+                all_bills_for_analysis, cosponsors_map, rep_bio_ids, rep_party_map,
+            )
+            ideology_scores = compute_ideology_scores(
+                all_bills_for_analysis, cosponsors_map, rep_bio_ids, rep_party_map,
+            )
+            logger.info(
+                "Sponsorship analysis: %d leadership scores, %d ideology scores",
+                len(leadership_scores), len(ideology_scores),
+            )
+
             # ── PHASE 5: FEC DATA + SCORING ──
             logger.info("--- House Phase 5: FEC DATA + SCORING ---")
 
@@ -342,24 +451,22 @@ async def run_house_pipeline() -> dict:
                             "industryBreakdown": [],
                         }
 
-                    # Sponsored bills
-                    sponsored = await fetch_member_sponsored(client, db, bio_id)
-                    rep["sponsoredBills"] = [
-                        {
-                            "billId": f"{(sp.get('type') or 'hr').upper()}.{sp.get('number', '')}",
-                            "title": sp.get("title", ""),
-                            "introducedDate": sp.get("introducedDate", ""),
-                            "latestAction": (sp.get("latestAction") or {}).get("text", ""),
-                            "latestActionDate": (sp.get("latestAction") or {}).get("actionDate", ""),
-                            "policyArea": "",
-                            "policyAreas": [],
-                            "partyLeaning": None,
-                            "congress": sp.get("congress", 0),
-                            "billType": sp.get("type", ""),
-                            "isLaw": "became public law" in ((sp.get("latestAction") or {}).get("text", "")).lower(),
-                        }
-                        for sp in (sponsored or [])[:50]
-                    ]
+                    # Sponsored bills are already populated in Phase 4b.
+                    # If not (e.g., bioguideId was missing), provide empty list.
+                    if "sponsoredBills" not in rep:
+                        rep["sponsoredBills"] = []
+
+                    # Set leadership/ideology from sponsorship analysis
+                    l_score = leadership_scores.get(bio_id)
+                    i_score = ideology_scores.get(bio_id)
+                    rep["leadershipScore"] = round(l_score, 4) if l_score is not None else None
+                    rep["ideologyScore"] = round(i_score, 4) if i_score is not None else None
+                    if l_score is not None and i_score is not None:
+                        rep["sponsorshipDescription"] = describe_senator_position(
+                            rep_name, rep.get("party", "I"),
+                            l_score, i_score, rep_bio_ids,
+                            leadership_scores, ideology_scores, rep_party_map,
+                        )
 
                     # Calculate scores
                     scores = calculate_scores(rep)

@@ -58,7 +58,8 @@ _POLICY_PROTOTYPES = [
 ]
 
 POLICY_RELEVANCE_THRESHOLD = 0.15
-CLUSTER_SIMILARITY_THRESHOLD = 0.65
+CLUSTER_TITLE_THRESHOLD = 0.45
+CLUSTER_CENTROID_MERGE_THRESHOLD = 0.40
 MAX_ISSUES = 4
 MIN_ARTICLES_PER_CLUSTER = 1
 
@@ -314,34 +315,29 @@ def _filter_policy_relevant(
     return relevant
 
 
-def _cluster_articles(
-    items: list[tuple[NewsArticle, np.ndarray]],
-) -> list[list[NewsArticle]]:
-    """Group articles about the same topic using greedy cosine clustering."""
-    if not items:
-        return []
-
+def _agglomerative_cluster(
+    sim_matrix: np.ndarray,
+    threshold: float,
+) -> list[list[int]]:
+    """Run greedy agglomerative clustering on a precomputed similarity matrix."""
+    n = sim_matrix.shape[0]
     clusters: list[list[int]] = []
+    cluster_map: dict[int, int] = {}
     assigned: set[int] = set()
 
-    embeddings = np.array([emb for _, emb in items])
-    sim_matrix = embeddings @ embeddings.T
+    pairs = []
+    for i in range(n):
+        for j in range(i + 1, n):
+            pairs.append((float(sim_matrix[i, j]), i, j))
+    pairs.sort(reverse=True)
 
-    indices_by_score = []
-    for i in range(len(items)):
-        for j in range(i + 1, len(items)):
-            indices_by_score.append((sim_matrix[i, j], i, j))
-    indices_by_score.sort(reverse=True)
-
-    cluster_map: dict[int, int] = {}
-    for score, i, j in indices_by_score:
-        if score < CLUSTER_SIMILARITY_THRESHOLD:
+    for score, i, j in pairs:
+        if score < threshold:
             break
         ci = cluster_map.get(i)
         cj = cluster_map.get(j)
         if ci is not None and cj is not None:
             if ci != cj:
-                # Merge smaller into larger
                 src, dst = (cj, ci) if len(clusters[ci]) >= len(clusters[cj]) else (ci, cj)
                 for idx in clusters[src]:
                     cluster_map[idx] = dst
@@ -362,17 +358,76 @@ def _cluster_articles(
             cluster_map[j] = new_id
             assigned.update([i, j])
 
-    for i in range(len(items)):
+    for i in range(n):
         if i not in assigned:
             clusters.append([i])
 
+    return [c for c in clusters if c]
+
+
+def _cluster_articles(
+    items: list[tuple[NewsArticle, np.ndarray]],
+) -> list[list[NewsArticle]]:
+    """Group articles about the same civic issue using two-pass clustering.
+
+    News outlets cover the same issue with very different framing —
+    "Iran missiles hit Israel", "Oil prices surge from Iran conflict",
+    and "Rising gas prices imperil Republican majority" are all facets
+    of one civic issue. A single-pass approach at a conservative
+    threshold treats them as separate stories.
+
+    Pass 1 — title-only embeddings at CLUSTER_TITLE_THRESHOLD:
+        Re-embeds just the headline (stripping summary noise) so articles
+        sharing the same event/subject merge even if their angle differs.
+
+    Pass 2 — centroid merge at CLUSTER_CENTROID_MERGE_THRESHOLD:
+        Computes each cluster's centroid and merges clusters that are
+        still close enough to be the same broad topic. This catches
+        different-angle coverage (military vs economic vs political)
+        that may not share enough title keywords to merge in pass 1.
+    """
+    if not items:
+        return []
+
+    # Pass 1: cluster on title-only embeddings (less source-specific noise)
+    titles = [a.title for a, _ in items]
+    title_embeddings = _embed_texts(titles)
+    title_sim = title_embeddings @ title_embeddings.T
+
+    pass1 = _agglomerative_cluster(title_sim, CLUSTER_TITLE_THRESHOLD)
+    logger.info(
+        "Clustering pass 1 (titles, threshold=%.2f): %d articles → %d clusters",
+        CLUSTER_TITLE_THRESHOLD, len(items), len(pass1),
+    )
+
+    # Pass 2: merge clusters whose centroids are close
+    if len(pass1) > 1:
+        centroids = np.zeros((len(pass1), title_embeddings.shape[1]))
+        for ci, indices in enumerate(pass1):
+            centroid = title_embeddings[indices].mean(axis=0)
+            norm = np.linalg.norm(centroid)
+            centroids[ci] = centroid / norm if norm > 0 else centroid
+
+        centroid_sim = centroids @ centroids.T
+        merge_groups = _agglomerative_cluster(centroid_sim, CLUSTER_CENTROID_MERGE_THRESHOLD)
+
+        merged: list[list[int]] = []
+        for group in merge_groups:
+            combined: list[int] = []
+            for ci in group:
+                combined.extend(pass1[ci])
+            merged.append(combined)
+    else:
+        merged = pass1
+
     result: list[list[NewsArticle]] = []
-    for cluster_indices in clusters:
-        if not cluster_indices:
-            continue
+    for cluster_indices in merged:
         result.append([items[idx][0] for idx in cluster_indices])
 
-    logger.info("Clustered %d articles into %d topic groups", len(items), len(result))
+    logger.info(
+        "Clustering pass 2 (centroids, threshold=%.2f): %d → %d clusters",
+        CLUSTER_CENTROID_MERGE_THRESHOLD, len(pass1), len(result),
+    )
     return result
 
 
@@ -453,6 +508,62 @@ def _rank_clusters(
         )
 
     return [clusters[i] for i in ranked_indices]
+
+
+def _deduplicate_top_clusters(
+    ranked_clusters: list[list[NewsArticle]],
+    max_issues: int,
+) -> list[list[NewsArticle]]:
+    """Select top clusters ensuring no two cover the same topic.
+
+    Greedily picks the highest-ranked cluster, then skips any subsequent
+    cluster whose centroid is too similar to an already-selected one.
+    With two-pass clustering, most merging happens earlier; this is a
+    final safety net before LLM analysis.
+
+    Remaining duplicates that slip through are merged into the earlier
+    selected cluster rather than discarded, so their articles contribute
+    to the LLM prompt for that issue.
+    """
+    if len(ranked_clusters) <= 1:
+        return ranked_clusters[:max_issues]
+
+    DEDUP_THRESHOLD = 0.50
+
+    cluster_texts = [
+        " ".join(a.title for a in cluster[:5])
+        for cluster in ranked_clusters
+    ]
+    embeddings = _embed_texts(cluster_texts)
+
+    selected: list[int] = []
+    for i in range(len(ranked_clusters)):
+        if len(selected) >= max_issues:
+            break
+
+        merged_into = None
+        for j in selected:
+            sim = float(embeddings[i] @ embeddings[j])
+            if sim >= DEDUP_THRESHOLD:
+                merged_into = j
+                break
+
+        if merged_into is not None:
+            ranked_clusters[merged_into].extend(ranked_clusters[i])
+            logger.info(
+                "Merged cluster '%s...' into '%s...' (sim=%.3f)",
+                ranked_clusters[i][0].title[:40],
+                ranked_clusters[merged_into][0].title[:40],
+                float(embeddings[i] @ embeddings[merged_into]),
+            )
+        else:
+            selected.append(i)
+
+    logger.info(
+        "Cluster dedup: selected %d of %d ranked clusters",
+        len(selected), len(ranked_clusters),
+    )
+    return [ranked_clusters[i] for i in selected]
 
 
 def _build_llm_prompt(cluster: list[NewsArticle]) -> str:
@@ -1220,6 +1331,210 @@ def _darken(hex_color: str, darkness: float = 0.12) -> str:
         return "#0a0a0f"
 
 
+_PERIOD_REVIEW_SYSTEM = (
+    "You are a nonpartisan civic analyst. Summarize the period's top civic issues "
+    "factually and briefly. Never advocate for any position."
+)
+
+_PERIOD_REVIEW_PROMPT = """\
+Summarize the top U.S. civic issues from {label}.
+
+Top stories from this period:
+{entries_text}
+
+Produce a JSON object:
+{{
+  "summary": "2-3 sentences summarizing the dominant civic themes and why they mattered.",
+  "topAreas": ["area1", "area2", "area3"]
+}}
+Use only information from the stories above. Be factual and neutral."""
+
+
+def _generate_period_summary(label: str, entries: list, cache_key: dict, db: "Session") -> dict:
+    """LLM-generate a summary for a week/month/year period."""
+    from app.pipeline.analyze.ollama_client import call_llm, extract_json
+
+    entries_text = "\n".join(
+        f"- [{e.date}] {e.title}: {e.summary[:120]}"
+        for e in entries[:30]
+    )
+    user_prompt = _PERIOD_REVIEW_PROMPT.format(label=label, entries_text=entries_text)
+
+    result = call_llm(
+        prompt_version="period-review-v1",
+        system_prompt=_PERIOD_REVIEW_SYSTEM,
+        user_prompt=user_prompt,
+        cache_key=cache_key,
+        db_session=db,
+        max_tokens=400,
+        num_ctx=2048,
+    )
+    if isinstance(result, str):
+        result = extract_json(result)
+    if not isinstance(result, dict):
+        return {"summary": "", "topAreas": []}
+    return {
+        "summary": str(result.get("summary", "")),
+        "topAreas": [str(a) for a in result.get("topAreas", [])[:5]],
+    }
+
+
+def generate_period_summaries(today_str: str, db: "Session") -> None:
+    """Generate missing week/month/year summaries for all completed periods.
+
+    Called after each action center refresh. Generates at most a handful of
+    LLM calls (one per newly-completed period) so it does not add much time.
+    """
+    import json as _json
+    from datetime import timedelta
+    from app.models import WeekSummary, MonthSummary, YearSummary, TimelineEntry
+
+    today = datetime.strptime(today_str, "%Y-%m-%d").date()
+    current_year = today.year
+    current_month = today.month
+
+    # ISO week containing today (week starts Monday)
+    current_week_monday = today - timedelta(days=today.weekday())
+    current_week_num = today.isocalendar()[1]
+
+    # --- Week summaries ---
+    # For each distinct ISO week in the DB that has ended (Sunday < today), ensure a WeekSummary exists
+    entries_this_year = (
+        db.query(TimelineEntry)
+        .filter(TimelineEntry.date >= f"{current_year}-01-01",
+                TimelineEntry.date <= today_str)
+        .order_by(TimelineEntry.date)
+        .all()
+    )
+
+    weeks: dict[int, list] = {}
+    for e in entries_this_year:
+        d = datetime.strptime(e.date, "%Y-%m-%d").date()
+        wnum = d.isocalendar()[1]
+        weeks.setdefault(wnum, []).append(e)
+
+    for wnum, week_entries in weeks.items():
+        if wnum == current_week_num:
+            continue  # current week is not complete yet
+        # Compute Monday/Sunday for this week
+        first_entry_date = datetime.strptime(week_entries[0].date, "%Y-%m-%d").date()
+        monday = first_entry_date - timedelta(days=first_entry_date.weekday())
+        sunday = monday + timedelta(days=6)
+        if sunday >= today:
+            continue  # week hasn't fully ended yet
+
+        existing = (
+            db.query(WeekSummary)
+            .filter(WeekSummary.year == current_year, WeekSummary.week_num == wnum)
+            .first()
+        )
+        if existing:
+            continue
+
+        label = f"the week of {monday.strftime('%B %-d')}–{sunday.strftime('%-d, %Y')}"
+        top_areas: dict[str, int] = {}
+        for e in week_entries:
+            for area in _json.loads(e.policy_areas or "[]"):
+                top_areas[area] = top_areas.get(area, 0) + 1
+        computed_areas = [a for a, _ in sorted(top_areas.items(), key=lambda x: -x[1])[:5]]
+
+        llm = _generate_period_summary(
+            label=label,
+            entries=week_entries,
+            cache_key={"period": "week", "year": current_year, "week": wnum},
+            db=db,
+        )
+        db.add(WeekSummary(
+            year=current_year,
+            week_num=wnum,
+            start_date=monday.strftime("%Y-%m-%d"),
+            end_date=sunday.strftime("%Y-%m-%d"),
+            summary=llm["summary"],
+            top_policy_areas=_json.dumps(llm["topAreas"] or computed_areas),
+            entry_count=len(week_entries),
+        ))
+        db.commit()
+        logger.info("Generated week-in-review for %s W%d", current_year, wnum)
+
+    # --- Month summaries ---
+    # For each completed month (not current month) in current year
+    months_done: dict[int, list] = {}
+    for e in entries_this_year:
+        mnum = int(e.date[5:7])
+        months_done.setdefault(mnum, []).append(e)
+
+    for mnum, month_entries in months_done.items():
+        if mnum >= current_month:
+            continue  # current month not complete
+        existing = (
+            db.query(MonthSummary)
+            .filter(MonthSummary.year == current_year, MonthSummary.month == mnum)
+            .first()
+        )
+        if existing:
+            continue
+
+        month_name = datetime(current_year, mnum, 1).strftime("%B %Y")
+        top_areas: dict[str, int] = {}
+        for e in month_entries:
+            for area in _json.loads(e.policy_areas or "[]"):
+                top_areas[area] = top_areas.get(area, 0) + 1
+        computed_areas = [a for a, _ in sorted(top_areas.items(), key=lambda x: -x[1])[:5]]
+
+        llm = _generate_period_summary(
+            label=month_name,
+            entries=month_entries,
+            cache_key={"period": "month", "year": current_year, "month": mnum},
+            db=db,
+        )
+        db.add(MonthSummary(
+            year=current_year,
+            month=mnum,
+            summary=llm["summary"],
+            top_policy_areas=_json.dumps(llm["topAreas"] or computed_areas),
+            entry_count=len(month_entries),
+        ))
+        db.commit()
+        logger.info("Generated month-in-review for %s %d", current_year, mnum)
+
+    # --- Year summaries ---
+    # For each year < current_year that has timeline entries
+    past_year_entries = (
+        db.query(TimelineEntry)
+        .filter(TimelineEntry.date < f"{current_year}-01-01")
+        .order_by(TimelineEntry.date)
+        .all()
+    )
+    past_years: dict[int, list] = {}
+    for e in past_year_entries:
+        yr = int(e.date[:4])
+        past_years.setdefault(yr, []).append(e)
+
+    for yr, year_entries in past_years.items():
+        existing = db.query(YearSummary).filter(YearSummary.year == yr).first()
+        if existing:
+            continue
+        top_areas: dict[str, int] = {}
+        for e in year_entries:
+            for area in _json.loads(e.policy_areas or "[]"):
+                top_areas[area] = top_areas.get(area, 0) + 1
+        computed_areas = [a for a, _ in sorted(top_areas.items(), key=lambda x: -x[1])[:5]]
+        llm = _generate_period_summary(
+            label=str(yr),
+            entries=year_entries,
+            cache_key={"period": "year", "year": yr},
+            db=db,
+        )
+        db.add(YearSummary(
+            year=yr,
+            summary=llm["summary"],
+            top_policy_areas=_json.dumps(llm["topAreas"] or computed_areas),
+            entry_count=len(year_entries),
+        ))
+        db.commit()
+        logger.info("Generated year-in-review for %d", yr)
+
+
 def _save_timeline_entry(today: str, db: Session) -> None:
     """Preserve today's #1 issue as a permanent timeline entry."""
     from app.models import TimelineEntry
@@ -1264,7 +1579,7 @@ def _save_timeline_entry(today: str, db: Session) -> None:
 _MONITOR_ISSUE_SIM = 0.55
 _MONITOR_ISSUE_TITLE_SIM = 0.40
 _MONITOR_MERGE_SIM = 0.50
-_MONITOR_MIN_DAYS = 2
+_MONITOR_MIN_DAYS = 3
 _MONITOR_LOOKBACK_DAYS = 14
 _MONITOR_DORMANT_DAYS = 7
 
@@ -1539,6 +1854,39 @@ def _update_national_monitors(today: str, db: Session) -> None:
             logger.info("New monitor created: '%s' (%d days)",
                         issue.title, len(matched_dates))
 
+    # Step 3b: Re-merge after creating new monitors. Step 3 checks each new
+    # monitor against pre-existing ones before creating it, but doesn't
+    # compare the new monitors against each other. Run a second merge pass
+    # so monitors created in the same run that overlap are consolidated.
+    all_monitors = db.query(NationalMonitor).all()
+    if len(all_monitors) >= 2:
+        mon_embs2 = model.encode(
+            [f"{m.title} {m.description}" for m in all_monitors],
+            normalize_embeddings=True,
+        )
+        mon_title_embs2 = model.encode(
+            [m.title for m in all_monitors],
+            normalize_embeddings=True,
+        )
+        merged_ids2: set[int] = set()
+        for a_idx in range(len(all_monitors)):
+            if all_monitors[a_idx].id in merged_ids2:
+                continue
+            for b_idx in range(a_idx + 1, len(all_monitors)):
+                if all_monitors[b_idx].id in merged_ids2:
+                    continue
+                full_sim = float((mon_embs2[a_idx] @ mon_embs2[b_idx].T).item())
+                title_sim = float((mon_title_embs2[a_idx] @ mon_title_embs2[b_idx].T).item())
+                if full_sim >= _MONITOR_MERGE_SIM or title_sim >= _MONITOR_MERGE_SIM:
+                    keep = all_monitors[a_idx]
+                    absorb = all_monitors[b_idx]
+                    if len(keep.updates or []) < len(absorb.updates or []):
+                        keep, absorb = absorb, keep
+                    _merge_monitors(keep, absorb, db)
+                    merged_ids2.add(absorb.id)
+        if merged_ids2:
+            db.flush()
+
     # Step 4: Mark stale monitors as watching
     dormant_cutoff = (
         datetime.strptime(today, "%Y-%m-%d") - timedelta(days=_MONITOR_DORMANT_DAYS)
@@ -1598,12 +1946,18 @@ def _run_refresh(db: Session) -> int:
 
     # 5. Rank clusters using coverage breadth + trending relevance
     ranked_clusters = _rank_clusters(clusters, trending)
-    top_clusters = ranked_clusters[:MAX_ISSUES]
+
+    # 5b. Deduplicate top clusters so two angles on the same story
+    # don't both appear (e.g., "Tariff hikes" and "Market fallout from tariffs")
+    top_clusters = _deduplicate_top_clusters(ranked_clusters, MAX_ISSUES)
 
     # 6. Generate analysis for each via LLM
     from app.pipeline.analyze.ollama_client import call_llm, extract_json
 
     issues_created = 0
+    created_ranks: set[int] = set()
+    # (title, embedding) pairs for post-LLM dedup within a single run
+    generated_title_embs: list[tuple[str, "np.ndarray"]] = []
 
     for rank, cluster in enumerate(top_clusters, start=1):
         user_prompt = _build_llm_prompt(cluster)
@@ -1639,6 +1993,19 @@ def _run_refresh(db: Session) -> int:
         facts = llm_result.get("facts", [])
         actions = llm_result.get("actions", [])
         policy_areas = llm_result.get("policyAreas", [])
+
+        # Post-LLM title dedup: skip if this LLM-generated title is too
+        # similar to one already selected this run. Catches cases where two
+        # article clusters were distinct enough to pass pre-LLM embedding
+        # dedup (threshold 0.50) but the LLM distills them to the same headline.
+        title_emb = _embed_texts([title])[0]
+        if any(float(title_emb @ prev_emb) >= 0.82 for _, prev_emb in generated_title_embs):
+            logger.info(
+                "Skipping duplicate issue rank %d (title too similar to earlier issue): '%s'",
+                rank, title[:80],
+            )
+            continue
+        generated_title_embs.append((title, title_emb))
 
         if not isinstance(facts, list):
             facts = []
@@ -1714,9 +2081,26 @@ def _run_refresh(db: Session) -> int:
         else:
             db.add(issue)
 
+        created_ranks.add(rank)
         issues_created += 1
 
     db.commit()
+
+    # Remove stale issues from prior runs at ranks not refreshed this run.
+    # This prevents leftover issues when clustering changes between runs
+    # or when fewer clusters are produced (e.g., LLM failure).
+    if created_ranks:
+        stale_deleted = (
+            db.query(ActionIssue)
+            .filter(
+                ActionIssue.date == today,
+                ~ActionIssue.rank.in_(created_ranks),
+            )
+            .delete(synchronize_session="fetch")
+        )
+        if stale_deleted:
+            db.commit()
+            logger.info("Cleaned up %d stale issues from prior runs", stale_deleted)
 
     # Stage 2: Auto-detect and update national monitors (must run before
     # _save_timeline_entry so the top issue has related_monitor_slugs populated)
@@ -1726,6 +2110,7 @@ def _run_refresh(db: Session) -> int:
     # Preserve today's #1 issue in the permanent timeline
     if issues_created > 0:
         _save_timeline_entry(today, db)
+        generate_period_summaries(today, db)
 
     # Stage 3: Generate daily visual theme from the top issues
     if issues_created > 0:

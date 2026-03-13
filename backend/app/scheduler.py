@@ -42,9 +42,26 @@ def _nightly_pipeline() -> None:
 
 
 def _hourly_action_refresh() -> None:
-    """Refresh the action center in a background thread."""
+    """Refresh the action center in a background thread.
+
+    Skipped when the nightly pipeline is running to avoid competing for
+    memory during the most intensive part of the pipeline.
+    """
     def _run():
         try:
+            from app.database import SessionLocal
+            from app.models import PipelineRun
+            db = SessionLocal()
+            try:
+                running = db.query(PipelineRun).filter(PipelineRun.status == "running").first()
+            finally:
+                db.close()
+            if running:
+                logger.info(
+                    "Action center refresh skipped — nightly pipeline is running (run #%d)",
+                    running.id,
+                )
+                return
             count = refresh_action_issues()
             logger.info("Action center hourly refresh: %d issues", count)
         except Exception:

@@ -128,8 +128,9 @@ class CampaignPromise(Base):
     promise_text: Mapped[str] = mapped_column(Text, nullable=False)
     category: Mapped[str] = mapped_column(String, nullable=False)  # e.g. "healthcare", "economy", "defense"
     alignment: Mapped[str] = mapped_column(String, default="unclear")  # "kept", "broken", "partial", "unclear"
-    related_votes: Mapped[str] = mapped_column(Text, default="[]")  # JSON array of bill IDs
-    analysis: Mapped[str] = mapped_column(Text, default="")  # LLM explanation of alignment
+    related_votes: Mapped[str] = mapped_column(Text, default="[]")  # JSON array of vote bill IDs
+    related_bills: Mapped[str] = mapped_column(Text, default="[]")  # JSON array of sponsored bill IDs
+    analysis: Mapped[str] = mapped_column(Text, default="")  # factual reasoning citing evidence
     party_alignment: Mapped[str | None] = mapped_column(String, nullable=True)  # "R", "D", "bipartisan"
 
     senator: Mapped["Senator"] = relationship(back_populates="campaign_promises")
@@ -279,6 +280,7 @@ class RepCampaignPromise(Base):
     category: Mapped[str] = mapped_column(String, nullable=False)
     alignment: Mapped[str] = mapped_column(String, default="unclear")
     related_votes: Mapped[str] = mapped_column(Text, default="[]")
+    related_bills: Mapped[str] = mapped_column(Text, default="[]")
     analysis: Mapped[str] = mapped_column(Text, default="")
     party_alignment: Mapped[str | None] = mapped_column(String, nullable=True)
 
@@ -508,6 +510,46 @@ class TimelineEntry(Base):
     source_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     monitor_slug: Mapped[str | None] = mapped_column(String(200), nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
+
+class WeekSummary(Base):
+    """LLM-generated 'week in review' for a completed ISO week."""
+    __tablename__ = "week_summaries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    year: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    week_num: Mapped[int] = mapped_column(Integer, nullable=False)
+    start_date: Mapped[str] = mapped_column(String(10), nullable=False)  # Monday YYYY-MM-DD
+    end_date: Mapped[str] = mapped_column(String(10), nullable=False)    # Sunday YYYY-MM-DD
+    summary: Mapped[str] = mapped_column(Text, default="")
+    top_policy_areas: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
+    entry_count: Mapped[int] = mapped_column(Integer, default=0)
+    generated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
+
+class MonthSummary(Base):
+    """LLM-generated 'month in review' for a completed calendar month."""
+    __tablename__ = "month_summaries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    year: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    month: Mapped[int] = mapped_column(Integer, nullable=False)  # 1-12
+    summary: Mapped[str] = mapped_column(Text, default="")
+    top_policy_areas: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
+    entry_count: Mapped[int] = mapped_column(Integer, default=0)
+    generated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
+
+class YearSummary(Base):
+    """LLM-generated 'year in review' for a completed calendar year."""
+    __tablename__ = "year_summaries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    year: Mapped[int] = mapped_column(Integer, nullable=False, unique=True, index=True)
+    summary: Mapped[str] = mapped_column(Text, default="")
+    top_policy_areas: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
+    entry_count: Mapped[int] = mapped_column(Integer, default=0)
+    generated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
 
 
 class NationalMonitor(Base):

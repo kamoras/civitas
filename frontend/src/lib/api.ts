@@ -733,10 +733,25 @@ export interface TimelineEntry {
   monitorSlug: string | null;
 }
 
+export interface TimelineWeek {
+  weekNum: number;
+  startDate: string;
+  endDate: string;
+  isCurrent: boolean;
+  summary: string | null;
+  topAreas: string[];
+  entryCount: number;
+  entries: TimelineEntry[];
+}
+
 export interface TimelineMonth {
   month: number;
   name: string;
+  isCurrent: boolean;
+  summary: string | null;
+  topAreas: string[];
   entries: TimelineEntry[];
+  weeks: TimelineWeek[];
   topThemes: [string, number][];
 }
 
@@ -753,10 +768,12 @@ export interface TimelineResponse {
   year: number;
   totalDays: number;
   currentMonth: number;
+  currentWeekNum: number;
   topThemes: { area: string; count: number }[];
   monitors: { slug: string; title: string; status: string; updateCount: number }[];
   months: TimelineMonth[];
   upcomingEvents: UpcomingEvent[];
+  yearSummary: { summary: string; topAreas: string[]; entryCount: number } | null;
 }
 
 export async function fetchTimeline(year?: number): Promise<TimelineResponse> {

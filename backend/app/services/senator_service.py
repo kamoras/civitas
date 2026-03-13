@@ -158,6 +158,7 @@ def _filter_promises(campaign_promises: list) -> list[CampaignPromiseSchema]:
         analysis = cp.analysis or ""
         alignment = cp.alignment or "unclear"
         related = json.loads(cp.related_votes) if cp.related_votes else []
+        related_sp = json.loads(cp.related_bills) if cp.related_bills else []
         promise_text = cp.promise_text or ""
 
         # Skip error page artifacts
@@ -202,12 +203,13 @@ def _filter_promises(campaign_promises: list) -> list[CampaignPromiseSchema]:
         elif alignment == "kept" and broken > 0 and kept == 0:
             alignment = "broken"
 
-        # Downgrade bold claims that lack specific bill evidence
+        # Downgrade bold claims that lack specific evidence
         if (
             alignment in ("kept", "broken")
             and analysis
             and not _BILL_ID_RE.search(analysis)
             and not related
+            and not related_sp
         ):
             alignment = "unclear"
             analysis = ""
@@ -217,6 +219,7 @@ def _filter_promises(campaign_promises: list) -> list[CampaignPromiseSchema]:
             category=cp.category,
             alignment=alignment,
             related_votes=related,
+            related_bills=related_sp,
             analysis=analysis,
             party_alignment=cp.party_alignment,
         ))
@@ -686,6 +689,7 @@ def upsert_senator(db: Session, senator_data: dict) -> Senator:
             category=cp.get("category") or "other",
             alignment=cp.get("alignment") or "unclear",
             related_votes=json.dumps(cp.get("relatedVotes") or []),
+            related_bills=json.dumps(cp.get("relatedBills") or []),
             analysis=cp.get("analysis") or "",
             party_alignment=cp.get("partyAlignment"),
         ))

@@ -16,6 +16,7 @@ from app.database import get_db
 from app.models import (
     ActionIssue, DailyTheme, ExploreDocument,
     NationalMonitor, MonitorUpdate, TimelineEntry, Senator,
+    WeekSummary, MonthSummary, YearSummary,
 )
 from app.schemas import (
     ActionIssueSchema, ActionItemSchema, RelatedBillSchema,
@@ -794,11 +795,17 @@ async def get_timeline(
     year: int | None = Query(None, description="Year (defaults to current)"),
     db: Session = Depends(get_db),
 ):
+    """Return the year's timeline with hierarchical week/month/year structure."""
     response.headers["Cache-Control"] = "public, max-age=300"
-    """Return the year's timeline: top daily issues grouped by month."""
     if year is None:
         year = date.today().year
 
+    today = date.today()
+    current_year = today.year
+    current_month = today.month if year == current_year else 12
+    current_week_num = today.isocalendar()[1] if year == current_year else 0
+
+    # All daily entries for the year
     entries = (
         db.query(TimelineEntry)
         .filter(TimelineEntry.date >= f"{year}-01-01", TimelineEntry.date <= f"{year}-12-31")
@@ -806,12 +813,33 @@ async def get_timeline(
         .all()
     )
 
-    months: dict[int, list[dict]] = {}
-    theme_counts: dict[str, int] = {}
+    # Week summaries for the year
+    week_summaries = {
+        ws.week_num: ws
+        for ws in db.query(WeekSummary).filter(WeekSummary.year == year).all()
+    }
 
+    # Month summaries for the year
+    month_summaries = {
+        ms.month: ms
+        for ms in db.query(MonthSummary).filter(MonthSummary.year == year).all()
+    }
+
+    # Year summary (for completed year)
+    year_summary_row = db.query(YearSummary).filter(YearSummary.year == year).first()
+
+    # Group entries by month and week
+    from datetime import timedelta
+    entries_by_month: dict[int, list] = {}
+    theme_counts: dict[str, int] = {}
     for e in entries:
-        month_num = int(e.date[5:7])
-        entry = TimelineEntrySchema(
+        mnum = int(e.date[5:7])
+        entries_by_month.setdefault(mnum, []).append(e)
+        for area in _parse_json_field(e.policy_areas):
+            theme_counts[area] = theme_counts.get(area, 0) + 1
+
+    def _entry_dict(e) -> dict:
+        return TimelineEntrySchema(
             date=e.date,
             title=e.title,
             summary=e.summary,
@@ -820,20 +848,63 @@ async def get_timeline(
             source_name=e.source_name,
             monitor_slug=e.monitor_slug,
         ).model_dump(by_alias=True)
-        months.setdefault(month_num, []).append(entry)
 
-        for area in _parse_json_field(e.policy_areas):
-            theme_counts[area] = theme_counts.get(area, 0) + 1
+    monthly_data = []
+    for m_num in range(1, 13):
+        m_entries = entries_by_month.get(m_num, [])
+        if not m_entries:
+            continue
+
+        m_themes: dict[str, int] = {}
+        for e in m_entries:
+            for area in _parse_json_field(e.policy_areas):
+                m_themes[area] = m_themes.get(area, 0) + 1
+        top_themes = sorted(m_themes.items(), key=lambda x: -x[1])[:5]
+
+        # Build week breakdown for this month
+        weeks_in_month: dict[int, list] = {}
+        for e in m_entries:
+            d = date.fromisoformat(e.date)
+            wnum = d.isocalendar()[1]
+            weeks_in_month.setdefault(wnum, []).append(e)
+
+        weeks_data = []
+        for wnum in sorted(weeks_in_month.keys()):
+            w_entries = weeks_in_month[wnum]
+            first_d = date.fromisoformat(w_entries[0].date)
+            monday = first_d - timedelta(days=first_d.weekday())
+            sunday = monday + timedelta(days=6)
+            ws = week_summaries.get(wnum)
+            weeks_data.append({
+                "weekNum": wnum,
+                "startDate": monday.isoformat(),
+                "endDate": sunday.isoformat(),
+                "isCurrent": wnum == current_week_num and m_num == current_month,
+                "summary": ws.summary if ws else None,
+                "topAreas": _parse_json_field(ws.top_policy_areas) if ws else [t[0] for t in top_themes[:3]],
+                "entryCount": len(w_entries),
+                "entries": [_entry_dict(e) for e in w_entries],
+            })
+
+        ms = month_summaries.get(m_num)
+        monthly_data.append({
+            "month": m_num,
+            "name": _MONTH_NAMES[m_num],
+            "isCurrent": m_num == current_month,
+            "summary": ms.summary if ms else None,
+            "topAreas": _parse_json_field(ms.top_policy_areas) if ms else [t[0] for t in top_themes[:5]],
+            "entries": [_entry_dict(e) for e in m_entries],
+            "weeks": weeks_data,
+            "topThemes": top_themes,
+        })
 
     sorted_themes = sorted(theme_counts.items(), key=lambda x: -x[1])
-    top_themes = [{"area": a, "count": c} for a, c in sorted_themes[:10]]
+    top_themes_all = [{"area": a, "count": c} for a, c in sorted_themes[:10]]
 
     monitors = (
         db.query(NationalMonitor)
         .options(selectinload(NationalMonitor.updates))
-        .filter(
-            NationalMonitor.created_at >= f"{year}-01-01",
-        )
+        .filter(NationalMonitor.created_at >= f"{year}-01-01")
         .order_by(NationalMonitor.created_at.asc())
         .all()
     )
@@ -843,32 +914,20 @@ async def get_timeline(
         for m in monitors
     ]
 
-    monthly_data = []
-    for m_num in range(1, 13):
-        m_entries = months.get(m_num, [])
-        if not m_entries:
-            continue
-        m_themes: dict[str, int] = {}
-        for e in m_entries:
-            for area in e.get("policyAreas", []):
-                m_themes[area] = m_themes.get(area, 0) + 1
-        monthly_data.append({
-            "month": m_num,
-            "name": _MONTH_NAMES[m_num],
-            "entries": m_entries,
-            "topThemes": sorted(m_themes.items(), key=lambda x: -x[1])[:5],
-        })
-
-    current_month = date.today().month if year == date.today().year else 12
-    today = date.today()
     civic_events = _upcoming_civic_events(year, today)
 
     return {
         "year": year,
         "totalDays": len(entries),
         "currentMonth": current_month,
-        "topThemes": top_themes,
+        "currentWeekNum": current_week_num,
+        "topThemes": top_themes_all,
         "monitors": active_monitors,
         "months": monthly_data,
         "upcomingEvents": civic_events,
+        "yearSummary": {
+            "summary": year_summary_row.summary,
+            "topAreas": _parse_json_field(year_summary_row.top_policy_areas),
+            "entryCount": year_summary_row.entry_count,
+        } if year_summary_row else None,
     }

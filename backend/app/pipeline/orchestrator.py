@@ -360,6 +360,9 @@ def upsert_senator(db: Session, data: dict) -> None:
                 related_votes=json.dumps(
                     promise_data.get("relatedVotes") or []
                 ),
+                related_bills=json.dumps(
+                    promise_data.get("relatedBills") or []
+                ),
                 analysis=promise_data.get("analysis") or "",
                 party_alignment=promise_data.get("partyAlignment"),
             )
@@ -1396,6 +1399,7 @@ async def run_full_pipeline(
                     senator_sponsored.append({
                         "billId": bill_id,
                         "title": title,
+                        "officialTitle": official_titles_map.get(bill_id, ""),
                         "introducedDate": sp.get("introducedDate", ""),
                         "latestAction": latest.get("text", ""),
                         "latestActionDate": latest.get("actionDate", ""),
@@ -1655,6 +1659,7 @@ async def run_full_pipeline(
                     "lobbyingMatches": lobbying_matches,
                     "campaignPromises": platform_data.get("campaignPromises", []),
                     "leadershipScore": leadership_scores.get(bio_id_for_score),
+                    "sponsoredBills": prepared.get("sponsoredBills", []),
                 }
                 corruption_score = calculate_scores(
                     temp_senator,
