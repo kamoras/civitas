@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import MatrixRain from "@/components/effects/MatrixRain";
 import Navbar from "@/components/layout/Navbar";
@@ -156,6 +157,15 @@ function ResultCard({
 }
 
 export default function ExplorePage() {
+  return (
+    <Suspense>
+      <ExplorePageInner />
+    </Suspense>
+  );
+}
+
+function ExplorePageInner() {
+  const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [chamber, setChamber] = useState<ChamberFilter>("all");
   const [commentableOnly, setCommentableOnly] = useState(false);
@@ -180,11 +190,13 @@ export default function ExplorePage() {
       setError("");
       setSearched(true);
       try {
+        const politicianId = searchParams.get("politician_id") || undefined;
         const resp = await searchExplore(q, {
           chamber: ch === "all" ? undefined : ch,
           limit: 30,
           commentableOnly: commentOnly || undefined,
           sort,
+          politicianId,
         });
         setResults(resp.results);
       } catch (e) {
@@ -196,8 +208,18 @@ export default function ExplorePage() {
         setLoading(false);
       }
     },
-    [],
+    [searchParams],
   );
+
+  useEffect(() => {
+    const initialQ = searchParams.get("q");
+    if (initialQ) {
+      setQuery(initialQ);
+      doSearch(initialQ, chamber, commentableOnly, sortOrder);
+    }
+    // Only run on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

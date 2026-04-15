@@ -15,7 +15,7 @@ from app.api.admin import require_admin
 from app.database import get_db
 from app.models import (
     ActionIssue, DailyTheme, ExploreDocument,
-    NationalMonitor, MonitorUpdate, TimelineEntry, Senator,
+    NationalMonitor, MonitorUpdate, TimelineEntry, Representative, Senator,
     WeekSummary, MonthSummary, YearSummary,
 )
 from app.schemas import (
@@ -293,76 +293,77 @@ async def get_country_news(response: Response):
     return {"countries": countries}
 
 
+_COUNTRIES: dict[str, dict] = {
+    "China": {"lat": 35.86, "lng": 104.19},
+    "Russia": {"lat": 61.52, "lng": 105.32},
+    "Ukraine": {"lat": 48.38, "lng": 31.17},
+    "Iran": {"lat": 32.43, "lng": 53.69},
+    "Israel": {"lat": 31.05, "lng": 34.85},
+    "North Korea": {"lat": 40.34, "lng": 127.51},
+    "South Korea": {"lat": 35.91, "lng": 127.77},
+    "Taiwan": {"lat": 23.70, "lng": 120.96},
+    "Japan": {"lat": 36.20, "lng": 138.25},
+    "India": {"lat": 20.59, "lng": 78.96},
+    "Mexico": {"lat": 23.63, "lng": -102.55},
+    "Canada": {"lat": 56.13, "lng": -106.35},
+    "United Kingdom": {"lat": 55.38, "lng": -3.44},
+    "Germany": {"lat": 51.17, "lng": 10.45},
+    "France": {"lat": 46.23, "lng": 2.21},
+    "Brazil": {"lat": -14.24, "lng": -51.93},
+    "Saudi Arabia": {"lat": 23.89, "lng": 45.08},
+    "Turkey": {"lat": 38.96, "lng": 35.24},
+    "Australia": {"lat": -25.27, "lng": 133.78},
+    "Iraq": {"lat": 33.22, "lng": 43.68},
+    "Syria": {"lat": 34.80, "lng": 38.99},
+    "Afghanistan": {"lat": 33.94, "lng": 67.71},
+    "Pakistan": {"lat": 30.38, "lng": 69.35},
+    "Cuba": {"lat": 21.52, "lng": -77.78},
+    "Venezuela": {"lat": 6.42, "lng": -66.59},
+    "Poland": {"lat": 51.92, "lng": 19.15},
+    "Italy": {"lat": 41.87, "lng": 12.57},
+    "Spain": {"lat": 40.46, "lng": -3.75},
+    "Nigeria": {"lat": 9.08, "lng": 8.68},
+    "Egypt": {"lat": 26.82, "lng": 30.80},
+    "South Africa": {"lat": -30.56, "lng": 22.94},
+    "Colombia": {"lat": 4.57, "lng": -74.30},
+    "Philippines": {"lat": 12.88, "lng": 121.77},
+    "Vietnam": {"lat": 14.06, "lng": 108.28},
+    "Indonesia": {"lat": -0.79, "lng": 113.92},
+    "Thailand": {"lat": 15.87, "lng": 100.99},
+    "Myanmar": {"lat": 21.91, "lng": 95.96},
+    "Ethiopia": {"lat": 9.15, "lng": 40.49},
+    "Kenya": {"lat": -0.02, "lng": 37.91},
+    "Argentina": {"lat": -38.42, "lng": -63.62},
+    "Chile": {"lat": -35.68, "lng": -71.54},
+    "Peru": {"lat": -9.19, "lng": -75.02},
+    "Palestine": {"lat": 31.95, "lng": 35.23},
+    "Lebanon": {"lat": 33.85, "lng": 35.86},
+    "Yemen": {"lat": 15.55, "lng": 48.52},
+    "Somalia": {"lat": 5.15, "lng": 46.20},
+    "Sudan": {"lat": 12.86, "lng": 30.22},
+    "Libya": {"lat": 26.34, "lng": 17.23},
+    "Haiti": {"lat": 18.97, "lng": -72.29},
+    "Honduras": {"lat": 15.20, "lng": -86.24},
+    "Guatemala": {"lat": 15.78, "lng": -90.23},
+    "El Salvador": {"lat": 13.79, "lng": -88.90},
+}
+
+_ALIASES: dict[str, str] = {
+    "UK": "United Kingdom", "Britain": "United Kingdom",
+    "DPRK": "North Korea", "Pyongyang": "North Korea",
+    "ROK": "South Korea", "Seoul": "South Korea",
+    "Beijing": "China", "Chinese": "China",
+    "Russian": "Russia", "Moscow": "Russia", "Kremlin": "Russia",
+    "Iranian": "Iran", "Tehran": "Iran",
+    "Israeli": "Israel", "Gaza": "Palestine", "West Bank": "Palestine",
+    "Palestinian": "Palestine", "Taipei": "Taiwan", "Taiwanese": "Taiwan",
+    "Kyiv": "Ukraine", "Ukrainian": "Ukraine",
+    "Mexican": "Mexico",
+}
+
+
 def _extract_country_mentions(articles: list) -> list[dict]:
     """Group articles by country mentions using simple name matching."""
-    _COUNTRIES: dict[str, dict] = {
-        "China": {"lat": 35.86, "lng": 104.19},
-        "Russia": {"lat": 61.52, "lng": 105.32},
-        "Ukraine": {"lat": 48.38, "lng": 31.17},
-        "Iran": {"lat": 32.43, "lng": 53.69},
-        "Israel": {"lat": 31.05, "lng": 34.85},
-        "North Korea": {"lat": 40.34, "lng": 127.51},
-        "South Korea": {"lat": 35.91, "lng": 127.77},
-        "Taiwan": {"lat": 23.70, "lng": 120.96},
-        "Japan": {"lat": 36.20, "lng": 138.25},
-        "India": {"lat": 20.59, "lng": 78.96},
-        "Mexico": {"lat": 23.63, "lng": -102.55},
-        "Canada": {"lat": 56.13, "lng": -106.35},
-        "United Kingdom": {"lat": 55.38, "lng": -3.44},
-        "Germany": {"lat": 51.17, "lng": 10.45},
-        "France": {"lat": 46.23, "lng": 2.21},
-        "Brazil": {"lat": -14.24, "lng": -51.93},
-        "Saudi Arabia": {"lat": 23.89, "lng": 45.08},
-        "Turkey": {"lat": 38.96, "lng": 35.24},
-        "Australia": {"lat": -25.27, "lng": 133.78},
-        "Iraq": {"lat": 33.22, "lng": 43.68},
-        "Syria": {"lat": 34.80, "lng": 38.99},
-        "Afghanistan": {"lat": 33.94, "lng": 67.71},
-        "Pakistan": {"lat": 30.38, "lng": 69.35},
-        "Cuba": {"lat": 21.52, "lng": -77.78},
-        "Venezuela": {"lat": 6.42, "lng": -66.59},
-        "Poland": {"lat": 51.92, "lng": 19.15},
-        "Italy": {"lat": 41.87, "lng": 12.57},
-        "Spain": {"lat": 40.46, "lng": -3.75},
-        "Nigeria": {"lat": 9.08, "lng": 8.68},
-        "Egypt": {"lat": 26.82, "lng": 30.80},
-        "South Africa": {"lat": -30.56, "lng": 22.94},
-        "Colombia": {"lat": 4.57, "lng": -74.30},
-        "Philippines": {"lat": 12.88, "lng": 121.77},
-        "Vietnam": {"lat": 14.06, "lng": 108.28},
-        "Indonesia": {"lat": -0.79, "lng": 113.92},
-        "Thailand": {"lat": 15.87, "lng": 100.99},
-        "Myanmar": {"lat": 21.91, "lng": 95.96},
-        "Ethiopia": {"lat": 9.15, "lng": 40.49},
-        "Kenya": {"lat": -0.02, "lng": 37.91},
-        "Argentina": {"lat": -38.42, "lng": -63.62},
-        "Chile": {"lat": -35.68, "lng": -71.54},
-        "Peru": {"lat": -9.19, "lng": -75.02},
-        "Palestine": {"lat": 31.95, "lng": 35.23},
-        "Lebanon": {"lat": 33.85, "lng": 35.86},
-        "Yemen": {"lat": 15.55, "lng": 48.52},
-        "Somalia": {"lat": 5.15, "lng": 46.20},
-        "Sudan": {"lat": 12.86, "lng": 30.22},
-        "Libya": {"lat": 26.34, "lng": 17.23},
-        "Haiti": {"lat": 18.97, "lng": -72.29},
-        "Honduras": {"lat": 15.20, "lng": -86.24},
-        "Guatemala": {"lat": 15.78, "lng": -90.23},
-        "El Salvador": {"lat": 13.79, "lng": -88.90},
-    }
-
-    _ALIASES: dict[str, str] = {
-        "UK": "United Kingdom", "Britain": "United Kingdom",
-        "DPRK": "North Korea", "Pyongyang": "North Korea",
-        "ROK": "South Korea", "Seoul": "South Korea",
-        "Beijing": "China", "Chinese": "China",
-        "Russian": "Russia", "Moscow": "Russia", "Kremlin": "Russia",
-        "Iranian": "Iran", "Tehran": "Iran",
-        "Israeli": "Israel", "Gaza": "Palestine", "West Bank": "Palestine",
-        "Palestinian": "Palestine", "Taipei": "Taiwan", "Taiwanese": "Taiwan",
-        "Kyiv": "Ukraine", "Ukrainian": "Ukraine",
-        "Mexican": "Mexico",
-    }
-
     from collections import defaultdict
     country_articles: dict[str, list[dict]] = defaultdict(list)
 
@@ -488,6 +489,21 @@ async def get_my_reps(
         .all()
     )
 
+    representatives = (
+        db.query(
+            Representative.id, Representative.name, Representative.state, Representative.party,
+            Representative.district,
+            Representative.score_funding_independence, Representative.score_promise_persistence,
+            Representative.score_independent_voting, Representative.score_funding_diversity,
+            Representative.score_legislative_effectiveness,
+            Representative.leadership_score, Representative.ideology_score,
+            Representative.years_in_office, Representative.initials,
+        )
+        .filter(Representative.state == state_upper)
+        .order_by(Representative.district)
+        .all()
+    )
+
     today_str = date.today().isoformat()
     issues = (
         db.query(ActionIssue)
@@ -509,13 +525,13 @@ async def get_my_reps(
                 .all()
             )
 
-    senator_ids = {s.id for s in senators}
-    senator_issues: dict[str, list[dict]] = {sid: [] for sid in senator_ids}
+    member_ids = {s.id for s in senators} | {r.id for r in representatives}
+    senator_issues: dict[str, list[dict]] = {sid: [] for sid in member_ids}
 
     for issue in issues:
         rel_sens = _parse_json_field(getattr(issue, "related_senators", "[]"))
         for rs in rel_sens:
-            if isinstance(rs, dict) and rs.get("id") in senator_ids:
+            if isinstance(rs, dict) and rs.get("id") in member_ids:
                 senator_issues[rs["id"]].append({
                     "id": issue.id,
                     "rank": issue.rank,
@@ -535,7 +551,7 @@ async def get_my_reps(
             "state": s.state,
             "party": s.party,
             "initials": s.initials,
-            "punkNickname": s.punk_nickname,
+            "punkNickname": s.punk_nickname if s.punk_nickname and s.punk_nickname != "TBD" else "",
             "scores": {
                 "fundingIndependence": round(s.score_funding_independence, 1),
                 "promisePersistence": round(s.score_promise_persistence, 1),
@@ -550,9 +566,37 @@ async def get_my_reps(
             "connectedIssues": senator_issues.get(s.id, []),
         })
 
+    result_reps = []
+    for r in representatives:
+        overall = round(
+            (r.score_funding_independence + r.score_promise_persistence +
+             r.score_independent_voting + r.score_funding_diversity) / 4, 1
+        )
+        result_reps.append({
+            "id": r.id,
+            "name": r.name,
+            "state": r.state,
+            "party": r.party,
+            "district": r.district,
+            "initials": r.initials,
+            "scores": {
+                "fundingIndependence": round(r.score_funding_independence, 1),
+                "promisePersistence": round(r.score_promise_persistence, 1),
+                "independentVoting": round(r.score_independent_voting, 1),
+                "fundingDiversity": round(r.score_funding_diversity, 1),
+                "legislativeEffectiveness": round(r.score_legislative_effectiveness, 1),
+                "overall": overall,
+            },
+            "leadershipScore": round(r.leadership_score, 1) if r.leadership_score else None,
+            "ideologyScore": round(r.ideology_score, 1) if r.ideology_score else None,
+            "yearsInOffice": r.years_in_office,
+            "connectedIssues": senator_issues.get(r.id, []),
+        })
+
     return {
         "state": state_upper,
         "senators": result_senators,
+        "representatives": result_reps,
         "issueDate": issues[0].date if issues else None,
     }
 
@@ -809,7 +853,7 @@ async def get_timeline(
     entries = (
         db.query(TimelineEntry)
         .filter(TimelineEntry.date >= f"{year}-01-01", TimelineEntry.date <= f"{year}-12-31")
-        .order_by(TimelineEntry.date.asc())
+        .order_by(TimelineEntry.date.desc())
         .all()
     )
 
@@ -850,7 +894,8 @@ async def get_timeline(
         ).model_dump(by_alias=True)
 
     monthly_data = []
-    for m_num in range(1, 13):
+    # Process months in descending order
+    for m_num in range(12, 0, -1):
         m_entries = entries_by_month.get(m_num, [])
         if not m_entries:
             continue
@@ -869,7 +914,8 @@ async def get_timeline(
             weeks_in_month.setdefault(wnum, []).append(e)
 
         weeks_data = []
-        for wnum in sorted(weeks_in_month.keys()):
+        # Sort weeks in descending order
+        for wnum in sorted(weeks_in_month.keys(), reverse=True):
             w_entries = weeks_in_month[wnum]
             first_d = date.fromisoformat(w_entries[0].date)
             monday = first_d - timedelta(days=first_d.weekday())
@@ -905,7 +951,7 @@ async def get_timeline(
         db.query(NationalMonitor)
         .options(selectinload(NationalMonitor.updates))
         .filter(NationalMonitor.created_at >= f"{year}-01-01")
-        .order_by(NationalMonitor.created_at.asc())
+        .order_by(NationalMonitor.last_article_date.desc())
         .all()
     )
     active_monitors = [

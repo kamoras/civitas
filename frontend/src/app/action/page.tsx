@@ -289,7 +289,7 @@ function SenatorChips({ issue }: { issue: ActionIssue }) {
         {issue.relatedSenators.map((s) => (
           <Link
             key={s.id}
-            href={`/scorecard?branch=senate&state=${s.state}&senator=${s.id}`}
+            href={`/scorecard?branch=${s.chamber === "house" ? "house" : "senate"}&state=${s.state}&${s.chamber === "house" ? "rep" : "senator"}=${s.id}`}
             className={`flex items-center gap-2 px-3 py-2 border ${PARTY_BORDER[s.party]} bg-matrix-dark-green/20 hover:border-neon-cyan/50 transition-all group`}
           >
             <span className={`font-pixel text-[10px] ${PARTY_COLORS[s.party]}`}>
@@ -606,7 +606,7 @@ function SecondaryIssue({
                 {issue.relatedSenators.map((s) => (
                   <Link
                     key={s.id}
-                    href={`/scorecard?branch=senate&state=${s.state}&senator=${s.id}`}
+                    href={`/scorecard?branch=${s.chamber === "house" ? "house" : "senate"}&state=${s.state}&${s.chamber === "house" ? "rep" : "senator"}=${s.id}`}
                     className={`flex items-center gap-1.5 px-2 py-1 border ${PARTY_BORDER[s.party]} bg-matrix-dark-green/20 hover:border-neon-cyan/40 transition-colors text-sm`}
                   >
                     <span className={`font-pixel text-[10px] ${PARTY_COLORS[s.party]}`}>[{s.party}]</span>

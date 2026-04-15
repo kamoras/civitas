@@ -13,6 +13,7 @@ export interface RelatedSenator {
   party: "D" | "R" | "I";
   overallScore: number;
   leadershipScore: number | null;
+  chamber?: "senate" | "house";
 }
 
 export interface ActionItem {
@@ -67,9 +68,31 @@ export interface MyRepSenator {
   connectedIssues: { id: number; rank: number; title: string; policyAreas: string[] }[];
 }
 
+export interface MyRepRep {
+  id: string;
+  name: string;
+  state: string;
+  party: "D" | "R" | "I";
+  district: number;
+  initials: string;
+  scores: {
+    fundingIndependence: number;
+    promisePersistence: number;
+    independentVoting: number;
+    fundingDiversity: number;
+    legislativeEffectiveness: number;
+    overall: number;
+  };
+  leadershipScore: number | null;
+  ideologyScore: number | null;
+  yearsInOffice: number;
+  connectedIssues: { id: number; rank: number; title: string; policyAreas: string[] }[];
+}
+
 export interface MyRepsResponse {
   state: string;
   senators: MyRepSenator[];
+  representatives: MyRepRep[];
   issueDate: string | null;
 }
 

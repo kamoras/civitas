@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
-from app.models import ActionIssue, DailyTheme, ExploreDocument, Senator
+from app.models import ActionIssue, DailyTheme, ExploreDocument, Representative, Senator
 from app.pipeline.fetch.news_feeds import NewsArticle, fetch_news_articles
 from app.pipeline.fetch.trending import TrendingTopic, fetch_trending_topics
 from app.pipeline.vector_store import (
@@ -59,7 +59,7 @@ _POLICY_PROTOTYPES = [
 
 POLICY_RELEVANCE_THRESHOLD = 0.15
 CLUSTER_TITLE_THRESHOLD = 0.45
-CLUSTER_CENTROID_MERGE_THRESHOLD = 0.40
+CLUSTER_CENTROID_MERGE_THRESHOLD = 0.38
 MAX_ISSUES = 4
 MIN_ARTICLES_PER_CLUSTER = 1
 
@@ -528,7 +528,7 @@ def _deduplicate_top_clusters(
     if len(ranked_clusters) <= 1:
         return ranked_clusters[:max_issues]
 
-    DEDUP_THRESHOLD = 0.50
+    DEDUP_THRESHOLD = 0.44
 
     cluster_texts = [
         " ".join(a.title for a in cluster[:5])
@@ -597,7 +597,15 @@ def _find_related_senators(
         Senator.leadership_score,
     ).all()
 
-    if not senators:
+    representatives = db.query(
+        Representative.id, Representative.name, Representative.state, Representative.party,
+        Representative.score_funding_independence, Representative.score_promise_persistence,
+        Representative.score_independent_voting, Representative.score_funding_diversity,
+        Representative.score_legislative_effectiveness,
+        Representative.leadership_score,
+    ).all()
+
+    if not senators and not representatives:
         return []
 
     issue_text = f"{title}. {summary}. {' '.join(facts)}"
@@ -605,7 +613,7 @@ def _find_related_senators(
 
     matched: dict[str, dict] = {}
 
-    def _make_entry(s) -> dict:
+    def _make_entry(s, chamber: str = "senate") -> dict:
         from app.config_definitions import SCORE_WEIGHTS
         overall = (
             s.score_funding_independence * SCORE_WEIGHTS["fundingIndependence"]
@@ -618,12 +626,15 @@ def _find_related_senators(
             "id": s.id, "name": s.name, "state": s.state,
             "party": s.party, "overall_score": round(overall, 1),
             "leadership_score": round(s.leadership_score * 100) if s.leadership_score else None,
+            "chamber": chamber,
         }
 
     # Pass 1: substring matches with contextual disambiguation
     candidates_needing_disambiguation: list[tuple] = []
 
-    for s in senators:
+    all_members = [(s, "senate") for s in senators] + [(r, "house") for r in representatives]
+
+    for s, chamber in all_members:
         last_name = s.name.split()[-1].lower() if s.name else ""
         full_name_lower = s.name.lower()
 
@@ -632,20 +643,20 @@ def _find_related_senators(
 
         # Full name match is high-confidence — no disambiguation needed
         if full_name_lower in issue_text_lower:
-            matched[s.id] = _make_entry(s)
+            matched[s.id] = _make_entry(s, chamber)
             continue
 
         # Last-name-only match needs word-boundary + disambiguation
         pattern = re.compile(r"\b" + re.escape(last_name) + r"\b", re.IGNORECASE)
         if pattern.search(issue_text):
-            candidates_needing_disambiguation.append((s, last_name, pattern))
+            candidates_needing_disambiguation.append((s, last_name, pattern, chamber))
 
     if candidates_needing_disambiguation:
         senator_phrases = []
         context_phrases = []
         candidate_refs = []
 
-        for s, last_name, pattern in candidates_needing_disambiguation:
+        for s, last_name, pattern, chamber in candidates_needing_disambiguation:
             if s.id in matched:
                 continue
             senator_phrases.append(f"Senator {s.name} from {s.state}")
@@ -657,7 +668,7 @@ def _find_related_senators(
                 end = min(len(issue_text), m.end() + 30)
                 contexts.append(issue_text[start:end].strip())
             context_phrases.append(" | ".join(contexts[:3]))
-            candidate_refs.append(s)
+            candidate_refs.append((s, chamber))
 
         if senator_phrases:
             all_texts = senator_phrases + context_phrases
@@ -667,10 +678,10 @@ def _find_related_senators(
             context_embeds = embeddings[n:]
 
             DISAMBIGUATION_THRESHOLD = 0.35
-            for i, s in enumerate(candidate_refs):
+            for i, (s, chamber) in enumerate(candidate_refs):
                 sim = float(np.dot(senator_embeds[i], context_embeds[i]))
                 if sim >= DISAMBIGUATION_THRESHOLD:
-                    matched[s.id] = _make_entry(s)
+                    matched[s.id] = _make_entry(s, chamber)
                 else:
                     logger.debug(
                         "Rejected senator match '%s' (sim=%.3f < %.2f) — "
@@ -680,8 +691,8 @@ def _find_related_senators(
 
     # Pass 2: embedding fallback when no substring matches found
     if not matched:
-        senator_names = [s.name for s in senators]
-        name_embeddings = _embed_texts(senator_names)
+        member_names = [s.name for s, _ in all_members]
+        name_embeddings = _embed_texts(member_names)
         issue_embedding = _embed_texts([issue_text])[0]
         similarities = name_embeddings @ issue_embedding
 
@@ -690,8 +701,8 @@ def _find_related_senators(
         for idx in top_indices[:5]:
             if similarities[idx] < SENATOR_MATCH_THRESHOLD:
                 break
-            s = senators[idx]
-            matched[s.id] = _make_entry(s)
+            s, chamber = all_members[idx]
+            matched[s.id] = _make_entry(s, chamber)
 
     result = list(matched.values())
     if result:
@@ -1576,12 +1587,51 @@ def _save_timeline_entry(today: str, db: Session) -> None:
     logger.info("Timeline entry saved for %s: %s", today, top_issue.title[:60])
 
 
-_MONITOR_ISSUE_SIM = 0.55
-_MONITOR_ISSUE_TITLE_SIM = 0.40
-_MONITOR_MERGE_SIM = 0.50
-_MONITOR_MIN_DAYS = 3
+_MONITOR_ISSUE_SIM = 0.62
+_MONITOR_ISSUE_TITLE_SIM = 0.48
+_MONITOR_MERGE_SIM = 0.42
+_MONITOR_MIN_DAYS = 5
+_MONITOR_MIN_UNIQUE_SOURCES = 3
 _MONITOR_LOOKBACK_DAYS = 14
 _MONITOR_DORMANT_DAYS = 7
+_MONITOR_CLOSE_DAYS = 30
+_MONITOR_MIN_UPDATES_FOR_ARCHIVE = 3
+
+
+_MONITOR_METADATA_PROMPT = """\
+You are a senior civic data analyst. Below are recent news articles for a \
+potential National Monitor. A National Monitor tracks a SIGNIFICANT, \
+LONG-TERM national or international issue of high civic importance.
+
+Articles:
+{articles}
+
+Analyze these articles and provide a JSON object:
+- "title": A concise, broad, and neutral name for this ongoing monitor (e.g., "U.S.-Iran Conflict" or "Federal Housing Reform").
+- "description": A factual 2-3 sentence summary of the ongoing situation and its national significance.
+- "category": The most appropriate category from this list: {categories}.
+- "is_significant": Boolean. True if this is a recurring national issue with long-term implications. False if it is a transient news story, a niche event, or lacks broad civic relevance.
+
+Respond with ONLY the JSON object."""
+
+
+_MONITOR_MERGE_PROMPT = """\
+You are a civic data analyst. Decide if these two National Monitors should be MERGED.
+A merge should occur if they are tracking the SAME underlying national or international issue.
+
+Monitor A: "{title_a}"
+Description A: "{desc_a}"
+
+Monitor B: "{title_b}"
+Description B: "{desc_b}"
+
+Rules:
+- Merge if B is a specific event or facet within the broader context of A (e.g., a specific strike within a conflict).
+- Merge if they cover the same topic but from different angles (e.g., "Oil Prices" and "Middle East Conflict").
+- Do NOT merge if they are distinct issues that simply happen in the same region or share a keyword but address different civic concerns.
+
+Return a JSON object: {{"should_merge": boolean, "reason": "short explanation"}}
+"""
 
 
 def _slugify(text: str) -> str:
@@ -1590,6 +1640,87 @@ def _slugify(text: str) -> str:
     slug = re.sub(r'[^a-z0-9\s-]', '', slug)
     slug = re.sub(r'[\s-]+', '-', slug)
     return slug[:200]
+
+
+def _should_merge_monitors_llm(
+    a: "NationalMonitor",
+    b: "NationalMonitor",
+    db: Session,
+) -> bool:
+    """Use LLM to decide if two monitors should be merged."""
+    from app.pipeline.analyze.ollama_client import call_llm, extract_json
+
+    user_prompt = _MONITOR_MERGE_PROMPT.format(
+        title_a=a.title, desc_a=a.description[:300],
+        title_b=b.title, desc_b=b.description[:300],
+    )
+
+    result = call_llm(
+        prompt_version="monitor-merge-v1",
+        system_prompt="You are a civic data analyst. Respond in JSON.",
+        user_prompt=user_prompt,
+        cache_key={"type": "monitor_merge", "ids": sorted([a.id, b.id])},
+        db_session=db,
+        max_tokens=256,
+    )
+
+    if isinstance(result, str):
+        result = extract_json(result)
+    
+    if isinstance(result, dict) and result.get("should_merge"):
+        logger.info("LLM approved merge: '%s' + '%s' because: %s",
+                    a.title, b.title, result.get("reason"))
+        return True
+    return False
+
+
+def _reclassify_monitor_llm(
+    monitor: "NationalMonitor",
+    db: Session,
+) -> None:
+    """Use LLM to re-evaluate and potentially re-categorize an existing monitor."""
+    from app.pipeline.analyze.ollama_client import call_llm, extract_json
+    from app.config_definitions import POLICY_AREAS
+
+    # Only re-classify if it's currently a generic or suspicious category
+    # or if we just want a periodic sanity check.
+    
+    updates = monitor.updates[:5]
+    articles = "\n".join([f"- {u.article_title}: {u.summary[:150]}" for u in updates])
+    
+    user_prompt = f"""\
+Identify the best policy category for this National Monitor.
+Title: {monitor.title}
+Description: {monitor.description[:300]}
+Recent Updates:
+{articles}
+
+Categories: {", ".join(POLICY_AREAS)}
+
+Return JSON: {{"category": "CATEGORY_NAME", "reason": "why"}}
+"""
+
+    result = call_llm(
+        prompt_version="monitor-reclassify-v1",
+        system_prompt="You are a civic data analyst. Respond in JSON.",
+        user_prompt=user_prompt,
+        cache_key={"type": "monitor_reclassify", "id": monitor.id, "title": monitor.title},
+        db_session=db,
+        max_tokens=256,
+    )
+
+    if isinstance(result, str):
+        result = extract_json(result)
+    
+    if isinstance(result, dict) and result.get("category"):
+        new_cat = str(result["category"]).upper().replace(" ", "_")
+        if new_cat in POLICY_AREAS:
+            old_cat = monitor.category
+            monitor.category = new_cat.lower()
+            monitor.policy_areas = json.dumps([new_cat])
+            if old_cat != monitor.category:
+                logger.info("Re-categorized monitor '%s': %s -> %s (%s)",
+                            monitor.title, old_cat, monitor.category, result.get("reason"))
 
 
 def _merge_monitors(keep: "NationalMonitor", absorb: "NationalMonitor",
@@ -1623,6 +1754,62 @@ def _merge_monitors(keep: "NationalMonitor", absorb: "NationalMonitor",
 
     logger.info("Merged monitor '%s' into '%s'", absorb.title, keep.title)
     db.delete(absorb)
+
+
+def _generate_monitor_metadata(
+    issue: ActionIssue,
+    past_issues: list[ActionIssue],
+    db: Session,
+) -> dict | None:
+    """Use LLM to generate professional metadata for a new National Monitor."""
+    from app.pipeline.analyze.ollama_client import call_llm, extract_json
+    from app.config_definitions import POLICY_AREAS
+
+    all_issues = [issue] + past_issues
+    # Gather unique articles to provide enough context for the LLM
+    seen_titles: set[str] = set()
+    articles: list[str] = []
+    for i in all_issues[:15]:
+        if i.title not in seen_titles:
+            seen_titles.add(i.title)
+            sources = json.loads(i.source_names or "[]")
+            source_str = f" [{sources[0]}]" if sources else ""
+            articles.append(f"{i.title}{source_str}\n  {i.summary[:200]}")
+
+    if not articles:
+        return None
+
+    user_prompt = _MONITOR_METADATA_PROMPT.format(
+        articles="\n\n".join(articles),
+        categories=", ".join(POLICY_AREAS),
+    )
+
+    result = call_llm(
+        prompt_version="monitor-metadata-v1",
+        system_prompt="You are a civic data analyst. Respond in JSON.",
+        user_prompt=user_prompt,
+        cache_key={"type": "monitor_metadata", "titles": sorted(list(seen_titles))[:5]},
+        db_session=db,
+        max_tokens=1024,
+    )
+
+    if isinstance(result, str):
+        result = extract_json(result)
+    
+    if not isinstance(result, dict) or not result.get("is_significant"):
+        logger.info("Monitor metadata rejected or not significant for '%s'", issue.title[:50])
+        return None
+    
+    # Validation
+    category = str(result.get("category", "FOREIGN_POLICY")).upper().replace(" ", "_")
+    if category not in POLICY_AREAS:
+        category = "FOREIGN_POLICY"
+    
+    return {
+        "title": str(result.get("title", issue.title))[:500],
+        "description": str(result.get("description", issue.summary))[:1000],
+        "category": category.lower(),
+    }
 
 
 def _update_national_monitors(today: str, db: Session) -> None:
@@ -1660,10 +1847,6 @@ def _update_national_monitors(today: str, db: Session) -> None:
     )
 
     # Step 1: Merge any existing monitors that are too similar to each other.
-    # This cleans up duplicates from prior runs (e.g. "Iran war oil supply"
-    # and "Oil prices spike from Iran conflict" are the same underlying event).
-    # Uses both title+description and title-only similarity — merges if either
-    # exceeds threshold, since descriptions can diverge while titles stay close.
     if len(existing_monitors) >= 2:
         mon_embs = model.encode(
             [f"{m.title} {m.description}" for m in existing_monitors],
@@ -1682,7 +1865,18 @@ def _update_national_monitors(today: str, db: Session) -> None:
                     continue
                 full_sim = float((mon_embs[a_idx] @ mon_embs[b_idx].T).item())
                 title_sim = float((mon_title_embs[a_idx] @ mon_title_embs[b_idx].T).item())
-                if full_sim >= _MONITOR_MERGE_SIM or title_sim >= _MONITOR_MERGE_SIM:
+                
+                # Use a tiered merge logic
+                should_merge = False
+                if full_sim >= 0.55 or title_sim >= 0.55:
+                    should_merge = True
+                elif full_sim >= _MONITOR_MERGE_SIM or title_sim >= _MONITOR_MERGE_SIM:
+                    # Moderate similarity - use LLM to verify
+                    should_merge = _should_merge_monitors_llm(
+                        existing_monitors[a_idx], existing_monitors[b_idx], db
+                    )
+
+                if should_merge:
                     keep = existing_monitors[a_idx]
                     absorb = existing_monitors[b_idx]
                     if len(keep.updates or []) < len(absorb.updates or []):
@@ -1715,12 +1909,6 @@ def _update_national_monitors(today: str, db: Session) -> None:
                 if sims[i][j] < _MONITOR_ISSUE_SIM:
                     continue
                 if title_sims[i][j] < _MONITOR_ISSUE_TITLE_SIM:
-                    logger.debug(
-                        "Monitor link rejected (title_sim=%.3f < %.2f): "
-                        "issue='%s' monitor='%s'",
-                        title_sims[i][j], _MONITOR_ISSUE_TITLE_SIM,
-                        issue.title[:50], monitor.title[:50],
-                    )
                     continue
 
                 issue_monitor_slugs.setdefault(i, []).append(monitor.slug)
@@ -1804,29 +1992,54 @@ def _update_national_monitors(today: str, db: Session) -> None:
             if len(matched_dates) < _MONITOR_MIN_DAYS:
                 continue
 
+            # Ensure the topic has breadth — if only 1 source (e.g. only AP) 
+            # covered it over 5 days, it's persistent but likely too niche
+            # for a dedicated National Monitor.
+            unique_sources = set(json.loads(issue.source_names or "[]"))
+            for p_issue in matched_past:
+                unique_sources.update(json.loads(p_issue.source_names or "[]"))
+
+            if len(unique_sources) < _MONITOR_MIN_UNIQUE_SOURCES:
+                logger.info(
+                    "Monitor creation skipped for '%s': insufficient breadth "
+                    "(%d sources over %d days)",
+                    issue.title[:50], len(unique_sources), len(matched_dates),
+                )
+                continue
+
             if mon_embs is not None:
                 dup_sims = today_embeddings[i] @ mon_embs.T
                 if float(dup_sims.max()) >= _MONITOR_ISSUE_SIM:
                     continue
 
-            slug = _slugify(issue.title)
-            source_urls = json.loads(issue.source_urls or "[]")
-            source_names = json.loads(issue.source_names or "[]")
-            policy_areas = json.loads(issue.policy_areas or "[]")
+            # --- LLM Metadata Generation ---
+            metadata = _generate_monitor_metadata(issue, matched_past, db)
+            if not metadata:
+                continue
+
+            slug = _slugify(metadata["title"])
+            
+            # Ensure unique slug
+            existing_slug = db.query(NationalMonitor).filter(NationalMonitor.slug == slug).first()
+            if existing_slug:
+                slug = f"{slug}-{int(time.time()) % 1000}"
 
             monitor = NationalMonitor(
                 slug=slug,
-                title=issue.title,
-                description=issue.summary[:500],
-                category=policy_areas[0].lower() if policy_areas else "general",
+                title=metadata["title"],
+                description=metadata["description"],
+                category=metadata["category"],
                 status="active",
-                policy_areas=json.dumps(policy_areas),
+                policy_areas=json.dumps([metadata["category"].upper()]),
                 last_article_date=today,
             )
             db.add(monitor)
             db.flush()
 
             seen_sources: set[str] = set()
+            source_urls = json.loads(issue.source_urls or "[]")
+            source_names = json.loads(issue.source_names or "[]")
+
             for past_issue in matched_past:
                 p_urls = json.loads(past_issue.source_urls or "[]")
                 p_names = json.loads(past_issue.source_names or "[]")
@@ -1851,13 +2064,10 @@ def _update_national_monitors(today: str, db: Session) -> None:
                     article_title=issue.title,
                 ))
 
-            logger.info("New monitor created: '%s' (%d days)",
-                        issue.title, len(matched_dates))
+            logger.info("New monitor created (LLM-vetted): '%s' (%d days)",
+                        monitor.title, len(matched_dates))
 
-    # Step 3b: Re-merge after creating new monitors. Step 3 checks each new
-    # monitor against pre-existing ones before creating it, but doesn't
-    # compare the new monitors against each other. Run a second merge pass
-    # so monitors created in the same run that overlap are consolidated.
+    # Step 3b: Re-merge after creating new monitors.
     all_monitors = db.query(NationalMonitor).all()
     if len(all_monitors) >= 2:
         mon_embs2 = model.encode(
@@ -1877,7 +2087,16 @@ def _update_national_monitors(today: str, db: Session) -> None:
                     continue
                 full_sim = float((mon_embs2[a_idx] @ mon_embs2[b_idx].T).item())
                 title_sim = float((mon_title_embs2[a_idx] @ mon_title_embs2[b_idx].T).item())
-                if full_sim >= _MONITOR_MERGE_SIM or title_sim >= _MONITOR_MERGE_SIM:
+                
+                should_merge = False
+                if full_sim >= 0.55 or title_sim >= 0.55:
+                    should_merge = True
+                elif full_sim >= _MONITOR_MERGE_SIM or title_sim >= _MONITOR_MERGE_SIM:
+                    should_merge = _should_merge_monitors_llm(
+                        all_monitors[a_idx], all_monitors[b_idx], db
+                    )
+
+                if should_merge:
                     keep = all_monitors[a_idx]
                     absorb = all_monitors[b_idx]
                     if len(keep.updates or []) < len(absorb.updates or []):
@@ -1887,22 +2106,54 @@ def _update_national_monitors(today: str, db: Session) -> None:
         if merged_ids2:
             db.flush()
 
-    # Step 4: Mark stale monitors as watching
+    # Step 4: Lifecycle management — watching, closing, and cleaning up
+    _cleanup_monitor_lifecycle(today, db)
+
+    db.commit()
+
+
+def _cleanup_monitor_lifecycle(today: str, db: Session) -> None:
+    """Close inactive monitors and delete insignificant ones."""
+    from datetime import timedelta
+    from app.models import NationalMonitor
+
     dormant_cutoff = (
         datetime.strptime(today, "%Y-%m-%d") - timedelta(days=_MONITOR_DORMANT_DAYS)
     ).strftime("%Y-%m-%d")
-    stale = (
-        db.query(NationalMonitor)
-        .filter(
-            NationalMonitor.status == "active",
-            (NationalMonitor.last_article_date < dormant_cutoff)
-            | (NationalMonitor.last_article_date.is_(None)),
-        )
-        .all()
-    )
-    for m in stale:
-        m.status = "watching"
-        logger.info("Monitor set to watching: '%s'", m.title)
+    close_cutoff = (
+        datetime.strptime(today, "%Y-%m-%d") - timedelta(days=_MONITOR_CLOSE_DAYS)
+    ).strftime("%Y-%m-%d")
+
+    all_monitors = db.query(NationalMonitor).filter(NationalMonitor.status != "closed").all()
+    
+    for m in all_monitors:
+        # Use created_at if last_article_date is missing (e.g. newly created)
+        last_date = m.last_article_date or m.created_at.strftime("%Y-%m-%d")
+        update_count = len(m.updates or [])
+
+        # 1. Close monitors inactive for >30 days
+        if last_date < close_cutoff:
+            # If it never gained enough updates to be considered historically 
+            # significant, just delete it to keep the database clean.
+            if update_count < _MONITOR_MIN_UPDATES_FOR_ARCHIVE:
+                logger.info("Deleting insignificant monitor: '%s' (%d updates)", 
+                            m.title, update_count)
+                db.delete(m)
+            else:
+                m.status = "closed"
+                logger.info("Closing monitor due to inactivity: '%s'", m.title)
+        
+        # 2. Mark active monitors as "watching" if inactive for >7 days
+        elif m.status == "active" and last_date < dormant_cutoff:
+            m.status = "watching"
+            logger.info("Monitor set to watching: '%s'", m.title)
+        
+        # 3. Periodically re-categorize active monitors to keep taxonomy accurate
+        elif m.status == "active":
+            # Probability-based or simple toggle to avoid too many LLM calls
+            # For now, let's just do it if it's currently 'general' or 'defense' (the most common mis-labels)
+            if m.category in ("general", "defense", "guns", "trade"):
+                _reclassify_monitor_llm(m, db)
 
     db.commit()
 
@@ -1999,7 +2250,7 @@ def _run_refresh(db: Session) -> int:
         # article clusters were distinct enough to pass pre-LLM embedding
         # dedup (threshold 0.50) but the LLM distills them to the same headline.
         title_emb = _embed_texts([title])[0]
-        if any(float(title_emb @ prev_emb) >= 0.82 for _, prev_emb in generated_title_embs):
+        if any(float(title_emb @ prev_emb) >= 0.76 for _, prev_emb in generated_title_embs):
             logger.info(
                 "Skipping duplicate issue rank %d (title too similar to earlier issue): '%s'",
                 rank, title[:80],

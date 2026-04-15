@@ -346,6 +346,7 @@ class RelatedSenator(CamelModel):
     party: Literal["D", "R", "I"]
     overall_score: float
     leadership_score: float | None = None
+    chamber: str = "senate"
 
 
 class ActionItemSchema(CamelModel):

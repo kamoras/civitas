@@ -26,6 +26,7 @@ async def search_explore(
     commentable: bool = Query(False, description="Only show documents open for comment"),
     sort: str = Query("relevance", description="Sort order: relevance or date"),
     limit: int = Query(20, ge=1, le=50),
+    politician_id: str | None = Query(None, description="Filter by politician ID (exact match)"),
     db: Session = Depends(get_db),
 ):
     """Semantic search over government activity documents.
@@ -64,6 +65,18 @@ async def search_explore(
                 result["agencyName"] = doc.agency_name or ""
                 result["commentUrl"] = doc.comment_url or ""
                 result["commentsCloseOn"] = doc.comments_close_on or ""
+
+    if politician_id:
+        matching_doc_ids = set(
+            row[0] for row in
+            db.query(ExploreDocument.id)
+            .filter(
+                ExploreDocument.id.in_(doc_ids),
+                ExploreDocument.politician_id == politician_id,
+            )
+            .all()
+        )
+        results = [r for r in results if r.get("id") in matching_doc_ids]
 
     if commentable:
         from datetime import date as date_type

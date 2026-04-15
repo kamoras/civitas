@@ -79,18 +79,24 @@ POLICY_TAXONOMY = {
         "paid family leave, and right-to-work legislation."
     ),
     "DEFENSE": (
-        "Military, defense, national security, armed forces, and veterans. "
+        "U.S. military, armed forces, national security, and veterans. "
         "Includes the National Defense Authorization Act (NDAA), Pentagon budget, "
         "troop deployments, weapons procurement, defense contracts, VA benefits, "
         "and military base funding."
     ),
+    "FOREIGN_POLICY": (
+        "International relations, foreign aid, diplomacy, and global conflicts. "
+        "Includes treaties, humanitarian aid, diplomatic sanctions, United Nations, "
+        "and relations with specific foreign countries or regions (e.g. Russia, "
+        "China, Ukraine, Middle East, Iran)."
+    ),
     "GUNS": (
-        "Firearms, gun control, and the Second Amendment. "
+        "Domestic firearms regulation, gun control, and the Second Amendment. "
         "Includes background checks, assault weapons bans, ammunition regulations, "
         "concealed carry, red flag laws, and gun violence prevention."
     ),
     "HEALTHCARE": (
-        "Healthcare, medical insurance, hospitals, Medicare, and Medicaid. "
+        "U.S. healthcare system, medical insurance, hospitals, Medicare, and Medicaid. "
         "Includes the Affordable Care Act, prescription drug prices, public health, "
         "mental health, opioid crisis, and health system regulation."
     ),
@@ -100,13 +106,13 @@ POLICY_TAXONOMY = {
         "endangered species, national parks, and environmental justice."
     ),
     "TAXES": (
-        "Taxes, federal budget, government spending, and appropriations. "
+        "Taxes, federal budget, and government spending appropriations. "
         "Includes tax reform, IRS, deductions, credits, corporate tax, "
         "continuing resolutions, omnibus spending bills, government funding, "
         "debt ceiling, and fiscal policy."
     ),
     "IMMIGRATION": (
-        "Immigration, border security, asylum, and citizenship. "
+        "U.S. immigration, border security, asylum, and citizenship. "
         "Includes visa policy, DACA, deportation, refugee resettlement, "
         "border wall funding, and immigration courts."
     ),
@@ -116,7 +122,7 @@ POLICY_TAXONOMY = {
         "school choice, and higher education access."
     ),
     "FINANCIAL": (
-        "Financial regulation, banking oversight, and consumer protection. "
+        "U.S. financial regulation, banking oversight, and consumer protection. "
         "Includes Wall Street reform, SEC, Dodd-Frank, CFPB, "
         "cryptocurrency regulation, and banking compliance."
     ),
@@ -138,12 +144,12 @@ POLICY_TAXONOMY = {
         "District of Columbia governance, and constitutional powers."
     ),
     "TRADE": (
-        "International trade, tariffs, sanctions, and commerce. "
+        "International trade, tariffs, economic sanctions, and commerce. "
         "Includes import/export policy, USMCA, trade agreements, "
-        "trade wars, foreign sanctions, and economic diplomacy."
+        "trade wars, and economic diplomacy."
     ),
     "WELFARE": (
-        "Social programs, safety net, and disaster relief. "
+        "Social safety net, housing assistance, and disaster relief. "
         "Includes SNAP, food assistance, housing, unemployment benefits, "
         "Social Security, retirement, disability, postal service, "
         "infrastructure, FEMA, and disaster assistance."

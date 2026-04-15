@@ -356,7 +356,7 @@ export default function TimelineTab() {
       {pastMonths.length > 0 && (
         <div className="space-y-3">
           <h3 className="font-pixel text-[10px] text-matrix-green/30 tracking-widest text-center">EARLIER THIS YEAR</h3>
-          {[...pastMonths].reverse().map((month) => (
+          {pastMonths.map((month) => (
             <MonthCard key={month.month} month={month} defaultExpanded={false} eventsByMonth={eventsByMonth} />
           ))}
         </div>

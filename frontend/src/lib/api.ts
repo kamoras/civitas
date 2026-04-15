@@ -300,7 +300,7 @@ export interface ExploreStats {
 
 export async function searchExplore(
   query: string,
-  options?: { docType?: string; chamber?: string; limit?: number; commentableOnly?: boolean; sort?: "relevance" | "date" },
+  options?: { docType?: string; chamber?: string; limit?: number; commentableOnly?: boolean; sort?: "relevance" | "date"; politicianId?: string },
 ): Promise<ExploreResponse> {
   const params = new URLSearchParams({ q: query });
   if (options?.docType) params.set("doc_type", options.docType);
@@ -308,6 +308,7 @@ export async function searchExplore(
   if (options?.limit) params.set("limit", String(options.limit));
   if (options?.commentableOnly) params.set("commentable", "true");
   if (options?.sort) params.set("sort", options.sort);
+  if (options?.politicianId) params.set("politician_id", options.politicianId);
 
   const res = await fetch(`${API_BASE}/explore?${params}`);
   if (!res.ok) throw new Error(`Explore search failed: ${res.status}`);

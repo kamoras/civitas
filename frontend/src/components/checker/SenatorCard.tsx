@@ -300,7 +300,7 @@ export default function SenatorCard({ senator, chamber = "senate" }: SenatorCard
                         </div>
                       )}
                       {donor.pacAnalysis &&
-                        !donor.pacAnalysis.match(/has received funding from|a political PAC|opposes the removal|which is (?:not )?related to/i) && (
+                        !donor.pacAnalysis.match(/has received funding from|a political PAC|opposes the removal|which is (?:not )?(?:aligned with|related to) (?:his|her|their) (?:platform|stance|stated)/i) && (
                         <div className="text-[10px] text-matrix-green/40 mt-0.5">
                           {donor.pacAnalysis}
                         </div>

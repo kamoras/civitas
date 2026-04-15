@@ -568,7 +568,8 @@ class NationalMonitor(Base):
     last_article_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
     updates = relationship("MonitorUpdate", back_populates="monitor",
-                           cascade="all, delete-orphan", order_by="desc(MonitorUpdate.date)")
+                           cascade="all, delete-orphan", 
+                           order_by="desc(MonitorUpdate.date), desc(MonitorUpdate.created_at)")
 
 
 class MonitorUpdate(Base):

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchMyReps } from "@/lib/api";
 import { STATES } from "@/data/states";
-import type { MyRepSenator, MyRepsResponse } from "@/types/action";
+import type { MyRepRep, MyRepSenator, MyRepsResponse } from "@/types/action";
 
 const PARTY_COLORS: Record<string, string> = {
   D: "text-dem-blue",
@@ -124,6 +124,79 @@ function SenatorCard({ senator }: { senator: MyRepSenator }) {
   );
 }
 
+function RepCard({ rep }: { rep: MyRepRep }) {
+  const s = rep.scores;
+
+  return (
+    <div
+      className={`terminal-window border ${PARTY_BORDER[rep.party]} ${PARTY_BG[rep.party]} p-5`}
+    >
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span
+              className={`font-pixel text-xs px-1.5 py-0.5 border ${PARTY_BORDER[rep.party]} ${PARTY_COLORS[rep.party]}`}
+            >
+              {rep.party}
+            </span>
+            <span className="text-matrix-green/40 text-[10px] font-pixel">
+              {rep.state}-{rep.district}
+            </span>
+            {rep.yearsInOffice > 0 && (
+              <span className="text-matrix-green/30 text-[10px] font-pixel">
+                {rep.yearsInOffice}yr{rep.yearsInOffice !== 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+          <h3 className="font-pixel text-base sm:text-lg text-matrix-green leading-snug">
+            {rep.name}
+          </h3>
+          <div className="text-[10px] text-neon-cyan/40 font-pixel mt-0.5">
+            DISTRICT {rep.district}
+          </div>
+        </div>
+        <div className="text-right shrink-0">
+          <div className="font-pixel text-2xl text-matrix-green">{Math.round(s.overall)}</div>
+          <div className="text-[10px] text-matrix-green/40 font-pixel">OVERALL</div>
+        </div>
+      </div>
+
+      <div className="space-y-1.5 mb-4">
+        <ScoreBar label="FUNDING" value={s.fundingIndependence} />
+        <ScoreBar label="PROMISES" value={s.promisePersistence} />
+        <ScoreBar label="INDEP. VOTE" value={s.independentVoting} />
+        <ScoreBar label="DIVERSITY" value={s.fundingDiversity} />
+        <ScoreBar label="EFFECTIVE" value={s.legislativeEffectiveness} />
+      </div>
+
+      {rep.connectedIssues.length > 0 && (
+        <div className="border-t border-matrix-green/10 pt-3 mb-3">
+          <h4 className="font-pixel text-[10px] text-neon-cyan/60 mb-2">
+            CONNECTED TO TODAY&apos;S ISSUES
+          </h4>
+          <div className="space-y-1.5">
+            {rep.connectedIssues.map((iss) => (
+              <div key={iss.id} className="flex items-start gap-2 text-sm">
+                <span className="text-[10px] font-pixel text-neon-cyan/40 shrink-0 mt-0.5">
+                  #{iss.rank}
+                </span>
+                <span className="text-matrix-green/70 leading-snug">{iss.title}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <Link
+        href={`/scorecard?branch=house&state=${rep.state}&rep=${rep.id}`}
+        className="inline-block font-pixel text-[10px] text-neon-cyan border border-neon-cyan/30 px-3 py-1.5 hover:bg-neon-cyan/10 transition-colors"
+      >
+        VIEW FULL SCORECARD →
+      </Link>
+    </div>
+  );
+}
+
 export default function MyRepsTab({
   userState,
   setUserState,
@@ -208,7 +281,7 @@ export default function MyRepsTab({
       <div className="flex items-center justify-between">
         <div>
           <h2 className="font-pixel text-sm sm:text-base text-matrix-green">
-            YOUR SENATORS — {stateName.toUpperCase()}
+            YOUR REPRESENTATIVES — {stateName.toUpperCase()}
           </h2>
           {data?.issueDate && (
             <div className="text-[10px] text-matrix-green/40 font-pixel mt-1">
@@ -225,17 +298,39 @@ export default function MyRepsTab({
         </button>
       </div>
 
-      {data && data.senators.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {data.senators.map((senator) => (
-            <SenatorCard key={senator.id} senator={senator} />
-          ))}
+      {data && (data.senators.length > 0 || (data.representatives && data.representatives.length > 0)) ? (
+        <div className="space-y-6">
+          {data.senators.length > 0 && (
+            <div className="space-y-4">
+              <div className="font-pixel text-xs text-neon-pink/60">
+                {">"} SENATORS
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {data.senators.map((senator) => (
+                  <SenatorCard key={senator.id} senator={senator} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {data.representatives && data.representatives.length > 0 && (
+            <div className="space-y-4">
+              <div className="font-pixel text-xs text-neon-pink/60">
+                {">"} HOUSE REPRESENTATIVES
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {data.representatives.map((rep) => (
+                  <RepCard key={rep.id} rep={rep} />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <div className="terminal-window p-8 text-center">
-          <div className="font-pixel text-sm text-amber-400/80">NO SENATOR DATA</div>
+          <div className="font-pixel text-sm text-amber-400/80">NO REPRESENTATIVE DATA</div>
           <p className="text-matrix-green/50 text-sm mt-2">
-            Senator data for {stateName} is not yet available. Run the pipeline
+            Senator and representative data for {stateName} is not yet available. Run the pipeline
             to populate scores.
           </p>
         </div>
