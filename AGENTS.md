@@ -17,8 +17,8 @@ locally on a Raspberry Pi 5 with zero cloud AI calls.
 
 - **Frontend**: Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS — port 3000/3001
 - **Backend**: FastAPI (Python 3.12), SQLAlchemy ORM, SQLite — port 8000/8001
-- **LLM**: Qwen 2.5 1.5B via llama.cpp (native ARM, port 8070) or Ollama (Docker, port 11434)
-- **Embeddings**: sentence-transformers (all-MiniLM-L6-v2), runs in-process
+- **LLM**: DeepSeek-R1 1.5B via llama.cpp (native ARM, port 8070) or Ollama (Docker, port 11434)
+- **Embeddings**: sentence-transformers (Snowflake Arctic-XS), runs in-process
 - **Vector Store**: ChromaDB for semantic search document store
 - **Deployment**: Docker Compose, blue/green zero-downtime via `deploy.sh`, nginx reverse proxy with caching
 - **Branches covered**: Senate (100 senators), House (435 representatives), Presidents (historical + modern), Supreme Court (9 justices)
@@ -137,7 +137,7 @@ the residual.
 | 2 | Sentence-transformer cosine similarity | Industry, donor type, bill policy, party alignment, stance direction, procedural detection, skip entity detection, employer filtering, memo transfer detection, category normalization |
 | 2b | SVD / PageRank on cosponsorship matrix | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
 | 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills |
-| 4 | LLM (Qwen 2.5 1.5B) | Narrative synthesis, promise analysis, summaries, action center issue summarization |
+| 4 | LLM (DeepSeek-R1 1.5B) | Narrative synthesis, promise analysis, summaries, action center issue summarization |
 
 When FEC metadata is ambiguous (e.g., entity_type "COM" could be a corporate
 employee PAC or a purely political PAC), the system defers to tier 2

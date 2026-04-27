@@ -42,3 +42,30 @@ Return JSON:
   "impact": "<1 sentence: concrete consequence for ordinary people, or empty string if none>"
 }}""",
     }
+
+def promise_decomposition_prompt(promise_text: str) -> dict:
+    return {
+        "promptVersion": "promise-decomp-v1",
+        "systemPrompt": (
+            "You are a political data scientist. Your task is to decompose a "
+            "vague campaign promise into specific, searchable policy sub-topics "
+            "and keywords. These will be used for embedding-based retrieval of "
+            "related legislative votes.\n"
+            "Rules:\n"
+            "1. Identify the core policy area (e.g., Healthcare, Energy).\n"
+            "2. Generate 3-5 granular sub-topics (e.g., 'prescription drug prices').\n"
+            "3. Generate a list of 5-10 specific technical keywords or bill title "
+            "fragments likely to appear in related legislation.\n"
+            "Return ONLY valid JSON."
+        ),
+        "userPrompt": f"""Decompose this campaign promise:
+"{promise_text}"
+
+Return JSON:
+{{
+  "category": "<Main Category>",
+  "subTopics": ["<sub-topic 1>", "<sub-topic 2>", "..."],
+  "keywords": ["<word1>", "<word2>", "..."],
+  "searchQuery": "<A optimized 1-sentence description of the promise's intent for embedding similarity>"
+}}""",
+    }

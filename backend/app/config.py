@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///data/modern-punk.db"
     DATA_GOV_API_KEY: str = ""
     OLLAMA_BASE_URL: str = "http://ollama:11434"
-    OLLAMA_MODEL: str = "qwen2.5:1.5b"
+    OLLAMA_MODEL: str = "deepseek-r1:1.5b"
     LLM_BACKEND: str = "llama-server"
     LLAMA_SERVER_URL: str = "http://host.docker.internal:8070"
     PIPELINE_CACHE_TTL_HOURS: int = 72

@@ -176,26 +176,12 @@ def compute_promise_vote_alignment(
 ) -> dict:
     """Determine if a senator's actions align with a campaign promise.
 
-    Evidence sources (all embedding-based, deterministic):
-      1. **Votes** (primary): Yea/Nay on semantically related bills,
-         weighted by stance direction. This is the strongest signal
-         because it's a public, recorded commitment.
-      2. **Sponsored bills** (supplementary): legislation the senator
-         introduced that advances the promise. Sponsorship is weaker
-         evidence than a vote (bills may stall, be symbolic, etc.)
-         so it's weighted at 0.5× vote evidence. It can only produce
-         "kept" signals — not sponsoring anything isn't evidence of
-         breaking a promise.
-
-    Returns:
-        {
-            "alignment": "kept" | "broken" | "partial" | "unclear",
-            "relatedVotes": [bill_ids],
-            "relatedBills": [bill_ids],
-            "confidence": 0.0-1.0,
-            "reasoning": "factual description of evidence"
-        }
+    Uses DeepSeek-R1 to decompose the promise into a rich semantic query
+    before performing embedding similarity search against legislative data.
     """
+    from app.pipeline.analyze.prompts import promise_decomposition_prompt
+    from app.pipeline.analyze.ollama_client import call_llm, extract_json
+
     empty = {
         "alignment": "unclear",
         "relatedVotes": [],
@@ -208,7 +194,24 @@ def compute_promise_vote_alignment(
     if not votes and not sponsored_bills:
         return empty
 
-    promise_emb = _embed(promise_text[:500])
+    # 1. Decompose promise via LLM for better search query
+    decomp_prompt = promise_decomposition_prompt(promise_text)
+    raw_decomp = call_llm(
+        system_prompt=decomp_prompt["systemPrompt"],
+        user_prompt=decomp_prompt["userPrompt"],
+        prompt_version=decomp_prompt["promptVersion"],
+        input_data={"promise": promise_text},
+        max_tokens=300
+    )
+    decomp = extract_json(raw_decomp) if raw_decomp else None
+    
+    # Use the LLM's optimized search query if available, otherwise fallback
+    search_text = promise_text
+    if decomp and decomp.get("searchQuery"):
+        # Blend original + optimized for best coverage
+        search_text = f"{promise_text} {decomp['searchQuery']} {' '.join(decomp.get('keywords', []))}"
+
+    promise_emb = _embed(search_text[:1000])
 
     # ── Vote evidence ──
     substantive = [
@@ -412,13 +415,34 @@ def detect_donor_vote_connections(
             vote_cast = vote["vote"]
             bill_name = vote.get("billName", bid)[:80]
             is_amendment = "amdt" in bid.lower() or "amendment" in bill_name.lower()
+            
+            # Determine if this was a consensus vote (overwhelming majority)
+            # using whatever tally info is available.
+            yeas = vote.get("totalYeas") or vote.get("yeas", 0)
+            nays = vote.get("totalNays") or vote.get("nays", 0)
+            is_consensus = False
+            if yeas + nays > 20:
+                is_consensus = (max(yeas, nays) / (yeas + nays)) >= 0.85
+
             desc_parts.append(
                 f"Voted {vote_cast} on {'amendment ' if is_amendment else ''}"
                 f"{bill_name} ({vote.get('policyArea', '')})"
+                f"{' [Consensus]' if is_consensus else ''}"
             )
 
         if not matched_bills:
             continue
+        
+        # Check if ALL matched bills for this donor were consensus votes
+        all_consensus = True
+        for bid in matched_bills:
+            vote_obj = next((v for v in substantive if v["billId"] == bid), None)
+            if vote_obj:
+                y = vote_obj.get("totalYeas") or vote_obj.get("yeas", 0)
+                n = vote_obj.get("totalNays") or vote_obj.get("nays", 0)
+                if y + n <= 20 or (max(y, n) / (y + n)) < 0.85:
+                    all_consensus = False
+                    break
 
         if donor_key in donor_matches:
             existing = donor_matches[donor_key]
@@ -426,6 +450,8 @@ def detect_donor_vote_connections(
                 if b not in existing["billsInfluenced"]:
                     existing["billsInfluenced"].append(b)
             existing["similarity"] = max(existing["similarity"], best_sim)
+            if not all_consensus:
+                existing["isConsensusVote"] = False
         else:
             donor_matches[donor_key] = {
                 "lobbyistOrg": donor_name,
@@ -434,6 +460,7 @@ def detect_donor_vote_connections(
                 "donationToSenator": round(donor.get("total", 0)),
                 "billsInfluenced": matched_bills,
                 "senatorVoteAligned": None,
+                "isConsensusVote": all_consensus,
                 "similarity": round(best_sim, 3),
                 "description": (
                     f"{donor_name} ({donor.get('industry', '?')}) donated "

@@ -34,8 +34,8 @@ logger = logging.getLogger(__name__)
 # invalidates all stored embeddings — call invalidate_on_model_change()
 # to wipe ChromaDB and the learning store when upgrading.
 
-EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
-EMBEDDING_MODEL_VERSION = "all-MiniLM-L6-v2"  # short id for metadata
+EMBEDDING_MODEL_NAME = "Snowflake/snowflake-arctic-embed-xs"
+EMBEDDING_MODEL_VERSION = "arctic-xs"  # short id for metadata
 EMBEDDING_DIMENSIONS = 384
 
 _VERSION_FILE = "/data/chroma/.model_version"

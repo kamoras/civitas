@@ -446,23 +446,32 @@ def _calc_independent_voting(
             if m.get("senatorVoteAligned") is not None
         ]
         if with_alignment:
-            aligned = sum(1 for m in with_alignment if m.get("senatorVoteAligned"))
-            lobby_alignment_rate = aligned / len(with_alignment)
+            # Weighted alignment: consensus votes (bipartisan majority) carry
+            # significantly less weight as a signal of capture than divided votes.
+            weighted_aligned = 0.0
+            total_weight = 0.0
+            for m in with_alignment:
+                # 0.2x weight for consensus, 1.0x for divided
+                weight = 0.2 if m.get("isConsensusVote") else 1.0
+                total_weight += weight
+                if m.get("senatorVoteAligned"):
+                    weighted_aligned += weight
+            
+            lobby_alignment_rate = weighted_aligned / total_weight if total_weight > 0 else 0
             donor_score = (1 - lobby_alignment_rate * min(pac_ratio * 2, 1.0)) * 100
         else:
-            # Matches found but alignment is unknown. The existence of
-            # industry-connected donors whose bills the senator voted on
-            # is a mild yellow flag. Scale by match count and total
-            # donation size relative to total raised.
+            # Matches found but alignment is unknown.
             total_lobby_donations = sum(
                 m.get("donationToSenator", 0) for m in lobbying_matches
             )
             donation_ratio = (
                 total_lobby_donations / total_raised if total_raised > 0 else 0
             )
-            connection_factor = min(len(lobbying_matches) / 8, 1.0)
-            # Blend: more matches + higher donation ratio = lower score.
-            # Cap penalty at 35 points (score floor ~65 from donor side).
+            # Count only non-consensus matches for the primary connection signal
+            non_consensus_count = sum(1 for m in lobbying_matches if not m.get("isConsensusVote"))
+            connection_factor = min(non_consensus_count / 8, 1.0)
+            
+            # Blend: more non-consensus matches + higher donation ratio = lower score.
             penalty = connection_factor * 0.20 + min(donation_ratio * 5, 0.15)
             donor_score = max(50, (1 - penalty) * 100)
     else:

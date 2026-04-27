@@ -738,7 +738,7 @@ export default function AboutPage() {
                   The Explore feature uses dense passage retrieval
                   <Cite id="11">Karpukhin et al. 2020</Cite> to enable free-text search over
                   government documents (floor speeches, executive orders, bills). Documents are
-                  chunked, embedded with all-MiniLM-L6-v2, and stored in ChromaDB for approximate
+                  chunked, embedded with Snowflake Arctic-XS, and stored in ChromaDB for approximate
                   nearest-neighbor retrieval. This outperforms keyword search (BM25) for
                   conceptual queries like &quot;climate policy&quot; where exact term overlap is low.
                 </P>
@@ -758,7 +758,7 @@ export default function AboutPage() {
               <div>
                 <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">EMBEDDING MODEL (CLASSIFICATION + SEARCH)</h3>
                 <P>
-                  <Label>all-MiniLM-L6-v2</Label> (22M parameters)
+                  <Label>Snowflake Arctic-XS</Label> (22M parameters)
                   <Cite id="8">Wang et al. 2020</Cite>
                   handles all classification tasks: bill policy areas, donor industries,
                   party alignment, motion types, and semantic search retrieval.
@@ -772,7 +772,7 @@ export default function AboutPage() {
               <div>
                 <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">LLM (NARRATIVE SYNTHESIS)</h3>
                 <P>
-                  <Label>Qwen 2.5 1.5B</Label> via llama.cpp
+                  <Label>DeepSeek-R1 1.5B</Label> via llama.cpp
                   <Cite id="16">Gerganov 2023</Cite> handles tasks requiring natural
                   language understanding and multi-step reasoning:
                 </P>
@@ -837,7 +837,7 @@ export default function AboutPage() {
               <div>
                 <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">MODEL AND ARCHITECTURE</h3>
                 <P>
-                  The inference model is <Label>Qwen 2.5 1.5B</Label>, a compact open-weight
+                  The inference model is <Label>DeepSeek-R1 1.5B</Label>, a compact open-weight
                   language model running natively via llama.cpp
                   <Cite id="16">Gerganov 2023</Cite> compiled with ARM-specific optimizations
                   (cortex-a76, dot-product, fp16). This provides ~3x faster inference compared
@@ -845,7 +845,7 @@ export default function AboutPage() {
                   Results are cached in a local database so each unique analysis is computed at most once.
                 </P>
                 <P>
-                  The embedding model is <Label>all-MiniLM-L6-v2</Label>
+                  The embedding model is <Label>Snowflake Arctic-XS</Label>
                   <Cite id="8">Wang et al. 2020</Cite>, a 22M-parameter sentence transformer.
                   It handles all classification (bills, donors, industries, party alignment),
                   semantic search, and nearest-neighbor retrieval. Both models run entirely
@@ -883,7 +883,7 @@ export default function AboutPage() {
               <h3 className="text-xs text-matrix-green/50 tracking-widest">EXPLORE FEATURE</h3>
               <Row label="Congressional Record (GovInfo)" value="Senate and House floor proceedings — speaker-attributed transcripts from daily CREC packages" />
               <Row label="Federal Register" value="Executive orders, presidential memoranda, and proclamations with full text and metadata" />
-              <Row label="Semantic Search" value="Documents embedded with all-MiniLM-L6-v2 into ChromaDB for dense passage retrieval" />
+              <Row label="Semantic Search" value="Documents embedded with Snowflake Arctic-XS into ChromaDB for dense passage retrieval" />
             </div>
 
             <div className="space-y-2 mt-6">
@@ -944,7 +944,7 @@ export default function AboutPage() {
               <div>
                 <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">OPEN-WEIGHT MODEL</h3>
                 <P>
-                  We deliberately chose Qwen 2.5, an open-weight model, over proprietary
+                  We deliberately chose DeepSeek-R1, an open-weight model, over proprietary
                   alternatives like GPT-4 or Claude. This means: no per-token API costs that
                   could make the project financially unsustainable, no dependency on a third-party
                   company&apos;s continued service, full auditability of the model&apos;s behavior,
@@ -991,10 +991,10 @@ export default function AboutPage() {
           <Section title="TECHNICAL STACK">
             <div className="space-y-2">
               <Row label="Hardware" value="Raspberry Pi 5 (16GB), NVMe SSD" />
-              <Row label="Backend" value="Python 3.12, FastAPI, SQLAlchemy, SQLite" />
-              <Row label="Frontend" value="Next.js 14, React 18, TypeScript, Tailwind CSS" />
-              <Row label="Embedding Model" value="all-MiniLM-L6-v2 (22M params, sentence-transformers)" />
-              <Row label="LLM Runtime" value="llama.cpp (native ARM build), Qwen 2.5 1.5B" />
+              <Row label="Backend" value="Python 3.13, FastAPI, SQLAlchemy, SQLite" />
+              <Row label="Frontend" value="Next.js 16, React 19, TypeScript, Tailwind CSS" />
+              <Row label="Embedding Model" value="Snowflake Arctic-XS (22M params, Snowflake/HuggingFace)" />
+              <Row label="LLM Runtime" value="llama.cpp (native ARM build), DeepSeek-R1 1.5B" />
               <Row label="Vector Database" value="ChromaDB (persistent, local)" />
               <Row label="Containers" value="Docker Compose (blue/green zero-downtime deploy via nginx)" />
               <Row label="Pipeline Schedule" value="Nightly at 3:00 AM via APScheduler" />
