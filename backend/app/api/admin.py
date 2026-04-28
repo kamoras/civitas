@@ -542,6 +542,53 @@ async def admin_trigger_pipeline(
     }
 
 
+@router.post("/pipeline/reembed-explore", dependencies=[Depends(require_admin)])
+async def admin_reembed_explore(db: Session = Depends(get_db)):
+    """Re-embed all explore documents using the current model.
+
+    Use this after changing the embedding model to rebuild the vector store
+    without running the full pipeline.
+    """
+    from app.models import ExploreDocument
+    from app.pipeline.vector_store import (
+        get_chroma_client,
+        embed_explore_documents,
+        _write_model_version,
+    )
+
+    client = get_chroma_client()
+    try:
+        client.delete_collection(name="explore_documents")
+    except Exception:
+        pass
+
+    all_docs = db.query(ExploreDocument).all()
+    doc_dicts = [
+        {
+            "id": d.id,
+            "title": d.title,
+            "summary": d.summary,
+            "body": d.body,
+            "doc_type": d.doc_type,
+            "source": d.source,
+            "date": d.date,
+            "politician_name": d.politician_name,
+            "politician_id": d.politician_id,
+            "chamber": d.chamber,
+        }
+        for d in all_docs
+    ]
+
+    def _run():
+        count = embed_explore_documents(doc_dicts)
+        _write_model_version()
+        return count
+
+    import asyncio
+    count = await asyncio.to_thread(_run)
+    return {"embedded": count}
+
+
 @router.post("/pipeline/trigger-house", dependencies=[Depends(require_admin)])
 async def admin_trigger_house_pipeline(db: Session = Depends(get_db)):
     """Trigger a House representative pipeline run."""
