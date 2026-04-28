@@ -200,10 +200,11 @@ def compute_promise_vote_alignment(
         system_prompt=decomp_prompt["systemPrompt"],
         user_prompt=decomp_prompt["userPrompt"],
         prompt_version=decomp_prompt["promptVersion"],
-        input_data={"promise": promise_text},
+        cache_key={"promise": promise_text},
         max_tokens=300
     )
-    decomp = extract_json(raw_decomp) if raw_decomp else None
+    # call_llm returns already-parsed JSON; extract_json is only needed for raw strings
+    decomp = raw_decomp if isinstance(raw_decomp, dict) else (extract_json(raw_decomp) if raw_decomp else None)
     
     # Use the LLM's optimized search query if available, otherwise fallback
     search_text = promise_text

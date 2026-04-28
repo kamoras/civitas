@@ -257,7 +257,7 @@ def _get_policy_embeddings() -> dict[str, np.ndarray]:
 EMBEDDING_CONFIDENCE_THRESHOLD = 0.25
 
 
-def _is_procedural_seed_match(text: str, threshold: float = 0.30) -> bool:
+def _is_procedural_seed_match(text: str, threshold: float = 0.74) -> bool:
     """Check if text is procedural via embedding similarity to the procedural prototype.
 
     Uses cosine similarity (Reimers & Gurevych 2019) instead of keyword
@@ -460,6 +460,36 @@ def derive_stance(bill_name: str, summary: str, policy_area: str) -> tuple[str, 
     """
     area = policy_area.lower().replace("_", " ")
 
+    # Tier 0: keyword prefix check for unambiguous stance verbs.
+    # Uses the same word lists that define the stance prototypes, so this is
+    # consistent with the embedding-based tier. Dense embedding models compress
+    # scores toward 0.75-0.80 for short directional phrases, so a word-list
+    # tier-0 provides higher precision for clear-cut cases (e.g. "A bill to
+    # repeal X" is always anti, regardless of X's domain).
+    _ANTI_VERBS = frozenset({
+        "ban", "prohibit", "restrict", "limit", "block", "repeal",
+        "eliminate", "remove", "defund", "rescind", "cut", "reduce",
+        "rollback", "revoke", "abolish", "dismantle", "oppose",
+        "curtail", "suspend", "withdraw", "terminate", "penalize",
+        "sanction", "end", "halt", "prevent", "stop",
+    })
+    _PRO_VERBS = frozenset({
+        "protect", "strengthen", "expand", "extend", "increase", "fund",
+        "invest", "establish", "create", "mandate", "require",
+        "reauthorize", "support", "promote", "enhance", "authorize",
+        "improve", "safeguard", "guarantee", "ensure", "provide",
+        "preserve", "advance", "empower",
+    })
+    # Normalise: strip leading articles/prepositions ("a bill to", "to", etc.)
+    _stub = re.sub(r"^(a\s+)?bill\s+to\s+", "", bill_name.lower().strip())
+    _first_word = _stub.split()[0] if _stub.split() else ""
+    if _first_word in _ANTI_VERBS:
+        keyword_dir: str | None = "anti"
+    elif _first_word in _PRO_VERBS:
+        keyword_dir = "pro"
+    else:
+        keyword_dir = None
+
     from app.pipeline.vector_store import get_embedding_model
     model = get_embedding_model()
     stance_embs = _get_stance_embeddings()
@@ -484,10 +514,23 @@ def derive_stance(bill_name: str, summary: str, policy_area: str) -> tuple[str, 
     if best_score < 0.10:
         best_dir = "neutral"
     elif best_dir != "neutral":
-        # For pro/anti, require a margin over neutral to avoid false positives
+        # For pro/anti, require a margin over neutral to avoid false positives.
+        # If the keyword tier agreed with the embedding tier, accept even a
+        # smaller margin to avoid over-predicting neutral.
         neutral_score = scores.get("neutral", 0.0)
-        if best_score - neutral_score < 0.03:
+        margin = best_score - neutral_score
+        min_margin = 0.005 if keyword_dir == best_dir else 0.03
+        if margin < min_margin:
             best_dir = "neutral"
+
+    # If embedding disagrees with the keyword tier, defer to the keyword
+    # result only when scores are very close (within 0.01) — the keyword is
+    # more reliable for short, explicitly-framed bill titles.
+    if keyword_dir and best_dir == "neutral":
+        anti_score = scores.get("anti", 0.0)
+        pro_score = scores.get("pro", 0.0)
+        if abs(anti_score - pro_score) < 0.01:
+            best_dir = keyword_dir
 
     if summary and len(summary) > 30:
         first_sentence = summary.split(".")[0].strip()

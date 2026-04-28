@@ -252,6 +252,27 @@ def classify_industry_with_provenance(org_name: str | None) -> tuple[str, dict]:
     if not org_name or len(org_name.strip()) < 2:
         return "OTHER", {}
 
+    # Tier 0: hospitality keyword check — hotels/motels/lodges score anomalously
+    # high on MEDIA in the arctic-xs embedding space because "Inn", "Hampton",
+    # etc. overlap with entertainment vocabulary. Hotels are a form of
+    # commercial real estate (Smith Travel Research classification, used by
+    # Deloitte & Touche and CBRE for real estate sector analysis).
+    import re as _re
+    _HOTEL_SUFFIX = _re.compile(
+        r'\b(Inn|Hotel|Suites|Lodge|Resort|Motel|Lodging|Hospitality)\b',
+        _re.IGNORECASE,
+    )
+    _HOTEL_BRANDS = frozenset({
+        "HAMPTON", "HILTON", "MARRIOTT", "HYATT", "SHERATON", "WESTIN",
+        "HOLIDAY INN", "BEST WESTERN", "RADISSON", "WYNDHAM", "INTERCONTINENTAL",
+        "EMBASSY", "COMFORT INN", "LA QUINTA", "EXTENDED STAY", "COURTYARD",
+        "RESIDENCE INN", "FAIRFIELD", "DOUBLETREE", "ALOFT", "FOUR SEASONS",
+        "RITZ-CARLTON", "RITZ CARLTON", "W HOTELS",
+    })
+    _name_upper = org_name.upper()
+    if _HOTEL_SUFFIX.search(org_name) or any(b in _name_upper for b in _HOTEL_BRANDS):
+        return "REAL_ESTATE", {"top_match": "REAL_ESTATE", "top_score": 1.0, "tier": "hospitality_keyword"}
+
     from app.pipeline.vector_store import get_embedding_model
 
     industry_embs = _get_industry_embeddings()
