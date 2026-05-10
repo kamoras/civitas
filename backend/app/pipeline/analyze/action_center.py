@@ -613,7 +613,7 @@ def _find_related_senators(
 
     matched: dict[str, dict] = {}
 
-    def _make_entry(s, chamber: str = "senate") -> dict:
+    def _make_entry(s, chamber: str = "senate", match_reason: str | None = None) -> dict:
         from app.config_definitions import SCORE_WEIGHTS
         overall = (
             s.score_funding_independence * SCORE_WEIGHTS["fundingIndependence"]
@@ -627,6 +627,7 @@ def _find_related_senators(
             "party": s.party, "overall_score": round(overall, 1),
             "leadership_score": round(s.leadership_score * 100) if s.leadership_score else None,
             "chamber": chamber,
+            "match_reason": match_reason,
         }
 
     # Pass 1: substring matches with contextual disambiguation
@@ -643,7 +644,7 @@ def _find_related_senators(
 
         # Full name match is high-confidence — no disambiguation needed
         if full_name_lower in issue_text_lower:
-            matched[s.id] = _make_entry(s, chamber)
+            matched[s.id] = _make_entry(s, chamber, match_reason="named in coverage")
             continue
 
         # Last-name-only match needs word-boundary + disambiguation
@@ -681,28 +682,13 @@ def _find_related_senators(
             for i, (s, chamber) in enumerate(candidate_refs):
                 sim = float(np.dot(senator_embeds[i], context_embeds[i]))
                 if sim >= DISAMBIGUATION_THRESHOLD:
-                    matched[s.id] = _make_entry(s, chamber)
+                    matched[s.id] = _make_entry(s, chamber, match_reason="referenced in coverage")
                 else:
                     logger.debug(
                         "Rejected senator match '%s' (sim=%.3f < %.2f) — "
                         "likely institutional reference",
                         s.name, sim, DISAMBIGUATION_THRESHOLD,
                     )
-
-    # Pass 2: embedding fallback when no substring matches found
-    if not matched:
-        member_names = [s.name for s, _ in all_members]
-        name_embeddings = _embed_texts(member_names)
-        issue_embedding = _embed_texts([issue_text])[0]
-        similarities = name_embeddings @ issue_embedding
-
-        SENATOR_MATCH_THRESHOLD = 0.45
-        top_indices = np.argsort(similarities)[::-1]
-        for idx in top_indices[:5]:
-            if similarities[idx] < SENATOR_MATCH_THRESHOLD:
-                break
-            s, chamber = all_members[idx]
-            matched[s.id] = _make_entry(s, chamber)
 
     result = list(matched.values())
     if result:
