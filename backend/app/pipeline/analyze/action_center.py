@@ -58,8 +58,8 @@ _POLICY_PROTOTYPES = [
 ]
 
 POLICY_RELEVANCE_THRESHOLD = 0.15
-CLUSTER_TITLE_THRESHOLD = 0.45
-CLUSTER_CENTROID_MERGE_THRESHOLD = 0.38
+CLUSTER_TITLE_THRESHOLD = 0.40
+CLUSTER_CENTROID_MERGE_THRESHOLD = 0.20
 MAX_ISSUES = 4
 MIN_ARTICLES_PER_CLUSTER = 1
 
@@ -389,10 +389,18 @@ def _cluster_articles(
     if not items:
         return []
 
-    # Pass 1: cluster on title-only embeddings (less source-specific noise)
+    # Pass 1: cluster on title-only embeddings (less source-specific noise).
+    # Center embeddings before computing similarity — the embedding model places
+    # all English news headlines in a tight cluster (~0.74 median cosine sim),
+    # so raw similarity is uninformative. Subtracting the batch mean removes the
+    # "generic news article" component and makes topic-specific dimensions dominate.
     titles = [a.title for a, _ in items]
     title_embeddings = _embed_texts(titles)
-    title_sim = title_embeddings @ title_embeddings.T
+    mean_emb = title_embeddings.mean(axis=0, keepdims=True)
+    centered = title_embeddings - mean_emb
+    norms = np.linalg.norm(centered, axis=1, keepdims=True)
+    centered_embs = centered / np.where(norms < 1e-9, 1.0, norms)
+    title_sim = centered_embs @ centered_embs.T
 
     pass1 = _agglomerative_cluster(title_sim, CLUSTER_TITLE_THRESHOLD)
     logger.info(
@@ -400,11 +408,11 @@ def _cluster_articles(
         CLUSTER_TITLE_THRESHOLD, len(items), len(pass1),
     )
 
-    # Pass 2: merge clusters whose centroids are close
+    # Pass 2: merge clusters whose centroids are close (using centered embeddings)
     if len(pass1) > 1:
-        centroids = np.zeros((len(pass1), title_embeddings.shape[1]))
+        centroids = np.zeros((len(pass1), centered_embs.shape[1]))
         for ci, indices in enumerate(pass1):
-            centroid = title_embeddings[indices].mean(axis=0)
+            centroid = centered_embs[indices].mean(axis=0)
             norm = np.linalg.norm(centroid)
             centroids[ci] = centroid / norm if norm > 0 else centroid
 
@@ -528,13 +536,18 @@ def _deduplicate_top_clusters(
     if len(ranked_clusters) <= 1:
         return ranked_clusters[:max_issues]
 
-    DEDUP_THRESHOLD = 0.44
+    # Threshold in centered-embedding space (see _cluster_articles for rationale)
+    DEDUP_THRESHOLD = 0.15
 
     cluster_texts = [
         " ".join(a.title for a in cluster[:5])
         for cluster in ranked_clusters
     ]
-    embeddings = _embed_texts(cluster_texts)
+    raw_embs = _embed_texts(cluster_texts)
+    mean_emb = raw_embs.mean(axis=0, keepdims=True)
+    centered = raw_embs - mean_emb
+    norms = np.linalg.norm(centered, axis=1, keepdims=True)
+    embeddings = centered / np.where(norms < 1e-9, 1.0, norms)
 
     selected: list[int] = []
     for i in range(len(ranked_clusters)):
