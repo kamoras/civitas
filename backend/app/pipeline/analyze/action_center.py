@@ -2249,7 +2249,7 @@ def _run_refresh(db: Session) -> int:
         # article clusters were distinct enough to pass pre-LLM embedding
         # dedup (threshold 0.50) but the LLM distills them to the same headline.
         title_emb = _embed_texts([title])[0]
-        if any(float(title_emb @ prev_emb) >= 0.76 for _, prev_emb in generated_title_embs):
+        if any(float(title_emb @ prev_emb) >= 0.92 for _, prev_emb in generated_title_embs):
             logger.info(
                 "Skipping duplicate issue rank %d (title too similar to earlier issue): '%s'",
                 rank, title[:80],
