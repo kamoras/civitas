@@ -11,6 +11,12 @@ import GlitchText from "@/components/effects/GlitchText";
 import { fetchActionIssues } from "@/lib/api";
 import { safeHref } from "@/lib/formatting";
 import StancePulse from "@/components/action/StancePulse";
+import { LogActionButton } from "@/components/action/CivicTracker";
+
+const CivicActionWidget = dynamic(
+  () => import("@/components/action/CivicTracker"),
+  { ssr: false },
+);
 import type { ActionIssue, ActionIssuesResponse, ActionItem, DailyTheme } from "@/types/action";
 import { STATES } from "@/data/states";
 
@@ -505,6 +511,9 @@ function HeroIssue({
         initialConcerned={issue.concernedCount || 0}
         initialNotPriority={issue.notPriorityCount || 0}
       />
+      <div className="mt-3 flex justify-end">
+        <LogActionButton issueTitle={issue.title} />
+      </div>
     </div>
   );
 }
@@ -646,6 +655,9 @@ function SecondaryIssue({
             initialConcerned={issue.concernedCount || 0}
             initialNotPriority={issue.notPriorityCount || 0}
           />
+          <div className="mt-3 flex justify-end">
+            <LogActionButton issueTitle={issue.title} />
+          </div>
         </div>
       )}
     </div>
@@ -1096,6 +1108,7 @@ function ActionPageInner() {
         </div>
       </main>
       <Footer />
+      <CivicActionWidget />
     </>
   );
 }
