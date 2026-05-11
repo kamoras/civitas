@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import MatrixRain from "@/components/effects/MatrixRain";
@@ -80,6 +80,105 @@ function formatCommentDate(dateStr: string): string {
   } catch {
     return dateStr;
   }
+}
+
+function buildCommentTemplate(title: string): string {
+  return `I am writing in response to the proposed rule: "${title}".
+
+I am a member of the public affected by this regulation. [Describe how this rule affects you or your community.]
+
+I urge the agency to consider the following: [State your specific concern, suggestion, or support.]
+
+Thank you for the opportunity to submit a public comment.`.trim();
+}
+
+function HelpMeCommentPanel({
+  doc,
+  remaining,
+}: {
+  doc: ExploreDocumentDetail;
+  remaining: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const plainSummary = doc.summary || (doc.body ? doc.body.slice(0, 400) + (doc.body.length > 400 ? "…" : "") : "");
+
+  function handleOpen() {
+    if (!open) setDraft(buildCommentTemplate(doc.title));
+    setOpen((v) => !v);
+  }
+
+  useEffect(() => {
+    if (open) textareaRef.current?.focus();
+  }, [open]);
+
+  return (
+    <div className="mt-3">
+      <button
+        onClick={handleOpen}
+        aria-expanded={open}
+        className="text-xs font-pixel px-4 py-2 rounded border border-emerald-500/40
+                   text-emerald-400/80 hover:text-emerald-400 hover:bg-emerald-500/10
+                   transition-colors"
+      >
+        {open ? "CLOSE" : "HELP ME WRITE A COMMENT"}
+      </button>
+
+      {open && (
+        <div className="mt-4 p-4 border border-emerald-500/20 rounded bg-emerald-500/5 space-y-4">
+          {plainSummary && (
+            <div>
+              <p className="text-[10px] font-pixel text-emerald-400/50 mb-1 tracking-wider">WHAT THIS DOCUMENT DOES</p>
+              <p className="text-sm text-matrix-green/70 leading-relaxed">{plainSummary}</p>
+            </div>
+          )}
+
+          <div>
+            <label htmlFor="comment-draft" className="text-[10px] font-pixel text-matrix-green/50 block mb-1 tracking-wider">
+              YOUR COMMENT — EDIT BEFORE SUBMITTING
+            </label>
+            <textarea
+              id="comment-draft"
+              ref={textareaRef}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              rows={9}
+              className="w-full bg-crt-black/80 border border-matrix-green/20 rounded px-3 py-2
+                         text-sm text-matrix-green leading-relaxed
+                         focus:outline-none focus:border-emerald-500/50 transition-colors
+                         resize-y min-h-[180px]"
+            />
+            <p className="text-[10px] text-matrix-green/30 mt-1">
+              Replace the bracketed text with your own words.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-[10px] text-emerald-400/50">
+              {remaining === 0 ? "Closes today" : `${remaining} day${remaining !== 1 ? "s" : ""} left`} · Opens on regulations.gov
+            </p>
+            <a
+              href={safeHref(doc.commentUrl) || "#"}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-pixel px-5 py-2 rounded
+                         bg-emerald-500/20 text-emerald-400 border border-emerald-500/50
+                         hover:bg-emerald-500/30 hover:border-emerald-500/70
+                         transition-colors"
+            >
+              OPEN COMMENT FORM →
+            </a>
+          </div>
+          <p className="text-[10px] text-matrix-green/25 leading-relaxed">
+            Copy your comment above, then paste it into the form on regulations.gov. Your comment
+            becomes part of the official public record.
+          </p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function CommentsSection({
@@ -553,6 +652,7 @@ export default function ExploreDetailPage() {
                   SUBMIT YOUR COMMENT →
                 </a>
               </div>
+              <HelpMeCommentPanel doc={doc} remaining={remaining} />
             </div>
           )}
 
