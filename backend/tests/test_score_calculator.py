@@ -49,13 +49,20 @@ class TestFundingIndependence:
         assert _calc_funding_independence(funding) < 20
 
     def test_balanced_funding(self):
+        # 30% PAC ratio + 20% top-10 concentration.
+        # Calibrated formula (Barber 2016 / Bonica 2014): median senator
+        # (25% PAC, 20% concentration) scores ~50, so 30% PAC should land
+        # slightly below neutral.  Expected range updated from v1 (50-90)
+        # to reflect recalibrated multipliers (PAC ×2.0, conc ×2.5).
+        # pac_score = (1-0.30*2.0)*100 = 40; conc_score = (1-0.20*2.5)*100 = 50
+        # FI = 0.5*40 + 0.5*50 = 45.
         funding = {
             "totalRaised": 1_000_000,
             "totalFromPACs": 300_000,
             "topDonors": [{"total": 20_000} for _ in range(10)],
         }
         score = _calc_funding_independence(funding)
-        assert 50 <= score <= 90
+        assert 35 <= score <= 60
 
     def test_no_funding_data(self):
         assert _calc_funding_independence({}) == 50
@@ -258,14 +265,22 @@ class TestPromisePersistence:
     """Higher score = more kept promises + floor advocacy boost."""
 
     def test_all_kept(self):
+        # Beta-Binomial posterior (Morris 1983, PRIOR_PSEUDOCOUNT=10):
+        # 3 kept → posterior = (3+5)/(3+10)*100 = 61.5, blended ≈ 65.
+        # Range updated from v1 (70-95) to reflect Beta(5,5) shrinkage —
+        # sparse samples (n=3) stay closer to the neutral prior of 50.
         promises = [{"alignment": "kept"}, {"alignment": "kept"}, {"alignment": "kept"}]
         score = _calc_promise_persistence({}, "D", promises)
-        assert 70 <= score <= 95
+        assert 58 <= score <= 85
 
     def test_all_broken(self):
+        # Beta-Binomial posterior (Morris 1983, PRIOR_PSEUDOCOUNT=10):
+        # 2 broken → posterior = (0+5)/(2+10)*100 = 41.7, blended ≈ 48.
+        # Range updated from v1 (score<=45) — n=2 sparse data should not
+        # anchor far from neutral; the prior dominates at this sample size.
         promises = [{"alignment": "broken"}, {"alignment": "broken"}]
         score = _calc_promise_persistence({}, "D", promises)
-        assert score <= 45
+        assert score <= 52
 
     def test_mixed(self):
         promises = [

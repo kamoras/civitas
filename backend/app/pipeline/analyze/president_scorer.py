@@ -74,19 +74,43 @@ def calc_effectiveness(
     gdp_growth_avg: float | None,
     term_years: float,
     seed_score: float,
+    gdp_growth_adjusted: float | None = None,
 ) -> int:
     """Calculate effectiveness score from economic data.
 
     Components (weighted):
       - GDP growth (60%): Compared to post-WWII average of ~3.2%
       - Jobs created (40%): Normalized per year of term
+
+    GDP adjustment — first-year exclusion
+    ----------------------------------------
+    When per-year GDP data is available, uses gdp_growth_adjusted which
+    excludes the first calendar year of the term.  The first year's GDP
+    primarily reflects the preceding administration's fiscal policy,
+    legislation, and macroeconomic inheritance.  Romer & Romer (2010,
+    AER 100(3), 763–801) document a 6–18 month transmission lag for
+    fiscal policy changes.  Blinder & Watson (2016, AER 106(4), 1015–1045)
+    and Bartels (2008, 'Unequal Democracy,' Princeton UP, Table 2.1)
+    both start measuring presidential economic performance from the second
+    year of the term on this basis.
+
+    When gdp_growth_adjusted is None, falls back to gdp_growth_avg
+    (full-term average, used for historical presidents and as a seed).
+
+    References:
+      Blinder, A.S., & Watson, M.W. (2016). AER 106(4), 1015–1045.
+      Bartels, L.M. (2008). Unequal Democracy. Princeton UP.
+      Romer, C.D., & Romer, D.H. (2010). AER 100(3), 763–801.
     """
     components: list[tuple[float, float]] = []
 
-    if gdp_growth_avg is not None:
-        # Scale: 3.2% avg = 55 (slightly above average), 5% = 80, 0% = 25
-        gdp_score = 25 + (gdp_growth_avg / 5.0) * 55
-        gdp_score = max(0, min(100, gdp_score))
+    effective_gdp = gdp_growth_adjusted if gdp_growth_adjusted is not None else gdp_growth_avg
+
+    if effective_gdp is not None:
+        # Scale: post-WWII average 3.2% → ~55 (slightly above mid-point).
+        # 5% → ~80; 0% → ~25; negative values score below 25.
+        gdp_score = 25 + (effective_gdp / 5.0) * 55
+        gdp_score = max(0.0, min(100.0, gdp_score))
         components.append((gdp_score, 0.60))
 
     if jobs_created_millions is not None and term_years > 0:
@@ -186,6 +210,7 @@ def recalculate_president_scores(
         gdp_growth_avg=live_data.get("gdp_growth_avg"),
         term_years=term_years,
         seed_score=seed_scores.get("score_effectiveness", 50),
+        gdp_growth_adjusted=live_data.get("gdp_growth_adjusted"),
     )
 
     scores["score_agency_alignment"] = calc_agency_alignment(

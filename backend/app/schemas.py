@@ -347,6 +347,7 @@ class RelatedSenator(CamelModel):
     overall_score: float
     leadership_score: float | None = None
     chamber: str = "senate"
+    match_reason: str | None = None
 
 
 class ActionItemSchema(CamelModel):

@@ -166,7 +166,11 @@ _SKIP_PROTOTYPE = (
 )
 
 _SEMANTIC_PROTOTYPES = {
-    "CandidateAffiliated": _CANDIDATE_AFFILIATED_PROTOTYPE,
+    # CandidateAffiliated is intentionally excluded from the general prototype
+    # competition — it is only detected via the explicit dynamic template check
+    # in classify_donor_type_semantic (requires candidate_name + last-name
+    # substring match). Including it in the general loop causes false positives
+    # for any PAC/political name (e.g. "Goldman Sachs PAC" scores 0.81).
     "Party/Ideological": _PARTY_PROTOTYPE,
     "Org/Employees": _ORG_EMPLOYEES_PROTOTYPE,
     "PAC": _PAC_PROTOTYPE,
@@ -217,6 +221,14 @@ def classify_donor_type_semantic(
     if not name or len(name.strip()) < 3:
         return None
 
+    # Tier 0: PAC suffix rule — FEC filing convention uses " PAC" as an
+    # unambiguous marker for political action committees (FEC Disclosure Guide
+    # 2023). This catches cases where the embedding model's compressed score
+    # space makes Party/Ideological win over PAC for explicitly-named PACs.
+    import re as _re
+    if _re.search(r'\bPAC\b', name.upper()):
+        return "PAC"
+
     from app.pipeline.vector_store import get_embedding_model
     model = get_embedding_model()
     type_embs = _get_semantic_type_embeddings()
@@ -254,7 +266,11 @@ def classify_donor_type_semantic(
             return "Self-Funded"
 
         last_name = candidate_name.split(",")[0].strip().upper()
-        if len(last_name) > 2:
+        # Require the candidate's last name to appear in the donor name as a
+        # substring before running the embedding check — this prevents any
+        # generic PAC name (e.g. "Goldman Sachs PAC") from matching a
+        # candidate-specific template through superficial political language.
+        if len(last_name) > 2 and last_name in name_upper:
             template = (
                 f"{last_name} senate campaign victory fund committee "
                 f"friends of {last_name} for senate reelect {last_name}"
@@ -315,7 +331,7 @@ def _get_skip_prototype_embedding(prototype_key: str, prototype_text: str) -> np
     return _skip_emb_cache[prototype_key]
 
 
-def is_skip_entity(name_upper: str, threshold: float = 0.30) -> bool:
+def is_skip_entity(name_upper: str, threshold: float = 0.65) -> bool:
     """Check if a donor is a payment processor via embedding similarity.
 
     Compares the entity name against the payment processor semantic

@@ -58,8 +58,8 @@ _POLICY_PROTOTYPES = [
 ]
 
 POLICY_RELEVANCE_THRESHOLD = 0.15
-CLUSTER_TITLE_THRESHOLD = 0.45
-CLUSTER_CENTROID_MERGE_THRESHOLD = 0.38
+CLUSTER_TITLE_THRESHOLD = 0.40
+CLUSTER_CENTROID_MERGE_THRESHOLD = 0.20
 MAX_ISSUES = 4
 MIN_ARTICLES_PER_CLUSTER = 1
 
@@ -389,10 +389,18 @@ def _cluster_articles(
     if not items:
         return []
 
-    # Pass 1: cluster on title-only embeddings (less source-specific noise)
+    # Pass 1: cluster on title-only embeddings (less source-specific noise).
+    # Center embeddings before computing similarity — the embedding model places
+    # all English news headlines in a tight cluster (~0.74 median cosine sim),
+    # so raw similarity is uninformative. Subtracting the batch mean removes the
+    # "generic news article" component and makes topic-specific dimensions dominate.
     titles = [a.title for a, _ in items]
     title_embeddings = _embed_texts(titles)
-    title_sim = title_embeddings @ title_embeddings.T
+    mean_emb = title_embeddings.mean(axis=0, keepdims=True)
+    centered = title_embeddings - mean_emb
+    norms = np.linalg.norm(centered, axis=1, keepdims=True)
+    centered_embs = centered / np.where(norms < 1e-9, 1.0, norms)
+    title_sim = centered_embs @ centered_embs.T
 
     pass1 = _agglomerative_cluster(title_sim, CLUSTER_TITLE_THRESHOLD)
     logger.info(
@@ -400,11 +408,11 @@ def _cluster_articles(
         CLUSTER_TITLE_THRESHOLD, len(items), len(pass1),
     )
 
-    # Pass 2: merge clusters whose centroids are close
+    # Pass 2: merge clusters whose centroids are close (using centered embeddings)
     if len(pass1) > 1:
-        centroids = np.zeros((len(pass1), title_embeddings.shape[1]))
+        centroids = np.zeros((len(pass1), centered_embs.shape[1]))
         for ci, indices in enumerate(pass1):
-            centroid = title_embeddings[indices].mean(axis=0)
+            centroid = centered_embs[indices].mean(axis=0)
             norm = np.linalg.norm(centroid)
             centroids[ci] = centroid / norm if norm > 0 else centroid
 
@@ -528,13 +536,18 @@ def _deduplicate_top_clusters(
     if len(ranked_clusters) <= 1:
         return ranked_clusters[:max_issues]
 
-    DEDUP_THRESHOLD = 0.44
+    # Threshold in centered-embedding space (see _cluster_articles for rationale)
+    DEDUP_THRESHOLD = 0.15
 
     cluster_texts = [
         " ".join(a.title for a in cluster[:5])
         for cluster in ranked_clusters
     ]
-    embeddings = _embed_texts(cluster_texts)
+    raw_embs = _embed_texts(cluster_texts)
+    mean_emb = raw_embs.mean(axis=0, keepdims=True)
+    centered = raw_embs - mean_emb
+    norms = np.linalg.norm(centered, axis=1, keepdims=True)
+    embeddings = centered / np.where(norms < 1e-9, 1.0, norms)
 
     selected: list[int] = []
     for i in range(len(ranked_clusters)):
@@ -613,7 +626,7 @@ def _find_related_senators(
 
     matched: dict[str, dict] = {}
 
-    def _make_entry(s, chamber: str = "senate") -> dict:
+    def _make_entry(s, chamber: str = "senate", match_reason: str | None = None) -> dict:
         from app.config_definitions import SCORE_WEIGHTS
         overall = (
             s.score_funding_independence * SCORE_WEIGHTS["fundingIndependence"]
@@ -627,6 +640,7 @@ def _find_related_senators(
             "party": s.party, "overall_score": round(overall, 1),
             "leadership_score": round(s.leadership_score * 100) if s.leadership_score else None,
             "chamber": chamber,
+            "match_reason": match_reason,
         }
 
     # Pass 1: substring matches with contextual disambiguation
@@ -643,7 +657,7 @@ def _find_related_senators(
 
         # Full name match is high-confidence — no disambiguation needed
         if full_name_lower in issue_text_lower:
-            matched[s.id] = _make_entry(s, chamber)
+            matched[s.id] = _make_entry(s, chamber, match_reason="named in coverage")
             continue
 
         # Last-name-only match needs word-boundary + disambiguation
@@ -681,28 +695,13 @@ def _find_related_senators(
             for i, (s, chamber) in enumerate(candidate_refs):
                 sim = float(np.dot(senator_embeds[i], context_embeds[i]))
                 if sim >= DISAMBIGUATION_THRESHOLD:
-                    matched[s.id] = _make_entry(s, chamber)
+                    matched[s.id] = _make_entry(s, chamber, match_reason="referenced in coverage")
                 else:
                     logger.debug(
                         "Rejected senator match '%s' (sim=%.3f < %.2f) — "
                         "likely institutional reference",
                         s.name, sim, DISAMBIGUATION_THRESHOLD,
                     )
-
-    # Pass 2: embedding fallback when no substring matches found
-    if not matched:
-        member_names = [s.name for s, _ in all_members]
-        name_embeddings = _embed_texts(member_names)
-        issue_embedding = _embed_texts([issue_text])[0]
-        similarities = name_embeddings @ issue_embedding
-
-        SENATOR_MATCH_THRESHOLD = 0.45
-        top_indices = np.argsort(similarities)[::-1]
-        for idx in top_indices[:5]:
-            if similarities[idx] < SENATOR_MATCH_THRESHOLD:
-                break
-            s, chamber = all_members[idx]
-            matched[s.id] = _make_entry(s, chamber)
 
     result = list(matched.values())
     if result:
@@ -2250,7 +2249,7 @@ def _run_refresh(db: Session) -> int:
         # article clusters were distinct enough to pass pre-LLM embedding
         # dedup (threshold 0.50) but the LLM distills them to the same headline.
         title_emb = _embed_texts([title])[0]
-        if any(float(title_emb @ prev_emb) >= 0.76 for _, prev_emb in generated_title_embs):
+        if any(float(title_emb @ prev_emb) >= 0.92 for _, prev_emb in generated_title_embs):
             logger.info(
                 "Skipping duplicate issue rank %d (title too similar to earlier issue): '%s'",
                 rank, title[:80],

@@ -624,3 +624,16 @@ class PipelineRun(Base):
     elapsed_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     progress_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class AlertSubscription(Base):
+    """Weekly email digest subscription."""
+    __tablename__ = "alert_subscriptions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    email: Mapped[str] = mapped_column(String(254), unique=True, nullable=False, index=True)
+    topics: Mapped[str] = mapped_column(Text, default="[]")   # JSON list of policy_area strings
+    senators: Mapped[str] = mapped_column(Text, default="[]") # JSON list of senator_ids
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    last_sent_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)

@@ -4,41 +4,19 @@ import { Senator } from "@/types/senator";
 import { calculateOverallScore, getScoreLabel, getScoreColor } from "@/lib/corruption";
 import { useScoreWeights } from "@/hooks/useConfig";
 import MetricTooltip from "./MetricTooltip";
+import { usePlainLanguage } from "@/context/PlainLanguageContext";
+import type { ScoreKey } from "@/lib/plainLanguage";
 
 interface RepresentationScoreProps {
   breakdown: Senator["representationScore"];
 }
 
-const SUB_SCORES: {
-  key: keyof Senator["representationScore"];
-  label: string;
-  description: string;
-}[] = [
-  {
-    key: "fundingIndependence",
-    label: "Funding Independence",
-    description: "How free is this senator from PAC and mega-donor influence? Penalizes heavy reliance on PAC money and concentration in a few top donors.",
-  },
-  {
-    key: "promisePersistence",
-    label: "Promise Persistence",
-    description: "Are they keeping campaign promises? Compares stated platform commitments against actual votes, using AI analysis. Higher = more follow-through.",
-  },
-  {
-    key: "independentVoting",
-    label: "Independent Voting",
-    description: "How often do they vote against their own party? Adjusted for state partisanship — breaking party line in a swing state counts less than in a deep-red/blue state.",
-  },
-  {
-    key: "fundingDiversity",
-    label: "Funding Diversity",
-    description: "Is their funding spread across many industries, or dominated by a few? Uses Shannon entropy to measure concentration. Higher = more diverse funding sources.",
-  },
-  {
-    key: "legislativeEffectiveness",
-    label: "Legislative Effectiveness",
-    description: "How effective is this senator at advancing legislation? Based on bill passage rates, cosponsorship influence, and ability to move bills through the process.",
-  },
+const SCORE_KEYS: ScoreKey[] = [
+  "fundingIndependence",
+  "promisePersistence",
+  "independentVoting",
+  "fundingDiversity",
+  "legislativeEffectiveness",
 ];
 
 function ScoreBar({
@@ -102,6 +80,7 @@ export default function CorruptionScore({ breakdown }: RepresentationScoreProps)
   const overall = calculateOverallScore(breakdown, weights);
   const label = getScoreLabel(overall);
   const colorClass = getScoreColor(overall);
+  const { terms } = usePlainLanguage();
 
   return (
     <div>
@@ -119,9 +98,10 @@ export default function CorruptionScore({ breakdown }: RepresentationScoreProps)
       </div>
 
       <div className="space-y-3">
-        {SUB_SCORES.map(({ key, label, description }) => (
-          <ScoreBar key={key} value={breakdown[key]} label={label} description={description} />
-        ))}
+        {SCORE_KEYS.map((key) => {
+          const t = terms(key);
+          return <ScoreBar key={key} value={breakdown[key]} label={t.label} description={t.description} />;
+        })}
       </div>
 
       <div className="mt-3 text-[10px] text-matrix-green/50">

@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     FEC_RPS: float = 0.25
     GOVINFO_RPS: float = 1.0
     CURRENT_CONGRESS: int = 119
+    # Email digest (leave SMTP_HOST empty to disable)
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASS: str = ""
+    SMTP_FROM: str = ""
+    DIGEST_SECRET: str = "change-me-in-production"  # used for unsubscribe tokens
 
 
 settings = Settings()

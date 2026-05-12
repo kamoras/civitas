@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.api.action import router as action_router
 from app.api.admin import router as admin_router
+from app.api.alerts import router as alerts_router
 from app.api.explore import router as explore_router
 from app.api.health import router as health_router
 from app.api.justices import router as justices_router
@@ -21,3 +22,4 @@ api_router.include_router(explore_router, tags=["explore"])
 api_router.include_router(action_router, tags=["action"])
 api_router.include_router(pipeline_router, tags=["pipeline"])
 api_router.include_router(admin_router, tags=["admin"])
+api_router.include_router(alerts_router, tags=["alerts"])

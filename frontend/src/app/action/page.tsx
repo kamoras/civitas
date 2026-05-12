@@ -11,6 +11,12 @@ import GlitchText from "@/components/effects/GlitchText";
 import { fetchActionIssues } from "@/lib/api";
 import { safeHref } from "@/lib/formatting";
 import StancePulse from "@/components/action/StancePulse";
+import { LogActionButton } from "@/components/action/CivicTracker";
+
+const CivicActionWidget = dynamic(
+  () => import("@/components/action/CivicTracker"),
+  { ssr: false },
+);
 import type { ActionIssue, ActionIssuesResponse, ActionItem, DailyTheme } from "@/types/action";
 import { STATES } from "@/data/states";
 
@@ -283,22 +289,29 @@ function SenatorChips({ issue }: { issue: ActionIssue }) {
   return (
     <div className="mb-6">
       <h3 className="font-pixel text-sm text-neon-pink/80 mb-3">
-        {">"} INVOLVED REPRESENTATIVES
+        {">"} REPRESENTATIVES IN COVERAGE
       </h3>
       <div className="flex flex-wrap gap-2">
         {issue.relatedSenators.map((s) => (
           <Link
             key={s.id}
             href={`/scorecard?branch=${s.chamber === "house" ? "house" : "senate"}&state=${s.state}&${s.chamber === "house" ? "rep" : "senator"}=${s.id}`}
-            className={`flex items-center gap-2 px-3 py-2 border ${PARTY_BORDER[s.party]} bg-matrix-dark-green/20 hover:border-neon-cyan/50 transition-all group`}
+            className={`flex items-start gap-2 px-3 py-2 border ${PARTY_BORDER[s.party]} bg-matrix-dark-green/20 hover:border-neon-cyan/50 transition-all group`}
           >
-            <span className={`font-pixel text-[10px] ${PARTY_COLORS[s.party]}`}>
+            <span className={`font-pixel text-[10px] mt-0.5 shrink-0 ${PARTY_COLORS[s.party]}`}>
               [{s.party}-{s.state}]
             </span>
-            <span className="text-sm text-matrix-green/80 group-hover:text-matrix-green">
-              {s.name}
-            </span>
-            <span className="text-[10px] font-pixel text-neon-cyan/60 border-l border-matrix-green/20 pl-2">
+            <div className="flex flex-col min-w-0">
+              <span className="text-sm text-matrix-green/80 group-hover:text-matrix-green leading-snug">
+                {s.name}
+              </span>
+              {s.matchReason && (
+                <span className="text-[9px] font-pixel text-matrix-green/40 uppercase tracking-wide mt-0.5">
+                  {s.matchReason}
+                </span>
+              )}
+            </div>
+            <span className="text-[10px] font-pixel text-neon-cyan/60 border-l border-matrix-green/20 pl-2 mt-0.5 shrink-0">
               SCORE: {Math.round(s.overallScore)}
             </span>
           </Link>
@@ -498,6 +511,9 @@ function HeroIssue({
         initialConcerned={issue.concernedCount || 0}
         initialNotPriority={issue.notPriorityCount || 0}
       />
+      <div className="mt-3 flex justify-end">
+        <LogActionButton issueTitle={issue.title} />
+      </div>
     </div>
   );
 }
@@ -601,17 +617,24 @@ function SecondaryIssue({
 
           {issue.relatedSenators && issue.relatedSenators.length > 0 && (
             <div>
-              <h4 className="font-pixel text-xs text-neon-pink/60 mb-2">INVOLVED REPRESENTATIVES</h4>
+              <h4 className="font-pixel text-xs text-neon-pink/60 mb-2">REPRESENTATIVES IN COVERAGE</h4>
               <div className="flex flex-wrap gap-2">
                 {issue.relatedSenators.map((s) => (
                   <Link
                     key={s.id}
                     href={`/scorecard?branch=${s.chamber === "house" ? "house" : "senate"}&state=${s.state}&${s.chamber === "house" ? "rep" : "senator"}=${s.id}`}
-                    className={`flex items-center gap-1.5 px-2 py-1 border ${PARTY_BORDER[s.party]} bg-matrix-dark-green/20 hover:border-neon-cyan/40 transition-colors text-sm`}
+                    className={`flex items-start gap-1.5 px-2 py-1.5 border ${PARTY_BORDER[s.party]} bg-matrix-dark-green/20 hover:border-neon-cyan/40 transition-colors`}
                   >
-                    <span className={`font-pixel text-[10px] ${PARTY_COLORS[s.party]}`}>[{s.party}]</span>
-                    <span className="text-matrix-green/70">{s.name}</span>
-                    <span className="text-[10px] font-pixel text-neon-cyan/50">{Math.round(s.overallScore)}</span>
+                    <span className={`font-pixel text-[10px] mt-0.5 shrink-0 ${PARTY_COLORS[s.party]}`}>[{s.party}]</span>
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-sm text-matrix-green/70 leading-snug">{s.name}</span>
+                      {s.matchReason && (
+                        <span className="text-[9px] font-pixel text-matrix-green/35 uppercase tracking-wide">
+                          {s.matchReason}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] font-pixel text-neon-cyan/50 mt-0.5 shrink-0">{Math.round(s.overallScore)}</span>
                   </Link>
                 ))}
               </div>
@@ -632,6 +655,9 @@ function SecondaryIssue({
             initialConcerned={issue.concernedCount || 0}
             initialNotPriority={issue.notPriorityCount || 0}
           />
+          <div className="mt-3 flex justify-end">
+            <LogActionButton issueTitle={issue.title} />
+          </div>
         </div>
       )}
     </div>
@@ -1082,6 +1108,7 @@ function ActionPageInner() {
         </div>
       </main>
       <Footer />
+      <CivicActionWidget />
     </>
   );
 }

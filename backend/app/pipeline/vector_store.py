@@ -231,7 +231,7 @@ def search_bills(
         return []
 
     # Generate query embedding
-    query_embedding = model.encode([query], show_progress_bar=False)[0].tolist()
+    query_embedding = model.encode([query], prompt_name="query", show_progress_bar=False)[0].tolist()
 
     # Build filter if congress specified
     where = {"congress": str(filter_congress)} if filter_congress else None
@@ -388,7 +388,7 @@ def search_explore_documents(
         logger.warning("explore_documents collection not found")
         return []
 
-    query_embedding = model.encode([query], show_progress_bar=False)[0].tolist()
+    query_embedding = model.encode([query], prompt_name="query", show_progress_bar=False)[0].tolist()
 
     where_clause: dict | None = None
     conditions = []

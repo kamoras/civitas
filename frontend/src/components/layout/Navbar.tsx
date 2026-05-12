@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef, useCallback } from "react";
+import { usePlainLanguage } from "@/context/PlainLanguageContext";
 
 const NAV_LINKS: readonly { href: string; label: string; accent?: boolean }[] = [
   { href: "/action", label: "ACTION CENTER", accent: true },
@@ -14,6 +15,7 @@ const NAV_LINKS: readonly { href: string; label: string; accent?: boolean }[] = 
 
 export default function Navbar() {
   const pathname = usePathname();
+  const { plain, toggle: togglePlain } = usePlainLanguage();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -107,6 +109,20 @@ export default function Navbar() {
           })}
         </div>
 
+        {/* Plain Language toggle */}
+        <button
+          onClick={togglePlain}
+          aria-pressed={plain}
+          title={plain ? "Switch to technical language" : "Switch to plain language"}
+          className={`hidden sm:block text-[10px] font-pixel px-2 py-1 border transition-colors ${
+            plain
+              ? "border-neon-cyan/50 text-neon-cyan bg-neon-cyan/10"
+              : "border-matrix-green/20 text-matrix-green/40 hover:text-matrix-green/60 hover:border-matrix-green/30"
+          }`}
+        >
+          {plain ? "PLAIN ✓" : "PLAIN"}
+        </button>
+
         {/* Mobile hamburger */}
         <button
           ref={toggleRef}
@@ -151,6 +167,15 @@ export default function Navbar() {
               </Link>
             );
           })}
+          <button
+            onClick={() => { togglePlain(); closeMenu(); }}
+            aria-pressed={plain}
+            className={`text-left font-pixel text-base transition-colors ${
+              plain ? "text-neon-cyan" : "text-matrix-green/50 hover:text-matrix-green"
+            }`}
+          >
+            {plain ? "> PLAIN LANGUAGE ✓" : "> PLAIN LANGUAGE"}
+          </button>
         </div>
       )}
     </nav>

@@ -9,6 +9,7 @@ from app.config import settings
 from app.pipeline.orchestrator import run_full_pipeline
 from app.pipeline.house_pipeline import run_house_pipeline
 from app.pipeline.analyze.action_center import refresh_action_issues
+from app.pipeline.digest import send_weekly_digests
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +98,16 @@ def start_scheduler() -> None:
         _hourly_action_refresh,
         CronTrigger(minute="15"),
         id="action_refresh",
+        replace_existing=True,
+    )
+
+    # Weekly digest — every Monday at 8 AM UTC
+    scheduler.add_job(
+        lambda: threading.Thread(
+            target=send_weekly_digests, daemon=True, name="weekly-digest"
+        ).start(),
+        CronTrigger(day_of_week="mon", hour=8, minute=0),
+        id="weekly_digest",
         replace_existing=True,
     )
 

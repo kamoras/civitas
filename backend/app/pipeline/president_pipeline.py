@@ -12,7 +12,12 @@ from sqlalchemy.orm import Session
 
 from app.models import President
 from app.pipeline.analyze.president_scorer import recalculate_president_scores
-from app.pipeline.fetch.economic_data import fetch_jobs_for_president
+from app.pipeline.fetch.economic_data import (
+    fetch_jobs_for_president,
+    fetch_gdp_by_year,
+    fetch_gdp_for_president,
+    TERM_YEARS,
+)
 from app.pipeline.fetch.federal_register import fetch_all_eo_data, fetch_all_rulemaking_stats
 
 logger = logging.getLogger(__name__)
@@ -20,6 +25,16 @@ logger = logging.getLogger(__name__)
 DYNAMIC_PRESIDENTS = [
     "clinton-42", "gwbush-43", "obama-44",
     "trump-45", "biden-46", "trump-47",
+]
+
+# Presidents for whom BLS employment data and FRED GDP data are available
+# but Federal Register / EO data are not.  Only score_effectiveness is
+# recalculated; all other sub-scores remain as seed values.
+# Data availability: BLS payroll series from 1939; FRED GDP from 1947.
+# References: Blinder & Watson (2016, AER 106(4)) for year-1 exclusion.
+ECONOMICS_ONLY_PRESIDENTS = [
+    "eisenhower-34", "jfk-35", "lbj-36", "nixon-37",
+    "ford-38", "carter-39", "reagan-40", "ghwbush-41",
 ]
 
 
@@ -49,13 +64,30 @@ async def run_president_pipeline(db: Session) -> dict:
         # 2. Fetch employment data from BLS
         logger.info("Fetching employment data from BLS...")
         jobs_data: dict[str, float | None] = {}
-        for pid in DYNAMIC_PRESIDENTS:
+        all_economic_presidents = DYNAMIC_PRESIDENTS + ECONOMICS_ONLY_PRESIDENTS
+        for pid in all_economic_presidents:
             jobs = await fetch_jobs_for_president(client, pid)
             if jobs is not None:
                 jobs_data[pid] = jobs
                 logger.info("  %s: %+.1fM jobs", pid, jobs)
 
-        # 3. Fetch rulemaking stats from Federal Register
+        # 3. Fetch annual GDP from FRED for year-1-excluded adjustment.
+        # Blinder & Watson (2016) show the first year's GDP reflects the
+        # prior administration; excluding it gives a fairer attribution.
+        logger.info("Fetching annual GDP data from FRED...")
+        gdp_by_year = await fetch_gdp_by_year(client) or {}
+        gdp_adj_data: dict[str, float] = {}
+        gdp_full_data: dict[str, float] = {}
+        for pid in all_economic_presidents:
+            gdp_full, gdp_adj = await fetch_gdp_for_president(client, pid, gdp_by_year)
+            if gdp_adj is not None:
+                gdp_adj_data[pid] = gdp_adj
+                logger.info("  %s: GDP full=%.1f%% adjusted(yr1-excl)=%.1f%%",
+                            pid, gdp_full or 0.0, gdp_adj)
+            elif gdp_full is not None:
+                gdp_full_data[pid] = gdp_full
+
+        # 4. Fetch rulemaking stats from Federal Register
         logger.info("Fetching agency rulemaking data from Federal Register...")
         rulemaking_data = await fetch_all_rulemaking_stats(client)
         logger.info("Rulemaking data fetched for %d presidents", len(rulemaking_data))
@@ -74,6 +106,8 @@ async def run_president_pipeline(db: Session) -> dict:
             "eo_court_success_pct": president.eo_court_success_pct,
             "cabinet_turnover_pct": president.cabinet_turnover_pct,
             "gdp_growth_avg": president.gdp_growth_avg,
+            # Year-1-excluded GDP average (Blinder & Watson 2016)
+            "gdp_growth_adjusted": gdp_adj_data.get(pid),
         }
 
         # Overlay live Federal Register EO count
@@ -121,11 +155,47 @@ async def run_president_pipeline(db: Session) -> dict:
             live.get("rulemaking_count", "seed"),
         )
 
+    # Update economics-only presidents (Eisenhower through GHW Bush).
+    # Only recalculates score_effectiveness from GDP + jobs; all other
+    # sub-scores remain as seed values.
+    econ_updated = 0
+    for pid in ECONOMICS_ONLY_PRESIDENTS:
+        president = db.query(President).filter(President.id == pid).first()
+        if not president:
+            continue
+
+        term_years = _term_years(president.term_start, president.term_end)
+        gdp_adj = gdp_adj_data.get(pid)
+        gdp_full = gdp_full_data.get(pid, president.gdp_growth_avg)
+        jobs = jobs_data.get(pid, president.jobs_created_millions)
+
+        if gdp_adj is None and gdp_full is None and jobs is None:
+            continue
+
+        from app.pipeline.analyze.president_scorer import calc_effectiveness
+        new_eff = calc_effectiveness(
+            jobs_created_millions=jobs,
+            gdp_growth_avg=gdp_full,
+            term_years=term_years,
+            seed_score=president.score_effectiveness,
+            gdp_growth_adjusted=gdp_adj,
+        )
+        president.score_effectiveness = new_eff
+        if jobs is not None:
+            president.jobs_created_millions = jobs
+        if gdp_full is not None and president.gdp_growth_avg is None:
+            president.gdp_growth_avg = gdp_full
+        president.updated_at = datetime.utcnow()
+        econ_updated += 1
+        logger.info("  %s: effectiveness=%d (gdp_adj=%.1f%% jobs=%.1fM)",
+                    pid, new_eff, gdp_adj or 0.0, jobs or 0.0)
+
     db.commit()
-    logger.info("President pipeline complete: %d updated", updated)
+    logger.info("President pipeline complete: %d dynamic + %d economics-only updated",
+                updated, econ_updated)
 
     return {
-        "updated": updated,
+        "updated": updated + econ_updated,
         "eo_data_count": len(eo_data),
         "jobs_data_count": len(jobs_data),
         "rulemaking_data_count": len(rulemaking_data),

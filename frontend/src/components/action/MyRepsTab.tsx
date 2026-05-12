@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { usePlainLanguage } from "@/context/PlainLanguageContext";
 import { fetchMyReps } from "@/lib/api";
 import { STATES } from "@/data/states";
 import type { MyRepRep, MyRepSenator, MyRepsResponse } from "@/types/action";
@@ -48,6 +49,7 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
 
 function SenatorCard({ senator }: { senator: MyRepSenator }) {
   const s = senator.scores;
+  const { terms } = usePlainLanguage();
 
   return (
     <div
@@ -86,11 +88,11 @@ function SenatorCard({ senator }: { senator: MyRepSenator }) {
       </div>
 
       <div className="space-y-1.5 mb-4">
-        <ScoreBar label="FUNDING" value={s.fundingIndependence} />
-        <ScoreBar label="PROMISES" value={s.promisePersistence} />
-        <ScoreBar label="INDEP. VOTE" value={s.independentVoting} />
-        <ScoreBar label="DIVERSITY" value={s.fundingDiversity} />
-        <ScoreBar label="EFFECTIVE" value={s.legislativeEffectiveness} />
+        <ScoreBar label={terms("fundingIndependence").shortLabel} value={s.fundingIndependence} />
+        <ScoreBar label={terms("promisePersistence").shortLabel} value={s.promisePersistence} />
+        <ScoreBar label={terms("independentVoting").shortLabel} value={s.independentVoting} />
+        <ScoreBar label={terms("fundingDiversity").shortLabel} value={s.fundingDiversity} />
+        <ScoreBar label={terms("legislativeEffectiveness").shortLabel} value={s.legislativeEffectiveness} />
       </div>
 
       {senator.connectedIssues.length > 0 && (
@@ -126,6 +128,7 @@ function SenatorCard({ senator }: { senator: MyRepSenator }) {
 
 function RepCard({ rep }: { rep: MyRepRep }) {
   const s = rep.scores;
+  const { terms } = usePlainLanguage();
 
   return (
     <div
@@ -162,11 +165,11 @@ function RepCard({ rep }: { rep: MyRepRep }) {
       </div>
 
       <div className="space-y-1.5 mb-4">
-        <ScoreBar label="FUNDING" value={s.fundingIndependence} />
-        <ScoreBar label="PROMISES" value={s.promisePersistence} />
-        <ScoreBar label="INDEP. VOTE" value={s.independentVoting} />
-        <ScoreBar label="DIVERSITY" value={s.fundingDiversity} />
-        <ScoreBar label="EFFECTIVE" value={s.legislativeEffectiveness} />
+        <ScoreBar label={terms("fundingIndependence").shortLabel} value={s.fundingIndependence} />
+        <ScoreBar label={terms("promisePersistence").shortLabel} value={s.promisePersistence} />
+        <ScoreBar label={terms("independentVoting").shortLabel} value={s.independentVoting} />
+        <ScoreBar label={terms("fundingDiversity").shortLabel} value={s.fundingDiversity} />
+        <ScoreBar label={terms("legislativeEffectiveness").shortLabel} value={s.legislativeEffectiveness} />
       </div>
 
       {rep.connectedIssues.length > 0 && (

@@ -14,6 +14,7 @@ export interface RelatedSenator {
   overallScore: number;
   leadershipScore: number | null;
   chamber?: "senate" | "house";
+  matchReason?: string | null;
 }
 
 export interface ActionItem {
