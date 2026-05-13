@@ -155,7 +155,18 @@ _PAC_NAMING_PROTOTYPE = (
 
 _embeddings_cache: dict[str, np.ndarray] = {}
 _pac_naming_emb: np.ndarray | None = None
-SIMILARITY_THRESHOLD = 0.30
+# Score-spread threshold: classify as an industry only when the top industry
+# raw cosine score exceeds the mean-of-all-industries score by at least this margin.
+# This handles the snowflake-arctic-embed-xs baseline (~0.74 for all English text):
+# entities named in an industry description score noticeably higher for that industry
+# while truly unrelated entities score uniformly across all industries (low spread).
+# Score-spread threshold in query-prompt embedding space.
+# snowflake-arctic-embed-xs is an asymmetric retrieval model: entity names
+# are encoded with prompt_name="query"; industry descriptions are encoded
+# as documents (no prompt). Entities named in an industry description
+# produce large top-score spread (>0.10), generic/unknown entities produce
+# small spread (<0.06). 0.070 sits cleanly in the gap.
+SPREAD_THRESHOLD = 0.070
 POLITICAL_MARGIN = 0.06
 
 
@@ -180,12 +191,13 @@ def _get_industry_embeddings() -> dict[str, np.ndarray]:
 
 
 def _get_pac_naming_embedding() -> np.ndarray:
-    """Cache and return the PAC naming context prototype embedding."""
+    """Cache and return the PAC naming context prototype embedding (document-side)."""
     global _pac_naming_emb
     if _pac_naming_emb is not None:
         return _pac_naming_emb
     from app.pipeline.vector_store import get_embedding_model
     model = get_embedding_model()
+    # Encoded as a document (no query prompt), same as industry descriptions.
     emb = model.encode([_PAC_NAMING_PROTOTYPE], show_progress_bar=False)[0]
     _pac_naming_emb = emb / np.linalg.norm(emb)
     return _pac_naming_emb
@@ -194,17 +206,15 @@ def _get_pac_naming_embedding() -> np.ndarray:
 def _decontextualize_political(
     query_emb: np.ndarray,
     scored: list[tuple[str, float]],
+    mean_score: float,
 ) -> tuple[str, float]:
     """If POLITICAL wins, check whether the entity is an industry-PAC.
 
     Many entities are named "[Industry] PAC" — the word PAC pulls them
     toward POLITICAL in embedding space. If the entity has high cosine
     similarity to the PAC naming context prototype AND a non-POLITICAL
-    runner-up is above threshold and within margin, prefer the runner-up.
-
-    This is a mathematical decontextualization approach: instead of
-    regex-stripping the PAC suffix, we detect the PAC naming pattern
-    semantically and adjust the ranking accordingly.
+    runner-up has sufficient spread (score - mean > SPREAD_THRESHOLD)
+    and is within margin, prefer the runner-up.
     """
     if not scored or scored[0][0] != "POLITICAL":
         return scored[0] if scored else ("OTHER", 0.0)
@@ -218,7 +228,7 @@ def _decontextualize_political(
         return scored[0]
 
     for industry, score in scored[1:]:
-        if score >= SIMILARITY_THRESHOLD and political_score - score < POLITICAL_MARGIN:
+        if score - mean_score >= SPREAD_THRESHOLD and political_score - score < POLITICAL_MARGIN:
             logger.debug(
                 "PAC decontextualization: POLITICAL(%.3f) -> %s(%.3f), pac_ctx=%.3f",
                 political_score, industry, score, pac_context_score,
@@ -275,22 +285,25 @@ def classify_industry_with_provenance(org_name: str | None) -> tuple[str, dict]:
 
     from app.pipeline.vector_store import get_embedding_model
 
-    industry_embs = _get_industry_embeddings()
+    raw_embs_cache = _get_industry_embeddings()
     model = get_embedding_model()
 
-    query_emb = model.encode([org_name], show_progress_bar=False)[0]
+    # Entity name is a query; industry descriptions are documents.
+    # snowflake-arctic-embed-xs must use prompt_name="query" for queries.
+    query_emb = model.encode([org_name], prompt_name="query", show_progress_bar=False)[0]
     norm = np.linalg.norm(query_emb)
     if norm > 0:
         query_emb = query_emb / norm
 
     scored: list[tuple[str, float]] = []
-    for industry, ind_emb in industry_embs.items():
+    for industry, ind_emb in raw_embs_cache.items():
         score = float(np.dot(query_emb, ind_emb))
         scored.append((industry, score))
     scored.sort(key=lambda x: x[1], reverse=True)
 
-    best_industry, best_score = _decontextualize_political(query_emb, scored)
-    if best_score < SIMILARITY_THRESHOLD:
+    mean_score = sum(s for _, s in scored) / len(scored) if scored else 0.0
+    best_industry, best_score = _decontextualize_political(query_emb, scored, mean_score)
+    if best_score - mean_score < SPREAD_THRESHOLD:
         best_industry = "OTHER"
 
     meta: dict = {"top_match": scored[0][0], "top_score": round(scored[0][1], 4)} if scored else {}
@@ -328,9 +341,9 @@ def classify_industries_batch_scored(org_names: list[str]) -> dict[str, tuple[st
 
     from app.pipeline.vector_store import get_embedding_model
 
-    industry_embs = _get_industry_embeddings()
-    ind_keys = list(industry_embs.keys())
-    ind_matrix = np.stack([industry_embs[k] for k in ind_keys])
+    raw_embs_cache = _get_industry_embeddings()
+    ind_keys = list(raw_embs_cache.keys())
+    ind_matrix = np.stack([raw_embs_cache[k] for k in ind_keys])
     pac_emb = _get_pac_naming_embedding()
 
     model = get_embedding_model()
@@ -340,20 +353,23 @@ def classify_industries_batch_scored(org_names: list[str]) -> dict[str, tuple[st
     all_embeddings = []
     for start in range(0, len(raw_names), _ENCODE_BATCH):
         batch = raw_names[start : start + _ENCODE_BATCH]
-        embs = model.encode(batch, show_progress_bar=False, batch_size=min(64, len(batch)))
+        # Entity names are queries; encode with the retrieval query prompt.
+        embs = model.encode(batch, prompt_name="query", show_progress_bar=False, batch_size=min(64, len(batch)))
         all_embeddings.append(embs)
-    query_embs = np.vstack(all_embeddings)
-    norms = np.linalg.norm(query_embs, axis=1, keepdims=True)
+    raw_embs = np.vstack(all_embeddings)
+    norms = np.linalg.norm(raw_embs, axis=1, keepdims=True)
     norms[norms == 0] = 1.0
-    query_embs = query_embs / norms
+    raw_embs = raw_embs / norms
 
-    scores = query_embs @ ind_matrix.T
-    pac_ctx_scores = query_embs @ pac_emb
+    scores = raw_embs @ ind_matrix.T
+    mean_scores = scores.mean(axis=1)  # (n_queries,) — baseline per query
+    pac_ctx_scores = raw_embs @ pac_emb
 
     political_idx = ind_keys.index("POLITICAL") if "POLITICAL" in ind_keys else -1
 
     for j, (_, name) in enumerate(needs_embedding):
         row_scores = scores[j]
+        mean_s = float(mean_scores[j])
         best_idx = int(np.argmax(row_scores))
         best_score = float(row_scores[best_idx])
         best_industry = ind_keys[best_idx]
@@ -362,12 +378,12 @@ def classify_industries_batch_scored(org_names: list[str]) -> dict[str, tuple[st
             sorted_idx = np.argsort(row_scores)[::-1]
             for k in sorted_idx[1:]:
                 runner_score = float(row_scores[k])
-                if runner_score >= SIMILARITY_THRESHOLD and best_score - runner_score < POLITICAL_MARGIN:
+                if runner_score - mean_s >= SPREAD_THRESHOLD and best_score - runner_score < POLITICAL_MARGIN:
                     best_industry = ind_keys[k]
                     best_score = runner_score
                     break
 
-        if best_score > SIMILARITY_THRESHOLD:
+        if best_score - mean_s >= SPREAD_THRESHOLD:
             results[name] = (best_industry, best_score)
 
     logger.info(

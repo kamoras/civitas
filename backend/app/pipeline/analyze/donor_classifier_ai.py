@@ -96,6 +96,12 @@ _PAYMENT_PROCESSOR_PROTOTYPE = (
     "that process political contributions, not actual donors."
 )
 
+# Explicit names for well-known payment processors that the embedding model
+# may not score high enough due to uppercase / abbreviation mismatch.
+_KNOWN_PAYMENT_PROCESSOR_KEYWORDS = frozenset({
+    "WINRED", "ACTBLUE", "ANEDOT", "REVV", "DONORBOX",
+})
+
 _EMPLOYER_SKIP_PROTOTYPE = (
     "self-employed self employed retired homemaker student unemployed "
     "not employed disabled information requested none not applicable "
@@ -331,14 +337,21 @@ def _get_skip_prototype_embedding(prototype_key: str, prototype_text: str) -> np
     return _skip_emb_cache[prototype_key]
 
 
-def is_skip_entity(name_upper: str, threshold: float = 0.65) -> bool:
-    """Check if a donor is a payment processor via embedding similarity.
+def is_skip_entity(name_upper: str, threshold: float = 0.67) -> bool:
+    """Check if a donor is a payment processor via keyword or embedding similarity.
 
-    Compares the entity name against the payment processor semantic
-    prototype using cosine similarity (Reimers & Gurevych 2019).
+    First checks against a list of known payment processor names (handles the
+    uppercase/case mismatch problem with the embedding model).  Falls back to
+    cosine similarity against the payment-processor semantic prototype.
     """
     if not name_upper or len(name_upper.strip()) < 2:
         return False
+
+    # Keyword check: known payment processors the embedding model may mis-score
+    # due to ALL-CAPS FEC formatting vs mixed-case prototype.
+    for keyword in _KNOWN_PAYMENT_PROCESSOR_KEYWORDS:
+        if keyword in name_upper:
+            return True
 
     from app.pipeline.vector_store import get_embedding_model
     model = get_embedding_model()
@@ -398,7 +411,7 @@ def classify_skip_names_batch(
     }
 
 
-def classify_employer_skips_batch(employer_names: list[str], threshold: float = 0.24) -> set[str]:
+def classify_employer_skips_batch(employer_names: list[str], threshold: float = 0.78) -> set[str]:
     """Batch-classify employer names against employment-status skip prototype.
 
     Detects FEC employer-field values that are not real organizations
@@ -418,7 +431,7 @@ def classify_employer_skips_batch(employer_names: list[str], threshold: float = 
     )
 
 
-def classify_transfer_memos_batch(memo_texts: list[str], threshold: float = 0.28) -> set[str]:
+def classify_transfer_memos_batch(memo_texts: list[str], threshold: float = 0.78) -> set[str]:
     """Batch-classify memo texts against fund-transfer prototype.
 
     Detects FEC memo_text values indicating internal fund transfers,
@@ -508,11 +521,10 @@ async def classify_donors_hybrid(
         logger.info("Batch embedding %d donor names for industry classification...", len(all_donor_names))
         embedding_scored = classify_industries_batch_scored(all_donor_names)
 
-    # Threshold for overriding a stale learning store entry.  Must be above
-    # the base SIMILARITY_THRESHOLD (0.30) but not so high that genuine
-    # corrections are missed.  A stale entry arises when the industry
-    # descriptions were improved after the learning store was populated.
-    _CORRECTION_THRESHOLD = 0.35
+    # Threshold for overriding a stale learning store entry.  Industry scores are
+    # now in centered embedding space (baseline ~0); only override if the embedding
+    # has a strong positive signal for a different industry.
+    _CORRECTION_THRESHOLD = 0.25
 
     for donor in unique_donors:
         name = donor["name"]
