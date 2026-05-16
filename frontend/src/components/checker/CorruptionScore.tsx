@@ -1,6 +1,6 @@
 "use client";
 
-import { Senator } from "@/types/senator";
+import { Senator, CampaignPromise, VotingRecord } from "@/types/senator";
 import { calculateOverallScore, getScoreLabel, getScoreColor } from "@/lib/corruption";
 import { useScoreWeights } from "@/hooks/useConfig";
 import MetricTooltip from "./MetricTooltip";
@@ -9,6 +9,9 @@ import type { ScoreKey } from "@/lib/plainLanguage";
 
 interface RepresentationScoreProps {
   breakdown: Senator["representationScore"];
+  promises?: CampaignPromise[];
+  votingRecord?: VotingRecord;
+  funding?: Senator["funding"];
 }
 
 const SCORE_KEYS: ScoreKey[] = [
@@ -23,10 +26,12 @@ function ScoreBar({
   value,
   label,
   description,
+  basis,
 }: {
   value: number;
   label: string;
   description: string;
+  basis?: string;
 }) {
   const filled = Math.round(value / 5);
   const empty = 20 - filled;
@@ -41,6 +46,7 @@ function ScoreBar({
         <div className="w-48 shrink-0" id={`score-label-${label.replace(/\s+/g, "-").toLowerCase()}`}>
           <span className="text-matrix-green/70">{label}</span>
           <div className="text-[10px] text-matrix-green/50 leading-tight">{description}</div>
+          {basis && <div className="text-[10px] text-matrix-green/25 italic leading-tight">{basis}</div>}
         </div>
         <span
           className="font-mono text-xs tracking-tight hidden sm:inline"
@@ -75,12 +81,38 @@ function ScoreBar({
   );
 }
 
-export default function CorruptionScore({ breakdown }: RepresentationScoreProps) {
+export default function CorruptionScore({ breakdown, promises, votingRecord, funding }: RepresentationScoreProps) {
   const weights = useScoreWeights();
   const overall = calculateOverallScore(breakdown, weights);
   const label = getScoreLabel(overall);
   const colorClass = getScoreColor(overall);
   const { terms } = usePlainLanguage();
+
+  const evaluable = (promises ?? []).filter(p => p.alignment !== "unclear").length;
+  const totalPromises = (promises ?? []).length;
+  const promiseBasis: string | undefined =
+    totalPromises === 0
+      ? "no platform data · defaults to 50"
+      : evaluable === 0
+        ? `${totalPromises} promise${totalPromises !== 1 ? "s" : ""}, none evaluable · defaults to 50`
+        : `${evaluable} of ${totalPromises} had enough evidence to score`;
+
+  const votingBasis: string | undefined =
+    !votingRecord || votingRecord.totalVotes === 0
+      ? "no voting record · defaults to 50"
+      : `${votingRecord.totalVotes} votes tracked`;
+
+  const fundingBasis: string | undefined =
+    !funding || funding.totalRaised === 0
+      ? "no funding data · defaults to 50"
+      : undefined;
+
+  const scoreBasis: Partial<Record<ScoreKey, string | undefined>> = {
+    promisePersistence: promiseBasis,
+    independentVoting: votingBasis,
+    fundingIndependence: fundingBasis,
+    fundingDiversity: fundingBasis,
+  };
 
   return (
     <div>
@@ -100,7 +132,7 @@ export default function CorruptionScore({ breakdown }: RepresentationScoreProps)
       <div className="space-y-3">
         {SCORE_KEYS.map((key) => {
           const t = terms(key);
-          return <ScoreBar key={key} value={breakdown[key]} label={t.label} description={t.description} />;
+          return <ScoreBar key={key} value={breakdown[key]} label={t.label} description={t.description} basis={scoreBasis[key]} />;
         })}
       </div>
 

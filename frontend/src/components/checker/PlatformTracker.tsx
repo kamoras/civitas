@@ -195,6 +195,7 @@ export default function PlatformTracker({ promises, platformSummary, partisanDep
   const kept = promises.filter((p) => p.alignment === "kept").length;
   const broken = promises.filter((p) => p.alignment === "broken").length;
   const partial = promises.filter((p) => p.alignment === "partial").length;
+  const unclear = promises.filter((p) => p.alignment === "unclear").length;
 
   const sortOrder = { broken: 0, partial: 1, kept: 2, unclear: 3 };
   const sorted = [...promises].sort(
@@ -220,7 +221,7 @@ export default function PlatformTracker({ promises, platformSummary, partisanDep
       )}
       {promises.length > 0 && (
         <div className="space-y-3">
-          <div className="grid grid-cols-3 gap-2 mb-3 text-center">
+          <div className="grid grid-cols-4 gap-2 mb-3 text-center">
             <div className="terminal-window p-2 min-w-0">
               <div className="text-lg font-pixel text-matrix-green">{kept}</div>
               <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Policy positions where their voting record shows consistent support. Matched by comparing sponsored legislation against roll-call votes.">KEPT</MetricTooltip></div>
@@ -233,7 +234,21 @@ export default function PlatformTracker({ promises, platformSummary, partisanDep
               <div className="text-lg font-pixel text-yellow-500">{partial}</div>
               <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Policy positions with mixed voting signals — some votes support it, others don't. May indicate the issue hasn't come to a direct vote yet.">PARTIAL</MetricTooltip></div>
             </div>
+            <div className="terminal-window p-2 min-w-0">
+              <div className="text-lg font-pixel text-matrix-green/30">{unclear}</div>
+              <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Positions where there weren't enough directly related votes to determine alignment. These are excluded from the Promise Persistence score — they don't count as kept or broken.">UNCLEAR</MetricTooltip></div>
+            </div>
           </div>
+          {unclear > 0 && (kept + broken + partial) === 0 && (
+            <div className="text-[10px] text-matrix-green/30 italic mb-3">
+              All {unclear} promise{unclear !== 1 ? "s" : ""} lacked enough related votes to evaluate — Promise Persistence score defaults to 50 (neutral) for this senator.
+            </div>
+          )}
+          {unclear > 0 && (kept + broken + partial) > 0 && (
+            <div className="text-[10px] text-matrix-green/30 italic mb-3">
+              {unclear} position{unclear !== 1 ? "s" : ""} marked unclear had no directly related votes and {unclear !== 1 ? "are" : "is"} excluded from the score.
+            </div>
+          )}
           {platformSummary && (
             <div className="terminal-window p-3">
               <p className="text-sm text-matrix-green/80 leading-relaxed">{platformSummary}</p>

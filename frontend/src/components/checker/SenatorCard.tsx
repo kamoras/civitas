@@ -248,7 +248,12 @@ export default function SenatorCard({ senator, chamber = "senate" }: SenatorCard
         </div>
 
         {/* ── Representation Score ── always visible */}
-        <CorruptionScore breakdown={senator.representationScore} />
+        <CorruptionScore
+          breakdown={senator.representationScore}
+          promises={senator.campaignPromises}
+          votingRecord={senator.votingRecord}
+          funding={senator.funding}
+        />
 
         {/* ── Collapsible detail sections ── */}
 
@@ -353,7 +358,12 @@ export default function SenatorCard({ senator, chamber = "senate" }: SenatorCard
           <CollapsibleSection
             title="DONOR-VOTE CONNECTIONS"
             titleColor="text-neon-pink neon-pink"
-            summary={`${senator.lobbyingMatches.length} connections found`}
+            summary={(() => {
+              const aligned = senator.lobbyingMatches.filter(m => m.senatorVoteAligned === true).length;
+              const withAlignment = senator.lobbyingMatches.filter(m => m.senatorVoteAligned !== null).length;
+              const base = `${senator.lobbyingMatches.length} donor-vote overlap${senator.lobbyingMatches.length !== 1 ? "s" : ""}`;
+              return withAlignment > 0 ? `${base} · ${aligned} voted same direction as donor interest` : base;
+            })()}
             source="fec.gov/data"
           >
             <LobbyingMatches matches={senator.lobbyingMatches} />
