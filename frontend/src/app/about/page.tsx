@@ -1013,6 +1013,31 @@ export default function AboutPage() {
             </div>
           </Section>
 
+          {/* ── How It's Built ── */}
+          <Section title="HOW IT'S BUILT">
+            <P>
+              Civitas is built and maintained by a single developer as a hobby project, running on
+              a home server. It exists to prove that meaningful civic accountability tools do not
+              require venture capital, a team of engineers, or enterprise cloud infrastructure.
+              Anyone with the knowledge, time, and a modest machine can build something like this.
+            </P>
+            <div className="space-y-2 mt-4">
+              <Row label="SERVER" value="Raspberry Pi 5 — a $80 single-board computer" />
+              <Row label="LOCAL LLM" value="DeepSeek-R1 1.5B via Ollama/llama.cpp · runs entirely on-device, zero API cost" />
+              <Row label="DATABASE" value="SQLite · no cloud database, no managed service" />
+              <Row label="DEPLOYMENT" value="Blue-green via Docker Compose on a single machine" />
+              <Row label="EXTERNAL APIs" value="Congress.gov, FEC.gov, Federal Register — all free and open" />
+              <Row label="MONTHLY COST" value="~$5–10 (electricity)" />
+              <Row label="CLOUD SERVICES" value="None" />
+              <Row label="VENTURE CAPITAL" value="None" />
+            </div>
+            <P>
+              The pipeline runs overnight, the site serves from a home IP address, and the entire
+              codebase is documented above. If you want to build something similar, everything
+              you need to know about the methodology is on this page.
+            </P>
+          </Section>
+
           {/* ── References ── */}
           <Section title="REFERENCES">
             <ol className="space-y-3">

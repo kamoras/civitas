@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Dark background -->
+  <rect width="32" height="32" fill="#0a0208"/>
+  <!-- Pixel-art "C" in matrix green — three bars forming the letter -->
+  <!-- Left vertical bar -->
+  <rect x="3"  y="4"  width="6"  height="24" fill="#00ff41"/>
+  <!-- Top horizontal bar -->
+  <rect x="9"  y="4"  width="19" height="6"  fill="#00ff41"/>
+  <!-- Bottom horizontal bar -->
+  <rect x="9"  y="22" width="19" height="6"  fill="#00ff41"/>
+</svg>

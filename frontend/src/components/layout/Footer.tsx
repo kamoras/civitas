@@ -84,12 +84,19 @@ export default function Footer() {
           >
             SCORECARD
           </Link>
-          <span className="text-matrix-green/20">|</span>
+          <span className="text-matrix-green/20" aria-hidden="true">|</span>
           <Link
             href="/about"
             className="text-matrix-green/60 hover:text-matrix-green transition-colors"
           >
             METHODOLOGY
+          </Link>
+          <span className="text-matrix-green/20" aria-hidden="true">|</span>
+          <Link
+            href="/accessibility"
+            className="text-matrix-green/60 hover:text-matrix-green transition-colors"
+          >
+            ACCESSIBILITY
           </Link>
         </nav>
 

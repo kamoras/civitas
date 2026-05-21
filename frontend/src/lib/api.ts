@@ -603,6 +603,46 @@ export async function fetchMyReps(state: string): Promise<MyRepsResponse> {
   return cachedFetch(`${API_BASE}/action/my-reps?state=${encodeURIComponent(state)}`, 300_000);
 }
 
+export interface ScoreSnapshot {
+  date: string;
+  overallScore: number;
+  scores: {
+    fundingIndependence: number;
+    promisePersistence: number;
+    independentVoting: number;
+    fundingDiversity: number;
+    legislativeEffectiveness: number;
+  };
+}
+
+export interface ScoreHistory {
+  snapshots: ScoreSnapshot[];
+}
+
+export async function fetchSenatorHistory(senatorId: string): Promise<ScoreHistory> {
+  return cachedFetch(`${API_BASE}/senators/${senatorId}/history`, 3_600_000);
+}
+
+export async function fetchRepresentativeHistory(repId: string): Promise<ScoreHistory> {
+  return cachedFetch(`${API_BASE}/representatives/${repId}/history`, 3_600_000);
+}
+
+export interface OpenCommentItem {
+  id: number;
+  title: string;
+  agencyName: string | null;
+  commentsCloseOn: string;
+  commentUrl: string;
+  policyAreas: string[];
+  docType: string;
+  date: string;
+  summary: string;
+}
+
+export async function fetchOpenComments(): Promise<OpenCommentItem[]> {
+  return cachedFetch(`${API_BASE}/action/open-comments`, 3_600_000);
+}
+
 export interface BranchDocument {
   id: number;
   title: string;

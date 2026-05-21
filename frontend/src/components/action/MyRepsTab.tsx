@@ -7,6 +7,93 @@ import { fetchMyReps } from "@/lib/api";
 import { STATES } from "@/data/states";
 import type { MyRepRep, MyRepSenator, MyRepsResponse } from "@/types/action";
 
+function ContactScript({
+  name,
+  stateName,
+  phone,
+  contactFormUrl,
+}: {
+  name: string;
+  stateName: string;
+  phone?: string | null;
+  contactFormUrl?: string | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const script = `My name is [YOUR NAME] and I am a constituent from ${stateName}. I am calling to express my concern about [ISSUE]. I urge ${name} to [TAKE ACTION]. Please leave a record of this call. Thank you.`;
+
+  if (!phone && !contactFormUrl) return null;
+
+  async function copyScript() {
+    try {
+      await navigator.clipboard.writeText(script);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard not available
+    }
+  }
+
+  return (
+    <div className="mt-3 border-t border-matrix-green/10 pt-3">
+      <div className="flex flex-wrap items-center gap-2 mb-2">
+        {phone && (
+          <a
+            href={`tel:${phone.replace(/[^0-9+]/g, "")}`}
+            className="inline-flex items-center gap-1 px-2.5 py-1 border border-matrix-green/20 text-matrix-green/60 font-pixel text-[10px] hover:bg-matrix-green/5 transition-colors"
+          >
+            CALL: {phone}
+          </a>
+        )}
+        {contactFormUrl && (
+          <a
+            href={contactFormUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 px-2.5 py-1 border border-neon-cyan/20 text-neon-cyan/60 font-pixel text-[10px] hover:bg-neon-cyan/5 transition-colors"
+          >
+            CONTACT FORM <span aria-hidden="true">↗</span>
+          </a>
+        )}
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="font-pixel text-[10px] text-neon-yellow/60 hover:text-neon-yellow border border-neon-yellow/20 px-2.5 py-1 transition-colors"
+          aria-expanded={open}
+        >
+          {open ? "HIDE SCRIPT" : "GET SCRIPT"}
+        </button>
+      </div>
+
+      {open && (
+        <div className="bg-matrix-dark-green/20 border border-matrix-green/20 p-3 space-y-2">
+          <p className="text-[11px] text-matrix-green/80 leading-relaxed font-mono">
+            {`My name is `}
+            <span className="text-neon-yellow/90">[YOUR NAME]</span>
+            {` and I am a constituent from ${stateName}. I am calling to express my concern about `}
+            <span className="text-neon-yellow/90">[ISSUE]</span>
+            {`. I urge ${name} to `}
+            <span className="text-neon-yellow/90">[TAKE ACTION]</span>
+            {`. Please leave a record of this call. Thank you.`}
+          </p>
+          <button
+            onClick={copyScript}
+            className="font-pixel text-[10px] border px-2.5 py-1 transition-colors"
+            style={{
+              borderColor: copied ? "#00ff41" : "rgba(0,255,65,0.3)",
+              color: copied ? "#00ff41" : "rgba(0,255,65,0.6)",
+            }}
+          >
+            {copied ? "COPIED!" : "COPY SCRIPT"}
+          </button>
+          <p className="text-[9px] text-matrix-green/30 italic">
+            Replace bracketed text with your own words before calling.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const PARTY_COLORS: Record<string, string> = {
   D: "text-dem-blue",
   R: "text-rep-red",
@@ -67,7 +154,7 @@ function SenatorCard({ senator }: { senator: MyRepSenator }) {
               {senator.state}
             </span>
             {senator.yearsInOffice > 0 && (
-              <span className="text-matrix-green/30 text-[10px] font-pixel">
+              <span className="text-matrix-green/50 text-[10px] font-pixel">
                 {senator.yearsInOffice}yr{senator.yearsInOffice !== 1 ? "s" : ""}
               </span>
             )}
@@ -122,6 +209,13 @@ function SenatorCard({ senator }: { senator: MyRepSenator }) {
       >
         VIEW FULL SCORECARD →
       </Link>
+
+      <ContactScript
+        name={senator.name}
+        stateName={STATES.find((s) => s.code === senator.state)?.name || senator.state}
+        phone={senator.officePhone}
+        contactFormUrl={senator.contactFormUrl}
+      />
     </div>
   );
 }
@@ -146,7 +240,7 @@ function RepCard({ rep }: { rep: MyRepRep }) {
               {rep.state}-{rep.district}
             </span>
             {rep.yearsInOffice > 0 && (
-              <span className="text-matrix-green/30 text-[10px] font-pixel">
+              <span className="text-matrix-green/50 text-[10px] font-pixel">
                 {rep.yearsInOffice}yr{rep.yearsInOffice !== 1 ? "s" : ""}
               </span>
             )}
@@ -196,6 +290,13 @@ function RepCard({ rep }: { rep: MyRepRep }) {
       >
         VIEW FULL SCORECARD →
       </Link>
+
+      <ContactScript
+        name={rep.name}
+        stateName={STATES.find((s) => s.code === rep.state)?.name || rep.state}
+        phone={rep.officePhone}
+        contactFormUrl={rep.contactFormUrl}
+      />
     </div>
   );
 }

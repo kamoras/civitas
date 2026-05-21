@@ -8,7 +8,7 @@ import MatrixRain from "@/components/effects/MatrixRain";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import GlitchText from "@/components/effects/GlitchText";
-import { fetchActionIssues } from "@/lib/api";
+import { fetchActionIssues, fetchOpenComments, OpenCommentItem } from "@/lib/api";
 import { safeHref } from "@/lib/formatting";
 import StancePulse from "@/components/action/StancePulse";
 import { LogActionButton } from "@/components/action/CivicTracker";
@@ -987,6 +987,64 @@ function isValidTab(s: string | null): s is Tab {
   return s !== null && VALID_TABS.has(s);
 }
 
+function OpenCommentsBanner() {
+  const [items, setItems] = useState<OpenCommentItem[]>([]);
+
+  useEffect(() => {
+    fetchOpenComments()
+      .then((data) => setItems(data.slice(0, 4)))
+      .catch(() => {});
+  }, []);
+
+  if (items.length === 0) return null;
+
+  function daysLeft(closeDate: string): string {
+    const diff = Math.ceil(
+      (new Date(closeDate).getTime() - Date.now()) / 86400000
+    );
+    return diff <= 0 ? "closes today" : diff === 1 ? "1 day left" : `${diff} days left`;
+  }
+
+  return (
+    <section aria-label="Open public comment periods" className="mb-6">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="font-pixel text-[10px] text-amber-400/80 tracking-widest">[!] OPEN FOR PUBLIC COMMENT</span>
+        <div className="flex-1 h-px bg-amber-400/20" aria-hidden="true" />
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 snap-x">
+        {items.map((item) => (
+          <div
+            key={item.id}
+            className="terminal-window border border-amber-400/30 bg-amber-400/5 p-3 min-w-[220px] max-w-[260px] flex-shrink-0 snap-start flex flex-col gap-1.5"
+          >
+            <p className="text-[11px] text-matrix-green/80 leading-snug line-clamp-3 flex-1">
+              {item.title}
+            </p>
+            {item.agencyName && (
+              <div className="text-[9px] text-amber-400/50 font-pixel truncate">
+                {item.agencyName}
+              </div>
+            )}
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[9px] text-amber-400/70 font-pixel">
+                {daysLeft(item.commentsCloseOn)}
+              </span>
+              <a
+                href={item.commentUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-pixel text-[9px] text-amber-400/80 border border-amber-400/30 px-2 py-0.5 hover:bg-amber-400/10 transition-colors shrink-0"
+              >
+                COMMENT ↗
+              </a>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export default function ActionPage() {
   return (
     <Suspense>
@@ -1044,6 +1102,9 @@ function ActionPageInner() {
               Stay informed. Take action. Track your government.
             </p>
           </div>
+
+          {/* Open comment periods banner */}
+          <OpenCommentsBanner />
 
           {/* Tab bar */}
           <div

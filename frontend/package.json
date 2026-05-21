@@ -25,6 +25,7 @@
     "@types/react-simple-maps": "^3.0.6",
     "eslint": "^10.2.1",
     "eslint-config-next": "^16.2.6",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
     "postcss": "^8.5.12",
     "prettier": "^3.8.1",
     "tailwindcss": "^4.2.4",

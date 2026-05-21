@@ -66,6 +66,9 @@ export interface MyRepSenator {
   leadershipScore: number | null;
   ideologyScore: number | null;
   yearsInOffice: number;
+  contactFormUrl?: string | null;
+  officePhone?: string | null;
+  websiteUrl?: string | null;
   connectedIssues: { id: number; rank: number; title: string; policyAreas: string[] }[];
 }
 
@@ -87,6 +90,9 @@ export interface MyRepRep {
   leadershipScore: number | null;
   ideologyScore: number | null;
   yearsInOffice: number;
+  contactFormUrl?: string | null;
+  officePhone?: string | null;
+  websiteUrl?: string | null;
   connectedIssues: { id: number; rank: number; title: string; policyAreas: string[] }[];
 }
 

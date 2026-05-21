@@ -46,7 +46,7 @@ function ScoreBar({
         <div className="w-48 shrink-0" id={`score-label-${label.replace(/\s+/g, "-").toLowerCase()}`}>
           <span className="text-matrix-green/70">{label}</span>
           <div className="text-[10px] text-matrix-green/50 leading-tight">{description}</div>
-          {basis && <div className="text-[10px] text-matrix-green/25 italic leading-tight">{basis}</div>}
+          {basis && <div className="text-[10px] text-matrix-green/50 italic leading-tight">{basis}</div>}
         </div>
         <span
           className="font-mono text-xs tracking-tight hidden sm:inline"

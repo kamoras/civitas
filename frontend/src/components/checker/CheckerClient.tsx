@@ -51,7 +51,7 @@ export default function CheckerClient() {
             <div className="text-matrix-green/40 text-sm mt-2 animate-pulse">
               LOADING FEC FILINGS...
             </div>
-            <div className="text-matrix-green/30 text-sm mt-1 animate-pulse">
+            <div className="text-matrix-green/50 text-sm mt-1 animate-pulse">
               MATCHING LOBBYING DATA...
             </div>
             <div className="mt-4 text-matrix-green/20">

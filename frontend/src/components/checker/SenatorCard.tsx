@@ -12,6 +12,9 @@ import SponsoredBills from "./SponsoredBills";
 import CollapsibleSection from "./CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
+import ScoreTrendSection from "./ScoreTrendSection";
+import NotablePartyBreaks from "./NotablePartyBreaks";
+import Link from "next/link";
 
 interface SenatorCardProps {
   senator: Senator;
@@ -247,12 +250,32 @@ export default function SenatorCard({ senator, chamber = "senate" }: SenatorCard
           </div>
         </div>
 
+        {/* ── Compare link ── */}
+        <div className="flex justify-end">
+          <Link
+            href={`/compare?leftId=${senator.id}&chamber=${chamber}`}
+            className="font-pixel text-[10px] text-neon-cyan/50 hover:text-neon-cyan border border-neon-cyan/20 px-2 py-0.5 transition-colors"
+          >
+            COMPARE →
+          </Link>
+        </div>
+
         {/* ── Representation Score ── always visible */}
         <CorruptionScore
           breakdown={senator.representationScore}
           promises={senator.campaignPromises}
           votingRecord={senator.votingRecord}
           funding={senator.funding}
+        />
+
+        {/* ── Score Trend ── shows historical sparkline if snapshots exist */}
+        <ScoreTrendSection entityId={senator.id} entityType={chamber} />
+
+        {/* ── Notable Party Breaks ── inline party-defection votes */}
+        <NotablePartyBreaks
+          entityId={senator.id}
+          entityType={chamber}
+          votedAgainstPartyCount={senator.votingRecord.votedAgainstPartyCount}
         />
 
         {/* ── Collapsible detail sections ── */}

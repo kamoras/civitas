@@ -330,9 +330,11 @@ body {
    WCAG AA requires 4.5:1 for normal text on #0d0208 background.
    Pure green #00ff41 at 40% opacity passes; below that fails.        */
 @media (prefers-contrast: more) {
+  [class*="text-matrix-green/1"],
   [class*="text-matrix-green/2"],
   [class*="text-matrix-green/3"],
   [class*="text-matrix-green/4"],
+  [class*="text-white/1"],
   [class*="text-white/2"],
   [class*="text-white/3"],
   [class*="text-white/4"] {
@@ -340,16 +342,42 @@ body {
     color: #00ff41 !important;
   }
 
+  [class*="text-neon-cyan/1"],
+  [class*="text-neon-cyan/2"],
+  [class*="text-neon-cyan/3"],
   [class*="text-neon-cyan/4"],
   [class*="text-neon-cyan/5"],
+  [class*="text-neon-pink/1"],
+  [class*="text-neon-pink/2"],
+  [class*="text-neon-pink/3"],
   [class*="text-neon-pink/4"],
   [class*="text-neon-pink/5"],
-  [class*="text-neon-pink/6"] {
+  [class*="text-neon-pink/6"],
+  [class*="text-neon-yellow/1"],
+  [class*="text-neon-yellow/2"],
+  [class*="text-neon-yellow/3"],
+  [class*="text-neon-yellow/4"],
+  [class*="text-neon-yellow/5"] {
     opacity: 1 !important;
   }
 
+  /* Lighter partisan colors for better contrast on dark backgrounds */
+  [class*="text-dem-blue"] {
+    color: #6699ff !important;
+  }
+  [class*="text-rep-red"] {
+    color: #ff6666 !important;
+  }
+
   .terminal-window {
-    border-color: #00ff41;
+    border-color: #00ff41 !important;
+    border-width: 2px !important;
+  }
+
+  /* Stronger focus ring in high-contrast mode */
+  *:focus-visible {
+    outline-width: 3px !important;
+    outline-offset: 3px !important;
   }
 }
 
