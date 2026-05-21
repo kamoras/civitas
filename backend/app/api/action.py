@@ -484,6 +484,7 @@ async def get_my_reps(
             Senator.score_legislative_effectiveness,
             Senator.leadership_score, Senator.ideology_score,
             Senator.years_in_office, Senator.punk_nickname, Senator.initials,
+            Senator.contact_form_url, Senator.office_phone, Senator.website_url,
         )
         .filter(Senator.state == state_upper)
         .all()
@@ -498,6 +499,7 @@ async def get_my_reps(
             Representative.score_legislative_effectiveness,
             Representative.leadership_score, Representative.ideology_score,
             Representative.years_in_office, Representative.initials,
+            Representative.contact_form_url, Representative.office_phone, Representative.website_url,
         )
         .filter(Representative.state == state_upper)
         .order_by(Representative.district)
@@ -563,6 +565,9 @@ async def get_my_reps(
             "leadershipScore": round(s.leadership_score, 1) if s.leadership_score else None,
             "ideologyScore": round(s.ideology_score, 1) if s.ideology_score else None,
             "yearsInOffice": s.years_in_office,
+            "contactFormUrl": s.contact_form_url or None,
+            "officePhone": s.office_phone or None,
+            "websiteUrl": s.website_url or None,
             "connectedIssues": senator_issues.get(s.id, []),
         })
 
@@ -590,6 +595,9 @@ async def get_my_reps(
             "leadershipScore": round(r.leadership_score, 1) if r.leadership_score else None,
             "ideologyScore": round(r.ideology_score, 1) if r.ideology_score else None,
             "yearsInOffice": r.years_in_office,
+            "contactFormUrl": r.contact_form_url or None,
+            "officePhone": r.office_phone or None,
+            "websiteUrl": r.website_url or None,
             "connectedIssues": senator_issues.get(r.id, []),
         })
 
@@ -599,6 +607,43 @@ async def get_my_reps(
         "representatives": result_reps,
         "issueDate": issues[0].date if issues else None,
     }
+
+
+@router.get("/open-comments")
+def get_open_comments(response: Response, db: Session = Depends(get_db)):
+    """Return Federal Register documents with open public comment periods, sorted by deadline."""
+    response.headers["Cache-Control"] = "public, max-age=3600"
+    today = date.today().isoformat()
+    docs = (
+        db.query(ExploreDocument)
+        .filter(
+            ExploreDocument.comment_url.isnot(None),
+            ExploreDocument.comment_url != "",
+            ExploreDocument.comments_close_on.isnot(None),
+            ExploreDocument.comments_close_on >= today,
+        )
+        .order_by(ExploreDocument.comments_close_on)
+        .limit(8)
+        .all()
+    )
+    result = []
+    for d in docs:
+        try:
+            areas = json.loads(d.policy_areas) if d.policy_areas else []
+        except Exception:
+            areas = []
+        result.append({
+            "id": d.id,
+            "title": d.title,
+            "agencyName": d.agency_name,
+            "commentsCloseOn": d.comments_close_on,
+            "commentUrl": d.comment_url,
+            "policyAreas": areas,
+            "docType": d.doc_type,
+            "date": d.date,
+            "summary": (d.summary or "")[:200],
+        })
+    return result
 
 
 @router.get("/elections")

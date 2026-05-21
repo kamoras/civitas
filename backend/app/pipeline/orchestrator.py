@@ -57,6 +57,7 @@ from app.pipeline.fetch.fec import (
     fetch_candidate_committees,
     fetch_candidate_financials,
     fetch_committee_receipts,
+    fetch_outside_spending,
     fetch_pac_receipts,
     find_candidate,
 )
@@ -1047,12 +1048,20 @@ async def run_full_pipeline(
                         client, db, committee_id
                     )
 
+                outside = await fetch_outside_spending(client, db, candidate_id)
+                logger.info(
+                    "Outside spending for %s: $%.0f",
+                    senator["name"],
+                    outside.get("totalFor", 0),
+                )
+
                 fec_data[senator["id"]] = {
                     "candidate": candidate,
                     "financials": financials,
                     "receipts": receipts,
                     "pacReceipts": pac_receipts_data,
                     "aggregated": aggregated,
+                    "outsideSpending": outside,
                 }
                 progress.update("fetch_fec", done=fec_idx + 1)
             logger.info(
@@ -1310,6 +1319,7 @@ async def run_full_pipeline(
                         fec.get("aggregated") or [],
                         ai_classifications=ai_classifications,
                         db_session=db,
+                        outside_spending=fec.get("outsideSpending"),
                     )
                 else:
                     funding = senator.get("funding", {})

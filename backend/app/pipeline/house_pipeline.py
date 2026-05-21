@@ -41,6 +41,7 @@ from app.pipeline.fetch.fec import (
     fetch_candidate_committees,
     fetch_candidate_financials,
     fetch_committee_receipts,
+    fetch_outside_spending,
     fetch_pac_receipts,
     find_candidate,
 )
@@ -274,7 +275,7 @@ async def run_house_pipeline() -> dict:
                     if sp_bill_id in cosponsors_map:
                         continue
                     parts = sp_bill_id.split(".")
-                    if len(parts) == 2:
+                    if len(parts) == 2 and parts[1].isdigit():
                         cosponsors = await fetch_bill_cosponsors(
                             client, db,
                             sp_data.get("congress", settings.CURRENT_CONGRESS),
@@ -437,9 +438,16 @@ async def run_house_pipeline() -> dict:
                                 raw_pac_receipts.extend(await fetch_pac_receipts(client, db, comm_id))
                                 aggregated.extend(await fetch_aggregated_contributors(client, db, comm_id))
 
+                        outside = await fetch_outside_spending(client, db, cand_id)
+                        logger.info(
+                            "Outside spending for %s: $%.0f",
+                            rep_name,
+                            outside.get("totalFor", 0),
+                        )
+
                         finance_data = normalize_finance(
                             fec_candidate, financials, raw_receipts, raw_pac_receipts,
-                            aggregated, db_session=db,
+                            aggregated, db_session=db, outside_spending=outside,
                         )
                         rep["funding"] = finance_data
                     else:

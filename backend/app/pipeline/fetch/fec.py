@@ -260,3 +260,33 @@ async def fetch_aggregated_contributors(
     results = (data or {}).get("results", [])
     api_cache_set(db, "fec", cache_key, results)
     return results
+
+
+async def fetch_outside_spending(
+    client: httpx.AsyncClient, db: Session, candidate_id: str
+) -> dict:
+    """Fetch independent expenditures (super PAC outside spending) supporting a candidate.
+
+    Returns totals for expenditures supporting the candidate (not opposing).
+    These are not controlled by the candidate but signal industry alignment
+    and are a key signal for senior legislators who rely on outside support.
+
+    FEC endpoint: /schedules/schedule_e/?candidate_id=...&support_oppose_indicator=S
+    """
+    cache_key = f"outside-spending-{candidate_id}"
+    cached = api_cache_get(db, "fec", cache_key)
+    if cached is not None:
+        return cached
+
+    data = await _fetch_with_retry(
+        client,
+        f"{FEC_API_BASE}/schedules/schedule_e/?candidate_id={candidate_id}"
+        f"&support_oppose_indicator=S&sort=-expenditure_amount&per_page=50",
+    )
+
+    results = (data or {}).get("results", [])
+    total_for = sum(r.get("expenditure_amount", 0) or 0 for r in results)
+
+    result = {"totalFor": round(total_for, 2), "count": len(results)}
+    api_cache_set(db, "fec", cache_key, result)
+    return result

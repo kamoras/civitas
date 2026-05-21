@@ -38,6 +38,34 @@ def list_rep_leaderboard(
     return _cached_json(data, max_age=300)
 
 
+@router.get("/representatives/{rep_id}/history")
+def get_rep_history(rep_id: str, db: Session = Depends(get_db)) -> JSONResponse:
+    """Return historical score snapshots for a representative."""
+    from app.models import ScoreSnapshot
+    snapshots = (
+        db.query(ScoreSnapshot)
+        .filter(ScoreSnapshot.entity_type == "representative", ScoreSnapshot.entity_id == rep_id)
+        .order_by(ScoreSnapshot.date)
+        .all()
+    )
+    return _cached_json({
+        "snapshots": [
+            {
+                "date": s.date,
+                "overallScore": round(s.overall_score, 1),
+                "scores": {
+                    "fundingIndependence": round(s.score_1, 1),
+                    "promisePersistence": round(s.score_2, 1),
+                    "independentVoting": round(s.score_3, 1),
+                    "fundingDiversity": round(s.score_4, 1),
+                    "legislativeEffectiveness": round(s.score_5, 1),
+                },
+            }
+            for s in snapshots
+        ]
+    }, max_age=3600)
+
+
 @router.get("/representatives/{rep_id}/votes")
 def get_votes(
     rep_id: str,
