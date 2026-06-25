@@ -8,6 +8,7 @@ from app.api.health import router as health_router
 from app.api.justices import router as justices_router
 from app.api.pipeline import router as pipeline_router
 from app.api.presidents import router as presidents_router
+from app.api.public import router as public_router
 from app.api.representatives import router as representatives_router
 from app.api.senators import router as senators_router
 
@@ -23,3 +24,4 @@ api_router.include_router(action_router, tags=["action"])
 api_router.include_router(pipeline_router, tags=["pipeline"])
 api_router.include_router(admin_router, tags=["admin"])
 api_router.include_router(alerts_router, tags=["alerts"])
+api_router.include_router(public_router, prefix="/public/v1", tags=["public"])

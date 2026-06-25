@@ -899,7 +899,7 @@ async def run_full_pipeline(
                 bill_id = bill_ref.get("billId", "")
                 # Parse bill type and number from the composite ID (e.g. "S.123")
                 parts = bill_id.split(".")
-                if len(parts) == 2:
+                if len(parts) == 2 and parts[1].isdigit():
                     cosponsors = await fetch_bill_cosponsors(
                         client, db,
                         bill_ref["congress"],
@@ -1479,7 +1479,7 @@ async def run_full_pipeline(
                         progress.update("fetch_sponsored_cosponsors", done=sc_idx + 1)
                         continue
                     parts = bill_id.split(".")
-                    if len(parts) == 2:
+                    if len(parts) == 2 and parts[1].isdigit():
                         cosponsors = await fetch_bill_cosponsors(
                             enrich_client, db,
                             sp_bill["congress"],

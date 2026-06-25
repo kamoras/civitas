@@ -93,11 +93,15 @@ async def trigger_pipeline(
         raise HTTPException(status_code=409, detail="Pipeline is already running")
 
     def _run_in_thread():
+        from app.pipeline.house_pipeline import run_house_pipeline
         loop = asyncio.new_event_loop()
         try:
-            loop.run_until_complete(
+            result = loop.run_until_complete(
                 run_full_pipeline(senator_filter=senator, fetch_only=fetch_only)
             )
+            if senator is None and not fetch_only and result.get("status") not in ("skipped", "failed"):
+                logger.info("Senate pipeline done — starting House pipeline")
+                loop.run_until_complete(run_house_pipeline())
         except BaseException:
             logger.exception("Pipeline run failed")
         finally:

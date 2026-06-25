@@ -253,6 +253,8 @@ async def run_house_pipeline() -> dict:
                     if sp.get("congress", 0) >= min_congress:
                         sp_type = (sp.get("type") or "hr").upper()
                         sp_num = sp.get("number", "")
+                        if not sp_num:
+                            continue
                         sp_key = f"{sp_type}.{sp_num}"
                         sp_list.append({
                             "billId": sp_key,
