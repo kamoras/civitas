@@ -56,9 +56,19 @@ from app.pipeline.transform.normalize_votes import (
 
 logger = logging.getLogger(__name__)
 
+# Module-level flag so the hourly action-center refresh can skip while the
+# house pipeline is running (prevents concurrent SQLite write conflicts).
+_house_pipeline_running: bool = False
+
+
+def is_house_pipeline_running() -> bool:
+    return _house_pipeline_running
+
 
 async def run_house_pipeline() -> dict:
     """Run the full House representative pipeline."""
+    global _house_pipeline_running
+    _house_pipeline_running = True
     db = SessionLocal()
     start_time = time.time()
 
@@ -218,108 +228,116 @@ async def run_house_pipeline() -> dict:
                 describe_senator_position,
             )
 
-            # Fetch cosponsors for significant bills to build the
-            # rep-rep cosponsorship graph. This reuses bills already
-            # fetched in Phase 3, keeping API calls manageable (~40).
             cosponsors_map: dict[str, list[dict]] = {}
             all_bills_for_analysis: list[dict] = []
+            leadership_scores: dict[str, float] = {}
+            ideology_scores: dict[str, float] = {}
 
-            for b in bills_data:
-                bill_key = f"{b['type'].upper()}.{b['number']}"
-                cosponsors = await fetch_bill_cosponsors(
-                    client, db, b["congress"], b["type"], b["number"],
-                )
-                if cosponsors:
-                    cosponsors_map[bill_key] = cosponsors
-                all_bills_for_analysis.append({
-                    "billId": bill_key,
-                    "congress": b["congress"],
-                    "sponsorBioguide": b.get("sponsorBioguide", ""),
-                    "sponsorParty": b.get("sponsorParty", ""),
-                })
-
-            # Enrich with per-rep sponsored bills (up to 5 per rep,
-            # recent Congress only) to make the cosponsorship matrix denser.
-            min_congress = settings.CURRENT_CONGRESS - 1
-            sponsored_for_cosponsor: list[dict] = []
-            for r in reps:
-                bio_id = r.get("bioguideId", "")
-                party = r.get("party", "")
-                if not bio_id:
-                    continue
-                sponsored = await fetch_member_sponsored(client, db, bio_id)
-                sp_list = []
-                for sp in (sponsored or []):
-                    if sp.get("congress", 0) >= min_congress:
-                        sp_type = (sp.get("type") or "hr").upper()
-                        sp_num = sp.get("number", "")
-                        if not sp_num:
-                            continue
-                        sp_key = f"{sp_type}.{sp_num}"
-                        sp_list.append({
-                            "billId": sp_key,
-                            "title": sp.get("title", ""),
-                            "introducedDate": sp.get("introducedDate", ""),
-                            "latestAction": (sp.get("latestAction") or {}).get("text", ""),
-                            "latestActionDate": (sp.get("latestAction") or {}).get("actionDate", ""),
-                            "policyArea": "",
-                            "policyAreas": [],
-                            "partyLeaning": None,
-                            "congress": sp.get("congress", 0),
-                            "billType": sp.get("type", ""),
-                            "isLaw": "became public law" in (
-                                (sp.get("latestAction") or {}).get("text", "")
-                            ).lower(),
-                        })
-                r["sponsoredBills"] = sp_list[:50]
-                for sp_data in sp_list[:5]:
-                    sp_bill_id = sp_data["billId"]
-                    if sp_bill_id in cosponsors_map:
-                        continue
-                    parts = sp_bill_id.split(".")
-                    if len(parts) == 2 and parts[1].isdigit():
-                        cosponsors = await fetch_bill_cosponsors(
-                            client, db,
-                            sp_data.get("congress", settings.CURRENT_CONGRESS),
-                            parts[0].lower(),
-                            int(parts[1]),
-                        )
-                        if cosponsors:
-                            cosponsors_map[sp_bill_id] = cosponsors
-                    sponsored_for_cosponsor.append({
-                        "billId": sp_bill_id,
-                        "congress": sp_data.get("congress", settings.CURRENT_CONGRESS),
-                        "sponsorBioguide": bio_id,
-                        "sponsorParty": party,
+            try:
+                # Fetch cosponsors for significant bills to build the
+                # rep-rep cosponsorship graph. This reuses bills already
+                # fetched in Phase 3, keeping API calls manageable (~40).
+                for b in bills_data:
+                    bill_key = f"{b['type'].upper()}.{b['number']}"
+                    cosponsors = await fetch_bill_cosponsors(
+                        client, db, b["congress"], b["type"], b["number"],
+                    )
+                    if cosponsors:
+                        cosponsors_map[bill_key] = cosponsors
+                    all_bills_for_analysis.append({
+                        "billId": bill_key,
+                        "congress": b["congress"],
+                        "sponsorBioguide": b.get("sponsorBioguide", ""),
+                        "sponsorParty": b.get("sponsorParty", ""),
                     })
 
-            all_bills_for_analysis.extend(sponsored_for_cosponsor)
-            total_cosponsors = sum(len(v) for v in cosponsors_map.values())
-            logger.info(
-                "Cosponsorship data: %d bills with cosponsors (%d total cosponsorships)",
-                len(cosponsors_map), total_cosponsors,
-            )
+                # Enrich with per-rep sponsored bills (up to 5 per rep,
+                # recent Congress only) to make the cosponsorship matrix denser.
+                min_congress = settings.CURRENT_CONGRESS - 1
+                sponsored_for_cosponsor: list[dict] = []
+                for r in reps:
+                    bio_id = r.get("bioguideId", "")
+                    party = r.get("party", "")
+                    if not bio_id:
+                        continue
+                    sponsored = await fetch_member_sponsored(client, db, bio_id)
+                    sp_list = []
+                    for sp in (sponsored or []):
+                        if sp.get("congress", 0) >= min_congress:
+                            sp_type = (sp.get("type") or "hr").upper()
+                            sp_num = sp.get("number", "")
+                            if not sp_num:
+                                continue
+                            sp_key = f"{sp_type}.{sp_num}"
+                            sp_list.append({
+                                "billId": sp_key,
+                                "title": sp.get("title", ""),
+                                "introducedDate": sp.get("introducedDate", ""),
+                                "latestAction": (sp.get("latestAction") or {}).get("text", ""),
+                                "latestActionDate": (sp.get("latestAction") or {}).get("actionDate", ""),
+                                "policyArea": "",
+                                "policyAreas": [],
+                                "partyLeaning": None,
+                                "congress": sp.get("congress", 0),
+                                "billType": sp.get("type", ""),
+                                "isLaw": "became public law" in (
+                                    (sp.get("latestAction") or {}).get("text", "")
+                                ).lower(),
+                            })
+                    r["sponsoredBills"] = sp_list[:50]
+                    for sp_data in sp_list[:5]:
+                        sp_bill_id = sp_data["billId"]
+                        if sp_bill_id in cosponsors_map:
+                            continue
+                        parts = sp_bill_id.split(".")
+                        if len(parts) == 2 and parts[1].isdigit():
+                            cosponsors = await fetch_bill_cosponsors(
+                                client, db,
+                                sp_data.get("congress", settings.CURRENT_CONGRESS),
+                                parts[0].lower(),
+                                int(parts[1]),
+                            )
+                            if cosponsors:
+                                cosponsors_map[sp_bill_id] = cosponsors
+                        sponsored_for_cosponsor.append({
+                            "billId": sp_bill_id,
+                            "congress": sp_data.get("congress", settings.CURRENT_CONGRESS),
+                            "sponsorBioguide": bio_id,
+                            "sponsorParty": party,
+                        })
 
-            rep_bio_ids = {
-                r.get("bioguideId", "")
-                for r in reps
-                if r.get("bioguideId")
-            }
-            rep_party_map = {
-                r.get("bioguideId", ""): r.get("party", "")
-                for r in reps
-                if r.get("bioguideId")
-            }
-            leadership_scores = compute_leadership_scores(
-                all_bills_for_analysis, cosponsors_map, rep_bio_ids, rep_party_map,
-            )
-            ideology_scores = compute_ideology_scores(
-                all_bills_for_analysis, cosponsors_map, rep_bio_ids, rep_party_map,
-            )
-            logger.info(
-                "Sponsorship analysis: %d leadership scores, %d ideology scores",
-                len(leadership_scores), len(ideology_scores),
-            )
+                all_bills_for_analysis.extend(sponsored_for_cosponsor)
+                total_cosponsors = sum(len(v) for v in cosponsors_map.values())
+                logger.info(
+                    "Cosponsorship data: %d bills with cosponsors (%d total cosponsorships)",
+                    len(cosponsors_map), total_cosponsors,
+                )
+
+                rep_bio_ids = {
+                    r.get("bioguideId", "")
+                    for r in reps
+                    if r.get("bioguideId")
+                }
+                rep_party_map = {
+                    r.get("bioguideId", ""): r.get("party", "")
+                    for r in reps
+                    if r.get("bioguideId")
+                }
+                leadership_scores = compute_leadership_scores(
+                    all_bills_for_analysis, cosponsors_map, rep_bio_ids, rep_party_map,
+                )
+                ideology_scores = compute_ideology_scores(
+                    all_bills_for_analysis, cosponsors_map, rep_bio_ids, rep_party_map,
+                )
+                logger.info(
+                    "Sponsorship analysis: %d leadership scores, %d ideology scores",
+                    len(leadership_scores), len(ideology_scores),
+                )
+            except Exception as phase4b_err:
+                logger.error(
+                    "Phase 4b failed (%s) — continuing with empty sponsorship scores",
+                    phase4b_err,
+                )
 
             # ── PHASE 5: FEC DATA + SCORING ──
             logger.info("--- House Phase 5: FEC DATA + SCORING ---")
@@ -513,6 +531,7 @@ async def run_house_pipeline() -> dict:
         logger.exception("House pipeline failed: %s", e)
         return {"status": "failed", "error": str(e)[:500]}
     finally:
+        _house_pipeline_running = False
         db.close()
 
 

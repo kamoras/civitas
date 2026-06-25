@@ -7,7 +7,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 from app.config import settings
 from app.pipeline.orchestrator import run_full_pipeline
-from app.pipeline.house_pipeline import run_house_pipeline
+from app.pipeline.house_pipeline import run_house_pipeline, is_house_pipeline_running
 from app.pipeline.analyze.action_center import refresh_action_issues
 from app.pipeline.digest import send_weekly_digests
 
@@ -62,6 +62,9 @@ def _hourly_action_refresh() -> None:
                     "Action center refresh skipped — nightly pipeline is running (run #%d)",
                     running.id,
                 )
+                return
+            if is_house_pipeline_running():
+                logger.info("Action center refresh skipped — house pipeline is running")
                 return
             count = refresh_action_issues()
             logger.info("Action center hourly refresh: %d issues", count)
