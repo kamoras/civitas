@@ -58,7 +58,7 @@ def _generate_new_post(issue) -> str | None:
     sources_text = _build_source_context(issue.source_names)
 
     user_prompt = f"""A new civic issue has emerged and is being covered by multiple news outlets.
-Synthesize what is happening and write a Bluesky post that explains it clearly.
+Write a Bluesky post that explains it clearly.
 
 Issue: {issue.title}
 Summary: {issue.summary or '(none)'}
@@ -67,13 +67,13 @@ Key facts:
 News sources covering this: {sources_text}
 
 Requirements:
-- Under {MAX_POST_CHARS} characters
+- STRICT MAXIMUM: {MAX_POST_CHARS} characters total (count carefully — this is a hard limit)
+- Write 1-3 complete sentences that end with proper punctuation
 - Factual and non-partisan
 - No hashtags, no exclamation points, no editorializing
-- Explain what is happening and what it means for citizens
 - Write in present tense
 
-Return JSON: {{"post": "<text under {MAX_POST_CHARS} chars>"}}"""
+Return JSON: {{"post": "<text — must be complete sentences and under {MAX_POST_CHARS} chars>"}}"""
 
     result = call_llm(
         prompt_version="bsky_new_post_v1",
@@ -86,7 +86,21 @@ Return JSON: {{"post": "<text under {MAX_POST_CHARS} chars>"}}"""
     )
     if not result or not isinstance(result.get("post"), str):
         return None
-    return result["post"].strip()
+    text = result["post"].strip()
+    # Enforce character limit: trim to last sentence boundary within budget
+    if len(text) > MAX_POST_CHARS:
+        trimmed = text[:MAX_POST_CHARS]
+        cut = -1
+        for punct in (".", "!", "?"):
+            idx = trimmed.rfind(punct)
+            if idx > len(trimmed) // 2:
+                cut = max(cut, idx + 1)
+        if cut > 0:
+            text = trimmed[:cut]
+        else:
+            last_space = trimmed.rfind(" ")
+            text = trimmed[:last_space] if last_space > 0 else trimmed
+    return text
 
 
 def _generate_surge_post(issue, old_rank: int) -> tuple[bool, str | None]:
@@ -131,7 +145,16 @@ Return JSON: {{"should_post": true/false, "post": "<text if should_post>", "reas
     if not result:
         return False, None
     should = bool(result.get("should_post", False))
-    text = result.get("post", "").strip() if should else None
+    raw = result.get("post", "").strip() if should else None
+    if raw and len(raw) > MAX_POST_CHARS:
+        trimmed = raw[:MAX_POST_CHARS]
+        cut = -1
+        for punct in (".", "!", "?"):
+            idx = trimmed.rfind(punct)
+            if idx > len(trimmed) // 2:
+                cut = max(cut, idx + 1)
+        raw = trimmed[:cut] if cut > 0 else trimmed[:trimmed.rfind(" ") or MAX_POST_CHARS]
+    text = raw
     logger.debug(
         "Surge judgment for '%s': should_post=%s reason=%s",
         issue.title[:60], should, result.get("reasoning", "")
@@ -150,10 +173,24 @@ def _publish(text: str, issue) -> bool:
     url = f"https://civitas.paramain.com/issue/{issue.id}"
     full_text = f"{text}\n\n{url}"
 
-    # Hard truncate the generated body if the LLM overshot, preserving the URL
+    # Hard truncate the generated body if the LLM overshot, preserving the URL.
+    # Prefer sentence boundary > word boundary so we never cut mid-sentence.
     if len(full_text) > 300:
         budget = 300 - len(url) - 2  # 2 for \n\n
-        full_text = f"{text[:budget]}\n\n{url}"
+        trimmed = text[:budget]
+        # Try to end on a sentence boundary
+        cut = -1
+        for punct in (".", "!", "?"):
+            idx = trimmed.rfind(punct)
+            if idx > len(trimmed) // 2:
+                cut = max(cut, idx + 1)  # include the punctuation char
+        if cut > 0:
+            trimmed = trimmed[:cut]
+        else:
+            last_space = trimmed.rfind(" ")
+            if last_space > 0:
+                trimmed = trimmed[:last_space]
+        full_text = f"{trimmed}\n\n{url}"
 
     try:
         from atproto import Client, models  # imported here so missing package only fails at post time
