@@ -76,26 +76,28 @@ def _generate_new_post(issue) -> str | None:
     facts_text = _build_facts_context(issue.facts)
     sources_text = _build_source_context(issue.source_names)
 
-    user_prompt = f"""A new civic issue has emerged and is being covered by multiple news outlets.
-Write a Bluesky post that explains it clearly.
+    user_prompt = f"""Write a Bluesky post summarizing this civic news issue.
 
-Issue: {issue.title}
+Title: {issue.title}
 Summary: {issue.summary or '(none)'}
 Key facts:
 {facts_text or '(none)'}
-News sources covering this: {sources_text}
+Sources: {sources_text}
 
-Requirements:
-- STRICT MAXIMUM: {MAX_POST_CHARS} characters total (count carefully — this is a hard limit)
-- Write 1-3 complete sentences that end with proper punctuation
-- Factual and non-partisan
-- No hashtags, no exclamation points, no editorializing
-- Write in present tense
+RULES — violating any rule means your response is unusable:
+1. Use ONLY information from the Title, Summary, and Key facts above. \
+Do not add details, statistics, or claims not stated there.
+2. If the title or summary says something was dropped, ended, or resolved — \
+write it as dropped/ended/resolved. Never contradict the title.
+3. STRICT MAXIMUM: {MAX_POST_CHARS} characters total.
+4. Write 1-3 complete sentences ending with proper punctuation.
+5. No hashtags, no exclamation points, no editorializing, no "breaking news".
+6. Neutral and non-partisan.
 
-Return JSON: {{"post": "<text — must be complete sentences and under {MAX_POST_CHARS} chars>"}}"""
+Return JSON: {{"post": "<your post text>"}}"""
 
     result = call_llm(
-        prompt_version="bsky_new_post_v1",
+        prompt_version="bsky_new_post_v2",
         system_prompt=_SYSTEM_PROMPT,
         user_prompt=user_prompt,
         cache_key=None,  # never cache — these are time-sensitive
@@ -139,7 +141,7 @@ Requirements for the post:
 Return JSON: {{"should_post": true/false, "post": "<text if should_post>", "reasoning": "<one sentence>"}}"""
 
     result = call_llm(
-        prompt_version="bsky_surge_post_v1",
+        prompt_version="bsky_surge_post_v2",
         system_prompt=_SYSTEM_PROMPT,
         user_prompt=user_prompt,
         cache_key=None,

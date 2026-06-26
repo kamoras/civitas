@@ -63,7 +63,7 @@ CLUSTER_CENTROID_MERGE_THRESHOLD = 0.20
 MAX_ISSUES = 4
 MIN_ARTICLES_PER_CLUSTER = 1
 
-ACTION_CENTER_PROMPT_VERSION = "action-v17"
+ACTION_CENTER_PROMPT_VERSION = "action-v18"
 
 _SYSTEM_PROMPT = """\
 You are a nonpartisan civic information analyst. You present facts without \
@@ -82,7 +82,12 @@ Produce a JSON object with these fields:
 - "summary": A factual 2-4 sentence summary of what is happening and why \
 it matters. No opinion.
 - "facts": An array of 3-5 key factual bullet points citizens should know. \
-Each fact must cite specific numbers, dates, or names when available.
+Each fact must cite specific numbers, dates, or names when available. \
+CRITICAL fact rules: (1) Every fact must be directly stated in the articles — \
+never infer or extrapolate. (2) Comparisons must name TWO DISTINCT entities — \
+never write "X surpasses X" or compare a thing to itself. (3) If an article \
+says something was dropped, dismissed, or ended, the fact must reflect that \
+outcome — do not write that it is ongoing.
 - "actions": An array of exactly 3 objects. Each has "text" and "type". \
 "type" must be one of: "contact_senator", "contact_representative", \
 "contact_whitehouse", "public_comment", "track_legislation", \
@@ -579,6 +584,38 @@ def _deduplicate_top_clusters(
         len(selected), len(ranked_clusters),
     )
     return [ranked_clusters[i] for i in selected]
+
+
+def _validate_facts(facts: list) -> list:
+    """Drop hallucinated or self-referential facts before saving.
+
+    Catches two common LLM failure modes:
+    - Self-comparison: "Meta surpasses Meta Platforms" — same root word on both sides
+    - Non-list return: LLM occasionally wraps facts in a dict or returns a string
+    """
+    if not isinstance(facts, list):
+        return []
+
+    import re as _re
+
+    clean = []
+    for fact in facts:
+        if not isinstance(fact, str) or not fact.strip():
+            continue
+        # Detect self-referential comparisons: extract capitalized words and check
+        # if any word root appears on both sides of a comparison verb.
+        lower = fact.lower()
+        comparison_verbs = ("surpass", "overtake", "exceed", "beat", "top", "outpace")
+        if any(verb in lower for verb in comparison_verbs):
+            # Extract significant words (4+ chars, capitalized in original)
+            words = _re.findall(r"\b[A-Z][a-z]{3,}\b", fact)
+            roots = [w.lower()[:6] for w in words]  # stem to first 6 chars
+            if len(roots) != len(set(roots)):  # duplicate root → self-comparison
+                logger.warning("Dropping self-referential fact: %s", fact[:120])
+                continue
+        clean.append(fact.strip())
+
+    return clean
 
 
 def _build_llm_prompt(cluster: list[NewsArticle]) -> str:
@@ -2337,7 +2374,7 @@ def _run_refresh(db: Session) -> int:
 
         title = llm_result.get("title", cluster[0].title)
         summary = llm_result.get("summary", "")
-        facts = llm_result.get("facts", [])
+        facts = _validate_facts(llm_result.get("facts", []))
         actions = llm_result.get("actions", [])
         policy_areas = llm_result.get("policyAreas", [])
 
