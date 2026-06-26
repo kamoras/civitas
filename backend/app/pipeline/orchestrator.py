@@ -1898,6 +1898,20 @@ async def run_full_pipeline(
 
         _record_score_snapshots(db)
 
+        try:
+            from app.pipeline.analyze.score_calibration import generate_calibration_report
+            report = generate_calibration_report("senator")
+            if report and report["drift_events"]:
+                for evt in report["drift_events"]:
+                    logger.warning(
+                        "SCORE DRIFT [%s] %s: %s",
+                        evt["severity"], evt["dimension"], evt["message"],
+                    )
+            else:
+                logger.info("Score calibration: no drift detected")
+        except Exception:
+            logger.exception("Score calibration check failed (non-fatal)")
+
         logger.info("--- Phase 7: FINALIZE ---")
         progress.begin("finalize")
 

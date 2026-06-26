@@ -645,3 +645,30 @@ async def admin_classification_health(db: Session = Depends(get_db)):
     return get_health_metrics(db)
 
 
+@router.get("/score-calibration", dependencies=[Depends(require_admin)])
+async def get_score_calibration(entity_type: str = "senator"):
+    """Return the drift report for the two most recent snapshot dates.
+
+    Compares score distributions between consecutive pipeline runs to surface
+    statistically unusual shifts for human review. No weights are mutated.
+
+    Query params:
+      entity_type: ``senator`` (default) or ``representative``
+    """
+    from app.pipeline.analyze.score_calibration import generate_calibration_report
+
+    if entity_type not in ("senator", "representative"):
+        raise HTTPException(
+            status_code=400,
+            detail="entity_type must be 'senator' or 'representative'",
+        )
+
+    report = generate_calibration_report(entity_type)
+    if report is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Fewer than 2 snapshot dates exist for entity_type={entity_type!r}",
+        )
+    return report
+
+

@@ -515,6 +515,20 @@ async def run_house_pipeline() -> dict:
             logger.info("--- House Phase 6: SNAPSHOTS ---")
             _record_rep_snapshots(db)
 
+            try:
+                from app.pipeline.analyze.score_calibration import generate_calibration_report
+                report = generate_calibration_report("representative")
+                if report and report["drift_events"]:
+                    for evt in report["drift_events"]:
+                        logger.warning(
+                            "SCORE DRIFT [%s] %s: %s",
+                            evt["severity"], evt["dimension"], evt["message"],
+                        )
+                else:
+                    logger.info("Score calibration: no drift detected")
+            except Exception:
+                logger.exception("Score calibration check failed (non-fatal)")
+
             elapsed = time.time() - start_time
             logger.info("=== HOUSE PIPELINE COMPLETE ===")
             logger.info("Representatives: %d success, %d failed", success_count, fail_count)
