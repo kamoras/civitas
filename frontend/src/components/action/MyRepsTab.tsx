@@ -437,7 +437,7 @@ export default function MyRepsTab({
             {repIssues.map((iss) => (
               <Link
                 key={iss.id}
-                href={`/action?tab=issues`}
+                href={`/action?issue=${iss.id}`}
                 className="flex items-start gap-3 group hover:bg-neon-pink/10 transition-colors p-2 -mx-2"
               >
                 <span className="text-[10px] font-pixel text-neon-pink/40 shrink-0 mt-0.5">

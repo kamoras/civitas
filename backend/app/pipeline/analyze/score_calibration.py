@@ -1,9 +1,9 @@
 """
-Score drift detection and calibration report.
+Score distribution monitoring across pipeline runs.
 
-Compares score distributions across consecutive snapshot dates to surface
-statistically unusual shifts for human review. No weights are auto-mutated —
-drift events are flagged and logged only.
+Compares score distributions across consecutive snapshot dates and logs
+any statistically notable shifts. Runs automatically at the end of each
+pipeline run. The admin endpoint exposes the latest report for observability.
 
 Score dimensions map to ScoreSnapshot columns:
   funding_independence      → score_1

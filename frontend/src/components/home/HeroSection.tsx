@@ -27,7 +27,7 @@ export default function HeroSection() {
 
       <div className="mb-12 text-xl sm:text-2xl md:text-3xl text-matrix-green/80 max-w-3xl">
         <TypewriterText
-          text="> PUBLIC DATA. ZERO SPIN. LOOK IT UP YOURSELF."
+          text="> CONGRESSIONAL DATA. SCORED. SOURCED. SEARCHABLE."
           speed={40}
           startDelay={800}
         />

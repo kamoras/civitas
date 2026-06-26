@@ -12,7 +12,7 @@ export function generateCommentary(senator: Senator): string[] {
     const pacPct = Math.round((funding.totalFromPACs / funding.totalRaised) * 100);
     if (pacPct >= 50) {
       comments.push(
-        `${pacPct}% of ${senator.name}'s ${formatCurrency(funding.totalRaised)} war chest came from PACs — more than half the money from organized special interests, not individual constituents.`
+        `${pacPct}% of ${senator.name}'s ${formatCurrency(funding.totalRaised)} in campaign fundraising came from PACs — more than half from political organizations rather than individual donors.`
       );
     } else if (pacPct >= 25) {
       comments.push(

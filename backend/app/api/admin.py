@@ -647,10 +647,11 @@ async def admin_classification_health(db: Session = Depends(get_db)):
 
 @router.get("/score-calibration", dependencies=[Depends(require_admin)])
 async def get_score_calibration(entity_type: str = "senator"):
-    """Return the drift report for the two most recent snapshot dates.
+    """Score distribution monitoring across consecutive pipeline runs.
 
-    Compares score distributions between consecutive pipeline runs to surface
-    statistically unusual shifts for human review. No weights are mutated.
+    Compares distributions between the two most recent snapshot dates.
+    Drift events are logged automatically during each pipeline run; this
+    endpoint surfaces the latest comparison for observability.
 
     Query params:
       entity_type: ``senator`` (default) or ``representative``

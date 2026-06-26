@@ -23,19 +23,20 @@ const shareTech = Share_Tech_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CIVITAS // EXPOSE THE MACHINE",
+  title: "CIVITAS // PUBLIC RECORD",
   description:
-    "Track corporate money in politics, see how your senators vote, and follow the receipts. All public data, zero spin.",
+    "See how your senators and representatives vote, score their funding independence, and find civic actions — all from public federal data.",
   keywords: [
-    "political corruption",
-    "senator corruption",
-    "corporate lobbying",
-    "campaign finance",
-    "money in politics",
+    "congressional voting records",
+    "campaign finance transparency",
+    "political accountability",
+    "civic data",
+    "Senate scorecard",
+    "House scorecard",
   ],
   openGraph: {
-    title: "CIVITAS // EXPOSE THE MACHINE",
-    description: "Track corporate money in politics. See how your senators vote. Follow the receipts.",
+    title: "CIVITAS // PUBLIC RECORD",
+    description: "Congressional scorecards, campaign finance data, and civic actions — all sourced from public federal records.",
     type: "website",
   },
 };
