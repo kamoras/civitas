@@ -1,3 +1,36 @@
+"""
+Pipeline caching layer — two independent stores with different invalidation strategies.
+
+API Cache (ApiCache table)
+--------------------------
+TTL-based. Caches raw HTTP responses from external APIs (FEC, Congress.gov, etc.)
+so repeated pipeline runs don't re-fetch unchanged data. Controlled by
+PIPELINE_CACHE_TTL_HOURS (default 72h). Safe to clear at any time; the next
+pipeline run will re-fetch. No manual intervention needed on code changes.
+
+LLM / Analysis Cache (AnalysisCache table)
+-------------------------------------------
+Version-based, no TTL. Caches parsed LLM output keyed by (prompt_version, input_hash).
+Old entries for a given prompt_version remain in the table but are never read once
+the version changes — they are dead weight and can be pruned with:
+
+    DELETE FROM analysis_cache WHERE prompt_version != '<current_version>';
+
+When to bump prompt_version in prompts.py:
+  - Any change to the system prompt or user prompt template text
+  - Any change to the output schema (new/removed fields)
+  - Any change to how input_data is constructed (affects what gets hashed)
+  - Model change (model name is included in the hash, so this auto-invalidates)
+
+When NOT to bump:
+  - Whitespace-only changes inside prompt strings
+  - Changes to surrounding Python code that don't affect the prompt text
+
+Bumping the version (e.g. "explore-doc-summary-v3" → "v4") causes all cached
+results for that prompt to be ignored on the next pipeline run. The LLM is called
+fresh for every document and results are stored under the new version key.
+Old version rows remain in the DB until pruned — they do not affect correctness.
+"""
 import json
 from datetime import datetime, timedelta
 
