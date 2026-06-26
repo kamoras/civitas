@@ -79,14 +79,21 @@ class TestFundingIndependence:
         assert score < 50
 
     def test_many_pacs_but_diversified(self):
-        """High PAC ratio but spread across many small PACs."""
+        """High PAC ratio but spread across many small PACs.
+
+        With the 30/70 PAC/concentration weighting (score v3), the diversified
+        concentration (10% top-10 → concentration_score=75) partially offsets
+        the terrible PAC ratio (70% → pac_score=0), yielding ~52.
+        The score is below 60 — not good — but not zero because no single
+        donor dominates the funding base.
+        """
         funding = {
             "totalRaised": 1_000_000,
             "totalFromPACs": 700_000,
             "topDonors": [{"total": 10_000} for _ in range(10)],
         }
         score = _calc_funding_independence(funding)
-        assert score <= 50
+        assert score < 60
 
     def test_amplified_penalties_create_spread(self):
         """Different PAC ratios should produce meaningfully different scores."""

@@ -160,7 +160,16 @@ class TestHybridClassification:
     async def test_unknown_donors_classified_via_nn(self, db_session):
         """Donors with unknown type AND industry should be queued for kNN."""
         donors = [{"name": "Completely Unknown Entity XYZ", "amount": 500}]
+        # Patch both upstream embedding tiers so the donor stays unclassifiable
+        # and truly falls through to the NN step (embedding similarity scores
+        # from newer sentence-transformers versions may classify it otherwise).
         with patch(
+            "app.pipeline.analyze.donor_classifier_ai.classify_industries_batch_scored",
+            return_value={},
+        ), patch(
+            "app.pipeline.analyze.donor_classifier_ai.classify_donor_type_semantic",
+            return_value=None,
+        ), patch(
             "app.pipeline.analyze.donor_classifier_ai._classify_remaining_via_nn",
             return_value={"COMPLETELY UNKNOWN ENTITY XYZ": {"type": "Org/Employees", "industry": "OTHER"}},
         ) as mock_nn:
