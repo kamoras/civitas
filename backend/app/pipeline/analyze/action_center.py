@@ -536,8 +536,10 @@ def _deduplicate_top_clusters(
     if len(ranked_clusters) <= 1:
         return ranked_clusters[:max_issues]
 
-    # Threshold in centered-embedding space (see _cluster_articles for rationale)
-    DEDUP_THRESHOLD = 0.15
+    # Threshold in normalized-centered-embedding space. Must be high enough that
+    # only genuinely same-story clusters are merged; 0.15 was too loose and caused
+    # unrelated clusters (e.g. abortion, World Cup) to be merged into Ukraine.
+    DEDUP_THRESHOLD = 0.50
 
     cluster_texts = [
         " ".join(a.title for a in cluster[:5])
@@ -2293,10 +2295,23 @@ def _run_refresh(db: Session) -> int:
 
     for rank, cluster in enumerate(top_clusters, start=1):
         user_prompt = _build_llm_prompt(cluster)
+
+        # Source attribution: only credit articles that are above the cosine
+        # similarity floor relative to the cluster centroid. This guards against
+        # stray articles that ended up in the cluster via merging but cover a
+        # completely different topic.
+        cluster_embs = _embed_texts([a.title for a in cluster])
+        centroid = cluster_embs.mean(axis=0)
+        centroid /= max(float(np.linalg.norm(centroid)), 1e-9)
+        sims = cluster_embs @ centroid
+        SOURCE_SIM_FLOOR = 0.50  # article must be at least this similar to the centroid
         seen_sources: dict[str, str] = {}
-        for a in cluster:
-            if a.source_name not in seen_sources:
+        for a, sim in zip(cluster, sims):
+            if float(sim) >= SOURCE_SIM_FLOOR and a.source_name not in seen_sources:
                 seen_sources[a.source_name] = a.url
+        # Fall back to top article if filter was too aggressive
+        if not seen_sources and cluster:
+            seen_sources[cluster[0].source_name] = cluster[0].url
         source_names = list(seen_sources.keys())
         source_urls = list(seen_sources.values())
 
