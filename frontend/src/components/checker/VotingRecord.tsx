@@ -162,7 +162,7 @@ function VoteCard({
             {vote.vote.toUpperCase()}
           </span>
           <span className="text-matrix-green/40" aria-hidden="true">
-            {expanded ? "[-]" : "[+]"}
+            {expanded ? "−" : "+"}
           </span>
         </div>
       </button>

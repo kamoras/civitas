@@ -48,7 +48,7 @@ export default function IndustryBreakdown({ industries, donors }: IndustryBreakd
                 >
                   <span className="text-matrix-green/70 flex items-center gap-1">
                     <span className="text-[10px] text-matrix-green/40" aria-hidden="true">
-                      {isExpanded ? "[-]" : "[+]"}
+                      {isExpanded ? "−" : "+"}
                     </span>
                     {displayName}
                   </span>

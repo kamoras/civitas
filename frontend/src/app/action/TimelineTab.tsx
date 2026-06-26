@@ -41,8 +41,8 @@ function EventCard({ event }: { event: UpcomingEvent }) {
           </div>
           <h4 className="font-pixel text-sm text-matrix-green leading-relaxed mb-1">{event.title}</h4>
           <p className="text-xs text-matrix-green/60 leading-relaxed mb-3">{event.description}</p>
-          <Link href={event.link} className="text-[10px] font-pixel text-neon-cyan/70 hover:text-neon-cyan transition-colors">
-            {">"} {event.linkLabel.toUpperCase()} →
+          <Link href={event.link} className="text-[10px] font-mono tracking-widest text-neon-cyan/60 hover:text-neon-cyan transition-colors">
+            {event.linkLabel.toUpperCase()} →
           </Link>
         </div>
         <div className="text-right shrink-0">
@@ -130,14 +130,14 @@ function WeekCard({ week }: { week: TimelineWeek }) {
             </span>
           ))}
         </div>
-        <span className="text-matrix-green/30 font-pixel text-xs shrink-0">{expanded ? "[-]" : "[+]"}</span>
+        <span className="text-matrix-green/30 font-mono text-base leading-none shrink-0">{expanded ? "−" : "+"}</span>
       </button>
 
       {expanded && (
         <div className="px-3 pb-3 border-t border-matrix-green/10 pt-3 space-y-3">
           {week.summary && !week.isCurrent && (
             <div className="border-l-2 border-purple-400/30 pl-3 py-1">
-              <div className="text-[10px] font-pixel text-purple-400/50 mb-1">WEEK IN REVIEW</div>
+              <div className="text-[10px] font-mono tracking-widest text-purple-400/40 mb-1">WEEK IN REVIEW</div>
               <p className="text-xs text-matrix-green/60 leading-relaxed italic">{week.summary}</p>
             </div>
           )}
@@ -185,7 +185,7 @@ function MonthCard({
             </span>
           ))}
         </div>
-        <span className="text-matrix-green/40 font-pixel text-sm" aria-hidden="true">{expanded ? "[-]" : "[+]"}</span>
+        <span className="text-matrix-green/40 font-mono text-base leading-none" aria-hidden="true">{expanded ? "−" : "+"}</span>
       </button>
 
       {expanded && (
@@ -212,7 +212,7 @@ function MonthCard({
           {/* Past month: show LLM summary + week breakdown */}
           {!month.isCurrent && month.summary && (
             <div className="border-l-2 border-purple-400/30 pl-3 py-1">
-              <div className="text-[10px] font-pixel text-purple-400/50 mb-1">MONTH IN REVIEW</div>
+              <div className="text-[10px] font-mono tracking-widest text-purple-400/40 mb-1">MONTH IN REVIEW</div>
               <p className="text-xs text-matrix-green/60 leading-relaxed italic">{month.summary}</p>
             </div>
           )}
@@ -262,7 +262,7 @@ export default function TimelineTab() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <div className="text-purple-400 animate-pulse font-pixel text-sm">{">"} LOADING TIMELINE...</div>
+        <div className="text-purple-400/50 font-mono text-xs tracking-widest animate-pulse">LOADING TIMELINE...</div>
       </div>
     );
   }
@@ -314,7 +314,7 @@ export default function TimelineTab() {
         </p>
         {data.topThemes.length > 0 && (
           <div className="flex items-center justify-center gap-2 flex-wrap">
-            <span className="font-pixel text-[10px] text-matrix-green/40">TOP THEMES:</span>
+            <span className="font-mono text-[10px] tracking-widest text-matrix-green/35">TOP THEMES</span>
             {data.topThemes.slice(0, 6).map((t) => (
               <span key={t.area} className="text-[10px] font-pixel px-2 py-0.5 border border-purple-400/30 text-purple-400/70 bg-purple-400/5">
                 {t.area} ({t.count})
@@ -327,7 +327,7 @@ export default function TimelineTab() {
       {/* Year summary (if complete year) */}
       {data.yearSummary && (
         <div className="terminal-window border-l-4 border-l-purple-400/50 p-5">
-          <div className="text-[10px] font-pixel text-purple-400/60 mb-2">YEAR IN REVIEW — {data.year}</div>
+          <div className="text-[10px] font-mono tracking-widest text-purple-400/50 mb-2">YEAR IN REVIEW — {data.year}</div>
           <p className="text-sm text-matrix-green/70 leading-relaxed italic">{data.yearSummary.summary}</p>
           {data.yearSummary.topAreas.length > 0 && (
             <div className="flex gap-2 flex-wrap mt-3">
@@ -342,7 +342,7 @@ export default function TimelineTab() {
       {/* Upcoming events */}
       {upcomingEvents.length > 0 && (
         <div className="space-y-3">
-          <h3 className="font-pixel text-[10px] text-neon-cyan/60 tracking-widest text-center">UPCOMING EVENTS</h3>
+          <h3 className="font-mono text-[10px] tracking-widest text-neon-cyan/50 text-center">UPCOMING EVENTS</h3>
           {upcomingEvents.map((event) => <EventCard key={event.date + event.category} event={event} />)}
         </div>
       )}
@@ -355,7 +355,7 @@ export default function TimelineTab() {
       {/* Past months (collapsed by default) */}
       {pastMonths.length > 0 && (
         <div className="space-y-3">
-          <h3 className="font-pixel text-[10px] text-matrix-green/30 tracking-widest text-center">EARLIER THIS YEAR</h3>
+          <h3 className="font-mono text-[10px] tracking-widest text-matrix-green/25 text-center">EARLIER THIS YEAR</h3>
           {pastMonths.map((month) => (
             <MonthCard key={month.month} month={month} defaultExpanded={false} eventsByMonth={eventsByMonth} />
           ))}
@@ -375,7 +375,7 @@ export default function TimelineTab() {
                       <span className="font-pixel text-sm text-purple-400/50">{MONTH_NAMES[monthNum]}</span>
                       <span className="text-[10px] font-pixel text-neon-cyan/60">{monthEvents.length} event{monthEvents.length !== 1 ? "s" : ""}</span>
                     </div>
-                    <span className="text-matrix-green/40 font-pixel text-sm">[+]</span>
+                    <span className="text-matrix-green/40 font-mono text-base leading-none">+</span>
                   </summary>
                   <div className="px-4 sm:px-5 pb-4 sm:pb-5 border-t border-matrix-green/10 pt-4 space-y-2">
                     {monthEvents.map((ev) => {

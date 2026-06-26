@@ -65,7 +65,7 @@ export default function StancePulse({
   return (
     <div className="mt-4 pt-4 border-t border-matrix-green/10">
       <fieldset>
-        <legend className="font-pixel text-[10px] text-matrix-green/50 mb-2 tracking-wider">
+        <legend className="font-mono text-[10px] tracking-widest text-matrix-green/40 mb-2">
           COMMUNITY PULSE
         </legend>
 
@@ -74,7 +74,7 @@ export default function StancePulse({
             <button
               onClick={() => vote("concerned")}
               disabled={submitting}
-              className="flex-1 py-2 px-3 border border-neon-cyan/30 text-neon-cyan/80 font-pixel text-[10px] sm:text-xs
+              className="flex-1 py-2.5 px-3 border border-neon-cyan/30 text-neon-cyan/80 font-mono text-xs tracking-widest
                          hover:bg-neon-cyan/10 hover:border-neon-cyan/50 transition-colors
                          disabled:opacity-40 disabled:cursor-not-allowed"
               role="radio"
@@ -85,7 +85,7 @@ export default function StancePulse({
             <button
               onClick={() => vote("not_priority")}
               disabled={submitting}
-              className="flex-1 py-2 px-3 border border-matrix-green/20 text-matrix-green/50 font-pixel text-[10px] sm:text-xs
+              className="flex-1 py-2.5 px-3 border border-matrix-green/20 text-matrix-green/50 font-mono text-xs tracking-widest
                          hover:bg-matrix-green/5 hover:border-matrix-green/30 transition-colors
                          disabled:opacity-40 disabled:cursor-not-allowed"
               role="radio"

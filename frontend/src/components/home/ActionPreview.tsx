@@ -123,9 +123,9 @@ export default function ActionPreview() {
 
               <Link
                 href="/action"
-                className="inline-block text-sm text-neon-cyan/70 hover:text-neon-cyan transition-colors font-pixel"
+                className="inline-block font-mono text-xs tracking-widest text-neon-cyan/60 hover:text-neon-cyan transition-colors"
               >
-                {">"} SEE FULL DETAILS + ACTIONS →
+                SEE ALL ISSUES →
               </Link>
             </div>
 
@@ -162,8 +162,8 @@ export default function ActionPreview() {
 
         {activeMonitors.length > 0 && (
           <div className="mb-8">
-            <h3 className="font-pixel text-[10px] text-amber-400/60 tracking-widest text-center mb-4">
-              NATIONAL MONITORS — ONGOING CONCERNS WE ARE TRACKING
+            <h3 className="font-mono text-[10px] tracking-widest text-amber-400/50 text-center mb-4 uppercase">
+              National Monitors — Ongoing Concerns We Are Tracking
             </h3>
             <div className={`grid gap-3 ${
               activeMonitors.length <= 2
@@ -181,7 +181,7 @@ export default function ActionPreview() {
                       className="w-2 h-2 rounded-full bg-green-400 shrink-0"
                       aria-hidden="true"
                     />
-                    <span className="font-pixel text-[10px] text-amber-400/50 uppercase truncate">
+                    <span className="font-mono text-[9px] tracking-wider text-amber-400/45 uppercase truncate">
                       {m.category}
                     </span>
                   </div>

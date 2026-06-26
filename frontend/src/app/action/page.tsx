@@ -26,7 +26,7 @@ const GlobeTab = dynamic(() => import("@/components/action/GlobeTab"), {
   ssr: false,
   loading: () => (
     <div className="flex items-center justify-center py-24">
-      <div className="text-neon-cyan animate-pulse font-pixel text-sm">LOADING GLOBE...</div>
+      <div className="text-neon-cyan/50 font-mono text-xs tracking-widest animate-pulse">LOADING GLOBE...</div>
     </div>
   ),
 });
@@ -35,7 +35,7 @@ const ElectionsTab = dynamic(() => import("@/components/action/ElectionsTab"), {
   ssr: false,
   loading: () => (
     <div className="flex items-center justify-center py-24">
-      <div className="text-neon-yellow animate-pulse font-pixel text-sm">LOADING ELECTIONS...</div>
+      <div className="text-neon-yellow/50 font-mono text-xs tracking-widest animate-pulse">LOADING ELECTIONS...</div>
     </div>
   ),
 });
@@ -43,7 +43,7 @@ const ElectionsTab = dynamic(() => import("@/components/action/ElectionsTab"), {
 const MonitorsTab = dynamic(() => import("./MonitorsTab"), {
   loading: () => (
     <div className="flex items-center justify-center py-24">
-      <div className="text-amber-400 animate-pulse font-pixel text-sm">{">"} SCANNING NATIONAL CONCERNS...</div>
+      <div className="text-amber-400/50 font-mono text-xs tracking-widest animate-pulse">SCANNING NATIONAL CONCERNS...</div>
     </div>
   ),
 });
@@ -51,7 +51,7 @@ const MonitorsTab = dynamic(() => import("./MonitorsTab"), {
 const TimelineTab = dynamic(() => import("./TimelineTab"), {
   loading: () => (
     <div className="flex items-center justify-center py-24">
-      <div className="text-purple-400 animate-pulse font-pixel text-sm">{">"} LOADING TIMELINE...</div>
+      <div className="text-purple-400/50 font-mono text-xs tracking-widest animate-pulse">LOADING TIMELINE...</div>
     </div>
   ),
 });
@@ -59,7 +59,7 @@ const TimelineTab = dynamic(() => import("./TimelineTab"), {
 const MyRepsTab = dynamic(() => import("@/components/action/MyRepsTab"), {
   loading: () => (
     <div className="flex items-center justify-center py-24">
-      <div className="text-neon-pink animate-pulse font-pixel text-sm">{">"} LOADING REPRESENTATIVES...</div>
+      <div className="text-neon-pink/50 font-mono text-xs tracking-widest animate-pulse">LOADING REPRESENTATIVES...</div>
     </div>
   ),
 });
@@ -91,24 +91,24 @@ function StatePicker({
     return (
       <button
         onClick={() => onSelect(null)}
-        className="text-[10px] font-pixel text-neon-cyan/60 hover:text-neon-cyan transition-colors"
+        className="text-[10px] font-mono tracking-widest text-neon-cyan/60 hover:text-neon-cyan transition-colors"
         title="Change your state"
         aria-label="Change your state"
       >
-        [{userState}] ✕
+        {userState} ✕
       </button>
     );
   }
 
   return (
     <div className="flex items-center gap-2">
-      <label htmlFor="state-picker" className="text-[10px] font-pixel text-matrix-green/50">YOUR STATE:</label>
+      <label htmlFor="state-picker" className="text-[10px] font-mono tracking-widest text-matrix-green/40">YOUR STATE</label>
       <select
         id="state-picker"
         value={userState || ""}
         onChange={(e) => onSelect(e.target.value || null)}
         autoComplete="address-level1"
-        className="appearance-none bg-crt-black border border-matrix-green/30 text-matrix-green font-pixel text-[11px] px-2 py-1 pr-6 cursor-pointer focus:outline-none focus:border-neon-cyan transition-all"
+        className="appearance-none bg-crt-black border border-matrix-green/25 text-matrix-green font-mono text-[11px] px-2 py-1 pr-6 cursor-pointer focus:outline-none focus:border-neon-cyan transition-all"
       >
         <option value="">SELECT</option>
         {STATES.map((s) => (
@@ -126,13 +126,13 @@ const TABS: { id: Tab; label: string; color: string }[] = [
   { id: "my-reps", label: "MY REPS", color: "text-neon-pink border-neon-pink" },
   { id: "elections", label: "ELECTIONS", color: "text-neon-yellow border-neon-yellow" },
   { id: "monitors", label: "MONITORS", color: "text-amber-400 border-amber-400" },
-  { id: "world", label: "WORLD", color: "text-green-400 border-green-400" },
+  { id: "world", label: "WORLD MAP", color: "text-green-400 border-green-400" },
   { id: "timeline", label: "TIMELINE", color: "text-purple-400 border-purple-400" },
 ];
 
 function PolicyBadge({ area, themed = false }: { area: string; themed?: boolean }) {
   return (
-    <span className={`text-[10px] px-2 py-0.5 border font-pixel ${themed ? "theme-tag" : "border-neon-yellow/30 text-neon-yellow/80 bg-neon-yellow/5"}`}>
+    <span className={`text-[10px] px-2 py-0.5 border font-mono tracking-wide ${themed ? "theme-tag" : "border-neon-yellow/25 text-neon-yellow/70 bg-neon-yellow/5"}`}>
       {area}
     </span>
   );
@@ -171,8 +171,8 @@ function SenatorChips({ issue, userState }: { issue: ActionIssue; userState: str
 
   return (
     <div className="mb-6">
-      <h3 className="font-pixel text-sm text-neon-pink/80 mb-3">
-        {">"} {senators.length > 0 ? "CONTACT REPRESENTATIVES" : "CONTACT YOUR REPRESENTATIVES"}
+      <h3 className="font-mono text-[10px] tracking-widest text-neon-pink/60 mb-3 uppercase">
+        {senators.length > 0 ? "Contact Representatives" : "Contact Your Representatives"}
       </h3>
 
       {senators.length > 0 ? (
@@ -246,12 +246,12 @@ function MonitorLinks({ slugs, onNavigate }: { slugs?: string[]; onNavigate?: (t
   if (!slugs || slugs.length === 0) return null;
   return (
     <div className="flex items-center gap-2 flex-wrap mb-4">
-      <span className="font-pixel text-[10px] text-amber-400/50">TRACKING:</span>
+      <span className="font-mono text-[10px] tracking-widest text-amber-400/40">TRACKING</span>
       {slugs.map((slug) => (
         <button
           key={slug}
           onClick={() => onNavigate?.("monitors")}
-          className="text-[10px] font-pixel px-2 py-0.5 border border-amber-400/30 text-amber-400/70 hover:text-amber-400 hover:border-amber-400/60 transition-colors bg-amber-400/5"
+          className="text-[10px] font-mono tracking-wide px-2 py-0.5 border border-amber-400/25 text-amber-400/60 hover:text-amber-400/90 hover:border-amber-400/50 transition-colors bg-amber-400/5"
         >
           {slug.replace(/-/g, " ").slice(0, 40)}
           {slug.length > 40 ? "…" : ""}
@@ -302,10 +302,10 @@ function HeroIssue({
       {themed && <div className="theme-urgency-bar mb-5" aria-hidden="true" />}
 
       <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <span className={`font-pixel text-xs px-2 py-1 border ${themed ? "theme-tag" : "text-neon-cyan/60 bg-neon-cyan/10 border-neon-cyan/30"}`}>
+        <span className={`font-mono text-[10px] tracking-widest px-2 py-1 border ${themed ? "theme-tag" : "text-neon-cyan/60 bg-neon-cyan/10 border-neon-cyan/30"}`}>
           TOP ISSUE
         </span>
-        <span className="text-xs text-matrix-green/40">{issue.date}</span>
+        <span className="text-[11px] font-mono text-matrix-green/35">{issue.date}</span>
       </div>
 
       <h2 className={`font-pixel text-lg sm:text-2xl mb-4 leading-relaxed ${themed ? "theme-accent-text theme-accent-glow" : "text-matrix-green"}`}>
@@ -333,13 +333,13 @@ function HeroIssue({
 
       {issue.facts.length > 0 && (
         <div className="mb-6">
-          <h3 className="font-pixel text-sm text-neon-yellow mb-3">
-            {">"} KEY FACTS
+          <h3 className="font-mono text-[10px] tracking-widest text-neon-yellow/60 mb-3 uppercase">
+            Key Facts
           </h3>
           <div className="space-y-2">
             {issue.facts.map((fact, i) => (
               <div key={i} className="flex gap-3 text-sm">
-                <span className="text-neon-yellow/60 shrink-0 font-pixel">[{i + 1}]</span>
+                <span className="text-neon-yellow/40 shrink-0 font-mono text-[10px] mt-0.5">{i + 1}.</span>
                 <span className="text-matrix-green/80">{fact}</span>
               </div>
             ))}
@@ -350,8 +350,8 @@ function HeroIssue({
       {/* Specific actions only — senator contact handled above by SenatorChips */}
       {issue.actions.filter(a => a.type === "track_legislation" && a.url).length > 0 && (
         <div className="mb-6">
-          <h3 className="font-pixel text-sm text-neon-cyan mb-3">
-            {">"} TRACK LEGISLATION
+          <h3 className="font-mono text-[10px] tracking-widest text-neon-cyan/60 mb-3 uppercase">
+            Track Legislation
           </h3>
           <div className="space-y-2">
             {issue.actions
@@ -378,8 +378,8 @@ function HeroIssue({
 
       {issue.relatedBills && issue.relatedBills.length > 0 && (
         <div className="mb-6">
-          <h3 className="font-pixel text-sm text-neon-yellow/80 mb-3">
-            {">"} OFFICIAL LEGISLATION
+          <h3 className="font-mono text-[10px] tracking-widest text-neon-yellow/60 mb-3 uppercase">
+            Official Legislation
           </h3>
           <div className="space-y-2">
             {issue.relatedBills.map((bill) => (
@@ -407,8 +407,8 @@ function HeroIssue({
 
       {issue.relatedExploreDocs.length > 0 && (
         <div className="mb-4">
-          <h3 className="font-pixel text-sm text-matrix-green/60 mb-3">
-            {">"} RELATED DOCUMENTS
+          <h3 className="font-mono text-[10px] tracking-widest text-matrix-green/40 mb-3 uppercase">
+            Related Documents
           </h3>
           <div className="space-y-1.5">
             {issue.relatedExploreDocs.map((doc) => (
@@ -526,8 +526,8 @@ function SecondaryIssue({
             </p>
           )}
         </div>
-        <span className="text-matrix-green/40 shrink-0 font-pixel text-sm mt-1" aria-hidden="true">
-          {expanded ? "[-]" : "[+]"}
+        <span className="text-matrix-green/40 shrink-0 font-mono text-base mt-0.5 leading-none" aria-hidden="true">
+          {expanded ? "−" : "+"}
         </span>
       </button>
 
@@ -541,11 +541,11 @@ function SecondaryIssue({
 
           {issue.facts.length > 0 && (
             <div>
-              <h4 className="font-pixel text-xs text-neon-yellow/60 mb-2">KEY FACTS</h4>
+              <h4 className="font-mono text-[10px] tracking-widest text-neon-yellow/50 mb-2 uppercase">Key Facts</h4>
               <div className="space-y-1.5">
                 {issue.facts.map((fact, i) => (
                   <div key={i} className="flex gap-2 text-sm">
-                    <span className="text-neon-yellow/50 shrink-0 font-pixel text-[10px]">[{i + 1}]</span>
+                    <span className="text-neon-yellow/40 shrink-0 font-mono text-[10px] mt-0.5">{i + 1}.</span>
                     <span className="text-matrix-green/70">{fact}</span>
                   </div>
                 ))}
@@ -557,7 +557,7 @@ function SecondaryIssue({
 
           {issue.actions.filter(a => a.type === "track_legislation" && a.url).length > 0 && (
             <div>
-              <h4 className="font-pixel text-xs text-neon-cyan/60 mb-2">TRACK LEGISLATION</h4>
+              <h4 className="font-mono text-[10px] tracking-widest text-neon-cyan/50 mb-2 uppercase">Track Legislation</h4>
               <div className="space-y-1.5">
                 {issue.actions
                   .filter(a => a.type === "track_legislation" && a.url)
@@ -579,7 +579,7 @@ function SecondaryIssue({
 
           {issue.relatedBills && issue.relatedBills.length > 0 && (
             <div>
-              <h4 className="font-pixel text-xs text-neon-yellow/60 mb-2">OFFICIAL LEGISLATION</h4>
+              <h4 className="font-mono text-[10px] tracking-widest text-neon-yellow/50 mb-2 uppercase">Official Legislation</h4>
               <div className="space-y-1.5">
                 {issue.relatedBills.map((bill) => (
                   <a
@@ -600,7 +600,7 @@ function SecondaryIssue({
 
           {issue.relatedSenators && issue.relatedSenators.length > 0 && (
             <div>
-              <h4 className="font-pixel text-xs text-neon-pink/60 mb-2">REPRESENTATIVES IN COVERAGE</h4>
+              <h4 className="font-mono text-[10px] tracking-widest text-neon-pink/50 mb-2 uppercase">Representatives in Coverage</h4>
               <div className="flex flex-wrap gap-2">
                 {issue.relatedSenators.map((s) => (
                   <Link
@@ -847,7 +847,7 @@ function IssuesTab({
   if (loading) {
     return (
       <div className="terminal-window max-w-md mx-auto p-6 text-center" role="status" aria-live="polite">
-        <div className="text-neon-cyan animate-pulse text-lg">{">"} SCANNING NEWS FEEDS...</div>
+        <div className="text-neon-cyan/50 font-mono text-xs tracking-widest animate-pulse">SCANNING NEWS FEEDS...</div>
       </div>
     );
   }
@@ -855,13 +855,13 @@ function IssuesTab({
   if (fetchError) {
     return (
       <div className="terminal-window max-w-lg mx-auto p-6 text-center" role="alert">
-        <div className="text-red-400 text-lg font-pixel mb-2">{">"} CONNECTION ERROR</div>
+        <div className="text-red-400 font-mono text-sm tracking-widest mb-2">CONNECTION ERROR</div>
         <p className="text-matrix-green/50 text-sm mb-4">Could not load today&apos;s issues.</p>
         <button
           onClick={() => loadIssues(selectedDate || undefined)}
-          className="text-neon-cyan font-pixel text-sm border border-neon-cyan/30 px-4 py-2 hover:bg-neon-cyan/10 transition-colors"
+          className="text-neon-cyan font-mono text-xs tracking-widest border border-neon-cyan/30 px-4 py-2 hover:bg-neon-cyan/10 transition-colors"
         >
-          [RETRY]
+          RETRY
         </button>
       </div>
     );
@@ -873,7 +873,7 @@ function IssuesTab({
   if (!heroIssue) {
     return (
       <div className="terminal-window max-w-lg mx-auto p-6 text-center" role="status" aria-live="polite">
-        <div className="text-neon-yellow text-lg font-pixel mb-2">{">"} NO ISSUES YET</div>
+        <div className="text-neon-yellow font-mono text-sm tracking-widest mb-2">NO ISSUES YET</div>
         <p className="text-matrix-green/50 text-sm">Check back soon.</p>
       </div>
     );
@@ -885,33 +885,33 @@ function IssuesTab({
 
       {/* Date navigation */}
       {availableDates.length > 1 && (
-        <div className="flex items-center justify-center gap-4 font-pixel text-xs">
+        <div className="flex items-center justify-center gap-4 font-mono text-[11px] tracking-widest">
           <button
             onClick={goToPrev}
             disabled={currentIdx >= availableDates.length - 1}
-            className="text-matrix-green/60 hover:text-matrix-green disabled:text-matrix-green/20 disabled:cursor-not-allowed transition-colors"
+            className="text-matrix-green/50 hover:text-matrix-green disabled:text-matrix-green/20 disabled:cursor-not-allowed transition-colors"
             aria-label="Previous day"
           >
-            {"<"} PREV
+            ← PREV
           </button>
-          <span className="text-matrix-green/80 px-3 py-1 border border-matrix-green/20 bg-matrix-green/5 min-w-[110px] text-center">
+          <span className="text-matrix-green/70 px-3 py-1 border border-matrix-green/15 bg-matrix-green/5 min-w-[110px] text-center">
             {currentDate || "—"}
           </span>
           <button
             onClick={goToNext}
             disabled={currentIdx <= 0 && !selectedDate}
-            className="text-matrix-green/60 hover:text-matrix-green disabled:text-matrix-green/20 disabled:cursor-not-allowed transition-colors"
+            className="text-matrix-green/50 hover:text-matrix-green disabled:text-matrix-green/20 disabled:cursor-not-allowed transition-colors"
             aria-label="Next day"
           >
-            NEXT {">"}
+            NEXT →
           </button>
           {selectedDate && (
             <button
               onClick={() => { setSelectedDate(null); loadIssues(); onDateChange?.(null); }}
-              className="text-neon-cyan/60 hover:text-neon-cyan transition-colors ml-1"
+              className="text-neon-cyan/50 hover:text-neon-cyan transition-colors ml-1"
               aria-label="Jump to present"
             >
-              [LATEST]
+              LATEST
             </button>
           )}
         </div>
@@ -920,9 +920,9 @@ function IssuesTab({
       {/* State selector bar */}
       <div className="flex items-center justify-between terminal-window p-3">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-pixel text-matrix-green/40">⚙ PERSONALIZE ACTIONS</span>
+          <span className="text-[10px] font-mono tracking-widest text-matrix-green/35">PERSONALIZE</span>
           {userState && (
-            <span className="text-[10px] font-pixel text-neon-cyan/80 border border-neon-cyan/30 px-1.5 py-0.5 bg-neon-cyan/5">
+            <span className="text-[10px] font-mono text-neon-cyan/70 border border-neon-cyan/20 px-1.5 py-0.5 bg-neon-cyan/5">
               {STATES.find((s) => s.code === userState)?.name || userState} — links personalized
             </span>
           )}
@@ -948,8 +948,8 @@ function IssuesTab({
       {secondaryIssues.length > 0 && (
         <div>
           {theme && <div className="theme-section-line mb-4" aria-hidden="true" />}
-          <h2 className="font-pixel text-sm text-matrix-green/50 mb-3 px-1">
-            {">"} MORE ISSUES TO WATCH
+          <h2 className="font-mono text-[10px] tracking-[0.3em] text-matrix-green/40 mb-3 px-1 uppercase">
+            More Issues to Watch
           </h2>
           <div className="space-y-3">
             {secondaryIssues.map((issue) => (
@@ -1009,9 +1009,10 @@ function OpenCommentsBanner() {
 
   return (
     <section aria-label="Open public comment periods" className="mb-6">
-      <div className="flex items-center gap-2 mb-2">
-        <span className="font-pixel text-[10px] text-amber-400/80 tracking-widest">[!] OPEN FOR PUBLIC COMMENT</span>
-        <div className="flex-1 h-px bg-amber-400/20" aria-hidden="true" />
+      <div className="flex items-center gap-3 mb-2">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-400/80 shrink-0" aria-hidden="true" />
+        <span className="font-mono text-[10px] tracking-widest text-amber-400/70">OPEN FOR PUBLIC COMMENT</span>
+        <div className="flex-1 h-px bg-amber-400/15" aria-hidden="true" />
       </div>
       <div className="flex gap-3 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 snap-x">
         {items.map((item) => (
@@ -1023,19 +1024,19 @@ function OpenCommentsBanner() {
               {item.title}
             </p>
             {item.agencyName && (
-              <div className="text-[9px] text-amber-400/50 font-pixel truncate">
+              <div className="text-[9px] text-amber-400/40 font-mono tracking-wider truncate">
                 {item.agencyName}
               </div>
             )}
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[9px] text-amber-400/70 font-pixel">
+              <span className="text-[9px] text-amber-400/60 font-mono">
                 {daysLeft(item.commentsCloseOn)}
               </span>
               <a
                 href={item.commentUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-pixel text-[9px] text-amber-400/80 border border-amber-400/30 px-2 py-0.5 hover:bg-amber-400/10 transition-colors shrink-0"
+                className="font-mono text-[9px] tracking-widest text-amber-400/70 border border-amber-400/25 px-2 py-0.5 hover:bg-amber-400/10 transition-colors shrink-0"
               >
                 COMMENT ↗
               </a>
@@ -1115,12 +1116,8 @@ function ActionPageInner() {
       <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
         <div className="max-w-4xl mx-auto relative z-10">
           <div className="text-center mb-6">
-            <GlitchText
-              text="ACTION CENTER"
-              as="h1"
-              className="font-pixel text-xl sm:text-3xl md:text-4xl text-matrix-green animate-pulse-neon"
-            />
-            <p className="text-matrix-green/50 text-sm mt-3 max-w-xl mx-auto">
+            <h1 className="font-pixel text-xl sm:text-3xl md:text-4xl text-matrix-green neon-green">ACTION CENTER</h1>
+            <p className="text-matrix-green/40 text-xs font-mono tracking-wider mt-3 max-w-xl mx-auto">
               Stay informed. Take action. Track your government.
             </p>
           </div>
@@ -1160,10 +1157,10 @@ function ActionPageInner() {
                 aria-controls={`tabpanel-${tab.id}`}
                 tabIndex={activeTab === tab.id ? 0 : -1}
                 onClick={() => setActiveTab(tab.id)}
-                className={`font-pixel text-[10px] sm:text-xs px-3 sm:px-5 py-2.5 border-b-2 transition-all whitespace-nowrap ${
+                className={`font-mono text-[11px] tracking-widest px-3 sm:px-5 py-3 border-b-2 transition-all whitespace-nowrap ${
                   activeTab === tab.id
-                    ? `${tab.color} bg-matrix-dark-green/30 border-current`
-                    : "text-matrix-green/40 border-transparent hover:text-matrix-green/60 hover:border-matrix-green/20"
+                    ? `${tab.color} bg-matrix-dark-green/20 border-current`
+                    : "text-matrix-green/35 border-transparent hover:text-matrix-green/60 hover:border-matrix-green/15"
                 }`}
               >
                 {tab.label}

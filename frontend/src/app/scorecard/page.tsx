@@ -44,11 +44,7 @@ function ScorecardContent() {
       <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-8">
-            <GlitchText
-              text="SCORECARD"
-              as="h1"
-              className="font-pixel text-xl sm:text-3xl md:text-4xl text-matrix-green animate-pulse-neon"
-            />
+            <h1 className="font-pixel text-xl sm:text-3xl md:text-4xl text-matrix-green neon-green">SCORECARD</h1>
           </div>
 
           <div className="mb-10">
@@ -56,9 +52,9 @@ function ScorecardContent() {
             <div className="text-center mt-3">
               <Link
                 href={`/leaderboard?branch=${branch}`}
-                className="text-[10px] font-pixel text-matrix-green/40 hover:text-matrix-green/70 transition-colors"
+                className="font-mono text-[10px] tracking-widest text-matrix-green/35 hover:text-matrix-green/70 transition-colors"
               >
-                {">"} VIEW FULL LEADERBOARD →
+                VIEW FULL LEADERBOARD →
               </Link>
             </div>
           </div>
