@@ -510,7 +510,13 @@ function HeroIssue({
         initialConcerned={issue.concernedCount || 0}
         initialNotPriority={issue.notPriorityCount || 0}
       />
-      <div className="mt-3 flex justify-end">
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <a
+          href={`/issue/${issue.id}`}
+          className="text-xs text-matrix-green border border-matrix-green/40 hover:border-matrix-green hover:bg-matrix-green/10 px-3 py-1.5 transition-colors"
+        >
+          READ FULL STORY →
+        </a>
         <LogActionButton issueTitle={issue.title} />
       </div>
 

@@ -449,6 +449,7 @@ class ActionIssue(Base):
     concerned_count: Mapped[int] = mapped_column(Integer, default=0)
     not_priority_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    full_story: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     bsky_posted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
     bsky_posted_rank: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
 

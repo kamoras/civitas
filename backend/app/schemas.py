@@ -379,6 +379,7 @@ class ActionIssueSchema(CamelModel):
     related_monitor_slugs: list[str] = []
     concerned_count: int = 0
     not_priority_count: int = 0
+    full_story: str | None = None
 
 
 class MonitorUpdateSchema(CamelModel):

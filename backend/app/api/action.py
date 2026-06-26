@@ -116,6 +116,7 @@ def _build_issue_response(
         related_monitor_slugs=monitor_slugs,
         concerned_count=getattr(issue, "concerned_count", 0) or 0,
         not_priority_count=getattr(issue, "not_priority_count", 0) or 0,
+        full_story=getattr(issue, "full_story", None),
     ).model_dump(by_alias=True)
 
 

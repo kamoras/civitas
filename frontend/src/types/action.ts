@@ -46,6 +46,7 @@ export interface ActionIssue {
   relatedMonitorSlugs?: string[];
   concernedCount: number;
   notPriorityCount: number;
+  fullStory?: string | null;
 }
 
 export interface MyRepSenator {

@@ -1545,6 +1545,88 @@ def generate_period_summaries(today_str: str, db: "Session") -> None:
         logger.info("Generated year-in-review for %d", yr)
 
 
+def _generate_full_story(issue) -> str | None:
+    """Generate a thorough 600-900 word factual deep-dive for an action issue.
+
+    Returns plain text (paragraphs separated by double newlines), or None on failure.
+    Stored in action_issues.full_story so it is ready before users click through.
+    """
+    from app.pipeline.analyze.ollama_client import call_llm
+
+    facts = json.loads(issue.facts or "[]")
+    source_names = json.loads(issue.source_names or "[]")
+    source_urls = json.loads(issue.source_urls or "[]")
+    policy_areas = json.loads(issue.policy_areas or "[]")
+
+    facts_text = "\n".join(f"- {f}" for f in facts) if facts else "(none provided)"
+    sources_text = ", ".join(source_names[:10]) if source_names else "(none provided)"
+    policy_text = ", ".join(policy_areas) if policy_areas else "(none provided)"
+
+    sources_with_urls = []
+    for i, name in enumerate(source_names[:10]):
+        url = source_urls[i] if i < len(source_urls) else ""
+        sources_with_urls.append(f"{name}: {url}" if url else name)
+    sources_detail = "\n".join(f"- {s}" for s in sources_with_urls)
+
+    user_prompt = f"""Write a thorough, factual deep-dive article on the following civic issue for Civitas, a U.S. civic transparency platform.
+
+Your article will be displayed as the primary reading experience — citizens should be able to understand everything they need to know without visiting external sources.
+
+STRICT REQUIREMENTS:
+- 600-900 words of clear, accessible prose
+- Factual and non-partisan — present facts, not opinions
+- Cover all five sections below in flowing paragraphs (no headers, no bullet points in the output)
+- Do not speculate beyond what the sources support
+- Cite specific details and data points from the key facts
+- Write in present tense where appropriate
+
+FIVE SECTIONS TO COVER IN ORDER:
+1. What is happening right now and why it matters
+2. Background and context — how did we get here?
+3. Key developments and specific details (use the key facts provided)
+4. How government and Congress are responding
+5. What this means for ordinary Americans
+
+ISSUE TITLE: {issue.title}
+BRIEF SUMMARY: {issue.summary or "(none)"}
+
+KEY FACTS FROM REPORTING:
+{facts_text}
+
+POLICY AREAS: {policy_text}
+NEWS SOURCES: {sources_text}
+
+Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}}"""
+
+    result = call_llm(
+        prompt_version="full_story_v1",
+        system_prompt=(
+            "You are a senior civic journalist writing factual, thorough, accessible "
+            "articles for Civitas — a non-partisan platform that aggregates U.S. government "
+            "data. Your goal is to give citizens a complete picture of what is happening in "
+            "Washington and why it matters to them. Write clearly for a general audience "
+            "without being condescending."
+        ),
+        user_prompt=user_prompt,
+        cache_key=f"full_story:{issue.id}:{issue.title[:80]}",
+        db_session=None,
+        max_tokens=1536,
+        num_ctx=4096,
+    )
+
+    if not result or not isinstance(result.get("story"), str):
+        logger.warning("Full story generation returned no result for issue %s", issue.id)
+        return None
+
+    story = result["story"].strip()
+    if len(story) < 200:
+        logger.warning("Full story too short (%d chars) for issue %s", len(story), issue.id)
+        return None
+
+    logger.info("Generated full story for issue %s (%d chars): %s", issue.id, len(story), issue.title[:60])
+    return story
+
+
 def _save_timeline_entry(today: str, db: Session) -> None:
     """Preserve today's #1 issue as a permanent timeline entry."""
     from app.models import TimelineEntry
@@ -2385,7 +2467,24 @@ def _run_refresh(db: Session) -> int:
                 db.add(DailyTheme(date=today, theme_json=json.dumps(theme)))
             db.commit()
 
-    # Stage 4: Post new/surging issues to Bluesky
+    # Stage 4: Generate full stories for issues that don't have one yet
+    if issues_created > 0:
+        story_issues = (
+            db.query(ActionIssue)
+            .filter(ActionIssue.date == today, ActionIssue.full_story.is_(None))
+            .order_by(ActionIssue.rank)
+            .all()
+        )
+        for issue in story_issues:
+            try:
+                story = _generate_full_story(issue)
+                if story:
+                    issue.full_story = story
+                    db.commit()
+            except Exception:
+                logger.exception("Full story generation failed for issue %s (non-fatal)", issue.id)
+
+    # Stage 5: Post new/surging issues to Bluesky
     if issues_created > 0:
         try:
             from app.pipeline.analyze.bluesky_poster import process_issues_for_bluesky
