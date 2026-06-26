@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState, useCallback } from "react";
+import { Suspense, useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -12,6 +12,7 @@ import { fetchActionIssues, fetchOpenComments, OpenCommentItem } from "@/lib/api
 import { safeHref } from "@/lib/formatting";
 import StancePulse from "@/components/action/StancePulse";
 import { LogActionButton } from "@/components/action/CivicTracker";
+import ShareButtons from "@/components/action/ShareButtons";
 
 const CivicActionWidget = dynamic(
   () => import("@/components/action/CivicTracker"),
@@ -345,18 +346,28 @@ function HeroIssue({
   userState,
   themed = false,
   onNavigate,
+  isDeepLinked = false,
 }: {
   issue: ActionIssue;
   userState: string | null;
   themed?: boolean;
   onNavigate?: (tab: Tab) => void;
+  isDeepLinked?: boolean;
 }) {
+  const heroRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isDeepLinked && heroRef.current) {
+      heroRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [isDeepLinked]);
+
   const panelClass = themed
     ? "theme-hero-panel terminal-window border p-6 sm:p-8"
     : "terminal-window border-t-2 border-t-neon-cyan/50 p-6 sm:p-8";
 
   return (
-    <div className={panelClass}>
+    <div ref={heroRef} className={panelClass}>
       {/* Corner accents */}
       {themed && (
         <>
@@ -514,6 +525,8 @@ function HeroIssue({
       <div className="mt-3 flex justify-end">
         <LogActionButton issueTitle={issue.title} />
       </div>
+
+      <ShareButtons issue={issue} />
     </div>
   );
 }
@@ -522,17 +535,40 @@ function SecondaryIssue({
   issue,
   userState,
   onNavigate,
+  deepLinked = false,
+  onToggle,
 }: {
   issue: ActionIssue;
   userState: string | null;
   onNavigate?: (tab: Tab) => void;
+  deepLinked?: boolean;
+  onToggle?: (id: number, expanded: boolean) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(deepLinked);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // If this issue is deep-linked, expand and scroll to it once data is ready
+  useEffect(() => {
+    if (deepLinked) {
+      setExpanded(true);
+      // Delay slightly so the panel renders before scrolling
+      const t = setTimeout(() => {
+        cardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 100);
+      return () => clearTimeout(t);
+    }
+  }, [deepLinked]);
+
+  function handleToggle() {
+    const next = !expanded;
+    setExpanded(next);
+    onToggle?.(issue.id, next);
+  }
 
   return (
-    <div className="terminal-window">
+    <div ref={cardRef} className="terminal-window">
       <button
-        onClick={() => setExpanded(!expanded)}
+        onClick={handleToggle}
         className="w-full text-left p-4 sm:p-5 flex items-start justify-between gap-4"
         aria-expanded={expanded}
         aria-controls={`issue-detail-${issue.id}`}
@@ -658,6 +694,8 @@ function SecondaryIssue({
           <div className="mt-3 flex justify-end">
             <LogActionButton issueTitle={issue.title} />
           </div>
+
+          <ShareButtons issue={issue} />
         </div>
       )}
     </div>
@@ -802,12 +840,16 @@ function IssuesTab({
   onNavigate,
   initialDate,
   onDateChange,
+  initialIssueId,
+  onIssueChange,
 }: {
   userState: string | null;
   setUserState: (s: string | null) => void;
   onNavigate?: (tab: Tab) => void;
   initialDate?: string | null;
   onDateChange?: (date: string | null) => void;
+  initialIssueId?: number | null;
+  onIssueChange?: (id: number | null) => void;
 }) {
   const [data, setData] = useState<ActionIssuesResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -948,7 +990,13 @@ function IssuesTab({
       {/* Themed divider line above hero */}
       {theme && <div className="theme-section-line" aria-hidden="true" />}
 
-      <HeroIssue issue={heroIssue} userState={userState} themed={!!theme} onNavigate={onNavigate} />
+      <HeroIssue
+        issue={heroIssue}
+        userState={userState}
+        themed={!!theme}
+        onNavigate={onNavigate}
+        isDeepLinked={initialIssueId === heroIssue.id}
+      />
 
       {secondaryIssues.length > 0 && (
         <div>
@@ -958,7 +1006,14 @@ function IssuesTab({
           </h2>
           <div className="space-y-3">
             {secondaryIssues.map((issue) => (
-              <SecondaryIssue key={issue.id} issue={issue} userState={userState} onNavigate={onNavigate} />
+              <SecondaryIssue
+                key={issue.id}
+                issue={issue}
+                userState={userState}
+                onNavigate={onNavigate}
+                deepLinked={initialIssueId === issue.id}
+                onToggle={(id, expanded) => onIssueChange?.(expanded ? id : null)}
+              />
             ))}
           </div>
         </div>
@@ -1063,6 +1118,10 @@ function ActionPageInner() {
   );
   const [userState, setUserState] = useUserState();
 
+  // Parse ?issue=<id> from URL (numeric id)
+  const paramIssue = searchParams.get("issue");
+  const initialIssueId = paramIssue ? parseInt(paramIssue, 10) || null : null;
+
   useEffect(() => {
     const t = searchParams.get("tab");
     if (isValidTab(t) && t !== activeTab) {
@@ -1082,6 +1141,15 @@ function ActionPageInner() {
       requestAnimationFrame(() => {
         document.getElementById(`tabpanel-${tab}`)?.focus();
       });
+    },
+    [router],
+  );
+
+  // Update URL when a secondary issue is expanded/collapsed
+  const handleIssueChange = useCallback(
+    (id: number | null) => {
+      const url = id ? `/action?issue=${id}` : "/action";
+      router.replace(url, { scroll: false });
     },
     [router],
   );
@@ -1156,10 +1224,18 @@ function ActionPageInner() {
             aria-labelledby={`tab-${activeTab}`}
             tabIndex={0}
           >
-            {activeTab === "issues" && <IssuesTab userState={userState} setUserState={setUserState} onNavigate={setActiveTab} initialDate={searchParams.get("date")} onDateChange={(d) => {
-              const url = d ? `/action?date=${d}` : "/action";
-              router.replace(url, { scroll: false });
-            }} />}
+            {activeTab === "issues" && <IssuesTab
+              userState={userState}
+              setUserState={setUserState}
+              onNavigate={setActiveTab}
+              initialDate={searchParams.get("date")}
+              onDateChange={(d) => {
+                const url = d ? `/action?date=${d}` : "/action";
+                router.replace(url, { scroll: false });
+              }}
+              initialIssueId={initialIssueId}
+              onIssueChange={handleIssueChange}
+            />}
             {activeTab === "my-reps" && <MyRepsTab userState={userState} setUserState={setUserState} />}
             {activeTab === "monitors" && <MonitorsTab />}
             {activeTab === "timeline" && <TimelineTab />}
