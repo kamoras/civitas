@@ -199,7 +199,6 @@ function PresidentLeaderboard({
                       rank <= 3 ? "border-l-2 border-l-neon-yellow/30" : ""
                     }`}
                     tabIndex={0}
-                    role="link"
                     aria-label={`View profile for ${entry.name}, rank ${rank}`}
                     onClick={() => (window.location.href = `/scorecard?branch=president&id=${entry.id}`)}
                     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); window.location.href = `/scorecard?branch=president&id=${entry.id}`; } }}
@@ -352,7 +351,6 @@ function JusticeLeaderboard({
                       rank <= 3 ? "border-l-2 border-l-neon-yellow/30" : ""
                     }`}
                     tabIndex={0}
-                    role="link"
                     aria-label={`View profile for ${entry.name}, rank ${rank}`}
                     onClick={() => (window.location.href = `/scorecard?branch=scotus&id=${entry.id}`)}
                     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); window.location.href = `/scorecard?branch=scotus&id=${entry.id}`; } }}
@@ -681,7 +679,6 @@ function LeaderboardContent() {
                           isTopTen ? "border-l-2 border-l-red-500/30" : ""
                         }`}
                         tabIndex={0}
-                        role="link"
                         aria-label={`View profile for ${entry.name}, ${entry.state}, rank ${rank}, score ${score}`}
                         onClick={() => {
                           const param = branch === "house" ? "representative" : "senator";

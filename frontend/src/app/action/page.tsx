@@ -184,8 +184,8 @@ function SenatorChips({ issue, userState }: { issue: ActionIssue; userState: str
                 key={s.id}
                 className={`flex items-center gap-3 px-3 py-2.5 border ${PARTY_BORDER[s.party]} bg-matrix-dark-green/20`}
               >
-                <span className={`font-pixel text-[10px] shrink-0 ${PARTY_COLORS[s.party]}`}>
-                  [{s.party}-{s.state}]
+                <span className={`font-mono text-[10px] shrink-0 ${PARTY_COLORS[s.party]}`}>
+                  {s.party}-{s.state}
                 </span>
                 <span className="text-sm text-matrix-green/80 flex-1 min-w-0 truncate">
                   {s.name}
@@ -196,7 +196,7 @@ function SenatorChips({ issue, userState }: { issue: ActionIssue; userState: str
                       href={url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-[10px] font-pixel text-neon-cyan border border-neon-cyan/40 hover:border-neon-cyan hover:bg-neon-cyan/10 px-2 py-1 transition-colors"
+                      className="text-[10px] font-mono tracking-widest text-neon-cyan border border-neon-cyan/40 hover:border-neon-cyan hover:bg-neon-cyan/10 px-2 py-1 transition-colors"
                     >
                       CONTACT ↗
                     </a>
@@ -205,14 +205,14 @@ function SenatorChips({ issue, userState }: { issue: ActionIssue; userState: str
                       href={`https://www.senate.gov/senators/senators-contact.htm`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-[10px] font-pixel text-neon-cyan/60 border border-neon-cyan/30 hover:border-neon-cyan/60 px-2 py-1 transition-colors"
+                      className="text-[10px] font-mono tracking-widest text-neon-cyan/60 border border-neon-cyan/30 hover:border-neon-cyan/60 px-2 py-1 transition-colors"
                     >
                       CONTACT ↗
                     </a>
                   )}
                   <Link
                     href={scoreUrl(s)}
-                    className="text-[10px] font-pixel text-matrix-green/50 hover:text-matrix-green transition-colors"
+                    className="text-[10px] font-mono tracking-wide text-matrix-green/50 hover:text-matrix-green transition-colors"
                   >
                     SCORE: {Math.round(s.overallScore)}
                   </Link>
@@ -224,7 +224,7 @@ function SenatorChips({ issue, userState }: { issue: ActionIssue; userState: str
       ) : userState ? (
         <a
           href={`/scorecard?branch=senate&state=${userState}`}
-          className="inline-flex items-center gap-2 text-[10px] font-pixel text-neon-cyan border border-neon-cyan/40 hover:border-neon-cyan hover:bg-neon-cyan/10 px-3 py-1.5 transition-colors"
+          className="inline-flex items-center gap-2 text-[10px] font-mono tracking-widest text-neon-cyan border border-neon-cyan/40 hover:border-neon-cyan hover:bg-neon-cyan/10 px-3 py-1.5 transition-colors"
         >
           VIEW {userState} SENATORS &amp; CONTACT INFO →
         </a>
@@ -233,7 +233,7 @@ function SenatorChips({ issue, userState }: { issue: ActionIssue; userState: str
           href="https://www.senate.gov/senators/senators-contact.htm"
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 text-[10px] font-pixel text-neon-cyan border border-neon-cyan/40 hover:border-neon-cyan hover:bg-neon-cyan/10 px-3 py-1.5 transition-colors"
+          className="inline-flex items-center gap-2 text-[10px] font-mono tracking-widest text-neon-cyan border border-neon-cyan/40 hover:border-neon-cyan hover:bg-neon-cyan/10 px-3 py-1.5 transition-colors"
         >
           FIND YOUR SENATORS ↗
         </a>
@@ -367,7 +367,7 @@ function HeroIssue({
                   <span className="text-sm text-matrix-green/80 group-hover:text-matrix-green flex-1">
                     {action.text}
                   </span>
-                  <span className="text-[10px] font-pixel text-neon-cyan/50 shrink-0">
+                  <span className="text-[10px] font-mono tracking-wide text-neon-cyan/50 shrink-0">
                     CONGRESS.GOV ↗
                   </span>
                 </a>
@@ -390,13 +390,13 @@ function HeroIssue({
                 rel="noopener noreferrer"
                 className="flex items-center gap-3 p-3 border border-neon-yellow/20 bg-neon-yellow/5 hover:border-neon-yellow/40 hover:bg-neon-yellow/10 transition-all group"
               >
-                <span className="text-[10px] font-pixel text-neon-yellow/60 border border-neon-yellow/30 px-1.5 py-0.5 shrink-0">
+                <span className="text-[10px] font-mono tracking-wide text-neon-yellow/60 border border-neon-yellow/30 px-1.5 py-0.5 shrink-0">
                   {bill.id}
                 </span>
                 <span className="text-sm text-matrix-green/80 group-hover:text-matrix-green truncate">
                   {bill.name}
                 </span>
-                <span className="text-[10px] font-pixel text-neon-cyan/50 shrink-0 ml-auto">
+                <span className="text-[10px] font-mono tracking-wide text-neon-cyan/50 shrink-0 ml-auto">
                   CONGRESS.GOV ↗
                 </span>
               </a>
@@ -413,7 +413,7 @@ function HeroIssue({
           <div className="space-y-1.5">
             {issue.relatedExploreDocs.map((doc) => (
               <div key={doc.id} className="flex items-center gap-2 text-sm">
-                <span className="text-[10px] px-1 py-0.5 border border-matrix-green/20 text-matrix-green/40 font-pixel">
+                <span className="text-[10px] px-1 py-0.5 border border-matrix-green/20 text-matrix-green/40 font-mono tracking-wide">
                   {doc.docType.replace(/_/g, " ")}
                 </span>
                 {doc.url ? (
@@ -589,7 +589,7 @@ function SecondaryIssue({
                     rel="noopener noreferrer"
                     className="flex items-center gap-2 p-2 border border-neon-yellow/15 bg-neon-yellow/5 hover:border-neon-yellow/30 transition-colors text-sm"
                   >
-                    <span className="text-[10px] font-pixel text-neon-yellow/60 shrink-0">{bill.id}</span>
+                    <span className="text-[10px] font-mono tracking-wide text-neon-yellow/60 shrink-0">{bill.id}</span>
                     <span className="text-matrix-green/70 truncate">{bill.name}</span>
                     <span className="text-[10px] text-neon-cyan/40 shrink-0 ml-auto">↗</span>
                   </a>
@@ -608,16 +608,16 @@ function SecondaryIssue({
                     href={`/scorecard?branch=${s.chamber === "house" ? "house" : "senate"}&state=${s.state}&${s.chamber === "house" ? "rep" : "senator"}=${s.id}`}
                     className={`flex items-start gap-1.5 px-2 py-1.5 border ${PARTY_BORDER[s.party]} bg-matrix-dark-green/20 hover:border-neon-cyan/40 transition-colors`}
                   >
-                    <span className={`font-pixel text-[10px] mt-0.5 shrink-0 ${PARTY_COLORS[s.party]}`}>[{s.party}]</span>
+                    <span className={`font-mono text-[10px] mt-0.5 shrink-0 ${PARTY_COLORS[s.party]}`}>{s.party}</span>
                     <div className="flex flex-col min-w-0">
                       <span className="text-sm text-matrix-green/70 leading-snug">{s.name}</span>
                       {s.matchReason && (
-                        <span className="text-[9px] font-pixel text-matrix-green/35 uppercase tracking-wide">
+                        <span className="text-[10px] font-mono text-matrix-green/35 uppercase tracking-wide">
                           {s.matchReason}
                         </span>
                       )}
                     </div>
-                    <span className="text-[10px] font-pixel text-neon-cyan/50 mt-0.5 shrink-0">{Math.round(s.overallScore)}</span>
+                    <span className="text-[10px] font-mono tracking-wide text-neon-cyan/50 mt-0.5 shrink-0">{Math.round(s.overallScore)}</span>
                   </Link>
                 ))}
               </div>

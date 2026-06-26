@@ -113,7 +113,7 @@ export default function StancePulse({
                 style={{ width: `${pctNotPriority}%` }}
               />
             </div>
-            <div className="flex justify-between mt-1.5 font-pixel text-[10px]">
+            <div className="flex justify-between mt-1.5 font-mono text-[10px] tracking-wide">
               <span className="text-neon-cyan/70">
                 CONCERNED {pctConcerned}%
               </span>

@@ -37,12 +37,14 @@ export default function ManifestoSection() {
     return () => observer.disconnect();
   }, []);
 
+  const fullText = MANIFESTO_LINES.filter(Boolean).slice(1).join(" ");
+
   return (
-    <section className="py-24 px-4" ref={ref}>
+    <section className="py-24 px-4" ref={ref} aria-label={fullText}>
       <div className="max-w-3xl mx-auto">
         <div className="terminal-window">
           <TerminalTitlebar title="about.txt" />
-          <div className="p-6 sm:p-8 min-h-[300px]">
+          <div className="p-6 sm:p-8 min-h-[300px]" aria-hidden="true">
             {visible ? (
               <div className="space-y-1">
                 {MANIFESTO_LINES.map((line, i) => (
@@ -63,7 +65,7 @@ export default function ManifestoSection() {
                 ))}
               </div>
             ) : (
-              <div className="text-matrix-green/30 animate-blink text-xl">{">"} _</div>
+              <div className="text-matrix-green/30 animate-blink text-xl">_ </div>
             )}
           </div>
         </div>

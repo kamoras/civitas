@@ -84,7 +84,7 @@ export default function WakeUpSection() {
           />
         </div>
 
-        <div className="ascii-divider mt-16" aria-hidden="true">{"=".repeat(60)}</div>
+        <div className="ascii-divider mt-16" aria-hidden="true" role="presentation">{"=".repeat(60)}</div>
       </div>
     </section>
   );
