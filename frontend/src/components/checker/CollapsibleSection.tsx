@@ -37,10 +37,10 @@ export default function CollapsibleSection({
         aria-controls={contentId}
       >
         <h3 className={`text-lg ${titleColor} flex items-center gap-2`}>
-          <span className="text-matrix-green/40 text-sm font-mono group-hover:text-matrix-green transition-colors" aria-hidden="true">
-            {open ? "[-]" : "[+]"}
+          <span className="text-matrix-green/40 text-base font-mono group-hover:text-matrix-green transition-colors" aria-hidden="true">
+            {open ? "−" : "+"}
           </span>
-          {">"} {title}
+          {title}
         </h3>
         <span className="flex items-center gap-3">
           {!open && summary && (

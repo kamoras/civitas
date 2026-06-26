@@ -233,7 +233,7 @@ function ComparisonTable({
   }) {
     if (side !== actual) return <span className="w-4" />;
     return (
-      <span className="text-matrix-green font-pixel text-[10px]" aria-label="better score">
+      <span className="text-matrix-green font-mono text-xs" aria-label="better score">
         ▲
       </span>
     );

@@ -69,7 +69,7 @@ export default function ActionPreview() {
               )}
 
               <div className="flex items-center gap-3 mb-4 flex-wrap">
-                <span className={`font-pixel text-[10px] px-2 py-0.5 border ${theme ? "hero-tag" : "text-neon-cyan/60 bg-neon-cyan/10 border-neon-cyan/30"}`}>
+                <span className={`font-mono text-[10px] tracking-widest px-2 py-0.5 border ${theme ? "hero-tag" : "text-neon-cyan/60 bg-neon-cyan/10 border-neon-cyan/30"}`}>
                   #1 ISSUE
                 </span>
                 {theme && (
@@ -81,7 +81,7 @@ export default function ActionPreview() {
                 {hero.policyAreas.map((area) => (
                   <span
                     key={area}
-                    className="text-[10px] px-1.5 py-0.5 border border-neon-yellow/30 text-neon-yellow/70 font-pixel"
+                    className="text-[10px] px-1.5 py-0.5 border border-neon-yellow/30 text-neon-yellow/70 font-mono tracking-wide"
                   >
                     {area}
                   </span>
@@ -104,7 +104,7 @@ export default function ActionPreview() {
                       href={`/scorecard?branch=senate&state=${s.state}&senator=${s.id}`}
                       className="flex items-center gap-2 px-3 py-1.5 border border-matrix-green/20 bg-matrix-dark-green/20 hover:border-neon-cyan/40 transition-colors group"
                     >
-                      <span className={`font-pixel text-[10px] ${PARTY_COLORS[s.party]}`}>
+                      <span className={`font-mono text-[10px] ${PARTY_COLORS[s.party]}`}>
                         [{s.party}]
                       </span>
                       <span className="text-sm text-matrix-green/80 group-hover:text-matrix-green">
@@ -113,7 +113,7 @@ export default function ActionPreview() {
                       <span className="text-[10px] text-matrix-green/40">
                         {s.state}
                       </span>
-                      <span className="text-[10px] font-pixel text-neon-cyan/60">
+                      <span className="text-[10px] font-mono text-neon-cyan/60">
                         {Math.round(s.overallScore)}/100
                       </span>
                     </Link>
@@ -138,13 +138,13 @@ export default function ActionPreview() {
                     className="terminal-window p-4 hover:border-matrix-green/40 transition-colors group"
                   >
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="font-pixel text-[10px] text-matrix-green/40">
+                      <span className="font-mono text-[10px] text-matrix-green/40">
                         #{issue.rank}
                       </span>
                       {issue.policyAreas.slice(0, 1).map((area) => (
                         <span
                           key={area}
-                          className="text-[10px] px-1 py-0.5 border border-neon-yellow/20 text-neon-yellow/50 font-pixel"
+                          className="text-[10px] px-1 py-0.5 border border-neon-yellow/20 text-neon-yellow/50 font-mono tracking-wide"
                         >
                           {area}
                         </span>

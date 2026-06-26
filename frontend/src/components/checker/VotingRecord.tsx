@@ -26,7 +26,7 @@ function PartyBadge({ leaning }: { leaning: string | null }) {
   const badge = PARTY_BADGE[leaning];
   if (!badge) return null;
   return (
-    <span className={`text-[10px] px-1 py-0.5 border font-pixel ${badge.className}`}>
+    <span className={`text-[10px] px-1 py-0.5 border font-mono ${badge.className}`}>
       {badge.label}
     </span>
   );
@@ -53,7 +53,7 @@ function VoteBadge({ vote }: { vote: string }) {
         ? "text-red-500 bg-red-500/10 border-red-500/30"
         : "text-yellow-500 bg-yellow-500/10 border-yellow-500/30";
   return (
-    <span className={`font-pixel text-xs px-2 py-1 border ${styles}`}>
+    <span className={`font-mono text-xs tracking-widest px-2 py-1 border ${styles}`}>
       {vote.toUpperCase()}
     </span>
   );
@@ -136,9 +136,9 @@ function VoteCard({
               href={sourceLink}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[10px] text-neon-cyan/40 hover:text-neon-cyan transition-colors"
+              className="text-[10px] font-mono tracking-wide text-neon-cyan/40 hover:text-neon-cyan transition-colors"
             >
-              [SOURCE]
+              SOURCE ↗
             </a>
           )}
         </div>
@@ -158,7 +158,7 @@ function VoteCard({
           <span className="text-matrix-green/80 text-sm">{vote.billName}</span>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <span className={`font-pixel text-xs ${voteColor}`}>
+          <span className={`font-mono text-xs tracking-widest ${voteColor}`}>
             {vote.vote.toUpperCase()}
           </span>
           <span className="text-matrix-green/40" aria-hidden="true">
@@ -484,8 +484,8 @@ export default function VotingRecord({ senatorId, votingRecord, chamber = "senat
         </div>
         {keyVoteCount > 0 && (
           <div>
-            <div className="text-xs text-neon-cyan/60 mb-2 font-pixel">
-              {">"} KEY VOTES — LONG-TERM SUMMARY
+            <div className="text-xs text-neon-cyan/60 mb-2 font-mono tracking-widest">
+              KEY VOTES — LONG-TERM SUMMARY
             </div>
             {votingSummary && (
               <div className="terminal-window p-3 mb-3">
@@ -498,8 +498,8 @@ export default function VotingRecord({ senatorId, votingRecord, chamber = "senat
 
         {recentVoteCount > 0 && (
           <div>
-            <div className="text-xs text-neon-cyan/60 mb-2 font-pixel">
-              {">"} RECENT VOTES ({recentVoteCount})
+            <div className="text-xs text-neon-cyan/60 mb-2 font-mono tracking-widest">
+              RECENT VOTES ({recentVoteCount})
             </div>
             <PaginatedVoteList senatorId={senatorId} category="recent" voteCount={recentVoteCount} chamber={chamber} />
           </div>
