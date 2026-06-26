@@ -528,6 +528,7 @@ class WeekSummary(Base):
     top_policy_areas: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
     entry_count: Mapped[int] = mapped_column(Integer, default=0)
     generated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    bsky_posted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
 
 
 class MonthSummary(Base):

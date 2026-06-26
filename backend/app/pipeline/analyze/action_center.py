@@ -1607,24 +1607,22 @@ def _generate_full_story(issue) -> str | None:
         sources_with_urls.append(f"{name}: {url}" if url else name)
     sources_detail = "\n".join(f"- {s}" for s in sources_with_urls)
 
-    user_prompt = f"""Write a thorough, factual deep-dive article on the following civic issue for Civitas, a U.S. civic transparency platform.
-
-Your article will be displayed as the primary reading experience — citizens should be able to understand everything they need to know without visiting external sources.
+    user_prompt = f"""Write a concise, factual article on the following civic issue for Civitas, a U.S. civic transparency platform.
 
 STRICT REQUIREMENTS:
-- 600-900 words of clear, accessible prose
-- Factual and non-partisan — present facts, not opinions
-- Cover all five sections below in flowing paragraphs (no headers, no bullet points in the output)
-- Do not speculate beyond what the sources support
-- Cite specific details and data points from the key facts
-- Write in present tense where appropriate
+- 350-500 words. Stop when the facts run out — do not pad.
+- Every sentence must add new information not already stated.
+- Do NOT repeat or rephrase information you have already written.
+- Factual and non-partisan — report what happened, not what to think about it.
+- Flowing paragraphs only (no headers, no bullet points).
+- Do not speculate beyond what the sources support.
 
-FIVE SECTIONS TO COVER IN ORDER:
-1. What is happening right now and why it matters
-2. Background and context — how did we get here?
-3. Key developments and specific details (use the key facts provided)
-4. How government and Congress are responding
-5. What this means for ordinary Americans
+STRUCTURE (3 natural paragraphs):
+1. What is happening and why it matters right now
+2. Relevant background and specific details from the key facts
+3. What government, Congress, or affected people are doing about it (only if known)
+
+If a section has no supporting facts, skip it rather than inventing content.
 
 ISSUE TITLE: {issue.title}
 BRIEF SUMMARY: {issue.summary or "(none)"}
@@ -1638,7 +1636,7 @@ NEWS SOURCES: {sources_text}
 Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}}"""
 
     result = call_llm(
-        prompt_version="full_story_v1",
+        prompt_version="full_story_v2",
         system_prompt=(
             "You are a senior civic journalist writing factual, thorough, accessible "
             "articles for Civitas — a non-partisan platform that aggregates U.S. government "
@@ -1707,8 +1705,9 @@ def _save_timeline_entry(today: str, db: Session) -> None:
     logger.info("Timeline entry saved for %s: %s", today, top_issue.title[:60])
 
 
-_MONITOR_ISSUE_SIM = 0.62
-_MONITOR_ISSUE_TITLE_SIM = 0.48
+_MONITOR_ISSUE_SIM = 0.70
+_MONITOR_ISSUE_TITLE_SIM = 0.62
+_MONITOR_ISSUE_SIM_HIGH = 0.80   # above this: skip LLM gate, auto-match
 _MONITOR_MERGE_SIM = 0.42
 _MONITOR_MIN_DAYS = 5
 _MONITOR_MIN_UNIQUE_SOURCES = 3
@@ -1792,6 +1791,42 @@ def _should_merge_monitors_llm(
                     a.title, b.title, result.get("reason"))
         return True
     return False
+
+
+def _should_match_monitor_llm(
+    issue_title: str,
+    issue_summary: str,
+    monitor: "NationalMonitor",
+    db: Session,
+) -> bool:
+    """LLM gate for borderline embedding matches: does this issue genuinely belong to this monitor?"""
+    from app.pipeline.analyze.ollama_client import call_llm
+
+    result = call_llm(
+        prompt_version="monitor-match-v1",
+        system_prompt="You are a civic data analyst. Respond in JSON.",
+        user_prompt=(
+            f'Monitor: "{monitor.title}"\n'
+            f'Monitor description: "{monitor.description[:300]}"\n\n'
+            f'Issue title: "{issue_title}"\n'
+            f'Issue summary: "{issue_summary[:300]}"\n\n'
+            "Does this issue genuinely belong to this monitor? The monitor and issue must "
+            "share the same specific subject (same country, same policy dispute, same named actors). "
+            "Superficial overlap (both involve government, both are international) is NOT enough.\n\n"
+            'Return JSON: {"matches": true/false, "reason": "one sentence"}'
+        ),
+        cache_key={"type": "monitor_match", "monitor": monitor.title, "issue": issue_title},
+        db_session=db,
+        max_tokens=128,
+    )
+    if not isinstance(result, dict):
+        return False
+    matched = bool(result.get("matches", False))
+    logger.debug(
+        "LLM monitor match '%s' → '%s': %s — %s",
+        issue_title[:50], monitor.title, matched, result.get("reason", ""),
+    )
+    return matched
 
 
 def _reclassify_monitor_llm(
@@ -2026,10 +2061,18 @@ def _update_national_monitors(today: str, db: Session) -> None:
 
         for i, issue in enumerate(today_issues):
             for j, monitor in enumerate(existing_monitors):
-                if sims[i][j] < _MONITOR_ISSUE_SIM:
+                full_sim = float(sims[i][j])
+                title_sim = float(title_sims[i][j])
+                if full_sim < _MONITOR_ISSUE_SIM:
                     continue
-                if title_sims[i][j] < _MONITOR_ISSUE_TITLE_SIM:
+                if title_sim < _MONITOR_ISSUE_TITLE_SIM:
                     continue
+                # LLM gate for borderline matches: require high confidence or LLM approval
+                if full_sim < _MONITOR_ISSUE_SIM_HIGH:
+                    if not _should_match_monitor_llm(
+                        issue.title, issue.summary or "", monitor, db
+                    ):
+                        continue
 
                 issue_monitor_slugs.setdefault(i, []).append(monitor.slug)
 
@@ -2558,12 +2601,13 @@ def _run_refresh(db: Session) -> int:
         except Exception:
             logger.exception("Bluesky posting failed (non-fatal)")
 
-    # Stage 6: Daily senator score spotlight
+    # Stage 6: Daily senator score spotlight + weekly civic summary
     try:
-        from app.pipeline.analyze.bluesky_spotlight import post_daily_spotlight
+        from app.pipeline.analyze.bluesky_spotlight import post_daily_spotlight, post_weekly_summary
         post_daily_spotlight(db)
+        post_weekly_summary(db)
     except Exception:
-        logger.exception("Daily senator spotlight failed (non-fatal)")
+        logger.exception("Bluesky spotlight/weekly post failed (non-fatal)")
 
     # Clean up issues older than 14 days
     from datetime import timedelta as _td
