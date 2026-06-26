@@ -147,7 +147,7 @@ def _publish(text: str, issue) -> bool:
         logger.debug("Bluesky credentials not set — skipping publish")
         return False
 
-    url = f"https://civitas.paramain.com/action?issue={issue.id}"
+    url = f"https://civitas.paramain.com/issue/{issue.id}"
     full_text = f"{text}\n\n{url}"
 
     # Hard truncate the generated body if the LLM overshot, preserving the URL

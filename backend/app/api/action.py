@@ -191,6 +191,17 @@ async def get_action_issues(
     }
 
 
+@router.get("/issues/{issue_id}")
+async def get_action_issue(issue_id: int, response: Response, db: Session = Depends(get_db)):
+    """Return a single action issue by ID (used for OG metadata / deep-link previews)."""
+    response.headers["Cache-Control"] = "public, max-age=300"
+    issue = db.query(ActionIssue).filter(ActionIssue.id == issue_id).first()
+    if not issue:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Issue not found")
+    return _build_issue_response(issue, db, {})
+
+
 class PulseVoteRequest(BaseModel):
     issue_id: int
     stance: str
