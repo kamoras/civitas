@@ -70,8 +70,8 @@ export default function Navbar() {
     <header
       role="banner"
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        scrolled || menuOpen ? "bg-[#0a0a0a] backdrop-blur-sm" : "bg-transparent"
-      } border-b border-matrix-green/20`}
+        scrolled || menuOpen ? "bg-crt-black/95 backdrop-blur-md" : "bg-transparent"
+      } border-b border-matrix-green/10`}
     >
     <nav
       aria-label="Main navigation"
@@ -79,13 +79,13 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
         <Link
           href="/"
-          className="font-pixel text-[10px] sm:text-xs text-matrix-green hover:text-neon-cyan transition-colors neon-green"
+          className="font-pixel text-[10px] sm:text-xs text-matrix-green hover:text-neon-cyan transition-colors tracking-widest"
         >
-          [CIVITAS]
+          CIVITAS
         </Link>
 
         {/* Desktop nav */}
-        <div className="hidden sm:flex items-center gap-6 text-lg">
+        <div className="hidden sm:flex items-center gap-7">
           {NAV_LINKS.map(({ href, label, accent }) => {
             const active = isActive(href);
             return (
@@ -95,15 +95,13 @@ export default function Navbar() {
                 aria-current={active ? "page" : undefined}
                 className={
                   active
-                    ? "text-neon-cyan transition-colors font-pixel text-sm neon-cyan"
+                    ? "text-neon-cyan font-mono text-xs tracking-widest uppercase transition-colors border-b border-neon-cyan/50 pb-0.5"
                     : accent
-                      ? "text-neon-cyan/70 hover:text-neon-cyan transition-colors font-pixel text-sm"
-                      : href === "/about"
-                        ? "text-matrix-green/50 hover:text-matrix-green transition-colors"
-                        : "text-matrix-green/70 hover:text-matrix-green transition-colors"
+                      ? "text-neon-cyan/60 hover:text-neon-cyan font-mono text-xs tracking-widest uppercase transition-colors"
+                      : "text-matrix-green/50 hover:text-matrix-green/90 font-mono text-xs tracking-widest uppercase transition-colors"
                 }
               >
-                {`> ${label}`}
+                {label}
               </Link>
             );
           })}
@@ -112,13 +110,13 @@ export default function Navbar() {
         {/* Mobile hamburger */}
         <button
           ref={toggleRef}
-          className="sm:hidden text-matrix-green text-2xl"
+          className="sm:hidden text-matrix-green/70 hover:text-matrix-green font-mono text-sm tracking-widest transition-colors"
           onClick={() => menuOpen ? closeMenu() : setMenuOpen(true)}
           aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
           aria-expanded={menuOpen}
           aria-controls="mobile-menu"
         >
-          {menuOpen ? "[X]" : "[=]"}
+          {menuOpen ? "CLOSE" : "MENU"}
         </button>
       </div>
 
@@ -129,7 +127,7 @@ export default function Navbar() {
           id="mobile-menu"
           role="dialog"
           aria-label="Navigation menu"
-          className="sm:hidden bg-[#0a0a0a] border-t border-matrix-green/20 px-4 py-6 flex flex-col gap-4 text-xl"
+          className="sm:hidden bg-crt-black/98 border-t border-matrix-green/10 px-6 py-8 flex flex-col gap-5"
         >
           {NAV_LINKS.map(({ href, label, accent }) => {
             const active = isActive(href);
@@ -141,15 +139,13 @@ export default function Navbar() {
                 onClick={closeMenu}
                 className={
                   active
-                    ? "text-neon-cyan transition-colors font-pixel text-base neon-cyan"
+                    ? "text-neon-cyan font-mono text-sm tracking-widest uppercase transition-colors"
                     : accent
-                      ? "text-neon-cyan/70 hover:text-neon-cyan transition-colors font-pixel text-base"
-                      : href === "/about"
-                        ? "text-matrix-green/50 hover:text-matrix-green transition-colors"
-                        : "text-matrix-green/70 hover:text-matrix-green transition-colors"
+                      ? "text-neon-cyan/60 hover:text-neon-cyan font-mono text-sm tracking-widest uppercase transition-colors"
+                      : "text-matrix-green/50 hover:text-matrix-green font-mono text-sm tracking-widest uppercase transition-colors"
                 }
               >
-                {`> ${label}`}
+                {label}
               </Link>
             );
           })}

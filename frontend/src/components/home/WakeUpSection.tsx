@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import GlitchText from "@/components/effects/GlitchText";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 
 interface StatCardProps {
@@ -35,12 +34,12 @@ function StatCard({ value, label, prefix = "", source }: StatCardProps) {
     >
       <TerminalTitlebar title="public_record.dat" />
       <div className="p-4 sm:p-6 text-center">
-        <div className="text-2xl sm:text-4xl md:text-5xl font-pixel text-neon-cyan neon-cyan mb-3 break-all">
+        <div className="text-3xl sm:text-5xl md:text-6xl font-terminal text-neon-cyan neon-cyan mb-3 tracking-wide">
           {prefix}
           {value}
         </div>
-        <div className="text-sm sm:text-base text-matrix-green/60 px-2">{label}</div>
-        {source && <div className="text-[10px] text-matrix-green/30 mt-2">{source}</div>}
+        <div className="text-xs font-mono text-matrix-green/55 px-2 leading-relaxed tracking-wide">{label}</div>
+        {source && <div className="text-[10px] font-mono text-matrix-green/25 mt-2">{source}</div>}
       </div>
     </div>
   );
@@ -54,12 +53,10 @@ export default function WakeUpSection() {
     >
       <div className="max-w-5xl mx-auto">
         <div className="text-center mb-16">
-          <GlitchText
-            text="WHAT WE TRACK"
-            as="h2"
-            className="font-pixel text-sm sm:text-xl md:text-2xl text-neon-pink"
-          />
-          <p className="text-matrix-green/40 text-sm mt-3">
+          <h2 className="font-mono text-xs tracking-[0.35em] uppercase text-neon-pink/70 mb-2">
+            WHAT WE TRACK
+          </h2>
+          <p className="text-matrix-green/35 text-xs font-mono tracking-wider mt-2">
             Senate. House of Representatives. Presidents. Supreme Court. Public data only.
           </p>
         </div>

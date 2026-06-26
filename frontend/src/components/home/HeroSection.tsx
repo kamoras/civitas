@@ -17,28 +17,32 @@ const MARQUEE_ITEMS = [
 export default function HeroSection() {
   return (
     <section className="relative min-h-screen flex flex-col justify-center items-center text-center px-4">
-      <div className="mb-8">
+      <div className="mb-6">
         <GlitchText
           text="CIVITAS"
           as="h1"
-          className="font-pixel text-3xl sm:text-5xl md:text-7xl text-matrix-green animate-pulse-neon"
+          className="font-pixel text-3xl sm:text-5xl md:text-7xl text-matrix-green neon-green"
         />
       </div>
 
-      <div className="mb-12 text-xl sm:text-2xl md:text-3xl text-matrix-green/80 max-w-3xl">
+      <div className="mb-2 text-matrix-green/30 font-mono text-xs tracking-[0.4em] uppercase">
+        public record terminal
+      </div>
+
+      <div className="mb-12 text-base sm:text-lg md:text-xl text-matrix-green/70 max-w-2xl font-mono">
         <TypewriterText
-          text="> CONGRESSIONAL DATA. SCORED. SOURCED. SEARCHABLE."
-          speed={40}
-          startDelay={800}
+          text="CONGRESSIONAL DATA. SCORED. SOURCED. SEARCHABLE."
+          speed={35}
+          startDelay={600}
         />
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4 mb-16">
+      <div className="flex flex-col sm:flex-row gap-3 mb-16">
         <Link href="/action" className="btn-retro">
-          [ ACTION CENTER ]
+          ACTION CENTER
         </Link>
         <Link href="/scorecard" className="btn-retro btn-retro-pink">
-          [ SCORECARDS ]
+          SCORECARDS
         </Link>
       </div>
 

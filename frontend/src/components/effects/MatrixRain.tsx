@@ -90,5 +90,5 @@ export default function MatrixRain() {
     };
   }, []);
 
-  return <canvas ref={canvasRef} className="fixed inset-0 -z-10 opacity-20" aria-hidden="true" />;
+  return <canvas ref={canvasRef} className="fixed inset-0 -z-10 opacity-10" aria-hidden="true" />;
 }

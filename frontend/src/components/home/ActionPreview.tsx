@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import GlitchText from "@/components/effects/GlitchText";
 import { fetchActionIssues, fetchMonitors } from "@/lib/api";
 import type { NationalMonitor } from "@/lib/api";
 import type { ActionIssue, DailyTheme } from "@/types/action";
@@ -47,12 +46,10 @@ export default function ActionPreview() {
     <section className="py-16 sm:py-24 px-4 bg-gradient-to-b from-crt-black to-crt-black/80">
       <div className="max-w-5xl mx-auto">
         <div className="text-center mb-10">
-          <GlitchText
-            text="TODAY'S TOP ISSUES"
-            as="h2"
-            className="font-pixel text-sm sm:text-xl md:text-2xl text-neon-cyan"
-          />
-          <p className="text-matrix-green/40 text-sm mt-3">
+          <h2 className="font-mono text-xs tracking-[0.35em] uppercase text-neon-cyan/80 mb-2">
+            TODAY&apos;S TOP ISSUES
+          </h2>
+          <p className="text-matrix-green/35 text-xs font-mono tracking-wider mt-2">
             Cross-referenced from news and social media trends. Updated hourly.
           </p>
         </div>
@@ -206,7 +203,7 @@ export default function ActionPreview() {
 
         <div className="text-center">
           <Link href="/action" className="btn-retro">
-            [ OPEN ACTION CENTER ]
+            OPEN ACTION CENTER
           </Link>
         </div>
       </div>

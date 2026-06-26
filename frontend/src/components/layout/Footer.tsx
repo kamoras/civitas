@@ -77,24 +77,22 @@ export default function Footer() {
     <footer className="border-t border-matrix-green/20 bg-crt-black/80 py-8 px-4">
       <div className="max-w-4xl mx-auto flex flex-col items-center gap-6">
         {/* Links */}
-        <nav aria-label="Footer navigation" className="flex flex-wrap justify-center gap-4 text-lg">
+        <nav aria-label="Footer navigation" className="flex flex-wrap justify-center gap-6">
           <Link
             href="/scorecard"
-            className="text-matrix-green/60 hover:text-matrix-green transition-colors"
+            className="text-matrix-green/40 hover:text-matrix-green/80 transition-colors font-mono text-xs tracking-widest uppercase"
           >
             SCORECARD
           </Link>
-          <span className="text-matrix-green/20" aria-hidden="true">|</span>
           <Link
             href="/about"
-            className="text-matrix-green/60 hover:text-matrix-green transition-colors"
+            className="text-matrix-green/40 hover:text-matrix-green/80 transition-colors font-mono text-xs tracking-widest uppercase"
           >
             METHODOLOGY
           </Link>
-          <span className="text-matrix-green/20" aria-hidden="true">|</span>
           <Link
             href="/accessibility"
-            className="text-matrix-green/60 hover:text-matrix-green transition-colors"
+            className="text-matrix-green/40 hover:text-matrix-green/80 transition-colors font-mono text-xs tracking-widest uppercase"
           >
             ACCESSIBILITY
           </Link>
@@ -105,13 +103,6 @@ export default function Footer() {
 
         {/* Visitor Counter */}
         <VisitorCounter />
-
-        {/* Retro badge */}
-        <div className="text-center">
-          <div className="inline-block border border-matrix-green/20 px-3 py-1 text-[10px] font-pixel text-matrix-green/30">
-            BEST VIEWED IN NETSCAPE NAVIGATOR 4.0
-          </div>
-        </div>
 
         {/* Disclaimer */}
         <p className="text-xs text-matrix-green/50 max-w-lg text-center leading-relaxed">

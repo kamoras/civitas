@@ -17,7 +17,7 @@ export default function Marquee({ items }: { items: string[] }) {
 
   return (
     <div
-      className="w-full overflow-hidden border-y border-matrix-green/30 bg-crt-black/80 py-3"
+      className="w-full overflow-hidden border-y border-matrix-green/10 bg-crt-black/60 py-2.5"
       aria-label="Site information"
     >
       <div className="sr-only">
@@ -29,7 +29,7 @@ export default function Marquee({ items }: { items: string[] }) {
       </div>
       <div
         aria-hidden="true"
-        className={`whitespace-nowrap font-terminal text-lg text-matrix-green/70 ${reducedMotion ? "" : "animate-marquee"}`}
+        className={`whitespace-nowrap font-mono text-[11px] tracking-widest text-matrix-green/40 ${reducedMotion ? "" : "animate-marquee"}`}
       >
         {reducedMotion ? text : doubled}
       </div>

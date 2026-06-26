@@ -20,7 +20,7 @@ body {
 
 /* ===== CUSTOM SCROLLBAR ===== */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 4px;
 }
 
 ::-webkit-scrollbar-track {
@@ -29,7 +29,7 @@ body {
 
 ::-webkit-scrollbar-thumb {
   background: #00ff41;
-  border-radius: 0;
+  border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -46,18 +46,9 @@ body {
     0deg,
     rgba(0, 0, 0, 0) 0px,
     rgba(0, 0, 0, 0) 1px,
-    rgba(0, 0, 0, 0.08) 1px,
-    rgba(0, 0, 0, 0.08) 2px
+    rgba(0, 0, 0, 0.03) 1px,
+    rgba(0, 0, 0, 0.03) 2px
   );
-}
-
-.crt-overlay::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(transparent 50%, rgba(0, 255, 65, 0.02) 50%);
-  background-size: 100% 4px;
-  animation: scanline 8s linear infinite;
 }
 
 /* ===== GLITCH TEXT ===== */
@@ -185,21 +176,21 @@ body {
 
 /* ===== TERMINAL WINDOW ===== */
 .terminal-window {
-  background: rgba(13, 2, 8, 0.95);
-  border: 1px solid #333;
+  background: rgba(13, 2, 8, 0.97);
+  border: 1px solid rgba(0, 255, 65, 0.12);
   border-radius: 0;
   box-shadow:
-    0 0 10px rgba(0, 255, 65, 0.2),
-    inset 0 0 30px rgba(0, 0, 0, 0.5);
+    0 0 0 1px rgba(0, 0, 0, 0.8),
+    0 4px 24px rgba(0, 0, 0, 0.6);
   overflow: hidden;
   word-wrap: break-word;
   overflow-wrap: break-word;
 }
 
 .terminal-titlebar {
-  background: #1a1a1a;
-  border-bottom: 1px solid #333;
-  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(0, 255, 65, 0.08);
+  padding: 5px 12px;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -211,9 +202,10 @@ body {
 }
 
 .terminal-dot {
-  width: 10px;
-  height: 10px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
+  opacity: 0.7;
 }
 
 .terminal-dot.red {
@@ -226,75 +218,66 @@ body {
   background: #27c93f;
 }
 
-/* ===== RETRO BUTTONS ===== */
+/* ===== BUTTONS ===== */
 .btn-retro {
-  background: #0d0208;
+  background: transparent;
   color: #00ff41;
-  border: 2px solid #00ff41;
-  padding: 12px 24px;
-  font-family: var(--font-vt323), monospace;
-  font-size: 1.25rem;
+  border: 1px solid rgba(0, 255, 65, 0.5);
+  padding: 10px 28px;
+  font-family: var(--font-share-tech), monospace;
+  font-size: 0.8rem;
   cursor: pointer;
   text-transform: uppercase;
-  letter-spacing: 2px;
-  transition: all 0.15s ease;
+  letter-spacing: 0.15em;
+  transition: all 0.2s ease;
   text-decoration: none;
   display: inline-block;
 }
 
 .btn-retro:hover {
-  background: #00ff41;
-  color: #0d0208;
-  box-shadow:
-    0 0 20px rgba(0, 255, 65, 0.5),
-    0 0 40px rgba(0, 255, 65, 0.2);
-  text-shadow: none;
+  background: rgba(0, 255, 65, 0.08);
+  border-color: #00ff41;
+  color: #00ff41;
+  box-shadow: 0 0 16px rgba(0, 255, 65, 0.2);
 }
 
 .btn-retro:active {
-  transform: translateY(2px);
-  box-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
+  transform: translateY(1px);
 }
 
 .btn-retro-pink {
-  border-color: #ff00ff;
+  border-color: rgba(255, 0, 255, 0.5);
   color: #ff00ff;
 }
 
 .btn-retro-pink:hover {
-  background: #ff00ff;
-  color: #0d0208;
-  box-shadow:
-    0 0 20px rgba(255, 0, 255, 0.5),
-    0 0 40px rgba(255, 0, 255, 0.2);
+  background: rgba(255, 0, 255, 0.08);
+  border-color: #ff00ff;
+  box-shadow: 0 0 16px rgba(255, 0, 255, 0.2);
 }
 
 /* ===== NEON GLOW EFFECTS ===== */
 .neon-green {
   text-shadow:
-    0 0 7px #00ff41,
-    0 0 10px #00ff41,
-    0 0 21px #00ff41;
+    0 0 8px rgba(0, 255, 65, 0.6),
+    0 0 20px rgba(0, 255, 65, 0.2);
 }
 
 .neon-cyan {
   text-shadow:
-    0 0 7px #00ffff,
-    0 0 10px #00ffff,
-    0 0 21px #00ffff;
+    0 0 8px rgba(0, 255, 255, 0.6),
+    0 0 20px rgba(0, 255, 255, 0.2);
 }
 
 .neon-pink {
   text-shadow:
-    0 0 7px #ff00ff,
-    0 0 10px #ff00ff,
-    0 0 21px #ff00ff;
+    0 0 8px rgba(255, 0, 255, 0.6),
+    0 0 20px rgba(255, 0, 255, 0.2);
 }
 
 .neon-yellow {
   text-shadow:
-    0 0 7px #ffff00,
-    0 0 10px #ffff00;
+    0 0 8px rgba(255, 255, 0, 0.5);
 }
 
 /* ===== ASCII DIVIDER ===== */
