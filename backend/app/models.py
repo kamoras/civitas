@@ -629,6 +629,16 @@ class PipelineRun(Base):
     progress_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class BskySenatorSpotlight(Base):
+    """Tracks which senators have been highlighted in daily Bluesky score posts."""
+    __tablename__ = "bsky_senator_spotlights"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    senator_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    posted_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    post_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class AlertSubscription(Base):
     """Weekly email digest subscription."""
     __tablename__ = "alert_subscriptions"

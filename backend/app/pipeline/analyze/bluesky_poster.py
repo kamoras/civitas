@@ -26,8 +26,8 @@ from app.pipeline.analyze.ollama_client import call_llm
 
 logger = logging.getLogger(__name__)
 
-SURGE_COOLDOWN_HOURS = 6
-SURGE_MIN_RANK_DROP = 2  # old rank must exceed current rank by at least this
+SURGE_COOLDOWN_HOURS = 24  # don't re-post the same issue within 24 hours
+SURGE_MIN_RANK_DROP = 2   # old rank must exceed current rank by at least this
 MAX_POST_CHARS = 240     # leaves room for the appended URL (~40 chars → total ~280)
 
 _SYSTEM_PROMPT = (
@@ -121,29 +121,37 @@ def _generate_surge_post(issue, old_rank: int) -> tuple[bool, str | None]:
     sources_text = _build_source_context(issue.source_names)
     source_count = len(json.loads(issue.source_names or "[]"))
 
-    user_prompt = f"""A civic issue previously ranked #{old_rank} has surged to rank #1 in our analysis.
-It is now the top story based on news volume and legislative activity.
+    user_prompt = f"""A civic issue previously ranked #{old_rank} has moved to rank #1.
 
 Issue: {issue.title}
 Summary: {issue.summary or '(none)'}
 Key facts:
 {facts_text or '(none)'}
-Now covered by {source_count} news sources: {sources_text}
+Sources ({source_count}): {sources_text}
 
-Decide whether this surge represents a genuinely new development worth posting about
-(e.g. new legislation introduced, vote happened, significant escalation in news coverage)
-versus routine churn. If yes, write a post focused on what has changed or escalated.
+We already posted about this issue. Decide whether there is a CONCRETE NEW DEVELOPMENT
+that warrants a follow-up post. A new development means one of:
+  - A vote occurred
+  - New legislation was introduced or passed
+  - A major new policy decision was announced
+  - A significant factual change (new numbers, new outcome)
 
-Requirements for the post:
-- Under {MAX_POST_CHARS} characters
-- Factual and non-partisan
-- Explain what is new or has escalated, not just what the issue is
-- No hashtags, no editorializing
+Do NOT post for: more news coverage of the same facts, rank changes alone,
+or restatements of what was already reported.
 
-Return JSON: {{"should_post": true/false, "post": "<text if should_post>", "reasoning": "<one sentence>"}}"""
+If there IS a new development, write a post focused specifically on what changed —
+not a recap of the whole issue.
+
+Requirements:
+- STRICT MAXIMUM: {MAX_POST_CHARS} characters total
+- Complete sentences ending with proper punctuation
+- No hashtags, no exclamation points, no editorializing
+- Only use information from the Title, Summary, and Key facts above
+
+Return JSON: {{"should_post": true/false, "post": "<text if should_post>", "reasoning": "<one sentence explaining what specifically is new>"}}"""
 
     result = call_llm(
-        prompt_version="bsky_surge_post_v2",
+        prompt_version="bsky_surge_post_v3",
         system_prompt=_SYSTEM_PROMPT,
         user_prompt=user_prompt,
         cache_key=None,

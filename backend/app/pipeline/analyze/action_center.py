@@ -2558,6 +2558,13 @@ def _run_refresh(db: Session) -> int:
         except Exception:
             logger.exception("Bluesky posting failed (non-fatal)")
 
+    # Stage 6: Daily senator score spotlight
+    try:
+        from app.pipeline.analyze.bluesky_spotlight import post_daily_spotlight
+        post_daily_spotlight(db)
+    except Exception:
+        logger.exception("Daily senator spotlight failed (non-fatal)")
+
     # Clean up issues older than 14 days
     from datetime import timedelta as _td
     cutoff = (datetime.now(timezone.utc) - _td(days=14)).strftime("%Y-%m-%d")
