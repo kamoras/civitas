@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePlainLanguage } from "@/context/PlainLanguageContext";
-import { fetchMyReps } from "@/lib/api";
+import { fetchMyReps, fetchActionIssues } from "@/lib/api";
 import { STATES } from "@/data/states";
-import type { MyRepRep, MyRepSenator, MyRepsResponse } from "@/types/action";
+import type { ActionIssue, MyRepRep, MyRepSenator, MyRepsResponse } from "@/types/action";
 
 function ContactScript({
   name,
@@ -311,6 +311,7 @@ export default function MyRepsTab({
   const [data, setData] = useState<MyRepsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState(false);
+  const [issues, setIssues] = useState<ActionIssue[]>([]);
 
   const loadReps = useCallback((st: string) => {
     setLoading(true);
@@ -324,6 +325,31 @@ export default function MyRepsTab({
   useEffect(() => {
     if (userState) loadReps(userState);
   }, [userState, loadReps]);
+
+  useEffect(() => {
+    fetchActionIssues()
+      .then((d) => setIssues(d.issues || []))
+      .catch(() => {/* silently ignore — this section is optional */});
+  }, []);
+
+  // Build a set of all rep IDs the user has saved for quick lookup
+  const myRepIds = useMemo(() => {
+    if (!data) return new Set<string>();
+    const ids = new Set<string>();
+    data.senators.forEach((s) => ids.add(s.id));
+    (data.representatives || []).forEach((r) => ids.add(r.id));
+    return ids;
+  }, [data]);
+
+  // Filter today's issues to those that mention any of the user's reps (up to 3)
+  const repIssues = useMemo(() => {
+    if (myRepIds.size === 0 || issues.length === 0) return [];
+    return issues
+      .filter((iss) =>
+        iss.relatedSenators?.some((s) => myRepIds.has(s.id))
+      )
+      .slice(0, 3);
+  }, [issues, myRepIds]);
 
   if (!userState) {
     return (
@@ -401,6 +427,33 @@ export default function MyRepsTab({
           CHANGE STATE
         </button>
       </div>
+
+      {repIssues.length > 0 && (
+        <div className="terminal-window border border-neon-pink/20 bg-neon-pink/5 p-4 space-y-3">
+          <div className="font-pixel text-xs text-neon-pink/70">
+            {">"} YOUR REPS IN THE NEWS
+          </div>
+          <div className="space-y-2">
+            {repIssues.map((iss) => (
+              <Link
+                key={iss.id}
+                href={`/action?tab=issues`}
+                className="flex items-start gap-3 group hover:bg-neon-pink/10 transition-colors p-2 -mx-2"
+              >
+                <span className="text-[10px] font-pixel text-neon-pink/40 shrink-0 mt-0.5">
+                  #{iss.rank}
+                </span>
+                <span className="text-sm text-matrix-green/80 group-hover:text-matrix-green leading-snug">
+                  {iss.title}
+                </span>
+                <span className="text-[10px] font-pixel text-neon-pink/40 shrink-0 ml-auto mt-0.5" aria-hidden="true">
+                  →
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {data && (data.senators.length > 0 || (data.representatives && data.representatives.length > 0)) ? (
         <div className="space-y-6">
