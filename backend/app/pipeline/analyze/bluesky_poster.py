@@ -16,6 +16,7 @@ module does nothing (allows running without a Bluesky account configured).
 
 import json
 import logging
+import re
 from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
@@ -36,6 +37,24 @@ _SYSTEM_PROMPT = (
     "Your posts are non-partisan, data-grounded, and written for citizens who "
     "want to understand what their representatives are actually doing."
 )
+
+
+def _sanitize(text: str, budget: int) -> str:
+    """Strip hashtags, enforce sentence-boundary character limit."""
+    text = re.sub(r"\s*#\w+", "", text).strip()
+    if len(text) > budget:
+        trimmed = text[:budget]
+        cut = -1
+        for punct in (".", "!", "?"):
+            idx = trimmed.rfind(punct)
+            if idx > len(trimmed) // 2:
+                cut = max(cut, idx + 1)
+        if cut > 0:
+            text = trimmed[:cut]
+        else:
+            last_space = trimmed.rfind(" ")
+            text = trimmed[:last_space] if last_space > 0 else trimmed
+    return text.strip()
 
 
 def _build_source_context(source_names_json: str) -> str:
@@ -86,21 +105,7 @@ Return JSON: {{"post": "<text — must be complete sentences and under {MAX_POST
     )
     if not result or not isinstance(result.get("post"), str):
         return None
-    text = result["post"].strip()
-    # Enforce character limit: trim to last sentence boundary within budget
-    if len(text) > MAX_POST_CHARS:
-        trimmed = text[:MAX_POST_CHARS]
-        cut = -1
-        for punct in (".", "!", "?"):
-            idx = trimmed.rfind(punct)
-            if idx > len(trimmed) // 2:
-                cut = max(cut, idx + 1)
-        if cut > 0:
-            text = trimmed[:cut]
-        else:
-            last_space = trimmed.rfind(" ")
-            text = trimmed[:last_space] if last_space > 0 else trimmed
-    return text
+    return _sanitize(result["post"], MAX_POST_CHARS)
 
 
 def _generate_surge_post(issue, old_rank: int) -> tuple[bool, str | None]:
@@ -145,16 +150,8 @@ Return JSON: {{"should_post": true/false, "post": "<text if should_post>", "reas
     if not result:
         return False, None
     should = bool(result.get("should_post", False))
-    raw = result.get("post", "").strip() if should else None
-    if raw and len(raw) > MAX_POST_CHARS:
-        trimmed = raw[:MAX_POST_CHARS]
-        cut = -1
-        for punct in (".", "!", "?"):
-            idx = trimmed.rfind(punct)
-            if idx > len(trimmed) // 2:
-                cut = max(cut, idx + 1)
-        raw = trimmed[:cut] if cut > 0 else trimmed[:trimmed.rfind(" ") or MAX_POST_CHARS]
-    text = raw
+    raw = result.get("post", "") if should else None
+    text = _sanitize(raw, MAX_POST_CHARS) if raw else None
     logger.debug(
         "Surge judgment for '%s': should_post=%s reason=%s",
         issue.title[:60], should, result.get("reasoning", "")
@@ -170,6 +167,7 @@ def _publish(text: str, issue) -> bool:
         logger.debug("Bluesky credentials not set — skipping publish")
         return False
 
+    text = re.sub(r"\s*#\w+", "", text).strip()  # final hashtag guard
     url = f"https://civitas.paramain.com/issue/{issue.id}"
     full_text = f"{text}\n\n{url}"
 
