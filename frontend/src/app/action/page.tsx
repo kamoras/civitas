@@ -9,6 +9,7 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import GlitchText from "@/components/effects/GlitchText";
 import { fetchActionIssues, fetchOpenComments, OpenCommentItem } from "@/lib/api";
+import { useUserState } from "@/hooks/useUserState";
 import { safeHref } from "@/lib/formatting";
 import StancePulse from "@/components/action/StancePulse";
 import { LogActionButton } from "@/components/action/CivicTracker";
@@ -132,19 +133,6 @@ function getActionLabel(action: ActionItem, userState: string | null): string {
   return meta.label;
 }
 
-function useUserState(): [string | null, (s: string | null) => void] {
-  const [state, setState] = useState<string | null>(null);
-  useEffect(() => {
-    const saved = localStorage.getItem("civitas_user_state");
-    if (saved) setState(saved);
-  }, []);
-  const setAndPersist = (s: string | null) => {
-    setState(s);
-    if (s) localStorage.setItem("civitas_user_state", s);
-    else localStorage.removeItem("civitas_user_state");
-  };
-  return [state, setAndPersist];
-}
 
 function StatePicker({
   userState,
@@ -1117,6 +1105,13 @@ function ActionPageInner() {
     isValidTab(paramTab) ? paramTab : "issues",
   );
   const [userState, setUserState] = useUserState();
+  const [sharedIssues, setSharedIssues] = useState<ActionIssue[]>([]);
+
+  useEffect(() => {
+    fetchActionIssues()
+      .then((d) => setSharedIssues(d.issues))
+      .catch(() => {/* silently ignore — IssuesTab has its own error handling */});
+  }, []);
 
   // Parse ?issue=<id> from URL (numeric id)
   const paramIssue = searchParams.get("issue");
@@ -1236,7 +1231,7 @@ function ActionPageInner() {
               initialIssueId={initialIssueId}
               onIssueChange={handleIssueChange}
             />}
-            {activeTab === "my-reps" && <MyRepsTab userState={userState} setUserState={setUserState} />}
+            {activeTab === "my-reps" && <MyRepsTab userState={userState} setUserState={setUserState} issues={sharedIssues} />}
             {activeTab === "monitors" && <MonitorsTab />}
             {activeTab === "timeline" && <TimelineTab />}
             {activeTab === "elections" && <ElectionsTab />}

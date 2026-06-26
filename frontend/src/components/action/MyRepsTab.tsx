@@ -304,14 +304,18 @@ function RepCard({ rep }: { rep: MyRepRep }) {
 export default function MyRepsTab({
   userState,
   setUserState,
+  issues,
 }: {
   userState: string | null;
   setUserState: (s: string | null) => void;
+  /** Optional pre-fetched issues from the parent; avoids a redundant fetchActionIssues() call. */
+  issues?: ActionIssue[];
 }) {
   const [data, setData] = useState<MyRepsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState(false);
-  const [issues, setIssues] = useState<ActionIssue[]>([]);
+  const [fallbackIssues, setFallbackIssues] = useState<ActionIssue[]>([]);
+  const activeIssues = issues ?? fallbackIssues;
 
   const loadReps = useCallback((st: string) => {
     setLoading(true);
@@ -327,12 +331,12 @@ export default function MyRepsTab({
   }, [userState, loadReps]);
 
   useEffect(() => {
+    if (issues) return;
     fetchActionIssues()
-      .then((d) => setIssues(d.issues || []))
-      .catch(() => {/* silently ignore — this section is optional */});
-  }, []);
+      .then((d) => setFallbackIssues(d.issues || []))
+      .catch(() => {});
+  }, [issues]);
 
-  // Build a set of all rep IDs the user has saved for quick lookup
   const myRepIds = useMemo(() => {
     if (!data) return new Set<string>();
     const ids = new Set<string>();
@@ -341,10 +345,9 @@ export default function MyRepsTab({
     return ids;
   }, [data]);
 
-  // Filter today's issues to those that mention any of the user's reps (up to 3)
   const repIssues = useMemo(() => {
-    if (myRepIds.size === 0 || issues.length === 0) return [];
-    return issues
+    if (myRepIds.size === 0 || activeIssues.length === 0) return [];
+    return activeIssues
       .filter((iss) =>
         iss.relatedSenators?.some((s) => myRepIds.has(s.id))
       )
@@ -482,6 +485,36 @@ export default function MyRepsTab({
               </div>
             </div>
           )}
+
+          {/* YOUR REPS IN THE NEWS — shown when parent passes pre-fetched issues */}
+          {(() => {
+            if (!issues || issues.length === 0) return null;
+            const repIssueIds = new Set<number>([
+              ...data.senators.flatMap((s) => s.connectedIssues.map((i) => i.id)),
+              ...(data.representatives ?? []).flatMap((r) => r.connectedIssues.map((i) => i.id)),
+            ]);
+            const matched = issues.filter((iss) => repIssueIds.has(iss.id));
+            if (matched.length === 0) return null;
+            return (
+              <div className="space-y-4">
+                <div className="font-pixel text-xs text-amber-400/60">
+                  {">"} YOUR REPS IN THE NEWS
+                </div>
+                <div className="space-y-2">
+                  {matched.map((iss) => (
+                    <Link
+                      key={iss.id}
+                      href={`/action?issue=${iss.id}`}
+                      className="block terminal-window border border-amber-400/20 p-3 hover:border-amber-400/40 transition-colors"
+                    >
+                      <div className="text-[10px] font-pixel text-amber-400/50 mb-1">{iss.date}</div>
+                      <div className="text-sm text-matrix-green/80 leading-snug">{iss.title}</div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       ) : (
         <div className="terminal-window p-8 text-center">

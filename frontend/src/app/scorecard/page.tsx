@@ -1,8 +1,8 @@
 "use client";
 
-import { Suspense, useCallback, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import MatrixRain from "@/components/effects/MatrixRain";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
@@ -12,11 +12,23 @@ import PresidentClient from "@/components/president/PresidentClient";
 import JusticeClient from "@/components/justice/JusticeClient";
 import HouseCheckerClient from "@/components/checker/HouseCheckerClient";
 import BranchSelector, { type Branch } from "@/components/BranchSelector";
+import { useUserState } from "@/hooks/useUserState";
 
 function ScorecardContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const initialBranch = (searchParams.get("branch") as Branch) || "senate";
   const [branch, setBranchState] = useState<Branch>(initialBranch);
+  const [savedState] = useUserState();
+
+  // Pre-populate the state URL param from localStorage when no ?state= param is present
+  useEffect(() => {
+    if (!searchParams.get("state") && savedState) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("state", savedState);
+      router.replace(`?${params.toString()}`, { scroll: false });
+    }
+  }, [savedState]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setBranch = useCallback((b: Branch) => {
     setBranchState(b);
