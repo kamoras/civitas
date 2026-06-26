@@ -2505,22 +2505,25 @@ def _run_refresh(db: Session) -> int:
             .first()
         )
         if existing:
-            title_changed = existing.title != issue.title[:500]
-            for attr in ("title", "summary", "facts", "actions", "source_urls",
-                         "source_names", "policy_areas", "related_bill_ids",
-                         "related_explore_ids", "related_senators"):
-                setattr(existing, attr, getattr(issue, attr))
-            existing.created_at = datetime.utcnow()
-            if title_changed:
-                # Only re-queue for Bluesky if the story hasn't been posted
-                # recently. Minor LLM title rephrasing changes the title on
-                # every hourly run; without this guard every run would post.
-                never_posted = existing.bsky_posted_at is None
-                stale = (
-                    not never_posted
-                    and (datetime.utcnow() - existing.bsky_posted_at).total_seconds() > 6 * 3600
-                )
-                if never_posted or stale:
+            if existing.bsky_posted_at is not None:
+                # Issue has been posted to Bluesky — its URL must remain stable.
+                # Freeze core content fields so followers of old links see the
+                # same story they were sent to. Only update enrichment metadata.
+                for attr in ("actions", "source_urls", "source_names", "policy_areas",
+                             "related_bill_ids", "related_explore_ids", "related_senators"):
+                    setattr(existing, attr, getattr(issue, attr))
+            else:
+                # Not yet posted — free to update all fields.
+                title_changed = existing.title != issue.title[:500]
+                for attr in ("title", "summary", "facts", "actions", "source_urls",
+                             "source_names", "policy_areas", "related_bill_ids",
+                             "related_explore_ids", "related_senators"):
+                    setattr(existing, attr, getattr(issue, attr))
+                existing.created_at = datetime.utcnow()
+                if title_changed:
+                    # Only re-queue for Bluesky if the story hasn't been posted
+                    # recently. Minor LLM title rephrasing changes the title on
+                    # every hourly run; without this guard every run would post.
                     existing.bsky_posted_at = None
                     existing.bsky_posted_rank = None
         else:
