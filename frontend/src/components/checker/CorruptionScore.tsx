@@ -1,6 +1,6 @@
 "use client";
 
-import { Senator, CampaignPromise, VotingRecord } from "@/types/senator";
+import { Senator, CampaignPromise, VotingRecord, SponsoredBill } from "@/types/senator";
 import { calculateOverallScore, getScoreLabel, getScoreColor } from "@/lib/corruption";
 import { useScoreWeights } from "@/hooks/useConfig";
 import MetricTooltip from "./MetricTooltip";
@@ -12,6 +12,7 @@ interface RepresentationScoreProps {
   promises?: CampaignPromise[];
   votingRecord?: VotingRecord;
   funding?: Senator["funding"];
+  sponsoredBills?: SponsoredBill[];
 }
 
 const SCORE_KEYS: ScoreKey[] = [
@@ -81,7 +82,7 @@ function ScoreBar({
   );
 }
 
-export default function CorruptionScore({ breakdown, promises, votingRecord, funding }: RepresentationScoreProps) {
+export default function CorruptionScore({ breakdown, promises, votingRecord, funding, sponsoredBills }: RepresentationScoreProps) {
   const weights = useScoreWeights();
   const overall = calculateOverallScore(breakdown, weights);
   const label = getScoreLabel(overall);
@@ -105,11 +106,20 @@ export default function CorruptionScore({ breakdown, promises, votingRecord, fun
       ? "no funding data · defaults to 50"
       : undefined;
 
+  const nBills = sponsoredBills?.length ?? 0;
+  const effectivenessBasis: string =
+    nBills === 0
+      ? "no bill data · defaults to 50"
+      : nBills < 10
+        ? `${nBills} bill${nBills !== 1 ? "s" : ""} sponsored · score shrunk toward 50`
+        : `${nBills} bills sponsored`;
+
   const scoreBasis: Partial<Record<ScoreKey, string | undefined>> = {
     promisePersistence: promiseBasis,
     independentVoting: votingBasis,
     fundingIndependence: fundingBasis,
     fundingDiversity: fundingBasis,
+    legislativeEffectiveness: effectivenessBasis,
   };
 
   return (

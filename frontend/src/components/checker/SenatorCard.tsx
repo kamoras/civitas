@@ -266,6 +266,7 @@ export default function SenatorCard({ senator, chamber = "senate" }: SenatorCard
           promises={senator.campaignPromises}
           votingRecord={senator.votingRecord}
           funding={senator.funding}
+          sponsoredBills={senator.sponsoredBills}
         />
 
         {/* ── Score Trend ── shows historical sparkline if snapshots exist */}

@@ -207,10 +207,20 @@ function PresidentLeaderboard({
                       <span className={`font-bold text-lg ${rankColor(rank)}`}>#{rank}</span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-white group-hover:text-matrix-green transition-colors">
-                        {entry.name}
-                      </span>
-                      <span className="ml-2 text-matrix-green/30 text-xs">#{entry.number}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-white group-hover:text-matrix-green transition-colors">
+                          {entry.name}
+                        </span>
+                        <span className="text-matrix-green/30 text-xs">#{entry.number}</span>
+                        {entry.avgApproval == null && entry.gdpGrowthAvg == null && (
+                          <span
+                            className="text-[9px] font-mono tracking-wide text-amber-400/50 border border-amber-400/20 px-1 shrink-0"
+                            title="Score uses historical/expert consensus estimates — live API data not available for this era"
+                          >
+                            HIST
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-3 py-3 text-center">
                       <span
@@ -263,6 +273,11 @@ function PresidentLeaderboard({
                     >
                       {presParty(entry.party).label}
                     </span>
+                    {entry.avgApproval == null && entry.gdpGrowthAvg == null && (
+                      <span className="text-[9px] font-mono text-amber-400/50 border border-amber-400/20 px-1 shrink-0">
+                        HIST
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-3 mt-0.5">
                     <ScoreBar score={score} />
@@ -277,11 +292,17 @@ function PresidentLeaderboard({
         </div>
       </div>
 
-          <p className="mt-4 text-center text-matrix-green/50 text-xs">
-            Higher score = better constituent representation. Computed from: independence (15%) +
-            follow-through (20%) + public mandate (15%) + effectiveness (20%) +
-            competence (15%) + agency alignment (15%). Click any row to view full profile.
-          </p>
+          <div className="mt-4 space-y-1 text-center">
+            <p className="text-matrix-green/50 text-xs">
+              Higher score = better representation of public mandate. Computed from: independence (15%) +
+              follow-through (20%) + public mandate (15%) + effectiveness (20%) +
+              competence (15%) + agency alignment (15%). Click any row to view full profile.
+            </p>
+            <p className="text-matrix-green/30 text-[10px] font-mono">
+              <span className="text-amber-400/50 border border-amber-400/20 px-1 mr-1.5">HIST</span>
+              = score uses historical/expert consensus estimates; live API data unavailable for that era
+            </p>
+          </div>
     </>
   );
 }
@@ -359,12 +380,22 @@ function JusticeLeaderboard({
                       <span className={`font-bold text-lg ${rankColor(rank)}`}>#{rank}</span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-white group-hover:text-matrix-green transition-colors">
-                        {entry.name}
-                      </span>
-                      {entry.roleTitle.includes("Chief") && (
-                        <span className="ml-2 text-neon-yellow text-[10px]">CHIEF</span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <span className="text-white group-hover:text-matrix-green transition-colors">
+                          {entry.name}
+                        </span>
+                        {entry.roleTitle.includes("Chief") && (
+                          <span className="text-neon-yellow text-[10px]">CHIEF</span>
+                        )}
+                        {entry.casesDecided < 100 && (
+                          <span
+                            className="text-[9px] font-mono tracking-wide text-neon-cyan/40 border border-neon-cyan/20 px-1 shrink-0"
+                            title={`Score based on ${entry.casesDecided} cases — may shift significantly as more decisions are issued`}
+                          >
+                            ~{entry.casesDecided}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-3 py-3 text-center">
                       <span
@@ -417,6 +448,11 @@ function JusticeLeaderboard({
                     >
                       {pp.label}
                     </span>
+                    {entry.casesDecided < 100 && (
+                      <span className="text-[9px] font-mono text-neon-cyan/40 border border-neon-cyan/20 px-1 shrink-0">
+                        ~{entry.casesDecided}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-3 mt-0.5">
                     <ScoreBar score={score} />
@@ -431,11 +467,17 @@ function JusticeLeaderboard({
         </div>
       </div>
 
-      <p className="mt-4 text-center text-matrix-green/50 text-xs">
-        Higher score = more impartial jurisprudence. Computed from: ideological consistency (35%) +
-        independence (30%) + judicial restraint (20%) + bipartisan agreement (15%).
-        Click any row to view full profile.
-      </p>
+      <div className="mt-4 space-y-1 text-center">
+        <p className="text-matrix-green/50 text-xs">
+          Higher score = more impartial jurisprudence. Computed from: ideological consistency (35%) +
+          independence (30%) + judicial restraint (20%) + bipartisan agreement (15%).
+          Click any row to view full profile.
+        </p>
+        <p className="text-matrix-green/30 text-[10px] font-mono">
+          <span className="text-neon-cyan/40 border border-neon-cyan/20 px-1 mr-1.5">~N</span>
+          = fewer than 100 cases decided; score has higher variance and may shift as more decisions are issued
+        </p>
+      </div>
     </>
   );
 }
@@ -827,11 +869,16 @@ function LeaderboardContent() {
 
         {/* Footer note */}
         {!loading && !error && displayed.length > 0 && (
-          <p className="mt-4 text-center text-matrix-green/50 text-xs">
-            Higher score = better constituent representation. Computed from: funding independence (25%) +
-            promise persistence (20%) + independent voting (20%) + funding diversity (15%) +
-            legislative effectiveness (20%). Click any row to view full profile.
-          </p>
+          <div className="mt-4 space-y-1 text-center">
+            <p className="text-matrix-green/50 text-xs">
+              Higher score = better constituent representation. Computed from: funding independence (25%) +
+              promise persistence (20%) + independent voting (20%) + funding diversity (15%) +
+              legislative effectiveness (20%). Click any row to view full profile.
+            </p>
+            <p className="text-matrix-green/30 text-[10px] font-mono">
+              Scores use Bayesian shrinkage — members with limited public data are pulled toward 50, not penalized or rewarded
+            </p>
+          </div>
         )}
         </>}
         </div>
