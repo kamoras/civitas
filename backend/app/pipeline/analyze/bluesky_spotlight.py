@@ -133,7 +133,7 @@ def _publish_spotlight(text: str, senator: Senator) -> bool:
     if not handle or not app_password:
         return False
 
-    url = f"{SITE}/senators/{senator.id}"
+    url = f"{SITE}/scorecard?branch=senate&state={senator.state}&senator={senator.id}"
     full_text = f"{text}\n\n{url}"
 
     if len(full_text) > 300:

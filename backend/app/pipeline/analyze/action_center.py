@@ -2617,13 +2617,31 @@ def _run_refresh(db: Session) -> int:
     except Exception:
         logger.exception("Bluesky spotlight/weekly post failed (non-fatal)")
 
-    # Clean up issues older than 14 days
+    # Clean up unposted issues older than 14 days.
+    # Issues that have been posted to Bluesky are preserved indefinitely
+    # so their permalink URLs remain valid.
     from datetime import timedelta as _td
     cutoff = (datetime.now(timezone.utc) - _td(days=14)).strftime("%Y-%m-%d")
-    deleted = db.query(ActionIssue).filter(ActionIssue.date < cutoff).delete()
+    deleted = (
+        db.query(ActionIssue)
+        .filter(ActionIssue.date < cutoff, ActionIssue.bsky_posted_at.is_(None))
+        .delete()
+    )
     if deleted:
         db.commit()
-        logger.info("Cleaned up %d old action issues", deleted)
+        logger.info("Cleaned up %d old unposted action issues", deleted)
+
+    # Prune api_cache entries older than 60 days to bound unbounded growth.
+    cache_cutoff = (datetime.now(timezone.utc) - _td(days=60)).isoformat()
+    from app.models import ApiCache
+    cache_deleted = (
+        db.query(ApiCache)
+        .filter(ApiCache.cached_at < cache_cutoff)
+        .delete()
+    )
+    if cache_deleted:
+        db.commit()
+        logger.info("Pruned %d stale api_cache entries", cache_deleted)
 
     elapsed = time.perf_counter() - t0
     logger.info(
