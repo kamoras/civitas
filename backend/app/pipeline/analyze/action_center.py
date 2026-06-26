@@ -2464,9 +2464,17 @@ def _run_refresh(db: Session) -> int:
                 setattr(existing, attr, getattr(issue, attr))
             existing.created_at = datetime.utcnow()
             if title_changed:
-                # New story at this rank — treat as fresh for Bluesky posting
-                existing.bsky_posted_at = None
-                existing.bsky_posted_rank = None
+                # Only re-queue for Bluesky if the story hasn't been posted
+                # recently. Minor LLM title rephrasing changes the title on
+                # every hourly run; without this guard every run would post.
+                never_posted = existing.bsky_posted_at is None
+                stale = (
+                    not never_posted
+                    and (datetime.utcnow() - existing.bsky_posted_at).total_seconds() > 6 * 3600
+                )
+                if never_posted or stale:
+                    existing.bsky_posted_at = None
+                    existing.bsky_posted_rank = None
         else:
             db.add(issue)
 
