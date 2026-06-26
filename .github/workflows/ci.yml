@@ -80,7 +80,7 @@ jobs:
       - run: pip install -r requirements.txt
 
       - name: Cache sentence-transformer model
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/huggingface
           key: st-model-all-MiniLM-L6-v2
