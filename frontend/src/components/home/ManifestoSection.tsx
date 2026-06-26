@@ -22,6 +22,22 @@ const MANIFESTO_LINES = [
   "We just made it easier to find.",
 ];
 
+const TYPEWRITER_SPEED = 20;
+const INTER_LINE_GAP = 80;
+
+// Each line starts only after the previous line finishes typing, ensuring
+// exactly one blinking cursor is visible at a time.
+function computeLineDelays(lines: string[], initialDelay: number): number[] {
+  let cum = initialDelay;
+  return lines.map((line) => {
+    const d = cum;
+    if (line !== "") cum += line.length * TYPEWRITER_SPEED + INTER_LINE_GAP;
+    return d;
+  });
+}
+
+const LINE_DELAYS = computeLineDelays(MANIFESTO_LINES, 500);
+
 export default function ManifestoSection() {
   const [visible, setVisible] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -56,8 +72,8 @@ export default function ManifestoSection() {
                     ) : (
                       <TypewriterText
                         text={line}
-                        speed={20}
-                        startDelay={300 + i * 200}
+                        speed={TYPEWRITER_SPEED}
+                        startDelay={LINE_DELAYS[i]}
                         className="text-matrix-green/90"
                       />
                     )}
