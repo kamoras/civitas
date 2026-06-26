@@ -154,7 +154,7 @@ def api_index(request: Request) -> JSONResponse:
                 "GET /api/public/v1/search": "Semantic search — ?q=text &chamber=senate|house &doc_type=X &politician_id=X &limit=N",
             },
             "docs": "/docs",
-            "source": "https://github.com/ryanmack/modern-punk",
+            "source": "https://github.com/kamoras/civitas",
         },
         headers=_CORS_HEADERS,
     )

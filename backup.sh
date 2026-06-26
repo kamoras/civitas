@@ -4,7 +4,7 @@
 # CONFIGURE THESE PATHS for your deployment:
 BACKUP_DIR="/media/usb-backup/civitas-backups"
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DATA_DIR="/var/lib/docker/volumes/modern-punk_app_data/_data"   # Docker volume mount
+DATA_DIR="/var/lib/docker/volumes/civitas_app_data/_data"   # Docker volume mount
 KEEP_DAYS=7
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -34,7 +34,7 @@ fi
 # --- Back up SQLite database (online-safe copy via .backup command) ---
 DB_BACKUP="$BACKUP_DIR/civitas-$DATE.db"
 log "Backing up SQLite database..."
-sqlite3 "$DATA_DIR/modern-punk.db" ".backup '$DB_BACKUP'"
+sqlite3 "$DATA_DIR/civitas.db" ".backup '$DB_BACKUP'"
 log "  DB backup: $(du -h "$DB_BACKUP" | cut -f1)"
 
 # --- Back up ChromaDB data ---

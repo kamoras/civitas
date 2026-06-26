@@ -11,7 +11,7 @@ party alignment, and deterministic scoring. It also features an Action Center
 that surfaces trending civic issues from news feeds, auto-detects ongoing
 national concerns as trackable monitors, builds a year-in-review timeline, and
 provides non-partisan summaries with recommended actions. Everything runs
-locally on a Raspberry Pi 5 with zero cloud AI calls.
+locally on a single self-hosted device with zero cloud AI calls.
 
 ## Architecture
 
@@ -25,12 +25,12 @@ locally on a Raspberry Pi 5 with zero cloud AI calls.
 - **News Feeds**: RSS parsing (AP, NPR, Reuters, PBS) + Google Trends + Reddit trending for Action Center
 - **Action Center**: National monitors (auto-detected ongoing concerns), year-in-review timeline, elections tab, dynamic theme styling
 
-All services, models, and data run on-device. No data leaves the Raspberry Pi.
+All services, models, and data run on-device. No data leaves the server.
 
 ## Repository Layout
 
 ```
-modern-punk/
+civitas/
 ├── backend/
 │   ├── app/
 │   │   ├── api/                 # FastAPI route handlers (senators, representatives, presidents, justices, explore, action, admin, health)
@@ -333,14 +333,14 @@ See `.env.example` for all options. Key variables:
 | `ADMIN_TOKEN` | Yes | Bearer token for admin panel |
 | `LLM_BACKEND` | No | `llama-server` (default) or `ollama` |
 | `LLAMA_SERVER_URL` | No | llama.cpp server URL |
-| `DATABASE_URL` | No | SQLite path (default: `sqlite:////data/modern-punk.db`) |
+| `DATABASE_URL` | No | SQLite path (default: `sqlite:////data/civitas.db`) |
 
 ### Database
 
-SQLite at `/data/modern-punk.db` inside the container (Docker volume
-`modern-punk_app_data`). On the host:
+SQLite at `/data/civitas.db` inside the container (Docker volume
+`civitas_app_data`). On the host:
 ```bash
-sudo sqlite3 /var/lib/docker/volumes/modern-punk_app_data/_data/modern-punk.db
+sudo sqlite3 /var/lib/docker/volumes/civitas_app_data/_data/civitas.db
 ```
 
 SQLAlchemy ORM models are in `backend/app/models.py`. Key tables: `senators`,

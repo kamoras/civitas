@@ -7,7 +7,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
     )
 
-    DATABASE_URL: str = "sqlite:///data/modern-punk.db"
+    DATABASE_URL: str = "sqlite:///data/civitas.db"
     DATA_GOV_API_KEY: str = ""
     OLLAMA_BASE_URL: str = "http://ollama:11434"
     OLLAMA_MODEL: str = "deepseek-r1:1.5b"

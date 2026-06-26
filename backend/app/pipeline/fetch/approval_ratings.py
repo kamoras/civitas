@@ -19,8 +19,8 @@ from app.pipeline.cache import api_cache_get, api_cache_set
 logger = logging.getLogger(__name__)
 
 _WIKI_UA = (
-    "ModernPunk/1.0 "
-    "(https://github.com/modern-punk; civic-transparency-tool) "
+    "Civitas/1.0 "
+    "(https://github.com/kamoras/civitas; civic-transparency-tool) "
     "httpx/0.27"
 )
 

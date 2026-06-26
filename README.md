@@ -59,7 +59,7 @@ external API calls to cloud AI services.
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                          PERSISTENCE LAYER                                   │
 │                                                                              │
-│  SQLite  (modern-punk.db)                ChromaDB  (HNSW vector index)       │
+│  SQLite  (civitas.db)                    ChromaDB  (HNSW vector index)       │
 │  ├── senators / representatives          └── ExploreDocument embeddings      │
 │  ├── KeyVote / SponsoredBill                 (~384-dim, Snowflake Arctic-XS) │
 │  ├── Donor / IndustryDonation / LobbyingMatch                                │
@@ -345,8 +345,8 @@ See the [Methodology page](/about) for full details and inline citations.
 
 ```bash
 # 1. Clone the repo
-git clone git@github.com:kamoras/modern-punk.git
-cd modern-punk
+git clone git@github.com:kamoras/civitas.git
+cd civitas
 
 # 2. Create your env file from the template
 cp .env.example .env
@@ -431,7 +431,7 @@ docker compose run --rm --no-deps backend python -m pytest tests/ -v \
 ### Project Structure
 
 ```
-modern-punk/
+civitas/
 ├── backend/
 │   ├── app/
 │   │   ├── api/              # FastAPI route handlers (senators, representatives, presidents, justices, explore, action, admin)
@@ -489,7 +489,7 @@ See `.env.example` for all options. Key variables:
 | `LLM_BACKEND` | No | `llama-server` (default) or `ollama` |
 | `LLAMA_SERVER_URL` | No | llama.cpp server URL (default: `http://host.docker.internal:8070`) |
 | `OLLAMA_MODEL` | No | Model name for cache keys and Ollama (default: `deepseek-r1:1.5b`) |
-| `DATABASE_URL` | No | SQLite path (default: `sqlite:///data/modern-punk.db`) |
+| `DATABASE_URL` | No | SQLite path (default: `sqlite:///data/civitas.db`) |
 | `PIPELINE_CRON_SCHEDULE` | No | Cron schedule for nightly pipeline (default: `0 3 * * *`) |
 | `PIPELINE_CACHE_TTL_HOURS` | No | API response cache TTL (default: `72`) |
 

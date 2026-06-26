@@ -56,6 +56,9 @@ next-env.d.ts
 # deploy state
 .deploy-*-slot
 
+# database files (never commit data to the repo)
+backend/*.db
+
 # python
 *.egg-info/
 .venv/

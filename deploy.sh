@@ -17,9 +17,9 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$PROJECT_DIR"
 
-NETWORK="modern-punk_default"
-VOLUME_DATA="modern-punk_app_data"
-NGINX_CONF="/etc/nginx/sites-enabled/modern-punk"
+NETWORK="civitas_default"
+VOLUME_DATA="civitas_app_data"
+NGINX_CONF="/etc/nginx/sites-enabled/civitas"
 
 BLUE_FE_PORT=3000; BLUE_BE_PORT=8000
 GREEN_FE_PORT=3001; GREEN_BE_PORT=8001
@@ -83,8 +83,8 @@ server {
     listen [::]:8081;
     server_name _;
 
-    access_log /var/log/nginx/modern-punk.access.log;
-    error_log  /var/log/nginx/modern-punk.error.log;
+    access_log /var/log/nginx/civitas.access.log;
+    error_log  /var/log/nginx/civitas.error.log;
 
     # Security headers
     add_header X-Content-Type-Options "nosniff" always;
@@ -454,7 +454,7 @@ deploy_backend() {
     --network-alias backend \
     --env-file .env \
     --add-host=host.docker.internal:host-gateway \
-    -e DATABASE_URL=sqlite:////data/modern-punk.db \
+    -e DATABASE_URL=sqlite:////data/civitas.db \
     -e OLLAMA_BASE_URL=http://mp-ollama:11434 \
     -e LLM_BACKEND="${LLM_BACKEND}" \
     -e LLAMA_SERVER_URL=http://host.docker.internal:8070 \
@@ -465,7 +465,7 @@ deploy_backend() {
     -p "127.0.0.1:${new_port}:8000" \
     --memory=4g \
     --restart unless-stopped \
-    modern-punk-backend:latest
+    civitas-backend:latest
 
   if ! wait_healthy "http://localhost:${new_port}/api/health" "Backend" 180; then
     err "Rolling back backend"
@@ -515,7 +515,7 @@ deploy_frontend() {
     -p "127.0.0.1:${new_port}:3000" \
     --memory=512m \
     --restart unless-stopped \
-    modern-punk-frontend:latest
+    civitas-frontend:latest
 
   if ! wait_healthy "http://localhost:${new_port}/" "Frontend" 60; then
     err "Rolling back frontend"

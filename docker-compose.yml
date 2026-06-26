@@ -1,5 +1,6 @@
 # For development or simple usage: docker compose up -d
 # For zero-downtime production deploys: ./deploy.sh (manages frontend/backend separately)
+name: civitas
 services:
   ollama:
     image: ollama/ollama:latest
@@ -38,7 +39,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      - DATABASE_URL=sqlite:////data/modern-punk.db
+      - DATABASE_URL=sqlite:////data/civitas.db
       - OLLAMA_BASE_URL=http://mp-ollama:11434
       - LLM_BACKEND=llama-server
       - LLAMA_SERVER_URL=http://host.docker.internal:8070

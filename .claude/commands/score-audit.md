@@ -13,7 +13,7 @@ Runs a full diagnostic on scoring algorithm accuracy and data quality. Use this 
 ```bash
 docker exec mp-backend-blue python3 - <<'EOF'
 import sqlite3, statistics
-conn = sqlite3.connect('/data/modern-punk.db')
+conn = sqlite3.connect('/data/civitas.db')
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
 
@@ -59,7 +59,7 @@ Compare specific senators against known facts. These should be stable reference 
 ```bash
 docker exec mp-backend-blue python3 - <<'EOF'
 import sqlite3
-conn = sqlite3.connect('/data/modern-punk.db')
+conn = sqlite3.connect('/data/civitas.db')
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
 
@@ -103,7 +103,7 @@ EOF
 ```bash
 docker exec mp-backend-blue python3 - <<'EOF'
 import sqlite3
-conn = sqlite3.connect('/data/modern-punk.db')
+conn = sqlite3.connect('/data/civitas.db')
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
 
@@ -198,7 +198,7 @@ High correlation between two dimensions means they're measuring the same thing (
 ```bash
 docker exec mp-backend-blue python3 - <<'EOF'
 import sqlite3, statistics, math
-conn = sqlite3.connect('/data/modern-punk.db')
+conn = sqlite3.connect('/data/civitas.db')
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
 
@@ -255,7 +255,7 @@ SENATOR_NAME="McConnell"
 
 docker exec mp-backend-blue python3 - <<EOF
 import sqlite3, json
-conn = sqlite3.connect('/data/modern-punk.db')
+conn = sqlite3.connect('/data/civitas.db')
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
 
@@ -305,7 +305,7 @@ EOF
 ```bash
 docker exec mp-backend-blue python3 - <<'EOF'
 import sqlite3
-conn = sqlite3.connect('/data/modern-punk.db')
+conn = sqlite3.connect('/data/civitas.db')
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
 
@@ -343,7 +343,7 @@ After multiple pipeline runs, verify that scores are stable (not oscillating wil
 ```bash
 docker exec mp-backend-blue python3 - <<'EOF'
 import sqlite3
-conn = sqlite3.connect('/data/modern-punk.db')
+conn = sqlite3.connect('/data/civitas.db')
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
 
@@ -391,7 +391,7 @@ Run this BEFORE and AFTER any algorithm change to measure impact:
 ```bash
 docker exec mp-backend-blue python3 - <<'EOF'
 import sqlite3, statistics
-conn = sqlite3.connect('/data/modern-punk.db')
+conn = sqlite3.connect('/data/civitas.db')
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
 

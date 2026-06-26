@@ -21,8 +21,8 @@ Thanks for your interest in contributing. Civitas is a civic transparency projec
 ### Running locally
 
 ```bash
-git clone https://github.com/kamoras/modern-punk.git
-cd modern-punk
+git clone https://github.com/kamoras/civitas.git
+cd civitas
 
 # Copy and fill in the environment file
 cp .env.example .env
