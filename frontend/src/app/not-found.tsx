@@ -13,14 +13,13 @@ export default function NotFound() {
           className="font-pixel text-6xl sm:text-8xl text-neon-pink mb-4"
         />
         <div className="terminal-window max-w-md p-6 mb-8">
-          <div className="text-neon-cyan text-lg mb-2">{">"} FILE NOT FOUND</div>
-          <p className="text-matrix-green/60 text-sm">
-            This page has been redacted. Or maybe it never existed. Just like your senator&apos;s
-            integrity.
+          <div className="text-neon-cyan font-mono text-xs tracking-widest mb-2">FILE NOT FOUND</div>
+          <p className="text-matrix-green/60 text-sm font-mono">
+            This page doesn&apos;t exist or has been moved. The public record is still out there.
           </p>
         </div>
         <Link href="/" className="btn-retro">
-          [ RETURN TO BASE ]
+          RETURN TO BASE
         </Link>
       </main>
     </>

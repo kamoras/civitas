@@ -113,7 +113,7 @@ function SenatorSelector({
 
   return (
     <div className="terminal-window p-4 space-y-3">
-      <div className="font-pixel text-[10px] text-neon-cyan/60 tracking-widest">
+      <div className="font-mono text-xs text-neon-cyan/60 tracking-widest">
         {label} — SELECT LEGISLATOR
       </div>
 
@@ -121,23 +121,23 @@ function SenatorSelector({
       <div className="flex gap-2">
         <button
           onClick={() => handleChamberToggle("senate")}
-          className={`font-pixel text-[10px] px-2 py-1 border transition-colors ${
+          className={`font-mono text-xs px-2 py-1 border transition-colors ${
             chamber === "senate"
               ? "border-neon-cyan/60 bg-neon-cyan/10 text-neon-cyan"
               : "border-matrix-green/20 text-matrix-green/50 hover:border-matrix-green/40 hover:text-matrix-green/70"
           }`}
         >
-          [SEN]
+          SEN
         </button>
         <button
           onClick={() => handleChamberToggle("house")}
-          className={`font-pixel text-[10px] px-2 py-1 border transition-colors ${
+          className={`font-mono text-xs px-2 py-1 border transition-colors ${
             chamber === "house"
               ? "border-neon-cyan/60 bg-neon-cyan/10 text-neon-cyan"
               : "border-matrix-green/20 text-matrix-green/50 hover:border-matrix-green/40 hover:text-matrix-green/70"
           }`}
         >
-          [HOUSE]
+          HOUSE
         </button>
       </div>
 
@@ -155,7 +155,7 @@ function SenatorSelector({
             if (e.target.value) loadMembers(e.target.value, chamber);
           }}
           className="w-full bg-matrix-dark-green/20 border border-matrix-green/30 text-matrix-green
-                     px-3 py-2 font-pixel text-xs focus:outline-none focus:border-neon-cyan/50"
+                     px-3 py-2 font-mono text-xs focus:outline-none focus:border-neon-cyan/50"
         >
           <option value="">— SELECT STATE —</option>
           {stateOptions.map((s) => (
@@ -167,8 +167,8 @@ function SenatorSelector({
       </div>
 
       {loading && (
-        <div className="text-matrix-green/40 font-pixel text-[10px] animate-pulse">
-          [LOADING...]
+        <div className="text-matrix-green/40 font-mono text-xs tracking-widest animate-pulse">
+          LOADING...
         </div>
       )}
 
@@ -178,7 +178,7 @@ function SenatorSelector({
             <button
               key={s.id}
               onClick={() => onSelect(s, chamber)}
-              className={`w-full text-left px-3 py-2 border transition-colors font-pixel text-xs ${
+              className={`w-full text-left px-3 py-2 border transition-colors font-mono text-xs ${
                 s.id === selectedId
                   ? "border-neon-cyan/60 bg-neon-cyan/10 text-neon-cyan"
                   : "border-matrix-green/20 hover:border-matrix-green/40 text-matrix-green/80"
@@ -260,7 +260,7 @@ function ComparisonTable({
           <div className="text-matrix-green/80 text-xs font-pixel leading-snug mt-1">
             {left.name}
           </div>
-          <div className="text-matrix-green/30 font-pixel text-[9px] mt-0.5 uppercase">
+          <div className="text-matrix-green/30 font-mono text-[10px] mt-0.5 uppercase tracking-wide">
             {leftChamber === "house" ? "House" : "Senate"}
           </div>
         </div>
@@ -275,7 +275,7 @@ function ComparisonTable({
           <div className="text-matrix-green/80 text-xs font-pixel leading-snug mt-1">
             {right.name}
           </div>
-          <div className="text-matrix-green/30 font-pixel text-[9px] mt-0.5 uppercase">
+          <div className="text-matrix-green/30 font-mono text-[10px] mt-0.5 uppercase tracking-wide">
             {rightChamber === "house" ? "House" : "Senate"}
           </div>
         </div>
@@ -304,7 +304,7 @@ function ComparisonTable({
                 </div>
               </div>
               <div className="text-center px-1">
-                <div className="text-[9px] text-matrix-green/50 font-pixel leading-snug">
+                <div className="text-[10px] text-matrix-green/50 font-mono leading-snug tracking-wide">
                   {SCORE_LABELS[key]}
                 </div>
               </div>
@@ -338,9 +338,9 @@ function ComparisonTable({
           { label: "PAC %", lv: `${leftPacPct}%`, rv: `${rightPacPct}%` },
         ].map(({ label, lv, rv }) => (
           <div key={label} className="grid grid-cols-3 items-center px-3 py-1.5">
-            <div className="text-right font-pixel text-[10px] text-neon-pink/60">{lv}</div>
-            <div className="text-center text-[9px] text-matrix-green/40 font-pixel">{label}</div>
-            <div className="text-left font-pixel text-[10px] text-neon-pink/60">{rv}</div>
+            <div className="text-right font-mono text-xs text-neon-pink/60">{lv}</div>
+            <div className="text-center text-[10px] text-matrix-green/40 font-mono tracking-wide">{label}</div>
+            <div className="text-left font-mono text-xs text-neon-pink/60">{rv}</div>
           </div>
         ))}
       </div>
@@ -349,13 +349,13 @@ function ComparisonTable({
       <div className="grid grid-cols-2 border-t border-matrix-green/20">
         <a
           href={leftScorecardUrl}
-          className="p-3 text-center font-pixel text-[10px] text-neon-cyan/60 hover:bg-neon-cyan/5 hover:text-neon-cyan transition-colors border-r border-matrix-green/20"
+          className="p-3 text-center font-mono text-xs tracking-widest text-neon-cyan/60 hover:bg-neon-cyan/5 hover:text-neon-cyan transition-colors border-r border-matrix-green/20"
         >
           FULL SCORECARD →
         </a>
         <a
           href={rightScorecardUrl}
-          className="p-3 text-center font-pixel text-[10px] text-neon-cyan/60 hover:bg-neon-cyan/5 hover:text-neon-cyan transition-colors"
+          className="p-3 text-center font-mono text-xs tracking-widest text-neon-cyan/60 hover:bg-neon-cyan/5 hover:text-neon-cyan transition-colors"
         >
           FULL SCORECARD →
         </a>
@@ -493,8 +493,8 @@ function ComparePageInner() {
         <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
           <div className="max-w-5xl mx-auto">
             <div className="terminal-window p-8 text-center">
-              <div className="font-pixel text-sm text-matrix-green/40 animate-pulse">
-                [LOADING...]
+              <div className="font-mono text-xs text-matrix-green/40 tracking-widest animate-pulse">
+                LOADING...
               </div>
             </div>
           </div>
@@ -553,13 +553,13 @@ function ComparePageInner() {
                 <button
                   onClick={handleQuickCompare}
                   disabled={quickLoading}
-                  className="mt-2 px-4 py-2 border border-neon-cyan/40 text-neon-cyan font-pixel text-xs
+                  className="mt-2 px-4 py-2 border border-neon-cyan/40 text-neon-cyan font-mono text-xs tracking-widest
                              hover:bg-neon-cyan/10 hover:border-neon-cyan/70 transition-colors
                              disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {quickLoading
-                    ? "[LOADING...]"
-                    : `[ COMPARE MY SENATORS FROM ${savedStateName ?? savedState} ]`}
+                    ? "LOADING..."
+                    : `COMPARE MY SENATORS FROM ${savedStateName ?? savedState}`}
                 </button>
               )}
             </div>

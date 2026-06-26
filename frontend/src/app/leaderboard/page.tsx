@@ -156,7 +156,7 @@ function PresidentLeaderboard({
   if (loading) {
     return (
       <div className="terminal-window p-8 text-center" role="status" aria-live="polite">
-        <p className="text-matrix-green animate-pulse">{">"} LOADING PRESIDENTIAL DATA...</p>
+        <p className="text-matrix-green/60 font-mono text-xs tracking-widest animate-pulse">LOADING PRESIDENTIAL DATA...</p>
       </div>
     );
   }
@@ -308,7 +308,7 @@ function JusticeLeaderboard({
   if (loading) {
     return (
       <div className="terminal-window p-8 text-center" role="status" aria-live="polite">
-        <p className="text-matrix-green animate-pulse">{">"} LOADING SCOTUS DATA...</p>
+        <p className="text-matrix-green/60 font-mono text-xs tracking-widest animate-pulse">LOADING SCOTUS DATA...</p>
       </div>
     );
   }
@@ -631,8 +631,8 @@ function LeaderboardContent() {
         {/* Loading / Error */}
         {(branch === "senate" ? loading : houseLoading) && (
           <div className="terminal-window p-8 text-center" role="status" aria-live="polite">
-            <p className="text-matrix-green animate-pulse">
-              {">"} LOADING {branch === "house" ? "REPRESENTATIVE" : "SENATOR"} DATA...
+            <p className="text-matrix-green/60 font-mono text-xs tracking-widest animate-pulse">
+              LOADING {branch === "house" ? "REPRESENTATIVE" : "SENATOR"} DATA...
             </p>
           </div>
         )}

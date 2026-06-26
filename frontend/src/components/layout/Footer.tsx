@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import VisitorCounter from "@/components/effects/VisitorCounter";
 
 function DigestSubscribeForm() {
   const [email, setEmail] = useState("");
@@ -42,7 +41,7 @@ function DigestSubscribeForm() {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col items-center gap-2 w-full max-w-sm">
-      <p className="text-[10px] font-pixel text-matrix-green/40 tracking-wider">WEEKLY DIGEST</p>
+      <p className="text-[10px] font-mono text-matrix-green/40 tracking-widest">WEEKLY DIGEST</p>
       <div className="flex w-full gap-2">
         <input
           type="email"
@@ -56,7 +55,7 @@ function DigestSubscribeForm() {
         <button
           type="submit"
           disabled={status === "loading"}
-          className="text-[10px] font-pixel px-3 py-2 border border-emerald-500/40 text-emerald-400
+          className="text-[10px] font-mono tracking-widest px-3 py-2 border border-emerald-500/40 text-emerald-400
                      hover:bg-emerald-500/10 transition-colors disabled:opacity-40 shrink-0"
         >
           {status === "loading" ? "..." : "SUBSCRIBE"}
@@ -100,9 +99,6 @@ export default function Footer() {
 
         {/* Digest subscribe */}
         <DigestSubscribeForm />
-
-        {/* Visitor Counter */}
-        <VisitorCounter />
 
         {/* Disclaimer */}
         <p className="text-xs text-matrix-green/50 max-w-lg text-center leading-relaxed">

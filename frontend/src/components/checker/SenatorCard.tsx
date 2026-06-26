@@ -66,7 +66,7 @@ function ContactInfo({ senator }: { senator: Senator }) {
 
   return (
     <div className="mt-3 p-3 border border-neon-cyan/15 bg-neon-cyan/5 space-y-2">
-      <div className="font-pixel text-[10px] text-neon-cyan/60 tracking-wider">
+      <div className="font-mono text-xs text-neon-cyan/60 tracking-widest">
         CONTACT YOUR REPRESENTATIVE
       </div>
       <div className="flex flex-wrap items-center gap-3">
@@ -75,7 +75,7 @@ function ContactInfo({ senator }: { senator: Senator }) {
             href={safeHref(senator.contactFormUrl) || "#"}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-neon-cyan/30 text-neon-cyan/80 font-pixel text-[10px] hover:bg-neon-cyan/10 hover:border-neon-cyan/50 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-neon-cyan/30 text-neon-cyan/80 font-mono text-xs tracking-widest hover:bg-neon-cyan/10 hover:border-neon-cyan/50 transition-colors"
           >
             SEND A MESSAGE <span aria-hidden="true">↗</span>
           </a>
@@ -83,7 +83,7 @@ function ContactInfo({ senator }: { senator: Senator }) {
         {senator.officePhone && (
           <a
             href={`tel:${senator.officePhone.replace(/[^0-9+]/g, "")}`}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-matrix-green/20 text-matrix-green/60 font-pixel text-[10px] hover:bg-matrix-green/5 hover:border-matrix-green/30 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-matrix-green/20 text-matrix-green/60 font-mono text-xs tracking-widest hover:bg-matrix-green/5 hover:border-matrix-green/30 transition-colors"
           >
             CALL: {senator.officePhone}
           </a>
@@ -150,26 +150,26 @@ export default function SenatorCard({ senator, chamber = "senate" }: SenatorCard
                 href={`https://www.fec.gov/data/candidates/?search=${encodeURIComponent(senator.name)}&office=S`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
+                className="text-[10px] font-mono tracking-wide text-matrix-green/50 hover:text-neon-cyan transition-colors"
               >
-                [FEC FILINGS]
+                FEC FILINGS ↗
               </a>
               <a
                 href={`https://www.congress.gov/member/${senator.name.toLowerCase().replace(/\s+/g, "-")}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
+                className="text-[10px] font-mono tracking-wide text-matrix-green/50 hover:text-neon-cyan transition-colors"
               >
-                [CONGRESS.GOV]
+                CONGRESS.GOV ↗
               </a>
               {senator.websiteUrl && (
                 <a
                   href={safeHref(senator.websiteUrl) || "#"}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
+                  className="text-[10px] font-mono tracking-wide text-matrix-green/50 hover:text-neon-cyan transition-colors"
                 >
-                  [OFFICIAL SITE]
+                  OFFICIAL SITE ↗
                 </a>
               )}
             </div>
@@ -254,7 +254,7 @@ export default function SenatorCard({ senator, chamber = "senate" }: SenatorCard
         <div className="flex justify-end">
           <Link
             href={`/compare?leftId=${senator.id}&leftChamber=${chamber}`}
-            className="font-pixel text-[10px] text-neon-cyan/50 hover:text-neon-cyan border border-neon-cyan/20 px-2 py-0.5 transition-colors"
+            className="font-mono text-xs tracking-widest text-neon-cyan/60 hover:text-neon-cyan border border-neon-cyan/25 hover:border-neon-cyan/50 px-3 py-1.5 transition-colors"
           >
             COMPARE →
           </Link>

@@ -37,7 +37,7 @@ export default function HeroSection() {
         />
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3 mb-16">
+      <div className="flex flex-col sm:flex-row gap-3 mb-4">
         <Link href="/action" className="btn-retro">
           ACTION CENTER
         </Link>
@@ -45,6 +45,10 @@ export default function HeroSection() {
           SCORECARDS
         </Link>
       </div>
+
+      <p className="mb-12 text-[11px] font-mono text-matrix-green/30 tracking-widest uppercase">
+        No login · no paywall · just the data
+      </p>
 
       <div className="absolute bottom-0 left-0 right-0">
         <Marquee items={MARQUEE_ITEMS} />

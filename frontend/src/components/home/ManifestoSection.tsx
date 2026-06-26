@@ -15,13 +15,11 @@ const MANIFESTO_LINES = [
   "through FEC filings and Senate records",
   "just to see who's funding who.",
   "",
-  "So we built this. Public data,",
-  "organized so you can actually read it.",
+  "So we built this. Campaign finance, votes,",
+  "lobbying, and legislation — all in one place.",
   "",
   "Every dollar is on the public record.",
   "We just made it easier to find.",
-  "",
-  "This is the first tool. More are coming.",
 ];
 
 export default function ManifestoSection() {
@@ -56,8 +54,8 @@ export default function ManifestoSection() {
                     ) : (
                       <TypewriterText
                         text={line}
-                        speed={25}
-                        startDelay={500 + i * 400}
+                        speed={20}
+                        startDelay={300 + i * 200}
                         className="text-matrix-green/90"
                       />
                     )}
@@ -72,7 +70,7 @@ export default function ManifestoSection() {
 
         <div className="text-center mt-12">
           <Link href="/scorecard" className="btn-retro text-lg">
-            [ CHECK YOUR REPRESENTATIVES ]
+            CHECK YOUR REPRESENTATIVES
           </Link>
           <p className="mt-4 text-sm text-matrix-green/40">no login. no paywall. just the data.</p>
         </div>

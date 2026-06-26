@@ -84,7 +84,7 @@ function ResultCard({
         <div className="flex items-start justify-between gap-3 mb-2">
           <div className="flex items-center gap-2 flex-wrap">
             <span
-              className={`text-[10px] font-pixel tracking-wider ${chamberColor(result.chamber)}`}
+              className={`text-[10px] font-mono tracking-wider ${chamberColor(result.chamber)}`}
             >
               {result.chamber === "Regulatory" && result.agencyName
                 ? result.agencyName
@@ -95,7 +95,7 @@ function ResultCard({
               {docTypeLabel(result.docType)}
             </span>
             {commentOpen && (
-              <span className="text-[10px] font-pixel px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 animate-pulse">
+              <span className="text-[10px] font-mono tracking-wide px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 animate-pulse">
                 OPEN FOR COMMENT
               </span>
             )}
@@ -125,7 +125,7 @@ function ResultCard({
               </span>
             )}
           </div>
-          <span className="text-[10px] font-pixel text-neon-cyan/50">
+          <span className="text-[10px] font-mono tracking-wide text-neon-cyan/50">
             VIEW DETAILS →
           </span>
         </div>
@@ -143,7 +143,7 @@ function ResultCard({
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="text-[10px] font-pixel px-3 py-1.5 rounded
+            className="text-[10px] font-mono tracking-wide px-3 py-1.5 rounded
                        bg-emerald-500/20 text-emerald-400 border border-emerald-500/40
                        hover:bg-emerald-500/30 hover:border-emerald-500/60
                        transition-colors shrink-0"
@@ -311,12 +311,12 @@ function ExplorePageInner() {
                     disabled={loading || !query.trim()}
                     aria-busy={loading}
                     aria-label={loading ? "Searching" : "Search"}
-                    className="text-[10px] font-pixel text-neon-cyan/70 hover:text-neon-cyan
+                    className="text-[10px] font-mono tracking-widest text-neon-cyan/70 hover:text-neon-cyan
                                disabled:text-matrix-green/20 transition-colors shrink-0 px-2 py-1
                                border border-neon-cyan/30 hover:border-neon-cyan/60 disabled:border-matrix-green/10
                                rounded"
                   >
-                    {loading ? "[SEARCHING...]" : "[SEARCH]"}
+                    {loading ? "SEARCHING..." : "SEARCH"}
                   </button>
                 </div>
               </div>
