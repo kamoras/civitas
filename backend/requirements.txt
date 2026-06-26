@@ -45,7 +45,7 @@ Mako==1.3.12
 markdown-it-py==4.0.0
 MarkupSafe==3.0.3
 mdurl==0.1.2
-mmh3==5.2.0
+mmh3==5.2.1
 mpmath==1.3.0
 msgpack==1.2.1
 networkx==3.6.1
