@@ -1,0 +1,55 @@
+name: Bug report
+description: Something is broken or showing incorrect data
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing — check that the issue isn't a stale pipeline run. Data refreshes nightly; a senator's score or an action center issue may lag by up to 24 hours.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to ...
+        2. Click on ...
+        3. See error
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Frontend (UI / display)
+        - Backend API
+        - Data pipeline
+        - Score calculation
+        - Action center
+        - Self-hosting / deployment
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Browser, OS, self-hosted vs civitas.vote, relevant senator/rep name, etc.
