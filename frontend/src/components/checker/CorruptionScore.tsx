@@ -4,7 +4,7 @@ import { Senator, CampaignPromise, VotingRecord } from "@/types/senator";
 import { calculateOverallScore, getScoreLabel, getScoreColor } from "@/lib/corruption";
 import { useScoreWeights } from "@/hooks/useConfig";
 import MetricTooltip from "./MetricTooltip";
-import { usePlainLanguage } from "@/context/PlainLanguageContext";
+import { TECHNICAL_TERMS } from "@/lib/plainLanguage";
 import type { ScoreKey } from "@/lib/plainLanguage";
 
 interface RepresentationScoreProps {
@@ -86,8 +86,6 @@ export default function CorruptionScore({ breakdown, promises, votingRecord, fun
   const overall = calculateOverallScore(breakdown, weights);
   const label = getScoreLabel(overall);
   const colorClass = getScoreColor(overall);
-  const { terms } = usePlainLanguage();
-
   const evaluable = (promises ?? []).filter(p => p.alignment !== "unclear").length;
   const totalPromises = (promises ?? []).length;
   const promiseBasis: string | undefined =
@@ -131,7 +129,7 @@ export default function CorruptionScore({ breakdown, promises, votingRecord, fun
 
       <div className="space-y-3">
         {SCORE_KEYS.map((key) => {
-          const t = terms(key);
+          const t = TECHNICAL_TERMS[key];
           return <ScoreBar key={key} value={breakdown[key]} label={t.label} description={t.description} basis={scoreBasis[key]} />;
         })}
       </div>
