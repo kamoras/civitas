@@ -253,7 +253,7 @@ export default function SenatorCard({ senator, chamber = "senate" }: SenatorCard
         {/* ── Compare link ── */}
         <div className="flex justify-end">
           <Link
-            href={`/compare?leftId=${senator.id}&chamber=${chamber}`}
+            href={`/compare?leftId=${senator.id}&leftChamber=${chamber}`}
             className="font-pixel text-[10px] text-neon-cyan/50 hover:text-neon-cyan border border-neon-cyan/20 px-2 py-0.5 transition-colors"
           >
             COMPARE →
