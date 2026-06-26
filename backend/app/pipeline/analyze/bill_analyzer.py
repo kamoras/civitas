@@ -308,7 +308,7 @@ def classify_policy_area(
         from app.pipeline.analyze.bill_learning import lookup_exact
         exact = lookup_exact(db_session, bill_id)
         if exact:
-            return exact, 1.0
+            return exact  # already a (policy_area, confidence) tuple
 
     # Seed check for trivially procedural items (cold-start safety net)
     if _is_procedural_seed_match(text):

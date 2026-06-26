@@ -170,8 +170,12 @@ def classify_bill_by_reference(
     return best_area, confidence
 
 
-def lookup_exact(db: Session, bill_id: str) -> str | None:
-    """Check if this exact bill was classified in a prior run."""
+def lookup_exact(db: Session, bill_id: str) -> tuple[str, float] | None:
+    """Check if this exact bill was classified in a prior run.
+
+    Returns (policy_area, confidence) if found, None otherwise.
+    Confidence is the value stored at classification time — not clamped to 1.0.
+    """
     row = (
         db.query(LearnedClassification)
         .filter(
@@ -180,7 +184,7 @@ def lookup_exact(db: Session, bill_id: str) -> str | None:
         )
         .first()
     )
-    return row.value if row else None
+    return (row.value, row.confidence) if row else None
 
 
 def record_classification(

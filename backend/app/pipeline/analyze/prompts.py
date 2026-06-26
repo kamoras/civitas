@@ -66,6 +66,6 @@ Return JSON:
   "category": "<Main Category>",
   "subTopics": ["<sub-topic 1>", "<sub-topic 2>", "..."],
   "keywords": ["<word1>", "<word2>", "..."],
-  "searchQuery": "<A optimized 1-sentence description of the promise's intent for embedding similarity>"
+  "searchQuery": "<An optimized 1-sentence description of the promise's intent for embedding similarity>"
 }}""",
     }

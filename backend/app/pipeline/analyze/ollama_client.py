@@ -32,7 +32,19 @@ def _make_input_hash(prompt_version: str, input_data: Any, model: str = "") -> s
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
+def _strip_thinking_tokens(text: str) -> str:
+    """Strip DeepSeek-R1 <think>...</think> chain-of-thought blocks.
+
+    R1 models emit reasoning traces before the final answer. If not removed,
+    the greedy JSON-extraction regex matches from the first { inside the think
+    block to the last } in the output, producing an unparseable span.
+    """
+    return re.sub(r"<think>[\s\S]*?</think>", "", text, flags=re.IGNORECASE).strip()
+
+
 def extract_json(text: str) -> Any | None:
+    text = _strip_thinking_tokens(text)
+
     try:
         return json.loads(text.strip())
     except (json.JSONDecodeError, ValueError):
@@ -45,6 +57,8 @@ def extract_json(text: str) -> Any | None:
         except (json.JSONDecodeError, ValueError):
             pass
 
+    # Greedy match — finds the maximal JSON span (first { to last }).
+    # Think-token stripping above ensures no spurious { before the JSON.
     json_match = re.search(r"(\[[\s\S]*\]|\{[\s\S]*\})", text)
     if json_match:
         try:
@@ -129,12 +143,15 @@ def _call_ollama(
         "options": {
             "num_predict": max_tokens,
             "num_ctx": num_ctx,
+            "temperature": 0.0,
         },
     }).encode()
     req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=http_timeout) as resp:
         raw = resp.read()
     data = json.loads(raw)
+    if data.get("done_reason") == "length":
+        logger.warning("Ollama output truncated (done_reason=length) for model %s", model)
     return data.get("response", "")
 
 
