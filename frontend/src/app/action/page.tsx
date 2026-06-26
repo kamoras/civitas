@@ -19,7 +19,7 @@ const CivicActionWidget = dynamic(
   () => import("@/components/action/CivicTracker"),
   { ssr: false },
 );
-import type { ActionIssue, ActionIssuesResponse, ActionItem, DailyTheme } from "@/types/action";
+import type { ActionIssue, ActionIssuesResponse, DailyTheme } from "@/types/action";
 import { STATES } from "@/data/states";
 
 const GlobeTab = dynamic(() => import("@/components/action/GlobeTab"), {
@@ -78,62 +78,6 @@ const PARTY_BORDER: Record<string, string> = {
 
 type Tab = "issues" | "my-reps" | "monitors" | "timeline" | "elections" | "world";
 
-const ACTION_TYPE_META: Record<string, { label: string; labelWithState: string; url: string; urlWithState?: (s: string) => string }> = {
-  contact_senator: {
-    label: "Find Your Senators",
-    labelWithState: "View Your Senators' Scores",
-    url: "https://www.senate.gov/senators/senators-contact.htm",
-    urlWithState: (s) => `/scorecard?branch=senate&state=${s}`,
-  },
-  contact_representative: {
-    label: "Find Your Rep",
-    labelWithState: "View Your Reps' Scores",
-    url: "https://www.house.gov/representatives/find-your-representative",
-    urlWithState: (s) => `/scorecard?branch=house&state=${s}`,
-  },
-  contact_whitehouse: {
-    label: "Contact White House",
-    labelWithState: "Contact White House",
-    url: "https://www.whitehouse.gov/contact/",
-  },
-  public_comment: {
-    label: "Submit Public Comment",
-    labelWithState: "Submit Public Comment",
-    url: "https://www.regulations.gov",
-  },
-  track_legislation: {
-    label: "Track on Congress.gov",
-    labelWithState: "Track on Congress.gov",
-    url: "https://www.congress.gov",
-  },
-  register_vote: {
-    label: "Register to Vote",
-    labelWithState: "Register to Vote",
-    url: "https://vote.gov",
-    urlWithState: (s) => `https://vote.gov/register/${s.toLowerCase()}`,
-  },
-  attend_hearing: {
-    label: "Find Town Halls",
-    labelWithState: "Find Town Halls",
-    url: "https://townhallproject.com",
-  },
-};
-
-function getActionUrl(action: ActionItem, userState: string | null): string | null {
-  const meta = ACTION_TYPE_META[action.type];
-  if (userState && meta?.urlWithState) return meta.urlWithState(userState);
-  if (action.url) return action.url;
-  return meta?.url || null;
-}
-
-function getActionLabel(action: ActionItem, userState: string | null): string {
-  const meta = ACTION_TYPE_META[action.type];
-  if (!meta) return "TAKE ACTION";
-  if (userState && meta.urlWithState) return `${meta.labelWithState} (${userState})`;
-  return meta.label;
-}
-
-
 function StatePicker({
   userState,
   onSelect,
@@ -177,64 +121,6 @@ function StatePicker({
   );
 }
 
-function linkLabel(url: string): string {
-  try {
-    const host = new URL(url).hostname.replace(/^www\./, "");
-    const known: Record<string, string> = {
-      "senate.gov": "SENATE.GOV",
-      "house.gov": "HOUSE.GOV",
-      "whitehouse.gov": "WHITEHOUSE.GOV",
-      "congress.gov": "CONGRESS.GOV",
-      "regulations.gov": "REGULATIONS.GOV",
-      "vote.gov": "VOTE.GOV",
-      "townhallproject.com": "TOWNHALLPROJECT.COM",
-    };
-    return known[host] || host.toUpperCase();
-  } catch {
-    return "LINK";
-  }
-}
-
-function ActionItemCard({
-  action,
-  userState,
-}: {
-  action: ActionItem;
-  userState: string | null;
-}) {
-  const url = getActionUrl(action, userState);
-  const stateLabel = getActionLabel(action, userState);
-  const isInternal = url?.startsWith("/");
-  const site = url && !isInternal ? linkLabel(url) : null;
-
-  return (
-    <div className="terminal-window p-3 border-l-2 border-l-neon-cyan/40 flex flex-col gap-2">
-      <span className="text-sm text-matrix-green/80">{action.text}</span>
-      {url && (
-        <div className="flex items-center gap-2 flex-wrap">
-          {isInternal ? (
-            <Link
-              href={safeHref(url) || "#"}
-              className="text-[10px] font-pixel text-neon-cyan/70 hover:text-neon-cyan border border-neon-cyan/30 hover:border-neon-cyan/60 px-2 py-1 transition-colors flex items-center gap-1"
-            >
-              {stateLabel} →
-            </Link>
-          ) : (
-            <a
-              href={safeHref(url) || "#"}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[10px] font-pixel text-neon-cyan/70 hover:text-neon-cyan border border-neon-cyan/30 hover:border-neon-cyan/60 px-2 py-1 transition-colors flex items-center gap-1"
-            >
-              {site} <span aria-hidden="true">↗</span>
-            </a>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 const TABS: { id: Tab; label: string; color: string }[] = [
   { id: "issues", label: "ISSUES", color: "text-neon-cyan border-neon-cyan" },
   { id: "my-reps", label: "MY REPS", color: "text-neon-pink border-neon-pink" },
@@ -272,40 +158,86 @@ function SourceBadge({ name, url }: { name: string; url?: string }) {
   );
 }
 
-function SenatorChips({ issue }: { issue: ActionIssue }) {
-  if (!issue.relatedSenators || issue.relatedSenators.length === 0) return null;
+function SenatorChips({ issue, userState }: { issue: ActionIssue; userState: string | null }) {
+  const senators = issue.relatedSenators ?? [];
+
+  if (senators.length === 0 && !userState) return null;
+
+  const contactUrl = (s: (typeof senators)[0]) =>
+    s.contactFormUrl || s.websiteUrl || null;
+
+  const scoreUrl = (s: (typeof senators)[0]) =>
+    `/scorecard?branch=${s.chamber === "house" ? "house" : "senate"}&state=${s.state}&${s.chamber === "house" ? "rep" : "senator"}=${s.id}`;
 
   return (
     <div className="mb-6">
       <h3 className="font-pixel text-sm text-neon-pink/80 mb-3">
-        {">"} REPRESENTATIVES IN COVERAGE
+        {">"} {senators.length > 0 ? "CONTACT REPRESENTATIVES" : "CONTACT YOUR REPRESENTATIVES"}
       </h3>
-      <div className="flex flex-wrap gap-2">
-        {issue.relatedSenators.map((s) => (
-          <Link
-            key={s.id}
-            href={`/scorecard?branch=${s.chamber === "house" ? "house" : "senate"}&state=${s.state}&${s.chamber === "house" ? "rep" : "senator"}=${s.id}`}
-            className={`flex items-start gap-2 px-3 py-2 border ${PARTY_BORDER[s.party]} bg-matrix-dark-green/20 hover:border-neon-cyan/50 transition-all group`}
-          >
-            <span className={`font-pixel text-[10px] mt-0.5 shrink-0 ${PARTY_COLORS[s.party]}`}>
-              [{s.party}-{s.state}]
-            </span>
-            <div className="flex flex-col min-w-0">
-              <span className="text-sm text-matrix-green/80 group-hover:text-matrix-green leading-snug">
-                {s.name}
-              </span>
-              {s.matchReason && (
-                <span className="text-[9px] font-pixel text-matrix-green/40 uppercase tracking-wide mt-0.5">
-                  {s.matchReason}
+
+      {senators.length > 0 ? (
+        <div className="space-y-2">
+          {senators.map((s) => {
+            const url = contactUrl(s);
+            return (
+              <div
+                key={s.id}
+                className={`flex items-center gap-3 px-3 py-2.5 border ${PARTY_BORDER[s.party]} bg-matrix-dark-green/20`}
+              >
+                <span className={`font-pixel text-[10px] shrink-0 ${PARTY_COLORS[s.party]}`}>
+                  [{s.party}-{s.state}]
                 </span>
-              )}
-            </div>
-            <span className="text-[10px] font-pixel text-neon-cyan/60 border-l border-matrix-green/20 pl-2 mt-0.5 shrink-0">
-              SCORE: {Math.round(s.overallScore)}
-            </span>
-          </Link>
-        ))}
-      </div>
+                <span className="text-sm text-matrix-green/80 flex-1 min-w-0 truncate">
+                  {s.name}
+                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  {url ? (
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] font-pixel text-neon-cyan border border-neon-cyan/40 hover:border-neon-cyan hover:bg-neon-cyan/10 px-2 py-1 transition-colors"
+                    >
+                      CONTACT ↗
+                    </a>
+                  ) : (
+                    <a
+                      href={`https://www.senate.gov/senators/senators-contact.htm`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] font-pixel text-neon-cyan/60 border border-neon-cyan/30 hover:border-neon-cyan/60 px-2 py-1 transition-colors"
+                    >
+                      CONTACT ↗
+                    </a>
+                  )}
+                  <Link
+                    href={scoreUrl(s)}
+                    className="text-[10px] font-pixel text-matrix-green/50 hover:text-matrix-green transition-colors"
+                  >
+                    SCORE: {Math.round(s.overallScore)}
+                  </Link>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : userState ? (
+        <a
+          href={`/scorecard?branch=senate&state=${userState}`}
+          className="inline-flex items-center gap-2 text-[10px] font-pixel text-neon-cyan border border-neon-cyan/40 hover:border-neon-cyan hover:bg-neon-cyan/10 px-3 py-1.5 transition-colors"
+        >
+          VIEW {userState} SENATORS &amp; CONTACT INFO →
+        </a>
+      ) : (
+        <a
+          href="https://www.senate.gov/senators/senators-contact.htm"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 text-[10px] font-pixel text-neon-cyan border border-neon-cyan/40 hover:border-neon-cyan hover:bg-neon-cyan/10 px-3 py-1.5 transition-colors"
+        >
+          FIND YOUR SENATORS ↗
+        </a>
+      )}
     </div>
   );
 }
@@ -397,7 +329,7 @@ function HeroIssue({
 
       <MonitorLinks slugs={issue.relatedMonitorSlugs} onNavigate={onNavigate} />
 
-      <SenatorChips issue={issue} />
+      <SenatorChips issue={issue} userState={userState} />
 
       {issue.facts.length > 0 && (
         <div className="mb-6">
@@ -415,19 +347,31 @@ function HeroIssue({
         </div>
       )}
 
-      {issue.actions.length > 0 && (
+      {/* Specific actions only — senator contact handled above by SenatorChips */}
+      {issue.actions.filter(a => a.type === "track_legislation" && a.url).length > 0 && (
         <div className="mb-6">
           <h3 className="font-pixel text-sm text-neon-cyan mb-3">
-            {">"} WHAT YOU CAN DO
+            {">"} TRACK LEGISLATION
           </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {issue.actions.map((action, i) => (
-              <ActionItemCard
-                key={i}
-                action={typeof action === "string" ? { text: action, type: "general" } : action}
-                userState={userState}
-              />
-            ))}
+          <div className="space-y-2">
+            {issue.actions
+              .filter(a => a.type === "track_legislation" && a.url)
+              .map((action, i) => (
+                <a
+                  key={i}
+                  href={action.url!}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 p-3 border border-neon-cyan/20 bg-neon-cyan/5 hover:border-neon-cyan/40 hover:bg-neon-cyan/10 transition-all group"
+                >
+                  <span className="text-sm text-matrix-green/80 group-hover:text-matrix-green flex-1">
+                    {action.text}
+                  </span>
+                  <span className="text-[10px] font-pixel text-neon-cyan/50 shrink-0">
+                    CONGRESS.GOV ↗
+                  </span>
+                </a>
+              ))}
           </div>
         </div>
       )}
@@ -609,17 +553,26 @@ function SecondaryIssue({
             </div>
           )}
 
-          {issue.actions.length > 0 && (
+          <SenatorChips issue={issue} userState={userState} />
+
+          {issue.actions.filter(a => a.type === "track_legislation" && a.url).length > 0 && (
             <div>
-              <h4 className="font-pixel text-xs text-neon-cyan/60 mb-2">WHAT YOU CAN DO</h4>
-              <div className="space-y-2">
-                {issue.actions.map((action, i) => (
-                  <ActionItemCard
-                    key={i}
-                    action={typeof action === "string" ? { text: action, type: "general" } : action}
-                    userState={userState}
-                  />
-                ))}
+              <h4 className="font-pixel text-xs text-neon-cyan/60 mb-2">TRACK LEGISLATION</h4>
+              <div className="space-y-1.5">
+                {issue.actions
+                  .filter(a => a.type === "track_legislation" && a.url)
+                  .map((action, i) => (
+                    <a
+                      key={i}
+                      href={action.url!}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 p-2 border border-neon-cyan/15 bg-neon-cyan/5 hover:border-neon-cyan/30 transition-colors text-sm"
+                    >
+                      <span className="text-matrix-green/70 flex-1 truncate">{action.text}</span>
+                      <span className="text-[10px] text-neon-cyan/40 shrink-0 ml-auto">↗</span>
+                    </a>
+                  ))}
               </div>
             </div>
           )}

@@ -63,7 +63,7 @@ CLUSTER_CENTROID_MERGE_THRESHOLD = 0.20
 MAX_ISSUES = 4
 MIN_ARTICLES_PER_CLUSTER = 1
 
-ACTION_CENTER_PROMPT_VERSION = "action-v18"
+ACTION_CENTER_PROMPT_VERSION = "action-v19"
 
 _SYSTEM_PROMPT = """\
 You are a nonpartisan civic information analyst. You present facts without \
@@ -88,20 +88,6 @@ never infer or extrapolate. (2) Comparisons must name TWO DISTINCT entities — 
 never write "X surpasses X" or compare a thing to itself. (3) If an article \
 says something was dropped, dismissed, or ended, the fact must reflect that \
 outcome — do not write that it is ongoing.
-- "actions": An array of exactly 3 objects. Each has "text" and "type". \
-"type" must be one of: "contact_senator", "contact_representative", \
-"contact_whitehouse", "public_comment", "track_legislation", \
-"register_vote", "attend_hearing", "general". \
-IMPORTANT: The FIRST action MUST be "contact_senator" or "contact_representative". \
-Each action MUST name the specific topic from the articles — never say "this issue" \
-or "this policy". Use the actual name of the bill, policy, or event. \
-Actions must be neutral — useful whether you agree OR disagree. \
-Never say "support" or "oppose" — the citizen decides their own stance. \
-Example: if the articles are about a bill called the "Clean Water Act": \
-[{{"text": "Contact your senators about the Clean Water Act's new regulations", "type": "contact_senator"}}, \
-{{"text": "Attend a town hall to discuss the Clean Water Act's impact on your community", "type": "attend_hearing"}}, \
-{{"text": "Read the full Clean Water Act text on Congress.gov", "type": "track_legislation"}}] \
-CRITICAL: Do NOT copy this example. Write actions about the ACTUAL topic in the articles.
 - "bills": An array of any specific bills or acts mentioned in the articles. \
 For each bill, provide an object with "name" (the common name) \
 and "id" (the bill number if mentioned anywhere in the articles, e.g. "HR.22" \
@@ -286,6 +272,41 @@ def _enrich_actions(
         deduped.append(a)
 
     return deduped
+
+
+def _build_actions_from_data(
+    title: str,
+    resolved_bills: list[dict],
+    source_urls: list[str],
+    source_names: list[str],
+    related_senators: list[dict],
+) -> list[dict]:
+    """Build action items from real data — no LLM hallucinations.
+
+    Senator contact is handled by the frontend SenatorChips component when
+    senators are named. Here we only emit actions we have real URLs for.
+    """
+    actions: list[dict] = []
+
+    # Bill tracking — only when we have a real Congress.gov URL
+    for bill in resolved_bills[:2]:
+        if bill.get("url"):
+            actions.append({
+                "text": f"Track {bill['name']} on Congress.gov",
+                "type": "track_legislation",
+                "url": bill["url"],
+            })
+
+    # Generic contact fallback — only emitted when no named senators found,
+    # so the frontend has something to show in that case
+    if not related_senators:
+        actions.append({
+            "text": f"Contact your senators or representative about {title}",
+            "type": "contact_senator",
+            "url": "https://www.senate.gov/senators/senators-contact.htm",
+        })
+
+    return actions
 
 
 def _embed_texts(texts: list[str]) -> np.ndarray:
@@ -646,7 +667,7 @@ def _find_related_senators(
         Senator.id, Senator.name, Senator.state, Senator.party,
         Senator.score_funding_independence, Senator.score_promise_persistence,
         Senator.score_independent_voting, Senator.score_funding_diversity,
-        Senator.leadership_score,
+        Senator.leadership_score, Senator.contact_form_url, Senator.website_url,
     ).all()
 
     representatives = db.query(
@@ -654,7 +675,7 @@ def _find_related_senators(
         Representative.score_funding_independence, Representative.score_promise_persistence,
         Representative.score_independent_voting, Representative.score_funding_diversity,
         Representative.score_legislative_effectiveness,
-        Representative.leadership_score,
+        Representative.leadership_score, Representative.contact_form_url, Representative.website_url,
     ).all()
 
     if not senators and not representatives:
@@ -680,6 +701,8 @@ def _find_related_senators(
             "leadership_score": round(s.leadership_score * 100) if s.leadership_score else None,
             "chamber": chamber,
             "match_reason": match_reason,
+            "contact_form_url": getattr(s, "contact_form_url", "") or "",
+            "website_url": getattr(s, "website_url", "") or "",
         }
 
     # Pass 1: substring matches with contextual disambiguation
@@ -2418,7 +2441,6 @@ def _run_refresh(db: Session) -> int:
         title = llm_result.get("title", cluster[0].title)
         summary = llm_result.get("summary", "")
         facts = _validate_facts(llm_result.get("facts", []))
-        actions = llm_result.get("actions", [])
         policy_areas = llm_result.get("policyAreas", [])
 
         # Post-LLM title dedup: skip if this LLM-generated title is too
@@ -2436,22 +2458,6 @@ def _run_refresh(db: Session) -> int:
 
         if not isinstance(facts, list):
             facts = []
-        if not isinstance(actions, list):
-            actions = []
-        actions = _normalize_actions(actions, title=title)
-        if len(actions) < 3:
-            topic = title or cluster[0].title
-            defaults = [
-                {"text": f"Contact your representative to share your position on {topic}", "type": "contact_representative"},
-                {"text": f"Stay informed by reading official documents about this topic", "type": "track_legislation"},
-                {"text": f"Voice your opinion at a town hall or public hearing", "type": "attend_hearing"},
-            ]
-            existing_types = {a["type"] for a in actions}
-            for d in defaults:
-                if len(actions) >= 3:
-                    break
-                if d["type"] not in existing_types:
-                    actions.append(d)
         policy_areas = _classify_issue_policy_areas(title, summary)
 
         # 7. Resolve bill references to Congress.gov URLs
@@ -2472,10 +2478,9 @@ def _run_refresh(db: Session) -> int:
         # 9. Find senators mentioned in or related to this issue
         related_senators = _find_related_senators(title, summary, facts, db)
 
-        # 10. Enrich actions with specific URLs and text
-        actions = _enrich_actions(
-            actions, title, resolved_bills,
-            source_urls, source_names, related_senators,
+        # 10. Build data-driven actions (no LLM hallucinations)
+        actions = _build_actions_from_data(
+            title, resolved_bills, source_urls, source_names, related_senators,
         )
 
         issue = ActionIssue(

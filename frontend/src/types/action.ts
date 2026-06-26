@@ -15,6 +15,8 @@ export interface RelatedSenator {
   leadershipScore: number | null;
   chamber?: "senate" | "house";
   matchReason?: string | null;
+  contactFormUrl?: string | null;
+  websiteUrl?: string | null;
 }
 
 export interface ActionItem {
