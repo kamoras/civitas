@@ -40,14 +40,16 @@ _SYSTEM_PROMPT = (
 
 
 def _sanitize(text: str, budget: int) -> str:
-    """Strip hashtags, enforce sentence-boundary character limit."""
-    text = re.sub(r"\s*#\w+", "", text).strip()
+    """Convert hashtags to plain text, enforce sentence-boundary character limit."""
+    # Replace #word with word so inline hashtags don't break sentence grammar
+    text = re.sub(r"#(\w+)", r"\1", text).strip()
     if len(text) > budget:
         trimmed = text[:budget]
+        # Find the last sentence-ending punctuation anywhere in the trimmed text
         cut = -1
         for punct in (".", "!", "?"):
             idx = trimmed.rfind(punct)
-            if idx > len(trimmed) // 2:
+            if idx > 0:
                 cut = max(cut, idx + 1)
         if cut > 0:
             text = trimmed[:cut]
@@ -169,7 +171,7 @@ def _publish(text: str, issue) -> bool:
         logger.debug("Bluesky credentials not set — skipping publish")
         return False
 
-    text = re.sub(r"\s*#\w+", "", text).strip()  # final hashtag guard
+    text = re.sub(r"#(\w+)", r"\1", text).strip()  # final hashtag guard
     url = f"https://civitas.paramain.com/issue/{issue.id}"
     full_text = f"{text}\n\n{url}"
 
