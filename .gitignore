@@ -50,6 +50,9 @@ next-env.d.ts
 # docker volume mount
 /data/
 
+# Claude Code local settings (session data, worktrees)
+.claude/settings.local.json
+
 # deploy state
 .deploy-*-slot
 

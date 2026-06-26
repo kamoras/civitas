@@ -1,6 +1,6 @@
-# Modern Punk - Project Mandates
+# Civitas - Project Mandates
 
-This project is a "Modern Punk" themed political representation tracker. It provides a data-intensive, AI-powered analysis of US politicians (Senators, Representatives, Presidents, and Justices) with a terminal-inspired aesthetic.
+Civitas is an open-data civic transparency platform. It provides a data-intensive, AI-powered analysis of US politicians (Senators, Representatives, Presidents, and Justices) with a terminal-inspired aesthetic.
 
 ## 🛠 Tech Stack & Architecture
 
@@ -22,7 +22,7 @@ This project is a "Modern Punk" themed political representation tracker. It prov
 
 ### Frontend (TypeScript/Next.js)
 - **Framework:** Next.js 14 (App Router).
-- **Styling:** Tailwind CSS with a "Modern Punk" / "Terminal" aesthetic.
+- **Styling:** Tailwind CSS with a "Terminal" aesthetic.
 - **Visuals:** High-contrast colors, monospace fonts, scanlines, and glow effects.
 - **Patterns:** Custom hooks for data fetching (`useSenators`, `useConfig`).
 

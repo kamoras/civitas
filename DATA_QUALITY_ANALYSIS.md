@@ -1,6 +1,6 @@
 # Data Quality Analysis: Missing Campaign Promises, Sponsored Bills, and Platform Summaries
 
-This document analyzes why ~25/100 senators lack campaign promises, ~25/100 lack sponsored bills, and ~12/100 lack platform summaries. All code references use absolute paths under `/mnt/nvme/modern-punk/backend/app/pipeline/`.
+This document analyzes why ~25/100 senators lack campaign promises, ~25/100 lack sponsored bills, and ~12/100 lack platform summaries. All code references use absolute paths under `backend/app/pipeline/`.
 
 ---
 
