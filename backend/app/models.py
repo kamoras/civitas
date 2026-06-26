@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -449,6 +449,8 @@ class ActionIssue(Base):
     concerned_count: Mapped[int] = mapped_column(Integer, default=0)
     not_priority_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    bsky_posted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    bsky_posted_rank: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
 
 
 class ScoreSnapshot(Base):

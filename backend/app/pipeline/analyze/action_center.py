@@ -2323,11 +2323,16 @@ def _run_refresh(db: Session) -> int:
             .first()
         )
         if existing:
+            title_changed = existing.title != issue.title[:500]
             for attr in ("title", "summary", "facts", "actions", "source_urls",
                          "source_names", "policy_areas", "related_bill_ids",
                          "related_explore_ids", "related_senators"):
                 setattr(existing, attr, getattr(issue, attr))
             existing.created_at = datetime.utcnow()
+            if title_changed:
+                # New story at this rank — treat as fresh for Bluesky posting
+                existing.bsky_posted_at = None
+                existing.bsky_posted_rank = None
         else:
             db.add(issue)
 
@@ -2379,6 +2384,20 @@ def _run_refresh(db: Session) -> int:
             else:
                 db.add(DailyTheme(date=today, theme_json=json.dumps(theme)))
             db.commit()
+
+    # Stage 4: Post new/surging issues to Bluesky
+    if issues_created > 0:
+        try:
+            from app.pipeline.analyze.bluesky_poster import process_issues_for_bluesky
+            today_issues = (
+                db.query(ActionIssue)
+                .filter(ActionIssue.date == today)
+                .order_by(ActionIssue.rank)
+                .all()
+            )
+            process_issues_for_bluesky(today_issues, db)
+        except Exception:
+            logger.exception("Bluesky posting failed (non-fatal)")
 
     # Clean up issues older than 14 days
     from datetime import timedelta as _td

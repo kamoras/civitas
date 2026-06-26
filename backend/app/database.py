@@ -41,6 +41,8 @@ def _migrate_columns() -> None:
         ("action_issues", "related_monitor_slugs", "TEXT DEFAULT '[]'"),
         ("action_issues", "concerned_count", "INTEGER DEFAULT 0"),
         ("action_issues", "not_priority_count", "INTEGER DEFAULT 0"),
+        ("action_issues", "bsky_posted_at", "DATETIME"),
+        ("action_issues", "bsky_posted_rank", "INTEGER"),
         ("senators", "website_url", "TEXT DEFAULT ''"),
         ("senators", "contact_form_url", "TEXT DEFAULT ''"),
         ("senators", "office_phone", "TEXT DEFAULT ''"),

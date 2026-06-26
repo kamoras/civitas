@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     FEC_RPS: float = 0.25
     GOVINFO_RPS: float = 1.0
     CURRENT_CONGRESS: int = 119
+    # Bluesky integration (leave BSKY_HANDLE empty to disable)
+    BSKY_HANDLE: str = ""
+    BSKY_APP_PASSWORD: str = ""
     # Email digest (leave SMTP_HOST empty to disable)
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
