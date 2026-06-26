@@ -311,18 +311,47 @@ def _publish_weekly(text: str, week: WeekSummary) -> bool:
 
 
 def post_weekly_summary(db: Session) -> None:
-    """Post the most recently completed week-in-review, if not yet posted."""
+    """Post the most recently completed week-in-review, at most once per week.
+
+    Older unposted weeks are silently marked as skipped so a backlog of
+    unposted summaries doesn't fire in rapid succession after a deployment.
+    """
     if not getattr(settings, "BSKY_HANDLE", "") or not getattr(settings, "BSKY_APP_PASSWORD", ""):
         return
 
-    week = (
+    from datetime import timedelta
+
+    # Enforce a 6-day cooldown — prevents hourly pipeline from posting
+    # multiple backlogged weeks in the same day.
+    last_posted = (
+        db.query(WeekSummary)
+        .filter(WeekSummary.bsky_posted_at.isnot(None))
+        .order_by(WeekSummary.bsky_posted_at.desc())
+        .first()
+    )
+    if last_posted and last_posted.bsky_posted_at:
+        age = datetime.now(UTC) - last_posted.bsky_posted_at.replace(tzinfo=UTC)
+        if age < timedelta(days=6):
+            logger.debug("Weekly summary posted %d days ago — skipping", age.days)
+            return
+
+    unposted = (
         db.query(WeekSummary)
         .filter(WeekSummary.bsky_posted_at.is_(None))
         .order_by(WeekSummary.end_date.desc())
-        .first()
+        .all()
     )
-    if not week:
+    if not unposted:
         return
+
+    # Post only the most recent unposted week; mark the rest as skipped
+    week = unposted[0]
+    skipped = unposted[1:]
+    if skipped:
+        for w in skipped:
+            w.bsky_posted_at = datetime.now(UTC)  # mark skipped so they don't queue up
+        db.commit()
+        logger.info("Marked %d stale week summaries as skipped", len(skipped))
 
     text = _generate_weekly_post(week)
     if not text:
