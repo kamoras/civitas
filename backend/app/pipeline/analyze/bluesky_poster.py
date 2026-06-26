@@ -156,10 +156,26 @@ def _publish(text: str, issue) -> bool:
         full_text = f"{text[:budget]}\n\n{url}"
 
     try:
-        from atproto import Client  # imported here so missing package only fails at post time
+        from atproto import Client, models  # imported here so missing package only fails at post time
         client = Client()
         client.login(handle, app_password)
-        client.send_post(full_text)
+
+        # Build a rich-text facet so the URL renders as a clickable link.
+        # Bluesky facet byte offsets are UTF-8 encoded positions.
+        encoded = full_text.encode("utf-8")
+        url_bytes = url.encode("utf-8")
+        url_start = encoded.find(url_bytes)
+        facets = [
+            models.AppBskyRichtextFacet.Main(
+                features=[models.AppBskyRichtextFacet.Link(uri=url)],
+                index=models.AppBskyRichtextFacet.ByteSlice(
+                    byte_start=url_start,
+                    byte_end=url_start + len(url_bytes),
+                ),
+            )
+        ]
+
+        client.send_post(full_text, facets=facets)
         logger.info("Posted to Bluesky: %s", issue.title[:80])
         return True
     except ImportError:
