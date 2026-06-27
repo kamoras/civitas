@@ -519,6 +519,7 @@ export async function fetchAdminDashboard(token: string): Promise<AdminDashboard
 
 export interface AdminPipelineStatus {
   isRunning: boolean;
+  houseIsRunning?: boolean;
   lastRun?: PipelineRunInfo;
 }
 
@@ -550,6 +551,15 @@ export async function triggerAdminPipeline(
     headers: adminHeaders(token),
   });
   if (res.status === 409) throw new Error("Pipeline is already running");
+  if (!res.ok) throw new Error(`Trigger failed: ${res.status}`);
+  return res.json();
+}
+
+export async function triggerHousePipeline(token: string): Promise<{ message: string }> {
+  const res = await fetch(`${API_BASE}/admin/pipeline/trigger-house`, {
+    method: "POST",
+    headers: adminHeaders(token),
+  });
   if (!res.ok) throw new Error(`Trigger failed: ${res.status}`);
   return res.json();
 }

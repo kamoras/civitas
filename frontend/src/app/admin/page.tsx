@@ -9,6 +9,7 @@ import {
   fetchAdminPipelineHistory,
   fetchAdminSystemStats,
   triggerAdminPipeline,
+  triggerHousePipeline,
   type AdminDashboard,
   type AdminPipelineStatus,
   type HostStats,
@@ -1113,6 +1114,9 @@ function AdminDashboardView({
   const [triggerMsg, setTriggerMsg] = useState("");
   const [triggerError, setTriggerError] = useState("");
   const [triggering, setTriggering] = useState(false);
+  const [houseTriggerMsg, setHouseTriggerMsg] = useState("");
+  const [houseTriggerError, setHouseTriggerError] = useState("");
+  const [houseTriggering, setHouseTriggering] = useState(false);
   const [completionBanner, setCompletionBanner] = useState<{
     status: "completed" | "failed";
     duration: string;
@@ -1217,6 +1221,23 @@ function AdminDashboardView({
       setTriggerError(e instanceof Error ? e.message : "Trigger failed");
     } finally {
       setTriggering(false);
+    }
+  };
+
+  const handleHouseTrigger = async () => {
+    setHouseTriggerMsg("");
+    setHouseTriggerError("");
+    setHouseTriggering(true);
+    try {
+      const r = await triggerHousePipeline(token);
+      setHouseTriggerMsg(r.message);
+      setPipelineStatus((prev) => (prev ? { ...prev, houseIsRunning: true } : prev));
+      setTimeout(() => setHouseTriggerMsg(""), 10000);
+      setTimeout(pollStatus, 1000);
+    } catch (e) {
+      setHouseTriggerError(e instanceof Error ? e.message : "Trigger failed");
+    } finally {
+      setHouseTriggering(false);
     }
   };
 
@@ -1338,9 +1359,15 @@ function AdminDashboardView({
               </div>
               <div className="border-t border-matrix-green/15 pt-2 mt-2">
                 <div className="flex justify-between">
-                  <span className="text-matrix-green/60">PIPELINE</span>
+                  <span className="text-matrix-green/60">SENATE PIPELINE</span>
                   <span className={pipelineStatus?.isRunning ? "text-neon-cyan animate-pulse" : "text-matrix-green/60"}>
                     {pipelineStatus?.isRunning ? "RUNNING" : "IDLE"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-matrix-green/60">HOUSE PIPELINE</span>
+                  <span className={pipelineStatus?.houseIsRunning ? "text-neon-cyan animate-pulse" : "text-matrix-green/60"}>
+                    {pipelineStatus?.houseIsRunning ? "RUNNING" : "IDLE"}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -1364,6 +1391,8 @@ function AdminDashboardView({
               <p className="text-matrix-green/50 text-xs font-terminal mb-2">
                 Trigger pipeline runs manually:
               </p>
+              {/* Senate pipeline */}
+              <p className="text-matrix-green/40 text-[10px] font-pixel tracking-wider">SENATE</p>
               <div className="space-y-2">
                 <button
                   onClick={() => handleTrigger("full")}
@@ -1387,37 +1416,60 @@ function AdminDashboardView({
                 >
                   ▶ FETCH ONLY (NO LLM)
                 </button>
-                <p className="text-matrix-green/30 text-[10px] font-terminal mt-1">
-                  Full pipeline includes senators, explore docs, and SCOTUS justices.
+                <p className="text-matrix-green/30 text-[10px] font-terminal">
+                  Senators, explore docs, and SCOTUS justices.
                 </p>
               </div>
               {triggerMsg && (
-                <div
-                  role="status"
-                  aria-live="polite"
-                  className="mt-3 p-2 border border-matrix-green/30 rounded bg-matrix-green/10
-                                animate-[fadeIn_0.3s_ease-out]"
+                <div role="status" aria-live="polite"
+                  className="p-2 border border-matrix-green/30 rounded bg-matrix-green/10 animate-[fadeIn_0.3s_ease-out]"
                 >
-                  <p className="text-matrix-green text-xs font-terminal font-bold">
-                    ✓ {triggerMsg}
-                  </p>
-                  <p className="text-matrix-green/50 text-[10px] font-terminal mt-1">
-                    Status updates will appear automatically above.
-                  </p>
+                  <p className="text-matrix-green text-xs font-terminal font-bold">✓ {triggerMsg}</p>
+                  <p className="text-matrix-green/50 text-[10px] font-terminal mt-1">Status updates will appear automatically above.</p>
                 </div>
               )}
               {triggerError && (
-                <div
-                  role="alert"
-                  aria-live="polite"
-                  className="mt-3 p-2 border border-neon-pink/30 rounded bg-neon-pink/10
-                                animate-[fadeIn_0.3s_ease-out]"
+                <div role="alert" aria-live="polite"
+                  className="p-2 border border-neon-pink/30 rounded bg-neon-pink/10 animate-[fadeIn_0.3s_ease-out]"
                 >
-                  <p className="text-neon-pink text-xs font-terminal font-bold">
-                    ✗ {triggerError}
-                  </p>
+                  <p className="text-neon-pink text-xs font-terminal font-bold">✗ {triggerError}</p>
                 </div>
               )}
+
+              {/* House pipeline */}
+              <div className="border-t border-matrix-green/15 pt-3 mt-1">
+                <p className="text-matrix-green/40 text-[10px] font-pixel tracking-wider mb-2">HOUSE</p>
+                <button
+                  onClick={handleHouseTrigger}
+                  disabled={pipelineStatus?.houseIsRunning || houseTriggering}
+                  className="w-full text-xs font-pixel py-2.5 rounded border transition-all
+                             text-matrix-green border-matrix-green/40 hover:bg-matrix-green/10 hover:border-matrix-green/60
+                             disabled:text-matrix-green/20 disabled:border-matrix-green/15 disabled:cursor-not-allowed"
+                >
+                  {houseTriggering
+                    ? "LAUNCHING..."
+                    : pipelineStatus?.houseIsRunning
+                      ? "HOUSE PIPELINE RUNNING..."
+                      : "▶ RUN HOUSE PIPELINE"}
+                </button>
+                <p className="text-matrix-green/30 text-[10px] font-terminal mt-1">
+                  435 representatives — scores, funding, votes. No LLM calls (~1-2h).
+                </p>
+                {houseTriggerMsg && (
+                  <div role="status" aria-live="polite"
+                    className="mt-2 p-2 border border-matrix-green/30 rounded bg-matrix-green/10 animate-[fadeIn_0.3s_ease-out]"
+                  >
+                    <p className="text-matrix-green text-xs font-terminal font-bold">✓ {houseTriggerMsg}</p>
+                  </div>
+                )}
+                {houseTriggerError && (
+                  <div role="alert" aria-live="polite"
+                    className="mt-2 p-2 border border-neon-pink/30 rounded bg-neon-pink/10 animate-[fadeIn_0.3s_ease-out]"
+                  >
+                    <p className="text-neon-pink text-xs font-terminal font-bold">✗ {houseTriggerError}</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

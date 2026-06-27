@@ -433,6 +433,7 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
     db.expire_all()
 
     from app.api.pipeline import _is_pipeline_running
+    from app.pipeline.house_pipeline import is_house_pipeline_running
     is_running = _is_pipeline_running(db)
 
     last_run = (
@@ -441,7 +442,7 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
         .first()
     )
 
-    result: dict = {"isRunning": is_running}
+    result: dict = {"isRunning": is_running, "houseIsRunning": is_house_pipeline_running()}
     if last_run:
         elapsed = last_run.elapsed_seconds
         if last_run.status == "running" and last_run.started_at:
