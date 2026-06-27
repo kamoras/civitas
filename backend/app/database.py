@@ -1,7 +1,7 @@
 import logging
 from collections.abc import Generator
 
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import settings
@@ -21,6 +21,24 @@ engine = create_engine(
     echo=False,
     pool_pre_ping=True,
 )
+
+if "sqlite" in settings.DATABASE_URL:
+    @event.listens_for(engine, "connect")
+    def _set_sqlite_pragmas(dbapi_conn, _connection_record):
+        """Apply WAL mode and performance PRAGMAs to every new pool connection.
+
+        SQLite PRAGMAs are per-connection; setting them only once at init_db
+        time leaves connections opened later (e.g. after a pool recycle or in
+        a second container) with the default journal_mode=DELETE, which blocks
+        concurrent reads during writes and causes 'database is locked' errors.
+        """
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA cache_size=-32000")
+        cursor.execute("PRAGMA mmap_size=268435456")
+        cursor.execute("PRAGMA temp_store=MEMORY")
+        cursor.close()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -79,7 +97,13 @@ def _migrate_columns() -> None:
             existing = {c["name"] for c in inspector.get_columns(table)}
             if column not in existing:
                 logger.info("Adding column %s.%s", table, column)
-                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
+                try:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
+                except Exception as exc:
+                    if "duplicate column name" in str(exc).lower():
+                        pass  # another container added the column concurrently
+                    else:
+                        raise
 
         for table, column in drops:
             if not inspector.has_table(table):
@@ -120,14 +144,6 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _migrate_columns()
     _ensure_indexes()
-
-    if "sqlite" in settings.DATABASE_URL:
-        with engine.connect() as conn:
-            conn.execute(text("PRAGMA journal_mode=WAL"))
-            conn.execute(text("PRAGMA synchronous=NORMAL"))
-            conn.execute(text("PRAGMA cache_size=-32000"))  # 32MB page cache
-            conn.execute(text("PRAGMA mmap_size=268435456"))  # 256MB memory-mapped I/O
-            conn.execute(text("PRAGMA temp_store=MEMORY"))
 
     # Seed president data if the table is empty
     from app.services.president_service import seed_presidents

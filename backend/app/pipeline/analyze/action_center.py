@@ -349,13 +349,15 @@ def _filter_policy_relevant(
         return []
 
     prototype_embeddings = _embed_texts(_POLICY_PROTOTYPES)
-    prototype_mean = prototype_embeddings.mean(axis=0)
-    prototype_mean /= np.linalg.norm(prototype_mean)
 
     texts = [f"{a.title}. {a.summary[:200]}" for a in specific]
     article_embeddings = _embed_texts(texts)
 
-    scores = article_embeddings @ prototype_mean
+    # Max-over-prototypes: an article is relevant if it scores high against ANY
+    # policy prototype, not just the average direction. The mean collapses 18
+    # diverse prototypes into one diffuse vector that sits below the news-headline
+    # floor for nearly every article.
+    scores = (article_embeddings @ prototype_embeddings.T).max(axis=1)
     relevant: list[tuple[NewsArticle, np.ndarray]] = []
     for i, (article, score) in enumerate(zip(specific, scores)):
         if score >= POLICY_RELEVANCE_THRESHOLD:
@@ -503,9 +505,28 @@ def _compute_trending_boost(
     trending topics. Higher = more aligned with public discourse.
     """
     if not trending or not clusters:
+        if not trending:
+            logger.warning(
+                "Trending data unavailable — ranking by coverage only (degraded mode)"
+            )
         return [0.0] * len(clusters)
 
-    trending_texts = [t.title for t in trending]
+    # Filter trending topics to US policy before computing boost so sports/
+    # entertainment topics can't inflate scores for unrelated clusters.
+    prototype_embeddings = _embed_texts(_POLICY_PROTOTYPES)
+    trending_texts_all = [t.title for t in trending]
+    trending_embeddings_all = _embed_texts(trending_texts_all)
+    policy_scores = (trending_embeddings_all @ prototype_embeddings.T).max(axis=1)
+    policy_mask = policy_scores >= POLICY_RELEVANCE_THRESHOLD
+    policy_trending = [t for t, keep in zip(trending, policy_mask) if keep]
+    if not policy_trending:
+        logger.info("No policy-relevant trending topics found — ranking by coverage only")
+        return [0.0] * len(clusters)
+    logger.info(
+        "Trending filter: %d/%d topics are policy-relevant",
+        len(policy_trending), len(trending),
+    )
+    trending_texts = [t.title for t in policy_trending]
     trending_embeddings = _embed_texts(trending_texts)
 
     boosts: list[float] = []
@@ -541,7 +562,7 @@ def _rank_clusters(
     if not clusters:
         return []
 
-    coverage_scores = [len({a.source_name for a in c}) + len(c) * 0.1 for c in clusters]
+    coverage_scores = [len({a.source_name for a in c}) for c in clusters]
     max_cov = max(coverage_scores) if coverage_scores else 1.0
     norm_coverage = [s / max_cov for s in coverage_scores]
 

@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import threading
+from datetime import datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -58,11 +59,23 @@ def _hourly_action_refresh() -> None:
             finally:
                 db.close()
             if running:
-                logger.info(
-                    "Action center refresh skipped — nightly pipeline is running (run #%d)",
-                    running.id,
-                )
-                return
+                age = datetime.utcnow() - running.started_at
+                if age > timedelta(hours=8):
+                    # Pipeline run has been "running" for >8h — it almost certainly
+                    # crashed without updating its status. Proceed rather than blocking
+                    # the action center indefinitely.
+                    logger.warning(
+                        "Stale PipelineRun detected (run #%d started %s, age %s) "
+                        "— treating as stale and proceeding with action center refresh",
+                        running.id, running.started_at.isoformat(), age,
+                    )
+                else:
+                    logger.info(
+                        "Action center refresh skipped — nightly pipeline is running "
+                        "(run #%d, age %s)",
+                        running.id, age,
+                    )
+                    return
             if is_house_pipeline_running():
                 logger.info("Action center refresh skipped — house pipeline is running")
                 return
