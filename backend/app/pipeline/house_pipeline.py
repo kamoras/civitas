@@ -491,9 +491,7 @@ async def run_house_pipeline() -> dict:
                     rep["ideologyScore"] = round(i_score, 4) if i_score is not None else None
                     if l_score is not None and i_score is not None:
                         rep["sponsorshipDescription"] = describe_senator_position(
-                            rep_name, rep.get("party", "I"),
-                            l_score, i_score, rep_bio_ids,
-                            leadership_scores, ideology_scores, rep_party_map,
+                            i_score, l_score, rep.get("party", "I"),
                         )
 
                     # Calculate scores
