@@ -880,53 +880,75 @@ function RunHistory({ runs }: { runs: PipelineRunInfo[] }) {
       <table className="w-full text-xs font-terminal">
         <thead>
           <tr className="text-matrix-green/60 border-b border-matrix-green/20">
-            <th scope="col" className="text-left py-1 pr-3">#</th>
+            <th scope="col" className="text-left py-1 pr-3">TYPE</th>
             <th scope="col" className="text-left py-1 pr-3">STARTED</th>
             <th scope="col" className="text-left py-1 pr-3">STATUS</th>
             <th scope="col" className="text-left py-1 pr-3">DURATION</th>
-            <th scope="col" className="text-right py-1 pr-3">SENATORS</th>
+            <th scope="col" className="text-right py-1 pr-3">PROCESSED</th>
             <th scope="col" className="text-right py-1 pr-3">LLM</th>
             <th scope="col" className="text-right py-1">CACHE</th>
           </tr>
         </thead>
         <tbody>
-          {runs.map((r) => (
-            <tr
-              key={r.id}
-              className="border-b border-matrix-green/10 hover:bg-matrix-green/5"
-            >
-              <td className="py-1.5 pr-3 text-matrix-green/40">{r.id}</td>
-              <td className="py-1.5 pr-3 text-matrix-green/70">{formatTime(r.startedAt)}</td>
-              <td className="py-1.5 pr-3">
-                <span
-                  className={
-                    r.status === "completed"
-                      ? "text-matrix-green"
-                      : r.status === "failed"
-                        ? "text-neon-pink"
-                        : r.status === "running"
-                          ? "text-neon-cyan animate-pulse"
-                          : "text-matrix-green/50"
-                  }
-                >
-                  {r.status.toUpperCase()}
-                </span>
-              </td>
-              <td className="py-1.5 pr-3 text-matrix-green/60">{formatDuration(r.elapsedSeconds)}</td>
-              <td className="py-1.5 pr-3 text-right text-matrix-green/60">
-                {r.senatorsProcessed}/{r.senatorsTotal}
-                {r.senatorsFailed > 0 && (
-                  <span className="text-neon-pink ml-1">({r.senatorsFailed}F)</span>
-                )}
-              </td>
-              <td className="py-1.5 pr-3 text-right text-matrix-green/60">{r.llmCalls}</td>
-              <td className="py-1.5 text-right text-matrix-green/60">
-                {r.cacheHits + r.cacheMisses > 0
-                  ? `${Math.round((r.cacheHits / (r.cacheHits + r.cacheMisses)) * 100)}%`
-                  : "—"}
-              </td>
-            </tr>
-          ))}
+          {runs.map((r) => {
+            const isHouse = r.pipelineType === "house";
+            const statusColor = r.status === "completed"
+              ? "text-matrix-green"
+              : r.status === "partial"
+                ? "text-yellow-400"
+                : r.status === "failed"
+                  ? "text-neon-pink"
+                  : r.status === "running"
+                    ? "text-neon-cyan animate-pulse"
+                    : "text-matrix-green/50";
+            return (
+              <tr
+                key={`${r.pipelineType ?? "senate"}-${r.id}`}
+                className="border-b border-matrix-green/10 hover:bg-matrix-green/5"
+              >
+                <td className="py-1.5 pr-3">
+                  <span className={isHouse ? "text-neon-cyan/70" : "text-matrix-green/50"}>
+                    {isHouse ? "HOUSE" : "SENATE"}
+                  </span>
+                </td>
+                <td className="py-1.5 pr-3 text-matrix-green/70">{formatTime(r.startedAt)}</td>
+                <td className="py-1.5 pr-3">
+                  <span className={statusColor}>
+                    {r.status.toUpperCase()}
+                  </span>
+                  {r.errorMessage && (
+                    <span className="ml-2 text-neon-pink/70 text-[10px]" title={r.errorMessage}>⚠</span>
+                  )}
+                </td>
+                <td className="py-1.5 pr-3 text-matrix-green/60">{formatDuration(r.elapsedSeconds)}</td>
+                <td className="py-1.5 pr-3 text-right text-matrix-green/60">
+                  {isHouse ? (
+                    <>
+                      {r.repsProcessed ?? 0}/{r.repsTotal ?? 0}
+                      {(r.repsFailed ?? 0) > 0 && (
+                        <span className="text-neon-pink ml-1">({r.repsFailed}F)</span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {r.senatorsProcessed}/{r.senatorsTotal}
+                      {r.senatorsFailed > 0 && (
+                        <span className="text-neon-pink ml-1">({r.senatorsFailed}F)</span>
+                      )}
+                    </>
+                  )}
+                </td>
+                <td className="py-1.5 pr-3 text-right text-matrix-green/60">
+                  {isHouse ? "—" : r.llmCalls}
+                </td>
+                <td className="py-1.5 text-right text-matrix-green/60">
+                  {!isHouse && r.cacheHits + r.cacheMisses > 0
+                    ? `${Math.round((r.cacheHits / (r.cacheHits + r.cacheMisses)) * 100)}%`
+                    : "—"}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -1370,6 +1392,24 @@ function AdminDashboardView({
                     {pipelineStatus?.houseIsRunning ? "RUNNING" : "IDLE"}
                   </span>
                 </div>
+                {pipelineStatus?.houseLastRun && (
+                  <div className="flex justify-between">
+                    <span className="text-matrix-green/60">HOUSE LAST RUN</span>
+                    <span className={
+                      pipelineStatus.houseLastRun.status === "completed" ? "text-matrix-green" :
+                      pipelineStatus.houseLastRun.status === "partial" ? "text-yellow-400" :
+                      pipelineStatus.houseLastRun.status === "failed" ? "text-neon-pink" :
+                      "text-matrix-green/50"
+                    }>
+                      {pipelineStatus.houseLastRun.status.toUpperCase()}
+                      {" · "}
+                      {pipelineStatus.houseLastRun.repsProcessed}/{pipelineStatus.houseLastRun.repsTotal} reps
+                      {(pipelineStatus.houseLastRun.repsFailed ?? 0) > 0 && (
+                        <span className="text-neon-pink"> ({pipelineStatus.houseLastRun.repsFailed}F)</span>
+                      )}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-matrix-green/60">SCHEDULE</span>
                   <span className="text-matrix-green/70">{d?.pipeline.cronSchedule}</span>

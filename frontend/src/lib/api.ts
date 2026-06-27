@@ -190,6 +190,7 @@ export interface PipelineStepInfo {
 
 export interface PipelineRunInfo {
   id: number;
+  pipelineType?: "senate" | "house";
   startedAt: string;
   completedAt: string | null;
   status: string;
@@ -204,6 +205,22 @@ export interface PipelineRunInfo {
   elapsedSeconds: number | null;
   errorMessage: string | null;
   progressSteps?: PipelineStepInfo[] | null;
+  // House-only fields
+  repsProcessed?: number;
+  repsTotal?: number;
+  repsFailed?: number;
+}
+
+export interface HouseRunInfo {
+  id: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  status: string;
+  repsProcessed: number;
+  repsTotal: number;
+  repsFailed: number;
+  elapsedSeconds: number | null;
+  errorMessage: string | null;
 }
 
 export interface PipelineStatus {
@@ -521,6 +538,7 @@ export interface AdminPipelineStatus {
   isRunning: boolean;
   houseIsRunning?: boolean;
   lastRun?: PipelineRunInfo;
+  houseLastRun?: HouseRunInfo;
 }
 
 export async function fetchAdminPipelineStatus(token: string): Promise<AdminPipelineStatus> {

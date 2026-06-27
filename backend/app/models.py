@@ -630,6 +630,21 @@ class PipelineRun(Base):
     progress_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class HousePipelineRun(Base):
+    """Tracks each House representative pipeline run — mirrors PipelineRun for senators."""
+    __tablename__ = "house_pipeline_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    started_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    status: Mapped[str] = mapped_column(String, default="running")
+    reps_processed: Mapped[int] = mapped_column(Integer, default=0)
+    reps_total: Mapped[int] = mapped_column(Integer, default=0)
+    reps_failed: Mapped[int] = mapped_column(Integer, default=0)
+    elapsed_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class BskySenatorSpotlight(Base):
     """Tracks which senators have been highlighted in daily Bluesky score posts."""
     __tablename__ = "bsky_senator_spotlights"

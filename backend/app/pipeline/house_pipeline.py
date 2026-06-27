@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
-from app.models import Representative, ScoreSnapshot
+from app.models import HousePipelineRun, Representative, ScoreSnapshot
 from app.services.representative_service import upsert_representative
 
 from app.pipeline.fetch.congress import (
@@ -72,6 +72,11 @@ async def run_house_pipeline() -> dict:
     db = SessionLocal()
     start_time = time.time()
 
+    # Record run start so failures are visible in the admin dashboard.
+    house_run = HousePipelineRun(started_at=datetime.utcnow(), status="running")
+    db.add(house_run)
+    db.commit()
+
     try:
         logger.info("=== HOUSE PIPELINE START ===")
 
@@ -83,7 +88,13 @@ async def run_house_pipeline() -> dict:
 
             if not raw_members:
                 logger.warning("No House members found — aborting")
-                return {"status": "no_data", "elapsed_seconds": round(time.time() - start_time, 1)}
+                elapsed = round(time.time() - start_time, 1)
+                house_run.status = "failed"
+                house_run.completed_at = datetime.utcnow()
+                house_run.error_message = "No House members returned from Congress API"
+                house_run.elapsed_seconds = elapsed
+                db.commit()
+                return {"status": "no_data", "elapsed_seconds": elapsed}
 
             member_details: dict[str, dict] = {}
             for i, m in enumerate(raw_members):
@@ -532,8 +543,19 @@ async def run_house_pipeline() -> dict:
             logger.info("Representatives: %d success, %d failed", success_count, fail_count)
             logger.info("Time: %.1fs", elapsed)
 
+            status = "completed" if fail_count == 0 else ("partial" if success_count > 0 else "failed")
+            house_run.status = status
+            house_run.completed_at = datetime.utcnow()
+            house_run.reps_processed = success_count
+            house_run.reps_total = success_count + fail_count
+            house_run.reps_failed = fail_count
+            house_run.elapsed_seconds = round(elapsed, 1)
+            if fail_count > 0:
+                house_run.error_message = f"{fail_count} of {success_count + fail_count} reps failed — check logs"
+            db.commit()
+
             return {
-                "status": "completed",
+                "status": status,
                 "reps_processed": success_count,
                 "reps_failed": fail_count,
                 "elapsed_seconds": round(elapsed, 1),
@@ -541,6 +563,14 @@ async def run_house_pipeline() -> dict:
 
     except Exception as e:
         logger.exception("House pipeline failed: %s", e)
+        try:
+            house_run.status = "failed"
+            house_run.completed_at = datetime.utcnow()
+            house_run.elapsed_seconds = round(time.time() - start_time, 1)
+            house_run.error_message = str(e)[:500]
+            db.commit()
+        except Exception:
+            logger.exception("Failed to record house pipeline failure")
         return {"status": "failed", "error": str(e)[:500]}
     finally:
         _house_pipeline_running = False

@@ -434,6 +434,7 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
 
     from app.api.pipeline import _is_pipeline_running
     from app.pipeline.house_pipeline import is_house_pipeline_running
+    from app.models import HousePipelineRun
     is_running = _is_pipeline_running(db)
 
     last_run = (
@@ -441,8 +442,30 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
         .order_by(PipelineRun.started_at.desc())
         .first()
     )
+    last_house_run = (
+        db.query(HousePipelineRun)
+        .order_by(HousePipelineRun.started_at.desc())
+        .first()
+    )
 
     result: dict = {"isRunning": is_running, "houseIsRunning": is_house_pipeline_running()}
+
+    if last_house_run:
+        house_elapsed = last_house_run.elapsed_seconds
+        if last_house_run.status == "running" and last_house_run.started_at:
+            house_elapsed = round((datetime.utcnow() - last_house_run.started_at).total_seconds(), 1)
+        result["houseLastRun"] = {
+            "id": last_house_run.id,
+            "startedAt": last_house_run.started_at.isoformat() if last_house_run.started_at else None,
+            "completedAt": last_house_run.completed_at.isoformat() if last_house_run.completed_at else None,
+            "status": last_house_run.status,
+            "repsProcessed": last_house_run.reps_processed,
+            "repsTotal": last_house_run.reps_total,
+            "repsFailed": last_house_run.reps_failed,
+            "elapsedSeconds": house_elapsed,
+            "errorMessage": last_house_run.error_message,
+        }
+
     if last_run:
         elapsed = last_run.elapsed_seconds
         if last_run.status == "running" and last_run.started_at:
@@ -483,16 +506,25 @@ async def admin_pipeline_history(
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    """Return recent pipeline run history."""
-    runs = (
+    """Return recent pipeline run history (Senate + House interleaved by date)."""
+    from app.models import HousePipelineRun
+    senate_runs = (
         db.query(PipelineRun)
         .order_by(PipelineRun.started_at.desc())
         .limit(limit)
         .all()
     )
-    return [
+    house_runs = (
+        db.query(HousePipelineRun)
+        .order_by(HousePipelineRun.started_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    senate_entries = [
         {
             "id": r.id,
+            "pipelineType": "senate",
             "startedAt": r.started_at.isoformat() if r.started_at else None,
             "completedAt": r.completed_at.isoformat() if r.completed_at else None,
             "status": r.status,
@@ -507,8 +539,30 @@ async def admin_pipeline_history(
             "elapsedSeconds": r.elapsed_seconds,
             "errorMessage": r.error_message,
         }
-        for r in runs
+        for r in senate_runs
     ]
+    house_entries = [
+        {
+            "id": r.id,
+            "pipelineType": "house",
+            "startedAt": r.started_at.isoformat() if r.started_at else None,
+            "completedAt": r.completed_at.isoformat() if r.completed_at else None,
+            "status": r.status,
+            "repsProcessed": r.reps_processed,
+            "repsTotal": r.reps_total,
+            "repsFailed": r.reps_failed,
+            "elapsedSeconds": r.elapsed_seconds,
+            "errorMessage": r.error_message,
+        }
+        for r in house_runs
+    ]
+
+    combined = sorted(
+        senate_entries + house_entries,
+        key=lambda x: x["startedAt"] or "",
+        reverse=True,
+    )
+    return combined[:limit]
 
 
 @router.post("/pipeline/trigger", dependencies=[Depends(require_admin)])
