@@ -13,7 +13,7 @@ import {
   type ExploreResult,
   type ExploreStats,
 } from "@/lib/api";
-import { safeHref } from "@/lib/formatting";
+import { safeHref, localDateStr } from "@/lib/formatting";
 import { chamberColor, chamberBg, chamberLabel } from "@/lib/chamber";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 
@@ -59,7 +59,7 @@ function formatDate(dateStr: string): string {
 
 function isCommentOpen(result: ExploreResult): boolean {
   if (!result.commentUrl || !result.commentsCloseOn) return false;
-  return result.commentsCloseOn >= new Date().toISOString().slice(0, 10);
+  return result.commentsCloseOn >= localDateStr();
 }
 
 function daysUntilClose(closeDate: string): number {

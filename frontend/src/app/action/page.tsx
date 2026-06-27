@@ -10,7 +10,7 @@ import Footer from "@/components/layout/Footer";
 import GlitchText from "@/components/effects/GlitchText";
 import { fetchActionIssues, fetchOpenComments, OpenCommentItem } from "@/lib/api";
 import { useUserState } from "@/hooks/useUserState";
-import { safeHref } from "@/lib/formatting";
+import { safeHref, formatUtcDate } from "@/lib/formatting";
 import StancePulse from "@/components/action/StancePulse";
 import { LogActionButton } from "@/components/action/CivicTracker";
 import ShareButtons from "@/components/action/ShareButtons";
@@ -914,7 +914,7 @@ function IssuesTab({
             ← PREV
           </button>
           <span className="text-matrix-green/70 px-3 py-1 border border-matrix-green/15 bg-matrix-green/5 min-w-[110px] text-center">
-            {currentDate || "—"}
+            {currentDate ? formatUtcDate(currentDate, { month: "short", day: "numeric", year: "numeric" }) : "—"}
           </span>
           <button
             onClick={goToNext}

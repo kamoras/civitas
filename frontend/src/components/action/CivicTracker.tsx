@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { localDateStr } from "@/lib/formatting";
 
 const STORAGE_KEY = "civitas_actions";
 
@@ -13,7 +14,7 @@ export interface CivicAction {
 }
 
 function today(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localDateStr();
 }
 
 function loadActions(): CivicAction[] {
@@ -37,7 +38,7 @@ function computeStreak(actions: CivicAction[]): number {
   const d = new Date();
   // count back from today; allow today to count even if no action yet today
   for (let i = 0; i < 365; i++) {
-    const key = d.toISOString().slice(0, 10);
+    const key = localDateStr(d);
     if (days.has(key)) {
       streak++;
       d.setDate(d.getDate() - 1);

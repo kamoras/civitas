@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ActionIssue } from "@/types/action";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
-const SITE = "https://civitas.paramain.com";
+const SITE = "https://civitas.vote";
 
 async function fetchIssue(id: string): Promise<ActionIssue | null> {
   try {

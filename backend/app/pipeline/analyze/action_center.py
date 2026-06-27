@@ -19,6 +19,9 @@ import logging
 import re
 import time
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+_US_EAST = ZoneInfo("America/New_York")
 
 import httpx
 import numpy as np
@@ -2359,7 +2362,7 @@ def refresh_action_issues(db: Session | None = None) -> int:
 
 def _run_refresh(db: Session) -> int:
     t0 = time.perf_counter()
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(_US_EAST).strftime("%Y-%m-%d")
 
     logger.info("Action center refresh starting for %s", today)
 

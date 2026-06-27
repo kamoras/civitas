@@ -6,7 +6,7 @@ import Link from "next/link";
 import MatrixRain from "@/components/effects/MatrixRain";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
-import { safeHref } from "@/lib/formatting";
+import { safeHref, localDateStr } from "@/lib/formatting";
 import { chamberColor, chamberBorder, chamberLabel } from "@/lib/chamber";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import {
@@ -63,7 +63,7 @@ function scorecardHref(doc: ExploreDocumentDetail): string | null {
 
 function isCommentOpen(doc: ExploreDocumentDetail): boolean {
   if (!doc.commentUrl || !doc.commentsCloseOn) return false;
-  return doc.commentsCloseOn >= new Date().toISOString().slice(0, 10);
+  return doc.commentsCloseOn >= localDateStr();
 }
 
 function daysUntilClose(closeDate: string): number {
