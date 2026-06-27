@@ -2581,22 +2581,23 @@ def _run_refresh(db: Session) -> int:
                 db.add(DailyTheme(date=today, theme_json=json.dumps(theme)))
             db.commit()
 
-    # Stage 4: Generate full stories for issues that don't have one yet
-    if issues_created > 0:
-        story_issues = (
-            db.query(ActionIssue)
-            .filter(ActionIssue.date == today, ActionIssue.full_story.is_(None))
-            .order_by(ActionIssue.rank)
-            .all()
-        )
-        for issue in story_issues:
-            try:
-                story = _generate_full_story(issue)
-                if story:
-                    issue.full_story = story
-                    db.commit()
-            except Exception:
-                logger.exception("Full story generation failed for issue %s (non-fatal)", issue.id)
+    # Stage 4: Generate full stories for issues that don't have one yet.
+    # Runs every refresh (not gated on issues_created) so that stories missed
+    # due to LLM timeouts or concurrent refreshes get filled in on the next cycle.
+    story_issues = (
+        db.query(ActionIssue)
+        .filter(ActionIssue.date == today, ActionIssue.full_story.is_(None))
+        .order_by(ActionIssue.rank)
+        .all()
+    )
+    for issue in story_issues:
+        try:
+            story = _generate_full_story(issue)
+            if story:
+                issue.full_story = story
+                db.commit()
+        except Exception:
+            logger.exception("Full story generation failed for issue %s (non-fatal)", issue.id)
 
     # Stage 5: Post new/surging issues to Bluesky
     if issues_created > 0:

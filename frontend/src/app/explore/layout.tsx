@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Explore Congressional Bills & Votes — Civitas",
     description: "Search bills, votes, and policy documents by topic. Discover how Congress is acting on issues that affect you.",
-    url: "https://civitas.vote/explore",
+    url: "https://civitas.paramain.com/explore",
   },
   twitter: {
     card: "summary_large_image",

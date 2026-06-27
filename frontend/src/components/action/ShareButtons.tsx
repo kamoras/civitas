@@ -25,7 +25,7 @@ function buildShareText(title: string, shareUrl: string): string {
 }
 
 export default function ShareButtons({ issue, className = "" }: ShareButtonsProps) {
-  const shareUrl = `https://civitas.vote/action?issue=${issue.id}`;
+  const shareUrl = `https://civitas.paramain.com/action?issue=${issue.id}`;
   const shareText = buildShareText(issue.title, shareUrl);
   const encodedText = encodeURIComponent(shareText);
 

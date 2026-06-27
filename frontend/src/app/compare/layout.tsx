@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Compare Congress Members — Civitas",
     description: "Side-by-side comparison of campaign finance, voting records, and representation scores for any two members of Congress.",
-    url: "https://civitas.vote/compare",
+    url: "https://civitas.paramain.com/compare",
   },
   twitter: {
     card: "summary_large_image",
