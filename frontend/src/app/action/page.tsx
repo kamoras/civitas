@@ -1161,7 +1161,7 @@ function ActionPageInner() {
           <div
             role="tablist"
             aria-label="Action Center sections"
-            className="flex gap-1 mb-8 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 sticky top-16 z-30 bg-crt-black/95 backdrop-blur-sm"
+            className="flex gap-1 mb-8 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 sticky top-10 z-30 bg-crt-black/95 backdrop-blur-sm"
             onKeyDown={(e) => {
               const tabs = TABS.map((t) => t.id);
               const idx = tabs.indexOf(activeTab);

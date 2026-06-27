@@ -143,6 +143,13 @@ POLICY_TAXONOMY = {
         "bail reform, executive authority, national emergencies, "
         "District of Columbia governance, and constitutional powers."
     ),
+    "ECONOMY": (
+        "Macroeconomic conditions, financial markets, and broad economic policy. "
+        "Includes stock market volatility, market selloffs, recession fears, "
+        "inflation, consumer prices, cost of living, GDP, Federal Reserve, "
+        "interest rates, monetary policy, jobs report, unemployment rate, "
+        "economic outlook, and supply chain disruptions."
+    ),
     "TRADE": (
         "International trade, tariffs, economic sanctions, and commerce. "
         "Includes import/export policy, USMCA, trade agreements, "
