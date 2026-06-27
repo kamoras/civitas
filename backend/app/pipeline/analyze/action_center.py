@@ -2509,28 +2509,18 @@ def _run_refresh(db: Session) -> int:
         )
         if existing:
             if existing.bsky_posted_at is not None:
-                # Issue has been posted to Bluesky — its URL must remain stable.
-                # Only update if the new cluster is still about the same topic;
-                # if a different topic has taken this rank slot on a re-run,
-                # skip the update entirely so the posted issue stays coherent.
-                # (The mismatched cluster will appear at a different rank or be
-                # dropped — the posted issue is preserved as-is.)
-                existing_emb = _embed_texts([existing.title])[0]
-                new_emb = _embed_texts([issue.title[:500]])[0]
-                title_sim = float(existing_emb @ new_emb)
-                if title_sim < 0.82:
-                    logger.info(
-                        "Skipping rank %d update: new cluster '%s' diverges from "
-                        "posted issue '%s' (title_sim=%.3f)",
-                        rank, issue.title[:60], existing.title[:60], title_sim,
-                    )
-                    created_ranks.add(rank)
-                    issues_created += 1
-                    continue
-                # Same topic — safe to refresh enrichment metadata
-                for attr in ("actions", "source_urls", "source_names", "policy_areas",
-                             "related_bill_ids", "related_explore_ids", "related_senators"):
-                    setattr(existing, attr, getattr(issue, attr))
+                # Issue has been posted to Bluesky — treat it as immutable.
+                # Any new cluster at this rank slot is ignored; the posted
+                # issue stands as-is. Mixing new sources into a frozen title
+                # produces incoherent content (e.g. stock market title with
+                # housing legislation sources).
+                logger.debug(
+                    "Skipping rank %d: already posted to Bluesky ('%s')",
+                    rank, existing.title[:60],
+                )
+                created_ranks.add(rank)
+                issues_created += 1
+                continue
             else:
                 # Not yet posted — free to update all fields.
                 title_changed = existing.title != issue.title[:500]
