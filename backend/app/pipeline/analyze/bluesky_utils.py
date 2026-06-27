@@ -2,6 +2,7 @@
 
 import logging
 import re
+from html import unescape
 
 import httpx
 
@@ -36,7 +37,7 @@ def build_link_card(client, url: str):
             rf'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:{prop}["\']',
             html, re.IGNORECASE,
         )
-        return m.group(1) if m else ""
+        return unescape(m.group(1)) if m else ""
 
     title = _og("title") or "Civitas // Public Record"
     description = _og("description") or ""
