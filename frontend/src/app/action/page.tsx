@@ -1023,7 +1023,7 @@ function OpenCommentsBanner({ onCount }: { onCount?: (n: number) => void }) {
   useEffect(() => {
     fetchOpenComments()
       .then((data) => {
-        setItems(data.slice(0, 4));
+        setItems(data);
         onCount?.(data.length);
       })
       .catch(() => {});
