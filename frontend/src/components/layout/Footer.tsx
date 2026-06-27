@@ -1,75 +1,4 @@
-"use client";
-
-import { useState } from "react";
 import Link from "next/link";
-
-function DigestSubscribeForm() {
-  const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<"idle" | "loading" | "ok" | "err">("idle");
-  const [msg, setMsg] = useState("");
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!email.trim() || status === "loading") return;
-    setStatus("loading");
-    try {
-      const res = await fetch("/api/alerts/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), topics: [], senators: [] }),
-      });
-      const data = await res.json();
-      if (res.ok && data.ok) {
-        setStatus("ok");
-        setMsg(data.message || "Subscribed!");
-        setEmail("");
-      } else {
-        setStatus("err");
-        setMsg(data.detail || "Something went wrong.");
-      }
-    } catch {
-      setStatus("err");
-      setMsg("Could not connect. Please try again.");
-    }
-  }
-
-  if (status === "ok") {
-    return (
-      <p className="text-xs text-emerald-400/80 text-center">{msg}</p>
-    );
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="flex flex-col items-center gap-2 w-full max-w-sm">
-      <p className="text-[10px] font-mono text-matrix-green/40 tracking-widest">WEEKLY DIGEST</p>
-      <div className="flex w-full gap-2">
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="your@email.com"
-          required
-          className="flex-1 min-w-0 bg-crt-black border border-matrix-green/20 text-matrix-green text-xs px-3 py-2
-                     placeholder:text-matrix-green/25 focus:outline-none focus:border-emerald-500/50 transition-colors"
-        />
-        <button
-          type="submit"
-          disabled={status === "loading"}
-          className="text-[10px] font-mono tracking-widest px-3 py-2 border border-emerald-500/40 text-emerald-400
-                     hover:bg-emerald-500/10 transition-colors disabled:opacity-40 shrink-0"
-        >
-          {status === "loading" ? "..." : "SUBSCRIBE"}
-        </button>
-      </div>
-      {status === "err" && (
-        <p className="text-[10px] text-red-400/70">{msg}</p>
-      )}
-      <p className="text-[9px] text-matrix-green/25 text-center">
-        Weekly summary of votes, monitors, and open comment periods. No spam. One-click unsubscribe.
-      </p>
-    </form>
-  );
-}
 
 export default function Footer() {
   return (
@@ -102,9 +31,6 @@ export default function Footer() {
             ENVIRONMENTAL
           </Link>
         </nav>
-
-        {/* Digest subscribe */}
-        <DigestSubscribeForm />
 
         {/* Disclaimer */}
         <p className="text-xs text-matrix-green/50 max-w-lg text-center leading-relaxed">
