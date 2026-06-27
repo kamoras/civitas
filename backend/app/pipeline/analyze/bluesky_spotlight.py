@@ -32,8 +32,19 @@ _SYSTEM_PROMPT = (
 )
 
 
-def _pick_senator(db: Session) -> Senator | None:
-    """Return the next senator to spotlight, cycling through all before repeating."""
+def _overall_score(s: Senator) -> float:
+    scores = [
+        s.score_funding_independence or 0,
+        s.score_promise_persistence or 0,
+        s.score_independent_voting or 0,
+        s.score_funding_diversity or 0,
+        s.score_legislative_effectiveness or 0,
+    ]
+    return sum(scores) / len(scores)
+
+
+def _pick_senator(db: Session) -> tuple["Senator | None", int, int]:
+    """Return (senator, rank, total) cycling between highest and lowest scorers."""
     spotlighted_ids = {
         row.senator_id
         for row in db.query(BskySenatorSpotlight.senator_id).all()
@@ -45,35 +56,28 @@ def _pick_senator(db: Session) -> Senator | None:
         .all()
     )
     if not senators:
-        return None
+        return None, 0, 0
 
-    # Prefer senators not yet spotlighted
-    unspotlighted = [s for s in senators if s.id not in spotlighted_ids]
+    # All senators ranked best → worst (for absolute rank lookup)
+    all_ranked = sorted(senators, key=_overall_score, reverse=True)
+    total = len(all_ranked)
+
+    unspotlighted = [s for s in all_ranked if s.id not in spotlighted_ids]
     if not unspotlighted:
-        # Full cycle complete — reset and start again
-        logger.info("All %d senators spotlighted — resetting cycle", len(senators))
+        logger.info("All %d senators spotlighted — resetting cycle", total)
         db.query(BskySenatorSpotlight).delete()
         db.commit()
-        unspotlighted = senators
+        unspotlighted = list(all_ranked)
 
-    # Pick the one with the most extreme overall score (most newsworthy)
-    def overall(s: Senator) -> float:
-        scores = [
-            s.score_funding_independence or 0,
-            s.score_promise_persistence or 0,
-            s.score_independent_voting or 0,
-            s.score_funding_diversity or 0,
-            (s.score_legislative_effectiveness or 0),
-        ]
-        return sum(scores) / len(scores)
-
-    # Alternate between highest and lowest to vary the tone
+    # Alternate between picking the highest and lowest unspotlighted senator
     cycle_pos = len(spotlighted_ids) % 2
-    ranked = sorted(unspotlighted, key=overall, reverse=(cycle_pos == 0))
-    return ranked[0]
+    pick = unspotlighted[0] if cycle_pos == 0 else unspotlighted[-1]
+
+    rank = next(i + 1 for i, s in enumerate(all_ranked) if s.id == pick.id)
+    return pick, rank, total
 
 
-def _generate_spotlight_post(senator: Senator) -> str | None:
+def _generate_spotlight_post(senator: "Senator", rank: int, total: int) -> str | None:
     """Ask the LLM to write a score highlight post for this senator."""
     scores = {
         "Funding independence": round(senator.score_funding_independence or 0, 1),
@@ -85,17 +89,26 @@ def _generate_spotlight_post(senator: Senator) -> str | None:
     overall = round(sum(scores.values()) / len(scores), 1)
     score_lines = "\n".join(f"- {k}: {v}/100" for k, v in scores.items())
 
+    # Give the LLM clear standing context so tone matches the senator's actual ranking
+    standing = f"ranks #{rank} of {total} senators"
+    if rank <= max(1, total // 5):
+        standing_context = f"a top performer — {standing}"
+    elif rank >= total - total // 5:
+        standing_context = f"a low performer — {standing}"
+    else:
+        standing_context = standing
+
     user_prompt = f"""Write a Bluesky post spotlighting this senator's Civitas transparency score.
 
 Senator: {senator.name} ({senator.party}-{senator.state})
-Overall score: {overall}/100
+Overall score: {overall}/100 ({standing_context})
 Individual scores:
 {score_lines}
 
 RULES:
-1. Mention the senator's name, state, and one or two of the most notable scores.
-2. Focus on the most striking data point — the highest or lowest individual score.
-3. Be factual and neutral. Do not say "good" or "bad" — just report the numbers.
+1. Mention the senator's name, state, and their overall score and standing.
+2. Highlight the most notable individual score (highest or lowest) with its number.
+3. The tone must match the standing: factual praise for top performers, factual concern for low performers. Do not use "good" or "bad" — let the numbers and ranking speak.
 4. STRICT MAXIMUM: {MAX_SPOTLIGHT_CHARS} characters total.
 5. Write 1-2 complete sentences ending with proper punctuation.
 6. No hashtags, no exclamation points, no editorializing.
@@ -190,12 +203,12 @@ def post_daily_spotlight(db: Session) -> None:
         logger.debug("Spotlight already posted today — skipping")
         return
 
-    senator = _pick_senator(db)
+    senator, rank, total = _pick_senator(db)
     if not senator:
         logger.warning("No senators available for spotlight")
         return
 
-    text = _generate_spotlight_post(senator)
+    text = _generate_spotlight_post(senator, rank, total)
     if not text:
         logger.warning("Failed to generate spotlight text for %s", senator.name)
         return
