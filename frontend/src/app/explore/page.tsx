@@ -6,6 +6,7 @@ import Link from "next/link";
 import MatrixRain from "@/components/effects/MatrixRain";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import BackToTop from "@/components/BackToTop";
 import {
   searchExplore,
   fetchExploreStats,
@@ -132,25 +133,20 @@ function ResultCard({
       </Link>
 
       {commentOpen && (
-        <div className="px-4 pb-3 pt-0 flex items-center justify-between gap-3 border-t border-emerald-500/15">
-          <span className="text-[10px] text-emerald-400/70">
-            {remaining === 0
-              ? "Comments close today!"
-              : `${remaining} day${remaining !== 1 ? "s" : ""} left to comment`}
-          </span>
-          <a
-            href={safeHref(result.commentUrl) || "#"}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="text-[10px] font-mono tracking-wide px-3 py-1.5 rounded
-                       bg-emerald-500/20 text-emerald-400 border border-emerald-500/40
-                       hover:bg-emerald-500/30 hover:border-emerald-500/60
-                       transition-colors shrink-0"
-          >
-            SUBMIT COMMENT →
-          </a>
-        </div>
+        <Link
+          href={detailHref + "#comment"}
+          onClick={(e) => e.stopPropagation()}
+          className="flex items-center justify-center gap-2 mx-3 mb-3 px-4 py-2 rounded
+                     border border-neon-cyan/40 text-neon-cyan/70 hover:text-neon-cyan
+                     hover:border-neon-cyan/70 hover:bg-neon-cyan/5
+                     text-[11px] font-mono tracking-wide transition-colors"
+        >
+          <span aria-hidden="true">✎</span>
+          SUBMIT YOUR COMMENT —{" "}
+          {remaining === 0
+            ? "closes today"
+            : `${remaining} day${remaining !== 1 ? "s" : ""} left`}
+        </Link>
       )}
     </div>
   );
@@ -478,6 +474,7 @@ function ExplorePageInner() {
         </div>
       </main>
       <Footer />
+      <BackToTop />
     </>
   );
 }

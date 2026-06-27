@@ -164,6 +164,13 @@ export default async function IssuePage({
                   </h2>
                 );
               }
+              // Bold paragraph: starts and ends with **
+              if (para.startsWith("**") && para.endsWith("**") && para.length > 4) {
+                const stripped = para.slice(2, -2);
+                return (
+                  <p key={i} className="text-matrix-green font-medium">{stripped}</p>
+                );
+              }
               return (
                 <p key={i}>{para}</p>
               );

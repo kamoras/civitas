@@ -13,6 +13,16 @@ interface RepresentationScoreProps {
   votingRecord?: VotingRecord;
   funding?: Senator["funding"];
   sponsoredBills?: SponsoredBill[];
+  rank?: number;
+  totalInChamber?: number;
+}
+
+function getScoreGrade(score: number): string {
+  if (score >= 80) return "A";
+  if (score >= 60) return "B";
+  if (score >= 40) return "C";
+  if (score >= 20) return "D";
+  return "F";
 }
 
 const SCORE_KEYS: ScoreKey[] = [
@@ -23,15 +33,23 @@ const SCORE_KEYS: ScoreKey[] = [
   "legislativeEffectiveness",
 ];
 
+const METRIC_BLURBS: Record<ScoreKey, string> = {
+  fundingIndependence: "How little of their campaign comes from PACs",
+  promisePersistence: "Do their votes match their campaign promises?",
+  independentVoting: "How often they break from their party",
+  fundingDiversity: "How many different industries fund them",
+  legislativeEffectiveness: "How well they advance bills they sponsor",
+};
+
 function ScoreBar({
   value,
   label,
-  description,
+  blurb,
   basis,
 }: {
   value: number;
   label: string;
-  description: string;
+  blurb: string;
   basis?: string;
 }) {
   const filled = Math.round(value / 5);
@@ -46,8 +64,8 @@ function ScoreBar({
       <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 text-sm">
         <div className="w-48 shrink-0" id={`score-label-${label.replace(/\s+/g, "-").toLowerCase()}`}>
           <span className="text-matrix-green/70">{label}</span>
-          <div className="text-[10px] text-matrix-green/50 leading-tight">{description}</div>
-          {basis && <div className="text-[10px] text-matrix-green/50 italic leading-tight">{basis}</div>}
+          <div className="text-[10px] text-neon-cyan/50 leading-tight">{blurb}</div>
+          {basis && <div className="text-[10px] text-matrix-green/40 italic leading-tight">{basis}</div>}
         </div>
         <span
           className="font-mono text-xs tracking-tight hidden sm:inline"
@@ -82,11 +100,13 @@ function ScoreBar({
   );
 }
 
-export default function CorruptionScore({ breakdown, promises, votingRecord, funding, sponsoredBills }: RepresentationScoreProps) {
+export default function CorruptionScore({ breakdown, promises, votingRecord, funding, sponsoredBills, rank, totalInChamber }: RepresentationScoreProps) {
   const weights = useScoreWeights();
   const overall = calculateOverallScore(breakdown, weights);
   const label = getScoreLabel(overall);
   const colorClass = getScoreColor(overall);
+  const grade = getScoreGrade(overall);
+
   const evaluable = (promises ?? []).filter(p => p.alignment !== "unclear").length;
   const totalPromises = (promises ?? []).length;
   const promiseBasis: string | undefined =
@@ -124,8 +144,11 @@ export default function CorruptionScore({ breakdown, promises, votingRecord, fun
 
   return (
     <div>
-      <div className="flex items-end gap-4 mb-4">
-        <div className={`text-5xl sm:text-6xl font-pixel ${colorClass}`}>{overall}</div>
+      <div className="flex items-end gap-4 mb-1">
+        <div className="flex items-baseline gap-2">
+          <div className={`text-5xl sm:text-6xl font-pixel ${colorClass}`}>{overall}</div>
+          <div className={`text-2xl sm:text-3xl font-pixel ${colorClass} opacity-70`} title={`Grade: ${grade}`}>{grade}</div>
+        </div>
         <div className="pb-2">
           <div className="text-xs text-matrix-green/40">
             <MetricTooltip text="Weighted average of 5 sub-scores measuring how well this senator represents constituents. Based on funding sources, promise follow-through, voting independence, funding diversity, and legislative effectiveness. 100 = ideal representation, 0 = none. Scores near 50 mean limited data.">
@@ -137,10 +160,26 @@ export default function CorruptionScore({ breakdown, promises, votingRecord, fun
         </div>
       </div>
 
-      <div className="space-y-3">
+      {rank != null && totalInChamber != null && (
+        <div className="mb-4 text-xs font-mono tracking-wide">
+          <span className="text-neon-cyan/80">RANKS #{rank} OF {totalInChamber}</span>
+          <span className="text-matrix-green/30 mx-2">·</span>
+          <span className="text-matrix-green/60">BETTER THAN {Math.round(((totalInChamber - rank) / totalInChamber) * 100)}% OF THE CHAMBER</span>
+        </div>
+      )}
+
+      <div className="space-y-3 mt-4">
         {SCORE_KEYS.map((key) => {
           const t = TECHNICAL_TERMS[key];
-          return <ScoreBar key={key} value={breakdown[key]} label={t.label} description={t.description} basis={scoreBasis[key]} />;
+          return (
+            <ScoreBar
+              key={key}
+              value={breakdown[key]}
+              label={t.label}
+              blurb={METRIC_BLURBS[key]}
+              basis={scoreBasis[key]}
+            />
+          );
         })}
       </div>
 

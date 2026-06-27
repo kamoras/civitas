@@ -4,6 +4,8 @@ export interface RelatedExploreDoc {
   docType: string;
   date: string;
   url: string | null;
+  commentUrl?: string | null;
+  commentsCloseOn?: string | null;
 }
 
 export interface RelatedSenator {
@@ -123,4 +125,5 @@ export interface ActionIssuesResponse {
   issues: ActionIssue[];
   theme?: DailyTheme | null;
   availableDates?: string[];
+  generatedAt?: string;
 }

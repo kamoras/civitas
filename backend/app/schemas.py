@@ -337,6 +337,8 @@ class RelatedExploreDoc(CamelModel):
     doc_type: str
     date: str
     url: str | None = None
+    comment_url: str | None = None
+    comments_close_on: str | None = None
 
 
 class RelatedSenator(CamelModel):

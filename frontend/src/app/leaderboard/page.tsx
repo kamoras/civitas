@@ -8,6 +8,7 @@ import TerminalTitlebar from "@/components/TerminalTitlebar";
 import MatrixRain from "@/components/effects/MatrixRain";
 import BranchSelector, { type Branch } from "@/components/BranchSelector";
 import Footer from "@/components/layout/Footer";
+import BackToTop from "@/components/BackToTop";
 import { fetchLeaderboard, fetchRepLeaderboard, fetchPresidentLeaderboard, fetchJusticeLeaderboard } from "@/lib/api";
 import { calculateOverallScore, calculatePresidentScore, calculateJusticeScore, getScoreColor } from "@/lib/corruption";
 import { useScoreWeights } from "@/hooks/useConfig";
@@ -884,6 +885,7 @@ function LeaderboardContent() {
         </div>
       </div>
       <Footer />
+      <BackToTop />
     </main>
   );
 }

@@ -142,6 +142,11 @@ export default function MonitorsTab() {
             <h3 className="font-pixel text-sm text-matrix-green mb-1 leading-relaxed">
               {m.title}
             </h3>
+            {selected?.slug !== m.slug && m.description && (
+              <p className="text-xs text-matrix-green/40 mb-2 line-clamp-1 leading-snug">
+                {m.description}
+              </p>
+            )}
             <div className="flex items-center gap-3 text-[10px] text-matrix-green/40">
               <span>{m.updateCount} update{m.updateCount !== 1 ? "s" : ""}</span>
               {m.lastArticleDate && (

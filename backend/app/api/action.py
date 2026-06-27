@@ -57,6 +57,8 @@ def _build_issue_response(
             RelatedExploreDoc(
                 id=d.id, title=d.title, doc_type=d.doc_type,
                 date=d.date, url=d.url,
+                comment_url=d.comment_url or None,
+                comments_close_on=d.comments_close_on or None,
             ).model_dump(by_alias=True)
             for d in docs
         ]

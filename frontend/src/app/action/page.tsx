@@ -14,6 +14,7 @@ import { safeHref } from "@/lib/formatting";
 import StancePulse from "@/components/action/StancePulse";
 import { LogActionButton } from "@/components/action/CivicTracker";
 import ShareButtons from "@/components/action/ShareButtons";
+import BackToTop from "@/components/BackToTop";
 
 const CivicActionWidget = dynamic(
   () => import("@/components/action/CivicTracker"),
@@ -124,10 +125,10 @@ function StatePicker({
 const TABS: { id: Tab; label: string; color: string }[] = [
   { id: "issues", label: "ISSUES", color: "text-neon-cyan border-neon-cyan" },
   { id: "my-reps", label: "MY REPS", color: "text-neon-pink border-neon-pink" },
-  { id: "elections", label: "ELECTIONS", color: "text-neon-yellow border-neon-yellow" },
   { id: "monitors", label: "MONITORS", color: "text-amber-400 border-amber-400" },
-  { id: "world", label: "WORLD MAP", color: "text-green-400 border-green-400" },
   { id: "timeline", label: "TIMELINE", color: "text-purple-400 border-purple-400" },
+  { id: "elections", label: "ELECTIONS", color: "text-neon-yellow border-neon-yellow" },
+  { id: "world", label: "GLOBE", color: "text-green-400 border-green-400" },
 ];
 
 function PolicyBadge({ area, themed = false }: { area: string; themed?: boolean }) {
@@ -410,32 +411,37 @@ function HeroIssue({
           <h3 className="font-mono text-[10px] tracking-widest text-matrix-green/40 mb-3 uppercase">
             Related Documents
           </h3>
-          <div className="space-y-1.5">
-            {issue.relatedExploreDocs.map((doc) => (
-              <div key={doc.id} className="flex items-center gap-2 text-sm">
-                <span className="text-[10px] px-1 py-0.5 border border-matrix-green/20 text-matrix-green/40 font-mono tracking-wide">
-                  {doc.docType.replace(/_/g, " ")}
-                </span>
-                {doc.url ? (
-                  <a
-                    href={safeHref(doc.url) || "#"}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-neon-cyan/70 hover:text-neon-cyan transition-colors truncate"
-                  >
-                    {doc.title}
-                  </a>
-                ) : (
-                  <Link
-                    href={`/explore/${doc.id}`}
-                    className="text-neon-cyan/70 hover:text-neon-cyan transition-colors truncate"
-                  >
-                    {doc.title}
-                  </Link>
-                )}
-                <span className="text-matrix-green/30 text-[10px] shrink-0">{doc.date}</span>
-              </div>
-            ))}
+          <div className="space-y-2">
+            {issue.relatedExploreDocs.map((doc) => {
+              const today = new Date().toISOString().slice(0, 10);
+              const commentOpen = !!(doc.commentUrl && doc.commentsCloseOn && doc.commentsCloseOn >= today);
+              return (
+                <div key={doc.id} className="space-y-1">
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-[10px] px-1 py-0.5 border border-matrix-green/20 text-matrix-green/40 font-mono tracking-wide shrink-0">
+                      {doc.docType.replace(/_/g, " ")}
+                    </span>
+                    <Link
+                      href={`/explore/${doc.id}`}
+                      className="text-neon-cyan/70 hover:text-neon-cyan transition-colors truncate"
+                    >
+                      {doc.title}
+                    </Link>
+                    <span className="text-matrix-green/30 text-[10px] shrink-0">{doc.date}</span>
+                  </div>
+                  {commentOpen && (
+                    <Link
+                      href={`/explore/${doc.id}#comment`}
+                      className="inline-flex items-center gap-1.5 text-[10px] font-mono tracking-wide
+                                 text-neon-cyan/70 hover:text-neon-cyan border border-neon-cyan/30 hover:border-neon-cyan/60
+                                 px-2 py-0.5 transition-colors"
+                    >
+                      → SUBMIT COMMENT
+                    </Link>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -843,6 +849,19 @@ function IssuesTab({
   }, [currentIdx, availableDates, selectedDate, loadIssues, onDateChange]);
 
   const theme = data?.theme;
+  const generatedAt = data?.generatedAt;
+
+  function formatGeneratedAt(iso: string): string {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleString(undefined, {
+        month: "short", day: "numeric",
+        hour: "numeric", minute: "2-digit",
+      });
+    } catch {
+      return "";
+    }
+  }
 
   if (loading) {
     return (
@@ -914,6 +933,15 @@ function IssuesTab({
               LATEST
             </button>
           )}
+        </div>
+      )}
+
+      {/* Data freshness timestamp */}
+      {generatedAt && (
+        <div className="text-center">
+          <span className="text-matrix-green/30 text-[10px] font-mono">
+            Updated: {formatGeneratedAt(generatedAt)}
+          </span>
         </div>
       )}
 
@@ -989,14 +1017,17 @@ function isValidTab(s: string | null): s is Tab {
   return s !== null && VALID_TABS.has(s);
 }
 
-function OpenCommentsBanner() {
+function OpenCommentsBanner({ onCount }: { onCount?: (n: number) => void }) {
   const [items, setItems] = useState<OpenCommentItem[]>([]);
 
   useEffect(() => {
     fetchOpenComments()
-      .then((data) => setItems(data.slice(0, 4)))
+      .then((data) => {
+        setItems(data.slice(0, 4));
+        onCount?.(data.length);
+      })
       .catch(() => {});
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (items.length === 0) return null;
 
@@ -1066,6 +1097,7 @@ function ActionPageInner() {
   );
   const [userState, setUserState] = useUserState();
   const [sharedIssues, setSharedIssues] = useState<ActionIssue[]>([]);
+  const [openCommentCount, setOpenCommentCount] = useState(0);
 
   useEffect(() => {
     fetchActionIssues()
@@ -1123,13 +1155,13 @@ function ActionPageInner() {
           </div>
 
           {/* Open comment periods banner */}
-          <OpenCommentsBanner />
+          <OpenCommentsBanner onCount={setOpenCommentCount} />
 
           {/* Tab bar */}
           <div
             role="tablist"
             aria-label="Action Center sections"
-            className="flex gap-1 mb-8 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0"
+            className="flex gap-1 mb-8 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 sticky top-16 z-30 bg-crt-black/95 backdrop-blur-sm"
             onKeyDown={(e) => {
               const tabs = TABS.map((t) => t.id);
               const idx = tabs.indexOf(activeTab);
@@ -1164,6 +1196,11 @@ function ActionPageInner() {
                 }`}
               >
                 {tab.label}
+                {tab.id === "issues" && openCommentCount > 0 && (
+                  <span className="ml-1.5 text-[9px] text-emerald-400/80 border border-emerald-500/40 px-1 py-0.5 rounded bg-emerald-500/10">
+                    {openCommentCount} OPEN
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -1196,6 +1233,7 @@ function ActionPageInner() {
         </div>
       </main>
       <Footer />
+      <BackToTop />
       <CivicActionWidget />
     </>
   );

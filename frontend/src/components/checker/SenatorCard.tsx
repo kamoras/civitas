@@ -248,6 +248,9 @@ export default function SenatorCard({ senator, chamber = "senate" }: SenatorCard
           <div className="text-[10px] text-matrix-green/50 mt-2 text-right">
             Source: fec.gov/data &amp; opensecrets.org/members-of-congress
           </div>
+          <div className="text-[9px] text-matrix-green/30 mt-1 text-right">
+            Campaign finance data: FEC filings · May lag 4–8 weeks
+          </div>
         </div>
 
         {/* ── Compare link ── */}
