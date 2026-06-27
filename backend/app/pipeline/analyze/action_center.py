@@ -323,8 +323,8 @@ def _embed_texts(texts: list[str]) -> np.ndarray:
 
 _ROUNDUP_PATTERNS = re.compile(
     r"\b(week(?:ly)? in (?:politics|review|news)|week(?:'?s)? (?:top |best )?(?:news|stories|headlines)"
-    r"|roundup|wrap-?up|this week in|what(?:'?s| is) happening|news of the week"
-    r"|political news this week|what we('re| are) watching)\b",
+    r"|this week in|news of the week|political news this week|what we('re| are) watching"
+    r"|week(?:ly)? (?:wrap-?up|round-?up))\b",
     re.IGNORECASE,
 )
 
