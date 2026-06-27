@@ -319,29 +319,49 @@ def _embed_texts(texts: list[str]) -> np.ndarray:
     return model.encode(texts, show_progress_bar=False, normalize_embeddings=True)
 
 
+_ROUNDUP_PATTERNS = re.compile(
+    r"\b(week(?:ly)? in (?:politics|review|news)|week(?:'?s)? (?:top |best )?(?:news|stories|headlines)"
+    r"|roundup|wrap-?up|this week in|what(?:'?s| is) happening|news of the week"
+    r"|political news this week|what we('re| are) watching)\b",
+    re.IGNORECASE,
+)
+
+
 def _filter_policy_relevant(
     articles: list[NewsArticle],
 ) -> list[tuple[NewsArticle, np.ndarray]]:
-    """Keep only articles that are about US policy/legislation."""
+    """Keep only articles about US policy/legislation; drop roundup articles."""
     if not articles:
+        return []
+
+    # Drop weekly-roundup/digest articles before embedding — they cover multiple
+    # unrelated topics and contaminate cluster centroids, producing catch-all issues.
+    specific = []
+    for a in articles:
+        if _ROUNDUP_PATTERNS.search(a.title):
+            logger.debug("Filtered roundup article: %s", a.title[:80])
+        else:
+            specific.append(a)
+
+    if not specific:
         return []
 
     prototype_embeddings = _embed_texts(_POLICY_PROTOTYPES)
     prototype_mean = prototype_embeddings.mean(axis=0)
     prototype_mean /= np.linalg.norm(prototype_mean)
 
-    texts = [f"{a.title}. {a.summary[:200]}" for a in articles]
+    texts = [f"{a.title}. {a.summary[:200]}" for a in specific]
     article_embeddings = _embed_texts(texts)
 
     scores = article_embeddings @ prototype_mean
     relevant: list[tuple[NewsArticle, np.ndarray]] = []
-    for i, (article, score) in enumerate(zip(articles, scores)):
+    for i, (article, score) in enumerate(zip(specific, scores)):
         if score >= POLICY_RELEVANCE_THRESHOLD:
             relevant.append((article, article_embeddings[i]))
 
     logger.info(
-        "Policy relevance filter: %d/%d articles passed (threshold=%.2f)",
-        len(relevant), len(articles), POLICY_RELEVANCE_THRESHOLD,
+        "Policy relevance filter: %d/%d articles passed (%d roundups dropped, threshold=%.2f)",
+        len(relevant), len(articles), len(articles) - len(specific), POLICY_RELEVANCE_THRESHOLD,
     )
     return relevant
 
