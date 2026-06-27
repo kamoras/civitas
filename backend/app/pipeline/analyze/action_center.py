@@ -40,6 +40,7 @@ from app.pipeline.vector_store import (
 logger = logging.getLogger(__name__)
 
 _POLICY_PROTOTYPES = [
+    # US government & law
     "Congressional legislation, bill, act, law, regulation, government policy",
     "Federal budget, government spending, appropriations, fiscal policy",
     "Supreme Court ruling, judicial decision, constitutional law",
@@ -49,15 +50,21 @@ _POLICY_PROTOTYPES = [
     "Immigration law, border policy, visa, asylum, deportation",
     "Tax reform, tax policy, IRS, tax cuts, tax increases",
     "Military, defense spending, veterans, national security",
-    "Climate policy, environmental regulation, EPA, energy policy",
+    "Climate policy, environmental regulation, energy policy, clean energy",
     "Education policy, student loans, public schools, higher education",
     "Civil rights, discrimination, equality, justice reform",
     "Trade policy, tariffs, sanctions, international agreements",
-    "Gun legislation, Second Amendment, firearms regulation",
+    "Gun legislation, firearms regulation, Second Amendment",
     "Labor policy, minimum wage, unions, workers rights, employment",
     "Housing policy, rent, mortgage, homelessness, affordable housing",
     "Social Security, retirement, pension, entitlements",
     "Technology regulation, privacy law, antitrust, AI policy",
+    # International civic & political (relevant to global audiences)
+    "International politics, foreign government, elections, democratic movements",
+    "Human rights, civil liberties, political protest, LGBTQ rights, freedoms",
+    "War, armed conflict, diplomacy, foreign policy, international relations",
+    "Extreme weather, climate disaster, heatwave, flooding, environmental crisis",
+    "Global economy, inflation, recession, central bank, financial markets",
 ]
 
 POLICY_RELEVANCE_THRESHOLD = 0.15
