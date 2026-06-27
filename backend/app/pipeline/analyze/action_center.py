@@ -2501,40 +2501,26 @@ def _run_refresh(db: Session) -> int:
             related_senators=json.dumps(related_senators),
         )
 
-        # Upsert: replace existing issue for same date+rank
+        # Upsert: always write the freshest cluster data for this rank slot.
+        # The action center is a live snapshot — whatever is most relevant
+        # right now is what gets displayed, regardless of Bluesky status.
+        # bsky_posted_at is Bluesky's own tracking field and has no effect
+        # on what the action center shows.
         existing = (
             db.query(ActionIssue)
             .filter(ActionIssue.date == today, ActionIssue.rank == rank)
             .first()
         )
         if existing:
-            if existing.bsky_posted_at is not None:
-                # Issue has been posted to Bluesky — treat it as immutable.
-                # Any new cluster at this rank slot is ignored; the posted
-                # issue stands as-is. Mixing new sources into a frozen title
-                # produces incoherent content (e.g. stock market title with
-                # housing legislation sources).
-                logger.debug(
-                    "Skipping rank %d: already posted to Bluesky ('%s')",
-                    rank, existing.title[:60],
-                )
-                created_ranks.add(rank)
-                issues_created += 1
-                continue
-            else:
-                # Not yet posted — free to update all fields.
-                title_changed = existing.title != issue.title[:500]
-                for attr in ("title", "summary", "facts", "actions", "source_urls",
-                             "source_names", "policy_areas", "related_bill_ids",
-                             "related_explore_ids", "related_senators"):
-                    setattr(existing, attr, getattr(issue, attr))
-                existing.created_at = datetime.utcnow()
-                if title_changed:
-                    # Only re-queue for Bluesky if the story hasn't been posted
-                    # recently. Minor LLM title rephrasing changes the title on
-                    # every hourly run; without this guard every run would post.
-                    existing.bsky_posted_at = None
-                    existing.bsky_posted_rank = None
+            for attr in ("title", "summary", "facts", "actions", "source_urls",
+                         "source_names", "policy_areas", "related_bill_ids",
+                         "related_explore_ids", "related_senators"):
+                setattr(existing, attr, getattr(issue, attr))
+            existing.created_at = datetime.utcnow()
+            # Preserve full_story once generated — it is the stable content
+            # behind the Bluesky permalink (/issue/<id>) and must not change.
+            if not existing.full_story and issue.full_story:
+                existing.full_story = issue.full_story
         else:
             db.add(issue)
 
