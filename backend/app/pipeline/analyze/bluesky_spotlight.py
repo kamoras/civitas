@@ -11,6 +11,7 @@ import logging
 import re
 from datetime import datetime, UTC
 
+import httpx
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -139,6 +140,57 @@ Return JSON: {{"post": "<your post text>"}}"""
     return text.strip()
 
 
+def _build_link_card(client: "Client", url: str) -> "models.AppBskyEmbedExternal.Main | None":
+    """Fetch OG metadata from url and build a Bluesky external embed (link card).
+
+    Returns None on any failure so callers can post without an embed rather
+    than raising.
+    """
+    from atproto import models as bsky_models
+
+    try:
+        resp = httpx.get(url, timeout=10, follow_redirects=True,
+                         headers={"User-Agent": "Civitas-Bot/1.0"})
+        resp.raise_for_status()
+        html = resp.text
+    except Exception:
+        logger.debug("Link card fetch failed for %s", url)
+        return None
+
+    def _og(prop: str) -> str:
+        m = re.search(
+            rf'<meta[^>]+property=["\']og:{prop}["\'][^>]+content=["\']([^"\']+)["\']',
+            html, re.IGNORECASE,
+        ) or re.search(
+            rf'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:{prop}["\']',
+            html, re.IGNORECASE,
+        )
+        return m.group(1) if m else ""
+
+    title = _og("title") or "Civitas // Public Record"
+    description = _og("description") or ""
+    image_url = _og("image")
+
+    thumb = None
+    if image_url:
+        try:
+            img_resp = httpx.get(image_url, timeout=10, follow_redirects=True)
+            img_resp.raise_for_status()
+            blob = client.upload_blob(img_resp.content)
+            thumb = blob.blob
+        except Exception:
+            logger.debug("Thumbnail upload failed for %s", image_url)
+
+    return bsky_models.AppBskyEmbedExternal.Main(
+        external=bsky_models.AppBskyEmbedExternal.External(
+            uri=url,
+            title=title,
+            description=description,
+            thumb=thumb,
+        )
+    )
+
+
 def _publish_spotlight(text: str, senator: Senator) -> bool:
     """Post the spotlight to Bluesky. Returns True on success."""
     handle = getattr(settings, "BSKY_HANDLE", "")
@@ -177,7 +229,8 @@ def _publish_spotlight(text: str, senator: Senator) -> bool:
                 ),
             )
         ]
-        client.send_post(full_text, facets=facets)
+        embed = _build_link_card(client, url)
+        client.send_post(full_text, facets=facets, embed=embed)
         logger.info("Posted senator spotlight: %s", senator.name)
         return True
     except ImportError:
@@ -312,7 +365,8 @@ def _publish_weekly(text: str, week: WeekSummary) -> bool:
                 ),
             )
         ]
-        client.send_post(full_text, facets=facets)
+        embed = _build_link_card(client, TIMELINE_URL)
+        client.send_post(full_text, facets=facets, embed=embed)
         logger.info("Posted weekly summary for week %d/%d", week.year, week.week_num)
         return True
     except ImportError:

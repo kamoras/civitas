@@ -95,6 +95,12 @@ export default function Footer() {
           >
             ACCESSIBILITY
           </Link>
+          <Link
+            href="/environmental"
+            className="text-matrix-green/40 hover:text-matrix-green/80 transition-colors font-mono text-xs tracking-widest uppercase"
+          >
+            ENVIRONMENTAL
+          </Link>
         </nav>
 
         {/* Digest subscribe */}
