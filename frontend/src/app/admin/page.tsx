@@ -8,8 +8,6 @@ import {
   fetchAdminPipelineStatus,
   fetchAdminPipelineHistory,
   fetchAdminSystemStats,
-  triggerAdminPipeline,
-  triggerHousePipeline,
   type AdminDashboard,
   type AdminPipelineStatus,
   type HostStats,
@@ -1133,21 +1131,13 @@ function AdminDashboardView({
   const [pipelineStatus, setPipelineStatus] = useState<AdminPipelineStatus | null>(null);
   const [history, setHistory] = useState<PipelineRunInfo[]>([]);
   const [loading, setLoading] = useState(true);
-  const [triggerMsg, setTriggerMsg] = useState("");
-  const [triggerError, setTriggerError] = useState("");
-  const [triggering, setTriggering] = useState(false);
-  const [houseTriggerMsg, setHouseTriggerMsg] = useState("");
-  const [houseTriggerError, setHouseTriggerError] = useState("");
-  const [houseTriggering, setHouseTriggering] = useState(false);
   const [completionBanner, setCompletionBanner] = useState<{
     status: "completed" | "failed";
     duration: string;
   } | null>(null);
 
   const wasRunningRef = useRef(false);
-  const triggerTimeRef = useRef<number>(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const triggerMsgTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -1175,8 +1165,7 @@ function AdminDashboardView({
       const s = await fetchAdminPipelineStatus(token);
       setPipelineStatus(s);
 
-      const inGracePeriod = Date.now() - triggerTimeRef.current < 10000;
-      if (!s.isRunning && wasRunningRef.current && !inGracePeriod) {
+      if (!s.isRunning && wasRunningRef.current) {
         const lastStatus = s.lastRun?.status ?? "completed";
         setCompletionBanner({
           status: lastStatus === "failed" ? "failed" : "completed",
@@ -1185,11 +1174,7 @@ function AdminDashboardView({
         setTimeout(() => setCompletionBanner(null), 15000);
         loadDashboard();
       }
-      if (s.isRunning) {
-        wasRunningRef.current = true;
-      } else if (!inGracePeriod) {
-        wasRunningRef.current = false;
-      }
+      wasRunningRef.current = s.isRunning;
     } catch {}
   }, [token, loadDashboard]);
 
@@ -1220,48 +1205,6 @@ function AdminDashboardView({
       if (dashboardPollRef.current) clearInterval(dashboardPollRef.current);
     };
   }, [loadDashboard, pipelineStatus?.isRunning]);
-
-  const handleTrigger = async (type: "full" | "fetch") => {
-    setTriggerMsg("");
-    setTriggerError("");
-    setCompletionBanner(null);
-    setTriggering(true);
-    try {
-      const r = await triggerAdminPipeline(token, {
-        fetchOnly: type === "fetch",
-      });
-      setTriggerMsg(r.message);
-      triggerTimeRef.current = Date.now();
-      setPipelineStatus((prev) => (prev ? { ...prev, isRunning: true } : prev));
-      wasRunningRef.current = true;
-
-      if (triggerMsgTimeoutRef.current) clearTimeout(triggerMsgTimeoutRef.current);
-      triggerMsgTimeoutRef.current = setTimeout(() => setTriggerMsg(""), 8000);
-
-      setTimeout(pollStatus, 1000);
-    } catch (e) {
-      setTriggerError(e instanceof Error ? e.message : "Trigger failed");
-    } finally {
-      setTriggering(false);
-    }
-  };
-
-  const handleHouseTrigger = async () => {
-    setHouseTriggerMsg("");
-    setHouseTriggerError("");
-    setHouseTriggering(true);
-    try {
-      const r = await triggerHousePipeline(token);
-      setHouseTriggerMsg(r.message);
-      setPipelineStatus((prev) => (prev ? { ...prev, houseIsRunning: true } : prev));
-      setTimeout(() => setHouseTriggerMsg(""), 10000);
-      setTimeout(pollStatus, 1000);
-    } catch (e) {
-      setHouseTriggerError(e instanceof Error ? e.message : "Trigger failed");
-    } finally {
-      setHouseTriggering(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -1342,8 +1285,8 @@ function AdminDashboardView({
         {/* System Monitor */}
         <SystemMonitor token={token} initialStats={d?.host} />
 
-        {/* System Health + Pipeline Controls */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        {/* System Health */}
+        <div className="grid grid-cols-1 mb-6">
           {/* System Health */}
           <div className="terminal-window">
             <TerminalTitlebar title="system_health" />
@@ -1424,94 +1367,6 @@ function AdminDashboardView({
             </div>
           </div>
 
-          {/* Pipeline Controls */}
-          <div className="terminal-window">
-            <TerminalTitlebar title="pipeline_control" />
-            <div className="p-4 space-y-3">
-              <p className="text-matrix-green/50 text-xs font-terminal mb-2">
-                Trigger pipeline runs manually:
-              </p>
-              {/* Senate pipeline */}
-              <p className="text-matrix-green/40 text-[10px] font-pixel tracking-wider">SENATE</p>
-              <div className="space-y-2">
-                <button
-                  onClick={() => handleTrigger("full")}
-                  disabled={pipelineStatus?.isRunning || triggering}
-                  className="w-full text-xs font-pixel py-2.5 rounded border transition-all
-                             text-matrix-green border-matrix-green/40 hover:bg-matrix-green/10 hover:border-matrix-green/60
-                             disabled:text-matrix-green/20 disabled:border-matrix-green/15 disabled:cursor-not-allowed"
-                >
-                  {triggering
-                    ? "LAUNCHING..."
-                    : pipelineStatus?.isRunning
-                      ? "PIPELINE RUNNING..."
-                      : "▶ RUN FULL PIPELINE"}
-                </button>
-                <button
-                  onClick={() => handleTrigger("fetch")}
-                  disabled={pipelineStatus?.isRunning || triggering}
-                  className="w-full text-xs font-pixel py-2.5 rounded border transition-all
-                             text-neon-cyan/70 border-neon-cyan/30 hover:bg-neon-cyan/10 hover:border-neon-cyan/50
-                             disabled:text-matrix-green/20 disabled:border-matrix-green/15 disabled:cursor-not-allowed"
-                >
-                  ▶ FETCH ONLY (NO LLM)
-                </button>
-                <p className="text-matrix-green/30 text-[10px] font-terminal">
-                  Senators, explore docs, and SCOTUS justices.
-                </p>
-              </div>
-              {triggerMsg && (
-                <div role="status" aria-live="polite"
-                  className="p-2 border border-matrix-green/30 rounded bg-matrix-green/10 animate-[fadeIn_0.3s_ease-out]"
-                >
-                  <p className="text-matrix-green text-xs font-terminal font-bold">✓ {triggerMsg}</p>
-                  <p className="text-matrix-green/50 text-[10px] font-terminal mt-1">Status updates will appear automatically above.</p>
-                </div>
-              )}
-              {triggerError && (
-                <div role="alert" aria-live="polite"
-                  className="p-2 border border-neon-pink/30 rounded bg-neon-pink/10 animate-[fadeIn_0.3s_ease-out]"
-                >
-                  <p className="text-neon-pink text-xs font-terminal font-bold">✗ {triggerError}</p>
-                </div>
-              )}
-
-              {/* House pipeline */}
-              <div className="border-t border-matrix-green/15 pt-3 mt-1">
-                <p className="text-matrix-green/40 text-[10px] font-pixel tracking-wider mb-2">HOUSE</p>
-                <button
-                  onClick={handleHouseTrigger}
-                  disabled={pipelineStatus?.houseIsRunning || houseTriggering}
-                  className="w-full text-xs font-pixel py-2.5 rounded border transition-all
-                             text-matrix-green border-matrix-green/40 hover:bg-matrix-green/10 hover:border-matrix-green/60
-                             disabled:text-matrix-green/20 disabled:border-matrix-green/15 disabled:cursor-not-allowed"
-                >
-                  {houseTriggering
-                    ? "LAUNCHING..."
-                    : pipelineStatus?.houseIsRunning
-                      ? "HOUSE PIPELINE RUNNING..."
-                      : "▶ RUN HOUSE PIPELINE"}
-                </button>
-                <p className="text-matrix-green/30 text-[10px] font-terminal mt-1">
-                  435 representatives — scores, funding, votes. No LLM calls (~1-2h).
-                </p>
-                {houseTriggerMsg && (
-                  <div role="status" aria-live="polite"
-                    className="mt-2 p-2 border border-matrix-green/30 rounded bg-matrix-green/10 animate-[fadeIn_0.3s_ease-out]"
-                  >
-                    <p className="text-matrix-green text-xs font-terminal font-bold">✓ {houseTriggerMsg}</p>
-                  </div>
-                )}
-                {houseTriggerError && (
-                  <div role="alert" aria-live="polite"
-                    className="mt-2 p-2 border border-neon-pink/30 rounded bg-neon-pink/10 animate-[fadeIn_0.3s_ease-out]"
-                  >
-                    <p className="text-neon-pink text-xs font-terminal font-bold">✗ {houseTriggerError}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Data Stats */}
@@ -1901,14 +1756,16 @@ function AdminDashboardView({
             <TerminalTitlebar title="llm_stats" />
             <div className="p-4">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm font-terminal">
-                {Object.entries(d.llm).map(([key, val]) => (
-                  <div key={key}>
-                    <span className="text-matrix-green/50 text-xs block">
-                      {key.replace(/_/g, " ").toUpperCase()}
-                    </span>
-                    <span>{String(val)}</span>
-                  </div>
-                ))}
+                {Object.entries(d.llm)
+                  .filter(([, val]) => val === null || typeof val !== "object")
+                  .map(([key, val]) => (
+                    <div key={key}>
+                      <span className="text-matrix-green/50 text-xs block">
+                        {key.replace(/_/g, " ").toUpperCase()}
+                      </span>
+                      <span>{val === null ? "—" : String(val)}</span>
+                    </div>
+                  ))}
               </div>
             </div>
           </div>
