@@ -68,7 +68,9 @@ MIN_ARTICLES_PER_CLUSTER = 1
 
 ACTION_CENTER_PROMPT_VERSION = "action-v19"
 
-TOPIC_CHANGE_THRESHOLD = 0.60  # cosine similarity below which a rank slot is considered a new topic
+TOPIC_CHANGE_THRESHOLD = 0.82  # cosine similarity below which a rank slot is considered a new topic
+# Raw cosine similarity between ANY two news headlines is ~0.74+ due to domain clustering.
+# Same-topic titles score 0.88-0.95; different topics score 0.72-0.78. Threshold at 0.82.
 
 _SYSTEM_PROMPT = """\
 You are a nonpartisan civic information analyst. You present facts without \
