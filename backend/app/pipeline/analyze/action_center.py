@@ -2566,6 +2566,7 @@ def _run_refresh(db: Session) -> int:
         if existing:
             old_title = existing.title
             old_bsky_posted_at = existing.bsky_posted_at
+            old_full_story = existing.full_story
 
             for attr in ("title", "summary", "facts", "actions", "source_urls",
                          "source_names", "policy_areas", "related_bill_ids",
@@ -2573,26 +2574,30 @@ def _run_refresh(db: Session) -> int:
                 setattr(existing, attr, getattr(issue, attr))
             existing.created_at = datetime.utcnow()
 
-            # Detect genuine topic changes: if the previous topic was posted to
-            # Bluesky and the new title is semantically dissimilar, reset the
-            # Bluesky tracking fields so the new topic gets its own post.
+            # Detect genuine topic changes by comparing old vs new title embedding.
+            # Run whenever ANY generated content exists — full_story or a Bluesky
+            # post — because a topic change must clear stale content regardless of
+            # whether the issue was ever posted. Gating only on bsky_posted_at caused
+            # full_story to survive topic changes when posting hadn't happened yet.
             topic_changed = False
-            if old_bsky_posted_at is not None:
+            has_generated_content = old_bsky_posted_at is not None or old_full_story is not None
+            if has_generated_content:
                 prev_title_emb = _embed_texts([old_title])[0]
                 topic_sim = float(title_emb @ prev_title_emb)
                 if topic_sim < TOPIC_CHANGE_THRESHOLD:
                     topic_changed = True
-                    existing.bsky_posted_at = None
-                    existing.bsky_posted_rank = None
-                    existing.full_story = None  # allow fresh story for new topic
+                    existing.full_story = None
+                    if old_bsky_posted_at is not None:
+                        existing.bsky_posted_at = None
+                        existing.bsky_posted_rank = None
                     logger.info(
-                        "Topic changed at rank %d (sim=%.2f): '%s' → '%s' — Bluesky reset",
+                        "Topic changed at rank %d (sim=%.2f): '%s' → '%s'%s",
                         rank, topic_sim, old_title[:60], title[:60],
+                        " — Bluesky + full_story reset" if old_bsky_posted_at else " — full_story cleared",
                     )
 
-            # Preserve full_story once generated — it is the stable content
-            # behind the Bluesky permalink (/issue/<id>) and must not change
-            # unless the topic itself changed.
+            # Preserve full_story once generated — stable content behind the
+            # Bluesky permalink (/issue/<id>).
             if not topic_changed and not existing.full_story and issue.full_story:
                 existing.full_story = issue.full_story
         else:
