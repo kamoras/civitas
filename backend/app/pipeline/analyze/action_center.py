@@ -2660,19 +2660,14 @@ def _run_refresh(db: Session) -> int:
         )
         if existing:
             old_title = existing.title
-            old_bsky_posted_at = existing.bsky_posted_at
-            old_full_story = existing.full_story
 
-            # Detect topic change whenever ANY generated content exists so that
-            # a stale full_story or Bluesky link is never carried forward to a
-            # different story.
-            topic_changed = False
-            has_generated_content = old_bsky_posted_at is not None or old_full_story is not None
-            if has_generated_content:
-                prev_title_emb = _embed_texts([old_title])[0]
-                topic_sim = float(title_emb @ prev_title_emb)
-                if topic_sim < TOPIC_CHANGE_THRESHOLD:
-                    topic_changed = True
+            # Always check topic similarity — every distinct topic gets its own
+            # permanent row and ID. In-place update is only safe when the topic
+            # is the same (sim >= threshold); any topic change must retire the
+            # existing row so its ID stays bound to its original content forever.
+            prev_title_emb = _embed_texts([old_title])[0]
+            topic_sim = float(title_emb @ prev_title_emb)
+            topic_changed = topic_sim < TOPIC_CHANGE_THRESHOLD
 
             if topic_changed:
                 # Retire the old row in place — its ID, content, and any
