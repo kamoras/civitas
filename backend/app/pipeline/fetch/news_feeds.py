@@ -2,9 +2,9 @@
 
 Sources chosen for factual reporting and minimal partisan lean:
   - AP News (via RSS)
-  - NPR Politics
-  - PBS NewsHour Politics
-  - Reuters (via RSS)
+  - NPR Politics / World
+  - PBS NewsHour
+  - BBC World News (direct URLs, no redirect wrapping)
 
 Each source is fetched independently; failures are logged and skipped
 so the system degrades gracefully if a feed goes down.
@@ -48,12 +48,16 @@ NEWS_FEEDS: list[dict[str, str]] = [
         "url": "https://feeds.npr.org/1014/rss.xml",
     },
     {
-        "name": "Reuters",
-        "url": "https://news.google.com/rss/search?q=site:reuters.com&hl=en-US&gl=US&ceid=US:en",
+        "name": "NPR World",
+        "url": "https://feeds.npr.org/1004/rss.xml",
     },
     {
         "name": "PBS NewsHour",
         "url": "https://www.pbs.org/newshour/feeds/rss/headlines",
+    },
+    {
+        "name": "BBC World",
+        "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
     },
 ]
 
