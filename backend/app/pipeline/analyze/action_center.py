@@ -72,6 +72,10 @@ CLUSTER_TITLE_THRESHOLD = 0.40
 CLUSTER_CENTROID_MERGE_THRESHOLD = 0.20
 MAX_ISSUES = 4
 MIN_ARTICLES_PER_CLUSTER = 1
+# Minimum policy relevance score for the LLM-generated title+summary.
+# Individual articles pass at 0.22 but the synthesized cluster description
+# must clear a higher bar to ensure the issue is a genuine civic/policy topic.
+CLUSTER_CIVIC_THRESHOLD = 0.30
 
 ACTION_CENTER_PROMPT_VERSION = "action-v19"
 
@@ -726,6 +730,75 @@ def _validate_facts(facts: list) -> list:
         clean.append(fact.strip())
 
     return clean
+
+
+_ROLE_PATTERNS = [
+    # Matches "U.S. Senator Name", "Senator Name", "Sen. Name"
+    (re.compile(
+        r'\b(?:U\.?S\.?\s+)?(?:Senator|Sen\.)\s+([A-Z][a-zA-Z\.\'-]+(?:\s+[A-Z][a-zA-Z\.\'-]+){0,2})',
+    ), "Senator"),
+    # Matches "U.S. Representative Name", "Representative Name", "Rep. Name",
+    # "Congressman Name", "Congresswoman Name"
+    (re.compile(
+        r'\b(?:U\.?S\.?\s+)?(?:Representative|Rep\.|Congressman|Congresswoman)\s+'
+        r'([A-Z][a-zA-Z\.\'-]+(?:\s+[A-Z][a-zA-Z\.\'-]+){0,2})',
+    ), "Representative"),
+]
+
+# Words stripped before comparing extracted names to DB names
+_ROLE_STRIP = {"senator", "sen", "rep", "representative", "congressman", "congresswoman",
+               "u.s", "us", "former", "the", "honorable", "hon"}
+
+
+def _name_in_table(extracted: str, known_names: list[str]) -> bool:
+    """Return True if extracted name shares at least one substantive token with any known name."""
+    tokens = {t.lower().rstrip(".") for t in extracted.split()} - _ROLE_STRIP
+    if not tokens:
+        return False
+    for known in known_names:
+        known_tokens = {t.lower().rstrip(".") for t in known.split()}
+        if tokens & known_tokens:
+            return True
+    return False
+
+
+def _validate_politician_roles(
+    title: str,
+    summary: str,
+    facts: list[str],
+    db: "Session",
+) -> tuple[str, str, list[str]]:
+    """Strip hallucinated legislative titles from LLM-generated content.
+
+    The LLM occasionally labels politicians with the wrong role
+    (e.g. calling a Cabinet Secretary a "Senator"). For each "Senator X" or
+    "Representative X" pattern found in the generated text, the name is
+    verified against the senators / representatives tables. If no match is
+    found the role prefix is removed, leaving just the name.
+    """
+    from app.models import Senator, Representative
+
+    senator_names = [s.name for s in db.query(Senator).all()]
+    rep_names = [r.name for r in db.query(Representative).all()]
+
+    def _fix(text: str) -> str:
+        for pattern, role in _ROLE_PATTERNS:
+            for m in pattern.finditer(text):
+                extracted = m.group(1)
+                known = senator_names if role == "Senator" else rep_names
+                if not _name_in_table(extracted, known):
+                    # Remove the role prefix — keep just the name
+                    logger.warning(
+                        "Role hallucination corrected: '%s' is not a %s — stripping role label",
+                        extracted, role,
+                    )
+                    text = text.replace(m.group(0), extracted, 1)
+        return text
+
+    title = _fix(title)
+    summary = _fix(summary)
+    facts = [_fix(f) for f in facts]
+    return title, summary, facts
 
 
 def _build_llm_prompt(cluster: list[NewsArticle]) -> str:
@@ -2480,6 +2553,11 @@ def _run_refresh(db: Session) -> int:
     # 6. Generate analysis for each via LLM
     from app.pipeline.analyze.ollama_client import call_llm, extract_json
 
+    # Pre-compute prototype embeddings once for the cluster-level civic check.
+    # Re-using the same prototypes as the article-level filter but applied to
+    # the LLM-generated title+summary, which is a cleaner topic signal.
+    _proto_embs = _embed_texts(_POLICY_PROTOTYPES)  # shape (N_prototypes, D)
+
     # Pre-load recent issues for topic-keyed matching.
     # Issues are keyed by TOPIC, not by (date, rank) slot — the same topic
     # always maps to the same DB row regardless of rank or whether it briefly
@@ -2572,6 +2650,22 @@ def _run_refresh(db: Session) -> int:
         title = llm_result.get("title", cluster[0].title)
         summary = llm_result.get("summary", "")
         facts = _validate_facts(llm_result.get("facts", []))
+
+        # Civic relevance gate: skip clusters that are about politicians personally
+        # but not about policy (e.g. personal scandals, biographical stories).
+        _cluster_text_emb = _embed_texts([f"{title}. {summary[:150]}"])[0]
+        _cluster_civic_score = float((_proto_embs @ _cluster_text_emb).max())
+        if _cluster_civic_score < CLUSTER_CIVIC_THRESHOLD:
+            logger.info(
+                "Skipping non-civic cluster rank %d (civic_score=%.2f < %.2f): '%s'",
+                rank, _cluster_civic_score, CLUSTER_CIVIC_THRESHOLD, title[:60],
+            )
+            continue
+
+        # Politician role validator: strip hallucinated "Senator X" / "Rep. X" labels
+        # that don't match anyone in the database.
+        title, summary, facts = _validate_politician_roles(title, summary, facts, db)
+
         policy_areas = llm_result.get("policyAreas", [])
 
         # Post-LLM title dedup: skip if this LLM-generated title is too
