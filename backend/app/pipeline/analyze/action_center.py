@@ -328,6 +328,40 @@ def _embed_texts(texts: list[str]) -> np.ndarray:
     return model.encode(texts, show_progress_bar=False, normalize_embeddings=True)
 
 
+def _resolve_url(url: str, timeout: float = 6.0) -> str:
+    """Follow Google News RSS redirect to the actual article URL.
+
+    Google News RSS article links are opaque `news.google.com/rss/articles/CBMi...`
+    redirects that don't reveal the destination until followed. A stock-market
+    Reuters article may end up in a cluster about a military strike when the
+    redirect is stored un-resolved. This function resolves those redirects so
+    we store and display the real article URL.
+    """
+    if "news.google.com/rss/articles/" not in url:
+        return url
+    try:
+        resp = httpx.head(url, follow_redirects=True, timeout=timeout, headers={
+            "User-Agent": "Mozilla/5.0 (compatible; Civitas/1.0)",
+        })
+        final = str(resp.url)
+        if "google.com" not in final:
+            logger.debug("Resolved Google News URL → %s", final[:100])
+            return final
+    except Exception:
+        pass
+    try:
+        resp = httpx.get(url, follow_redirects=True, timeout=timeout, headers={
+            "User-Agent": "Mozilla/5.0 (compatible; Civitas/1.0)",
+        })
+        final = str(resp.url)
+        if "google.com" not in final:
+            logger.debug("Resolved Google News URL (GET) → %s", final[:100])
+            return final
+    except Exception:
+        pass
+    return url
+
+
 _ROUNDUP_PATTERNS = re.compile(
     r"\b(week(?:ly)? in (?:politics|review|news)|week(?:'?s)? (?:top |best )?(?:news|stories|headlines)"
     r"|this week in|news of the week|political news this week|what we('re| are) watching"
@@ -2492,7 +2526,7 @@ def _run_refresh(db: Session) -> int:
         seen_sources: dict[str, str] = {}
         for a, _ in on_topic:
             if a.source_name not in seen_sources:
-                seen_sources[a.source_name] = a.url
+                seen_sources[a.source_name] = _resolve_url(a.url)
         source_names = list(seen_sources.keys())
         source_urls = list(seen_sources.values())
 
