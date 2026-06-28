@@ -133,13 +133,14 @@ async def get_action_issues(
     if date:
         issues = (
             db.query(ActionIssue)
-            .filter(ActionIssue.date == date)
+            .filter(ActionIssue.date == date, ActionIssue.is_current == True)  # noqa: E712
             .order_by(ActionIssue.rank)
             .all()
         )
     else:
         latest_date = (
             db.query(ActionIssue.date)
+            .filter(ActionIssue.is_current == True)  # noqa: E712
             .order_by(ActionIssue.date.desc())
             .limit(1)
             .scalar()
@@ -148,7 +149,7 @@ async def get_action_issues(
             return {"date": None, "issues": []}
         issues = (
             db.query(ActionIssue)
-            .filter(ActionIssue.date == latest_date)
+            .filter(ActionIssue.date == latest_date, ActionIssue.is_current == True)  # noqa: E712
             .order_by(ActionIssue.rank)
             .all()
         )
@@ -523,20 +524,21 @@ async def get_my_reps(
     today_str = date.today().isoformat()
     issues = (
         db.query(ActionIssue)
-        .filter(ActionIssue.date == today_str)
+        .filter(ActionIssue.date == today_str, ActionIssue.is_current == True)  # noqa: E712
         .order_by(ActionIssue.rank)
         .all()
     )
     if not issues:
         latest_date = (
             db.query(ActionIssue.date)
+            .filter(ActionIssue.is_current == True)  # noqa: E712
             .order_by(ActionIssue.date.desc())
             .first()
         )
         if latest_date:
             issues = (
                 db.query(ActionIssue)
-                .filter(ActionIssue.date == latest_date[0])
+                .filter(ActionIssue.date == latest_date[0], ActionIssue.is_current == True)  # noqa: E712
                 .order_by(ActionIssue.rank)
                 .all()
             )

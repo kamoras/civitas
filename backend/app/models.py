@@ -452,6 +452,7 @@ class ActionIssue(Base):
     full_story: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     bsky_posted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
     bsky_posted_rank: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    is_current: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
 class ScoreSnapshot(Base):

@@ -2579,14 +2579,11 @@ def _run_refresh(db: Session) -> int:
             related_senators=json.dumps(related_senators),
         )
 
-        # Upsert: always write the freshest cluster data for this rank slot.
-        # The action center is a live snapshot — whatever is most relevant
-        # right now is what gets displayed, regardless of Bluesky status.
-        # bsky_posted_at is Bluesky's own tracking field and has no effect
-        # on what the action center shows.
+        # Find the current active row for this rank slot (if any).
         existing = (
             db.query(ActionIssue)
-            .filter(ActionIssue.date == today, ActionIssue.rank == rank)
+            .filter(ActionIssue.date == today, ActionIssue.rank == rank,
+                    ActionIssue.is_current == True)  # noqa: E712
             .first()
         )
         if existing:
@@ -2594,17 +2591,9 @@ def _run_refresh(db: Session) -> int:
             old_bsky_posted_at = existing.bsky_posted_at
             old_full_story = existing.full_story
 
-            for attr in ("title", "summary", "facts", "actions", "source_urls",
-                         "source_names", "policy_areas", "related_bill_ids",
-                         "related_explore_ids", "related_senators"):
-                setattr(existing, attr, getattr(issue, attr))
-            existing.created_at = datetime.utcnow()
-
-            # Detect genuine topic changes by comparing old vs new title embedding.
-            # Run whenever ANY generated content exists — full_story or a Bluesky
-            # post — because a topic change must clear stale content regardless of
-            # whether the issue was ever posted. Gating only on bsky_posted_at caused
-            # full_story to survive topic changes when posting hadn't happened yet.
+            # Detect topic change whenever ANY generated content exists so that
+            # a stale full_story or Bluesky link is never carried forward to a
+            # different story.
             topic_changed = False
             has_generated_content = old_bsky_posted_at is not None or old_full_story is not None
             if has_generated_content:
@@ -2612,21 +2601,33 @@ def _run_refresh(db: Session) -> int:
                 topic_sim = float(title_emb @ prev_title_emb)
                 if topic_sim < TOPIC_CHANGE_THRESHOLD:
                     topic_changed = True
-                    existing.full_story = None
-                    if old_bsky_posted_at is not None:
-                        existing.bsky_posted_at = None
-                        existing.bsky_posted_rank = None
-                    logger.info(
-                        "Topic changed at rank %d (sim=%.2f): '%s' → '%s'%s",
-                        rank, topic_sim, old_title[:60], title[:60],
-                        " — Bluesky + full_story reset" if old_bsky_posted_at else " — full_story cleared",
-                    )
 
-            # Preserve full_story once generated — stable content behind the
-            # Bluesky permalink (/issue/<id>).
-            if not topic_changed and not existing.full_story and issue.full_story:
-                existing.full_story = issue.full_story
+            if topic_changed:
+                # Retire the old row in place — its ID, content, and any
+                # Bluesky link it carries are now permanent and stable.
+                # Insert a new row so the new topic gets its own unique ID.
+                existing.is_current = False
+                issue.is_current = True
+                db.add(issue)
+                logger.info(
+                    "Topic changed at rank %d (sim=%.2f): '%s' → '%s' — retired id=%d, inserting new row",
+                    rank, topic_sim, old_title[:60], title[:60], existing.id,
+                )
+            else:
+                # Same topic: update the existing row in place so its ID (and
+                # any Bluesky link pointing to it) remains stable.
+                for attr in ("title", "summary", "facts", "actions", "source_urls",
+                             "source_names", "policy_areas", "related_bill_ids",
+                             "related_explore_ids", "related_senators"):
+                    setattr(existing, attr, getattr(issue, attr))
+                existing.created_at = datetime.utcnow()
+
+                # Preserve full_story once generated — stable content behind
+                # the Bluesky permalink (/issue/<id>).
+                if not existing.full_story and issue.full_story:
+                    existing.full_story = issue.full_story
         else:
+            issue.is_current = True
             db.add(issue)
 
         created_ranks.add(rank)
@@ -2634,21 +2635,24 @@ def _run_refresh(db: Session) -> int:
 
     db.commit()
 
-    # Remove stale issues from prior runs at ranks not refreshed this run.
-    # This prevents leftover issues when clustering changes between runs
-    # or when fewer clusters are produced (e.g., LLM failure).
+    # Retire current rows at ranks that didn't appear in this run's clusters.
+    # This prevents ghost issues when clustering produces fewer results.
+    # Retired rows are kept for stable Bluesky link resolution.
     if created_ranks:
-        stale_deleted = (
+        stale = (
             db.query(ActionIssue)
             .filter(
                 ActionIssue.date == today,
+                ActionIssue.is_current == True,  # noqa: E712
                 ~ActionIssue.rank.in_(created_ranks),
             )
-            .delete(synchronize_session="fetch")
+            .all()
         )
-        if stale_deleted:
+        for row in stale:
+            row.is_current = False
+        if stale:
             db.commit()
-            logger.info("Cleaned up %d stale issues from prior runs", stale_deleted)
+            logger.info("Retired %d stale issues from prior runs", len(stale))
 
     # Stage 2: Auto-detect and update national monitors (must run before
     # _save_timeline_entry so the top issue has related_monitor_slugs populated)
@@ -2664,7 +2668,7 @@ def _run_refresh(db: Session) -> int:
     if issues_created > 0:
         created_issues = (
             db.query(ActionIssue)
-            .filter(ActionIssue.date == today)
+            .filter(ActionIssue.date == today, ActionIssue.is_current == True)  # noqa: E712
             .order_by(ActionIssue.rank)
             .all()
         )
@@ -2683,7 +2687,8 @@ def _run_refresh(db: Session) -> int:
     # due to LLM timeouts or concurrent refreshes get filled in on the next cycle.
     story_issues = (
         db.query(ActionIssue)
-        .filter(ActionIssue.date == today, ActionIssue.full_story.is_(None))
+        .filter(ActionIssue.date == today, ActionIssue.is_current == True,  # noqa: E712
+                ActionIssue.full_story.is_(None))
         .order_by(ActionIssue.rank)
         .all()
     )
@@ -2702,7 +2707,7 @@ def _run_refresh(db: Session) -> int:
             from app.pipeline.analyze.bluesky_poster import process_issues_for_bluesky
             today_issues = (
                 db.query(ActionIssue)
-                .filter(ActionIssue.date == today)
+                .filter(ActionIssue.date == today, ActionIssue.is_current == True)  # noqa: E712
                 .order_by(ActionIssue.rank)
                 .all()
             )

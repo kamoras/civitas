@@ -62,6 +62,7 @@ def _migrate_columns() -> None:
         ("action_issues", "full_story", "TEXT"),
         ("action_issues", "bsky_posted_at", "DATETIME"),
         ("action_issues", "bsky_posted_rank", "INTEGER"),
+        ("action_issues", "is_current", "INTEGER DEFAULT 1"),
         ("senators", "website_url", "TEXT DEFAULT ''"),
         ("senators", "contact_form_url", "TEXT DEFAULT ''"),
         ("senators", "office_phone", "TEXT DEFAULT ''"),
