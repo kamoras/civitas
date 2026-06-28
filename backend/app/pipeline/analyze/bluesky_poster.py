@@ -1,14 +1,16 @@
 """
 Posts ActionIssues to Bluesky via the AT Protocol.
 
-Two triggers:
-  - New issue: first time this date+rank slot has been posted
-  - Surge: issue climbed to rank #1 from rank 3+ since last post, with
-    a 6-hour cooldown between posts on the same issue
+Posting triggers:
+  - New issue: bsky_posted_at is None (either brand-new topic or topic with
+    genuinely new articles since the last post, as determined by the pipeline)
 
-The local LLM synthesizes the collection of related articles and writes
-the post text rather than filling a template. For surges, the LLM also
-decides whether the change is substantive enough to warrant a post.
+The pipeline resets bsky_posted_at=None when a topic gets new articles
+(primary_article_date advanced), so the poster never needs to evaluate
+whether to re-post — that decision is already made upstream.
+
+When the newest article driving an issue is from a prior day, the LLM is
+instructed to make the timing clear in the post text.
 
 Credentials: BSKY_HANDLE + BSKY_APP_PASSWORD in .env. If not set, this
 module does nothing (allows running without a Bluesky account configured).
@@ -17,7 +19,7 @@ module does nothing (allows running without a Bluesky account configured).
 import json
 import logging
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 
@@ -27,8 +29,6 @@ from app.pipeline.analyze.ollama_client import call_llm
 
 logger = logging.getLogger(__name__)
 
-SURGE_COOLDOWN_HOURS = 24  # don't re-post the same issue within 24 hours
-SURGE_MIN_RANK_DROP = 2   # old rank must exceed current rank by at least this
 MAX_POST_CHARS = 240     # leaves room for the appended URL (~40 chars → total ~280)
 
 _SYSTEM_PROMPT = (
@@ -74,10 +74,27 @@ def _build_facts_context(facts_json: str) -> str:
     return "\n".join(f"- {f}" for f in facts[:4])
 
 
-def _generate_new_post(issue) -> str | None:
-    """Ask the LLM to synthesize the issue and write a Bluesky post."""
+def _generate_new_post(issue, today: str) -> str | None:
+    """Ask the LLM to write a Bluesky post for this issue.
+
+    When the newest article driving the issue predates today, the LLM is
+    instructed to frame the post so readers know the event isn't happening
+    right now (e.g. "Yesterday: ..." or "On June 27: ...").
+    """
     facts_text = _build_facts_context(issue.facts)
     sources_text = _build_source_context(issue.source_names)
+
+    article_date = getattr(issue, "primary_article_date", None) or today
+    is_stale = article_date < today
+
+    staleness_instruction = ""
+    if is_stale:
+        staleness_instruction = (
+            f"\nIMPORTANT: The events described occurred on {article_date}, not today ({today}). "
+            "Open the post with a clear date reference so readers are not misled into thinking "
+            "this is happening right now. Use a phrasing like 'Yesterday: ...' or "
+            f"'On {article_date}: ...' at the start of the post."
+        )
 
     user_prompt = f"""Write a Bluesky post summarizing this civic news issue.
 
@@ -85,7 +102,7 @@ Title: {issue.title}
 Summary: {issue.summary or '(none)'}
 Key facts:
 {facts_text or '(none)'}
-Sources: {sources_text}
+Sources: {sources_text}{staleness_instruction}
 
 RULES — violating any rule means your response is unusable:
 1. Use ONLY information from the Title, Summary, and Key facts above. \
@@ -100,7 +117,7 @@ write it as dropped/ended/resolved. Never contradict the title.
 Return JSON: {{"post": "<your post text>"}}"""
 
     result = call_llm(
-        prompt_version="bsky_new_post_v2",
+        prompt_version="bsky_new_post_v3",
         system_prompt=_SYSTEM_PROMPT,
         user_prompt=user_prompt,
         cache_key=None,  # never cache — these are time-sensitive
@@ -111,67 +128,6 @@ Return JSON: {{"post": "<your post text>"}}"""
     if not result or not isinstance(result.get("post"), str):
         return None
     return _sanitize(result["post"], MAX_POST_CHARS)
-
-
-def _generate_surge_post(issue, old_rank: int) -> tuple[bool, str | None]:
-    """
-    Ask the LLM to evaluate whether a surge is worth posting and write the text.
-    Returns (should_post, post_text).
-    """
-    facts_text = _build_facts_context(issue.facts)
-    sources_text = _build_source_context(issue.source_names)
-    source_count = len(json.loads(issue.source_names or "[]"))
-
-    user_prompt = f"""A civic issue previously ranked #{old_rank} has moved to rank #1.
-
-Issue: {issue.title}
-Summary: {issue.summary or '(none)'}
-Key facts:
-{facts_text or '(none)'}
-Sources ({source_count}): {sources_text}
-
-We already posted about this issue. Decide whether there is a CONCRETE NEW DEVELOPMENT
-that warrants a follow-up post. A new development means one of:
-  - A vote occurred
-  - New legislation was introduced or passed
-  - A major new policy decision was announced
-  - A significant factual change (new numbers, new outcome)
-
-Do NOT post for: more news coverage of the same facts, rank changes alone,
-or restatements of what was already reported.
-
-If there IS a new development, write a post focused specifically on what changed —
-not a recap of the whole issue.
-
-Requirements:
-- STRICT MAXIMUM: {MAX_POST_CHARS} characters total
-- Complete sentences ending with proper punctuation
-- No hashtags, no exclamation points, no editorializing
-- Only use information from the Title, Summary, and Key facts above
-
-Return JSON: {{"should_post": true/false, "post": "<text if should_post>", "reasoning": "<one sentence explaining what specifically is new>"}}"""
-
-    result = call_llm(
-        prompt_version="bsky_surge_post_v3",
-        system_prompt=_SYSTEM_PROMPT,
-        user_prompt=user_prompt,
-        cache_key=None,
-        db_session=None,
-        max_tokens=256,
-        num_ctx=2048,
-    )
-    if not result:
-        return False, None
-    should = bool(result.get("should_post", False))
-    raw = result.get("post", "") if should else None
-    text = _sanitize(raw, MAX_POST_CHARS) if raw else None
-    logger.debug(
-        "Surge judgment for '%s': should_post=%s reason=%s",
-        issue.title[:60], should, result.get("reasoning", "")
-    )
-    return should, text
-
-
 
 
 def _publish(text: str, issue) -> bool:
@@ -238,39 +194,31 @@ def _publish(text: str, issue) -> bool:
 
 
 def process_issues_for_bluesky(issues: list, db: Session) -> None:
-    """
-    Called after each action center refresh. Generates and publishes posts
-    for new issues and qualified surges. Mutates bsky_posted_* columns in place.
+    """Post new/updated issues to Bluesky.
+
+    The pipeline already decides which issues deserve a post by setting
+    bsky_posted_at=None (new topic or topic with genuinely new articles).
+    This function just executes those posts.
     """
     if not getattr(settings, "BSKY_HANDLE", "") or not getattr(settings, "BSKY_APP_PASSWORD", ""):
         return  # fast-path: no credentials configured
 
+    from zoneinfo import ZoneInfo
+    _US_EAST = ZoneInfo("America/New_York")
+    today = datetime.now(tz=_US_EAST).strftime("%Y-%m-%d")
+
     now = datetime.utcnow()
-    cooldown = timedelta(hours=SURGE_COOLDOWN_HOURS)
     dirty = False
 
     for issue in issues:
-        is_new = issue.bsky_posted_at is None
+        if issue.bsky_posted_at is not None:
+            continue  # pipeline didn't flag this issue for posting
 
-        if is_new:
-            text = _generate_new_post(issue)
-            if text and _publish(text, issue):
-                issue.bsky_posted_at = now
-                issue.bsky_posted_rank = issue.rank
-                dirty = True
-            continue
-
-        # Surge check: hit #1, previously ranked lower, cooldown elapsed
-        last_rank = issue.bsky_posted_rank or issue.rank
-        rank_improved = last_rank - issue.rank  # positive = better rank now
-        cooled_down = (now - issue.bsky_posted_at) >= cooldown
-
-        if issue.rank == 1 and rank_improved >= SURGE_MIN_RANK_DROP and cooled_down:
-            should, text = _generate_surge_post(issue, old_rank=last_rank)
-            if should and text and _publish(text, issue):
-                issue.bsky_posted_at = now
-                issue.bsky_posted_rank = issue.rank
-                dirty = True
+        text = _generate_new_post(issue, today)
+        if text and _publish(text, issue):
+            issue.bsky_posted_at = now
+            issue.bsky_posted_rank = issue.rank
+            dirty = True
 
     if dirty:
         db.commit()

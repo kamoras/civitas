@@ -2433,44 +2433,6 @@ def _cleanup_monitor_lifecycle(today: str, db: Session) -> None:
     db.commit()
 
 
-def _inherit_bsky_if_yo_yo(
-    issue: ActionIssue,
-    today: str,
-    rank: int,
-    title_emb: "np.ndarray",
-    db: Session,
-) -> None:
-    """Prevent re-posting the same topic when it yo-yos back to a rank slot.
-
-    If a topic appears at rank N, gets posted to Bluesky, then is displaced
-    by a different topic (retiring the row), and then reappears at rank N, the
-    new row has bsky_posted_at=None and would be posted again as "new." This
-    check finds any retired row at the same rank+date that was already posted
-    and has a matching title (same topic). If found, the new row inherits the
-    bsky_posted_at so the poster skips it.
-    """
-    retired_posted = (
-        db.query(ActionIssue)
-        .filter(
-            ActionIssue.date == today,
-            ActionIssue.rank == rank,
-            ActionIssue.is_current == False,  # noqa: E712
-            ActionIssue.bsky_posted_at.isnot(None),
-        )
-        .all()
-    )
-    for retired in retired_posted:
-        retired_emb = _embed_texts([retired.title])[0]
-        if float(title_emb @ retired_emb) >= TOPIC_CHANGE_THRESHOLD:
-            issue.bsky_posted_at = retired.bsky_posted_at
-            issue.bsky_posted_rank = retired.bsky_posted_rank
-            logger.info(
-                "Yo-yo rank %d: '%s' already posted today (retired id=%d) — skipping re-post",
-                rank, issue.title[:50], retired.id,
-            )
-            return
-
-
 def refresh_action_issues(db: Session | None = None) -> int:
     """Run the full action center pipeline. Returns number of issues created."""
     own_session = db is None
@@ -2518,8 +2480,24 @@ def _run_refresh(db: Session) -> int:
     # 6. Generate analysis for each via LLM
     from app.pipeline.analyze.ollama_client import call_llm, extract_json
 
+    # Pre-load recent issues for topic-keyed matching.
+    # Issues are keyed by TOPIC, not by (date, rank) slot — the same topic
+    # always maps to the same DB row regardless of rank or whether it briefly
+    # fell out of the top N and came back.
+    _lookback = (datetime.now(_US_EAST) - timedelta(days=2)).strftime("%Y-%m-%d")
+    _recent_issues: list[ActionIssue] = (
+        db.query(ActionIssue)
+        .filter(ActionIssue.date >= _lookback)
+        .all()
+    )
+    _recent_embs: "np.ndarray | None" = (
+        np.array(_embed_texts([i.title for i in _recent_issues]))
+        if _recent_issues else None
+    )
+    _matched_issue_ids: set[int] = set()  # existing IDs touched this run
+    _new_issues: list[ActionIssue] = []   # newly inserted rows (no ID yet)
+
     issues_created = 0
-    created_ranks: set[int] = set()
     # (title, embedding) pairs for post-LLM dedup within a single run
     generated_title_embs: list[tuple[str, "np.ndarray"]] = []
 
@@ -2636,92 +2614,103 @@ def _run_refresh(db: Session) -> int:
             title, resolved_bills, source_urls, source_names, related_senators,
         )
 
-        issue = ActionIssue(
-            date=today,
-            rank=rank,
-            title=title[:500],
-            summary=summary,
-            facts=json.dumps(facts),
-            actions=json.dumps(actions),
-            source_urls=json.dumps(source_urls),
-            source_names=json.dumps(source_names),
-            policy_areas=json.dumps(policy_areas),
-            related_bill_ids=json.dumps(resolved_bills),
-            related_explore_ids=json.dumps(related_explore_ids),
-            related_senators=json.dumps(related_senators),
+        # Track the date of the newest article driving this cluster so the
+        # Bluesky poster can frame posts as "yesterday" or include the date
+        # when reporting on events that didn't happen today.
+        newest_pub = max(
+            (a.published for a in filtered_cluster if a.published is not None),
+            default=None,
+        )
+        primary_article_date = (
+            newest_pub.astimezone(_US_EAST).strftime("%Y-%m-%d")
+            if newest_pub is not None else today
         )
 
-        # Find the current active row for this rank slot (if any).
-        existing = (
-            db.query(ActionIssue)
-            .filter(ActionIssue.date == today, ActionIssue.rank == rank,
-                    ActionIssue.is_current == True)  # noqa: E712
-            .first()
+        # Find the matching existing issue by topic similarity across all
+        # recent issues (2-day lookback, any rank).  Same topic → same row,
+        # regardless of whether it yo-yoed in rank or was briefly displaced.
+        match: ActionIssue | None = None
+        if _recent_embs is not None:
+            sims = _recent_embs @ title_emb
+            best_idx = int(np.argmax(sims))
+            if float(sims[best_idx]) >= TOPIC_CHANGE_THRESHOLD:
+                candidate = _recent_issues[best_idx]
+                if candidate.id not in _matched_issue_ids:
+                    match = candidate
+
+        _update_attrs = (
+            "title", "summary", "facts", "actions", "source_urls",
+            "source_names", "policy_areas", "related_bill_ids",
+            "related_explore_ids", "related_senators", "primary_article_date",
         )
-        if existing:
-            old_title = existing.title
 
-            # Always check topic similarity — every distinct topic gets its own
-            # permanent row and ID. In-place update is only safe when the topic
-            # is the same (sim >= threshold); any topic change must retire the
-            # existing row so its ID stays bound to its original content forever.
-            prev_title_emb = _embed_texts([old_title])[0]
-            topic_sim = float(title_emb @ prev_title_emb)
-            topic_changed = topic_sim < TOPIC_CHANGE_THRESHOLD
+        _new_values: dict = {
+            "title": title[:500],
+            "summary": summary,
+            "facts": json.dumps(facts),
+            "actions": json.dumps(actions),
+            "source_urls": json.dumps(source_urls),
+            "source_names": json.dumps(source_names),
+            "policy_areas": json.dumps(policy_areas),
+            "related_bill_ids": json.dumps(resolved_bills),
+            "related_explore_ids": json.dumps(related_explore_ids),
+            "related_senators": json.dumps(related_senators),
+            "primary_article_date": primary_article_date,
+        }
 
-            if topic_changed:
-                # Retire the old row in place — its ID, content, and any
-                # Bluesky link it carries are now permanent and stable.
-                # Insert a new row so the new topic gets its own unique ID.
-                existing.is_current = False
-                issue.is_current = True
-                _inherit_bsky_if_yo_yo(issue, today, rank, title_emb, db)
-                db.add(issue)
+        if match:
+            _matched_issue_ids.add(match.id)
+            has_new_articles = primary_article_date > (match.primary_article_date or "1970-01-01")
+
+            match.rank = rank
+            match.date = today
+            match.is_current = True
+            for attr in _update_attrs:
+                setattr(match, attr, _new_values[attr])
+
+            if has_new_articles:
+                # New articles arrived — allow the Bluesky poster to post an update.
+                match.bsky_posted_at = None
+                match.bsky_posted_rank = None
                 logger.info(
-                    "Topic changed at rank %d (sim=%.2f): '%s' → '%s' — retired id=%d, inserting new row",
-                    rank, topic_sim, old_title[:60], title[:60], existing.id,
+                    "Rank %d '%s': new articles (article_date=%s) — updating and allowing repost",
+                    rank, title[:60], primary_article_date,
                 )
             else:
-                # Same topic: update the existing row in place so its ID (and
-                # any Bluesky link pointing to it) remains stable.
-                for attr in ("title", "summary", "facts", "actions", "source_urls",
-                             "source_names", "policy_areas", "related_bill_ids",
-                             "related_explore_ids", "related_senators"):
-                    setattr(existing, attr, getattr(issue, attr))
-                existing.created_at = datetime.utcnow()
-
-                # Preserve full_story once generated — stable content behind
-                # the Bluesky permalink (/issue/<id>).
-                if not existing.full_story and issue.full_story:
-                    existing.full_story = issue.full_story
+                logger.info(
+                    "Rank %d '%s': no new articles (article_date=%s) — rank updated, no repost",
+                    rank, title[:60], primary_article_date,
+                )
         else:
-            issue.is_current = True
-            _inherit_bsky_if_yo_yo(issue, today, rank, title_emb, db)
-            db.add(issue)
+            # Brand new topic — give it a permanent row and post to Bluesky.
+            new_row = ActionIssue(date=today, rank=rank, is_current=True, **_new_values)
+            db.add(new_row)
+            _new_issues.append(new_row)
+            logger.info("Rank %d new topic: '%s'", rank, title[:60])
 
-        created_ranks.add(rank)
         issues_created += 1
 
-    db.commit()
+    # Flush to assign IDs to newly inserted rows, then mark them as touched.
+    db.flush()
+    for ni in _new_issues:
+        _matched_issue_ids.add(ni.id)
 
-    # Retire current rows at ranks that didn't appear in this run's clusters.
-    # This prevents ghost issues when clustering produces fewer results.
-    # Retired rows are kept for stable Bluesky link resolution.
-    if created_ranks:
-        stale = (
-            db.query(ActionIssue)
-            .filter(
-                ActionIssue.date == today,
-                ActionIssue.is_current == True,  # noqa: E712
-                ~ActionIssue.rank.in_(created_ranks),
-            )
-            .all()
-        )
-        for row in stale:
+    # Retire every current issue not touched in this run.
+    # Retired rows are kept permanently for stable permalink resolution.
+    all_current = (
+        db.query(ActionIssue)
+        .filter(ActionIssue.is_current == True)  # noqa: E712
+        .all()
+    )
+    n_retired = 0
+    for row in all_current:
+        if row.id not in _matched_issue_ids:
             row.is_current = False
-        if stale:
-            db.commit()
-            logger.info("Retired %d stale issues from prior runs", len(stale))
+            n_retired += 1
+    if n_retired:
+        logger.info("Retired %d stale issues not in current clusters", n_retired)
+
+    db.commit()
 
     # Stage 2: Auto-detect and update national monitors (must run before
     # _save_timeline_entry so the top issue has related_monitor_slugs populated)
