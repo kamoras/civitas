@@ -96,6 +96,123 @@ external API calls to cloud AI services.
 
 ---
 
+## Nightly Pipeline: Phase by Phase
+
+The nightly pipeline processes every senator and House representative through six sequential phases before persisting scores and snapshots.
+
+### Phase 1 — FETCH
+
+Pulls raw data from each government API and stores the complete response verbatim in `ApiCache` before any transformation:
+
+| Source | What is fetched | Rate limit |
+|--------|-----------------|------------|
+| Congress.gov | Bills sponsored/cosponsored (last 2 years), roll-call votes | 1.2 RPS |
+| FEC API | Campaign finance transactions, committee receipts, outside spending | 0.25 RPS |
+| GovInfo API | Full bill text for key votes (PDF → text extraction) | 1.0 RPS |
+| Senate.gov | Floor speeches, press remarks (scraped; no public API) | polite crawl |
+| Oyez / SCOTUS | Justice voting records, case metadata | 0.5 RPS |
+| BLS | Unemployment, inflation, job growth by administration | batch |
+| BEA | GDP growth by quarter | batch |
+| Federal Register | Executive orders signed per administration | 1.0 RPS |
+
+Nothing from the API cache is ever cleared — it represents immutable source data. A fresh run can replay against the cached responses without re-hitting the external APIs (controlled by `PIPELINE_CACHE_TTL_HOURS`).
+
+### Phase 2 — TRANSFORM
+
+Normalizes raw API payloads into typed domain objects. Key operations:
+
+- **FEC deduplication**: FEC records contain duplicate committee entries from amended filings. The transform layer resolves these by matching on committee ID and keeping the most recent amendment.
+- **Bill title normalization**: Congress.gov returns bill titles in several formats (official, short, display, popular). Transform picks the most human-readable, falling back through the hierarchy.
+- **Employer name normalization**: FEC contributor employer fields are free text. A batch embedding pass maps variant spellings (e.g. "Goldman Sachs & Co", "GOLDMAN SACHS") to a canonical form before classification.
+- **Memo text parsing**: FEC memo text fields encode earmarks and transfers in free-form text. A batch skip-entity classifier separates genuine contributions from administrative memo entries.
+
+### Phase 3 — ANALYZE
+
+The heaviest phase. Runs the producer-consumer pipeline (Librarian + Analyst threads) for each member:
+
+**Librarian thread (batch embedding, runs one member ahead):**
+1. Embed all sponsored/cosponsored bill titles → classify policy areas (nearest centroid, 14 prototypes)
+2. Embed all donor employer names → classify industries (tiered: exact match → embedding → kNN)
+3. Compute lobbying conflicts: cosine similarity between donor industries and bill policy areas
+4. Select key votes: composite score = party deviation + donor industry overlap
+5. Embed platform text → extract policy topics (sentence-transformer, not LLM)
+6. Embed floor speeches → compute party alignment (nearest centroid vs. party platform corpora)
+
+**Analyst thread (LLM, one call at a time):**
+1. Classify PAC donors that evaded the embedding classifier (LLM PAC identification)
+2. Evaluate campaign promises: compare platform commitments vs. voting record (LLM, compressed context)
+3. Generate narrative summary: synthesize key votes, donor conflicts, promise status (LLM, ~500 tokens out)
+
+The Librarian runs one member ahead of the Analyst. While the Analyst blocks on LLM I/O (~15–30s), the Librarian completes the embedding batch for the next member. Results are passed via a `threading.Event` + shared dict — no queue needed since lookahead is exactly 1.
+
+### Phase 4 — EXPLORE
+
+Builds the semantic search index over government documents:
+- Splits each bill's full text into 512-token chunks with 64-token overlap
+- Encodes chunks with the sentence-transformer (384-dim, Snowflake Arctic-XS)
+- Upserts into ChromaDB with metadata: bill ID, policy area, sponsor, date
+- At query time: embed query → HNSW approximate nearest-neighbor search → return top-k chunks
+
+The Explore index is separate from the classification embeddings — it uses raw bill text, not title-only embeddings, enabling full-text semantic search across legislation.
+
+### Phase 5 — JUSTICES
+
+Fetches and scores Supreme Court justices from Oyez:
+- Pulls all majority/dissent/concurrence votes for the current term
+- Scores ideological consistency: deviation from the justice's historical median position
+- Scores impartiality: proportion of cases where the justice's coalition crossed party-appointment lines
+
+### Phase 6 — PRESIDENTS
+
+Scores sitting and historical presidents from a mix of live and archival sources:
+- **Live**: BLS employment rate, BEA GDP growth, Federal Register order count
+- **Historical**: C-SPAN Presidential Historians Survey (competence/leadership), Gallup approval archive, FiveThirtyEight election margin data
+- All six score dimensions (Independence, Follow-Through, Public Mandate, Effectiveness, Competence, Agency Alignment) are computed from source data with no LLM involvement.
+
+### Phase 7 — FINALIZE
+
+Persists everything computed in phases 3–6:
+- Writes senator/representative scores, key votes, lobbying matches, campaign promises, sponsored bills to SQLite
+- Appends a `ScoreSnapshot` record (all 5 sub-scores + overall) for each member — enables historical score trend charts
+- Records a `PipelineRun` with phase timings, counts, and any per-member errors
+- Runs a SHA-256 fingerprint over all analysis source files; if changed since last run, clears `AnalysisCache` and `LearnedClassification` so stale results from the old code are not served
+
+---
+
+## Caching Architecture
+
+Three independent caching systems serve different purposes:
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│  ApiCache  (SQLite: api_cache)                                     │
+│  Key: (tier, endpoint+params_hash)   TTL: 72h (configurable)       │
+│  Stores: raw API JSON, verbatim                                     │
+│  Cleared: never (source data is immutable; re-fetched after TTL)   │
+│  Purpose: replay pipeline without re-hitting external APIs          │
+└────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────┐
+│  AnalysisCache  (SQLite: analysis_cache)                           │
+│  Key: (prompt_version, SHA-256(input))                             │
+│  Stores: LLM JSON output, verbatim                                 │
+│  Cleared: when source file fingerprint changes (code update)       │
+│  Purpose: skip LLM calls for unchanged inputs on warm reruns       │
+└────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────┐
+│  LearnedClassification  (SQLite: learned_classifications)          │
+│  Key: (entity_text, entity_type)                                   │
+│  Stores: classification + confidence + source                      │
+│  Cleared: when source file fingerprint changes                     │
+│  Purpose: cross-run entity memory (kNN bootstrapping, audit trail) │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+The fingerprint check at pipeline start compares `SHA-256(all analysis/*.py files)` to the hash stored in the last `PipelineRun`. If they differ, `AnalysisCache` and `LearnedClassification` are cleared so updated logic produces fresh results. `ApiCache` is never cleared by fingerprint — source data doesn't change when analysis code does.
+
+---
+
 ## Data Pipeline: Design Rationale
 
 The pipeline is structured around a specific set of constraints that shape every decision.
@@ -352,6 +469,49 @@ All scores default to 50 when data is insufficient. No LLM input is used in scor
 
 ---
 
+## Semantic Search (Explore)
+
+The Explore feature provides full-text semantic search over government documents without keyword matching. Documents are embedded offline (during pipeline runs) and stored in ChromaDB; queries are embedded at request time.
+
+**What is indexed:**
+- Full text of bills sponsored by any senator or representative (chunked, 512 tokens, 64-token overlap)
+- Each chunk stored with metadata: bill ID, Congress.gov URL, policy area, sponsor name, chamber, date introduced
+
+**Query flow:**
+```
+User query
+    │
+    ▼ embed (Snowflake Arctic-XS, 384-dim)
+    │
+    ▼ HNSW approximate nearest-neighbor (ChromaDB, cosine distance)
+    │
+    ▼ top-k chunks retrieved with metadata
+    │
+    ▼ deduplicated by bill ID, ranked by similarity score
+    │
+    ▼ returned with excerpt, bill link, policy area, sponsor
+```
+
+The same embedding model used for classification is used for Explore — no separate model or index is needed. ChromaDB's HNSW index handles collections of ~500K chunks on the Pi with sub-100ms query latency.
+
+---
+
+## Score Data Transparency
+
+Each score shown in the UI links to a "data basis" view that surfaces the raw data behind the number. This is built without any additional data storage — the existing tables are queried at render time:
+
+| Score | Data shown |
+|-------|------------|
+| Funding Independence | Top 10 donors by amount, PAC fraction, outside spending total |
+| Promise Persistence | Per-promise verdict (kept/broken/partial), supporting vote or speech |
+| Independent Voting | Key votes where member broke with party, bill title + vote |
+| Funding Diversity | Industry breakdown pie chart from `IndustryDonation` records |
+| Legislative Effectiveness | Sponsored bills, cosponsor counts, committee/floor passage rate |
+
+The score transparency layer deliberately surfaces the underlying `KeyVote`, `Donor`, `CampaignPromise`, and `SponsoredBill` records rather than LLM-written explanations — the numbers are auditable against the source data.
+
+---
+
 ## Public API
 
 A rate-limited public read-only API is available without authentication at `/api/public`:
@@ -457,15 +617,63 @@ curl -X POST http://localhost:8000/api/admin/pipeline/trigger \
 
 ## Deployment
 
-The project uses blue/green zero-downtime deployment via `deploy.sh`:
+### Blue/Green Architecture
 
-```bash
-./deploy.sh backend    # build, start, health check, swap nginx, stop old
-./deploy.sh frontend
-./deploy.sh            # both
+The project uses zero-downtime blue/green deployment with nginx as the traffic router:
+
+```
+                    ┌─── nginx (port 80/443) ───┐
+                    │   upstream backend { }     │
+                    │   upstream frontend { }    │
+                    └──────────┬────────────────┘
+                               │ proxy_pass
+              ┌────────────────┴────────────────┐
+              ▼                                 ▼
+   mp-backend-blue (8000)          mp-backend-green (8001)
+   mp-frontend-blue (3000)         mp-frontend-green (3001)
+        [idle]                          [live]
 ```
 
-Data is persisted in Docker named volumes (`app_data`) that survive container rebuilds and redeployments.
+`deploy.sh` follows this sequence:
+1. Build the new Docker image
+2. Start the new container on the idle port (e.g. green on 8001)
+3. Poll `GET /health` until the container responds (up to 60s)
+4. Rewrite the nginx upstream block to point to the new port
+5. `nginx -s reload` — zero-downtime config swap (nginx drains in-flight requests)
+6. Stop and remove the old container
+
+The script auto-detects which slot is currently live by parsing the active nginx config, so it always starts the container on the idle slot without manual bookkeeping.
+
+Data is persisted in a Docker named volume (`app_data`) mounted at `/app/data` inside every container. The SQLite database and ChromaDB files live here and survive container rebuilds. Both blue and green containers mount the same volume, so the new container has full access to the current database the moment it starts — no data migration needed on deploy.
+
+### Service Layout
+
+```
+Host ports                 Container            Purpose
+──────────────────────────────────────────────────────────
+8000 or 8001               mp-backend-{slot}    FastAPI backend
+3000 or 3001               mp-frontend-{slot}   Next.js frontend
+8070                       llama-server         llama.cpp inference (systemd)
+80 / 443                   nginx                Reverse proxy + TLS termination
+```
+
+llama.cpp runs as a systemd service (not Docker) so the model weights stay in RAM across backend redeploys. The backend connects to it via `http://host.docker.internal:8070`. If the llama.cpp server is unavailable, all LLM calls fall through to a timeout error and the pipeline records a per-member failure without aborting the run.
+
+### Health Check
+
+`GET /health` returns:
+```json
+{
+  "status": "ok",
+  "db": "connected",
+  "llm": "reachable" | "unreachable",
+  "pipeline_running": false,
+  "senators_count": 100,
+  "representatives_count": 435
+}
+```
+
+The deploy script considers the new container healthy when `status == "ok"` and `db == "connected"`. LLM reachability is informational and does not block deployment.
 
 ## Development Setup
 
