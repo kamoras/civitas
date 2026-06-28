@@ -23,7 +23,7 @@ external API calls to cloud AI services.
 │  (bills, votes, (campaign  (bill text,  (speeches,  (SCOTUS (jobs,           │
 │   members)       finance)   histories)   remarks)    cases)  GDP)            │
 │                                                                              │
-│  AP / NPR / Reuters / PBS (RSS)     Google Trends     Reddit r/politics      │
+│  AP / NPR / BBC / PBS (RSS)          Google Trends     Reddit r/politics     │
 └──────────────────────────┬───────────────────────────────────────────────────┘
                            │  rate-limited HTTP
                            │  (Congress 1.2 RPS, FEC 0.25 RPS, GovInfo 1.0 RPS)
@@ -66,6 +66,7 @@ external API calls to cloud AI services.
 │  ├── CampaignPromise                                                         │
 │  ├── ActionIssue / NationalMonitor / MonitorUpdate                           │
 │  ├── TimelineEntry / WeekSummary / MonthSummary / YearSummary                │
+│  ├── ScoreSnapshot  (historical score tracking per senator/rep)               │
 │  ├── ApiCache  (raw API responses, TTL=72h, never cleared)                   │
 │  ├── AnalysisCache  (LLM outputs, hash-keyed, cleared on code changes)       │
 │  └── LearnedClassification  (cross-run entity learning store)                │
@@ -76,7 +77,7 @@ external API calls to cloud AI services.
 │  FastAPI backend  (port 8000)                                                │
 │  /api/senators      /api/representatives     /api/presidents                 │
 │  /api/justices      /api/action              /api/explore                    │
-│  /api/admin         /health                                                  │
+│  /api/admin         /api/public  (open, rate-limited)    /health             │
 │                                              ┌────────────────────────┐      │
 │  APScheduler ──▶ nightly pipeline            │  llama.cpp server      │      │
 │  APScheduler ──▶ hourly action refresh  ────▶│  DeepSeek-R1 1.5B      │      │
@@ -86,7 +87,8 @@ external API calls to cloud AI services.
                            ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │  Next.js 14 frontend  (port 3000)                                            │
-│  /scorecard  /leaderboard  /action  /explore  /about  /admin                 │
+│  /scorecard  /leaderboard  /action  /explore  /compare  /issue  /about       │
+│  /admin  /environmental  /accessibility                                      │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -140,6 +142,7 @@ Everything else uses geometric methods in sentence-embedding space:
 | Key vote selection | Composite score: party deviation + donor overlap | Fully deterministic |
 | Monitor deduplication | Pairwise cosine (full text + title-only) | Robust to surface paraphrase |
 | Issue deduplication | Post-LLM title embedding similarity | Catches LLM-generated near-duplicates missed by pre-filtering |
+| Issue topic continuity | Cosine similarity across 2-day lookback | Ensures same story maps to same DB row across runs and rank changes |
 
 LLM calls per full run: ~100–400 (one narrative per senator/rep, plus daily action issues). Embedding operations per run: ~50,000. The pipeline is a **semantic classification and retrieval system** that uses a language model only at the final synthesis step.
 
@@ -211,8 +214,8 @@ The Action Center is intentionally separate from the nightly pipeline because it
 Every hour at :15
        │
        ▼
-  1. FETCH ─── RSS (AP/NPR/Reuters/PBS) + Google Trends + Reddit
-       │
+  1. FETCH ─── RSS (AP / NPR / BBC / PBS) + Google Trends + Reddit
+       │         48-hour article window; direct URLs only (no redirect wrappers)
        ▼
   2. FILTER ── Embed each article against 18 US policy prototypes
        │         Discard cosine_sim < 0.15 (off-topic articles)
@@ -226,24 +229,52 @@ Every hour at :15
   5. LLM ───── Per cluster: neutral summary + key facts + citizen actions
        │         Post-generation title deduplication (cosine_sim > 0.82)
        ▼
-  6. ENRICH ── ChromaDB semantic search → link related bills/senators
+  6. PERSIST ─ Topic-keyed matching: each unique story maps to one permanent
+       │         DB row regardless of rank changes or brief displacement.
+       │         Same story + no new articles → update rank silently, no repost.
+       │         Same story + new articles → update content, allow Bluesky repost.
+       │         Brand new story → create new row.
+       ▼
+  7. ENRICH ── ChromaDB semantic search → link related bills/senators
        │         Resolve bill IDs mentioned in article text
        ▼
-  7. MONITORS ─ Detect cross-day recurring topics (similarity > 0.50)
+  8. MONITORS ─ Detect cross-day recurring topics (similarity > 0.50)
        │          Create/update NationalMonitor records (min 3 days)
        │          Re-merge duplicate monitors (title OR full sim > 0.50)
        ▼
-  8. TIMELINE ─ Record daily TimelineEntry
-                 At week/month/year boundaries: LLM generates period summary
+  9. TIMELINE ─ Record daily TimelineEntry
+       │          At week/month/year boundaries: LLM generates period summary
+       ▼
+ 10. BLUESKY ── Post new/updated issues (LLM-written, with staleness framing
+       │          if event predates today). Daily senator score spotlight.
+       │          Weekly civic summary.
+       │          Repost + like outlet posts that match active issues.
 ```
 
-**Why cluster before ranking?** Articles about the same event arrive from multiple outlets within minutes. Without clustering, all 4 "top issues" would be the same story from AP, NPR, Reuters, and PBS. Clustering first, then ranking by source breadth, surfaces the 4 most distinct newsworthy topics.
+**Why cluster before ranking?** Articles about the same event arrive from multiple outlets within minutes. Without clustering, all 4 "top issues" would be the same story from AP, NPR, BBC, and PBS. Clustering first, then ranking by source breadth, surfaces the 4 most distinct newsworthy topics.
 
 **Why filter at 0.15 cosine similarity?** The policy prototype filter is deliberately permissive. False negatives (dropping a real policy story) are worse than false positives. The LLM step handles borderline cases through its non-partisan framing constraint.
 
 **Why a 3-day monitor threshold?** A topic appearing on 3+ distinct days is structurally different from a one-day news spike — it indicates a developing situation citizens may need to track. A 2-day threshold creates too many ephemeral monitors.
 
 **Why post-LLM title deduplication?** Article clusters with overlapping coverage (different outlets, slightly different angles) can have pre-LLM embedding similarity below the merge threshold (< 0.40), yet the LLM generates near-identical titles for both. A post-generation cosine similarity check at 0.82 on title embeddings catches these cases and drops the duplicate before it reaches the database.
+
+**Why topic-keyed matching instead of rank-slot matching?** The original design keyed issues by `(date, rank)`. When the same story briefly fell off the top 4 and returned, a new row was created with `bsky_posted_at=None`, triggering a duplicate Bluesky post. Topic-keyed matching (2-day lookback by cosine similarity) ensures the same story always maps to the same row. New articles advance `primary_article_date` and allow a repost; more outlets covering the same event do not.
+
+---
+
+## Bluesky Integration
+
+The Civitas Bluesky account (`@civitas-research.bsky.social`) is updated automatically by the hourly pipeline:
+
+| Post type | Trigger | Content |
+|-----------|---------|---------|
+| **Issue post** | New topic enters action center, or existing topic gets articles with a newer date | LLM-written 1–3 sentence summary. If event predates today, post opens with "Yesterday: …" or "On [date]: …" |
+| **Senator spotlight** | Once per day (cycles highest → lowest scorers) | LLM-written score highlight with data from Civitas scorecard |
+| **Weekly summary** | Once per week (6-day cooldown) | LLM-written condensed week-in-review from the timeline pipeline |
+| **Repost + like** | Outlet post matches an active issue (cosine sim ≥ 0.78) | Reposts + likes posts from AP, BBC, NPR, PBS NewsHour; max 3 per hourly run |
+
+Each issue links back to its permanent Civitas permalink (`/issue/<id>`). The permalink is stable — issue IDs never change even as content is updated.
 
 ---
 
@@ -255,12 +286,14 @@ The scoring formulas deliberately avoid any ground truth that encodes partisan a
 
 ```
 Overall = 0.25 × FundingIndependence
-        + 0.25 × PromisePersistence
-        + 0.25 × IndependentVoting
-        + 0.25 × FundingDiversity
+        + 0.20 × PromisePersistence
+        + 0.20 × IndependentVoting
+        + 0.15 × FundingDiversity
+        + 0.20 × LegislativeEffectiveness
 
 FundingIndependence = (1 − PAC_fraction) × 100
   where PAC_fraction = total_PAC_receipts / total_raised
+  Outside spending (super PACs) blended at 0.5× since less direct than PAC contributions
 
 PromisePersistence = (kept / (kept + broken + partial)) × 100
   with Bayesian shrinkage:
@@ -276,20 +309,28 @@ IndependentVoting = (against_party_count / total_votes) × PVI_weight × 100
 FundingDiversity = (1 − HHI(industry_donations)) × 100
   where HHI = Σ(industry_share_i²)   [Herfindahl-Hirschman Index]
   High score = broadly-funded; low score = dominated by one sector
+
+LegislativeEffectiveness = f(bills_sponsored, cosponsors, committee_passage_rate,
+                             floor_passage_rate, leadership_score)
+  Composite of bill throughput, peer support (PageRank-weighted cosponsorship),
+  and committee + floor success rates
 ```
 
 ### Senate & House Scores
 
-Each senator and House representative receives four sub-scores (0-100, higher = better):
+Each senator and House representative receives five sub-scores (0-100, higher = better):
 
 | Metric | Weight | What It Measures | Key Reference |
 |--------|--------|------------------|---------------|
-| **Funding Independence** | 25% | PAC dependency + top-donor concentration | Bonica 2014; Stratmann 2005 |
-| **Promise Persistence** | 25% | Campaign commitments kept + floor advocacy + participation | Naurin 2011; Martin 2011 |
-| **Independent Voting** | 25% | Party-line breaks (state-adjusted) + donor independence | Carson et al. 2010 |
-| **Funding Diversity** | 25% | Donor traceability + industry diversity (inverse HHI) | Rhoades 1993 |
+| **Funding Independence** | 25% | PAC dependency + top-donor concentration + outside spending | Bonica 2014; Stratmann 2005 |
+| **Promise Persistence** | 20% | Campaign commitments kept + floor advocacy + participation | Naurin 2011; Martin 2011 |
+| **Independent Voting** | 20% | Party-line breaks (state-adjusted) + donor independence | Carson et al. 2010 |
+| **Funding Diversity** | 15% | Donor traceability + industry diversity (inverse HHI) | Rhoades 1993 |
+| **Legislative Effectiveness** | 20% | Bill throughput + cosponsorship (PageRank) + committee success | Tauberer 2012; Brin & Page 1998 |
 
 House representatives use the same scoring framework, data sources, and classification pipeline as senators, ensuring comparable scores across chambers.
+
+Score history is tracked in `ScoreSnapshot` records so the frontend can render historical score trends per senator/representative.
 
 Additional senator metrics (informational, not scored):
 
@@ -305,9 +346,24 @@ Each justice is scored on impartiality and ideological consistency based on case
 
 ### Presidential Scores
 
-Presidents are scored on five dimensions (Independence, Follow-Through, Public Mandate, Effectiveness, Competence) using a mix of live API data (BLS employment, Federal Register executive orders) and historical records (C-SPAN Historians Survey, Gallup approval data, BEA GDP).
+Presidents are scored on six dimensions (Independence, Follow-Through, Public Mandate, Effectiveness, Competence, Agency Alignment) using a mix of live API data (BLS employment, Federal Register executive orders) and historical records (C-SPAN Historians Survey, Gallup approval data, BEA GDP).
 
 All scores default to 50 when data is insufficient. No LLM input is used in score calculation — formulas are deterministic and auditable.
+
+---
+
+## Public API
+
+A rate-limited public read-only API is available without authentication at `/api/public`:
+
+```
+GET /api/public/senators          All senators with scores
+GET /api/public/representatives   All representatives with scores
+GET /api/public/action-issues     Current action center issues
+GET /api/public/config            Score weights, industry codes, policy areas
+```
+
+Rate limit: 60 requests/minute per IP. Headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`.
 
 ---
 
@@ -434,12 +490,18 @@ docker compose run --rm --no-deps backend python -m pytest tests/ -v \
 civitas/
 ├── backend/
 │   ├── app/
-│   │   ├── api/              # FastAPI route handlers (senators, representatives, presidents, justices, explore, action, admin)
-│   │   ├── services/         # Business logic (senator_service, representative_service with paginated votes)
+│   │   ├── api/              # FastAPI route handlers
+│   │   │   ├── senators.py, representatives.py, presidents.py, justices.py
+│   │   │   ├── action.py     # Action center issues, monitors, timeline
+│   │   │   ├── explore.py    # Semantic document search
+│   │   │   ├── public.py     # Open read-only API (rate-limited, no auth)
+│   │   │   └── admin.py      # Pipeline control panel
+│   │   ├── services/         # Business logic (senator_service, representative_service)
 │   │   ├── pipeline/
-│   │   │   ├── fetch/        # API clients (Congress.gov, FEC, GovInfo, Senate.gov, Oyez, BLS, Federal Register, news RSS)
+│   │   │   ├── fetch/        # API clients (Congress.gov, FEC, GovInfo, Senate.gov,
+│   │   │   │                 #   Oyez, BLS, Federal Register, news RSS)
 │   │   │   ├── transform/    # Data normalization + embedding-based industry classifier
-│   │   │   ├── analyze/      # Bill, donor, party alignment, scoring, justice scorecards
+│   │   │   ├── analyze/      # Scoring, classification, action center, Bluesky
 │   │   │   │   ├── bill_analyzer.py          # Embedding-based bill classification + stance
 │   │   │   │   ├── bill_learning.py          # Adaptive kNN reference corpus
 │   │   │   │   ├── party_platform.py         # Content-based party alignment + partisan depth
@@ -448,26 +510,38 @@ civitas/
 │   │   │   │   ├── sponsorship_analysis.py   # PageRank leadership + SVD ideology
 │   │   │   │   ├── policy_alignment.py       # Industry↔policy area mapping
 │   │   │   │   ├── cross_reference.py        # Per-senator LLM narrative
-│   │   │   │   ├── action_center.py          # News analysis, LLM summarization, national monitors, timeline
+│   │   │   │   ├── action_center.py          # News clustering, LLM summarization,
+│   │   │   │   │                             #   national monitors, timeline
 │   │   │   │   ├── score_calculator.py       # Deterministic scoring formulas
-│   │   │   │   └── ollama_client.py          # LLM backend abstraction
+│   │   │   │   ├── ollama_client.py          # LLM backend abstraction
+│   │   │   │   ├── bluesky_poster.py         # Post new/updated action issues
+│   │   │   │   ├── bluesky_spotlight.py      # Daily senator spotlight + weekly summary
+│   │   │   │   ├── bluesky_engagement.py     # Repost/like matching outlet posts
+│   │   │   │   └── bluesky_utils.py          # Shared link-card builder
 │   │   │   ├── assemble/     # Senator scorecard builder + validator
 │   │   │   ├── vector_store.py  # ChromaDB + sentence-transformer
 │   │   │   └── orchestrator.py  # Pipeline control flow
-│   │   ├── models.py         # SQLAlchemy ORM (Senator, Representative, KeyVote, Justice, NationalMonitor, TimelineEntry, etc.)
+│   │   ├── models.py         # SQLAlchemy ORM (Senator, Representative, KeyVote,
+│   │   │                     #   Justice, ActionIssue, NationalMonitor,
+│   │   │                     #   TimelineEntry, ScoreSnapshot, etc.)
 │   │   ├── schemas.py        # Pydantic response schemas
-│   │   ├── database.py       # DB engine + session management
-│   │   └── config.py         # Pydantic settings from .env
+│   │   ├── database.py       # DB engine, session management, lightweight migrations
+│   │   ├── config.py         # Pydantic settings from .env
+│   │   └── config_definitions.py  # Score weights, industry codes, policy areas
 │   ├── tests/                # pytest test suite
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/app/              # Next.js app router pages
 │   │   ├── about/            # Methodology page with full citations
-│   │   ├── action/           # Action Center (issues, monitors, timeline, elections, branches, globe)
+│   │   ├── action/           # Action Center (issues, monitors, timeline)
+│   │   ├── issue/[id]/       # Permanent issue permalinks (Bluesky link target)
+│   │   ├── compare/          # Side-by-side senator/representative comparison
 │   │   ├── explore/          # Semantic search over government documents
 │   │   ├── scorecard/        # Senator, representative, president, and justice scorecards
 │   │   ├── leaderboard/      # Rankings across all branches (House paginated)
+│   │   ├── environmental/    # Environmental policy tracking
+│   │   ├── accessibility/    # Accessibility statement
 │   │   └── admin/            # Pipeline control panel with granular progress
 │   ├── src/components/       # React components
 │   └── Dockerfile
@@ -492,6 +566,8 @@ See `.env.example` for all options. Key variables:
 | `DATABASE_URL` | No | SQLite path (default: `sqlite:///data/civitas.db`) |
 | `PIPELINE_CRON_SCHEDULE` | No | Cron schedule for nightly pipeline (default: `0 3 * * *`) |
 | `PIPELINE_CACHE_TTL_HOURS` | No | API response cache TTL (default: `72`) |
+| `BSKY_HANDLE` | No | Bluesky handle (e.g. `civitas-research.bsky.social`) |
+| `BSKY_APP_PASSWORD` | No | Bluesky app password (from Settings → App Passwords) |
 
 ## References
 
@@ -500,6 +576,7 @@ Key references:
 
 - Bonica, A. (2014). Mapping the Ideological Marketplace. *AJPS*, 58(2), 367-386.
 - Budge, I. et al. (2001). *Mapping Policy Preferences*. Oxford UP.
+- Brin, S. & Page, L. (1998). The Anatomy of a Large-Scale Hypertextual Web Search Engine. *Proc. WWW 1998*.
 - Carson, J. et al. (2010). The Electoral Costs of Party Loyalty. *AJPS*, 54(3), 598-616.
 - Clinton, J., Jackman, S. & Rivers, D. (2004). The Statistical Analysis of Roll Call Data. *APSR*, 98(2), 355-370.
 - Cover, T. & Hart, P. (1967). Nearest Neighbor Pattern Classification. *IEEE Trans. Info Theory*, 13(1), 21-27.
@@ -512,7 +589,6 @@ Key references:
 - Snell, J. et al. (2017). Prototypical Networks for Few-Shot Learning. *NeurIPS 2017*, 4077-4087.
 - Stratmann, T. (2005). Some Talk: Money in Politics. *Public Choice*, 124(1-2), 135-156.
 - Tauberer, J. (2012). *Open Government Data*. GovTrack.us ideology/leadership methodology.
-- Brin, S. & Page, L. (1998). The Anatomy of a Large-Scale Hypertextual Web Search Engine. *Proc. WWW 1998*.
 
 ## License
 
