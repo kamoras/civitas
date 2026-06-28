@@ -1725,7 +1725,7 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
         user_prompt=user_prompt,
         cache_key=f"full_story:{issue.id}:{issue.title[:80]}",
         db_session=None,
-        max_tokens=1536,
+        max_tokens=2048,
         num_ctx=4096,
     )
 
@@ -2452,24 +2452,45 @@ def _run_refresh(db: Session) -> int:
     generated_title_embs: list[tuple[str, "np.ndarray"]] = []
 
     for rank, cluster in enumerate(top_clusters, start=1):
-        user_prompt = _build_llm_prompt(cluster)
+        # Filter the cluster to articles that are genuinely on-topic using
+        # centered embeddings — the same space the clustering used. Raw cosine
+        # similarity is useless here because every news headline sits in the
+        # same high-similarity region; centering removes that bias so only
+        # articles that share the cluster's specific topic score highly.
+        cluster_titles = [a.title for a in cluster]
+        raw_embs = _embed_texts(cluster_titles)
+        mean_emb = raw_embs.mean(axis=0)
+        centered = raw_embs - mean_emb
+        norms = np.linalg.norm(centered, axis=1, keepdims=True)
+        centered_normed = centered / np.where(norms < 1e-9, 1.0, norms)
+        c_centroid = centered_normed.mean(axis=0)
+        c_norm = float(np.linalg.norm(c_centroid))
+        c_centroid = c_centroid / c_norm if c_norm > 0 else c_centroid
+        centered_sims = centered_normed @ c_centroid
 
-        # Source attribution: only credit articles that are above the cosine
-        # similarity floor relative to the cluster centroid. This guards against
-        # stray articles that ended up in the cluster via merging but cover a
-        # completely different topic.
-        cluster_embs = _embed_texts([a.title for a in cluster])
-        centroid = cluster_embs.mean(axis=0)
-        centroid /= max(float(np.linalg.norm(centroid)), 1e-9)
-        sims = cluster_embs @ centroid
-        SOURCE_SIM_FLOOR = 0.50  # article must be at least this similar to the centroid
+        # Threshold in centered space: 0.0 means at least as similar to the
+        # cluster centroid as the average article. Stray articles from Pass 2
+        # merges typically score negative (anti-correlated with the centroid).
+        SOURCE_SIM_FLOOR = 0.0
+        on_topic = [(a, float(s)) for a, s in zip(cluster, centered_sims) if float(s) >= SOURCE_SIM_FLOOR]
+        if not on_topic:
+            on_topic = [(cluster[0], 1.0)]
+
+        filtered_cluster = [a for a, _ in on_topic]
+        logger.info(
+            "Rank %d coherence filter: %d/%d articles on-topic",
+            rank, len(filtered_cluster), len(cluster),
+        )
+
+        # Build the LLM prompt from only the on-topic articles so the generated
+        # title, summary, and facts reflect the cluster's actual topic, not
+        # tangentially related articles that drifted in via Pass 2 merging.
+        user_prompt = _build_llm_prompt(filtered_cluster)
+
         seen_sources: dict[str, str] = {}
-        for a, sim in zip(cluster, sims):
-            if float(sim) >= SOURCE_SIM_FLOOR and a.source_name not in seen_sources:
+        for a, _ in on_topic:
+            if a.source_name not in seen_sources:
                 seen_sources[a.source_name] = a.url
-        # Fall back to top article if filter was too aggressive
-        if not seen_sources and cluster:
-            seen_sources[cluster[0].source_name] = cluster[0].url
         source_names = list(seen_sources.keys())
         source_urls = list(seen_sources.values())
 

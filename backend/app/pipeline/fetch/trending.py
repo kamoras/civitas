@@ -4,9 +4,10 @@ Used by the Action Center to cross-reference news articles with what
 people are actually discussing, so issue ranking reflects real public
 interest rather than just editorial coverage breadth.
 
-Sources (no API keys required):
+Sources:
   - Google Trends (daily trending searches RSS)
   - Reddit (top posts from policy-relevant subreddits via public JSON)
+  - Bluesky (getTrendingTopics via AT Protocol, requires BSKY credentials)
 """
 
 import logging
@@ -136,6 +137,45 @@ def _fetch_reddit_trending() -> list[TrendingTopic]:
     return topics
 
 
+def _fetch_bluesky_trending() -> list[TrendingTopic]:
+    """Fetch trending topics from Bluesky via the AT Protocol.
+
+    Uses the same credentials as the Bluesky poster. Returns empty list
+    if credentials aren't configured or the call fails.
+    """
+    try:
+        from app.config import settings
+        handle = getattr(settings, "BSKY_HANDLE", "")
+        app_password = getattr(settings, "BSKY_APP_PASSWORD", "")
+        if not handle or not app_password:
+            return []
+
+        from atproto import Client
+        client = Client()
+        client.login(handle, app_password)
+        resp = client.app.bsky.unspecced.get_trending_topics(params={"limit": 20})
+        topics_raw = getattr(resp, "topics", []) or []
+    except Exception as e:
+        logger.warning("Bluesky trending fetch failed: %s", e)
+        return []
+
+    topics: list[TrendingTopic] = []
+    for t in topics_raw:
+        display = getattr(t, "display_name", None) or getattr(t, "topic", None) or ""
+        if not display:
+            continue
+        # Bluesky doesn't expose a numeric traffic score; use 1.0 as a uniform
+        # signal weight so these topics influence ranking alongside Reddit/Trends.
+        topics.append(TrendingTopic(
+            title=display,
+            source="bluesky",
+            traffic_score=1.0,
+        ))
+
+    logger.info("Bluesky: fetched %d trending topics", len(topics))
+    return topics
+
+
 def fetch_trending_topics() -> list[TrendingTopic]:
     """Fetch trending topics from all social media sources.
 
@@ -145,6 +185,7 @@ def fetch_trending_topics() -> list[TrendingTopic]:
 
     all_topics.extend(_fetch_google_trends())
     all_topics.extend(_fetch_reddit_trending())
+    all_topics.extend(_fetch_bluesky_trending())
 
     all_topics.sort(key=lambda t: t.traffic_score, reverse=True)
     logger.info("Total trending topics: %d", len(all_topics))
