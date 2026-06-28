@@ -2468,23 +2468,25 @@ def _run_refresh(db: Session) -> int:
         c_centroid = c_centroid / c_norm if c_norm > 0 else c_centroid
         centered_sims = centered_normed @ c_centroid
 
-        # Threshold in centered space: 0.0 means at least as similar to the
-        # cluster centroid as the average article. Stray articles from Pass 2
-        # merges typically score negative (anti-correlated with the centroid).
-        SOURCE_SIM_FLOOR = 0.0
+        # Keep only articles that score above 0.25 similarity to the centroid
+        # in centered space. 0.0 (above-average) is too loose when the cluster
+        # contains articles about different sub-topics that share one broad
+        # dimension (e.g. "Trump administration") — they all score positive.
+        # 0.25 requires a meaningful alignment with the cluster's specific topic.
+        SOURCE_SIM_FLOOR = 0.25
         on_topic = [(a, float(s)) for a, s in zip(cluster, centered_sims) if float(s) >= SOURCE_SIM_FLOOR]
         if not on_topic:
             on_topic = [(cluster[0], 1.0)]
 
         filtered_cluster = [a for a, _ in on_topic]
         logger.info(
-            "Rank %d coherence filter: %d/%d articles on-topic",
+            "Rank %d coherence filter: %d/%d articles on-topic (sims: %s)",
             rank, len(filtered_cluster), len(cluster),
+            ", ".join("%.2f" % s for _, s in sorted([(a, float(s)) for a, s in zip(cluster, centered_sims)], key=lambda x: -x[1])[:6]),
         )
 
         # Build the LLM prompt from only the on-topic articles so the generated
-        # title, summary, and facts reflect the cluster's actual topic, not
-        # tangentially related articles that drifted in via Pass 2 merging.
+        # title, summary, and facts reflect the cluster's actual topic.
         user_prompt = _build_llm_prompt(filtered_cluster)
 
         seen_sources: dict[str, str] = {}
@@ -2494,11 +2496,14 @@ def _run_refresh(db: Session) -> int:
         source_names = list(seen_sources.keys())
         source_urls = list(seen_sources.values())
 
+        # Cache key uses the FILTERED titles so that when coherence filtering
+        # changes which articles the LLM sees, the cache is invalidated and
+        # a fresh generation reflects the cleaner cluster.
         llm_result = call_llm(
             prompt_version=ACTION_CENTER_PROMPT_VERSION,
             system_prompt=_SYSTEM_PROMPT,
             user_prompt=user_prompt,
-            cache_key={"date": today, "rank": rank, "titles": [a.title for a in cluster[:5]]},
+            cache_key={"date": today, "rank": rank, "titles": [a.title for a in filtered_cluster[:5]]},
             db_session=db,
             max_tokens=1024,
             num_ctx=4096,
