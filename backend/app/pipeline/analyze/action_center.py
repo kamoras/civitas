@@ -2433,6 +2433,44 @@ def _cleanup_monitor_lifecycle(today: str, db: Session) -> None:
     db.commit()
 
 
+def _inherit_bsky_if_yo_yo(
+    issue: ActionIssue,
+    today: str,
+    rank: int,
+    title_emb: "np.ndarray",
+    db: Session,
+) -> None:
+    """Prevent re-posting the same topic when it yo-yos back to a rank slot.
+
+    If a topic appears at rank N, gets posted to Bluesky, then is displaced
+    by a different topic (retiring the row), and then reappears at rank N, the
+    new row has bsky_posted_at=None and would be posted again as "new." This
+    check finds any retired row at the same rank+date that was already posted
+    and has a matching title (same topic). If found, the new row inherits the
+    bsky_posted_at so the poster skips it.
+    """
+    retired_posted = (
+        db.query(ActionIssue)
+        .filter(
+            ActionIssue.date == today,
+            ActionIssue.rank == rank,
+            ActionIssue.is_current == False,  # noqa: E712
+            ActionIssue.bsky_posted_at.isnot(None),
+        )
+        .all()
+    )
+    for retired in retired_posted:
+        retired_emb = _embed_texts([retired.title])[0]
+        if float(title_emb @ retired_emb) >= TOPIC_CHANGE_THRESHOLD:
+            issue.bsky_posted_at = retired.bsky_posted_at
+            issue.bsky_posted_rank = retired.bsky_posted_rank
+            logger.info(
+                "Yo-yo rank %d: '%s' already posted today (retired id=%d) — skipping re-post",
+                rank, issue.title[:50], retired.id,
+            )
+            return
+
+
 def refresh_action_issues(db: Session | None = None) -> int:
     """Run the full action center pipeline. Returns number of issues created."""
     own_session = db is None
@@ -2642,6 +2680,7 @@ def _run_refresh(db: Session) -> int:
                 # Insert a new row so the new topic gets its own unique ID.
                 existing.is_current = False
                 issue.is_current = True
+                _inherit_bsky_if_yo_yo(issue, today, rank, title_emb, db)
                 db.add(issue)
                 logger.info(
                     "Topic changed at rank %d (sim=%.2f): '%s' → '%s' — retired id=%d, inserting new row",
@@ -2662,6 +2701,7 @@ def _run_refresh(db: Session) -> int:
                     existing.full_story = issue.full_story
         else:
             issue.is_current = True
+            _inherit_bsky_if_yo_yo(issue, today, rank, title_emb, db)
             db.add(issue)
 
         created_ranks.add(rank)
