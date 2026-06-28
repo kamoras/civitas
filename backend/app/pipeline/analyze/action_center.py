@@ -2781,6 +2781,13 @@ def _run_refresh(db: Session) -> int:
     except Exception:
         logger.exception("Bluesky spotlight/weekly post failed (non-fatal)")
 
+    # Stage 7: Repost/like news outlet posts that match active issues
+    try:
+        from app.pipeline.analyze.bluesky_engagement import engage_with_news_posts
+        engage_with_news_posts(db)
+    except Exception:
+        logger.exception("Bluesky engagement failed (non-fatal)")
+
     # Clean up unposted issues older than 14 days.
     # Issues that have been posted to Bluesky are preserved indefinitely
     # so their permalink URLs remain valid.
