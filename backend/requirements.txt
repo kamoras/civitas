@@ -76,7 +76,7 @@ posthog==7.9.3
 protobuf==6.33.5
 pulsar-client==3.10.0
 py-serializable==2.1.0
-pydantic==2.10.6
+pydantic==2.13.4
 pydantic-settings==2.7.1
 pydantic_core==2.27.2
 Pygments==2.20.0
