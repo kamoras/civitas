@@ -179,13 +179,33 @@ def fetch_news_articles(
         except Exception as e:
             logger.warning("Failed to fetch feed %s: %s", name, e)
 
+    # Drop opinion/editorial/blog pieces — these carry partisan framing that
+    # pollutes the action center.  Match on URL path segments that news outlets
+    # use to categorise non-news content.
+    _OPINION_PATH_SEGMENTS = frozenset({
+        "/opinion/", "/opinions/", "/blogs/", "/blog/",
+        "/commentary/", "/op-ed/", "/editorial/", "/editorials/",
+        "/column/", "/columns/", "/contributor/", "/contributors/",
+    })
+    def _is_opinion(url: str) -> bool:
+        from urllib.parse import urlparse
+        path = urlparse(url).path.lower()
+        return any(seg in path for seg in _OPINION_PATH_SEGMENTS)
+
     # Deduplicate by URL
     seen_urls: set[str] = set()
     unique: list[NewsArticle] = []
+    opinion_dropped = 0
     for a in all_articles:
         if a.url not in seen_urls:
             seen_urls.add(a.url)
-            unique.append(a)
+            if _is_opinion(a.url):
+                opinion_dropped += 1
+            else:
+                unique.append(a)
+
+    if opinion_dropped:
+        logger.info("Dropped %d opinion/editorial articles", opinion_dropped)
 
     unique.sort(key=lambda a: a.published or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
     logger.info("Total unique articles: %d from %d feeds", len(unique), len(feeds))
