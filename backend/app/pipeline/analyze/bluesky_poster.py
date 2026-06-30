@@ -193,7 +193,7 @@ def _publish(text: str, issue) -> bool:
         return False
 
 
-def process_issues_for_bluesky(issues: list, db: Session) -> None:
+def process_issues_for_bluesky(issues: list, db: Session) -> int:
     """Post new/updated issues to Bluesky.
 
     The pipeline already decides which issues deserve a post by setting
@@ -201,14 +201,14 @@ def process_issues_for_bluesky(issues: list, db: Session) -> None:
     This function just executes those posts.
     """
     if not getattr(settings, "BSKY_HANDLE", "") or not getattr(settings, "BSKY_APP_PASSWORD", ""):
-        return  # fast-path: no credentials configured
+        return 0  # fast-path: no credentials configured
 
     from zoneinfo import ZoneInfo
     _US_EAST = ZoneInfo("America/New_York")
     today = datetime.now(tz=_US_EAST).strftime("%Y-%m-%d")
 
     now = datetime.utcnow()
-    dirty = False
+    posted = 0
 
     for issue in issues:
         if issue.bsky_posted_at is not None:
@@ -218,7 +218,8 @@ def process_issues_for_bluesky(issues: list, db: Session) -> None:
         if text and _publish(text, issue):
             issue.bsky_posted_at = now
             issue.bsky_posted_rank = issue.rank
-            dirty = True
+            posted += 1
 
-    if dirty:
+    if posted:
         db.commit()
+    return posted

@@ -604,11 +604,14 @@ def upsert_senator(db: Session, senator_data: dict) -> Senator:
     existing.initials = senator_data.get("initials", existing.initials)
     existing.punk_nickname = senator_data.get("punkNickname", existing.punk_nickname)
 
-    existing.score_funding_independence = cs.get("fundingIndependence", 0)
-    existing.score_promise_persistence = cs.get("promisePersistence", 0)
-    existing.score_independent_voting = cs.get("independentVoting", 0)
-    existing.score_funding_diversity = cs.get("fundingDiversity", 0)
-    existing.score_legislative_effectiveness = cs.get("legislativeEffectiveness", 0)
+    # Only overwrite scores when representationScore is explicitly provided.
+    # A partial update (bio/contact only) must not zero out previously computed scores.
+    if cs:
+        existing.score_funding_independence = cs.get("fundingIndependence", existing.score_funding_independence)
+        existing.score_promise_persistence = cs.get("promisePersistence", existing.score_promise_persistence)
+        existing.score_independent_voting = cs.get("independentVoting", existing.score_independent_voting)
+        existing.score_funding_diversity = cs.get("fundingDiversity", existing.score_funding_diversity)
+        existing.score_legislative_effectiveness = cs.get("legislativeEffectiveness", existing.score_legislative_effectiveness)
 
     existing.total_raised = funding.get("totalRaised", 0)
     existing.total_from_pacs = funding.get("totalFromPACs", 0)

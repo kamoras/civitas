@@ -19,7 +19,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
-from app.models import ExploreDocument, Senator
+from app.models import ExploreDocument, Justice, Representative, Senator
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.congressional_record import fetch_floor_remarks
 from app.pipeline.fetch.house_record import fetch_house_floor_remarks
@@ -49,6 +49,26 @@ def _senator_lookup(db: Session) -> dict[str, str]:
         parts = s.name.split()
         if parts:
             lookup[parts[-1].upper()] = s.id
+    return lookup
+
+
+def _rep_lookup(db: Session) -> dict[str, str]:
+    """Build a map of UPPERCASE last name -> representative ID for linking."""
+    lookup: dict[str, str] = {}
+    for r in db.query(Representative.id, Representative.name).all():
+        parts = r.name.split()
+        if parts:
+            lookup[parts[-1].upper()] = r.id
+    return lookup
+
+
+def _justice_lookup(db: Session) -> dict[str, str]:
+    """Build a map of UPPERCASE last name -> justice ID for linking."""
+    lookup: dict[str, str] = {}
+    for j in db.query(Justice.id, Justice.name).filter(Justice.is_active == True).all():  # noqa: E712
+        parts = j.name.split()
+        if parts:
+            lookup[parts[-1].upper()] = j.id
     return lookup
 
 
@@ -244,6 +264,7 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
 
             # --- 2. House floor proceedings ---
             logger.info("Explore pipeline: fetching House floor proceedings...")
+            rep_map = _rep_lookup(db)
             try:
                 house_remarks = await fetch_house_floor_remarks(
                     client, db, days_back=days_back, max_granules_per_day=8
@@ -258,6 +279,7 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
                     if exists:
                         continue
 
+                    rep_id = rep_map.get(speaker.upper())
                     db.add(ExploreDocument(
                         doc_type="House Floor Speech",
                         source="Congressional Record (GovInfo)",
@@ -267,7 +289,7 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
                         date=remark["date"],
                         url=_crec_url(remark["date"], "House"),
                         politician_name=speaker.title(),
-                        politician_id=None,
+                        politician_id=rep_id,
                         chamber="House",
                         external_id=ext_id,
                     ))
@@ -317,6 +339,7 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
 
             # --- 4. Supreme Court opinions ---
             logger.info("Explore pipeline: fetching Supreme Court opinions...")
+            justice_map = _justice_lookup(db)
             try:
                 scotus_cases = await fetch_scotus_cases(client)
                 for case in scotus_cases:
@@ -328,6 +351,11 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
                     if exists:
                         continue
 
+                    # Link to the authoring justice when politician_name is set
+                    author_name = case.get("politician_name") or ""
+                    author_last = author_name.split()[-1].upper() if author_name.strip() else ""
+                    justice_id = justice_map.get(author_last)
+
                     db.add(ExploreDocument(
                         doc_type=case["doc_type"],
                         source="Supreme Court (supremecourt.gov)",
@@ -336,8 +364,8 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
                         body=case.get("body", ""),
                         date=case["date"],
                         url=case.get("url"),
-                        politician_name=case.get("politician_name"),
-                        politician_id=None,
+                        politician_name=author_name or None,
+                        politician_id=justice_id,
                         chamber="Judicial",
                         external_id=ext_id,
                     ))

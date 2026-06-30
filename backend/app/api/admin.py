@@ -469,9 +469,7 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
     if last_run:
         elapsed = last_run.elapsed_seconds
         if last_run.status == "running" and last_run.started_at:
-            from datetime import datetime
-            now = datetime.utcnow()
-            elapsed = round((now - last_run.started_at).total_seconds(), 1)
+            elapsed = round((datetime.utcnow() - last_run.started_at).total_seconds(), 1)
 
         progress_steps = None
         if last_run.progress_detail:
@@ -498,6 +496,22 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
             "errorMessage": last_run.error_message,
             "progressSteps": progress_steps,
         }
+
+    from app.pipeline.analyze.action_center import get_action_refresh_state
+    ac = get_action_refresh_state()
+    result["actionRefresh"] = {
+        "isRunning": ac["is_running"],
+        "stage": ac["stage"],
+        "stageDetail": ac["stage_detail"],
+        "startedAt": ac["started_at"].isoformat() if ac["started_at"] else None,
+        "lastCompletedAt": ac["last_completed_at"].isoformat() if ac["last_completed_at"] else None,
+        "lastIssuesCreated": ac["last_issues_created"],
+        "lastIssuesRetired": ac["last_issues_retired"],
+        "lastStoriesGenerated": ac["last_stories_generated"],
+        "lastBskyPosted": ac["last_bsky_posted"],
+        "lastElapsed": ac["last_elapsed"],
+    }
+
     return result
 
 
@@ -664,6 +678,38 @@ async def admin_trigger_house_pipeline(db: Session = Depends(get_db)):
 
     threading.Thread(target=_run_in_thread, daemon=True, name="house-pipeline-run").start()
     return {"message": "House pipeline triggered"}
+
+
+@router.post("/pipeline/clear-stuck-house", dependencies=[Depends(require_admin)])
+async def admin_clear_stuck_house(db: Session = Depends(get_db)):
+    """Mark any stuck (status=running) house pipeline run as failed.
+
+    Use when the in-memory flag says idle but the DB record still shows running
+    (e.g. after a container restart mid-run).
+    """
+    from app.models import HousePipelineRun
+    from app.pipeline.house_pipeline import is_house_pipeline_running
+
+    if is_house_pipeline_running():
+        raise HTTPException(status_code=409, detail="House pipeline is actively running — stop it first")
+
+    stuck = (
+        db.query(HousePipelineRun)
+        .filter(HousePipelineRun.status == "running")
+        .all()
+    )
+    if not stuck:
+        return {"cleared": 0, "message": "No stuck runs found"}
+
+    now = datetime.utcnow()
+    for run in stuck:
+        run.status = "failed"
+        run.error_message = "Cleared by admin (container restart)"
+        run.completed_at = now
+        if run.started_at:
+            run.elapsed_seconds = round((now - run.started_at).total_seconds(), 1)
+    db.commit()
+    return {"cleared": len(stuck), "message": f"Marked {len(stuck)} run(s) as failed"}
 
 
 @router.post("/data/reset", dependencies=[Depends(require_admin)])

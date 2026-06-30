@@ -34,14 +34,14 @@ _SYSTEM_PROMPT = (
 
 
 def _overall_score(s: Senator) -> float:
-    scores = [
-        s.score_funding_independence or 0,
-        s.score_promise_persistence or 0,
-        s.score_independent_voting or 0,
-        s.score_funding_diversity or 0,
-        s.score_legislative_effectiveness or 0,
-    ]
-    return sum(scores) / len(scores)
+    from app.config_definitions import SCORE_WEIGHTS
+    return (
+        (s.score_funding_independence or 0) * SCORE_WEIGHTS["fundingIndependence"]
+        + (s.score_promise_persistence or 0) * SCORE_WEIGHTS["promisePersistence"]
+        + (s.score_independent_voting or 0) * SCORE_WEIGHTS["independentVoting"]
+        + (s.score_funding_diversity or 0) * SCORE_WEIGHTS["fundingDiversity"]
+        + (s.score_legislative_effectiveness or 0) * SCORE_WEIGHTS["legislativeEffectiveness"]
+    )
 
 
 def _pick_senator(db: Session) -> tuple["Senator | None", int, int]:

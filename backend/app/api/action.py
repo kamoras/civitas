@@ -681,15 +681,21 @@ async def get_election_info(response: Response, db: Session = Depends(get_db)):
         db.query(Senator.id, Senator.name, Senator.state, Senator.party,
                  Senator.score_funding_independence, Senator.score_promise_persistence,
                  Senator.score_independent_voting, Senator.score_funding_diversity,
+                 Senator.score_legislative_effectiveness,
                  Senator.leadership_score, Senator.years_in_office)
         .all()
     )
 
     by_state: dict[str, list[dict]] = {}
     for s in senators:
+        from app.config_definitions import SCORE_WEIGHTS as _SW
         overall = round(
-            (s.score_funding_independence + s.score_promise_persistence +
-             s.score_independent_voting + s.score_funding_diversity) / 4, 1
+            s.score_funding_independence * _SW["fundingIndependence"]
+            + s.score_promise_persistence * _SW["promisePersistence"]
+            + s.score_independent_voting * _SW["independentVoting"]
+            + s.score_funding_diversity * _SW["fundingDiversity"]
+            + s.score_legislative_effectiveness * _SW["legislativeEffectiveness"],
+            1,
         )
         entry = {
             "id": s.id, "name": s.name, "state": s.state, "party": s.party,

@@ -606,12 +606,12 @@ function SecondaryIssue({
 
           {issue.relatedSenators && issue.relatedSenators.length > 0 && (
             <div>
-              <h4 className="font-mono text-[10px] tracking-widest text-neon-pink/50 mb-2 uppercase">Representatives in Coverage</h4>
+              <h4 className="font-mono text-[10px] tracking-widest text-neon-pink/50 mb-2 uppercase">Officials in Coverage</h4>
               <div className="flex flex-wrap gap-2">
                 {issue.relatedSenators.map((s) => (
                   <Link
                     key={s.id}
-                    href={`/scorecard?branch=${s.chamber === "house" ? "house" : "senate"}&state=${s.state}&${s.chamber === "house" ? "rep" : "senator"}=${s.id}`}
+                    href={`/politicians/${s.id}`}
                     className={`flex items-start gap-1.5 px-2 py-1.5 border ${PARTY_BORDER[s.party]} bg-matrix-dark-green/20 hover:border-neon-cyan/40 transition-colors`}
                   >
                     <span className={`font-mono text-[10px] mt-0.5 shrink-0 ${PARTY_COLORS[s.party]}`}>{s.party}</span>

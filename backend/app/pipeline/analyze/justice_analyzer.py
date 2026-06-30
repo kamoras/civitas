@@ -77,6 +77,11 @@ def _expected_bloc(justice_id: str, appointing_party: str) -> str:
         return "R"
     if justice_id in D_BLOC:
         return "D"
+    if justice_id in SWING:
+        # Swing justices have no expected bloc — bloc-based scores (consistency,
+        # independence) use the else branch (own_bloc=set(), opp_bloc=set()) so
+        # they are computed solely from bipartisan agreement and restraint.
+        return ""
     if appointing_party in ("R", "D"):
         return appointing_party
     return ""
@@ -183,18 +188,21 @@ def analyze_justice_votes(
 
         # --- Cross-bloc tracking (non-unanimous only) ---
         if not is_unanimous and expected_bloc:
-            split_decisions += 1
-
             own_in = [o for o in case_votes if o["justice_id"] in own_bloc]
             opp_in = [o for o in case_votes if o["justice_id"] in opp_bloc]
-            own_same = sum(1 for o in own_in if o["vote"] == this_side)
-            opp_same = sum(1 for o in opp_in if o["vote"] == this_side)
+            # Only count as a split decision when opposing-bloc justices were
+            # seated for the case — recusals would otherwise inflate the
+            # denominator and deflate independence scores spuriously.
+            if opp_in:
+                split_decisions += 1
+                own_same = sum(1 for o in own_in if o["vote"] == this_side)
+                opp_same = sum(1 for o in opp_in if o["vote"] == this_side)
 
-            own_aligned = len(own_in) > 0 and own_same >= len(own_in) * 0.5
-            opp_aligned = len(opp_in) > 0 and opp_same >= len(opp_in) * 0.5
+                own_aligned = len(own_in) > 0 and own_same >= len(own_in) * 0.5
+                opp_aligned = opp_same >= len(opp_in) * 0.5
 
-            if opp_aligned and not own_aligned:
-                cross_bloc_count += 1
+                if opp_aligned and not own_aligned:
+                    cross_bloc_count += 1
 
     # --- Score: Consistency (Ideological Independence) ---
     # Agreement-rate differential weighted by Fisher information.
@@ -219,16 +227,11 @@ def analyze_justice_votes(
     # --- Score: Bipartisan Agreement ---
     # Average pairwise agreement with opposing-bloc justices across ALL cases
     # (unanimous + split).  Produces differentiated scores per justice.
-    bipartisan_rates: list[float] = []
-    for oid in opp_bloc:
-        t = agreement_totals.get(oid, 0)
-        if t > 0:
-            bipartisan_rates.append(agreement_counts.get(oid, 0) / t)
-    bipartisan = (
-        (sum(bipartisan_rates) / len(bipartisan_rates) * 100)
-        if bipartisan_rates
-        else 50.0
-    )
+    # Case-weighted bipartisan rate: a justice who appeared in 200 cases with
+    # Kagan gets 200 votes, not equal weight with a 3-case pairing against Jackson.
+    bipartisan_total_cases = sum(agreement_totals.get(oid, 0) for oid in opp_bloc)
+    bipartisan_total_agree = sum(agreement_counts.get(oid, 0) for oid in opp_bloc)
+    bipartisan = (bipartisan_total_agree / bipartisan_total_cases * 100) if bipartisan_total_cases > 0 else 50.0
 
     # --- Score: Judicial Restraint ---
     #
@@ -260,7 +263,10 @@ def analyze_justice_votes(
     AUTHORED_SCALE  = 150.0
 
     dissent_rate = minority_count / total if total > 0 else 0.0
-    authored_dissent_rate = authored_dissent / total if total > 0 else 0.0
+    # Clamp authored dissent rate to actual dissent rate: opinion_type and vote
+    # fields can diverge in source data (e.g. partial dissents), so authored
+    # dissents can't meaningfully exceed cases where the justice voted minority.
+    authored_dissent_rate = min(authored_dissent / total, dissent_rate) if total > 0 else 0.0
 
     if dissent_rate < DISSENT_MIN:
         # Near-zero: slight conformist penalty per Caldeira & Zorn (1998)
@@ -321,10 +327,10 @@ def analyze_justice_votes(
 
 def _empty_result() -> dict:
     return {
-        "score_consistency": 0.0,
-        "score_independence": 0.0,
-        "score_bipartisan_agreement": 0.0,
-        "score_judicial_restraint": 0.0,
+        "score_consistency": 50.0,
+        "score_independence": 50.0,
+        "score_bipartisan_agreement": 50.0,
+        "score_judicial_restraint": 50.0,
         "cases_decided": 0,
         "majority_pct": 0.0,
         "dissent_pct": 0.0,

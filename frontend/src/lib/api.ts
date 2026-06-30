@@ -2,6 +2,7 @@ import { LeaderboardEntry, PaginatedVotes, Senator } from "@/types/senator";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 import type { Justice, JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssuesResponse, MyRepsResponse } from "@/types/action";
+import type { PaginatedDocs, PoliticianCard, PoliticianProfile } from "@/types/politicians";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -534,11 +535,25 @@ export async function fetchAdminDashboard(token: string): Promise<AdminDashboard
   return res.json();
 }
 
+export interface ActionRefreshState {
+  isRunning: boolean;
+  stage: string | null;
+  stageDetail: string | null;
+  startedAt: string | null;
+  lastCompletedAt: string | null;
+  lastIssuesCreated: number;
+  lastIssuesRetired: number;
+  lastStoriesGenerated: number;
+  lastBskyPosted: number;
+  lastElapsed: number;
+}
+
 export interface AdminPipelineStatus {
   isRunning: boolean;
   houseIsRunning?: boolean;
   lastRun?: PipelineRunInfo;
   houseLastRun?: HouseRunInfo;
+  actionRefresh?: ActionRefreshState;
 }
 
 export async function fetchAdminPipelineStatus(token: string): Promise<AdminPipelineStatus> {
@@ -548,6 +563,16 @@ export async function fetchAdminPipelineStatus(token: string): Promise<AdminPipe
   if (!res.ok) throw new Error(`Status failed: ${res.status}`);
   return res.json();
 }
+
+export async function clearStuckHousePipeline(token: string): Promise<{ cleared: number; message: string }> {
+  const res = await fetch(`${API_BASE}/admin/pipeline/clear-stuck-house`, {
+    method: "POST",
+    headers: adminHeaders(token),
+  });
+  if (!res.ok) throw new Error(`Clear failed: ${res.status}`);
+  return res.json();
+}
+
 
 export async function fetchAdminPipelineHistory(token: string): Promise<PipelineRunInfo[]> {
   const res = await fetch(`${API_BASE}/admin/pipeline/history?limit=20`, {
@@ -848,4 +873,40 @@ export interface TimelineResponse {
 export async function fetchTimeline(year?: number): Promise<TimelineResponse> {
   const params = year ? `?year=${year}` : "";
   return cachedFetch(`${API_BASE}/action/timeline${params}`, 300_000);
+}
+
+// ---------------------------------------------------------------------------
+// Politicians directory
+// ---------------------------------------------------------------------------
+
+export async function fetchPoliticianDirectory(params?: {
+  branch?: string;
+  state?: string;
+  party?: string;
+  q?: string;
+}): Promise<PoliticianCard[]> {
+  const qs = new URLSearchParams();
+  if (params?.branch) qs.set("branch", params.branch);
+  if (params?.state) qs.set("state", params.state);
+  if (params?.party) qs.set("party", params.party);
+  if (params?.q) qs.set("q", params.q);
+  const query = qs.toString() ? `?${qs.toString()}` : "";
+  return cachedFetch(`${API_BASE}/politicians${query}`, 120_000);
+}
+
+export async function fetchPoliticianProfile(id: string): Promise<PoliticianProfile> {
+  return cachedFetch(`${API_BASE}/politicians/${encodeURIComponent(id)}`, 120_000);
+}
+
+export async function fetchPoliticianDocuments(
+  id: string,
+  page = 1,
+  perPage = 20,
+  docType?: string,
+): Promise<PaginatedDocs> {
+  const qs = new URLSearchParams({ page: String(page), per_page: String(perPage) });
+  if (docType) qs.set("doc_type", docType);
+  const res = await fetch(`${API_BASE}/politicians/${encodeURIComponent(id)}/documents?${qs}`);
+  if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+  return res.json();
 }

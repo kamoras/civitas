@@ -185,15 +185,19 @@ def _calc_funding_independence(funding: dict) -> int:
     Two independent dimensions, calibrated to the empirical distribution
     of Senate campaign finance (Barber 2016; Bonica 2014):
 
-      1. PAC dependency (50%): fraction of funding from PACs vs individuals.
+      1. PAC dependency (30%): fraction of funding from PACs vs individuals.
          Multiplier calibrated so the median senator (≈25% PAC ratio per
          Barber 2016, Table 2) scores 50 — making the distribution roughly
          symmetric around the sample median.  At 0% PAC: 100; at 50%: 0.
+         Weight is 30% (reduced from 50%) because PAC% understates influence
+         for senior senators who rely on coordinated outside spending.
 
-      2. Top-donor concentration (50%): fraction from top 10 donors.
+      2. Top-donor concentration (70%): fraction from top 10 donors.
          Multiplier calibrated so a moderately concentrated donor base
          (≈20% from top-10, consistent with Bonica 2014, Table 3) scores
          50.  At 0% concentration: 100; at 40%: 0.
+         Weight is 70% (increased from 50%) because concentration captures
+         bundled individual donations that the PAC channel misses.
 
     Calibration derivation
     ----------------------
@@ -303,8 +307,6 @@ def _calc_promise_persistence(
                 else 0.0
                 for p in scoreable
             )
-            raw_pct = raw_score / n_scoreable * 100
-
             # Beta-Binomial posterior mean with Beta(α, α) prior where
             # α = PRIOR_PSEUDOCOUNT / 2.  The posterior mean is:
             #
@@ -525,7 +527,12 @@ def _calc_independent_voting(
                     weighted_aligned += weight
             
             lobby_alignment_rate = weighted_aligned / total_weight if total_weight > 0 else 0
-            donor_score = (1 - lobby_alignment_rate * min(pac_ratio * 2, 1.0)) * 100
+            # Floor at 0.25 so lobbying alignment always carries some penalty
+            # even when direct PAC contributions are zero (bundled individual
+            # donations and coordinated spending are not reflected in pac_ratio
+            # but are equally influential).
+            pac_amplifier = max(0.25, min(pac_ratio * 2, 1.0))
+            donor_score = (1 - lobby_alignment_rate * pac_amplifier) * 100
         else:
             # Matches found but alignment is unknown.
             total_lobby_donations = sum(
@@ -595,7 +602,7 @@ def _calc_funding_diversity(funding: dict) -> int:
     small_donor_pct = funding.get("smallDonorPercentage", 0)
     total_raised = funding.get("totalRaised", 0)
 
-    if not industry_breakdown and not total_raised:
+    if not industry_breakdown or not total_raised:
         return 50
 
     # Signal 1: source breadth
@@ -691,10 +698,11 @@ def _calc_legislative_effectiveness(
     sparse, preventing extreme scores from thin evidence.
     """
     if not sponsored_bills:
-        # No data — defer to leadership if available
-        if leadership_score is not None and leadership_score > 0:
-            return clamp(50 + leadership_score * 30)
-        return 50
+        # No bill data — use the same three-component formula with a neutral
+        # (50) advancement score so the no-data path is continuous with the
+        # low-data path and avoids a 32-point cliff when the first bill arrives.
+        lp = min(leadership_score, 1.0) * 100 if (leadership_score and leadership_score > 0) else 40
+        return clamp(50 * 0.40 + lp * 0.30 + 0 * 0.30)
 
     n_bills = len(sponsored_bills)
 

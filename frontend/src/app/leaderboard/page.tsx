@@ -201,8 +201,8 @@ function PresidentLeaderboard({
                     }`}
                     tabIndex={0}
                     aria-label={`View profile for ${entry.name}, rank ${rank}`}
-                    onClick={() => (window.location.href = `/scorecard?branch=president&id=${entry.id}`)}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); window.location.href = `/scorecard?branch=president&id=${entry.id}`; } }}
+                    onClick={() => (window.location.href = `/politicians/${entry.id}`)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); window.location.href = `/politicians/${entry.id}`; } }}
                   >
                     <td className="px-4 py-3">
                       <span className={`font-bold text-lg ${rankColor(rank)}`}>#{rank}</span>
@@ -260,7 +260,7 @@ function PresidentLeaderboard({
             return (
               <Link
                 key={entry.id}
-                href={`/scorecard?branch=president&id=${entry.id}`}
+                href={`/politicians/${entry.id}`}
                 className="flex items-center gap-3 px-4 py-3 hover:bg-matrix-green/5 transition-colors"
               >
                 <span className={`text-lg font-bold w-10 shrink-0 ${rankColor(rank)}`}>
@@ -374,8 +374,8 @@ function JusticeLeaderboard({
                     }`}
                     tabIndex={0}
                     aria-label={`View profile for ${entry.name}, rank ${rank}`}
-                    onClick={() => (window.location.href = `/scorecard?branch=scotus&id=${entry.id}`)}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); window.location.href = `/scorecard?branch=scotus&id=${entry.id}`; } }}
+                    onClick={() => (window.location.href = `/politicians/${entry.id}`)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); window.location.href = `/politicians/${entry.id}`; } }}
                   >
                     <td className="px-4 py-3">
                       <span className={`font-bold text-lg ${rankColor(rank)}`}>#{rank}</span>
@@ -435,7 +435,7 @@ function JusticeLeaderboard({
             return (
               <Link
                 key={entry.id}
-                href={`/scorecard?branch=scotus&id=${entry.id}`}
+                href={`/politicians/${entry.id}`}
                 className="flex items-center gap-3 px-4 py-3 hover:bg-matrix-green/5 transition-colors"
               >
                 <span className={`text-lg font-bold w-10 shrink-0 ${rankColor(rank)}`}>
@@ -723,11 +723,8 @@ function LeaderboardContent() {
                         }`}
                         tabIndex={0}
                         aria-label={`View profile for ${entry.name}, ${entry.state}, rank ${rank}, score ${score}`}
-                        onClick={() => {
-                          const param = branch === "house" ? "representative" : "senator";
-                          window.location.href = `/scorecard?branch=${branch}&state=${entry.state}&${param}=${entry.id}`;
-                        }}
-                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); const param = branch === "house" ? "representative" : "senator"; window.location.href = `/scorecard?branch=${branch}&state=${entry.state}&${param}=${entry.id}`; } }}
+                        onClick={() => { window.location.href = `/politicians/${entry.id}`; }}
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); window.location.href = `/politicians/${entry.id}`; } }}
                       >
                         <td className="px-4 py-3">
                           <span className={`font-bold text-lg ${rankColor(rank)}`}>
@@ -795,7 +792,7 @@ function LeaderboardContent() {
                 return (
                   <Link
                     key={entry.id}
-                    href={`/scorecard?branch=${branch}&state=${entry.state}&${branch === "house" ? "representative" : "senator"}=${entry.id}`}
+                    href={`/politicians/${entry.id}`}
                     className="flex items-center gap-3 px-4 py-3 hover:bg-matrix-green/5 transition-colors"
                   >
                     <span className={`text-lg font-bold w-10 shrink-0 ${rankColor(rank)}`}>

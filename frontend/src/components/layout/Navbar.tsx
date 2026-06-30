@@ -7,7 +7,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 
 const NAV_LINKS: readonly { href: string; label: string; accent?: boolean }[] = [
   { href: "/action", label: "ACTION CENTER", accent: true },
-  { href: "/scorecard", label: "SCORECARD" },
+  { href: "/politicians", label: "POLITICIANS" },
   { href: "/leaderboard", label: "LEADERBOARD" },
   { href: "/compare", label: "COMPARE" },
   { href: "/explore", label: "EXPLORE" },

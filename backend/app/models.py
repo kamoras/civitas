@@ -445,6 +445,7 @@ class ActionIssue(Base):
     related_bill_ids: Mapped[str] = mapped_column(Text, default="[]")
     related_explore_ids: Mapped[str] = mapped_column(Text, default="[]")
     related_senators: Mapped[str] = mapped_column(Text, default="[]")
+    related_officials: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     related_monitor_slugs: Mapped[str] = mapped_column(Text, default="[]")
     concerned_count: Mapped[int] = mapped_column(Integer, default=0)
     not_priority_count: Mapped[int] = mapped_column(Integer, default=0)

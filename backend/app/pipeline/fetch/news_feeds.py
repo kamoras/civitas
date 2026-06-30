@@ -59,6 +59,18 @@ NEWS_FEEDS: list[dict[str, str]] = [
         "name": "BBC World",
         "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
     },
+    {
+        "name": "The Hill",
+        "url": "https://thehill.com/rss/syndicator/19110",
+    },
+    {
+        "name": "Politico",
+        "url": "https://rss.politico.com/congress.xml",
+    },
+    {
+        "name": "Roll Call",
+        "url": "https://rollcall.com/feed/",
+    },
 ]
 
 

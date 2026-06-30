@@ -8,8 +8,10 @@ import {
   fetchAdminPipelineStatus,
   fetchAdminPipelineHistory,
   fetchAdminSystemStats,
+  clearStuckHousePipeline,
   type AdminDashboard,
   type AdminPipelineStatus,
+  type ActionRefreshState,
   type HostStats,
   type PipelineRunInfo,
   type PipelineStepInfo,
@@ -1119,6 +1121,135 @@ function DataInventory({ data }: { data: Record<string, number> }) {
   );
 }
 
+// --- Action Center Status Panel ---
+const ACTION_STAGE_LABELS: Record<string, string> = {
+  fetch:    "FETCHING ARTICLES",
+  filter:   "FILTERING RELEVANCE",
+  cluster:  "CLUSTERING TOPICS",
+  rank:     "RANKING CLUSTERS",
+  issues:   "GENERATING ISSUES",
+  monitors: "UPDATING MONITORS",
+  theme:    "GENERATING THEME",
+  stories:  "WRITING STORIES",
+  bluesky:  "POSTING TO BLUESKY",
+  cleanup:  "CLEANUP",
+};
+
+function useElapsedSeconds(startIso: string | null, running: boolean): number {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!running || !startIso) { setElapsed(0); return; }
+    const update = () => {
+      const diff = (Date.now() - new Date(startIso + "Z").getTime()) / 1000;
+      setElapsed(Math.max(0, Math.round(diff)));
+    };
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [startIso, running]);
+  return elapsed;
+}
+
+function ActionCenterStatus({ ac }: { ac: ActionRefreshState | null }) {
+  // Use a stable startedAt ref so the timer only resets when a genuinely new run begins
+  const startedAt = ac?.isRunning ? ac.startedAt : null;
+  const totalElapsed = useElapsedSeconds(startedAt, ac?.isRunning ?? false);
+
+  if (!ac || (!ac.isRunning && !ac.lastCompletedAt)) {
+    return (
+      <div className="p-4 text-xs font-terminal text-matrix-green/40">
+        No data yet — status available after first refresh.
+      </div>
+    );
+  }
+
+  const stageLabel = ac.stage ? (ACTION_STAGE_LABELS[ac.stage] ?? ac.stage.toUpperCase()) : null;
+
+  // Parse N/M progress detail
+  const progressMatch = ac.stageDetail ? /^(\d+)\/(\d+)/.exec(ac.stageDetail) : null;
+  const progressDone = progressMatch ? parseInt(progressMatch[1]) : null;
+  const progressTotal = progressMatch ? parseInt(progressMatch[2]) : null;
+  const progressPct = progressDone !== null && progressTotal && progressTotal > 0
+    ? Math.round((progressDone / progressTotal) * 100) : null;
+
+  // Sub-step detail (text after N/M)
+  const subStep = ac.stageDetail && !progressMatch ? ac.stageDetail : null;
+
+  return (
+    <div className="p-4 space-y-3 text-xs font-terminal">
+      {/* Status + elapsed */}
+      <div className="flex items-center justify-between">
+        <span className="text-matrix-green/60">STATUS</span>
+        <span className={ac.isRunning ? "text-neon-cyan animate-pulse font-bold" : "text-matrix-green/60"}>
+          {ac.isRunning
+            ? `RUNNING · ${formatDuration(totalElapsed)}`
+            : "IDLE"}
+        </span>
+      </div>
+
+      {/* Live stage — shown when running */}
+      {ac.isRunning && stageLabel && (
+        <div className="border border-neon-cyan/20 rounded px-3 py-2 bg-neon-cyan/5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-neon-cyan font-bold tracking-wider">{stageLabel}</span>
+            <span className="text-neon-cyan/70 shrink-0">
+              {progressDone !== null && progressTotal !== null
+                ? `${progressDone}/${progressTotal}`
+                : subStep ?? ""}
+            </span>
+          </div>
+          {progressPct !== null && (
+            <div className="mt-2 h-1 bg-matrix-green/10 rounded overflow-hidden">
+              <div
+                className="h-full bg-neon-cyan/60 rounded transition-all duration-500"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Last run results */}
+      <div className="border-t border-matrix-green/10 pt-2 space-y-1.5">
+        <div className="flex justify-between">
+          <span className="text-matrix-green/60">LAST RUN</span>
+          <span className="text-matrix-green/80">{formatTime(ac.lastCompletedAt)}</span>
+        </div>
+        {ac.lastElapsed > 0 && (
+          <div className="flex justify-between">
+            <span className="text-matrix-green/60">DURATION</span>
+            <span className="text-matrix-green/80">{formatDuration(ac.lastElapsed)}</span>
+          </div>
+        )}
+        {(ac.lastIssuesCreated > 0 || ac.lastIssuesRetired > 0) && (
+          <div className="flex justify-between">
+            <span className="text-matrix-green/60">ISSUES</span>
+            <span>
+              <span className="text-matrix-green">+{ac.lastIssuesCreated} created</span>
+              {ac.lastIssuesRetired > 0 && (
+                <span className="text-matrix-green/50"> · -{ac.lastIssuesRetired} retired</span>
+              )}
+            </span>
+          </div>
+        )}
+        {ac.lastStoriesGenerated > 0 && (
+          <div className="flex justify-between">
+            <span className="text-matrix-green/60">STORIES</span>
+            <span className="text-matrix-green">{ac.lastStoriesGenerated} written</span>
+          </div>
+        )}
+        {ac.lastBskyPosted > 0 && (
+          <div className="flex justify-between">
+            <span className="text-matrix-green/60">BLUESKY</span>
+            <span className="text-neon-cyan">{ac.lastBskyPosted} posted</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
 // --- Main Admin Dashboard ---
 function AdminDashboardView({
   token,
@@ -1135,22 +1266,21 @@ function AdminDashboardView({
     status: "completed" | "failed";
     duration: string;
   } | null>(null);
+  const [clearingHouse, setClearingHouse] = useState(false);
 
   const wasRunningRef = useRef(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadDashboard = useCallback(async () => {
     try {
-      const [d, h] = await Promise.all([
+      const [d, h, s] = await Promise.all([
         fetchAdminDashboard(token),
         fetchAdminPipelineHistory(token),
+        fetchAdminPipelineStatus(token),
       ]);
       setDashboard(d);
       setHistory(h);
-      setPipelineStatus({
-        isRunning: d.pipeline.isRunning,
-        lastRun: d.pipeline.lastRun,
-      });
+      setPipelineStatus(s);
     } catch (e) {
       if (e instanceof Error && e.message === "Unauthorized") {
         onLogout();
@@ -1185,15 +1315,15 @@ function AdminDashboardView({
   }, [loadDashboard]);
 
   useEffect(() => {
-    const isRunning = pipelineStatus?.isRunning ?? false;
-    const interval = isRunning ? 2000 : 10000;
+    const anyRunning = (pipelineStatus?.isRunning ?? false) || (pipelineStatus?.actionRefresh?.isRunning ?? false);
+    const interval = anyRunning ? 3000 : 10000;
 
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(pollStatus, interval);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [pollStatus, pipelineStatus?.isRunning]);
+  }, [pollStatus, pipelineStatus?.isRunning, pipelineStatus?.actionRefresh?.isRunning]);
 
   useEffect(() => {
     const isRunning = pipelineStatus?.isRunning ?? false;
@@ -1322,37 +1452,108 @@ function AdminDashboardView({
                     : "UNAVAILABLE"}
                 </span>
               </div>
-              <div className="border-t border-matrix-green/15 pt-2 mt-2">
+              <div className="border-t border-matrix-green/15 pt-2 mt-2 space-y-1.5">
+                {/* Senate pipeline */}
                 <div className="flex justify-between">
-                  <span className="text-matrix-green/60">SENATE PIPELINE</span>
+                  <span className="text-matrix-green/60">SENATE</span>
                   <span className={pipelineStatus?.isRunning ? "text-neon-cyan animate-pulse" : "text-matrix-green/60"}>
-                    {pipelineStatus?.isRunning ? "RUNNING" : "IDLE"}
+                    {pipelineStatus?.isRunning ? "RUNNING" : (() => {
+                      const run = pipelineStatus?.lastRun;
+                      if (!run) return "IDLE";
+                      const senators = `${run.senatorsProcessed}/${run.senatorsTotal}`;
+                      const failed = run.senatorsFailed > 0 ? ` · ${run.senatorsFailed}F` : "";
+                      return (
+                        <span>
+                          <span className={run.status === "completed" ? "text-matrix-green" : run.status === "failed" ? "text-neon-pink" : "text-matrix-green/60"}>
+                            {run.status.toUpperCase()}
+                          </span>
+                          <span className="text-matrix-green/60"> · {senators}</span>
+                          {run.senatorsFailed > 0 && <span className="text-neon-pink">{failed}</span>}
+                        </span>
+                      );
+                    })()}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-matrix-green/60">HOUSE PIPELINE</span>
-                  <span className={pipelineStatus?.houseIsRunning ? "text-neon-cyan animate-pulse" : "text-matrix-green/60"}>
-                    {pipelineStatus?.houseIsRunning ? "RUNNING" : "IDLE"}
-                  </span>
-                </div>
-                {pipelineStatus?.houseLastRun && (
-                  <div className="flex justify-between">
-                    <span className="text-matrix-green/60">HOUSE LAST RUN</span>
-                    <span className={
-                      pipelineStatus.houseLastRun.status === "completed" ? "text-matrix-green" :
-                      pipelineStatus.houseLastRun.status === "partial" ? "text-yellow-400" :
-                      pipelineStatus.houseLastRun.status === "failed" ? "text-neon-pink" :
-                      "text-matrix-green/50"
-                    }>
-                      {pipelineStatus.houseLastRun.status.toUpperCase()}
-                      {" · "}
-                      {pipelineStatus.houseLastRun.repsProcessed}/{pipelineStatus.houseLastRun.repsTotal} reps
-                      {(pipelineStatus.houseLastRun.repsFailed ?? 0) > 0 && (
-                        <span className="text-neon-pink"> ({pipelineStatus.houseLastRun.repsFailed}F)</span>
+
+                {/* House pipeline */}
+                {(() => {
+                  const run = pipelineStatus?.houseLastRun;
+                  const isStuck = run?.status === "running" && !pipelineStatus?.houseIsRunning;
+                  return (
+                    <>
+                      <div className="flex justify-between items-center">
+                        <span className="text-matrix-green/60">HOUSE</span>
+                        <span className={pipelineStatus?.houseIsRunning ? "text-neon-cyan animate-pulse" : "text-matrix-green/60"}>
+                          {pipelineStatus?.houseIsRunning ? "RUNNING" : run ? (
+                            <span>
+                              <span className={
+                                run.status === "completed" ? "text-matrix-green" :
+                                run.status === "partial" ? "text-yellow-400" :
+                                run.status === "failed" ? "text-neon-pink" :
+                                isStuck ? "text-yellow-400" : "text-matrix-green/50"
+                              }>
+                                {isStuck ? "STUCK" : run.status.toUpperCase()}
+                              </span>
+                              {run.repsTotal > 0 && <span className="text-matrix-green/60"> · {run.repsProcessed}/{run.repsTotal}</span>}
+                              {(run.repsFailed ?? 0) > 0 && <span className="text-neon-pink"> · {run.repsFailed}F</span>}
+                            </span>
+                          ) : "IDLE"}
+                        </span>
+                      </div>
+                      {isStuck && (
+                        <div className="flex justify-end">
+                          <button
+                            disabled={clearingHouse}
+                            onClick={async () => {
+                              setClearingHouse(true);
+                              try {
+                                await clearStuckHousePipeline(token);
+                                await pollStatus();
+                              } catch {}
+                              setClearingHouse(false);
+                            }}
+                            className="text-[9px] font-pixel text-yellow-400/70 hover:text-yellow-400
+                                       border border-yellow-400/30 hover:border-yellow-400/60
+                                       px-2 py-0.5 rounded transition-colors disabled:opacity-40"
+                          >
+                            {clearingHouse ? "CLEARING..." : "[CLEAR STUCK RUN]"}
+                          </button>
+                        </div>
                       )}
-                    </span>
-                  </div>
-                )}
+                    </>
+                  );
+                })()}
+
+                {/* SCOTUS justices */}
+                {(() => {
+                  const step = pipelineStatus?.lastRun?.progressSteps?.find(s => s.key === "justice_scorecards");
+                  if (!step) return null;
+                  return (
+                    <div className="flex justify-between">
+                      <span className="text-matrix-green/60">SCOTUS</span>
+                      <span className="text-matrix-green/80">
+                        {step.detail ?? "—"}
+                        <span className="text-matrix-green/40"> · {formatTime(step.completedAt)}</span>
+                      </span>
+                    </div>
+                  );
+                })()}
+
+                {/* Presidents */}
+                {(() => {
+                  const step = pipelineStatus?.lastRun?.progressSteps?.find(s => s.key === "president_scorecards");
+                  if (!step) return null;
+                  return (
+                    <div className="flex justify-between">
+                      <span className="text-matrix-green/60">PRESIDENTS</span>
+                      <span className="text-matrix-green/80">
+                        {step.detail ?? "—"}
+                        <span className="text-matrix-green/40"> · {formatTime(step.completedAt)}</span>
+                      </span>
+                    </div>
+                  );
+                })()}
+
                 <div className="flex justify-between">
                   <span className="text-matrix-green/60">SCHEDULE</span>
                   <span className="text-matrix-green/70">{d?.pipeline.cronSchedule}</span>
@@ -1367,6 +1568,12 @@ function AdminDashboardView({
             </div>
           </div>
 
+        </div>
+
+        {/* Action Center */}
+        <div className="terminal-window mb-6">
+          <TerminalTitlebar title="action_center" />
+          <ActionCenterStatus ac={pipelineStatus?.actionRefresh ?? null} />
         </div>
 
         {/* Data Stats */}

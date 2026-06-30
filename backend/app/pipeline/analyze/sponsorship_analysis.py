@@ -106,6 +106,11 @@ def _rescale(u: np.ndarray, log_scale: bool = False) -> list[float]:
         denom = 2 * m - 1
         if abs(denom) > 1e-9:
             s = -(m ** 2) / denom
+            # When median >= 0.5, s goes negative (log of a negative value is
+            # undefined), so we fall back to the linear scale already computed
+            # above. The linear scale is still informative; the log transform
+            # primarily helps when PageRank is heavily left-skewed (many low
+            # scorers), which isn't the case when median >= 0.5.
             if s > 0:
                 u = np.log(u + s)
                 u_min2, u_max2 = float(np.min(u)), float(np.max(u))

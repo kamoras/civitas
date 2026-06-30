@@ -47,7 +47,7 @@ def calc_competence(
         stability_score = max(0, 100 - cabinet_turnover_pct * 1.3)
         components.append((stability_score, 0.30))
 
-    if eo_count is not None and term_years > 0:
+    if eo_count and term_years > 0:
         eo_per_year = eo_count / term_years
         # Moderate rate (30-60/year) scores highest; extremes penalized
         if eo_per_year <= 50:
@@ -151,7 +151,7 @@ def calc_agency_alignment(
     """
     components: list[tuple[float, float]] = []
 
-    if rulemaking_count is not None and term_years > 0:
+    if rulemaking_count and term_years > 0:
         rules_per_year = rulemaking_count / term_years
         # 500-2000 rules/year is typical modern rate; scale accordingly
         if rules_per_year <= 1500:

@@ -14,11 +14,13 @@ Flow:
 """
 
 import asyncio
+import calendar
 import json
 import logging
 import re
+import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 _US_EAST = ZoneInfo("America/New_York")
@@ -29,7 +31,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
-from app.models import ActionIssue, DailyTheme, ExploreDocument, Representative, Senator
+from app.models import ActionIssue, DailyTheme, ExploreDocument, Justice, President, Representative, Senator
 from app.pipeline.fetch.news_feeds import NewsArticle, fetch_news_articles
 from app.pipeline.fetch.trending import TrendingTopic, fetch_trending_topics
 from app.pipeline.vector_store import (
@@ -38,6 +40,34 @@ from app.pipeline.vector_store import (
 )
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# In-memory refresh state — read by the admin API for live progress display
+# ---------------------------------------------------------------------------
+_refresh_state: dict = {
+    "is_running": False,
+    "stage": None,
+    "stage_detail": None,
+    "started_at": None,
+    "last_completed_at": None,
+    "last_issues_created": 0,
+    "last_issues_retired": 0,
+    "last_stories_generated": 0,
+    "last_bsky_posted": 0,
+    "last_elapsed": 0.0,
+}
+_refresh_state_lock = threading.Lock()
+
+
+def get_action_refresh_state() -> dict:
+    with _refresh_state_lock:
+        return dict(_refresh_state)
+
+
+def _set_refresh_state(**kwargs) -> None:
+    with _refresh_state_lock:
+        _refresh_state.update(kwargs)
+
 
 _POLICY_PROTOTYPES = [
     # US government & law
@@ -67,17 +97,30 @@ _POLICY_PROTOTYPES = [
     "Global economy, inflation, recession, central bank, financial markets",
 ]
 
+_US_CIVIC_PROTOTYPES = [
+    "US Congress bill vote legislation Senate House passed signed",
+    "President executive order White House federal policy decision",
+    "US Supreme Court federal court ruling constitutional law decision",
+    "US military action Pentagon American troops deployed strikes",
+    "Federal agency regulation EPA FDA FTC FCC rule enforcement policy",
+    "American workers economy domestic policy jobs wages US",
+    "US federal budget spending deficit appropriations government shutdown",
+    "US election voting rights ballot federal electoral",
+    "US immigration border policy ICE deportation federal",
+    "US healthcare Medicare Medicaid insurance federal program policy",
+]
+
 POLICY_RELEVANCE_THRESHOLD = 0.22
 CLUSTER_TITLE_THRESHOLD = 0.40
 CLUSTER_CENTROID_MERGE_THRESHOLD = 0.20
 MAX_ISSUES = 4
-MIN_ARTICLES_PER_CLUSTER = 1
+MIN_ARTICLES_PER_CLUSTER = 2
 # Minimum policy relevance score for the LLM-generated title+summary.
 # Individual articles pass at 0.22 but the synthesized cluster description
 # must clear a higher bar to ensure the issue is a genuine civic/policy topic.
 CLUSTER_CIVIC_THRESHOLD = 0.30
 
-ACTION_CENTER_PROMPT_VERSION = "action-v19"
+ACTION_CENTER_PROMPT_VERSION = "action-v20"
 
 TOPIC_CHANGE_THRESHOLD = 0.82  # cosine similarity below which a rank slot is considered a new topic
 # Raw cosine similarity between ANY two news headlines is ~0.74+ due to domain clustering.
@@ -96,7 +139,10 @@ Analyze ONLY the topic covered in these specific articles. \
 Do NOT reference bills, policies, or events not mentioned in the articles. \
 Produce a JSON object with these fields:
 
-- "title": A concise, neutral headline for this issue (max 15 words)
+- "title": A concise, neutral headline for this issue (max 15 words). \
+Name the actual countries or entities involved. Do NOT add "U.S." or \
+"America" to the title unless the United States is a direct actor in \
+these specific articles.
 - "summary": A factual 2-4 sentence summary of what is happening and why \
 it matters. No opinion.
 - "facts": An array of 3-5 key factual bullet points citizens should know. \
@@ -394,6 +440,7 @@ def _filter_policy_relevant(
         return []
 
     prototype_embeddings = _embed_texts(_POLICY_PROTOTYPES)
+    us_civic_embeddings = _embed_texts(_US_CIVIC_PROTOTYPES)
 
     texts = [f"{a.title}. {a.summary[:200]}" for a in specific]
     article_embeddings = _embed_texts(texts)
@@ -402,15 +449,23 @@ def _filter_policy_relevant(
     # policy prototype, not just the average direction. The mean collapses 18
     # diverse prototypes into one diffuse vector that sits below the news-headline
     # floor for nearly every article.
-    scores = (article_embeddings @ prototype_embeddings.T).max(axis=1)
+    policy_scores = (article_embeddings @ prototype_embeddings.T).max(axis=1)
+    us_civic_scores = (article_embeddings @ us_civic_embeddings.T).max(axis=1)
+    # Gently penalize articles that are policy-relevant but have no US actor —
+    # purely foreign-domestic stories require stronger policy relevance to pass.
+    effective_scores = policy_scores * np.where(us_civic_scores >= 0.15, 1.0, 0.82)
+
     relevant: list[tuple[NewsArticle, np.ndarray]] = []
-    for i, (article, score) in enumerate(zip(specific, scores)):
+    for i, (article, score) in enumerate(zip(specific, effective_scores)):
         if score >= POLICY_RELEVANCE_THRESHOLD:
             relevant.append((article, article_embeddings[i]))
 
+    n_penalized = int(np.sum(us_civic_scores < 0.15))
     logger.info(
-        "Policy relevance filter: %d/%d articles passed (%d roundups dropped, threshold=%.2f)",
-        len(relevant), len(articles), len(articles) - len(specific), POLICY_RELEVANCE_THRESHOLD,
+        "Policy relevance filter: %d/%d articles passed "
+        "(%d roundups dropped, %d low-US-civic penalized, threshold=%.2f)",
+        len(relevant), len(articles),
+        len(articles) - len(specific), n_penalized, POLICY_RELEVANCE_THRESHOLD,
     )
     return relevant
 
@@ -593,16 +648,48 @@ def _compute_trending_boost(
     return boosts
 
 
+def _compute_us_civic_boost(clusters: list[list[NewsArticle]]) -> list[float]:
+    """Score each cluster by its US civic action relevance.
+
+    Measures how directly a cluster involves US government actors — Congress,
+    the President, federal agencies, or the US military — versus foreign-domestic
+    policy stories where US citizens have no direct action surface.
+
+    Mirrors _compute_trending_boost: embeds each cluster's articles and scores
+    them against US civic prototypes, returning the mean of the top-3 per-article
+    scores so one highly-relevant article can lift the whole cluster.
+    """
+    if not clusters:
+        return []
+
+    us_civic_embs = _embed_texts(_US_CIVIC_PROTOTYPES)
+    boosts: list[float] = []
+
+    for cluster in clusters:
+        cluster_texts = [f"{a.title}. {a.summary[:100]}" for a in cluster]
+        cluster_embeddings = _embed_texts(cluster_texts)
+        per_article = (cluster_embeddings @ us_civic_embs.T).max(axis=1)
+        top_k = min(3, len(per_article))
+        boost = float(np.mean(np.sort(per_article)[-top_k:]))
+        boosts.append(boost)
+
+    logger.info(
+        "US civic boosts: %s",
+        ", ".join(f"{b:.3f}" for b in boosts[:8]),
+    )
+    return boosts
+
+
 def _rank_clusters(
     clusters: list[list[NewsArticle]],
     trending: list[TrendingTopic],
 ) -> list[list[NewsArticle]]:
-    """Rank clusters by combined coverage breadth and trending relevance.
+    """Rank clusters by coverage breadth, trending relevance, and US civic relevance.
 
-    Final score = 0.4 * normalized_coverage + 0.6 * trending_similarity.
-    Coverage breadth (distinct source count) is still valued but trending
-    signal from social media gets more weight since it reflects actual
-    public interest.
+    Final score = 0.25 * coverage + 0.45 * trending + 0.30 * us_civic.
+    The US civic dimension ensures stories where citizens can directly act
+    (contact Congress, track legislation, respond to executive action) rank
+    above foreign-domestic stories with no US action surface.
     """
     if not clusters:
         return []
@@ -615,12 +702,20 @@ def _rank_clusters(
     max_trend = max(trending_boosts) if trending_boosts and max(trending_boosts) > 0 else 1.0
     norm_trending = [s / max_trend for s in trending_boosts]
 
-    COVERAGE_WEIGHT = 0.4
-    TRENDING_WEIGHT = 0.6
+    us_civic_boosts = _compute_us_civic_boost(clusters)
+    max_civic = max(us_civic_boosts) if us_civic_boosts and max(us_civic_boosts) > 0 else 1.0
+    norm_us_civic = [s / max_civic for s in us_civic_boosts]
+
+    # Coverage is the most stable signal (source count doesn't change hourly).
+    # Trending is the most volatile (Bluesky/Google shift every run) so we
+    # weight it less to prevent full topic replacement each hour.
+    COVERAGE_WEIGHT = 0.40
+    TRENDING_WEIGHT = 0.30
+    US_CIVIC_WEIGHT = 0.30
 
     combined = [
-        COVERAGE_WEIGHT * cov + TRENDING_WEIGHT * trend
-        for cov, trend in zip(norm_coverage, norm_trending)
+        COVERAGE_WEIGHT * cov + TRENDING_WEIGHT * trend + US_CIVIC_WEIGHT * civic
+        for cov, trend, civic in zip(norm_coverage, norm_trending, norm_us_civic)
     ]
 
     ranked_indices = sorted(range(len(clusters)), key=lambda i: combined[i], reverse=True)
@@ -629,8 +724,8 @@ def _rank_clusters(
         c = clusters[idx]
         titles = c[0].title[:60]
         logger.info(
-            "  Rank %d: score=%.3f (cov=%.2f trend=%.2f) sources=%d \"%s...\"",
-            i + 1, combined[idx], norm_coverage[idx], norm_trending[idx],
+            "  Rank %d: score=%.3f (cov=%.2f trend=%.2f civic=%.2f) sources=%d \"%s...\"",
+            i + 1, combined[idx], norm_coverage[idx], norm_trending[idx], norm_us_civic[idx],
             len({a.source_name for a in c}), titles,
         )
 
@@ -703,30 +798,60 @@ def _deduplicate_top_clusters(
 def _validate_facts(facts: list) -> list:
     """Drop hallucinated or self-referential facts before saving.
 
-    Catches two common LLM failure modes:
+    Catches three LLM failure modes:
     - Self-comparison: "Meta surpasses Meta Platforms" — same root word on both sides
     - Non-list return: LLM occasionally wraps facts in a dict or returns a string
+    - Stale future dates: fact says "will remain until December 2025" in June 2026
     """
     if not isinstance(facts, list):
         return []
 
     import re as _re
 
+    _DATE_MONTH_YEAR = _re.compile(
+        r'\b(January|February|March|April|May|June|July|August|'
+        r'September|October|November|December)\s+(\d{4})\b',
+        _re.IGNORECASE,
+    )
+    _FORWARD_PHRASES = ("will remain", "is expected", "continue", "until ", "through ", "by the end")
+    _today = datetime.now(_US_EAST).date()
+    _month_index = {m: i for i, m in enumerate(calendar.month_name) if m}
+
     clean = []
     for fact in facts:
         if not isinstance(fact, str) or not fact.strip():
             continue
+        lower = fact.lower()
+
         # Detect self-referential comparisons: extract capitalized words and check
         # if any word root appears on both sides of a comparison verb.
-        lower = fact.lower()
         comparison_verbs = ("surpass", "overtake", "exceed", "beat", "top", "outpace")
         if any(verb in lower for verb in comparison_verbs):
-            # Extract significant words (4+ chars, capitalized in original)
             words = _re.findall(r"\b[A-Z][a-z]{3,}\b", fact)
             roots = [w.lower()[:6] for w in words]  # stem to first 6 chars
             if len(roots) != len(set(roots)):  # duplicate root → self-comparison
                 logger.warning("Dropping self-referential fact: %s", fact[:120])
                 continue
+
+        # Detect stale future-tense facts with past dates — e.g. the LLM writes
+        # "the ban will remain until December 2025" when it's now June 2026.
+        stale = False
+        if any(phrase in lower for phrase in _FORWARD_PHRASES):
+            for m in _DATE_MONTH_YEAR.finditer(fact):
+                month_num = _month_index.get(m.group(1).capitalize(), 0)
+                if month_num == 0:
+                    continue
+                try:
+                    mentioned = datetime(int(m.group(2)), month_num, 1).date()
+                    if mentioned < _today:
+                        logger.warning("Dropping stale future-dated fact: %s", fact[:120])
+                        stale = True
+                        break
+                except ValueError:
+                    pass
+        if stale:
+            continue
+
         clean.append(fact.strip())
 
     return clean
@@ -867,6 +992,14 @@ def _find_related_senators(
             "website_url": getattr(s, "website_url", "") or "",
         }
 
+    # Last names that are also common institutional/legal words — require full-name match only.
+    # A bare last-name hit for these is nearly always a false positive (e.g. "justice" in
+    # "Department of Justice", "congress" in any legislative text, "banks" in finance news).
+    _COMMON_WORD_SURNAMES = {
+        "justice", "congress", "banks", "young", "price", "bush", "king",
+        "reed", "hunt", "law", "case", "judge", "bond",
+    }
+
     # Pass 1: substring matches with contextual disambiguation
     candidates_needing_disambiguation: list[tuple] = []
 
@@ -882,6 +1015,11 @@ def _find_related_senators(
         # Full name match is high-confidence — no disambiguation needed
         if full_name_lower in issue_text_lower:
             matched[s.id] = _make_entry(s, chamber, match_reason="named in coverage")
+            continue
+
+        # Last names that are common institutional words skip bare last-name matching
+        # entirely — they require the full name to appear in text.
+        if last_name in _COMMON_WORD_SURNAMES:
             continue
 
         # Last-name-only match needs word-boundary + disambiguation
@@ -933,6 +1071,102 @@ def _find_related_senators(
                      len(result), title[:50],
                      ", ".join(s["name"] for s in result))
     return result
+
+
+def _find_related_officials(
+    title: str,
+    summary: str,
+    facts: list[str],
+    db: Session,
+) -> list[dict]:
+    """Extend related_senators to cover the current president and active justices.
+
+    Returns a combined list of all matched officials (senators, reps, president,
+    justices) with a 'branch' key added to each entry. Senators/reps are detected
+    by _find_related_senators; president and justices use the same substring +
+    embedding disambiguation pattern.
+    """
+    import re
+
+    combined: list[dict] = []
+
+    # Senators + reps (existing logic, backward compat)
+    for entry in _find_related_senators(title, summary, facts, db):
+        combined.append({**entry, "branch": entry.get("chamber", "senate")})
+
+    text = f"{title} {summary} {' '.join(facts)}"
+
+    # President detection — simple name-forms check, no embedding needed
+    current_president = db.query(President).filter(President.is_current == True).first()  # noqa: E712
+    if current_president:
+        last_name = current_president.name.split()[-1]
+        president_patterns = [
+            last_name,
+            current_president.name,
+            "the president",
+            "the white house",
+            "executive order",
+        ]
+        if any(p.lower() in text.lower() for p in president_patterns):
+            if not any(e["id"] == current_president.id for e in combined):
+                combined.append({
+                    "id": current_president.id,
+                    "name": current_president.name,
+                    "party": current_president.party,
+                    "branch": "president",
+                    "match_reason": "named in coverage",
+                })
+
+    # Justice detection — last-name + embedding disambiguation (same as senators)
+    justices = db.query(
+        Justice.id, Justice.name, Justice.appointing_party,
+    ).filter(Justice.is_active == True).all()  # noqa: E712
+
+    if justices:
+        candidates_needing_disambiguation: list[tuple] = []
+        matched_justices: dict[str, dict] = {}
+        DISAMBIGUATION_THRESHOLD = 0.35
+
+        for j in justices:
+            last = j.name.split()[-1]
+            if len(last) < 4:
+                continue
+            full_match = j.name.lower() in text.lower()
+            if full_match:
+                matched_justices[j.id] = {
+                    "id": j.id, "name": j.name, "party": j.appointing_party or "R",
+                    "branch": "scotus", "match_reason": "named in coverage",
+                }
+                continue
+            pattern = re.compile(r"\b" + re.escape(last) + r"\b", re.IGNORECASE)
+            m = pattern.search(text)
+            if m:
+                start = max(0, m.start() - 60)
+                end = min(len(text), m.end() + 60)
+                context = text[start:end]
+                candidates_needing_disambiguation.append((j, context))
+
+        if candidates_needing_disambiguation:
+            justice_phrases = [f"Justice {j.name}" for j, _ in candidates_needing_disambiguation]
+            context_phrases = [ctx for _, ctx in candidates_needing_disambiguation]
+            try:
+                justice_embeds = np.array(_embed_texts(justice_phrases))
+                context_embeds = np.array(_embed_texts(context_phrases))
+                for i, (j, _) in enumerate(candidates_needing_disambiguation):
+                    sim = float(np.dot(justice_embeds[i], context_embeds[i]))
+                    if sim >= DISAMBIGUATION_THRESHOLD:
+                        matched_justices[j.id] = {
+                            "id": j.id, "name": j.name, "party": j.appointing_party or "R",
+                            "branch": "scotus", "match_reason": "referenced in coverage",
+                        }
+            except Exception as exc:
+                logger.debug("Justice embedding disambiguation failed: %s", exc)
+
+        for entry in matched_justices.values():
+            if not any(e["id"] == entry["id"] for e in combined):
+                combined.append(entry)
+
+    return combined
 
 
 def _classify_issue_policy_areas(title: str, summary: str) -> list[str]:
@@ -1855,7 +2089,8 @@ def _save_timeline_entry(today: str, db: Session) -> None:
 
     top_issue = (
         db.query(ActionIssue)
-        .filter(ActionIssue.date == today, ActionIssue.rank == 1)
+        .filter(ActionIssue.date == today, ActionIssue.rank == 1,
+                ActionIssue.is_current == True)  # noqa: E712
         .first()
     )
     if not top_issue:
@@ -1890,10 +2125,13 @@ def _save_timeline_entry(today: str, db: Session) -> None:
     logger.info("Timeline entry saved for %s: %s", today, top_issue.title[:60])
 
 
-_MONITOR_ISSUE_SIM = 0.70
+_MONITOR_ISSUE_SIM = 0.70        # issue vs monitor-description (headline vs long text)
 _MONITOR_ISSUE_TITLE_SIM = 0.62
 _MONITOR_ISSUE_SIM_HIGH = 0.80   # above this: skip LLM gate, auto-match
 _MONITOR_MERGE_SIM = 0.42
+# Headline-to-headline floor is ~0.74; use 0.83 to distinguish same-topic from
+# any-two-news-headlines so Step 3 doesn't create monitors for unrelated topics.
+_MONITOR_HISTORY_SIM = 0.83
 _MONITOR_MIN_DAYS = 5
 _MONITOR_MIN_UNIQUE_SOURCES = 3
 _MONITOR_LOOKBACK_DAYS = 14
@@ -2187,6 +2425,7 @@ def _update_national_monitors(today: str, db: Session) -> None:
     )
 
     # Step 1: Merge any existing monitors that are too similar to each other.
+    _set_refresh_state(stage_detail="1/4 dedup")
     if len(existing_monitors) >= 2:
         mon_embs = model.encode(
             [f"{m.title} {m.description}" for m in existing_monitors],
@@ -2229,6 +2468,7 @@ def _update_national_monitors(today: str, db: Session) -> None:
             existing_monitors = db.query(NationalMonitor).all()
 
     # Step 2: Match today's issues to existing monitors and add updates
+    _set_refresh_state(stage_detail="2/4 matching")
     matched_issues: set[int] = set()
     issue_monitor_slugs: dict[int, list[str]] = {}
 
@@ -2301,6 +2541,7 @@ def _update_national_monitors(today: str, db: Session) -> None:
             issue.related_monitor_slugs = json.dumps(slugs)
 
     # Step 3: Detect new recurring topics from unmatched issues
+    _set_refresh_state(stage_detail="3/4 new topics")
     cutoff_date = (
         datetime.strptime(today, "%Y-%m-%d") - timedelta(days=_MONITOR_LOOKBACK_DAYS)
     ).strftime("%Y-%m-%d")
@@ -2333,7 +2574,7 @@ def _update_national_monitors(today: str, db: Session) -> None:
             matched_dates = {today}
             matched_past: list[ActionIssue] = []
             for j, past_issue in enumerate(past_issues):
-                if sims[i][j] >= _MONITOR_ISSUE_SIM:
+                if sims[i][j] >= _MONITOR_HISTORY_SIM:
                     matched_dates.add(past_issue.date)
                     matched_past.append(past_issue)
 
@@ -2455,6 +2696,7 @@ def _update_national_monitors(today: str, db: Session) -> None:
             db.flush()
 
     # Step 4: Lifecycle management — watching, closing, and cleaning up
+    _set_refresh_state(stage_detail="4/4 lifecycle")
     _cleanup_monitor_lifecycle(today, db)
 
     db.commit()
@@ -2506,6 +2748,40 @@ def _cleanup_monitor_lifecycle(today: str, db: Session) -> None:
     db.commit()
 
 
+_US_REFS_RE = re.compile(
+    r'\bU\.S\.?\b|\bUnited States\b|\bAmerican?\b', re.IGNORECASE,
+)
+
+
+def _validate_geographic_consistency(title: str, source_titles: list[str]) -> str:
+    """Remove hallucinated U.S. references from the generated title.
+
+    Catches the pattern where the LLM inserts 'U.S.' into a title about
+    a story where the US is not a direct actor — e.g. China-Japan export
+    controls becoming 'U.S. and Japan: Tensions Rise...'. Checks the title
+    against actual source article titles; if no source mentions the US,
+    the reference is stripped.
+    """
+    if not _US_REFS_RE.search(title):
+        return title
+    combined_sources = " ".join(source_titles)
+    if _US_REFS_RE.search(combined_sources):
+        return title
+    logger.warning(
+        "Removing hallucinated U.S. reference from title (absent from source articles): '%s'",
+        title[:80],
+    )
+    # Strip "U.S. and X: ..." or "U.S.: ..." lead patterns
+    fixed = re.sub(
+        r'^(U\.S\.?|United States|American?)\s+(and\s+[A-Z][^:]*:\s*|:\s*)',
+        '', title, flags=re.IGNORECASE,
+    )
+    # Strip "U.S. and " mid-title
+    fixed = re.sub(r'\b(U\.S\.?|United States|American?)\s+and\s+', '', fixed, flags=re.IGNORECASE)
+    fixed = fixed.strip().strip(':').strip()
+    return fixed if len(fixed) >= 10 else title
+
+
 def refresh_action_issues(db: Session | None = None) -> int:
     """Run the full action center pipeline. Returns number of issues created."""
     own_session = db is None
@@ -2524,31 +2800,41 @@ def _run_refresh(db: Session) -> int:
     today = datetime.now(_US_EAST).strftime("%Y-%m-%d")
 
     logger.info("Action center refresh starting for %s", today)
+    _set_refresh_state(
+        is_running=True, stage="fetch", stage_detail=None,
+        started_at=datetime.utcnow(),
+    )
 
     # 1. Fetch articles
     articles = fetch_news_articles()
     if not articles:
         logger.warning("No articles fetched — skipping action center refresh")
+        _set_refresh_state(is_running=False, stage=None)
         return 0
 
     # 2. Filter for policy relevance
+    _set_refresh_state(stage="filter")
     relevant = _filter_policy_relevant(articles)
     if not relevant:
         logger.warning("No policy-relevant articles found")
+        _set_refresh_state(is_running=False, stage=None)
         return 0
 
     # 3. Fetch trending topics from social media
     trending = fetch_trending_topics()
 
     # 4. Cluster by topic
+    _set_refresh_state(stage="cluster")
     clusters = _cluster_articles(relevant)
 
     # 5. Rank clusters using coverage breadth + trending relevance
+    _set_refresh_state(stage="rank")
     ranked_clusters = _rank_clusters(clusters, trending)
 
     # 5b. Deduplicate top clusters so two angles on the same story
     # don't both appear (e.g., "Tariff hikes" and "Market fallout from tariffs")
     top_clusters = _deduplicate_top_clusters(ranked_clusters, MAX_ISSUES)
+    _set_refresh_state(stage="issues", stage_detail=f"0/{len(top_clusters)}")
 
     # 6. Generate analysis for each via LLM
     from app.pipeline.analyze.ollama_client import call_llm, extract_json
@@ -2580,6 +2866,7 @@ def _run_refresh(db: Session) -> int:
     generated_title_embs: list[tuple[str, "np.ndarray"]] = []
 
     for rank, cluster in enumerate(top_clusters, start=1):
+        _set_refresh_state(stage_detail=f"{rank}/{len(top_clusters)}")
         # Filter the cluster to articles that are genuinely on-topic using
         # centered embeddings — the same space the clustering used. Raw cosine
         # similarity is useless here because every news headline sits in the
@@ -2651,6 +2938,8 @@ def _run_refresh(db: Session) -> int:
         summary = llm_result.get("summary", "")
         facts = _validate_facts(llm_result.get("facts", []))
 
+        title = _validate_geographic_consistency(title, [a.title for a in filtered_cluster])
+
         # Civic relevance gate: skip clusters that are about politicians personally
         # but not about policy (e.g. personal scandals, biographical stories).
         _cluster_text_emb = _embed_texts([f"{title}. {summary[:150]}"])[0]
@@ -2700,8 +2989,11 @@ def _run_refresh(db: Session) -> int:
         related_docs = _find_related_explore_docs(title, summary, policy_areas, db)
         related_explore_ids = [d["id"] for d in related_docs]
 
-        # 9. Find senators mentioned in or related to this issue
+        # 9. Find senators/reps mentioned in this issue (backward compat field)
         related_senators = _find_related_senators(title, summary, facts, db)
+
+        # 9b. Find ALL officials (senators + reps + president + justices) for profile cross-links
+        related_officials = _find_related_officials(title, summary, facts, db)
 
         # 10. Build data-driven actions (no LLM hallucinations)
         actions = _build_actions_from_data(
@@ -2735,7 +3027,8 @@ def _run_refresh(db: Session) -> int:
         _update_attrs = (
             "title", "summary", "facts", "actions", "source_urls",
             "source_names", "policy_areas", "related_bill_ids",
-            "related_explore_ids", "related_senators", "primary_article_date",
+            "related_explore_ids", "related_senators", "related_officials",
+            "primary_article_date",
         )
 
         _new_values: dict = {
@@ -2749,6 +3042,7 @@ def _run_refresh(db: Session) -> int:
             "related_bill_ids": json.dumps(resolved_bills),
             "related_explore_ids": json.dumps(related_explore_ids),
             "related_senators": json.dumps(related_senators),
+            "related_officials": json.dumps(related_officials),
             "primary_article_date": primary_article_date,
         }
 
@@ -2789,29 +3083,43 @@ def _run_refresh(db: Session) -> int:
     for ni in _new_issues:
         _matched_issue_ids.add(ni.id)
 
-    # Retire every current issue not touched in this run.
-    # Retired rows are kept permanently for stable permalink resolution.
+    # Retire issues not touched in this run, but only after a grace period.
+    # An issue must miss two consecutive hourly runs (~2h) before being retired.
+    # This prevents a briefly-trending topic from displacing a solid story on
+    # a single run, then the original story coming back an hour later.
+    # Grace period: issue must be older than 90 minutes to be eligible for retirement.
+    _grace_cutoff = datetime.utcnow() - timedelta(minutes=90)
     all_current = (
         db.query(ActionIssue)
         .filter(ActionIssue.is_current == True)  # noqa: E712
         .all()
     )
     n_retired = 0
+    n_graced = 0
     for row in all_current:
         if row.id not in _matched_issue_ids:
-            row.is_current = False
-            n_retired += 1
+            if row.created_at and row.created_at > _grace_cutoff:
+                # Too young to retire — give it another run to prove itself.
+                n_graced += 1
+            else:
+                row.is_current = False
+                n_retired += 1
     if n_retired:
         logger.info("Retired %d stale issues not in current clusters", n_retired)
+    if n_graced:
+        logger.info("Spared %d recent issues from retirement (within grace period)", n_graced)
 
     db.commit()
 
     # Stage 2: Auto-detect and update national monitors (must run before
     # _save_timeline_entry so the top issue has related_monitor_slugs populated)
+    _set_refresh_state(stage="monitors", stage_detail=None,
+                       last_issues_created=issues_created, last_issues_retired=n_retired)
     if issues_created > 0:
         _update_national_monitors(today, db)
 
     # Preserve today's #1 issue in the permanent timeline
+    _set_refresh_state(stage="theme")
     if issues_created > 0:
         _save_timeline_entry(today, db)
         generate_period_summaries(today, db)
@@ -2844,16 +3152,23 @@ def _run_refresh(db: Session) -> int:
         .order_by(ActionIssue.rank)
         .all()
     )
-    for issue in story_issues:
+    _stories_total = len(story_issues)
+    _stories_done = 0
+    _set_refresh_state(stage="stories", stage_detail=f"0/{_stories_total}" if _stories_total else None)
+    for i, issue in enumerate(story_issues):
+        _set_refresh_state(stage_detail=f"{i + 1}/{_stories_total}")
         try:
             story = _generate_full_story(issue)
             if story:
                 issue.full_story = story
+                _stories_done += 1
                 db.commit()
         except Exception:
             logger.exception("Full story generation failed for issue %s (non-fatal)", issue.id)
+    _set_refresh_state(last_stories_generated=_stories_done)
 
     # Stage 5: Post new/surging issues to Bluesky
+    _set_refresh_state(stage="bluesky", stage_detail=None)
     if issues_created > 0:
         try:
             from app.pipeline.analyze.bluesky_poster import process_issues_for_bluesky
@@ -2863,7 +3178,8 @@ def _run_refresh(db: Session) -> int:
                 .order_by(ActionIssue.rank)
                 .all()
             )
-            process_issues_for_bluesky(today_issues, db)
+            bsky_posted = process_issues_for_bluesky(today_issues, db)
+            _set_refresh_state(last_bsky_posted=bsky_posted or 0)
         except Exception:
             logger.exception("Bluesky posting failed (non-fatal)")
 
@@ -2912,5 +3228,10 @@ def _run_refresh(db: Session) -> int:
     logger.info(
         "Action center refresh complete: %d issues created in %.1fs",
         issues_created, elapsed,
+    )
+    _set_refresh_state(
+        is_running=False, stage=None, stage_detail=None,
+        last_completed_at=datetime.utcnow(),
+        last_elapsed=round(elapsed, 1),
     )
     return issues_created

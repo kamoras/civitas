@@ -42,7 +42,6 @@ _CACHE_TIER = "bsky_engagement"
 # verified outlets register (e.g. apnews.com maps to their Bluesky account).
 NEWS_OUTLET_HANDLES: list[str] = [
     "apnews.com",
-    "bbc.com",
     "npr.org",
     "newshour.bsky.social",
 ]
@@ -102,6 +101,10 @@ def engage_with_news_posts(db: Session) -> None:
         return
 
     reposts_this_run = 0
+    logger.info(
+        "Bluesky engagement: checking %d outlets against %d active issues",
+        len(NEWS_OUTLET_HANDLES), len(active_issues),
+    )
 
     for outlet_handle in NEWS_OUTLET_HANDLES:
         if reposts_this_run >= MAX_REPOSTS_PER_RUN:
@@ -110,9 +113,11 @@ def engage_with_news_posts(db: Session) -> None:
         try:
             feed_resp = client.get_author_feed(actor=outlet_handle, limit=25, filter="posts_no_replies")
         except Exception:
-            logger.warning("Failed to fetch feed for %s", outlet_handle)
+            logger.warning("Failed to fetch feed for %s", outlet_handle, exc_info=True)
             continue
 
+        n_posts = len(feed_resp.feed or [])
+        logger.info("@%s: %d posts in feed", outlet_handle, n_posts)
         for feed_item in (feed_resp.feed or []):
             if reposts_this_run >= MAX_REPOSTS_PER_RUN:
                 break
@@ -153,6 +158,10 @@ def engage_with_news_posts(db: Session) -> None:
             _mark_processed(cid, db)
 
             if best_sim < ENGAGE_THRESHOLD:
+                logger.debug(
+                    "@%s post below threshold (%.2f < %.2f): %s",
+                    outlet_handle, best_sim, ENGAGE_THRESHOLD, text[:60],
+                )
                 continue
 
             matched_issue = active_issues[best_idx]
@@ -168,5 +177,4 @@ def engage_with_news_posts(db: Session) -> None:
             except Exception:
                 logger.exception("Failed to repost/like post %s from %s", cid, outlet_handle)
 
-    if reposts_this_run > 0:
-        logger.info("Bluesky engagement: %d repost(s) this run", reposts_this_run)
+    logger.info("Bluesky engagement done: %d repost(s) this run", reposts_this_run)
