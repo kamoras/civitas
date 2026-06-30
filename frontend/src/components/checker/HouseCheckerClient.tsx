@@ -67,7 +67,7 @@ export default function HouseCheckerClient() {
 
   return (
     <div>
-      <StateSelector selectedState={selectedState} onSelect={handleSelect} />
+      <StateSelector selectedState={selectedState} onSelect={handleSelect} label="SELECT YOUR STATE TO VIEW REPRESENTATIVE FUNDING DATA." />
 
       {loading && (
         <div className="mt-12 text-center">

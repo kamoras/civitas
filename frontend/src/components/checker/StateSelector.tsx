@@ -5,13 +5,14 @@ import { STATES } from "@/data/states";
 interface StateSelectorProps {
   selectedState: string;
   onSelect: (stateCode: string) => void;
+  label?: string;
 }
 
-export default function StateSelector({ selectedState, onSelect }: StateSelectorProps) {
+export default function StateSelector({ selectedState, onSelect, label }: StateSelectorProps) {
   return (
     <div className="flex flex-col items-center gap-4">
       <label htmlFor="state-select" className="text-lg sm:text-xl text-matrix-green/80">
-        {">"} SELECT YOUR STATE TO VIEW SENATOR FUNDING DATA.
+        {">"} {label ?? "SELECT YOUR STATE TO VIEW SENATOR FUNDING DATA."}
       </label>
       <div className="relative">
         <select

@@ -30,6 +30,12 @@ from app.services.senator_service import STATE_NAMES
 router = APIRouter()
 
 
+def _bioguide_photo(bioguide_id: str | None) -> str | None:
+    if not bioguide_id:
+        return None
+    return f"https://bioguide.congress.gov/bioguide/photo/{bioguide_id[0]}/{bioguide_id}.jpg"
+
+
 def _cached_json(data, max_age: int = 120) -> JSONResponse:
     return JSONResponse(
         content=data,
@@ -164,7 +170,7 @@ def list_politicians(
                 "stateName": STATE_NAMES.get(s.state, s.state),
                 "district": None,
                 "role": "Senator",
-                "thumbnailUrl": None,
+                "thumbnailUrl": _bioguide_photo(s.bioguide_id),
                 "hasScorecard": overall is not None,
                 "overallScore": overall,
                 "activeIssueCount": len(issue_map.get(s.id, [])),
@@ -189,7 +195,7 @@ def list_politicians(
                 "stateName": STATE_NAMES.get(r.state, r.state),
                 "district": getattr(r, "district", None),
                 "role": "Representative",
-                "thumbnailUrl": None,
+                "thumbnailUrl": _bioguide_photo(r.bioguide_id),
                 "hasScorecard": overall is not None,
                 "overallScore": overall,
                 "activeIssueCount": len(issue_map.get(r.id, [])),
@@ -277,6 +283,7 @@ def _build_identity(branch: str, entity) -> dict:
             "state": entity.state,
             "stateName": STATE_NAMES.get(entity.state, entity.state),
             "role": "Senator",
+            "thumbnailUrl": _bioguide_photo(entity.bioguide_id),
             "yearsInOffice": entity.years_in_office,
             "contactFormUrl": entity.contact_form_url or "",
             "websiteUrl": entity.website_url or "",
@@ -291,6 +298,7 @@ def _build_identity(branch: str, entity) -> dict:
             "stateName": STATE_NAMES.get(entity.state, entity.state),
             "district": getattr(entity, "district", None),
             "role": "Representative",
+            "thumbnailUrl": _bioguide_photo(entity.bioguide_id),
             "contactFormUrl": entity.contact_form_url or "",
             "websiteUrl": entity.website_url or "",
             "officePhone": entity.office_phone or "",

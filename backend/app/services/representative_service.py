@@ -354,7 +354,7 @@ def get_rep_leaderboard(
                 "legislativeEffectiveness": r.score_legislative_effectiveness,
             },
             "totalRaised": r.total_raised,
-            "totalFromPACs": r.total_from_pacs,
+            "totalFromPacs": r.total_from_pacs,
             "smallDonorPercentage": r.small_donor_percentage,
             "topIndustry": top_industry_map.get(r.id),
             "trend": trend_map.get(r.id, {"direction": "new", "change": 0.0, "previousScore": None}),
