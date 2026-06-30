@@ -153,11 +153,11 @@ never write "X surpasses X" or compare a thing to itself. (3) If an article \
 says something was dropped, dismissed, or ended, the fact must reflect that \
 outcome — do not write that it is ongoing.
 - "bills": An array of any specific bills or acts mentioned in the articles. \
-For each bill, provide an object with "name" (the common name) \
-and "id" (the bill number if mentioned anywhere in the articles, e.g. "HR.22" \
-or "S.100", or null if not found). Look carefully for references like \
-"H.R. 22", "S. 100", etc. Only include bills actually named in the articles. \
-If NO bills are mentioned, return an empty array [].
+For each bill, provide an object with "name" (the common name or acronym, e.g. \
+"Kids Online Safety Act" or "KOSA") and "id": ALWAYS null. Never invent or \
+guess a bill number — leave "id" null even if you think you know it. \
+The bill number will be looked up separately. Only include bills actually named \
+in the articles. If NO bills are mentioned, return an empty array [].
 Articles:
 {articles}
 
@@ -1320,22 +1320,12 @@ def _resolve_bills(raw_bills: list, article_texts: list[str]) -> list[dict]:
             seen_raw.add(raw_id)
             id_refs.append({"name": raw_id, "id": raw_id})
 
-    # Collect LLM-extracted bills
+    # Collect LLM-extracted bills — always search by name, never trust LLM IDs.
+    # LLMs frequently hallucinate bill numbers (e.g. "S.2026" when the year is 2026).
+    # Regex extraction from article text above is the only source of trusted IDs.
     for b in raw_bills:
         if isinstance(b, dict) and b.get("name"):
-            llm_id = b.get("id") or None
-            if llm_id and re.search(r'\d', llm_id):
-                norm = re.sub(r'\s+', '', llm_id).upper()
-                norm = norm.replace("H.R.", "HR.").replace("HR", "HR.")
-                norm = re.sub(r'\.+', '.', norm)
-                if not norm.startswith("S."):
-                    norm = norm.replace("S", "S.")
-                    norm = re.sub(r'\.+', '.', norm)
-                if norm not in seen_raw:
-                    seen_raw.add(norm)
-                    id_refs.append({"name": b["name"], "id": norm})
-            else:
-                name_refs.append({"name": b["name"], "id": None})
+            name_refs.append({"name": b["name"], "id": None})
 
     bill_refs = id_refs + name_refs
 
