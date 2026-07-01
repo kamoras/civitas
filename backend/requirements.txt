@@ -10,7 +10,7 @@ bcrypt==5.0.0
 boolean.py==5.0
 build==1.4.0
 CacheControl==0.14.4
-certifi==2026.1.4
+certifi==2026.6.17
 charset-normalizer==3.4.4
 chroma-hnswlib==0.7.3
 chromadb==0.4.24
