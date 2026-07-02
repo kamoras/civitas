@@ -263,7 +263,8 @@ async def fetch_aggregated_contributors(
 
 
 async def fetch_outside_spending(
-    client: httpx.AsyncClient, db: Session, candidate_id: str
+    client: httpx.AsyncClient, db: Session, candidate_id: str,
+    cycles: list[int] | None = None,
 ) -> dict:
     """Fetch independent expenditures (super PAC outside spending) supporting a candidate.
 
@@ -271,22 +272,42 @@ async def fetch_outside_spending(
     These are not controlled by the candidate but signal industry alignment
     and are a key signal for senior legislators who rely on outside support.
 
-    FEC endpoint: /schedules/schedule_e/?candidate_id=...&support_oppose_indicator=S
+    Uses the aggregate endpoint /schedules/schedule_e/totals/by_candidate/,
+    which returns complete per-cycle totals in one call. The raw
+    /schedules/schedule_e/ list is paginated and summing a single page
+    truncates the total at the 50 largest expenditures.
+
+    Args:
+        cycles: Election cycles to include. When given, should match the
+            cycles used for receipt totals so outside spending covers the
+            same window. When omitted, the two most recent cycles with
+            supporting expenditures are used.
     """
-    cache_key = f"outside-spending-{candidate_id}"
+    cycle_tag = "-".join(str(c) for c in sorted(cycles)) if cycles else "recent"
+    cache_key = f"outside-spending-v2-{candidate_id}-{cycle_tag}"
     cached = api_cache_get(db, "fec", cache_key)
     if cached is not None:
         return cached
 
     data = await _fetch_with_retry(
         client,
-        f"{FEC_API_BASE}/schedules/schedule_e/?candidate_id={candidate_id}"
-        f"&support_oppose_indicator=S&sort=-expenditure_amount&per_page=50",
+        f"{FEC_API_BASE}/schedules/schedule_e/totals/by_candidate/"
+        f"?candidate_id={candidate_id}&per_page=100",
     )
 
     results = (data or {}).get("results", [])
-    total_for = sum(r.get("expenditure_amount", 0) or 0 for r in results)
+    support = [r for r in results if r.get("support_oppose_indicator") == "S"]
+    if cycles:
+        wanted = {c for c in cycles if c}
+        support = [r for r in support if r.get("cycle") in wanted]
+    else:
+        recent = sorted(
+            {r.get("cycle") for r in support if r.get("cycle")}, reverse=True
+        )[:2]
+        support = [r for r in support if r.get("cycle") in set(recent)]
 
-    result = {"totalFor": round(total_for, 2), "count": len(results)}
+    total_for = sum(r.get("total", 0) or 0 for r in support)
+
+    result = {"totalFor": round(total_for, 2), "count": len(support)}
     api_cache_set(db, "fec", cache_key, result)
     return result

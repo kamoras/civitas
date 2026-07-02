@@ -736,18 +736,18 @@ def refine_with_vote_data(
 ) -> str:
     """Combine content-based and vote-based party alignment.
 
-    Implements a two-signal fusion where content analysis is the primary
-    signal and vote tallies are secondary. This ordering is grounded in
-    the observation from Snyder & Groseclose (2000, "Estimating Party
-    Influence in Congressional Roll-Call Voting," AJPS 44:2) that vote
-    outcomes reflect party discipline and strategic calculation as much
-    as ideology. Content analysis recovers the bill's inherent
-    ideological position independent of legislative gamesmanship.
+    The actual roll-call split wins whenever it exists. partyLeaning's
+    downstream consumer is the voted-with-party computation, and "did
+    this member break with their party" is defined by how the parties
+    actually voted, not by the bill's inherent ideology. In particular,
+    a bill whose content reads partisan but which passed with both party
+    majorities ("bipartisan" split) must be excluded from party-loyalty
+    counting — the 2026-06 audit found the previous rule (content wins
+    over a bipartisan split) marked members of one party as voting
+    "against party" on bills nearly everyone supported, which pinned
+    House Independent Voting scores at ≈87-89 for all 431 reps.
 
-    When the two signals agree, confidence is high. When they disagree,
-    content wins except when vote data shows a clear party-line split —
-    because a strong party-line vote is itself informative (the bill
-    was important enough to whip).
+    Content analysis is used only when no roll-call member data exists.
 
     Args:
         content_alignment: "R", "D", or "bipartisan" from content analysis
@@ -757,15 +757,6 @@ def refine_with_vote_data(
         Final party alignment: "R", "D", or "bipartisan"
     """
     if vote_alignment is None:
-        return content_alignment
-
-    if content_alignment == vote_alignment:
-        return content_alignment
-
-    if content_alignment == "bipartisan":
-        return vote_alignment
-
-    if vote_alignment == "bipartisan":
         return content_alignment
 
     return vote_alignment

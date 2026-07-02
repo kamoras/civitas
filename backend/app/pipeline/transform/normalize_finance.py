@@ -98,9 +98,16 @@ def normalize_finance(
         if d.get("type") in ("PAC", "SuperPAC", "Party/Ideological")
     )
 
-    final_pac_total = min(computed_pac_total, total_raised)
-    if total_from_pacs > 0 and abs(total_from_pacs - computed_pac_total) > total_raised * 0.5:
-        final_pac_total = total_from_pacs
+    # The FEC's cycle totals (other_political_committee_contributions,
+    # Schedule A) are the authoritative PAC figure. The classifier-derived
+    # sum systematically undercounts when committee donors are typed as
+    # Org/Employees — the 2026-06 audit found $34.8K recorded vs millions
+    # actual for senior senators, which then scored as funding independence.
+    # Use the classifier sum only when the FEC total is missing.
+    if total_from_pacs > 0:
+        final_pac_total = min(total_from_pacs, total_raised)
+    else:
+        final_pac_total = min(computed_pac_total, total_raised)
 
     outside_spending_for = outside_spending.get("totalFor", 0) if outside_spending else 0
 
@@ -248,6 +255,11 @@ def build_top_donors(
         }
         for d in sorted_donors
         if d["total"] > 0 and len(d["name"].strip()) >= 3
+        # Candidate-affiliated committees (the candidate's own campaign,
+        # joint fundraising, and victory committees) are transfers, not
+        # donors. Listing them made routine JFC users look captured by
+        # their own committees in the concentration score and the UI.
+        and d.get("type") != "CandidateAffiliated"
     ][:100]
 
 

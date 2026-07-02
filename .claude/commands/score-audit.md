@@ -65,14 +65,26 @@ cur = conn.cursor()
 
 GROUND_TRUTH = [
     # (name_fragment, expected_iv_range, expected_fi_range, note)
-    ("Collins",    (75, 100), (70, 100), "Known party crosser, grassroots ME fundraising"),
-    ("Murkowski",  (75, 100), (70, 100), "Frequent party breaks, AK independent streak"),
-    ("Sanders",    (40, 75),  (80, 100), "Independent, strong small-donor base"),
-    ("Warren",     (40, 70),  (80, 100), "Rejected corporate PAC money explicitly"),
-    ("Cruz",       (20, 55),  (50, 95),  "High party loyalty, Texas energy donors"),
-    ("McConnell",  (20, 55),  (20, 65),  "Senate GOP leader, heavy outside spending"),
-    ("Paul",       (65, 95),  (70, 100), "Libertarian crosser, small-dollar base"),
-    ("Klobuchar",  (40, 70),  (35, 65),  "Moderate D, mid-range PAC reliance"),
+    # Ranges updated 2026-07 (v4) to match app/pipeline/analyze/ground_truth.py,
+    # which now runs these checks automatically at the end of each pipeline run.
+    # Notable revisions vs the 2026-05 table:
+    #  - McConnell FI ceiling raised to 90: his recent-window candidate-committee
+    #    profile (7% PAC ratio, 36% unitemized, minimal supporting Schedule E —
+    #    the big Schedule E money in 2020 was spent AGAINST him) is genuinely
+    #    mid-pack. Leadership-PAC/party-apparatus influence is invisible in
+    #    candidate FEC data and must not be faked into the score.
+    #  - Murkowski FI expectation dropped: her small-donor share is 4% — the
+    #    "grassroots AK fundraising" premise was factually wrong.
+    #  - IV floors lowered slightly: v4 measures breaks only on genuinely
+    #    divided votes, which lowers everyone's IV honestly.
+    ("Collins",    (70, 100), (40, 90),  "≈36% contested-vote break rate"),
+    ("Murkowski",  (70, 100), (10, 60),  "≈33% break rate; PAC/establishment-funded (4% small-donor)"),
+    ("Sanders",    (30, 75),  (70, 100), "Independent, strong small-donor base"),
+    ("Warren",     (30, 70),  (70, 100), "Rejected corporate PAC money explicitly"),
+    ("Cruz",       (15, 55),  (50, 95),  "High party loyalty (≈4% breaks), big small-dollar base"),
+    ("McConnell",  (15, 55),  (30, 90),  "Party leader, ≈9% break rate; see FI note above"),
+    ("Paul",       (55, 95),  (60, 100), "Libertarian crosser (≈16% breaks), small-dollar base"),
+    ("Klobuchar",  (35, 70),  (35, 75),  "Moderate D, mid-range PAC reliance"),
 ]
 
 print(f"{'Senator':<15} {'IV':>4} {'FI':>4}  IV-OK  FI-OK  Note")
@@ -470,3 +482,10 @@ Track changes here to maintain an auditable history:
 | 2026-05 v3 | IV: fundraising-scaled donor default (75→50 at $50M+) | High fundraising without lobbying = data gap, not independence | McConnell/Graham IV reduced |
 | 2026-05 v3 | LE: advancement threshold 10→5%; volume ceiling log2(200)→log2(100) | 10% threshold made median senators score below 50; unreachable ceiling | LE scores spread more evenly |
 | 2026-05 fix | House pipeline: `parts[1].isdigit()` guard | `int("")` crash on bills with empty number prevented all rep data | 435 reps now populate correctly |
+| 2026-07 v4 | FI: rebuilt as PAC+outside 50% / small-donor 25% / relative concentration 25% | v3 concentration (top-10/total raised) was ≈0 for $50M+ raisers; missing PAC data scored as independence (McConnell FI 97) | FI mean 69→52, stdev 18; McConnell 97→82; Klobuchar 31→55 |
+| 2026-07 v4 | Data: totalFromPACs prefers FEC cycle totals; CandidateAffiliated excluded from topDonors; Schedule E via totals/by_candidate (was truncated at 50 rows) | Classifier-typed PAC sums recorded $34.8K vs $5.7M actual for McConnell; JFC transfers counted as donors; outside spending undercounted ~10x | Funding inputs now authoritative |
+| 2026-07 v4 | IV: donor weight 40→25% when alignment unknown; removed count/8 constant (always 1.0); base rate 3%; state-lean discount capped at 20% full-credit | senatorVoteAligned was never computed — donor component was a constant 80 inflating loyalists; safe-state leaders scored as independents | McConnell IV 75→55; all 14 ground-truth checks pass |
+| 2026-07 v4 | LE: advancement on substantive bills only (no resolutions, no law double-count, no calendar/cloture credit); volume per-congress (n/80) | v3 saturated: everyone maxed advancement (inflated median 9.4% vs real 2.5%) and volume (career bill lists vs log2(100) ceiling) | LE mean 82→52, stdev 15 |
+| 2026-07 v4 | PP data: neutral-stance votes give no kept signal; sponsored-bill introduction = effort (partial at most), only advanced bills count as kept | 88% of promises scored "kept" — circular: platform promises "kept" by sponsoring bills about the platform | Takes effect on next pipeline run (alignment recomputed) |
+| 2026-07 v4 | House: refine_with_vote_data applied (roll-call split authoritative, incl. bipartisan); recent roll calls 15→30 | LLM content labels overrode actual bipartisan splits → half the chamber "against party" on near-unanimous votes → all reps IV≈87-89 | Takes effect on next House pipeline run |
+| 2026-07 v4 | Ground-truth gate wired into pipeline (analyze/ground_truth.py) | Reference senators had failed audit expectations across two algorithm versions with no automated alarm | Logs GROUND TRUTH FAIL warnings after each run |

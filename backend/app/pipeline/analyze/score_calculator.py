@@ -109,6 +109,31 @@ Changes from v2 → v3 (data quality audit 2026-05):
   to match actual Senate bill passage rates (Volden & Wiseman 2014).
   Volume ceiling recalibrated log2(200)→log2(100) so typical active senators
   (20-40 bills per congress) score in the informative 50-76% range.
+
+Changes from v3 → v4 (score audit 2026-06):
+- Funding Independence: rebuilt as PAC+outside (50%) / small-donor share
+  (25%) / relative top-donor concentration (25%). The v3 concentration
+  metric (top-10 / total raised) was structurally ≈0 for $50M+ fundraisers,
+  so missing PAC data plus scale produced FI 97 for senators the ground
+  truth expected ≤65. Candidate-affiliated transfers and self-funding are
+  excluded from concentration (upstream, normalize_finance also stops
+  listing transfers as donors — they made JFC users look captured by
+  their own committees). Data fixes landed alongside: totalFromPACs now
+  prefers FEC cycle totals over classifier-typed donor sums, and
+  outside spending uses complete per-cycle Schedule E totals instead of
+  a single 50-row page.
+- Independent Voting: donor component reweighted 40%→25% when alignment
+  is unknown (senatorVoteAligned has never been computed — every stored
+  match is None), and the unknown-branch heuristic no longer divides the
+  upstream-capped match count by 8 (a constant 1.0 that scored everyone
+  80). Party-independence curve gains a 2% base rate and the state-lean
+  discount is capped at a 20% full-credit break rate so safe-state party
+  leaders with single-digit break rates no longer score as independents.
+- Legislative Effectiveness: advancement counts substantive bills only
+  (no simple/concurrent resolutions), stops double-counting laws, and
+  drops "placed on calendar"/"cloture" credit; volume is per-congress
+  (total/80) instead of career-log2. v3 saturated: LE mean was 81.6 with
+  everyone maxing advancement and volume.
 """
 
 import logging
@@ -182,79 +207,82 @@ def _calc_funding_independence(funding: dict) -> int:
     """
     Funding Independence Score (0-100, higher = better).
 
-    Two independent dimensions, calibrated to the empirical distribution
-    of Senate campaign finance (Barber 2016; Bonica 2014):
+    Three components, calibrated so the median senator scores ≈50 on each
+    (empirical distributions from the 2026-06 audit of FEC cycle totals):
 
-      1. PAC dependency (30%): fraction of funding from PACs vs individuals.
-         Multiplier calibrated so the median senator (≈25% PAC ratio per
-         Barber 2016, Table 2) scores 50 — making the distribution roughly
-         symmetric around the sample median.  At 0% PAC: 100; at 50%: 0.
-         Weight is 30% (reduced from 50%) because PAC% understates influence
-         for senior senators who rely on coordinated outside spending.
+      1. PAC dependency (50%): fraction of funding from PACs (FEC cycle
+         totals, Schedule A) plus half-weighted outside spending
+         (Schedule E independent expenditures supporting the candidate).
+         Median true PAC ratio is ≈28% (audit; consistent with Barber
+         2016, Table 2 ≈25–30%), so the ×2.0 multiplier puts the median
+         near 50.  At 0% PAC: 100; at 50%: 0.
 
-      2. Top-donor concentration (70%): fraction from top 10 donors.
-         Multiplier calibrated so a moderately concentrated donor base
-         (≈20% from top-10, consistent with Bonica 2014, Table 3) scores
-         50.  At 0% concentration: 100; at 40%: 0.
-         Weight is 70% (increased from 50%) because concentration captures
-         bundled individual donations that the PAC channel misses.
+      2. Small-donor share (25%): unitemized (<$200) contributions as a
+         share of total receipts — the broadest-possible funding base and
+         a well-established grassroots proxy (Bonica 2014; Malbin 2009).
+         Full credit at 40% (audit p90 ≈43%); median ≈17% scores ≈43.
 
-    Calibration derivation
-    ----------------------
-    For a linear penalty (1 − ratio × k):
-      PAC:         set score = 50 at ratio = 0.25  →  k = (1 − 0.50) / 0.25 = 2.0
-      Concentration: set score = 50 at ratio = 0.20  →  k = (1 − 0.50) / 0.20 = 2.5
-
-    This replaces the v1 multipliers (1.3×, 1.5×) which mapped the typical
-    range into 61–94, compressing meaningful variation and making the median
-    senator appear above-average.
+      3. Relative top-donor concentration (25%): top-10 external donors as
+         a share of the full external donor pool (candidate-affiliated
+         transfers and self-funding excluded — they are the candidate's
+         own money, not donor influence).  The v3 metric divided top-10 by
+         *total raised*, which is structurally near-zero for $50M+
+         fundraisers (itemized employer-aggregated donations are always a
+         tiny share of a mega-campaign), so large fundraisers scored
+         90–100 regardless of how concentrated their donor base was.
+         The relative pool ratio discriminates at any scale: audit median
+         0.60 maps to 50, p10 (0.34) to ≈82, p90 (0.93) to ≈9.
 
     Academic rationale
     ------------------
-    Barber (2016, Public Opinion Quarterly 80(S1), 225–249) documents that
-    the median senator receives ≈25–30% of funding from PACs, establishing
-    the calibration anchor for the PAC component.  Bonica (2014, AJPS
-    58(2), 367–386) shows top-donor concentration affects legislative
-    behaviour above ≈15–20%, establishing the concentration calibration
-    anchor.  Stratmann (2005, Public Choice 124(1–2), 135–156) confirms
-    the linear relationship between PAC dependency and roll-call alignment
-    in the relevant range.
+    Barber (2016, Public Opinion Quarterly 80(S1), 225–249) anchors the
+    PAC component.  Bonica (2014, AJPS 58(2), 367–386) supports both the
+    small-donor proxy and the concentration signal.  Stratmann (2005,
+    Public Choice 124(1–2), 135–156) confirms the linear PAC-dependency
+    relationship in the relevant range.
     """
     total_raised = funding.get("totalRaised", 0)
     if not total_raised or total_raised == 0:
         return 50
 
-    # Component 1: PAC dependency (30% weight)
-    # Direct PAC contributions (Schedule A, committee-to-committee) systematically
-    # undercount actual PAC influence for senior senators who rely on coordinated
-    # outside spending rather than direct PAC transfers. Weight reduced from 50%
-    # to 30% to reflect this known data gap.
+    # Component 1: PAC dependency incl. outside spending (50% weight)
     pac_ratio = funding.get("totalFromPACs", 0) / total_raised
 
-    # Incorporate outside spending (super PAC independent expenditures, Schedule E)
-    # if available. Outside spending is not controlled by the candidate but is a
-    # strong signal of industry alignment, especially for senior legislators whose
-    # direct PAC intake is low but whose outside support is massive.
+    # Outside spending is not controlled by the candidate but signals
+    # aligned-industry investment in the seat. Half-weight because it is
+    # less direct than a contribution.
     outside_for = funding.get("outsideSpendingFor", 0) or 0
     if outside_for > 0:
-        # Half-weight: outside spending is less direct than a PAC contribution
-        # but still signals industry alignment in the broader ecosystem.
         effective_outside = outside_for / (total_raised + outside_for) * 0.5
         pac_ratio = min(pac_ratio + effective_outside, 1.0)
 
     pac_score = max(0.0, (1.0 - pac_ratio * 2.0)) * 100
 
-    # Component 2: Top-donor concentration (70% weight)
-    # More reliably populated than PAC% — captures bundled individual donations
-    # from industry lobbyists, which are the dominant influence channel for many
-    # senior senators. Weight increased from 50% to 70%.
-    # Calibrated: moderate concentration (20% top-10) → score 50 (Bonica 2014)
-    top_donors = funding.get("topDonors", [])
-    top_donor_total = sum(d.get("total", 0) for d in top_donors[:10])
-    concentration = min(top_donor_total / total_raised, 1.0) if total_raised > 0 else 0.0
-    concentration_score = max(0.0, (1.0 - concentration * 2.5)) * 100
+    # Component 2: small-donor share (25% weight)
+    small_pct = funding.get("smallDonorPercentage", 0) or 0
+    small_score = min(small_pct / 40.0, 1.0) * 100
 
-    return clamp(pac_score * 0.30 + concentration_score * 0.70)
+    # Component 3: relative top-donor concentration (25% weight)
+    external = sorted(
+        (
+            d for d in funding.get("topDonors", [])
+            if d.get("type") not in ("CandidateAffiliated", "Self-Funded")
+        ),
+        key=lambda d: d.get("total", 0),
+        reverse=True,
+    )
+    pool = sum(d.get("total", 0) for d in external)
+    if len(external) >= 20 and pool >= 250_000:
+        concentration = sum(d.get("total", 0) for d in external[:10]) / pool
+        # Linear map: 0.20 → 100, 1.00 → 0 (median 0.60 → 50)
+        concentration_score = max(0.0, min(1.0, (1.0 - concentration) / 0.8)) * 100
+    else:
+        # Too few itemized external donors to measure concentration.
+        concentration_score = 50.0
+
+    return clamp(
+        pac_score * 0.50 + small_score * 0.25 + concentration_score * 0.25
+    )
 
 
 ADVOCACY_WEIGHT = 0.15
@@ -434,15 +462,25 @@ def _calc_independent_voting(
     Independent Voting Score (0-100, higher = better).
 
     Two components:
-      1. Party independence (60%): percentage of votes against party
-         on non-state-relevant bills.  Adjusted by state partisan lean
-         so that a senator in a safe R+20 state isn't penalized for
-         voting with their party — that's constituent representation.
+      1. Party independence (75%, or 60% when real donor-alignment data
+         exists): percentage of votes against party on non-state-relevant
+         bills.  Adjusted by state partisan lean so that a senator in a
+         safe R+20 state isn't penalized for voting with their party —
+         that's constituent representation.  The lean discount is capped
+         (full credit never below a 20% break rate) so that safe-state
+         party leaders with single-digit break rates cannot score as
+         independents — the 2026-06 audit found the uncapped discount let
+         a 9% break rate score ≈72 on this component.
 
-      2. Donor independence (40%): based on lobbying match alignment.
-         When donors in a specific industry give money AND the senator
-         votes aligned with that industry's interests on related bills,
-         that's a red flag — especially when PAC funding is high.
+      2. Donor independence (25%/40%): based on donor-vote connection
+         matches.  senatorVoteAligned is only populated when a real
+         alignment computation exists — when it is None for every match
+         (the current state of the data), this component uses the
+         donation-share heuristic and gets the reduced 25% weight.
+         The previous heuristic scored a near-constant 80 for everyone:
+         it divided match count by 8 while the match list is capped at 8
+         upstream (detect_donor_vote_connections max_matches), so the
+         ratio was 1.0 for every senator with matches.
     """
     effective_party = voting_record.get("effectiveParty", party)
     state_policies = _get_state_relevant_policies(funding)
@@ -485,23 +523,30 @@ def _calc_independent_voting(
 
     if party_total >= 3.0:
         against_pct = voted_against / party_total
-        # Use a two-stage curve instead of a single threshold to
-        # create meaningful spread. Below 5% cross-party = low score;
-        # 5-20% = rising; 20%+ = diminishing returns toward 100.
-        # State lean scales the "full credit" point: in safe states
-        # constituent representation means voting with party.
-        full_credit = max(0.10, 0.30 - state_lean * 0.15)
-        if against_pct <= 0:
+        # Two-stage curve with a base rate: below ~3% cross-party voting
+        # is party-line noise — CQ party-unity data puts typical dissent
+        # at 3-5%, and every senator strays occasionally on procedural or
+        # home-state matters. 3%→full_credit rises linearly; beyond
+        # full_credit, diminishing returns toward 100.
+        # State lean shifts the full-credit point, but is capped at 0.20:
+        # even in a safe state, genuine independence means breaking with
+        # the party on at least a fifth of contested votes. (The prior
+        # floor of 0.10 let safe-state senators with single-digit break
+        # rates score near 60 on this component.)
+        BASE_RATE = 0.03
+        full_credit = max(0.20, 0.30 - state_lean * 0.10)
+        if against_pct <= BASE_RATE:
             party_score = 20
         elif against_pct >= full_credit:
             party_score = 80 + min((against_pct - full_credit) / 0.20, 1.0) * 20
         else:
-            party_score = 20 + (against_pct / full_credit) * 60
+            party_score = 20 + (
+                (against_pct - BASE_RATE) / (full_credit - BASE_RATE)
+            ) * 60
     else:
         party_score = 50
 
-    # Donor independence via lobbying matches (algorithmically computed,
-    # not dependent on the broken stanceVote field)
+    # Donor independence via donor-vote connection matches
     total_raised = funding.get("totalRaised", 0)
     pac_ratio = (
         funding.get("totalFromPACs", 0) / total_raised
@@ -509,64 +554,70 @@ def _calc_independent_voting(
         else 0
     )
 
-    if lobbying_matches:
-        with_alignment = [
-            m for m in lobbying_matches
-            if m.get("senatorVoteAligned") is not None
-        ]
-        if with_alignment:
-            # Weighted alignment: consensus votes (bipartisan majority) carry
-            # significantly less weight as a signal of capture than divided votes.
-            weighted_aligned = 0.0
-            total_weight = 0.0
-            for m in with_alignment:
-                # 0.2x weight for consensus, 1.0x for divided
-                weight = 0.2 if m.get("isConsensusVote") else 1.0
-                total_weight += weight
-                if m.get("senatorVoteAligned"):
-                    weighted_aligned += weight
-            
-            lobby_alignment_rate = weighted_aligned / total_weight if total_weight > 0 else 0
-            # Floor at 0.25 so lobbying alignment always carries some penalty
-            # even when direct PAC contributions are zero (bundled individual
-            # donations and coordinated spending are not reflected in pac_ratio
-            # but are equally influential).
-            pac_amplifier = max(0.25, min(pac_ratio * 2, 1.0))
-            donor_score = (1 - lobby_alignment_rate * pac_amplifier) * 100
-        else:
-            # Matches found but alignment is unknown.
-            total_lobby_donations = sum(
-                m.get("donationToSenator", 0) for m in lobbying_matches
-            )
-            donation_ratio = (
-                total_lobby_donations / total_raised if total_raised > 0 else 0
-            )
-            # Count only non-consensus matches for the primary connection signal
-            non_consensus_count = sum(1 for m in lobbying_matches if not m.get("isConsensusVote"))
-            connection_factor = min(non_consensus_count / 8, 1.0)
-            
-            # Blend: more non-consensus matches + higher donation ratio = lower score.
-            penalty = connection_factor * 0.20 + min(donation_ratio * 5, 0.15)
-            donor_score = max(50, (1 - penalty) * 100)
+    # Baseline reflects data visibility: a small operation with no visible
+    # donor-vote connections is plausibly independent; a $100M+ fundraiser
+    # with no visible connections almost certainly has a data gap — at
+    # that scale influence flows through bundled donations and outside
+    # spending rather than anything our matching can see.
+    if total_raised >= 100_000_000:
+        base_donor = 50.0
+    elif total_raised >= 50_000_000:
+        base_donor = 60.0
+    elif total_raised >= 10_000_000:
+        base_donor = 67.0
     else:
-        # No lobbying signal — default scaled by fundraising total.
-        # A senator who raised $5M and has no lobbying matches is plausibly
-        # genuinely independent. A senator who raised $100M+ with no visible
-        # lobbying connections almost certainly has a data gap — at that scale,
-        # influence flows through bundled individual donations and outside
-        # spending rather than registered lobbying. The gradient prevents
-        # aggressive penalization of mid-range fundraisers (like Collins at
-        # $44M) while still flagging mega-fundraisers (Graham $133M, Cruz $115M).
-        if total_raised >= 100_000_000:
-            donor_score = 50  # outlier scale → absence of matches = likely data gap
-        elif total_raised >= 50_000_000:
-            donor_score = 60
-        elif total_raised >= 10_000_000:
-            donor_score = 67
-        else:
-            donor_score = 72  # small operations are plausibly independent
+        base_donor = 72.0
 
-    return clamp(party_score * 0.6 + donor_score * 0.4)
+    with_alignment = [
+        m for m in lobbying_matches
+        if m.get("senatorVoteAligned") is not None
+    ] if lobbying_matches else []
+
+    if with_alignment:
+        # Real alignment data: weighted alignment rate, where consensus
+        # votes (bipartisan majority) carry much less weight as a signal
+        # of capture than divided votes.
+        weighted_aligned = 0.0
+        total_weight = 0.0
+        for m in with_alignment:
+            weight = 0.2 if m.get("isConsensusVote") else 1.0
+            total_weight += weight
+            if m.get("senatorVoteAligned"):
+                weighted_aligned += weight
+
+        lobby_alignment_rate = weighted_aligned / total_weight if total_weight > 0 else 0
+        # Floor at 0.25 so lobbying alignment always carries some penalty
+        # even when direct PAC contributions are zero.
+        pac_amplifier = max(0.25, min(pac_ratio * 2, 1.0))
+        donor_score = (1 - lobby_alignment_rate * pac_amplifier) * 100
+        donor_weight = 0.40
+    elif lobbying_matches:
+        # Matches exist but alignment is unknown (senatorVoteAligned is
+        # None for all of them — the current state of the pipeline data).
+        # Penalize the visibility baseline by how much money the matched
+        # donors represent and how many matches involve divided votes.
+        # NOTE: do not use raw match count against a fixed divisor — the
+        # match list is capped upstream, which made count/8 a constant.
+        total_lobby_donations = sum(
+            m.get("donationToSenator", 0) for m in lobbying_matches
+        )
+        donation_ratio = (
+            total_lobby_donations / total_raised if total_raised > 0 else 0
+        )
+        non_consensus_share = sum(
+            1 for m in lobbying_matches if not m.get("isConsensusVote")
+        ) / len(lobbying_matches)
+
+        penalty = min(donation_ratio * 4, 0.20) + 0.08 * non_consensus_share
+        donor_score = base_donor * (1 - penalty)
+        donor_weight = 0.25
+    else:
+        donor_score = base_donor
+        donor_weight = 0.25
+
+    return clamp(
+        party_score * (1 - donor_weight) + donor_score * donor_weight
+    )
 
 
 def _calc_funding_diversity(funding: dict) -> int:
@@ -678,59 +729,76 @@ def _calc_legislative_effectiveness(
 
     Three components:
 
-      1. Bill advancement rate (40%): fraction of sponsored bills that
-         reached meaningful milestones (became law, passed chamber, or
-         received committee action). Raw passage is rare (~3-5% of
-         introduced bills become law), so advancement beyond introduction
-         is also credited.
+      1. Bill advancement rate (40%): fraction of sponsored *substantive*
+         bills (S/HR/joint resolutions) that became law, passed a chamber,
+         or were ordered reported.  Simple and concurrent resolutions are
+         excluded: commemorative resolutions are routinely "agreed to" and
+         counting them (as v3 did, together with double-counting laws)
+         saturated this component — the 2026-06 audit measured a real
+         substantive advancement median of 2.5% (p90 5.3%) vs the v3
+         inflated median of 9.4%. "Placed on calendar" and "cloture" are
+         no longer credited either (Rule XIV calendar placement skips
+         committee and signals nothing about advancement). Full credit
+         stays at 5%, which now sits just above the p90 of the honest
+         rate, matching Volden & Wiseman (2014).
 
       2. Legislative leadership (30%): PageRank score from the
          cosponsorship network (Brin & Page 1998, computed in
          sponsorship_analysis.py). Senators whose bills attract
          cosponsors from influential colleagues score higher.
 
-      3. Sponsorship volume (30%): total bills introduced, with
-         logarithmic diminishing returns. Introducing 1 bill is much
-         more meaningful than going from 100 to 101 (Bradford's law
-         of diminishing returns, Bradford 1934).
+      3. Sponsorship volume (30%): bills introduced *per congress served*,
+         linear with full credit at 80/congress.  The v3 metric applied
+         log2(total career bills)/log2(100), but the bill lists span whole
+         careers (audit median: 338 bills over 7 congresses), so nearly
+         every senator maxed the component.  Per-congress rates: senate
+         median ≈42 (→53), p10 ≈25 (→31), p90 ≈69 (→86).
 
     All components apply Bayesian shrinkage toward 50 when data is
     sparse, preventing extreme scores from thin evidence.
     """
     if not sponsored_bills:
-        # No bill data — use the same three-component formula with a neutral
-        # (50) advancement score so the no-data path is continuous with the
-        # low-data path and avoids a 32-point cliff when the first bill arrives.
-        lp = min(leadership_score, 1.0) * 100 if (leadership_score and leadership_score > 0) else 40
-        return clamp(50 * 0.40 + lp * 0.30 + 0 * 0.30)
+        # No bill data at all — neutral 50 per the design principle that
+        # missing data never scores as good or bad. When cosponsorship
+        # leadership exists, blend it in with neutral advancement/volume
+        # priors so a well-networked senator without bill data sits
+        # coherently above (not below) the fully-unknown case.
+        if leadership_score and leadership_score > 0:
+            lp = min(leadership_score, 1.0) * 100
+            return clamp(50 * 0.40 + lp * 0.30 + 50 * 0.30)
+        return 50
 
     n_bills = len(sponsored_bills)
 
-    # Component 1: advancement rate
+    # Component 1: advancement rate over substantive bills only
+    SUBSTANTIVE_TYPES = {"s", "hr", "sjres", "hjres"}
+    substantive = [
+        b for b in sponsored_bills
+        if (b.get("billType") or "").lower() in SUBSTANTIVE_TYPES
+    ]
+
     became_law = 0
     advanced = 0
-    for bill in sponsored_bills:
+    for bill in substantive:
         if bill.get("isLaw"):
             became_law += 1
         else:
             action = (bill.get("latestAction") or "").lower()
             if any(kw in action for kw in [
                 "passed", "agreed to", "ordered to be reported",
-                "placed on calendar", "cloture",
             ]):
                 advanced += 1
 
-    success_count = became_law * 2 + advanced
-    success_rate = success_count / max(n_bills, 1)
-    # Scale: 5%+ advancement is excellent in typical Congresses where only
-    # ~3-5% of introduced bills reach committee action. The prior v1 threshold
-    # of 10% treated the median-achieving senator as below average, compressing
-    # most scores below 50. Recalibrated to 5% so the distribution is symmetric
-    # around actual Senate performance (Volden & Wiseman 2014).
-    advancement_raw = min(success_rate / 0.05, 1.0) * 100
-    # Shrink toward 50 with few bills
-    advancement_conf = min(n_bills / 10, 1.0)
-    advancement_score = advancement_raw * advancement_conf + 50 * (1 - advancement_conf)
+    n_sub = len(substantive)
+    if n_sub > 0:
+        success_rate = (became_law + advanced) / n_sub
+        advancement_raw = min(success_rate / 0.05, 1.0) * 100
+        # Shrink toward 50 with few bills
+        advancement_conf = min(n_sub / 10, 1.0)
+        advancement_score = advancement_raw * advancement_conf + 50 * (1 - advancement_conf)
+    else:
+        # Only resolutions sponsored — no substantive signal.
+        advancement_score = 50.0
 
     # Component 2: leadership score from cosponsorship PageRank
     if leadership_score is not None and leadership_score > 0:
@@ -739,15 +807,10 @@ def _calc_legislative_effectiveness(
     else:
         leadership_pct = 40  # below neutral — we expected data
 
-    # Component 3: sponsorship volume with log diminishing returns.
-    # Prior ceiling was log2(200) ≈ 7.6, meaning a senator needed 200 sponsored
-    # bills to score 100 — unreachable for most legislators and leaving most
-    # senators below 87% even with 100 bills. Recalibrated to log2(100) so
-    # that 100 sponsored bills (a highly productive but achievable standard
-    # for a full term senator) maps to 100%. The typical active senator
-    # sponsors 20-40 bills per congress, scoring 50-76% on this component.
-    import math
-    volume_raw = min(math.log2(max(n_bills, 1)) / math.log2(100), 1.0) * 100
+    # Component 3: sponsorship volume per congress served
+    congresses = {b.get("congress") for b in sponsored_bills if b.get("congress")}
+    per_congress = n_bills / max(len(congresses), 1)
+    volume_raw = min(per_congress / 80.0, 1.0) * 100
 
     return clamp(
         advancement_score * 0.40

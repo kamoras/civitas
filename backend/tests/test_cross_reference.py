@@ -73,6 +73,49 @@ class TestPromiseVoteAlignment:
         if result["relatedVotes"]:
             assert "HR.1" in result["relatedVotes"]
 
+    def test_neutral_stance_votes_give_no_directional_signal(self):
+        """Topically related votes with neutral stance must not count as kept.
+
+        The 2026-06 audit found 88% of promises scored "kept" partly
+        because a Yea on any related bill counted as half-kept regardless
+        of direction.
+        """
+        votes = [
+            {"billId": "HR.1", "vote": "Yea", "policyArea": "HEALTHCARE",
+             "billName": "Prescription Drug Pricing Act",
+             "description": "Lower prescription drug costs for seniors",
+             "stance": "neutral"},
+        ]
+        result = compute_promise_vote_alignment(
+            "Lower prescription drug costs for seniors", votes
+        )
+        assert result["alignment"] != "kept"
+
+    def test_sponsorship_alone_is_partial_not_kept(self):
+        """Introducing a bill on the promised topic is effort, not fulfillment."""
+        bills = [
+            {"billId": "S.100",
+             "title": "A bill to lower prescription drug costs for seniors",
+             "isLaw": False, "latestAction": "Read twice and referred to committee"},
+        ]
+        result = compute_promise_vote_alignment(
+            "Lower prescription drug costs for seniors", [], sponsored_bills=bills,
+        )
+        assert result["alignment"] in ("partial", "unclear")
+        assert result["alignment"] != "kept"
+
+    def test_advanced_sponsored_bill_counts_as_kept(self):
+        """A sponsored bill that became law is genuine promise fulfillment."""
+        bills = [
+            {"billId": "S.100",
+             "title": "A bill to lower prescription drug costs for seniors",
+             "isLaw": True, "latestAction": "Became Public Law No: 119-45"},
+        ]
+        result = compute_promise_vote_alignment(
+            "Lower prescription drug costs for seniors", [], sponsored_bills=bills,
+        )
+        assert result["alignment"] == "kept"
+
 
 # ── Industry-policy embedding similarity ─────────────────────────
 

@@ -1048,7 +1048,20 @@ async def run_full_pipeline(
                         client, db, committee_id
                     )
 
-                outside = await fetch_outside_spending(client, db, candidate_id)
+                # Match the outside-spending window to the receipt window
+                # (normalize_finance sums the two most recent cycles).
+                # /candidate/{id}/totals returns election-period rows where
+                # `cycle` may be null — fall back to candidate_election_year,
+                # and include the preceding 2-year cycle since independent
+                # expenditures accrue across the election period.
+                recent_cycles = []
+                for c in financials[:2]:
+                    ey = c.get("cycle") or c.get("candidate_election_year")
+                    if ey:
+                        recent_cycles.extend([int(ey), int(ey) - 2])
+                outside = await fetch_outside_spending(
+                    client, db, candidate_id, cycles=recent_cycles
+                )
                 logger.info(
                     "Outside spending for %s: $%.0f",
                     senator["name"],
@@ -1911,6 +1924,12 @@ async def run_full_pipeline(
                 logger.info("Score calibration: no drift detected")
         except Exception:
             logger.exception("Score calibration check failed (non-fatal)")
+
+        try:
+            from app.pipeline.analyze.ground_truth import check_ground_truth
+            check_ground_truth(db)
+        except Exception:
+            logger.exception("Ground truth check failed (non-fatal)")
 
         logger.info("--- Phase 7: FINALIZE ---")
         progress.begin("finalize")

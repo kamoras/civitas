@@ -154,9 +154,12 @@ async def run_house_pipeline() -> dict:
 
             logger.info("Found %d House roll calls from bill actions", len(house_roll_calls))
 
-            # Fetch recent House roll calls
+            # Fetch recent House roll calls. 30 (up from 15) so that after
+            # bipartisan votes are excluded from party-loyalty counting,
+            # reps still have enough divided votes for a meaningful
+            # Independent Voting score (the IV formula needs >= 3).
             current_year = datetime.now().year
-            recent_rcs = await fetch_recent_house_roll_calls(client, db, year=current_year, count=15)
+            recent_rcs = await fetch_recent_house_roll_calls(client, db, year=current_year, count=30)
             logger.info("Fetched %d recent House roll calls", len(recent_rcs))
 
             # Map recent roll calls by a synthetic billId
@@ -213,22 +216,31 @@ async def run_house_pipeline() -> dict:
             classified_recent = await classify_all_bills(recent_for_classification, db)
             logger.info("Classified %d recent House votes", len(classified_recent))
 
-            # Add vote split data from roll calls
+            # Refine LLM party leanings with actual roll-call splits.
+            # The real member-vote split is authoritative for party-loyalty
+            # measurement (see refine_with_vote_data) — previously it was
+            # only used when the LLM produced no label, so bipartisan-passed
+            # bills kept partisan content labels and half the chamber was
+            # marked as voting "against party" on near-unanimous bills.
+            from app.pipeline.analyze.party_platform import refine_with_vote_data
+
             for bill in classified_bills:
                 bill_id = bill.get("billId", "")
                 rc = house_roll_calls.get(bill_id)
                 if rc:
                     split = compute_party_split(rc)
-                    if split and not bill.get("partyLeaning"):
-                        bill["partyLeaning"] = split
+                    bill["partyLeaning"] = refine_with_vote_data(
+                        bill.get("partyLeaning", "bipartisan"), split,
+                    )
 
             for bill in classified_recent:
                 bill_id = bill.get("billId", "")
                 rc = recent_rc_map.get(bill_id)
                 if rc:
                     split = compute_party_split(rc)
-                    if split and not bill.get("partyLeaning"):
-                        bill["partyLeaning"] = split
+                    bill["partyLeaning"] = refine_with_vote_data(
+                        bill.get("partyLeaning", "bipartisan"), split,
+                    )
 
             # ── PHASE 4b: SPONSORSHIP ANALYSIS (PageRank + SVD) ──
             logger.info("--- House Phase 4b: SPONSORSHIP ANALYSIS ---")
@@ -469,7 +481,14 @@ async def run_house_pipeline() -> dict:
                                 raw_pac_receipts.extend(await fetch_pac_receipts(client, db, comm_id))
                                 aggregated.extend(await fetch_aggregated_contributors(client, db, comm_id))
 
-                        outside = await fetch_outside_spending(client, db, cand_id)
+                        recent_cycles = []
+                        for c in financials[:2]:
+                            ey = c.get("cycle") or c.get("candidate_election_year")
+                            if ey:
+                                recent_cycles.extend([int(ey), int(ey) - 2])
+                        outside = await fetch_outside_spending(
+                            client, db, cand_id, cycles=recent_cycles
+                        )
                         logger.info(
                             "Outside spending for %s: $%.0f",
                             rep_name,

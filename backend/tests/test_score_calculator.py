@@ -29,12 +29,16 @@ class TestClamp:
 
 
 class TestFundingIndependence:
-    """Higher score = less PAC dependency, less top-donor concentration."""
+    """Higher score = less PAC dependency, more small donors, less
+    top-donor concentration (v4: 50% PAC+outside / 25% small / 25% conc)."""
 
     def test_ideal_grassroots(self):
+        # 0% PAC (→100), 55% small donors (→100), donor pool too small to
+        # measure concentration (→ neutral 50): 50 + 25 + 12.5 = 87.5.
         funding = {
             "totalRaised": 1_000_000,
             "totalFromPACs": 0,
+            "smallDonorPercentage": 55,
             "topDonors": [{"total": 100} for _ in range(10)],
         }
         score = _calc_funding_independence(funding)
@@ -49,16 +53,13 @@ class TestFundingIndependence:
         assert _calc_funding_independence(funding) < 20
 
     def test_balanced_funding(self):
-        # 30% PAC ratio + 20% top-10 concentration.
-        # Calibrated formula (Barber 2016 / Bonica 2014): median senator
-        # (25% PAC, 20% concentration) scores ~50, so 30% PAC should land
-        # slightly below neutral.  Expected range updated from v1 (50-90)
-        # to reflect recalibrated multipliers (PAC ×2.0, conc ×2.5).
-        # pac_score = (1-0.30*2.0)*100 = 40; conc_score = (1-0.20*2.5)*100 = 50
-        # FI = 0.5*40 + 0.5*50 = 45.
+        # Median-ish senator: 30% PAC (→40), 17% small donors (→42.5),
+        # concentration pool below the $250K floor (→ neutral 50):
+        # FI = 0.5*40 + 0.25*42.5 + 0.25*50 ≈ 43.
         funding = {
             "totalRaised": 1_000_000,
             "totalFromPACs": 300_000,
+            "smallDonorPercentage": 17,
             "topDonors": [{"total": 20_000} for _ in range(10)],
         }
         score = _calc_funding_independence(funding)
@@ -69,14 +70,41 @@ class TestFundingIndependence:
         assert _calc_funding_independence({"totalRaised": 0}) == 50
 
     def test_low_pac_but_concentrated(self):
-        """Low PAC ratio but one big individual donor = penalized for concentration."""
+        """Low PAC ratio but a top-heavy donor pool = penalized for concentration."""
         funding = {
             "totalRaised": 1_000_000,
             "totalFromPACs": 50_000,
-            "topDonors": [{"total": 800_000}],
+            # Top 10 donors hold 800K of an 830K external pool (96%).
+            "topDonors": (
+                [{"total": 80_000} for _ in range(10)]
+                + [{"total": 2_000} for _ in range(15)]
+            ),
         }
         score = _calc_funding_independence(funding)
         assert score < 50
+
+    def test_own_committees_excluded_from_concentration(self):
+        """Transfers from the candidate's own committees are not donors.
+
+        A senator whose 'top donors' are their own victory committees
+        (routine joint fundraising) must not be scored as captured —
+        the 2026-06 audit found this artifact put a reference senator
+        at FI 31.
+        """
+        base = {
+            "totalRaised": 5_000_000,
+            "totalFromPACs": 250_000,
+            "smallDonorPercentage": 20,
+            "topDonors": [{"total": 30_000} for _ in range(30)],
+        }
+        with_transfers = {
+            **base,
+            "topDonors": [
+                {"total": 2_000_000, "type": "CandidateAffiliated"},
+                {"total": 1_000_000, "type": "CandidateAffiliated"},
+            ] + base["topDonors"],
+        }
+        assert _calc_funding_independence(with_transfers) == _calc_funding_independence(base)
 
     def test_many_pacs_but_diversified(self):
         """High PAC ratio but spread across many small PACs.
@@ -229,6 +257,7 @@ class TestFundingDiversity:
 
     def test_fully_classified_itemized(self):
         funding = {
+            "totalRaised": 1_000_000,
             "smallDonorPercentage": 10,
             "industryBreakdown": [
                 {"industry": "FINANCE", "percentage": 20},
@@ -243,6 +272,7 @@ class TestFundingDiversity:
     def test_grassroots_small_donors_scores_high(self):
         """High small-donor percentage = broad grassroots base = high diversity."""
         funding = {
+            "totalRaised": 1_000_000,
             "smallDonorPercentage": 90,
             "industryBreakdown": [
                 {"industry": "OTHER", "percentage": 5},
@@ -254,6 +284,7 @@ class TestFundingDiversity:
     def test_single_industry_dominated(self):
         """Concentrated in one industry = low diversity score."""
         funding = {
+            "totalRaised": 1_000_000,
             "smallDonorPercentage": 20,
             "industryBreakdown": [
                 {"industry": "OIL_GAS", "percentage": 75},
@@ -376,7 +407,8 @@ class TestLegislativeEffectiveness:
     def test_prolific_but_no_passage(self):
         """Many bills introduced but none advanced — moderate score from volume only."""
         bills = [
-            {"title": f"Bill {i}", "isLaw": False, "latestAction": "Introduced"}
+            {"title": f"Bill {i}", "isLaw": False, "latestAction": "Introduced",
+             "billType": "s", "congress": 119}
             for i in range(50)
         ]
         score = _calc_legislative_effectiveness(bills, None)
@@ -385,11 +417,15 @@ class TestLegislativeEffectiveness:
     def test_high_passage_rate(self):
         """Bills that became law should boost the score significantly."""
         bills = [
-            {"title": "Good Bill", "isLaw": True, "latestAction": "Became public law"},
-            {"title": "Also Good", "isLaw": True, "latestAction": "Became public law"},
-            {"title": "Decent", "isLaw": False, "latestAction": "Passed Senate"},
+            {"title": "Good Bill", "isLaw": True, "latestAction": "Became public law",
+             "billType": "s", "congress": 119},
+            {"title": "Also Good", "isLaw": True, "latestAction": "Became public law",
+             "billType": "s", "congress": 119},
+            {"title": "Decent", "isLaw": False, "latestAction": "Passed Senate",
+             "billType": "s", "congress": 119},
         ] + [
-            {"title": f"Bill {i}", "isLaw": False, "latestAction": "Introduced"}
+            {"title": f"Bill {i}", "isLaw": False, "latestAction": "Introduced",
+             "billType": "s", "congress": 119}
             for i in range(10)
         ]
         score = _calc_legislative_effectiveness(bills, 0.5)
@@ -403,18 +439,48 @@ class TestLegislativeEffectiveness:
         assert score_high > score_low
 
     def test_advancement_keywords(self):
-        """Bills that passed committee or chamber should count as advanced."""
-        bills = [
-            {"title": "B1", "isLaw": False, "latestAction": "Ordered to be reported"},
-            {"title": "B2", "isLaw": False, "latestAction": "Placed on calendar"},
-            {"title": "B3", "isLaw": False, "latestAction": "Introduced"},
+        """Committee/chamber milestones count as advanced; calendar placement doesn't.
+
+        Senate Rule XIV places bills on the calendar without committee
+        action, so "Placed on calendar" signals nothing about advancement.
+        """
+        introduced = [
+            {"title": f"B{i}", "isLaw": False, "latestAction": "Introduced",
+             "billType": "s", "congress": 119}
+            for i in range(3)
         ]
-        score_advanced = _calc_legislative_effectiveness(bills, None)
-        score_none = _calc_legislative_effectiveness(
-            [{"title": f"B{i}", "isLaw": False, "latestAction": "Introduced"} for i in range(3)],
-            None,
-        )
-        assert score_advanced > score_none
+        reported = [
+            {"title": "B1", "isLaw": False, "latestAction": "Ordered to be reported",
+             "billType": "s", "congress": 119},
+        ] + introduced[:2]
+        calendar_only = [
+            {"title": "B1", "isLaw": False, "latestAction": "Placed on calendar",
+             "billType": "s", "congress": 119},
+        ] + introduced[:2]
+
+        score_reported = _calc_legislative_effectiveness(reported, None)
+        score_calendar = _calc_legislative_effectiveness(calendar_only, None)
+        score_none = _calc_legislative_effectiveness(introduced, None)
+        assert score_reported > score_none
+        assert score_calendar == score_none
+
+    def test_resolutions_excluded_from_advancement(self):
+        """Commemorative resolutions being 'agreed to' must not inflate advancement."""
+        substantive_only = [
+            {"title": f"B{i}", "isLaw": False, "latestAction": "Introduced",
+             "billType": "s", "congress": 119}
+            for i in range(10)
+        ]
+        with_resolutions = substantive_only + [
+            {"title": f"R{i}", "isLaw": False,
+             "latestAction": "Resolution agreed to in Senate",
+             "billType": "sres", "congress": 119}
+            for i in range(10)
+        ]
+        score_plain = _calc_legislative_effectiveness(substantive_only, 0.5)
+        score_res = _calc_legislative_effectiveness(with_resolutions, 0.5)
+        # The resolutions add volume but must not count as advancement.
+        assert score_res <= score_plain + 10
 
 
 class TestCalculateScoresIntegration:

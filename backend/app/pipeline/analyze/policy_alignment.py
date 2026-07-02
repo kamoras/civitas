@@ -257,12 +257,13 @@ def compute_promise_vote_alignment(
                         kept_signals += sim
                     else:
                         broken_signals += sim
-                else:
-                    half_sim = sim * 0.5
-                    if vote_cast == "Yea":
-                        kept_signals += half_sim
-                    else:
-                        broken_signals += half_sim
+                # Neutral/unknown stance: the vote is related to the promise
+                # topic but we cannot tell which direction honors it, so it
+                # contributes no kept/broken signal. (Previously a Yea on any
+                # topically-related bill counted as half-kept, which — since
+                # most classified stances are neutral and most floor votes
+                # pass — biased promise evaluation heavily toward "kept":
+                # the 2026-06 audit measured 88% of promises as kept.)
 
             for idx in top_indices[:2]:
                 if float(similarities[idx]) < relevance_threshold:
@@ -274,14 +275,25 @@ def compute_promise_vote_alignment(
                 )
 
     # ── Sponsored bill evidence ──
+    # Sponsoring a bill on the promised topic is effort, not fulfillment:
+    # introducing a bill is free and senators sponsor bills on their own
+    # platform topics almost by definition. Counting introduction as
+    # "kept" (as prior versions did) made promise evaluation circular —
+    # promises extracted from a senator's platform were marked kept
+    # because the senator sponsored legislation about their platform.
+    # Only bills that actually advanced (became law, passed a chamber,
+    # or were ordered reported) count as kept evidence; introduction-only
+    # bills accumulate an "effort" signal that can at most yield a
+    # "partial" alignment.
     BILL_WEIGHT = 0.5
     related_bills: list[str] = []
+    effort_signals = 0.0
 
     if sponsored_bills:
+        candidates = [b for b in sponsored_bills if b.get("title")]
         bill_texts = [
             (b.get("officialTitle") or b.get("title", ""))[:300]
-            for b in sponsored_bills
-            if b.get("title")
+            for b in candidates
         ]
         if bill_texts:
             bill_embs = _embed_batch(bill_texts)
@@ -293,12 +305,25 @@ def compute_promise_vote_alignment(
                     bsim = float(bill_sims[bidx])
                     if bsim < bill_relevance_threshold:
                         continue
-                    bill = sponsored_bills[bidx]
+                    bill = candidates[bidx]
                     related_bills.append(bill.get("billId", ""))
-                    kept_signals += bsim * BILL_WEIGHT
-                    reasons.append(
-                        f"Sponsored {bill.get('title', bill.get('billId', ''))[:80]}"
+
+                    action = (bill.get("latestAction") or "").lower()
+                    bill_advanced = bill.get("isLaw") or any(
+                        kw in action for kw in [
+                            "passed", "agreed to", "ordered to be reported",
+                        ]
                     )
+                    if bill_advanced:
+                        kept_signals += bsim * BILL_WEIGHT
+                        reasons.append(
+                            f"Advanced {bill.get('title', bill.get('billId', ''))[:80]}"
+                        )
+                    else:
+                        effort_signals += bsim * BILL_WEIGHT
+                        reasons.append(
+                            f"Sponsored {bill.get('title', bill.get('billId', ''))[:80]}"
+                        )
 
     if not related_votes and not related_bills:
         return {
@@ -311,20 +336,24 @@ def compute_promise_vote_alignment(
 
     total_signal = kept_signals + broken_signals
     if total_signal == 0:
-        alignment = "unclear"
-        confidence = 0.3
+        if effort_signals > 0:
+            # Legislation introduced on the topic but no directional vote
+            # evidence and nothing advanced: acted on the promise without
+            # a measurable outcome.
+            alignment = "partial"
+            confidence = 0.4
+        else:
+            alignment = "unclear"
+            confidence = 0.3
     elif kept_signals > broken_signals * 1.3:
         alignment = "kept"
         confidence = min(kept_signals / total_signal, 1.0)
     elif broken_signals > kept_signals * 1.3:
         alignment = "broken"
         confidence = min(broken_signals / total_signal, 1.0)
-    elif total_signal > 0:
+    else:
         alignment = "partial"
         confidence = 0.5
-    else:
-        alignment = "unclear"
-        confidence = 0.0
 
     return {
         "alignment": alignment,
