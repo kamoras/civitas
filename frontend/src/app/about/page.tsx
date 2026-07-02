@@ -117,16 +117,20 @@ export default function AboutPage() {
               <div>
                 <Label>Funding Independence (25%)</Label>
                 <P>
-                  Measures two independent dimensions: (1) the ratio of individual donors to
-                  corporate PAC money, and (2) top-donor concentration — what fraction of
-                  total fundraising comes from the top 10 donors. PAC dependency is
-                  operationalized following Stratmann (2005),
+                  Measures three dimensions: (1) PAC dependency — a blend of the share of
+                  funding from PACs and the absolute PAC dollars received, so that very
+                  large campaigns cannot dilute significant PAC money into a tiny
+                  percentage (PAC checks are legally capped; individual money is not);
+                  (2) the share of funding from small (&lt;$200, unitemized) donors — the
+                  broadest possible funding base; and (3) relative top-donor
+                  concentration — what fraction of the itemized external donor pool comes
+                  from the top 10 donors, with the senator&apos;s own money and transfers from
+                  their own committees excluded. PAC dependency follows Stratmann (2005),
                   <Cite id="5">Stratmann 2005</Cite>
                   who found that PAC contributions are more strongly correlated with
-                  roll-call alignment than individual contributions. The donor concentration
-                  component applies the same intuition as HHI but at the donor level,
-                  following Bonica (2014) who demonstrated that donor composition is a
-                  strong predictor of legislative behavior.
+                  roll-call alignment than individual contributions. The concentration
+                  component applies the same intuition as HHI at the donor level,
+                  following Bonica (2014).
                   <Cite id="1">Bonica 2014</Cite>
                 </P>
               </div>
@@ -174,14 +178,17 @@ export default function AboutPage() {
                   The score is adjusted by state partisan lean using Cook PVI as a proxy:
                   a senator in a safe R+20 state voting with their party may be representing
                   constituents, not following orders. Raw break rates are misleading without
-                  this contextual adjustment.
+                  this contextual adjustment. Note on composition: confirmation votes on
+                  nominations make up a large share of recent Senate roll calls, so
+                  measured independence reflects both legislation and nominations —
+                  both are genuine, whipped party-line tests.
                 </P>
                 <P>
-                  The score blends two components: party independence (60%) — the rate of
-                  breaking with the party on non-state-relevant votes — and donor independence
-                  (40%) — whether votes appear free from donor influence, measured by
-                  lobbying match alignment and PAC funding levels. We follow the
-                  methodological caution of Ansolabehere et al. (2003)
+                  The score blends two components: party independence (75%) — the rate of
+                  breaking with the party on non-state-relevant votes — and donor
+                  independence (25%) — a heuristic based on the money associated with
+                  donor-vote topical overlaps. We follow the methodological caution of
+                  Ansolabehere et al. (2003)
                   <Cite id="18">Ansolabehere et al. 2003</Cite>
                   in interpreting donation-vote correlations: correlation does not prove causation.
                   <Cite id="5">Stratmann 2005</Cite>
@@ -215,6 +222,41 @@ export default function AboutPage() {
                 </P>
               </div>
             </div>
+          </Section>
+
+          {/* ── Known Limitations ── */}
+          <Section title="KNOWN LIMITATIONS &amp; DISCLOSURES">
+            <P>
+              <em className="text-matrix-green/80">Scores correlate with funding style,
+              and funding style correlates with party.</em> In current data, Democratic
+              senators take roughly half the PAC share of Republican senators (median
+              ~10% vs ~17%) and raise about twice the small-donor share (~24% vs ~12%).
+              Because Funding Independence measures those behaviors directly, average
+              scores differ by party. The formulas are identical for everyone and contain
+              no party term; the gap reflects measured funding behavior, not editorial
+              judgment.
+            </P>
+            <P>
+              <em className="text-matrix-green/80">Fundraising scale still matters.</em>{" "}
+              Larger campaigns naturally have smaller PAC <em>shares</em> because PAC
+              checks are legally capped while individual money is not. We mitigate this
+              by scoring absolute PAC dollars alongside the share, but no single number
+              fully separates &quot;independent&quot; from &quot;big.&quot;
+            </P>
+            <P>
+              <em className="text-matrix-green/80">Comparison windows differ by tenure
+              and chamber.</em> Funding metrics cover a member&apos;s two most recent
+              election periods — roughly 8 years for a veteran senator, 2 for a freshman,
+              4 for House members — so cross-member comparisons weigh different spans of
+              time.
+            </P>
+            <P>
+              <em className="text-matrix-green/80">Donor-vote connections are semantic
+              overlaps, not lobbying records.</em> They aggregate employee and PAC money
+              associated with an organization and match it to vote topics by embedding
+              similarity. They indicate where money and votes intersect; they do not
+              establish influence.
+            </P>
           </Section>
 
           {/* ── House Representatives ── */}

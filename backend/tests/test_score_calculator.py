@@ -83,6 +83,27 @@ class TestFundingIndependence:
         score = _calc_funding_independence(funding)
         assert score < 50
 
+    def test_pac_volume_penalizes_diluted_pac_money(self):
+        """$5M of PAC money must not vanish inside a $100M campaign.
+
+        Share alone gave mega-fundraisers near-perfect PAC scores because
+        capped PAC checks shrink as a fraction of unbounded individual
+        money (audit: FI vs log(raised) r=+0.68).
+        """
+        small_campaign = {
+            "totalRaised": 10_000_000,
+            "totalFromPACs": 500_000,   # 5% share, $0.5M volume
+            "smallDonorPercentage": 15,
+            "topDonors": [],
+        }
+        mega_campaign = {
+            "totalRaised": 100_000_000,
+            "totalFromPACs": 5_000_000,  # same 5% share, $5M volume
+            "smallDonorPercentage": 15,
+            "topDonors": [],
+        }
+        assert _calc_funding_independence(mega_campaign) < _calc_funding_independence(small_campaign)
+
     def test_own_committees_excluded_from_concentration(self):
         """Transfers from the candidate's own committees are not donors.
 
@@ -234,6 +255,33 @@ class TestIndependentVoting:
             record, [], funding, state="NV", party="R"
         )
         assert score_deep_red > score_swing
+
+    def test_nomination_votes_weighted_like_legislation(self):
+        """Nominations are whipped party-line tests; they count at full weight.
+
+        (A ×0.5 down-weighting experiment inflated IV for members whose
+        loyalty concentrates on nominations — see the note in
+        _calc_independent_voting.)
+        """
+        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
+        legis = {
+            "keyVotes": [
+                {"votedWithParty": i >= 10, "policyArea": "JUSTICE",
+                 "vote": "Yea", "stance": "neutral"}
+                for i in range(100)
+            ],
+            "recentVotes": [],
+        }
+        noms = {
+            "keyVotes": [
+                {"votedWithParty": i >= 10, "policyArea": "JUSTICE",
+                 "vote": "Yea", "stance": "nomination"}
+                for i in range(100)
+            ],
+            "recentVotes": [],
+        }
+        assert _calc_independent_voting(legis, [], funding) == \
+            _calc_independent_voting(noms, [], funding)
 
     def test_two_stage_curve_creates_spread(self):
         """Different independence levels should produce meaningfully different scores."""

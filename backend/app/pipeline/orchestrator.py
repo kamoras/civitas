@@ -1610,8 +1610,15 @@ async def run_full_pipeline(
                     precomputed=precomputed,
                 )
                 analysis = analysis_results[0] if analysis_results else {}
+                # Clean promises BEFORE scoring and persistence so the
+                # Promise Persistence score is computed from exactly the
+                # promises users will see (the read path applies the same
+                # rules only as a legacy safety net).
+                from app.pipeline.analyze.promise_quality import clean_promises
                 platform_data = {
-                    "campaignPromises": analysis.get("campaignPromises", []),
+                    "campaignPromises": clean_promises(
+                        analysis.get("campaignPromises", [])
+                    ),
                     "platformSummary": analysis.get("platformSummary", ""),
                 }
                 all_key_votes = analysis.get("keyVotes") or voting_record["keyVotes"]

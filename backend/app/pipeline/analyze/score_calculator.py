@@ -210,12 +210,18 @@ def _calc_funding_independence(funding: dict) -> int:
     Three components, calibrated so the median senator scores ≈50 on each
     (empirical distributions from the 2026-06 audit of FEC cycle totals):
 
-      1. PAC dependency (50%): fraction of funding from PACs (FEC cycle
-         totals, Schedule A) plus half-weighted outside spending
-         (Schedule E independent expenditures supporting the candidate).
-         Median true PAC ratio is ≈28% (audit; consistent with Barber
-         2016, Table 2 ≈25–30%), so the ×2.0 multiplier puts the median
-         near 50.  At 0% PAC: 100; at 50%: 0.
+      1. PAC dependency (50%): PAC *share*, scaled by a penalty-only
+         absolute-*dollar* factor.  Share: fraction of funding from PACs
+         (FEC cycle totals, Schedule A) plus half-weighted outside
+         spending (Schedule E independent expenditures supporting the
+         candidate); median true PAC ratio is ≈28% (audit; consistent
+         with Barber 2016, Table 2 ≈25–30%), so the ×2.0 multiplier puts
+         the median near 50.  Dollar factor: ×1.0 at $0 down to ×0.5 at
+         $4M+ (audit median $2.0M → ×0.75).  This corrects the mechanical
+         scale bias of share alone (PAC checks are capped, individual
+         money is not, so mega-campaigns dilute PAC money to
+         invisibility) without letting modest absolute dollars rescue a
+         fully PAC-funded small campaign.
 
       2. Small-donor share (25%): unitemized (<$200) contributions as a
          share of total receipts — the broadest-possible funding base and
@@ -246,7 +252,8 @@ def _calc_funding_independence(funding: dict) -> int:
         return 50
 
     # Component 1: PAC dependency incl. outside spending (50% weight)
-    pac_ratio = funding.get("totalFromPACs", 0) / total_raised
+    pac_total = funding.get("totalFromPACs", 0)
+    pac_ratio = pac_total / total_raised
 
     # Outside spending is not controlled by the candidate but signals
     # aligned-industry investment in the seat. Half-weight because it is
@@ -256,7 +263,20 @@ def _calc_funding_independence(funding: dict) -> int:
         effective_outside = outside_for / (total_raised + outside_for) * 0.5
         pac_ratio = min(pac_ratio + effective_outside, 1.0)
 
-    pac_score = max(0.0, (1.0 - pac_ratio * 2.0)) * 100
+    ratio_score = max(0.0, (1.0 - pac_ratio * 2.0)) * 100
+
+    # Scale the share-based score by an absolute-dollar factor. Share
+    # alone has a mechanical scale bias: PAC checks are capped (~$10K per
+    # PAC per cycle) while individual money scales without bound, so a
+    # $100M campaign dilutes millions of PAC dollars to a near-zero share
+    # and scores as "independent" — the 2026-07 audit measured FI vs
+    # log(total raised) at r=+0.68. The factor is penalty-only (it can
+    # halve the share score but never raise it, so a small fully-PAC-
+    # funded campaign still scores ~0). Calibrated to the audit
+    # distribution of two-election-window PAC receipts: $0 → no penalty,
+    # median $2.0M → ×0.75, $4M+ (p90 $4.4M) → ×0.5.
+    volume_factor = 0.5 + 0.5 * max(0.0, 1.0 - pac_total / 4_000_000)
+    pac_score = ratio_score * volume_factor
 
     # Component 2: small-donor share (25% weight)
     small_pct = funding.get("smallDonorPercentage", 0) or 0
@@ -505,6 +525,13 @@ def _calc_independent_voting(
         # less informative about party loyalty than a vote on a 100% D bill.
         # This implements the weighted-expert aggregation framework from
         # Clemen (1989, "Combining Forecasts," Intl J Forecasting 5:4).
+        # NOTE on composition: nominations are ~43% of party-labeled votes
+        # in the current Senate (2026-07 audit). They are deliberately
+        # weighted the same as legislation — an experiment down-weighting
+        # them ×0.5 inflated IV for members whose loyalty concentrates on
+        # nominations while their breaks are legislative (a party leader
+        # jumped from 55 to 68 and out of the ground-truth range).
+        # Confirmation votes are genuine, whipped party-line tests.
         weight = 1.0
         if isinstance(v, dict):
             raw_weight = v.get("partyAlignmentWeight", 0.0)

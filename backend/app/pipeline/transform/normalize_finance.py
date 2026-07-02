@@ -13,6 +13,7 @@ industry classifier.
 
 import logging
 
+from app.pipeline.transform.candidate_names import is_candidate_self_donor
 from app.pipeline.transform.industry_classifier import classify_with_learning
 from app.pipeline.analyze.donor_classifier_ai import (
     classify_donor_type_semantic,
@@ -91,6 +92,7 @@ def normalize_finance(
         total_raised=total_raised,
         ai_classifications=ai_classifications,
         db_session=db_session,
+        candidate_name=candidate_name,
     )
 
     computed_pac_total = sum(
@@ -245,6 +247,16 @@ def build_top_donors(
                 "industry": industry,
             }
 
+    # The candidate's own money (self-loans recorded as "Lastname,
+    # Firstname") is frequently mistyped Org/Employees by the semantic
+    # classifier — the 2026-07 audit found 19 senators listed as their own
+    # top donor ($19M for one). Deterministically reclassify so downstream
+    # consumers (FI concentration, donor-vote matches) can exclude it.
+    for d in donor_map.values():
+        if d["type"] not in ("Self-Funded", "CandidateAffiliated") and \
+                is_candidate_self_donor(d["name"], candidate_name):
+            d["type"] = "Self-Funded"
+
     sorted_donors = sorted(donor_map.values(), key=lambda d: d["total"], reverse=True)
     return [
         {
@@ -285,6 +297,7 @@ def _build_industry_breakdown(
     total_raised: float,
     ai_classifications: dict[str, dict] | None = None,
     db_session=None,
+    candidate_name: str = "",
 ) -> list[dict]:
     """Build a funding breakdown showing all sources by industry.
 
@@ -325,6 +338,10 @@ def _build_industry_breakdown(
             return True
         if is_skip_entity(name_upper):
             return True
+        # The candidate's own money is not industry money — the semantic
+        # classifier misses "Lastname, Firstname" self-loans.
+        if candidate_name and is_candidate_self_donor(name_upper, candidate_name):
+            return True
         return False
 
     for r in pac_receipts:
@@ -348,6 +365,8 @@ def _build_industry_breakdown(
     for r in individual_receipts:
         employer = (r.get("contributor_employer") or "").upper().strip()
         if not employer or employer in skip_employer_bd:
+            continue
+        if _should_skip_for_breakdown(employer):
             continue
         employer_totals[employer] = employer_totals.get(employer, 0) + (
             r.get("contribution_receipt_amount", 0) or 0

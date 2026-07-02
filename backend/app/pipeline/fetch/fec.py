@@ -131,20 +131,38 @@ async def find_candidate(
     return match
 
 
+def _sort_financials_recent_first(results: list[dict]) -> list[dict]:
+    """Order candidate totals rows most-recent-first.
+
+    The API's `sort=-cycle` is a no-op for election-full rows (they return
+    `cycle: null`), so row order is not guaranteed — the 2026-07 audit
+    found one senator whose `[:2]` window was his 1984 and 2014 races
+    while his most recent (and largest) race was dropped. Sort explicitly
+    by election year.
+    """
+    return sorted(
+        results,
+        key=lambda c: c.get("candidate_election_year") or c.get("cycle") or 0,
+        reverse=True,
+    )
+
+
 async def fetch_candidate_financials(
     client: httpx.AsyncClient, db: Session, candidate_id: str
 ) -> list[dict]:
-    """Fetch candidate financial totals."""
+    """Fetch candidate financial totals, most recent election period first."""
     cache_key = f"candidate-financials-{candidate_id}"
     cached = api_cache_get(db, "fec", cache_key)
     if cached is not None:
-        return cached
+        # Sort cached entries too — entries cached before 2026-07 were
+        # stored in whatever order the API returned.
+        return _sort_financials_recent_first(cached)
 
     data = await _fetch_with_retry(
         client,
         f"{FEC_API_BASE}/candidate/{candidate_id}/totals/?sort=-cycle&per_page=4",
     )
-    results = (data or {}).get("results", [])
+    results = _sort_financials_recent_first((data or {}).get("results", []))
     api_cache_set(db, "fec", cache_key, results)
     return results
 

@@ -380,9 +380,13 @@ def detect_donor_vote_connections(
     semantic similarity between each donor's industry description and each
     vote's content.
     """
+    # Self-Funded excluded: a senator's own money is not a donor interest.
+    # (The 2026-07 audit found self-loans surfacing as senators' biggest
+    # "lobbying connection" — e.g. "Scott, Rick — $19M" matched to
+    # rick-scott's own votes.)
     external = [
         d for d in donors
-        if d.get("type") not in ("CandidateAffiliated", "SKIP")
+        if d.get("type") not in ("CandidateAffiliated", "Self-Funded", "SKIP")
         and d.get("industry") not in ("OTHER", "POLITICAL", "SMALL_DONORS", "LARGE_INDIVIDUAL")
     ]
     if not external:
@@ -492,9 +496,16 @@ def detect_donor_vote_connections(
                 "senatorVoteAligned": None,
                 "isConsensusVote": all_consensus,
                 "similarity": round(best_sim, 3),
+                # Careful phrasing: these totals are employer-aggregated
+                # individual contributions plus PAC money (often far above
+                # the per-PAC legal limit), and topical overlap is not
+                # evidence of influence. Describe the overlap; don't imply
+                # causation or a single org-level donation.
                 "description": (
-                    f"{donor_name} ({donor.get('industry', '?')}) donated "
-                    f"${donor.get('total', 0):,.0f}. "
+                    f"Individuals and PACs associated with {donor_name} "
+                    f"({donor.get('industry', '?')}) contributed "
+                    f"${donor.get('total', 0):,.0f} across recent cycles. "
+                    f"Votes on related topics: "
                     + ". ".join(desc_parts) + "."
                 ),
             }

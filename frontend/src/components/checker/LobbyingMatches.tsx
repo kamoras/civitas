@@ -12,8 +12,11 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
   return (
     <div>
       <div className="text-[10px] text-matrix-green/50 mb-3">
-        Cases where a donor to this senator also had interests in legislation the senator voted on.
-        A connection does not prove influence — it highlights where money and votes intersect.
+        Cases where money associated with an organization (employee donations
+        plus PAC contributions, aggregated across recent cycles) overlaps
+        topically with legislation the senator voted on. Overlap is detected
+        by semantic similarity, not lobbying-registry records, and does not
+        prove influence — it highlights where money and votes intersect.
       </div>
       <div className="space-y-4">
         {matches.map((match, i) => (
@@ -26,9 +29,9 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
             </div>
 
             <div className="text-xs font-mono text-matrix-green/60 mb-3 space-y-1">
-              <div>DONATED: {formatCurrency(match.donationToSenator)}</div>
+              <div>ASSOCIATED CONTRIBUTIONS: {formatCurrency(match.donationToSenator)}</div>
               <div className="flex items-center gap-1 flex-wrap">
-                <span>LINKED BILL:</span>
+                <span>TOPICALLY RELATED BILLS:</span>
                 {match.billsInfluenced.map((b, j) => {
                   const url = billUrl(b);
                   return url ? (

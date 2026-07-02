@@ -6,23 +6,13 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models import CampaignPromise, Donor, IndustryDonation, KeyVote, LobbyingMatch, ScoreSnapshot, Senator
 
-_FILLER_RE = re.compile(
-    r"has received funding from|(?:^|[,.])\s*a political PAC"
-    r"|opposes the removal of the United States Army"
-    r"|which is (?:not )?(?:aligned with|related to) (?:his|her|their) (?:platform|stance|stated)",
-    re.IGNORECASE,
-)
-
-_KEPT_RE = re.compile(
-    r"align(?:s|ed|ing|ment)|support(?:s|ing|ed)?(?:\s+(?:for|of|this))?"
-    r"|consistent|keeping|kept|match|fulfill|advance[sd]?|further[sd]?",
-    re.IGNORECASE,
-)
-_BROKEN_RE = re.compile(
-    r"contradict|voted\s+against|oppos(?:es|ing|ed)|undermin"
-    r"|broke[n]?|fail(?:s|ed|ing)|violat|inconsistent"
-    r"|does not (?:support|align|match)",
-    re.IGNORECASE,
+# Promise quality rules are shared with the pipeline (which now cleans
+# promises before scoring/persisting); the read path keeps applying them
+# only as a safety net for rows persisted before 2026-07.
+from app.pipeline.analyze.promise_quality import (
+    _ERROR_PAGE_RE,
+    _FILLER_RE,
+    clean_promises,
 )
 from app.schemas import (
     CampaignPromiseSchema,
@@ -63,15 +53,6 @@ STATE_NAMES: dict[str, str] = {
 }
 
 
-_ERROR_PAGE_RE = re.compile(
-    r"(?:404\s*error|page\s*not\s*found|page\s*requested|"
-    r"search\s+senate\.gov|e-?mail\s+webmaster|broken\s+link)",
-    re.IGNORECASE,
-)
-
-_BILL_ID_RE = re.compile(
-    r"(?:H\.R\.|S\.|H\.J\.Res\.|S\.J\.Res\.|S\.Res\.|H\.Res\.|Roll-|Amdt\.)"
-)
 
 
 _USELESS_SPONSOR = {"unclear", "unknown", "n/a", "none", ""}
@@ -117,14 +98,6 @@ def _clean_platform_summary(text: str | None) -> str:
     return text
 
 
-_PROMISE_ARTIFACT_RE = re.compile(
-    r"^On the (?:Amendment|Joint Resolution|Resolution|Bill|Motion|Cloture)"
-    r"|^Pursuant to Senate Policy"
-    r"|^Learn About \w+"
-    r"|^See \w+'s Position",
-    re.IGNORECASE,
-)
-
 def _fixup_donor_type(donor_name: str, donor_type: str, senator_name: str) -> str:
     """Read-time safety net for donor types.
 
@@ -148,94 +121,38 @@ def _fixup_donor_type(donor_name: str, donor_type: str, senator_name: str) -> st
 
 
 def _filter_promises(campaign_promises: list) -> list[CampaignPromiseSchema]:
-    """Filter and correct campaign promise quality issues in persisted data."""
-    from collections import Counter
+    """Filter and correct campaign promise quality issues in persisted data.
 
-    result = []
-    seen_texts: set[str] = set()
+    Delegates to the shared pipeline rules (promise_quality.clean_promises)
+    so displayed alignments always match what the scoring path would
+    produce. For rows written by pipelines after 2026-07 this is a no-op;
+    it corrects legacy rows persisted before cleaning moved upstream.
+    """
+    as_dicts = [
+        {
+            "promiseText": cp.promise_text or "",
+            "category": cp.category,
+            "alignment": cp.alignment or "unclear",
+            "relatedVotes": json.loads(cp.related_votes) if cp.related_votes else [],
+            "relatedBills": json.loads(cp.related_bills) if cp.related_bills else [],
+            "analysis": cp.analysis or "",
+            "partyAlignment": cp.party_alignment,
+        }
+        for cp in campaign_promises
+    ]
 
-    for cp in campaign_promises:
-        analysis = cp.analysis or ""
-        alignment = cp.alignment or "unclear"
-        related = json.loads(cp.related_votes) if cp.related_votes else []
-        related_sp = json.loads(cp.related_bills) if cp.related_bills else []
-        promise_text = cp.promise_text or ""
-
-        # Skip error page artifacts
-        if _ERROR_PAGE_RE.search(promise_text) or _ERROR_PAGE_RE.search(analysis):
-            continue
-
-        # Skip promises that are actually browser/embed artifacts
-        promise_lower = promise_text.lower()
-        if any(sig in promise_lower for sig in (
-            "browser does not support",
-            "twitter feed",
-            "skip to content",
-            "menu menu menu",
-            "javascript",
-            "cookie",
-        )):
-            continue
-
-        # Skip overly short or generic promises
-        if len(promise_text.strip()) < 10:
-            continue
-
-        # Skip promises that are actually bill amendment titles or Senate policy boilerplate
-        if _PROMISE_ARTIFACT_RE.search(promise_text.strip()):
-            continue
-
-        # Deduplicate by exact promise text
-        text_key = promise_text.strip().lower()
-        if text_key in seen_texts:
-            continue
-        seen_texts.add(text_key)
-
-        if _FILLER_RE.search(analysis):
-            analysis = ""
-
-        kept = len(_KEPT_RE.findall(analysis))
-        broken = len(_BROKEN_RE.findall(analysis))
-        if kept > 0 and broken > 0:
-            alignment = "unclear"
-        elif alignment == "broken" and kept > 0 and broken == 0:
-            alignment = "kept"
-        elif alignment == "kept" and broken > 0 and kept == 0:
-            alignment = "broken"
-
-        # Downgrade bold claims that lack specific evidence
-        if (
-            alignment in ("kept", "broken")
-            and analysis
-            and not _BILL_ID_RE.search(analysis)
-            and not related
-            and not related_sp
-        ):
-            alignment = "unclear"
-            analysis = ""
-
-        result.append(CampaignPromiseSchema(
-            promise_text=promise_text,
-            category=cp.category,
-            alignment=alignment,
-            related_votes=related,
-            related_bills=related_sp,
-            analysis=analysis,
-            party_alignment=cp.party_alignment,
-        ))
-
-    if len(result) >= 2:
-        bill_sets = [tuple(sorted(p.related_votes)) for p in result]
-        counts = Counter(bill_sets)
-        overused = {bs for bs, cnt in counts.items() if cnt >= 2 and bs}
-        if overused:
-            for p in result:
-                if tuple(sorted(p.related_votes)) in overused:
-                    p.alignment = "unclear"
-                    p.related_votes = []
-                    p.analysis = ""
-
-    return result
+    return [
+        CampaignPromiseSchema(
+            promise_text=p["promiseText"],
+            category=p["category"],
+            alignment=p["alignment"],
+            related_votes=p["relatedVotes"],
+            related_bills=p["relatedBills"],
+            analysis=p["analysis"],
+            party_alignment=p["partyAlignment"],
+        )
+        for p in clean_promises(as_dicts)
+    ]
 
 
 def _build_sponsored_bills(sponsored_bills: list) -> list[SponsoredBillSchema]:
