@@ -7,6 +7,10 @@
 #   ./deploy.sh frontend     Deploy frontend only
 #   ./deploy.sh backend      Deploy backend only
 #
+# Env:
+#   SKIP_BUILD=1             Reuse the existing :latest image instead of
+#                            rebuilding (e.g. retrying after a failed flip)
+#
 # Blue slot: frontend=3000, backend=8000
 # Green slot: frontend=3001, backend=8001
 #
@@ -433,8 +437,12 @@ deploy_backend() {
 
   log "Backend: $cur_slot → $new_slot (port $new_port)"
 
-  log "Building backend image..."
-  docker compose build backend
+  if [[ -n "${SKIP_BUILD:-}" ]]; then
+    log "SKIP_BUILD set — reusing existing civitas-backend:latest image"
+  else
+    log "Building backend image..."
+    docker compose build backend
+  fi
 
   docker rm -f "$container_name" 2>/dev/null || true
 
@@ -493,8 +501,12 @@ deploy_frontend() {
 
   log "Frontend: $cur_slot → $new_slot (port $new_port)"
 
-  log "Building frontend image..."
-  docker compose build frontend
+  if [[ -n "${SKIP_BUILD:-}" ]]; then
+    log "SKIP_BUILD set — reusing existing civitas-frontend:latest image"
+  else
+    log "Building frontend image..."
+    docker compose build frontend
+  fi
 
   docker rm -f "$container_name" 2>/dev/null || true
 
