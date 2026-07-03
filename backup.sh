@@ -4,7 +4,14 @@
 # CONFIGURE THESE PATHS for your deployment:
 BACKUP_DIR="/media/usb-backup/civitas-backups"
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DATA_DIR="/var/lib/docker/volumes/civitas_app_data/_data"   # Docker volume mount
+# Resolve the docker volume mountpoint at runtime — a hardcoded path here
+# went stale when the docker data-root moved (2026-03), and backups
+# silently produced nothing for months (found 2026-07-02).
+DATA_DIR="$(docker volume inspect civitas_app_data --format '{{.Mountpoint}}' 2>/dev/null || true)"
+if [ -z "$DATA_DIR" ] || [ ! -f "$DATA_DIR/civitas.db" ]; then
+  echo "ERROR: cannot resolve civitas_app_data volume (got '$DATA_DIR')" >&2
+  exit 1
+fi
 KEEP_DAYS=7
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -36,6 +43,21 @@ DB_BACKUP="$BACKUP_DIR/civitas-$DATE.db"
 log "Backing up SQLite database..."
 sqlite3 "$DATA_DIR/civitas.db" ".backup '$DB_BACKUP'"
 log "  DB backup: $(du -h "$DB_BACKUP" | cut -f1)"
+
+# --- Verify the backup is restorable (a backup that can't restore is
+#     a false sense of security, not a backup) ---
+log "Verifying backup integrity..."
+integrity=$(sqlite3 "$DB_BACKUP" "PRAGMA integrity_check;")
+if [ "$integrity" != "ok" ]; then
+  log "ERROR: backup failed integrity check: $integrity"
+  exit 1
+fi
+senator_count=$(sqlite3 "file:$DB_BACKUP?mode=ro" "SELECT count(*) FROM senators;")
+if [ "$senator_count" -lt 90 ]; then
+  log "ERROR: backup looks incomplete — only $senator_count senators"
+  exit 1
+fi
+log "  Verified: integrity ok, $senator_count senators"
 
 # --- Back up ChromaDB data ---
 CHROMA_BACKUP="$BACKUP_DIR/chroma-$DATE.tar.gz"

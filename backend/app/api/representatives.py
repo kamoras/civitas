@@ -53,6 +53,7 @@ def get_rep_history(rep_id: str, db: Session = Depends(get_db)) -> JSONResponse:
             {
                 "date": s.date,
                 "overallScore": round(s.overall_score, 1),
+                "algorithmVersion": s.algorithm_version,
                 "scores": {
                     "fundingIndependence": round(s.score_1, 1),
                     "promisePersistence": round(s.score_2, 1),

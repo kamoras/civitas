@@ -31,6 +31,32 @@ GREEN_FE_PORT=3001; GREEN_BE_PORT=8001
 FE_SLOT_FILE="$PROJECT_DIR/.deploy-frontend-slot"
 BE_SLOT_FILE="$PROJECT_DIR/.deploy-backend-slot"
 
+# ── CI gate ──────────────────────────────────────────────────────────
+# Branch protection isn't available on this repo (private, free plan),
+# so the deploy script is the enforcement point: refuse to ship a commit
+# whose CI failed. Override with FORCE_DEPLOY=1.
+if [[ -z "${FORCE_DEPLOY:-}" ]] && command -v gh >/dev/null 2>&1; then
+  head_sha=$(git -C "$PROJECT_DIR" rev-parse HEAD 2>/dev/null || true)
+  if [[ -n "$head_sha" ]]; then
+    ci_conclusion=$(gh run list --commit "$head_sha" --workflow CI \
+      --json conclusion --jq '.[0].conclusion' 2>/dev/null || true)
+    case "$ci_conclusion" in
+      failure|cancelled|timed_out)
+        printf '\033[1;31m!!!\033[0m CI %s for HEAD (%s) — fix it or FORCE_DEPLOY=1\n' \
+          "$ci_conclusion" "${head_sha:0:8}" >&2
+        exit 1
+        ;;
+      success)
+        printf '\033[1;32m>>>\033[0m CI passed for HEAD (%s)\n' "${head_sha:0:8}"
+        ;;
+      *)
+        printf '\033[1;33m>>>\033[0m CI status for HEAD: %s (not blocking)\n' \
+          "${ci_conclusion:-unknown}"
+        ;;
+    esac
+  fi
+fi
+
 # Read LLM_BACKEND from .env (default: ollama)
 LLM_BACKEND=$(grep -E '^LLM_BACKEND=' .env 2>/dev/null | cut -d= -f2 | tr -d '"' | tr -d "'" || true)
 LLM_BACKEND="${LLM_BACKEND:-ollama}"

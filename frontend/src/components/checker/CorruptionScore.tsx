@@ -121,10 +121,37 @@ export default function CorruptionScore({ breakdown, promises, votingRecord, fun
       ? "no voting record · defaults to 50"
       : `${votingRecord.totalVotes} votes tracked`;
 
-  const fundingBasis: string | undefined =
+  // Surface the FI sub-components so the score is an auditable claim,
+  // not a black-box number (matches the methodology on /about).
+  const fundingIndependenceBasis: string | undefined = (() => {
+    if (!funding || funding.totalRaised === 0) {
+      return "no funding data · defaults to 50";
+    }
+    const pacPct = Math.round(((funding.totalFromPACs ?? 0) / funding.totalRaised) * 100);
+    const smallPct = Math.round(funding.smallDonorPercentage ?? 0);
+    const external = (funding.topDonors ?? []).filter(
+      (d) => d.type !== "CandidateAffiliated" && d.type !== "Self-Funded",
+    );
+    const pool = external.reduce((a, d) => a + (d.total ?? 0), 0);
+    const top10 = external.slice(0, 10).reduce((a, d) => a + (d.total ?? 0), 0);
+    let basis = `${pacPct}% from PACs · ${smallPct}% small-donor`;
+    if (external.length >= 20 && pool > 0) {
+      basis += ` · top 10 donors hold ${Math.round((top10 / pool) * 100)}% of itemized pool`;
+    }
+    return basis;
+  })();
+
+  const fundingDiversityBasis: string | undefined =
     !funding || funding.totalRaised === 0
       ? "no funding data · defaults to 50"
-      : undefined;
+      : (() => {
+          const industries = (funding.industryBreakdown ?? []).filter(
+            (i) => !["OTHER", "SMALL_DONORS", "LARGE_INDIVIDUAL", "POLITICAL", "UNCLASSIFIED"].includes(i.industry),
+          ).length;
+          return industries > 0
+            ? `${industries} classified industr${industries !== 1 ? "ies" : "y"} · ${Math.round(funding.smallDonorPercentage ?? 0)}% small-donor`
+            : undefined;
+        })();
 
   const nBills = sponsoredBills?.length ?? 0;
   const effectivenessBasis: string =
@@ -137,8 +164,8 @@ export default function CorruptionScore({ breakdown, promises, votingRecord, fun
   const scoreBasis: Partial<Record<ScoreKey, string | undefined>> = {
     promisePersistence: promiseBasis,
     independentVoting: votingBasis,
-    fundingIndependence: fundingBasis,
-    fundingDiversity: fundingBasis,
+    fundingIndependence: fundingIndependenceBasis,
+    fundingDiversity: fundingDiversityBasis,
     legislativeEffectiveness: effectivenessBasis,
   };
 

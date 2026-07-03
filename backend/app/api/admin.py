@@ -1,6 +1,7 @@
 """Admin API — protected management endpoints for dashboard, pipeline control, and metrics."""
 
 import asyncio
+import json
 import logging
 import os
 import secrets
@@ -383,6 +384,12 @@ async def admin_dashboard(db: Session = Depends(get_db)):
             "elapsedSeconds": last_run.elapsed_seconds,
             "errorMessage": last_run.error_message,
             "progressSteps": dash_progress_steps,
+            # Reference-senator score checks from the end of the run —
+            # non-empty means scores shifted outside externally-verifiable
+            # ranges and the run needs investigation before being trusted.
+            "groundTruthFailures": json.loads(last_run.ground_truth_failures)
+            if getattr(last_run, "ground_truth_failures", None)
+            else [],
         }
 
     # --- Vector DB stats ---

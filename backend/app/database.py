@@ -75,6 +75,8 @@ def _migrate_columns() -> None:
         ("senators", "score_legislative_effectiveness", "REAL DEFAULT 0.0"),
         ("representatives", "score_legislative_effectiveness", "REAL DEFAULT 0.0"),
         ("score_snapshots", "score_5", "REAL DEFAULT 0.0"),
+        ("score_snapshots", "algorithm_version", "TEXT"),
+        ("pipeline_runs", "ground_truth_failures", "TEXT"),
         ("campaign_promises", "related_bills", "TEXT DEFAULT '[]'"),
         ("rep_campaign_promises", "related_bills", "TEXT DEFAULT '[]'"),
         ("week_summaries", "bsky_posted_at", "DATETIME"),

@@ -659,6 +659,8 @@ export async function fetchMyReps(state: string): Promise<MyRepsResponse> {
 export interface ScoreSnapshot {
   date: string;
   overallScore: number;
+  /** Scoring algorithm version that produced this snapshot (null for pre-v4.1 rows). */
+  algorithmVersion?: string | null;
   scores: {
     fundingIndependence: number;
     promisePersistence: number;

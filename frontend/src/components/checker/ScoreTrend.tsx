@@ -29,6 +29,18 @@ export default function ScoreTrend({ snapshots }: ScoreTrendProps) {
   const points = scores.map((v, i) => `${toX(i)},${toY(v)}`).join(" ");
   const midY = toY(50);
 
+  // Methodology-change markers: indices where the scoring algorithm
+  // version differs from the previous snapshot. A jump at one of these
+  // is a formula change, not a behavior change.
+  const versionChanges: { i: number; version: string }[] = [];
+  for (let i = 1; i < snapshots.length; i++) {
+    const prev = snapshots[i - 1].algorithmVersion ?? null;
+    const cur = snapshots[i].algorithmVersion ?? null;
+    if (cur && cur !== prev) {
+      versionChanges.push({ i, version: cur });
+    }
+  }
+
   const changeColor = change > 0 ? "#00ff41" : change < 0 ? "#ff5555" : "#888";
   const changeLabel = change > 0 ? `↑ +${change}` : change < 0 ? `↓ ${change}` : "→ 0";
 
@@ -52,6 +64,20 @@ export default function ScoreTrend({ snapshots }: ScoreTrendProps) {
       >
         {/* Reference line at 50 */}
         <line x1={PAD} y1={midY} x2={W - PAD} y2={midY} stroke="#333" strokeWidth="0.5" strokeDasharray="3,3" />
+        {/* Methodology-change markers */}
+        {versionChanges.map(({ i, version }) => (
+          <line
+            key={`v-${version}-${i}`}
+            x1={toX(i)}
+            y1={PAD}
+            x2={toX(i)}
+            y2={H - PAD}
+            stroke="#00e5ff"
+            strokeWidth="0.75"
+            strokeDasharray="2,2"
+            opacity="0.6"
+          />
+        ))}
         {/* Trend line */}
         <polyline points={points} stroke="#00ff41" strokeWidth="1.5" fill="none" opacity="0.8" />
         {/* First point */}
@@ -86,6 +112,15 @@ export default function ScoreTrend({ snapshots }: ScoreTrendProps) {
         <span>{snapshots[0].date}</span>
         <span>{snapshots[snapshots.length - 1].date}</span>
       </div>
+      {versionChanges.length > 0 && (
+        <div className="text-[8px] text-neon-cyan/40 font-mono mt-0.5">
+          ┊ methodology updated ({versionChanges.map((v) => v.version).join(", ")}) — see
+          {" "}
+          <a href="/about#changelog" className="underline underline-offset-2 hover:text-neon-cyan/70">
+            scoring changelog
+          </a>
+        </div>
+      )}
     </div>
   );
 }

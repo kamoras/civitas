@@ -2,10 +2,11 @@ import MatrixRain from "@/components/effects/MatrixRain";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
+import { SCORE_VERSIONS } from "@/lib/scoreVersions";
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children, id }: { title: string; children: React.ReactNode; id?: string }) {
   return (
-    <section className="terminal-window mb-6">
+    <section className="terminal-window mb-6" id={id}>
       <TerminalTitlebar title={`${title.toLowerCase().replace(/ /g, "_")}.txt`} />
       <div className="p-6 space-y-4">
         <h2 className="text-neon-cyan font-terminal text-sm tracking-widest">{title}</h2>
@@ -785,6 +786,28 @@ export default function AboutPage() {
                   conceptual queries like &quot;climate policy&quot; where exact term overlap is low.
                 </P>
               </div>
+            </div>
+          </Section>
+
+          {/* ── Scoring Changelog ── */}
+          <Section title="SCORING CHANGELOG" id="changelog">
+            <P>
+              The scoring algorithms are versioned. When a formula or its data
+              inputs change, every affected score can shift on the next nightly
+              run — the trend charts mark these dates so a methodology update is
+              never mistaken for a change in a politician&apos;s behavior.
+            </P>
+            <div className="space-y-4 mt-4">
+              {SCORE_VERSIONS.map((v) => (
+                <div key={v.version}>
+                  <Label>{v.version} — {v.title} ({v.date})</Label>
+                  <ul className="list-disc pl-5 space-y-1 text-sm text-matrix-green/70">
+                    {v.changes.map((c, i) => (
+                      <li key={i}>{c}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </div>
           </Section>
 

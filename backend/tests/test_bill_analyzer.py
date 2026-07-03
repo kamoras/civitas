@@ -66,7 +66,16 @@ class TestPolicyAreaClassification:
         ],
     )
     def test_clear_policy_areas(self, text, expected):
-        area, confidence = classify_policy_area(text)
+        # This test validates the SEED taxonomy (tier 2). Tier 1 (the
+        # accumulated reference corpus) is environment-dependent — a live
+        # deployment's corpus can override seeds with learned labels, which
+        # made this test pass/fail differently in CI vs on the server.
+        from unittest.mock import patch
+        with patch(
+            "app.pipeline.analyze.bill_learning.classify_bill_by_reference",
+            return_value=(None, 0.0),
+        ):
+            area, confidence = classify_policy_area(text)
         assert area == expected, f"'{text}' classified as {area}, expected {expected}"
         assert confidence > 0.3
 

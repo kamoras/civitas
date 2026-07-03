@@ -431,6 +431,7 @@ def _record_score_snapshots(db: Session) -> None:
             + s.score_funding_diversity * SCORE_WEIGHTS["fundingDiversity"]
             + s.score_legislative_effectiveness * SCORE_WEIGHTS["legislativeEffectiveness"]
         )
+        from app.pipeline.analyze.score_calculator import ALGORITHM_VERSION
         db.add(ScoreSnapshot(
             entity_type="senator",
             entity_id=s.id,
@@ -441,6 +442,7 @@ def _record_score_snapshots(db: Session) -> None:
             score_3=s.score_independent_voting,
             score_4=s.score_funding_diversity,
             score_5=s.score_legislative_effectiveness,
+            algorithm_version=ALGORITHM_VERSION,
         ))
     db.commit()
     logger.info("Recorded score snapshots for %d senators on %s", len(senators), today)
@@ -1661,6 +1663,33 @@ async def run_full_pipeline(
 
                 lobbying_matches = analysis.get("lobbyingMatches", [])
 
+                # Enrich matches with real registered lobbying activity
+                # (LDA filings). lobbyingSpend was a hardcoded 0 for every
+                # match before 2026-07; now it reflects actual disclosed
+                # federal lobbying by the matched organization. Cached per
+                # org+year, so only the first pipeline run pays the fetch.
+                if lobbying_matches:
+                    from datetime import datetime as _dt
+                    from app.pipeline.fetch.lda import fetch_lobbying_spend
+                    lda_year = _dt.utcnow().year - 1  # last complete filing year
+                    for m in lobbying_matches:
+                        try:
+                            spend = await fetch_lobbying_spend(
+                                client, db, m.get("lobbyistOrg", ""), lda_year,
+                            )
+                            m["lobbyingSpend"] = round(spend)
+                            if spend > 0:
+                                m["description"] = (
+                                    m.get("description", "")
+                                    + f" Registered federal lobbying (LDA "
+                                    f"{lda_year}): ${spend:,.0f}."
+                                )
+                        except Exception:
+                            logger.exception(
+                                "LDA enrichment failed for %s (non-fatal)",
+                                m.get("lobbyistOrg", "?"),
+                            )
+
                 # Match Congressional Record floor remarks to this senator
                 senator_last_name = senator.get("lastNameForVoteMatch", "")
                 if not senator_last_name:
@@ -1934,7 +1963,15 @@ async def run_full_pipeline(
 
         try:
             from app.pipeline.analyze.ground_truth import check_ground_truth
-            check_ground_truth(db)
+            gt_report = check_ground_truth(db)
+            # Persist on the run record so failures surface in the admin
+            # dashboard instead of living only in logs (the 2026-06 audit
+            # found reference senators failing across two algorithm
+            # versions with no automated alarm).
+            pipeline_run.ground_truth_failures = json.dumps(
+                gt_report.get("failures", [])
+            )
+            db.commit()
         except Exception:
             logger.exception("Ground truth check failed (non-fatal)")
 

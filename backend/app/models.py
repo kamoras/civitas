@@ -471,6 +471,10 @@ class ScoreSnapshot(Base):
     score_3: Mapped[float] = mapped_column(Float, default=0.0)
     score_4: Mapped[float] = mapped_column(Float, default=0.0)
     score_5: Mapped[float] = mapped_column(Float, default=0.0)
+    # Scoring algorithm version that produced this snapshot (e.g. "v4.1").
+    # Lets trend charts annotate methodology changes so a score shift from
+    # an algorithm update isn't read as a behavior change.
+    algorithm_version: Mapped[str | None] = mapped_column(String(16), nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
 
 
@@ -631,6 +635,9 @@ class PipelineRun(Base):
     elapsed_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     progress_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # JSON list of ground-truth reference-check failures from this run
+    # (see analyze/ground_truth.py). Empty/"[]" = all checks passed.
+    ground_truth_failures: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class HousePipelineRun(Base):

@@ -55,6 +55,17 @@ jobs:
       - name: Run fast tests (no embedding model)
         run: python -m pytest tests/ -v -m "not slow"
 
+  backend-image:
+    name: Backend — Docker Image Builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Catches image-level breakage (e.g. requirements conflicts that
+      # only surface in the container build — an inconsistent Dependabot
+      # pin made main undeployable for a day in 2026-07).
+      - name: Build backend image (amd64 smoke build)
+        run: docker build backend/
+
   backend-slow:
     name: Backend — Embedding Tests
     runs-on: ubuntu-latest

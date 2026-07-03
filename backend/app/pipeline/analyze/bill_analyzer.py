@@ -81,8 +81,8 @@ POLICY_TAXONOMY = {
     "DEFENSE": (
         "U.S. military, armed forces, national security, and veterans. "
         "Includes the National Defense Authorization Act (NDAA), Pentagon budget, "
-        "troop deployments, weapons procurement, defense contracts, VA benefits, "
-        "and military base funding."
+        "troop deployments, military weapons systems procurement, defense "
+        "contracts, VA benefits, and military base funding."
     ),
     "FOREIGN_POLICY": (
         "International relations, foreign aid, diplomacy, and global conflicts. "
@@ -91,9 +91,12 @@ POLICY_TAXONOMY = {
         "China, Ukraine, Middle East, Iran)."
     ),
     "GUNS": (
-        "Domestic firearms regulation, gun control, and the Second Amendment. "
-        "Includes background checks, assault weapons bans, ammunition regulations, "
-        "concealed carry, red flag laws, and gun violence prevention."
+        "Domestic firearms regulation, gun control, gun rights, and the Second "
+        "Amendment. Includes background checks for gun purchases, assault "
+        "weapons bans, ammunition regulations, concealed carry permits, red "
+        "flag laws, firearm dealer licensing, safe storage requirements, "
+        "school shootings, mass shooting response, and gun violence "
+        "prevention legislation."
     ),
     "HEALTHCARE": (
         "U.S. healthcare system, medical insurance, hospitals, Medicare, and Medicaid. "

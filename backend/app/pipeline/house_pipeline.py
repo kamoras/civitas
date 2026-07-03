@@ -154,12 +154,20 @@ async def run_house_pipeline() -> dict:
 
             logger.info("Found %d House roll calls from bill actions", len(house_roll_calls))
 
-            # Fetch recent House roll calls. 30 (up from 15) so that after
-            # bipartisan votes are excluded from party-loyalty counting,
-            # reps still have enough divided votes for a meaningful
-            # Independent Voting score (the IV formula needs >= 3).
+            # Fetch recent House roll calls — 120, up from the original 15.
+            # Rep IV was resting on ~28 votes each; after bipartisan votes
+            # are excluded from party-loyalty counting, a thin sample left
+            # many reps near the >=3 divided-vote floor. clerk.house.gov
+            # roll-call XML is cheap and cached; classification of each
+            # vote is also cached, so the marginal cost after the first
+            # run is zero. Pull the prior year too when the current year
+            # is young (fewer than 60 roll calls yet).
             current_year = datetime.now().year
-            recent_rcs = await fetch_recent_house_roll_calls(client, db, year=current_year, count=30)
+            recent_rcs = await fetch_recent_house_roll_calls(client, db, year=current_year, count=120)
+            if len(recent_rcs) < 60 and datetime.now().month <= 6:
+                recent_rcs += await fetch_recent_house_roll_calls(
+                    client, db, year=current_year - 1, count=120 - len(recent_rcs),
+                )
             logger.info("Fetched %d recent House roll calls", len(recent_rcs))
 
             # Map recent roll calls by a synthetic billId
@@ -629,6 +637,7 @@ def _record_rep_snapshots(db: Session) -> None:
             existing.score_4 = r.score_funding_diversity
             existing.score_5 = r.score_legislative_effectiveness
         else:
+            from app.pipeline.analyze.score_calculator import ALGORITHM_VERSION
             db.add(ScoreSnapshot(
                 entity_type="representative",
                 entity_id=r.id,
@@ -639,6 +648,7 @@ def _record_rep_snapshots(db: Session) -> None:
                 score_3=r.score_independent_voting,
                 score_4=r.score_funding_diversity,
                 score_5=r.score_legislative_effectiveness,
+                algorithm_version=ALGORITHM_VERSION,
             ))
             count += 1
     db.commit()
