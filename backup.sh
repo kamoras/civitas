@@ -28,7 +28,15 @@ log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOGFILE"; }
 log "=== Starting Civitas backup ==="
 
 if ! mountpoint -q "$(dirname "$BACKUP_DIR")"; then
-  log "ERROR: Backup destination not mounted — aborting"
+  # Abort — a local (same-Pi) copy adds little: the host dying takes both
+  # copies with it, and the documented rebuild path (RUNBOOK.md) is the
+  # accepted recovery story. What must never happen again is a SILENT
+  # abort: backups stopped unnoticed for four months (2026-03..07) when
+  # the USB drive unmounted after a reboot. Shout to syslog so the
+  # failure is visible outside this log file; fstab (nofail) remounts
+  # the drive automatically at next boot.
+  log "ERROR: $(dirname "$BACKUP_DIR") is not a mounted drive — aborting (no offsite target)"
+  logger -t civitas-backup -p user.err "Civitas backup SKIPPED: backup drive not mounted at $(dirname "$BACKUP_DIR")"
   exit 1
 fi
 
