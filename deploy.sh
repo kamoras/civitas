@@ -510,6 +510,12 @@ deploy_backend() {
   echo "$new_slot" > "$BE_SLOT_FILE"
   BE_ACTIVE_PORT=$new_port
 
+  # Point nginx at the new backend IMMEDIATELY — before this function
+  # returns. When deploying both sides, a frontend build failure used to
+  # abort the script after the old backend container was already removed
+  # but before the final nginx switch, leaving the API 502 (2026-07-02).
+  write_nginx "$FE_ACTIVE_PORT" "$BE_ACTIVE_PORT"
+
   # Clean up old
   local old_name="mp-backend-${cur_slot}"
   docker rm -f "$old_name" 2>/dev/null || true
@@ -563,6 +569,9 @@ deploy_frontend() {
 
   echo "$new_slot" > "$FE_SLOT_FILE"
   FE_ACTIVE_PORT=$new_port
+
+  # Same immediate-switch rationale as deploy_backend.
+  write_nginx "$FE_ACTIVE_PORT" "$BE_ACTIVE_PORT"
 
   # Clean up old
   local old_name="mp-frontend-${cur_slot}"
