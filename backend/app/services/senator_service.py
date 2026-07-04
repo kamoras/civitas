@@ -267,6 +267,7 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
             independent_voting=senator.score_independent_voting,
             funding_diversity=senator.score_funding_diversity,
             legislative_effectiveness=senator.score_legislative_effectiveness,
+            confidence=json.loads(senator.score_confidence or "{}") or None,
         ),
         funding=FundingSchema(
             total_raised=senator.total_raised,
@@ -529,6 +530,8 @@ def upsert_senator(db: Session, senator_data: dict) -> Senator:
         existing.score_independent_voting = cs.get("independentVoting", existing.score_independent_voting)
         existing.score_funding_diversity = cs.get("fundingDiversity", existing.score_funding_diversity)
         existing.score_legislative_effectiveness = cs.get("legislativeEffectiveness", existing.score_legislative_effectiveness)
+        if cs.get("confidence") is not None:
+            existing.score_confidence = json.dumps(cs["confidence"])
 
     existing.total_raised = funding.get("totalRaised", 0)
     existing.total_from_pacs = funding.get("totalFromPACs", 0)

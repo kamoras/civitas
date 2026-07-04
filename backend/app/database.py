@@ -74,6 +74,8 @@ def _migrate_columns() -> None:
         ("representatives", "office_address", "TEXT DEFAULT ''"),
         ("senators", "score_legislative_effectiveness", "REAL DEFAULT 0.0"),
         ("representatives", "score_legislative_effectiveness", "REAL DEFAULT 0.0"),
+        ("senators", "score_confidence", "TEXT DEFAULT '{}'"),
+        ("representatives", "score_confidence", "TEXT DEFAULT '{}'"),
         ("score_snapshots", "score_5", "REAL DEFAULT 0.0"),
         ("score_snapshots", "algorithm_version", "TEXT"),
         ("pipeline_runs", "ground_truth_failures", "TEXT"),

@@ -59,32 +59,19 @@ from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
-# Court composition as of the 2023-2025 terms.  Update when membership
-# changes.  Bloc assignments reflect appointing-party ideology, not
-# observed voting — they are INPUTS to the scoring model, not outputs.
-# Roberts is classified as SWING because empirical data consistently
-# shows him as the court's median justice (Epstein & Jacobi 2010).
-R_BLOC = {"clarence_thomas", "samuel_a_alito_jr", "neil_gorsuch", "brett_m_kavanaugh", "amy_coney_barrett"}
-D_BLOC = {"sonia_sotomayor", "elena_kagan", "ketanji_brown_jackson"}
-SWING = {"john_g_roberts_jr"}
-
-ALL_ACTIVE = R_BLOC | D_BLOC | SWING
+# Blocs are derived from each justice's appointing president's party —
+# a historical fact carried on the fetched data — never from hand-coded
+# membership sets. A prior version hardcoded justice IDs and classified
+# Roberts as "SWING" by name (pinning his bloc-based scores at a neutral
+# 50); that was a per-person judgment inside the scoring path, removed
+# 2026-07-04 under the no-hand-fed-inputs rule. A justice who behaves as
+# the court's median now EARNS high independence/consistency from their
+# observed cross-bloc voting instead of being granted neutrality.
 
 
-def _expected_bloc(justice_id: str, appointing_party: str) -> str:
-    """Determine expected ideological bloc from appointing president's party."""
-    if justice_id in R_BLOC:
-        return "R"
-    if justice_id in D_BLOC:
-        return "D"
-    if justice_id in SWING:
-        # Swing justices have no expected bloc — bloc-based scores (consistency,
-        # independence) use the else branch (own_bloc=set(), opp_bloc=set()) so
-        # they are computed solely from bipartisan agreement and restraint.
-        return ""
-    if appointing_party in ("R", "D"):
-        return appointing_party
-    return ""
+def _expected_bloc(appointing_party: str) -> str:
+    """Expected ideological bloc from the appointing president's party."""
+    return appointing_party if appointing_party in ("R", "D") else ""
 
 
 def _fisher_weight(majority_votes: int, minority_votes: int) -> float:
@@ -106,6 +93,7 @@ def analyze_justice_votes(
     appointing_party: str,
     votes: list[dict],
     all_case_votes: dict[str, list[dict]],
+    party_map: dict[str, str] | None = None,
 ) -> dict:
     """Compute ideological consistency scores for a single justice.
 
@@ -114,6 +102,8 @@ def analyze_justice_votes(
         appointing_party: "R" or "D" from appointing president.
         votes: List of this justice's vote records.
         all_case_votes: Map of case_id -> list of all justices' votes for that case.
+        party_map: justice_id -> appointing party for every sitting
+            justice; used to derive the comparison blocs from data.
 
     Returns:
         Dict with score_consistency, score_independence, score_bipartisan_agreement,
@@ -122,7 +112,12 @@ def analyze_justice_votes(
     if not votes:
         return _empty_result()
 
-    expected_bloc = _expected_bloc(justice_id, appointing_party)
+    party_map = party_map or {}
+    r_bloc = {jid for jid, p in party_map.items() if p == "R"}
+    d_bloc = {jid for jid, p in party_map.items() if p == "D"}
+    all_active = set(party_map)
+
+    expected_bloc = _expected_bloc(appointing_party)
 
     total = len(votes)
     majority_count = sum(1 for v in votes if v["vote"] == "majority")
@@ -137,11 +132,11 @@ def analyze_justice_votes(
     close_majority = sum(1 for v in close_votes if v["vote"] == "majority") if close_votes else 0
 
     if expected_bloc == "R":
-        own_bloc = R_BLOC - {justice_id}
-        opp_bloc = D_BLOC
+        own_bloc = r_bloc - {justice_id}
+        opp_bloc = d_bloc
     elif expected_bloc == "D":
-        own_bloc = D_BLOC - {justice_id}
-        opp_bloc = R_BLOC
+        own_bloc = d_bloc - {justice_id}
+        opp_bloc = r_bloc
     else:
         own_bloc = set()
         opp_bloc = set()
@@ -169,7 +164,7 @@ def analyze_justice_votes(
         # --- Pairwise agreement (all cases) + Fisher-weighted bloc rates ---
         for other in case_votes:
             oid = other["justice_id"]
-            if oid == justice_id or oid not in ALL_ACTIVE:
+            if oid == justice_id or oid not in all_active:
                 continue
 
             same_side = other["vote"] == this_side
@@ -298,7 +293,7 @@ def analyze_justice_votes(
 
     # --- Agreement matrix ---
     agreement_matrix: dict[str, float] = {}
-    for oid in ALL_ACTIVE:
+    for oid in all_active:
         if oid == justice_id:
             continue
         t = agreement_totals.get(oid, 0)

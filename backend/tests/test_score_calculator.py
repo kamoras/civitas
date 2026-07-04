@@ -664,3 +664,51 @@ class TestCalculateScoresIntegration:
             assert 40 <= value <= 60, (
                 f"{key} = {value}; empty data should yield neutral scores"
             )
+
+
+class TestCalculateConfidence:
+    """Confidence derives ONLY from data volume — identical rules for
+    every member; who they are and what they scored play no part."""
+
+    def test_empty_data_is_low_everywhere(self):
+        from app.pipeline.analyze.score_calculator import calculate_confidence
+        conf = calculate_confidence({})
+        assert set(conf.values()) == {"low"}
+
+    def test_rich_data_is_high_everywhere(self):
+        from app.pipeline.analyze.score_calculator import calculate_confidence
+        senator = {
+            "funding": {
+                "totalRaised": 5_000_000,
+                "topDonors": [{"name": f"d{i}"} for i in range(12)],
+                "industryBreakdown": [{"industry": f"i{i}"} for i in range(7)],
+            },
+            "votingRecord": {
+                "keyVotes": [
+                    {"votedWithParty": bool(i % 2)} for i in range(50)
+                ],
+                "recentVotes": [],
+            },
+            "campaignPromises": [
+                {"alignment": "kept"} for _ in range(9)
+            ],
+            "sponsoredBills": [{"title": f"b{i}"} for i in range(15)],
+        }
+        conf = calculate_confidence(senator)
+        assert set(conf.values()) == {"high"}
+
+    def test_unlabeled_votes_do_not_count(self):
+        """Votes without a party label carry no alignment signal."""
+        from app.pipeline.analyze.score_calculator import calculate_confidence
+        senator = {
+            "votingRecord": {
+                "keyVotes": [{"votedWithParty": None} for _ in range(100)],
+                "recentVotes": [],
+            },
+        }
+        assert calculate_confidence(senator)["independentVoting"] == "low"
+
+    def test_unclear_promises_do_not_count(self):
+        from app.pipeline.analyze.score_calculator import calculate_confidence
+        senator = {"campaignPromises": [{"alignment": "unclear"} for _ in range(20)]}
+        assert calculate_confidence(senator)["promisePersistence"] == "low"

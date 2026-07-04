@@ -39,6 +39,10 @@ async def run_justice_pipeline(db: Session) -> dict:
         case_votes[v["case_id"]].append(v)
         justice_votes[v["justice_id"]].append(v)
 
+    # Comparison blocs are derived from appointing party (data), never
+    # hand-coded membership sets — see the note in justice_analyzer.
+    party_map = {j["id"]: j.get("appointing_party", "") for j in justices}
+
     for j in justices:
         jid = j["id"]
         jvotes = justice_votes.get(jid, [])
@@ -48,6 +52,7 @@ async def run_justice_pipeline(db: Session) -> dict:
             appointing_party=j.get("appointing_party", ""),
             votes=jvotes,
             all_case_votes=dict(case_votes),
+            party_map=party_map,
         )
 
         summary = _generate_summary(j, analysis, jvotes, db)

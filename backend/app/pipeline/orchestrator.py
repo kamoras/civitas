@@ -91,7 +91,7 @@ from app.pipeline.analyze.donor_classifier_ai import classify_donors_hybrid
 from app.pipeline.analyze.ollama_client import get_llm_stats, reset_client, reset_stats
 from app.pipeline.analyze.policy_alignment import clear_alignment_cache
 from app.pipeline.analyze.floor_speech_analyzer import analyze_floor_advocacy
-from app.pipeline.analyze.score_calculator import calculate_scores
+from app.pipeline.analyze.score_calculator import calculate_confidence, calculate_scores
 
 # Assemble modules
 from app.pipeline.assemble.senator_builder import build_senator
@@ -1741,6 +1741,7 @@ async def run_full_pipeline(
                     temp_senator,
                     floor_advocacy=floor_advocacy,
                 )
+                corruption_score["confidence"] = calculate_confidence(temp_senator)
 
                 # Enrich donors with PAC details from combined analysis
                 pac_detail_map = {

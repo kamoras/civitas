@@ -56,6 +56,8 @@ GROUND_TRUTH = [
     ("McConnell", "iv", 30, 60),  ("McConnell", "fi", 30, 90),
     ("Paul",      "iv", 55, 95),  ("Paul",      "fi", 60, 100),
     ("Klobuchar", "iv", 40, 70),  ("Klobuchar", "fi", 35, 75),
+    ("Ossoff",    "iv", 28, 50),  ("Thune",     "iv", 38, 62),
+    ("Fetterman", "iv", 50, 85),
 ]
 
 DIM_KEYS = ["fi", "pp", "iv", "fd", "le"]

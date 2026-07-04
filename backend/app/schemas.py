@@ -42,6 +42,8 @@ class RepresentationScoreSchema(CamelModel):
     independent_voting: float
     funding_diversity: float
     legislative_effectiveness: float = 0.0
+    # Per-dimension data-sufficiency: "high" | "medium" | "low"
+    confidence: dict[str, str] | None = None
 
 
 class PolicyAreaDetail(CamelModel):

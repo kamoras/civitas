@@ -35,13 +35,23 @@ function branchLabel(branch: string) {
   return map[branch] ?? branch.toUpperCase();
 }
 
-function ScoreBar({ label, score, max = 100 }: { label: string; score: number; max?: number }) {
+function ScoreBar({ label, score, max = 100, confidence }: { label: string; score: number; max?: number; confidence?: string }) {
   const pct = Math.min(100, Math.max(0, (score / max) * 100));
   const color = getScoreColor(score);
   return (
     <div className="mb-3">
       <div className="flex justify-between items-center mb-1">
-        <span className="font-mono text-[10px] text-matrix-green/50 tracking-widest uppercase">{label}</span>
+        <span className="font-mono text-[10px] text-matrix-green/50 tracking-widest uppercase">
+          {label}
+          {confidence === "low" && (
+            <span
+              className="ml-1.5 text-amber-500/70 normal-case tracking-normal"
+              title="Limited source data backs this score — treat it as approximate."
+            >
+              · low data
+            </span>
+          )}
+        </span>
         <span className={`font-mono text-xs ${color}`}>{score.toFixed(0)}</span>
       </div>
       <div className="h-1 bg-matrix-green/10 rounded-full overflow-hidden">
@@ -244,7 +254,9 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
               </p>
 
               {isCongress && (() => {
-                const rs = sc.representationScore as Record<string, number> | undefined;
+                const rs = sc.representationScore as
+                  | (Record<string, number> & { confidence?: Record<string, string> })
+                  | undefined;
                 if (!rs) return null;
                 return (
                   <>
@@ -257,7 +269,7 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
                         legislativeEffectiveness: "Legislative Effectiveness",
                       };
                       if (rs[key] == null) return null;
-                      return <ScoreBar key={key} label={labels[key]} score={rs[key]} />;
+                      return <ScoreBar key={key} label={labels[key]} score={rs[key]} confidence={rs.confidence?.[key]} />;
                     })}
                   </>
                 );

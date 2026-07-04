@@ -23,6 +23,9 @@ class Senator(Base):
     score_independent_voting: Mapped[float] = mapped_column(Float, default=0.0)
     score_funding_diversity: Mapped[float] = mapped_column(Float, default=0.0)
     score_legislative_effectiveness: Mapped[float] = mapped_column(Float, default=0.0)
+    # Per-dimension data-sufficiency ("high"/"medium"/"low") as JSON —
+    # see score_calculator.calculate_confidence.
+    score_confidence: Mapped[str] = mapped_column(Text, default="{}")
 
     total_raised: Mapped[float] = mapped_column(Float, default=0.0)
     total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)
@@ -174,6 +177,9 @@ class Representative(Base):
     score_independent_voting: Mapped[float] = mapped_column(Float, default=0.0)
     score_funding_diversity: Mapped[float] = mapped_column(Float, default=0.0)
     score_legislative_effectiveness: Mapped[float] = mapped_column(Float, default=0.0)
+    # Per-dimension data-sufficiency ("high"/"medium"/"low") as JSON —
+    # see score_calculator.calculate_confidence.
+    score_confidence: Mapped[str] = mapped_column(Text, default="{}")
 
     total_raised: Mapped[float] = mapped_column(Float, default=0.0)
     total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)

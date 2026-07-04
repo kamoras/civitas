@@ -374,7 +374,7 @@ async def run_house_pipeline() -> dict:
             logger.info("--- House Phase 5: FEC DATA + SCORING ---")
 
             from app.pipeline.transform.normalize_finance import normalize_finance
-            from app.pipeline.analyze.score_calculator import calculate_scores
+            from app.pipeline.analyze.score_calculator import calculate_confidence, calculate_scores
 
             success_count = 0
             fail_count = 0
@@ -534,6 +534,7 @@ async def run_house_pipeline() -> dict:
 
                     # Calculate scores
                     scores = calculate_scores(rep)
+                    scores["confidence"] = calculate_confidence(rep)
                     rep["representationScore"] = scores
 
                     # Set bioguideId for persistence

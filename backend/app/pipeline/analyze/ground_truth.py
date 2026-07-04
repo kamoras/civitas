@@ -59,6 +59,10 @@ GROUND_TRUTH: list[tuple[str, str, tuple[int, int], str]] = [
     ("Paul",      "score_funding_independence",  (60, 100), "small-dollar base"),
     ("Klobuchar", "score_independent_voting",    (40, 70),  "≈10% breaks in D+2 MN ≈ slightly above seat expectation"),
     ("Klobuchar", "score_funding_independence",  (35, 75),  "mid-range PAC reliance, no capture signal"),
+    # Added 2026-07-04, anchored to Voteview S119 party-unity data:
+    ("Ossoff",    "score_independent_voting",    (28, 50),  "≈4% breaks as a swing-state D — below seat expectation (Voteview)"),
+    ("Thune",     "score_independent_voting",    (38, 62),  "party leader, ≈2% breaks in safe-R SD ≈ seat expectation (Voteview)"),
+    ("Fetterman", "score_independent_voting",    (50, 85),  "frequent crosser in swing-state PA — crossing toward the state median"),
 ]
 
 _DIM_LABEL = {

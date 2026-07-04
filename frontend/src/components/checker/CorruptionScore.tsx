@@ -36,7 +36,7 @@ const SCORE_KEYS: ScoreKey[] = [
 const METRIC_BLURBS: Record<ScoreKey, string> = {
   fundingIndependence: "How little of their campaign comes from PACs",
   promisePersistence: "Do their votes match their campaign promises?",
-  independentVoting: "How often they break from their party",
+  independentVoting: "Does their voting match what their state elected them to do?",
   fundingDiversity: "How many different industries fund them",
   legislativeEffectiveness: "How well they advance bills they sponsor",
 };

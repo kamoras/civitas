@@ -102,6 +102,7 @@ def build_rep_response(rep: Representative, _db: Session = None) -> dict:
             "independentVoting": rep.score_independent_voting,
             "fundingDiversity": rep.score_funding_diversity,
             "legislativeEffectiveness": rep.score_legislative_effectiveness,
+            "confidence": json.loads(rep.score_confidence or "{}"),
         },
         "funding": {
             "totalRaised": rep.total_raised,
@@ -396,6 +397,7 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
     existing.score_independent_voting = cs.get("independentVoting", 0)
     existing.score_funding_diversity = cs.get("fundingDiversity", 0)
     existing.score_legislative_effectiveness = cs.get("legislativeEffectiveness", 0)
+    existing.score_confidence = json.dumps(cs.get("confidence") or {})
 
     existing.total_raised = funding.get("totalRaised", 0)
     existing.total_from_pacs = funding.get("totalFromPACs", 0)

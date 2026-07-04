@@ -222,6 +222,53 @@ def calculate_scores(
     }
 
 
+def calculate_confidence(senator: dict) -> dict[str, str]:
+    """Data-sufficiency confidence per dimension: "high" | "medium" | "low".
+
+    Derived ONLY from how much source data backs each dimension — never
+    from who the member is or what they scored. Published alongside the
+    scores so sparse-data results aren't read with false precision: a
+    Promise Persistence of 58 backed by two evaluable promises is a
+    shrunk-to-prior guess, while the same number over twenty promises is
+    a measurement. Thresholds are volume counts, identical for every
+    member and both parties.
+    """
+    funding = senator.get("funding", {})
+    voting_record = senator.get("votingRecord", {})
+    promises = senator.get("campaignPromises") or []
+    bills = senator.get("sponsoredBills") or []
+
+    def grade(n: int, medium_at: int, high_at: int) -> str:
+        if n >= high_at:
+            return "high"
+        if n >= medium_at:
+            return "medium"
+        return "low"
+
+    has_funding = (funding.get("totalRaised", 0) or 0) > 0
+    n_donors = len(funding.get("topDonors") or [])
+    n_industries = len(funding.get("industryBreakdown") or [])
+    all_votes = (voting_record.get("keyVotes") or []) + (
+        voting_record.get("recentVotes") or []
+    )
+    n_party_votes = sum(
+        1 for v in all_votes
+        if isinstance(v, dict) and v.get("votedWithParty") is not None
+    )
+    n_evaluable = sum(
+        1 for p in promises
+        if isinstance(p, dict) and p.get("alignment") in ("kept", "partial", "broken")
+    )
+
+    return {
+        "fundingIndependence": grade(n_donors, 3, 10) if has_funding else "low",
+        "promisePersistence": grade(n_evaluable, 3, 8),
+        "independentVoting": grade(n_party_votes, 10, 40),
+        "fundingDiversity": grade(n_industries, 3, 6) if has_funding else "low",
+        "legislativeEffectiveness": grade(len(bills), 3, 10),
+    }
+
+
 def _calc_funding_independence(funding: dict) -> int:
     """
     Funding Independence Score (0-100, higher = better).
