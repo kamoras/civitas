@@ -78,10 +78,19 @@ export default function AboutPage() {
               endorse, or oppose any candidate or party.
             </P>
             <P>
+              What the scores measure: for senators and House representatives, how well
+              they <em className="text-matrix-green/80">represent their constituents</em>;
+              for presidents, how well they serve the country; for Supreme Court justices,
+              how well they serve the law regardless of party. Every scoring dimension is
+              justified against that yardstick — independence from party is credited only
+              where it tracks constituents, not as a virtue in itself.
+            </P>
+            <P>
               Scores reflect observable behavior — voting patterns, funding sources,
-              legislative activity — not ideology. A senator who votes with their party 100%
-              of the time receives a lower independence score regardless of whether they are
-              a Democrat or Republican. The system is designed to be structurally non-partisan.
+              legislative activity — not ideology. The formulas are symmetric across
+              parties: the same voting record in the same seat produces the same score
+              regardless of whether the member is a Democrat or Republican. The system is
+              designed to be structurally non-partisan.
             </P>
             <P>
               Every metric on the scorecard includes a <em className="text-matrix-green/80">[?]
@@ -165,29 +174,34 @@ export default function AboutPage() {
               </div>
 
               <div>
-                <Label>Independent Voting (20%)</Label>
+                <Label>Constituent Alignment (20%)</Label>
                 <P>
-                  Measures willingness to break with party leadership on votes that are not
-                  explained by constituent interests. We identify state-relevant policy areas
-                  by analyzing the senator&apos;s top donor industries (which serve as a proxy for
-                  the state&apos;s economic composition). Party-line votes on state-relevant issues
-                  are excluded from the independence penalty because they may reflect genuine
-                  constituent representation rather than blind party loyalty.
-                  <Cite id="4">Carson et al. 2010</Cite>
+                  Measures how a member&apos;s voting compares to what their state elected them
+                  to do — not raw defection from party. Each member&apos;s contested-vote break
+                  rate is scored against a seat-specific expectation derived from state
+                  partisan lean (Cook PVI<Cite id="4">Carson et al. 2010</Cite>): an aligned
+                  safe seat expects near-base-rate dissent (~3%), a swing seat ~8%, and a
+                  seat whose electorate leans toward the opposing party up to ~20%. Matching
+                  the expectation scores ~50 — a typical partisan for that seat. Crossing
+                  beyond it earns credit (discounted in aligned safe seats, where surplus
+                  defection reflects ideology rather than constituents); hyper-loyalty in a
+                  swing or opposed seat drifts below neutral. This is the delegate model of
+                  representation with partisan lean standing in for issue-level constituent
+                  opinion — a measurable, disclosed simplification. Note on composition:
+                  confirmation votes on nominations make up a large share of recent Senate
+                  roll calls and count at full weight — they are genuine, whipped
+                  party-line tests.
                 </P>
                 <P>
-                  The score is adjusted by state partisan lean using Cook PVI as a proxy:
-                  a senator in a safe R+20 state voting with their party may be representing
-                  constituents, not following orders. Raw break rates are misleading without
-                  this contextual adjustment. Note on composition: confirmation votes on
-                  nominations make up a large share of recent Senate roll calls, so
-                  measured independence reflects both legislation and nominations —
-                  both are genuine, whipped party-line tests.
+                  Before v4.2 this dimension was called Independent Voting and rewarded raw
+                  defection; it also exempted party-line votes on policy areas related to a
+                  member&apos;s top donor industries. That exemption is removed: donor
+                  industries are not a proxy for state interests, and it shielded exactly
+                  the votes most suspect for donor influence.
                 </P>
                 <P>
-                  The score blends two components: party independence (75%) — the rate of
-                  breaking with the party on non-state-relevant votes — and donor
-                  independence (25%) — a heuristic based on the money associated with
+                  The score blends two components: seat-relative vote alignment (75%) and
+                  donor independence (25%) — a heuristic based on the money associated with
                   donor-vote topical overlaps. We follow the methodological caution of
                   Ansolabehere et al. (2003)
                   <Cite id="18">Ansolabehere et al. 2003</Cite>
@@ -265,7 +279,7 @@ export default function AboutPage() {
             <P>
               All 435 House representatives are scored using the same five-metric
               framework as the Senate: Funding Independence, Promise Persistence,
-              Independent Voting, Funding Diversity, and Legislative Effectiveness. The data sources (FEC,
+              Constituent Alignment, Funding Diversity, and Legislative Effectiveness. The data sources (FEC,
               Congress.gov, GovInfo) and classification techniques are identical,
               ensuring consistent, comparable scores across both chambers.
             </P>

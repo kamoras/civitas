@@ -36,21 +36,26 @@ import sqlite3
 import statistics
 import sys
 
-sys.path.insert(0, "/app")
+# Fall back to the installed tree, but never shadow a PYTHONPATH override
+# (the docstring's "test uncommitted code" recipe depends on this).
+if "/app" not in sys.path:
+    sys.path.append("/app")
 
 from app.pipeline.analyze.score_calculator import calculate_scores  # noqa: E402
 from app.pipeline.transform.candidate_names import is_candidate_self_donor  # noqa: E402
 
 DB = "file:/data/civitas.db?mode=ro"
 
+# Keep in sync with app/pipeline/analyze/ground_truth.py
+# (v4.2 Constituent Alignment ranges, 2026-07-04)
 GROUND_TRUTH = [
     ("Collins",   "iv", 70, 100), ("Murkowski", "iv", 70, 100),
-    ("Sanders",   "iv", 30, 75),  ("Sanders",   "fi", 70, 100),
-    ("Warren",    "iv", 30, 70),  ("Warren",    "fi", 70, 100),
-    ("Cruz",      "iv", 15, 55),  ("Cruz",      "fi", 50, 95),
-    ("McConnell", "iv", 15, 55),  ("McConnell", "fi", 30, 90),
+    ("Sanders",   "iv", 35, 75),  ("Sanders",   "fi", 70, 100),
+    ("Warren",    "iv", 35, 70),  ("Warren",    "fi", 70, 100),
+    ("Cruz",      "iv", 30, 60),  ("Cruz",      "fi", 50, 95),
+    ("McConnell", "iv", 30, 60),  ("McConnell", "fi", 30, 90),
     ("Paul",      "iv", 55, 95),  ("Paul",      "fi", 60, 100),
-    ("Klobuchar", "iv", 35, 70),  ("Klobuchar", "fi", 35, 75),
+    ("Klobuchar", "iv", 40, 70),  ("Klobuchar", "fi", 35, 75),
 ]
 
 DIM_KEYS = ["fi", "pp", "iv", "fd", "le"]

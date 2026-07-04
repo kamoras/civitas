@@ -7,9 +7,15 @@ All scores are 0-100 where 100 = ideal representative, 0 = fully captured.
 The five dimensions:
   1. Funding Independence       — donor concentration, PAC dependency, self-funding
   2. Promise Persistence        — campaign commitments kept vs broken + participation
-  3. Independent Voting         — willingness to break with party, adjusted for state lean
+  3. Constituent Alignment      — voting behavior vs what the seat's electorate
+                                  expects (PVI-relative; stored/keyed as
+                                  independentVoting for compatibility)
   4. Funding Diversity          — source traceability and industry diversification
   5. Legislative Effectiveness  — bill passage, cosponsorship leadership, volume
+
+North star (owner, 2026-07): scores measure how well members REPRESENT
+their constituents — not independence as an intrinsic virtue. Party-line
+voting in a seat that elected that platform is representation.
 
 Design principles
 -----------------
@@ -41,16 +47,20 @@ Stein's Estimator," JASA 70:350). Floor advocacy uses Martin (2011,
 Studies 59:2) as precedent for floor speech as a proxy for legislative
 effort.
 
-Independent Voting: party-line break rate is the simplest measure of
-independence, but raw break rates are misleading without context.
-Following Carson et al. (2010, "The Electoral Costs of Party Loyalty,"
-AJPS 54:3), we adjust for state partisan lean using Cook PVI as a proxy
-for constituent preferences — a senator in a safe R+20 state voting with
-their party may be representing constituents, not following orders.
-Donor independence via lobbying matches follows Stratmann (2005) with
-the methodological caution from Ansolabehere, de Figueiredo & Snyder
-(2003, "Why Is There So Little Money in U.S. Politics?" JEP 17:1) that
-donation-vote correlations are not causal evidence of influence.
+Constituent Alignment: raw party-line break rates are misleading without
+context. Following Carson et al. (2010, "The Electoral Costs of Party
+Loyalty," AJPS 54:3), we use Cook PVI as a proxy for constituent
+preferences and score each member against a seat-specific EXPECTED break
+rate — a senator in a safe R+20 state voting with their party is
+representing constituents, not failing at independence, while the same
+loyalty in a swing state diverges from the median voter. This is the
+delegate model of representation (Miller & Stokes 1963, "Constituency
+Influence in Congress," APSR 57:1), with state partisan lean standing in
+for issue-level constituent opinion. Donor independence via lobbying
+matches follows Stratmann (2005) with the methodological caution from
+Ansolabehere, de Figueiredo & Snyder (2003, "Why Is There So Little
+Money in U.S. Politics?" JEP 17:1) that donation-vote correlations are
+not causal evidence of influence.
 
 Funding Diversity: the inverse Herfindahl-Hirschman Index (HHI) is a
 standard concentration metric from industrial organization (Rhoades
@@ -144,7 +154,7 @@ logger = logging.getLogger(__name__)
 # shifts scores. Recorded on every ScoreSnapshot so trend charts can
 # annotate methodology changes; keep frontend/src/lib/scoreVersions.ts
 # in sync (it holds the human-readable changelog).
-ALGORITHM_VERSION = "v4.1"
+ALGORITHM_VERSION = "v4.2"
 
 NON_INDUSTRY_CODES = {"OTHER", "SMALL_DONORS", "LARGE_INDIVIDUAL", "POLITICAL"}
 
@@ -194,7 +204,10 @@ def calculate_scores(
             senator.get("campaignPromises", []),
             floor_advocacy,
         ),
-        "independentVoting": _calc_independent_voting(
+        # Key kept as "independentVoting" for storage/API compatibility;
+        # since v4.2 this dimension is Constituent Alignment (see
+        # _calc_constituent_alignment).
+        "independentVoting": _calc_constituent_alignment(
             voting_record,
             lobbying_matches,
             funding,
@@ -437,27 +450,13 @@ def _calc_promise_persistence(
     return clamp(final)
 
 
-def _get_state_relevant_policies(funding: dict) -> set[str]:
-    """Derive state-relevant policy areas from the senator's top donor industries.
+def _signed_state_alignment(state: str, party: str, effective_party: str | None = None) -> float:
+    """How the senator's party aligns with their state's partisan lean.
 
-    Uses embedding similarity instead of a hardcoded mapping.
-    """
-    from app.pipeline.analyze.policy_alignment import get_related_policies
-
-    policies: set[str] = set()
-    for ind in funding.get("industryBreakdown", [])[:5]:
-        industry = ind.get("industry", "")
-        if industry in ("OTHER", "SMALL_DONORS", "LARGE_INDIVIDUAL", "POLITICAL"):
-            continue
-        policies.update(get_related_policies(industry))
-    return policies
-
-
-def _state_partisan_lean(state: str, party: str, effective_party: str | None = None) -> float:
-    """How strongly the state leans toward the senator's party.
-
-    Returns 0.0 (swing/opposing) to 1.0 (deep partisan match).
-    Used to discount party-line voting penalties in safe states.
+    Returns -1.0 to +1.0, normalized at ±15 PVI points:
+      +1.0 = deep safe seat for the senator's party,
+       0.0 = swing state (or unknown party/state),
+      -1.0 = state strongly leans toward the opposing party.
 
     For Independents, uses effective_party (inferred caucus) to
     determine state alignment. Sanders (I-VT, caucuses D) gets
@@ -471,13 +470,10 @@ def _state_partisan_lean(state: str, party: str, effective_party: str | None = N
         lean = -pvi
     else:
         return 0.0
-
-    if lean <= 0:
-        return 0.0
-    return min(lean / 15.0, 1.0)
+    return max(-1.0, min(lean / 15.0, 1.0))
 
 
-def _calc_independent_voting(
+def _calc_constituent_alignment(
     voting_record: dict,
     lobbying_matches: list[dict],
     funding: dict,
@@ -485,32 +481,49 @@ def _calc_independent_voting(
     party: str = "I",
 ) -> int:
     """
-    Independent Voting Score (0-100, higher = better).
+    Constituent Alignment Score (0-100, higher = better). v4.2 rebuild of
+    the former Independent Voting dimension (stored under the same key).
+
+    Purpose shift (2026-07): the dimension measures how a member's voting
+    compares to what their state elected them to do — NOT raw defection.
+    The v4.1 curve treated any break rate ≤3% as a hard floor of 20,
+    which pinned 73/100 senators into a 26–38 band (live mean 34): it
+    called the median elected official a failure for party-line voting
+    that, in a safe seat, IS constituent representation.
 
     Two components:
-      1. Party independence (75%, or 60% when real donor-alignment data
-         exists): percentage of votes against party on non-state-relevant
-         bills.  Adjusted by state partisan lean so that a senator in a
-         safe R+20 state isn't penalized for voting with their party —
-         that's constituent representation.  The lean discount is capped
-         (full credit never below a 20% break rate) so that safe-state
-         party leaders with single-digit break rates cannot score as
-         independents — the 2026-06 audit found the uncapped discount let
-         a 9% break rate score ≈72 on this component.
+      1. Seat-relative vote alignment (75%, or 60% when real
+         donor-alignment data exists): the member's contested-vote break
+         rate compared to an EXPECTED break rate derived from state
+         partisan lean (Cook PVI):
+           aligned safe seat → ~3% expected (base-rate dissent),
+           swing seat        → ~8%,
+           opposed seat      → up to ~20% (a member whose party opposes
+                               the state median should cross more often).
+         Matching expectation scores ~50 ("typical partisan for this
+         seat"). Crossing beyond it earns credit toward 100 — discounted
+         up to 40% in aligned safe seats, where surplus defection is
+         ideology rather than constituent representation (and where an
+         undiscounted credit let a 9%-break party leader score ≈72; see
+         2026-06 audit). Hyper-loyalty in a swing or opposed seat drifts
+         down to at most 25 — below neutral, but never the old
+         failure-grade floor.
 
-      2. Donor independence (25%/40%): based on donor-vote connection
-         matches.  senatorVoteAligned is only populated when a real
-         alignment computation exists — when it is None for every match
-         (the current state of the data), this component uses the
-         donation-share heuristic and gets the reduced 25% weight.
-         The previous heuristic scored a near-constant 80 for everyone:
-         it divided match count by 8 while the match list is capped at 8
-         upstream (detect_donor_vote_connections max_matches), so the
-         ratio was 1.0 for every senator with matches.
+      2. Donor independence (25%/40%): unchanged from v4.1 — based on
+         donor-vote connection matches, with the visibility-scaled
+         baseline. senatorVoteAligned is only populated when a real
+         alignment computation exists; when it is None for every match,
+         the donation-share heuristic gets the reduced 25% weight.
+
+    Removed in v4.2: the "state-relevant policy" exemption that skipped
+    party-line votes on policy areas related to the member's TOP DONOR
+    industries. Donor industries are not a proxy for state interests —
+    that exemption shielded exactly the votes most suspect for capture,
+    and gave bigger fundraisers more exemptions. Seat-relative
+    expectations now carry the constituent-representation adjustment.
     """
     effective_party = voting_record.get("effectiveParty", party)
-    state_policies = _get_state_relevant_policies(funding)
-    state_lean = _state_partisan_lean(state, party, effective_party=effective_party)
+    alignment = _signed_state_alignment(state, party, effective_party=effective_party)
 
     all_votes = (voting_record.get("keyVotes") or []) + (
         voting_record.get("recentVotes") or []
@@ -522,7 +535,6 @@ def _calc_independent_voting(
         wp = v.get("votedWithParty") if isinstance(v, dict) else None
         if wp is None:
             continue
-        policy = (v.get("policyArea") or "") if isinstance(v, dict) else ""
 
         # Multi-area alignment weight: when a bill spans multiple policy
         # areas, some may align with the senator's party and some may not.
@@ -534,18 +546,16 @@ def _calc_independent_voting(
         # NOTE on composition: nominations are ~43% of party-labeled votes
         # in the current Senate (2026-07 audit). They are deliberately
         # weighted the same as legislation — an experiment down-weighting
-        # them ×0.5 inflated IV for members whose loyalty concentrates on
-        # nominations while their breaks are legislative (a party leader
-        # jumped from 55 to 68 and out of the ground-truth range).
-        # Confirmation votes are genuine, whipped party-line tests.
+        # them ×0.5 inflated the score for members whose loyalty
+        # concentrates on nominations while their breaks are legislative
+        # (a party leader jumped from 55 to 68 and out of the
+        # ground-truth range). Confirmation votes are genuine, whipped
+        # party-line tests.
         weight = 1.0
         if isinstance(v, dict):
             raw_weight = v.get("partyAlignmentWeight", 0.0)
             if raw_weight > 0.0:
                 weight = raw_weight
-
-        if wp is True and policy in state_policies:
-            continue
 
         if wp is True:
             voted_with += weight
@@ -554,28 +564,32 @@ def _calc_independent_voting(
 
     party_total = voted_with + voted_against
 
+    # Expected break rate for the seat. BASE_RATE: CQ party-unity data
+    # puts typical dissent at 3-5%; every senator strays occasionally on
+    # procedural or home-state matters.
+    BASE_RATE = 0.03
+    if alignment >= 0:
+        expected = BASE_RATE + 0.05 * (1.0 - alignment)
+    else:
+        expected = 0.08 + 0.12 * (-alignment)
+
     if party_total >= 3.0:
         against_pct = voted_against / party_total
-        # Two-stage curve with a base rate: below ~3% cross-party voting
-        # is party-line noise — CQ party-unity data puts typical dissent
-        # at 3-5%, and every senator strays occasionally on procedural or
-        # home-state matters. 3%→full_credit rises linearly; beyond
-        # full_credit, diminishing returns toward 100.
-        # State lean shifts the full-credit point, but is capped at 0.20:
-        # even in a safe state, genuine independence means breaking with
-        # the party on at least a fifth of contested votes. (The prior
-        # floor of 0.10 let safe-state senators with single-digit break
-        # rates score near 60 on this component.)
-        BASE_RATE = 0.03
-        full_credit = max(0.20, 0.30 - state_lean * 0.10)
-        if against_pct <= BASE_RATE:
-            party_score = 20
-        elif against_pct >= full_credit:
-            party_score = 80 + min((against_pct - full_credit) / 0.20, 1.0) * 20
+        if against_pct >= expected:
+            # Crossing beyond the seat's expectation: credit toward 100,
+            # saturating at +25pts of surplus break rate, discounted in
+            # aligned safe seats (see docstring).
+            surplus = against_pct - expected
+            credit = 1.0 - 0.4 * max(alignment, 0.0)
+            party_score = 50.0 + 50.0 * min(surplus / 0.25, 1.0) * credit
         else:
-            party_score = 20 + (
-                (against_pct - BASE_RATE) / (full_credit - BASE_RATE)
-            ) * 60
+            # More loyal than the seat expects: drift below neutral by up
+            # to 25 points, scaled in absolute break-rate points so an
+            # aligned-safe-seat loyalist (expected ≈3%, actual ≈1%) stays
+            # near 47 while a swing-state hyper-loyalist (expected ≈8%,
+            # actual ≈1%) lands near 33.
+            deficit = expected - against_pct
+            party_score = 50.0 - 25.0 * min(deficit / 0.10, 1.0)
     else:
         party_score = 50
 

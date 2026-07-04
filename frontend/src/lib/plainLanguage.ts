@@ -25,10 +25,10 @@ export const TECHNICAL_TERMS: Record<ScoreKey, ScoreTerm> = {
       "Are they keeping campaign promises? Compares stated platform commitments against actual votes, using AI analysis. Higher = more follow-through.",
   },
   independentVoting: {
-    label: "Independent Voting",
-    shortLabel: "INDEP. VOTE",
+    label: "Constituent Alignment",
+    shortLabel: "ALIGNMENT",
     description:
-      "How often do they vote against their own party? Adjusted for state partisanship — breaking party line in a swing state counts less than in a deep-red/blue state.",
+      "Does their voting match what their state elected them to do? Each member's party-line break rate is compared to what their seat's partisan lean predicts: matching it scores ~50 (typical for the seat), crossing party lines beyond it scores higher, and hyper-loyalty in a swing state scores lower. Party-line voting in a safe seat is representation, not a failing.",
   },
   fundingDiversity: {
     label: "Funding Diversity",
@@ -58,10 +58,10 @@ export const PLAIN_TERMS: Record<ScoreKey, ScoreTerm> = {
       "How often they keep the promises they made during their campaign. We compare what they said they'd do against how they actually voted.",
   },
   independentVoting: {
-    label: "Breaks With Party",
-    shortLabel: "INDEP.",
+    label: "Votes Like Their District",
+    shortLabel: "ALIGNMENT",
     description:
-      "How often they break with their party to vote differently. Adjusted for their district — a representative in a split district gets more credit for bipartisan votes.",
+      "Does their voting match what their district elected them to do? Voting the party line in a safe seat is normal representation (~50). Crossing party lines counts for more in split districts, and pure party-line voting in a split district scores below average.",
   },
   fundingDiversity: {
     label: "Spread Out Funding",

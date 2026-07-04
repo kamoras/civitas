@@ -252,7 +252,7 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
                       const labels: Record<string, string> = {
                         fundingIndependence: "Funding Independence",
                         promisePersistence: "Promise Persistence",
-                        independentVoting: "Independent Voting",
+                        independentVoting: "Constituent Alignment",
                         fundingDiversity: "Funding Diversity",
                         legislativeEffectiveness: "Legislative Effectiveness",
                       };

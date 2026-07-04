@@ -3,9 +3,9 @@
 import pytest
 
 from app.pipeline.analyze.score_calculator import (
+    _calc_constituent_alignment,
     _calc_funding_diversity,
     _calc_funding_independence,
-    _calc_independent_voting,
     _calc_legislative_effectiveness,
     _calc_promise_persistence,
     calculate_scores,
@@ -162,8 +162,13 @@ class TestFundingIndependence:
         assert score_low - score_high >= 10
 
 
-class TestIndependentVoting:
-    """Higher score = more independent from party and donors."""
+class TestConstituentAlignment:
+    """v4.2: score is relative to what the seat's electorate expects.
+
+    Matching the seat's expected break rate ≈ neutral 50; crossing
+    beyond it earns credit; hyper-loyalty in a swing/opposed seat
+    drifts below neutral but never to a failure-grade floor.
+    """
 
     def _make_votes(self, with_party=0, against_party=0, policy="JUSTICE"):
         votes = []
@@ -175,28 +180,43 @@ class TestIndependentVoting:
 
     def test_no_data_returns_neutral(self):
         record = {"keyVotes": [], "recentVotes": []}
-        score = _calc_independent_voting(record, [], {})
+        score = _calc_constituent_alignment(record, [], {})
         assert 40 <= score <= 60
 
-    def test_high_party_independence(self):
+    def test_frequent_crosser_scores_high(self):
         record = {
             "keyVotes": self._make_votes(with_party=70, against_party=30),
             "recentVotes": [],
         }
-        score = _calc_independent_voting(
+        score = _calc_constituent_alignment(
             record, [], {"totalRaised": 1_000_000, "totalFromPACs": 0}
         )
         assert score >= 70
 
-    def test_pure_party_line_voter(self):
+    def test_pure_party_line_voter_below_neutral_in_swing_seat(self):
         record = {
             "keyVotes": self._make_votes(with_party=100, against_party=0),
             "recentVotes": [],
         }
-        score = _calc_independent_voting(
+        score = _calc_constituent_alignment(
             record, [], {"totalRaised": 1_000_000, "totalFromPACs": 500_000}
         )
         assert score < 50
+
+    def test_safe_seat_loyalist_scores_near_neutral(self):
+        """THE v4.2 regression test: a member of a deep-safe seat voting
+        the way the seat elected them to is typical representation
+        (≈50), not a failure grade. v4.1 pinned 73/100 senators at a
+        floor of ~26-38 for exactly this behavior."""
+        record = {
+            "keyVotes": self._make_votes(with_party=97, against_party=3),
+            "recentVotes": [],
+        }
+        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
+        score = _calc_constituent_alignment(
+            record, [], funding, state="ID", party="R"
+        )
+        assert 45 <= score <= 62
 
     def test_lobbying_alignment_penalizes(self):
         record = {
@@ -208,18 +228,21 @@ class TestIndependentVoting:
             {"senatorVoteAligned": True},
             {"senatorVoteAligned": True},
         ]
-        score_with = _calc_independent_voting(
+        score_with = _calc_constituent_alignment(
             record, all_aligned,
             {"totalRaised": 1_000_000, "totalFromPACs": 500_000},
         )
-        score_without = _calc_independent_voting(
+        score_without = _calc_constituent_alignment(
             record, [],
             {"totalRaised": 1_000_000, "totalFromPACs": 500_000},
         )
         assert score_with < score_without
 
-    def test_state_relevant_party_votes_excluded(self):
-        """Party-line votes on state-relevant bills shouldn't count against independence."""
+    def test_donor_industry_votes_no_longer_exempt(self):
+        """v4.1 exempted party-line votes on policy areas related to the
+        member's top DONOR industries — backwards under the representation
+        north star (it shielded the votes most suspect for capture).
+        Those votes now count like any other party-line vote."""
         funding = {
             "totalRaised": 1_000_000,
             "totalFromPACs": 200_000,
@@ -236,32 +259,73 @@ class TestIndependentVoting:
             "keyVotes": other_votes,
             "recentVotes": [],
         }
-        score_with_energy = _calc_independent_voting(record_with_energy, [], funding)
-        score_just_other = _calc_independent_voting(record_just_other, [], funding)
-        assert abs(score_with_energy - score_just_other) <= 5
+        score_with_energy = _calc_constituent_alignment(record_with_energy, [], funding)
+        score_just_other = _calc_constituent_alignment(record_just_other, [], funding)
+        # 20 extra party-line votes dilute the break rate → lower score
+        assert score_with_energy < score_just_other
 
-    def test_deep_red_state_senator_not_penalized(self):
-        """A Republican in a deep red state voting with the party should score OK."""
+    def test_swing_seat_loyalty_scores_below_safe_seat_loyalty(self):
+        """The same 95% party-line record represents a deep-red state's
+        electorate but diverges from a swing state's median voter."""
         record = {
             "keyVotes": self._make_votes(with_party=95, against_party=5),
             "recentVotes": [],
         }
         funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
 
-        score_deep_red = _calc_independent_voting(
+        score_deep_red = _calc_constituent_alignment(
             record, [], funding, state="WY", party="R"
         )
-        score_swing = _calc_independent_voting(
+        score_swing = _calc_constituent_alignment(
             record, [], funding, state="NV", party="R"
         )
         assert score_deep_red > score_swing
 
+    def test_opposed_seat_expects_more_crossing(self):
+        """A member whose party opposes the state lean is expected to
+        cross more; the same loyal record scores lower there than in a
+        seat aligned with the party."""
+        record = {
+            "keyVotes": self._make_votes(with_party=95, against_party=5),
+            "recentVotes": [],
+        }
+        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
+        score_opposed = _calc_constituent_alignment(
+            record, [], funding, state="MA", party="R"
+        )
+        score_aligned = _calc_constituent_alignment(
+            record, [], funding, state="ID", party="R"
+        )
+        assert score_opposed < score_aligned
+
+    def test_safe_seat_surplus_crossing_credit_discounted(self):
+        """Crossing far beyond a safe aligned seat's expectation is
+        ideology rather than constituent representation: credited, but
+        discounted relative to the same surplus in a swing seat (this is
+        the guardrail that kept a 9%-break party leader from scoring as
+        an independent in the 2026-06 audit)."""
+        record = {
+            "keyVotes": self._make_votes(with_party=75, against_party=25),
+            "recentVotes": [],
+        }
+        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
+        score_safe = _calc_constituent_alignment(
+            record, [], funding, state="WY", party="R"
+        )
+        score_swing = _calc_constituent_alignment(
+            record, [], funding, state="NV", party="R"
+        )
+        # Both above neutral, but the swing-seat crosser earns more per
+        # point of surplus even though their expected break rate is higher.
+        assert score_safe > 50
+        assert score_swing > 50
+
     def test_nomination_votes_weighted_like_legislation(self):
         """Nominations are whipped party-line tests; they count at full weight.
 
-        (A ×0.5 down-weighting experiment inflated IV for members whose
-        loyalty concentrates on nominations — see the note in
-        _calc_independent_voting.)
+        (A ×0.5 down-weighting experiment inflated the score for members
+        whose loyalty concentrates on nominations — see the note in
+        _calc_constituent_alignment.)
         """
         funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
         legis = {
@@ -280,11 +344,12 @@ class TestIndependentVoting:
             ],
             "recentVotes": [],
         }
-        assert _calc_independent_voting(legis, [], funding) == \
-            _calc_independent_voting(noms, [], funding)
+        assert _calc_constituent_alignment(legis, [], funding) == \
+            _calc_constituent_alignment(noms, [], funding)
 
-    def test_two_stage_curve_creates_spread(self):
-        """Different independence levels should produce meaningfully different scores."""
+    def test_break_rate_monotonic_with_spread(self):
+        """More crossing (relative to the same seat) never lowers the
+        score, and the range is meaningful."""
         funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
         scores = []
         for against in [0, 5, 10, 20, 40]:
@@ -292,11 +357,9 @@ class TestIndependentVoting:
                 "keyVotes": self._make_votes(with_party=100 - against, against_party=against),
                 "recentVotes": [],
             }
-            scores.append(_calc_independent_voting(record, [], funding))
-        # Scores should be monotonically increasing
+            scores.append(_calc_constituent_alignment(record, [], funding))
         for i in range(1, len(scores)):
             assert scores[i] >= scores[i - 1]
-        # And there should be meaningful spread
         assert scores[-1] - scores[0] >= 25
 
 

@@ -39,20 +39,25 @@ import logging
 logger = logging.getLogger(__name__)
 
 # (name_fragment, dimension_attr, (min, max), rationale)
+# IV ranges updated 2026-07-04 for v4.2 Constituent Alignment: the score
+# is now relative to the seat's expected break rate, so loyalists in
+# aligned seats center near 50 ("typical partisan for this seat") rather
+# than pinning at the old ≤3% floor of ~26-38. Frequent crossers whose
+# crossing tracks their state (Collins/Murkowski) still score high.
 GROUND_TRUTH: list[tuple[str, str, tuple[int, int], str]] = [
-    ("Collins",   "score_independent_voting",    (70, 100), "≈36% contested-vote break rate"),
-    ("Murkowski", "score_independent_voting",    (70, 100), "≈33% contested-vote break rate"),
-    ("Sanders",   "score_independent_voting",    (30, 75),  "caucuses D, ≈8% break rate"),
+    ("Collins",   "score_independent_voting",    (70, 100), "≈36% breaks, D-lean state — crossing IS representation"),
+    ("Murkowski", "score_independent_voting",    (70, 100), "≈33% breaks, independent-streak state"),
+    ("Sanders",   "score_independent_voting",    (35, 75),  "caucuses D, ≈8% breaks in deep-D VT ≈ slightly above expectation"),
     ("Sanders",   "score_funding_independence",  (70, 100), "small-donor base, ~0% PAC"),
-    ("Warren",    "score_independent_voting",    (30, 70),  "≈7% break rate"),
+    ("Warren",    "score_independent_voting",    (35, 70),  "≈7% breaks in deep-D MA ≈ slightly above expectation"),
     ("Warren",    "score_funding_independence",  (70, 100), "rejected corporate PAC money"),
-    ("Cruz",      "score_independent_voting",    (15, 55),  "≈4% break rate, safe state"),
+    ("Cruz",      "score_independent_voting",    (30, 60),  "≈4% breaks in R+8 TX ≈ typical partisan for the seat"),
     ("Cruz",      "score_funding_independence",  (50, 95),  "large small-dollar base"),
-    ("McConnell", "score_independent_voting",    (15, 55),  "party leader, ≈9% break rate"),
+    ("McConnell", "score_independent_voting",    (30, 60),  "party leader, ≈9% breaks in R+16 KY ≈ at/above seat expectation; must NOT exceed 60 (2026-06 audit trap)"),
     ("McConnell", "score_funding_independence",  (30, 90),  "recent-window profile is mid-pack; see module docstring"),
-    ("Paul",      "score_independent_voting",    (55, 95),  "≈16% break rate despite safe state"),
+    ("Paul",      "score_independent_voting",    (55, 95),  "≈16% breaks, far beyond safe-seat expectation (discounted credit)"),
     ("Paul",      "score_funding_independence",  (60, 100), "small-dollar base"),
-    ("Klobuchar", "score_independent_voting",    (35, 70),  "≈10% break rate"),
+    ("Klobuchar", "score_independent_voting",    (40, 70),  "≈10% breaks in D+2 MN ≈ slightly above seat expectation"),
     ("Klobuchar", "score_funding_independence",  (35, 75),  "mid-range PAC reliance, no capture signal"),
 ]
 

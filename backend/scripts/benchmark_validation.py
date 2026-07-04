@@ -18,9 +18,13 @@ Baseline (2026-07-02, algorithm v4.1, Senate 119, 97 matched senators):
     IV vs party-unity break rate:  r = +0.70
     IV vs |DW-NOMINATE| extremity: r = -0.48
 
-If a future run drops the party-unity correlation well below the
-baseline, the IV pipeline (vote fetching, party labeling, or formula)
-has regressed — investigate before trusting the scores.
+v4.2 note (2026-07-04): the dimension is now Constituent Alignment —
+scored against a seat-specific expected break rate (Cook PVI), not raw
+defection — so a LOWER raw-rate correlation is by design:
+    CA vs party-unity break rate (shadow-scored):        r = +0.45
+    CA vs seat-relative surplus (rate − expected):       r = +0.60
+Investigate if the raw-rate correlation falls below ~+0.30 (sign/ordering
+regressions) or the surplus correlation falls below ~+0.50.
 
 Future work: correlate Legislative Effectiveness against Volden &
 Wiseman's LES (thelawmakers.org) once a stable download URL is wired in.
