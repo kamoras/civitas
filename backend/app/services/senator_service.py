@@ -324,6 +324,7 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
         partisan_depth=_parse_partisan_depth(senator.partisan_depth),
         sponsored_bills=_build_sponsored_bills(senator.sponsored_bills),
         leadership_score=senator.leadership_score,
+        bipartisanship_score=senator.bipartisanship_score,
         ideology_score=senator.ideology_score,
         sponsorship_description=getattr(senator, "sponsorship_description", "") or "",
         website_url=getattr(senator, "website_url", "") or "",

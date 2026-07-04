@@ -82,6 +82,8 @@ def _migrate_columns() -> None:
         ("campaign_promises", "related_bills", "TEXT DEFAULT '[]'"),
         ("rep_campaign_promises", "related_bills", "TEXT DEFAULT '[]'"),
         ("week_summaries", "bsky_posted_at", "DATETIME"),
+        ("senators", "bipartisanship_score", "REAL"),
+        ("representatives", "bipartisanship_score", "REAL"),
     ]
 
     drops: list[tuple[str, str]] = [

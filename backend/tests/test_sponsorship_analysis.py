@@ -186,3 +186,63 @@ class TestDescribePosition:
     def test_independent(self):
         desc = describe_senator_position(0.2, 0.5, "I")
         assert "Independent" in desc
+
+
+# ── Bipartisanship (v5) ──────────────────────────────────────────
+
+from app.pipeline.analyze.sponsorship_analysis import compute_bipartisanship_scores
+
+
+class TestBipartisanship:
+    def _cohort(self):
+        """12 members, 6 per party; M1(D) works across the aisle, M2(D) never does."""
+        parties = {f"D{i}": "D" for i in range(6)} | {f"R{i}": "R" for i in range(6)}
+        bills, cosponsors = [], {}
+        # Every member sponsors one bill
+        for bio, p in parties.items():
+            bills.append({"billId": f"B.{bio}", "sponsorBioguide": bio, "sponsorParty": p})
+        # D0 cosponsors all R bills; D1 cosponsors only D bills; everyone
+        # else cosponsors two same-party bills + R0's bill gets D cosponsors
+        for i in range(6):
+            cosponsors.setdefault(f"B.R{i}", []).append({"bioguideId": "D0", "party": "D"})
+        for i in range(2, 6):
+            cosponsors.setdefault(f"B.D{i}", []).append({"bioguideId": "D1", "party": "D"})
+            cosponsors[f"B.D{i}"].append({"bioguideId": f"D{(i+1)%4+2}", "party": "D"})
+        for i in range(2, 6):
+            cosponsors.setdefault(f"B.R{i}", []).append({"bioguideId": f"R{(i+1)%4+2}", "party": "R"})
+        # give everyone a few more same-party interactions to clear min_interactions
+        for i in range(6):
+            cosponsors.setdefault(f"B.D{i%6}", []).append({"bioguideId": f"D{(i+2)%6}", "party": "D"})
+            cosponsors.setdefault(f"B.R{i%6}", []).append({"bioguideId": f"R{(i+2)%6}", "party": "R"})
+        return bills, cosponsors, parties
+
+    def test_crossing_member_outranks_loyalist(self):
+        bills, cos, parties = self._cohort()
+        scores = compute_bipartisanship_scores(bills, cos, parties, min_interactions=3)
+        assert scores, "cohort should produce scores"
+        assert scores["D0"] > scores.get("D1", 0.0)
+        assert scores["D0"] == 1.0  # far above cohort median caps at 1.0
+
+    def test_zero_crossing_scores_zero(self):
+        bills, cos, parties = self._cohort()
+        scores = compute_bipartisanship_scores(bills, cos, parties, min_interactions=3)
+        if "D1" in scores:
+            assert scores["D1"] == 0.0
+
+    def test_no_fabrication_for_thin_data(self):
+        bills, cos, parties = self._cohort()
+        scores = compute_bipartisanship_scores(bills, cos, parties, min_interactions=50)
+        assert scores == {}
+
+    def test_party_symmetric(self):
+        """Mirroring every party label leaves the score set unchanged."""
+        bills, cos, parties = self._cohort()
+        flip = {"D": "R", "R": "D"}
+        bills2 = [{**b, "sponsorParty": flip[b["sponsorParty"]]} for b in bills]
+        cos2 = {
+            k: [{**c, "party": flip[c["party"]]} for c in v] for k, v in cos.items()
+        }
+        parties2 = {k: flip[v] for k, v in parties.items()}
+        s1 = compute_bipartisanship_scores(bills, cos, parties, min_interactions=3)
+        s2 = compute_bipartisanship_scores(bills2, cos2, parties2, min_interactions=3)
+        assert s1 == s2

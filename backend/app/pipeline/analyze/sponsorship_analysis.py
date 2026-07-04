@@ -262,3 +262,122 @@ def describe_senator_position(
     if role:
         parts.append(role)
     return " ".join(parts)
+
+
+def compute_bipartisanship_scores(
+    bills_data: list[dict],
+    cosponsors_map: dict[str, list[dict]],
+    member_parties: dict[str, str],
+    min_interactions: int = 5,
+) -> dict[str, float]:
+    """Cross-party coalition breadth from cosponsorship behavior.
+
+    Modeled on the Lugar Center Bipartisan Index (Lugar Center &
+    Georgetown McCourt School, 2014-): a member's willingness to work
+    across the aisle is measured on both sides of sponsorship —
+
+      * receiving: of the cosponsors a member attracts to their own
+        bills, what share come from the other party; and
+      * giving: of the bills a member chooses to cosponsor, what share
+        are sponsored by the other party.
+
+    Both directions matter: attracting cross-party support shows bills
+    written for a broad constituency, and lending support across the
+    aisle shows engagement beyond the member's base (Harbridge 2015,
+    "Is Bipartisanship Dead?", Cambridge UP).
+
+    Scores are normalized to the cohort median (median -> 0.5, 2x the
+    median or better -> 1.0), which makes the measure symmetric across
+    parties and majority status without any fixed constant: the
+    normalization is recomputed from the observed cohort every run.
+    Members of neither major party are assigned the side they cosponsor
+    with most (caucus inference, consistent with normalize_votes);
+    members with fewer than ``min_interactions`` observed interactions
+    are omitted (callers treat missing as neutral, and the confidence
+    grade reflects the thin data).
+
+    Returns bioguideId -> [0, 1].
+    """
+    def _norm_party(p: str | None) -> str | None:
+        if not p:
+            return None
+        p = p.strip().upper()[:1]
+        return p if p in ("D", "R") else None
+
+    sponsor_party_by_bill: dict[str, str] = {}
+    sponsor_bio_by_bill: dict[str, str] = {}
+    for b in bills_data:
+        sp = _norm_party(b.get("sponsorParty"))
+        if sp and b.get("billId"):
+            sponsor_party_by_bill[b["billId"]] = sp
+            if b.get("sponsorBioguide"):
+                sponsor_bio_by_bill[b["billId"]] = b["sponsorBioguide"]
+
+    # First pass: per-member cross/total counts on both directions, and
+    # D/R giving profile for caucus inference of Independents.
+    give_total: dict[str, int] = {}
+    give_cross_d: dict[str, int] = {}  # cosponsored a D-sponsored bill
+    give_cross_r: dict[str, int] = {}
+    recv_total: dict[str, int] = {}
+    recv_from_d: dict[str, int] = {}
+    recv_from_r: dict[str, int] = {}
+
+    for bill_id, sponsor_party in sponsor_party_by_bill.items():
+        sponsor_bio = sponsor_bio_by_bill.get(bill_id)
+        for co in cosponsors_map.get(bill_id, []):
+            co_bio = co.get("bioguideId", "")
+            if not co_bio or co_bio == sponsor_bio:
+                continue
+            co_party = _norm_party(co.get("party")) or _norm_party(
+                member_parties.get(co_bio)
+            )
+            give_total[co_bio] = give_total.get(co_bio, 0) + 1
+            if sponsor_party == "D":
+                give_cross_d[co_bio] = give_cross_d.get(co_bio, 0) + 1
+            else:
+                give_cross_r[co_bio] = give_cross_r.get(co_bio, 0) + 1
+            if sponsor_bio:
+                recv_total[sponsor_bio] = recv_total.get(sponsor_bio, 0) + 1
+                if co_party == "D":
+                    recv_from_d[sponsor_bio] = recv_from_d.get(sponsor_bio, 0) + 1
+                elif co_party == "R":
+                    recv_from_r[sponsor_bio] = recv_from_r.get(sponsor_bio, 0) + 1
+
+    def _side(bio: str) -> str | None:
+        p = _norm_party(member_parties.get(bio))
+        if p:
+            return p
+        d, r = give_cross_d.get(bio, 0), give_cross_r.get(bio, 0)
+        if d + r == 0:
+            return None
+        return "D" if d >= r else "R"
+
+    raw_rates: dict[str, float] = {}
+    for bio in set(give_total) | set(recv_total):
+        side = _side(bio)
+        if side is None:
+            continue
+        cross = 0
+        total = 0
+        gt = give_total.get(bio, 0)
+        if gt:
+            cross += give_cross_r.get(bio, 0) if side == "D" else give_cross_d.get(bio, 0)
+            total += gt
+        rt = recv_total.get(bio, 0)
+        if rt:
+            cross += recv_from_r.get(bio, 0) if side == "D" else recv_from_d.get(bio, 0)
+            total += rt
+        if total >= min_interactions:
+            raw_rates[bio] = cross / total
+
+    if len(raw_rates) < 10:
+        return {}
+
+    rates = sorted(raw_rates.values())
+    median = rates[len(rates) // 2]
+    if median <= 0:
+        # Degenerate cohort (no observed crossing anywhere): fall back to
+        # an absolute scale where 30% cross-party interactions = 1.0.
+        return {bio: min(r / 0.30, 1.0) for bio, r in raw_rates.items()}
+
+    return {bio: min(r / (2.0 * median), 1.0) for bio, r in raw_rates.items()}

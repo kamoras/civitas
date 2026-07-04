@@ -208,10 +208,15 @@ export default function AboutPage() {
                   the votes most suspect for donor influence.
                 </P>
                 <P>
-                  The score blends two components: seat-relative vote alignment (75%) and
-                  donor independence (25%) — a heuristic based on the money associated with
-                  donor-vote topical overlaps. We follow the methodological caution of
-                  Ansolabehere et al. (2003)
+                  Since v5 the score blends three components: seat-relative vote alignment
+                  (~55%), coalition breadth (20%), and donor independence (25%) — a
+                  heuristic based on the money associated with donor-vote topical overlaps.
+                  Coalition breadth asks whether a member also legislates for the
+                  constituents who didn&apos;t vote for them: the rate at which they attract
+                  cosponsors from the other party and lend their name to the other party&apos;s
+                  bills, normalized to the chamber median (following the Lugar Center
+                  Bipartisan Index method; Harbridge 2015). We follow the methodological
+                  caution of Ansolabehere et al. (2003)
                   <Cite id="18">Ansolabehere et al. 2003</Cite>
                   in interpreting donation-vote correlations: correlation does not prove causation.
                   <Cite id="5">Stratmann 2005</Cite>
@@ -237,11 +242,16 @@ export default function AboutPage() {
               <div>
                 <Label>Legislative Effectiveness (20%)</Label>
                 <P>
-                  Measures how effective a senator is at advancing legislation. The score
-                  combines bill passage rates, cosponsorship network influence (PageRank),
-                  and ability to move bills through committee and floor consideration.
-                  Higher scores indicate senators who successfully shepherd bills into law
-                  and attract bipartisan cosponsorship.
+                  Measures how effective a member is at advancing legislation. The score
+                  combines bill advancement rates, cosponsorship network influence
+                  (PageRank), and sponsorship volume. Since v5, advancement is benchmarked
+                  against the sponsor&apos;s majority/minority status per congress — minority
+                  sponsors advance bills at a fraction of the majority rate (Volden &amp;
+                  Wiseman 2014; our own corpus measures senate 3.6% vs 2.4%, house 6.4% vs
+                  2.4%), so scoring everyone against one absolute threshold would silently
+                  penalize whichever party is out of power. Matching the baseline for your
+                  status scores 50; the thresholds are measured from the data, identical
+                  for both parties.
                 </P>
               </div>
             </div>

@@ -17,6 +17,17 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v5",
+    date: "2026-07-05",
+    title: "Representing all constituents — coalition breadth and status-fair effectiveness",
+    changes: [
+      "Constituent Alignment gains a coalition-breadth component (20%): the rate at which a member attracts cosponsors from the other party and cosponsors the other party's bills, normalized to the chamber median (Lugar Center Bipartisan Index method). Voting congruence asks whether you vote the way your seat elected you to; breadth asks whether you also legislate for the constituents who didn't vote for you. Cohort-median crossing scores 50; the normalization is recomputed from observed behavior every run, so it is party- and majority-symmetric with no fixed constants.",
+      "Legislative Effectiveness advancement is now benchmarked against the sponsor's majority/minority status in each congress. Measured from our own bill corpus: senate majority sponsors advance 3.6% of substantive bills vs 2.4% for the minority; house 6.4% vs 2.4% (consistent with Volden & Wiseman 2014). The old absolute 5% threshold silently penalized whichever party was out of power; matching your status baseline now scores 50 for everyone.",
+      "Senators with sparse platform data get their Promise Persistence positions augmented from their own sponsored legislation (the deterministic House path from v4.3), deduplicated against stated platform promises. This closes most of the v4.3 cross-chamber shrinkage offset by giving both chambers comparable evaluable-position counts.",
+      "Action center ranking now leads with civic actionability (40%) over coverage breadth (35%) and trending (25%): a story where citizens can directly act outranks a better-covered story with no US action surface.",
+    ],
+  },
+  {
     version: "v4.3",
     date: "2026-07-05",
     title: "Real House promise data",

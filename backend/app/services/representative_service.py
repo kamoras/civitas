@@ -182,6 +182,7 @@ def build_rep_response(rep: Representative, _db: Session = None) -> dict:
             for sb in sorted(rep.sponsored_bills, key=lambda x: x.introduced_date or "", reverse=True)
         ],
         "leadershipScore": rep.leadership_score,
+        "bipartisanshipScore": rep.bipartisanship_score,
         "ideologyScore": rep.ideology_score,
         "sponsorshipDescription": rep.sponsorship_description or "",
         "websiteUrl": getattr(rep, "website_url", "") or "",
@@ -508,6 +509,8 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
 
     ls = rep_data.get("leadershipScore")
     existing.leadership_score = ls if ls is not None else existing.leadership_score
+    bs = rep_data.get("bipartisanshipScore")
+    existing.bipartisanship_score = bs if bs is not None else existing.bipartisanship_score
     ids = rep_data.get("ideologyScore")
     existing.ideology_score = ids if ids is not None else existing.ideology_score
     existing.sponsorship_description = rep_data.get("sponsorshipDescription") or existing.sponsorship_description

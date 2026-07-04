@@ -402,6 +402,8 @@ def upsert_senator(db: Session, data: dict) -> None:
     if existing:
         ls = data.get("leadershipScore")
         existing.leadership_score = ls if ls is not None else None
+        bs = data.get("bipartisanshipScore")
+        existing.bipartisanship_score = bs if bs is not None else None
         ids = data.get("ideologyScore")
         existing.ideology_score = ids if ids is not None else None
         existing.sponsorship_description = data.get("sponsorshipDescription") or ""
@@ -1537,6 +1539,7 @@ async def run_full_pipeline(
 
         # 3f. Sponsorship analysis: PageRank leadership + SVD ideology
         from app.pipeline.analyze.sponsorship_analysis import (
+            compute_bipartisanship_scores,
             compute_ideology_scores,
             compute_leadership_scores,
             describe_senator_position,
@@ -1558,9 +1561,12 @@ async def run_full_pipeline(
         ideology_scores = compute_ideology_scores(
             all_bills_for_analysis, cosponsors_map, senator_bio_ids, senator_party_map,
         )
+        bipartisanship_scores = compute_bipartisanship_scores(
+            all_bills_for_analysis, cosponsors_map, senator_party_map,
+        )
         logger.info(
-            "Sponsorship analysis: %d leadership scores, %d ideology scores",
-            len(leadership_scores), len(ideology_scores),
+            "Sponsorship analysis: %d leadership, %d ideology, %d bipartisanship scores",
+            len(leadership_scores), len(ideology_scores), len(bipartisanship_scores),
         )
         progress.complete(
             "sponsorship_analysis",
@@ -1735,6 +1741,7 @@ async def run_full_pipeline(
                     "lobbyingMatches": lobbying_matches,
                     "campaignPromises": platform_data.get("campaignPromises", []),
                     "leadershipScore": leadership_scores.get(bio_id_for_score),
+                    "bipartisanshipScore": bipartisanship_scores.get(bio_id_for_score),
                     "sponsoredBills": prepared.get("sponsoredBills", []),
                 }
                 corruption_score = calculate_scores(
@@ -1841,6 +1848,8 @@ async def run_full_pipeline(
                 l_score = leadership_scores.get(bio_id)
                 i_score = ideology_scores.get(bio_id)
                 result["leadershipScore"] = round(l_score, 4) if l_score is not None else None
+                b_score = bipartisanship_scores.get(bio_id)
+                result["bipartisanshipScore"] = round(b_score, 4) if b_score is not None else None
                 result["ideologyScore"] = round(i_score, 4) if i_score is not None else None
                 if l_score is not None and i_score is not None:
                     result["sponsorshipDescription"] = describe_senator_position(

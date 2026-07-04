@@ -270,6 +270,7 @@ async def run_house_pipeline() -> dict:
             from app.pipeline.analyze.sponsorship_analysis import (
                 compute_leadership_scores,
                 compute_ideology_scores,
+                compute_bipartisanship_scores,
                 describe_senator_position,
             )
 
@@ -277,6 +278,7 @@ async def run_house_pipeline() -> dict:
             all_bills_for_analysis: list[dict] = []
             leadership_scores: dict[str, float] = {}
             ideology_scores: dict[str, float] = {}
+            bipartisanship_scores: dict[str, float] = {}
 
             try:
                 # Fetch cosponsors for significant bills to build the
@@ -370,6 +372,9 @@ async def run_house_pipeline() -> dict:
                 }
                 leadership_scores = compute_leadership_scores(
                     all_bills_for_analysis, cosponsors_map, rep_bio_ids, rep_party_map,
+                )
+                bipartisanship_scores = compute_bipartisanship_scores(
+                    all_bills_for_analysis, cosponsors_map, rep_party_map,
                 )
                 ideology_scores = compute_ideology_scores(
                     all_bills_for_analysis, cosponsors_map, rep_bio_ids, rep_party_map,
@@ -567,7 +572,9 @@ async def run_house_pipeline() -> dict:
                     # Set leadership/ideology from sponsorship analysis
                     l_score = leadership_scores.get(bio_id)
                     i_score = ideology_scores.get(bio_id)
+                    b_score = bipartisanship_scores.get(bio_id)
                     rep["leadershipScore"] = round(l_score, 4) if l_score is not None else None
+                    rep["bipartisanshipScore"] = round(b_score, 4) if b_score is not None else None
                     rep["ideologyScore"] = round(i_score, 4) if i_score is not None else None
                     if l_score is not None and i_score is not None:
                         rep["sponsorshipDescription"] = describe_senator_position(

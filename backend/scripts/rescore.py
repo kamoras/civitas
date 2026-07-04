@@ -181,6 +181,9 @@ def build_payload(cur, s, search, fin):
         "campaignPromises": promises,
         "sponsoredBills": bills,
         "leadershipScore": s["leadership_score"],
+        "bipartisanshipScore": (
+            s["bipartisanship_score"] if "bipartisanship_score" in s.keys() else None
+        ),
     }
 
 

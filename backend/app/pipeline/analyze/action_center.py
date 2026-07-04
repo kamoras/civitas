@@ -684,12 +684,16 @@ def _rank_clusters(
     clusters: list[list[NewsArticle]],
     trending: list[TrendingTopic],
 ) -> list[list[NewsArticle]]:
-    """Rank clusters by coverage breadth, trending relevance, and US civic relevance.
+    """Rank clusters by US civic actionability, coverage breadth, and trending.
 
-    Final score = 0.25 * coverage + 0.45 * trending + 0.30 * us_civic.
-    The US civic dimension ensures stories where citizens can directly act
-    (contact Congress, track legislation, respond to executive action) rank
-    above foreign-domestic stories with no US action surface.
+    Final score = 0.40 * us_civic + 0.35 * coverage + 0.25 * trending.
+    Actionability leads: the platform exists so citizens can act (contact
+    Congress, track legislation, respond to executive action), so a story
+    with a direct US action surface outranks a better-covered story
+    without one. Coverage is the stability anchor (source count doesn't
+    change hourly); trending is weighted least because it is the most
+    volatile signal (Bluesky/Google shift every run) and would otherwise
+    churn the top issues hour to hour.
     """
     if not clusters:
         return []
@@ -706,12 +710,9 @@ def _rank_clusters(
     max_civic = max(us_civic_boosts) if us_civic_boosts and max(us_civic_boosts) > 0 else 1.0
     norm_us_civic = [s / max_civic for s in us_civic_boosts]
 
-    # Coverage is the most stable signal (source count doesn't change hourly).
-    # Trending is the most volatile (Bluesky/Google shift every run) so we
-    # weight it less to prevent full topic replacement each hour.
-    COVERAGE_WEIGHT = 0.40
-    TRENDING_WEIGHT = 0.30
-    US_CIVIC_WEIGHT = 0.30
+    COVERAGE_WEIGHT = 0.35
+    TRENDING_WEIGHT = 0.25
+    US_CIVIC_WEIGHT = 0.40
 
     combined = [
         COVERAGE_WEIGHT * cov + TRENDING_WEIGHT * trend + US_CIVIC_WEIGHT * civic

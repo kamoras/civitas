@@ -169,6 +169,7 @@ class SenatorSchema(CamelModel):
     partisan_depth: PartisanDepthSchema | None = None
     sponsored_bills: list[SponsoredBillSchema] = []
     leadership_score: float | None = None
+    bipartisanship_score: float | None = None
     ideology_score: float | None = None
     sponsorship_description: str = ""
     website_url: str = ""
@@ -350,6 +351,7 @@ class RelatedSenator(CamelModel):
     party: Literal["D", "R", "I"]
     overall_score: float
     leadership_score: float | None = None
+    bipartisanship_score: float | None = None
     chamber: str = "senate"
     match_reason: str | None = None
 

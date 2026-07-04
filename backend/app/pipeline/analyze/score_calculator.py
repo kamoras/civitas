@@ -154,7 +154,7 @@ logger = logging.getLogger(__name__)
 # shifts scores. Recorded on every ScoreSnapshot so trend charts can
 # annotate methodology changes; keep frontend/src/lib/scoreVersions.ts
 # in sync (it holds the human-readable changelog).
-ALGORITHM_VERSION = "v4.3"
+ALGORITHM_VERSION = "v5"
 
 NON_INDUSTRY_CODES = {"OTHER", "SMALL_DONORS", "LARGE_INDIVIDUAL", "POLITICAL"}
 
@@ -213,11 +213,13 @@ def calculate_scores(
             funding,
             senator.get("state", ""),
             senator.get("party", "I"),
+            bipartisanship=senator.get("bipartisanshipScore"),
         ),
         "fundingDiversity": _calc_funding_diversity(funding),
         "legislativeEffectiveness": _calc_legislative_effectiveness(
             senator.get("sponsoredBills", []),
             senator.get("leadershipScore"),
+            party=voting_record.get("effectiveParty") or senator.get("party", "I"),
         ),
     }
 
@@ -526,6 +528,7 @@ def _calc_constituent_alignment(
     funding: dict,
     state: str = "",
     party: str = "I",
+    bipartisanship: float | None = None,
 ) -> int:
     """
     Constituent Alignment Score (0-100, higher = better). v4.2 rebuild of
@@ -719,8 +722,28 @@ def _calc_constituent_alignment(
         donor_score = base_donor
         donor_weight = 0.25
 
+    # Coalition breadth (v5): cross-party cosponsorship rate normalized to
+    # the chamber cohort (Lugar Center Bipartisan Index method; Harbridge
+    # 2015). Voting congruence asks "do you vote the way your seat
+    # elected you to"; breadth asks "do you also legislate for the
+    # constituents who didn't vote for you" — attracting other-party
+    # cosponsors to your bills and lending your name across the aisle.
+    # The cohort median arrives at 0.5 -> 50 (typical member), so the
+    # component carries the same "match expectation = 50" semantics as
+    # seat-relative voting. When cosponsorship data is missing the
+    # component is skipped entirely rather than scored neutral.
+    if bipartisanship is not None:
+        breadth_weight = 0.20
+        breadth_score = max(0.0, min(bipartisanship, 1.0)) * 100
+    else:
+        breadth_weight = 0.0
+        breadth_score = 0.0
+
+    party_weight = 1.0 - donor_weight - breadth_weight
     return clamp(
-        party_score * (1 - donor_weight) + donor_score * donor_weight
+        party_score * party_weight
+        + donor_score * donor_weight
+        + breadth_score * breadth_weight
     )
 
 
@@ -818,9 +841,41 @@ def _calc_funding_diversity(funding: dict) -> int:
     return clamp(breadth_score * 0.5 + concentration_score * 0.5)
 
 
+# Chamber majority party by congress (public record; applied symmetrically).
+# Used to benchmark bill advancement against what a sponsor's majority/
+# minority status makes achievable — Volden & Wiseman (2014) show minority
+# sponsors advance bills at a fraction of the majority rate, and scoring
+# against a single absolute threshold silently penalizes whichever party
+# is out of power. Baseline rates are measured from this platform's own
+# bill corpus (2026-07: senate 3.6% majority / 2.4% minority over 24,294
+# bills; house 6.4% / 2.4% over 13,510).
+_SENATE_MAJORITY: dict[int, str] = {
+    104: "R", 105: "R", 106: "R", 107: "D", 108: "R", 109: "R", 110: "D",
+    111: "D", 112: "D", 113: "D", 114: "R", 115: "R", 116: "R", 117: "D",
+    118: "D", 119: "R",
+}
+_HOUSE_MAJORITY: dict[int, str] = {
+    104: "R", 105: "R", 106: "R", 107: "R", 108: "R", 109: "R", 110: "D",
+    111: "D", 112: "R", 113: "R", 114: "R", 115: "R", 116: "D", 117: "D",
+    118: "R", 119: "R",
+}
+
+
+def _advancement_baseline(bill_type: str, congress: int | None, party: str | None) -> float:
+    """Expected substantive-bill advancement rate for a sponsor."""
+    is_house = bill_type in ("hr", "hjres")
+    majority = (_HOUSE_MAJORITY if is_house else _SENATE_MAJORITY).get(congress or 0)
+    if not majority or party not in ("D", "R"):
+        return 0.030  # overall measured mean when status is unknowable
+    if is_house:
+        return 0.064 if party == majority else 0.024
+    return 0.036 if party == majority else 0.024
+
+
 def _calc_legislative_effectiveness(
     sponsored_bills: list[dict],
     leadership_score: float | None = None,
+    party: str | None = None,
 ) -> int:
     """
     Legislative Effectiveness Score (0-100, higher = better).
@@ -896,7 +951,17 @@ def _calc_legislative_effectiveness(
     n_sub = len(substantive)
     if n_sub > 0:
         success_rate = (became_law + advanced) / n_sub
-        advancement_raw = min(success_rate / 0.05, 1.0) * 100
+        # Benchmark against the sponsor's majority/minority baseline per
+        # bill (careers span both statuses). Matching the baseline -> 50;
+        # full credit at 2x it — same headroom the old absolute 5%
+        # threshold gave the 2.5% cohort median, now status-fair.
+        expected = sum(
+            _advancement_baseline(
+                (b.get("billType") or "").lower(), b.get("congress"), party,
+            )
+            for b in substantive
+        ) / n_sub
+        advancement_raw = min(success_rate / (2.0 * expected), 1.0) * 100
         # Shrink toward 50 with few bills
         advancement_conf = min(n_sub / 10, 1.0)
         advancement_score = advancement_raw * advancement_conf + 50 * (1 - advancement_conf)

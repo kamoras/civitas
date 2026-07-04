@@ -260,6 +260,35 @@ async def analyze_senator_batch(
         else:
             final_promises = fallback_promises
 
+        # Sparse platform data leaves senate Promise Persistence shrunk
+        # hard toward the neutral prior (~2 evaluable promises vs the
+        # House's ~8 after v4.3, a disclosed cross-chamber offset).
+        # Augment thin promise sets with positions derived from the
+        # senator's own sponsored legislation — the same deterministic
+        # path the House uses — deduplicated against the platform
+        # promises so a stated commitment is never double-counted.
+        n_evaluable = sum(
+            1 for p in final_promises
+            if p.get("alignment") in ("kept", "partial", "broken")
+        )
+        if n_evaluable < 4 and sponsored_bills:
+            derived = positions_from_sponsored_bills(
+                sponsored_bills, all_votes,
+                max_positions=8 - min(len(final_promises), 8),
+            )
+            if derived:
+                from app.pipeline.analyze.policy_alignment import _embed
+                import numpy as np
+                existing_embs = [
+                    _embed(p["promiseText"][:200]) for p in final_promises
+                ] if final_promises else []
+                for d in derived:
+                    if existing_embs:
+                        sims = np.array(existing_embs) @ _embed(d["promiseText"][:200])
+                        if float(sims.max()) > 0.70:
+                            continue
+                    final_promises.append(d)
+
         results.append({
             "senatorId": senator["id"],
             "keyVotes": key_votes,

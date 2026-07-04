@@ -716,3 +716,76 @@ class TestCalculateConfidence:
         from app.pipeline.analyze.score_calculator import calculate_confidence
         senator = {"campaignPromises": [{"alignment": "unclear"} for _ in range(20)]}
         assert calculate_confidence(senator)["promisePersistence"] == "low"
+
+
+# ── v5: majority-adjusted effectiveness + coalition breadth ──────
+
+from app.pipeline.analyze.score_calculator import (
+    _advancement_baseline,
+    _calc_legislative_effectiveness,
+    _calc_constituent_alignment,
+)
+
+
+class TestMajorityAdjustedAdvancement:
+    def _bills(self, n, advanced, congress=118, bill_type="s"):
+        out = []
+        for i in range(n):
+            out.append({
+                "billId": f"S.{i}", "billType": bill_type, "congress": congress,
+                "isLaw": False,
+                "latestAction": "Passed Senate" if i < advanced else "Referred to committee",
+                "title": f"Bill {i}",
+            })
+        return out
+
+    def test_minority_not_penalized_for_status(self):
+        """Equal-quality sponsors: each matching their status baseline scores alike.
+
+        118th Senate majority is D (baseline 3.6%), minority R (2.4%).
+        A D sponsor advancing at ~3.6% and an R sponsor at ~2.4% are both
+        performing exactly at expectation and must land within a few
+        points of each other — the old absolute 5% threshold gave the
+        majority sponsor a structurally higher score for the same skill.
+        """
+        d_bills = self._bills(250, 9)   # 3.6%
+        r_bills = self._bills(250, 6)   # 2.4%
+        d = _calc_legislative_effectiveness(d_bills, leadership_score=0.5, party="D")
+        r = _calc_legislative_effectiveness(r_bills, leadership_score=0.5, party="R")
+        assert abs(d - r) <= 3, (d, r)
+
+    def test_house_majority_baseline_higher(self):
+        assert _advancement_baseline("hr", 118, "R") > _advancement_baseline("hr", 118, "D")
+        assert _advancement_baseline("s", 118, "D") > _advancement_baseline("s", 118, "R")
+
+    def test_unknown_congress_neutral_baseline(self):
+        assert _advancement_baseline("s", 90, "D") == 0.030
+
+
+class TestCoalitionBreadth:
+    def _vr(self):
+        return {
+            "keyVotes": [
+                {"votedWithParty": True, "partyAlignmentWeight": 1.0}
+                for _ in range(30)
+            ],
+            "recentVotes": [],
+        }
+
+    def test_breadth_moves_score(self):
+        base = dict(voting_record=self._vr(), lobbying_matches=[], funding={},
+                    state="CA", party="D")
+        low = _calc_constituent_alignment(**base, bipartisanship=0.0)
+        mid = _calc_constituent_alignment(**base, bipartisanship=0.5)
+        high = _calc_constituent_alignment(**base, bipartisanship=1.0)
+        assert low < mid < high
+        # 20% weight over a 0-100 component: full range moves CA by ~20
+        assert 15 <= high - low <= 25
+
+    def test_missing_breadth_is_not_neutral_scored(self):
+        """Absent cosponsorship data must reproduce the pre-v5 score exactly."""
+        base = dict(voting_record=self._vr(), lobbying_matches=[], funding={},
+                    state="CA", party="D")
+        assert _calc_constituent_alignment(**base) == _calc_constituent_alignment(
+            **base, bipartisanship=None
+        )

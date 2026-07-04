@@ -37,6 +37,7 @@ class Senator(Base):
 
     leadership_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     ideology_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bipartisanship_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     sponsorship_description: Mapped[str] = mapped_column(String, default="")
 
     website_url: Mapped[str] = mapped_column(String, default="")
@@ -191,6 +192,7 @@ class Representative(Base):
 
     leadership_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     ideology_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bipartisanship_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     sponsorship_description: Mapped[str] = mapped_column(String, default="")
 
     website_url: Mapped[str] = mapped_column(String, default="")
