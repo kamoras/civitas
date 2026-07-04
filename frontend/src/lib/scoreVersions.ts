@@ -22,7 +22,8 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
     title: "Constituent Alignment — representation, not defection",
     changes: [
       "Mission clarified: scores measure how well members represent their constituents — not independence as an intrinsic virtue. Party-line voting in a seat that elected that platform is representation.",
-      "Independent Voting renamed Constituent Alignment and rebuilt: each member's contested-vote break rate is now scored against a seat-specific expectation derived from state partisan lean (Cook PVI). Matching the seat's expectation scores ~50 (\"typical partisan for this seat\"); crossing beyond it earns credit — discounted in aligned safe seats; hyper-loyalty in a swing or opposed seat drifts below neutral instead of to a failure grade.",
+      "Independent Voting renamed Constituent Alignment and rebuilt: each member's contested-vote break rate is now scored against a seat-specific expectation derived from state partisan lean (Cook PVI). Matching the seat's expectation scores ~50 (\"typical partisan for this seat\"); hyper-loyalty in a swing or opposed seat drifts below neutral instead of to a failure grade.",
+      "Crossing party lines is not rewarded for its own sake: surplus crossing earns credit only where it plausibly moves toward the state's median voter (opposed and swing seats). In deep aligned seats it sits near neutral — break direction relative to state opinion is unobservable, so safe-seat defection is treated as neither virtue nor defiance.",
       "Removed the hard floor that pinned any break rate under 3% at a score of ~20 — it placed 73 of 100 senators in an indistinguishable 26-38 band and labeled typical representation a failure.",
       "Removed the exemption for party-line votes on policy areas related to a member's top donor industries. Donor industries are not a proxy for state interests; that exemption shielded exactly the votes most suspect for donor influence.",
     ],

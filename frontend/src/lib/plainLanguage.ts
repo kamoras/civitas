@@ -28,7 +28,7 @@ export const TECHNICAL_TERMS: Record<ScoreKey, ScoreTerm> = {
     label: "Constituent Alignment",
     shortLabel: "ALIGNMENT",
     description:
-      "Does their voting match what their state elected them to do? Each member's party-line break rate is compared to what their seat's partisan lean predicts: matching it scores ~50 (typical for the seat), crossing party lines beyond it scores higher, and hyper-loyalty in a swing state scores lower. Party-line voting in a safe seat is representation, not a failing.",
+      "Does their voting match what their state elected them to do? Each member's party-line break rate is compared to what their seat's partisan lean predicts: matching it scores ~50 (typical for the seat), and hyper-loyalty in a swing state scores lower. Crossing party lines only earns extra credit where it moves toward the state's political center — party-line voting in a safe seat is representation, not a failing, and defection is not a virtue by itself.",
   },
   fundingDiversity: {
     label: "Funding Diversity",

@@ -298,12 +298,15 @@ class TestConstituentAlignment:
         )
         assert score_opposed < score_aligned
 
-    def test_safe_seat_surplus_crossing_credit_discounted(self):
-        """Crossing far beyond a safe aligned seat's expectation is
-        ideology rather than constituent representation: credited, but
-        discounted relative to the same surplus in a swing seat (this is
-        the guardrail that kept a 9%-break party leader from scoring as
-        an independent in the 2026-06 audit)."""
+    def test_crossing_not_rewarded_for_its_own_sake(self):
+        """Owner principle (2026-07-04): the goal is carrying out the
+        will of constituents, not defection. The same 25% break rate
+        earns much more in a swing seat (crossing toward the median
+        voter) than in a deep aligned seat (crossing away from it).
+        Safe-seat surplus crossing sits near neutral — not virtue, not
+        defiance — because break direction relative to state opinion is
+        unobservable. This is also the guardrail that kept a 9%-break
+        party leader from scoring as an independent (2026-06 audit)."""
         record = {
             "keyVotes": self._make_votes(with_party=75, against_party=25),
             "recentVotes": [],
@@ -315,10 +318,11 @@ class TestConstituentAlignment:
         score_swing = _calc_constituent_alignment(
             record, [], funding, state="NV", party="R"
         )
-        # Both above neutral, but the swing-seat crosser earns more per
-        # point of surplus even though their expected break rate is higher.
-        assert score_safe > 50
-        assert score_swing > 50
+        # Swing-seat crossing = toward the median voter = clearly better.
+        assert score_swing - score_safe >= 10
+        # Safe-seat surplus crossing hovers near neutral, never failure.
+        assert 50 <= score_safe <= 70
+        assert score_swing > 70
 
     def test_nomination_votes_weighted_like_legislation(self):
         """Nominations are whipped party-line tests; they count at full weight.

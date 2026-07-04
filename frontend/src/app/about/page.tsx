@@ -79,11 +79,15 @@ export default function AboutPage() {
             </P>
             <P>
               What the scores measure: for senators and House representatives, how well
-              they <em className="text-matrix-green/80">represent their constituents</em>;
-              for presidents, how well they serve the country; for Supreme Court justices,
-              how well they serve the law regardless of party. Every scoring dimension is
-              justified against that yardstick — independence from party is credited only
-              where it tracks constituents, not as a virtue in itself.
+              they carry out <em className="text-matrix-green/80">the will of the majority
+              of their constituents</em> — not the preferences of a few wealthy donors,
+              and not party defection for its own sake; for presidents, how well they
+              serve the country; for Supreme Court justices, how well they serve the law
+              regardless of party. Every scoring dimension is justified against that
+              yardstick: crossing party lines is credited only where it plausibly moves
+              toward the state&apos;s median voter, and the funding dimensions exist because
+              money concentrated in few hands is the main channel by which representation
+              drifts away from the majority.
             </P>
             <P>
               Scores reflect observable behavior — voting patterns, funding sources,
@@ -182,9 +186,11 @@ export default function AboutPage() {
                   partisan lean (Cook PVI<Cite id="4">Carson et al. 2010</Cite>): an aligned
                   safe seat expects near-base-rate dissent (~3%), a swing seat ~8%, and a
                   seat whose electorate leans toward the opposing party up to ~20%. Matching
-                  the expectation scores ~50 — a typical partisan for that seat. Crossing
-                  beyond it earns credit (discounted in aligned safe seats, where surplus
-                  defection reflects ideology rather than constituents); hyper-loyalty in a
+                  the expectation scores ~50 — a typical partisan for that seat. Crossing is
+                  not rewarded for its own sake: surplus crossing earns credit only where it
+                  plausibly moves toward the state&apos;s median voter (opposed and swing seats);
+                  in a deep aligned seat it sits near neutral, since break direction relative
+                  to state opinion is unobservable. Hyper-loyalty in a
                   swing or opposed seat drifts below neutral. This is the delegate model of
                   representation with partisan lean standing in for issue-level constituent
                   opinion — a measurable, disclosed simplification. Note on composition:

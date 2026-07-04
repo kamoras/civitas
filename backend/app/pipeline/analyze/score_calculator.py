@@ -548,13 +548,15 @@ def _calc_constituent_alignment(
            opposed seat      → up to ~20% (a member whose party opposes
                                the state median should cross more often).
          Matching expectation scores ~50 ("typical partisan for this
-         seat"). Crossing beyond it earns credit toward 100 — discounted
-         up to 40% in aligned safe seats, where surplus defection is
-         ideology rather than constituent representation (and where an
-         undiscounted credit let a 9%-break party leader score ≈72; see
-         2026-06 audit). Hyper-loyalty in a swing or opposed seat drifts
-         down to at most 25 — below neutral, but never the old
-         failure-grade floor.
+         seat"). Crossing is NOT rewarded for its own sake: surplus
+         crossing earns credit only where it plausibly moves toward the
+         state's median voter — full credit in opposed/swing seats,
+         shrinking to a near-neutral 0.25 in deep aligned seats, where
+         surplus defection is ideology rather than constituent
+         representation (an undiscounted credit once let a 9%-break
+         party leader score ≈72; see 2026-06 audit). Hyper-loyalty in a
+         swing or opposed seat drifts down to at most 25 — below
+         neutral, but never the old failure-grade floor.
 
       2. Donor independence (25%/40%): unchanged from v4.1 — based on
          donor-vote connection matches, with the visibility-scaled
@@ -623,11 +625,19 @@ def _calc_constituent_alignment(
     if party_total >= 3.0:
         against_pct = voted_against / party_total
         if against_pct >= expected:
-            # Crossing beyond the seat's expectation: credit toward 100,
-            # saturating at +25pts of surplus break rate, discounted in
-            # aligned safe seats (see docstring).
+            # Crossing beyond the seat's expectation earns credit ONLY to
+            # the extent it plausibly moves toward the state's median
+            # voter: full credit in opposed/swing seats (the median sits
+            # across or between the parties), shrinking to 0.25 in deep
+            # aligned seats — there, surplus crossing moves AWAY from the
+            # state median and is not itself representation. The small
+            # residual (rather than zero or a penalty) reflects that we
+            # cannot observe WHICH WAY a break points relative to state
+            # opinion, so safe-seat crossing is treated as near-neutral,
+            # not as virtue and not as defiance. Saturates at +25pts of
+            # surplus break rate.
             surplus = against_pct - expected
-            credit = 1.0 - 0.4 * max(alignment, 0.0)
+            credit = max(0.25, 1.0 - 0.75 * max(alignment, 0.0))
             party_score = 50.0 + 50.0 * min(surplus / 0.25, 1.0) * credit
         else:
             # More loyal than the seat expects: drift below neutral by up
