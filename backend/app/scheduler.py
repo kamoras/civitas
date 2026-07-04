@@ -8,7 +8,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 from app.config import settings
 from app.pipeline.orchestrator import run_full_pipeline
-from app.pipeline.house_pipeline import run_house_pipeline, is_house_pipeline_running
+from app.pipeline.house_pipeline import run_house_pipeline, is_house_pipeline_running, house_pipeline_age
 from app.pipeline.analyze.action_center import refresh_action_issues
 from app.pipeline.digest import send_weekly_digests
 
@@ -90,8 +90,29 @@ def _hourly_action_refresh() -> None:
                     )
                     return
             if is_house_pipeline_running():
-                logger.info("Action center refresh skipped — house pipeline is running")
-                return
+                house_age = house_pipeline_age()
+                if house_age is not None and house_age > timedelta(hours=8):
+                    # Same reasoning as the stale PipelineRun check above: a
+                    # House run this old is wedged (normal runs are 1-2h), and
+                    # on 2026-07-04 one hung in Phase 1 for 17h, silently
+                    # starving the action center all day.
+                    from app.ops_alerts import send_ops_alert
+                    logger.warning(
+                        "House pipeline has been running for %s — treating as "
+                        "hung and proceeding with action center refresh",
+                        house_age,
+                    )
+                    send_ops_alert(
+                        "House pipeline overrun",
+                        f"The House pipeline has been running for {house_age} "
+                        "(normal is 1-2h) and is likely hung. The action center "
+                        "is no longer waiting for it; the run may need "
+                        "clear-stuck-house and a container restart.",
+                        dedupe_key=f"house-overrun-{datetime.utcnow():%Y-%m-%d}",
+                    )
+                else:
+                    logger.info("Action center refresh skipped — house pipeline is running")
+                    return
             count = refresh_action_issues()
             logger.info("Action center hourly refresh: %d issues", count)
         except Exception:

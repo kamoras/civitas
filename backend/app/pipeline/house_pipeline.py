@@ -13,7 +13,7 @@ computed deterministically and don't need LLM calls.
 
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import httpx
 from sqlalchemy.orm import Session
@@ -59,16 +59,30 @@ logger = logging.getLogger(__name__)
 # Module-level flag so the hourly action-center refresh can skip while the
 # house pipeline is running (prevents concurrent SQLite write conflicts).
 _house_pipeline_running: bool = False
+_house_pipeline_started_at: float | None = None
 
 
 def is_house_pipeline_running() -> bool:
     return _house_pipeline_running
 
 
+def house_pipeline_age() -> "timedelta | None":
+    """Wall-clock age of the in-process House run, or None when idle.
+
+    Lets callers distinguish a live run from a hung one: on 2026-07-04 a
+    run wedged silently in Phase 1 held the running flag for 17h and the
+    action center skipped every hourly refresh behind it.
+    """
+    if not _house_pipeline_running or _house_pipeline_started_at is None:
+        return None
+    return timedelta(seconds=time.time() - _house_pipeline_started_at)
+
+
 async def run_house_pipeline() -> dict:
     """Run the full House representative pipeline."""
-    global _house_pipeline_running
+    global _house_pipeline_running, _house_pipeline_started_at
     _house_pipeline_running = True
+    _house_pipeline_started_at = time.time()
     db = SessionLocal()
     start_time = time.time()
 
@@ -637,6 +651,7 @@ async def run_house_pipeline() -> dict:
         return {"status": "failed", "error": str(e)[:500]}
     finally:
         _house_pipeline_running = False
+        _house_pipeline_started_at = None
         db.close()
 
 
