@@ -152,24 +152,26 @@ export default function AboutPage() {
               <div>
                 <Label>Promise Persistence (20%)</Label>
                 <P>
-                  Tracks whether a senator&apos;s voting record aligns with their stated campaign
-                  promises. Platform text is extracted from official senate.gov websites and
-                  analyzed to identify key commitments. Votes are then cross-referenced against
-                  those promises using semantic search to find relevant legislation.
+                  Tracks whether a member&apos;s voting record aligns with their stated commitments.
+                  For senators, commitments are extracted from official senate.gov campaign
+                  platforms. For House representatives, commitments are derived from the bills
+                  they sponsor, since campaign platform text is scarce for House members. Votes are
+                  cross-referenced against these commitments using semantic search to find relevant
+                  legislation.
                   <Cite id="2">Naurin 2011</Cite>
                 </P>
                 <P>
-                  A confidence penalty is applied when few promises are evaluable: if only
-                  1 of 10 promises could be checked against votes, the score blends toward
+                  A confidence penalty is applied when few commitments are evaluable: if only
+                  1 of 10 could be checked against votes, the score blends toward
                   50 (neutral) rather than being inflated by a single data point. This
                   implements Bayesian shrinkage toward the prior.
                   <Cite id="19">Efron &amp; Morris 1975</Cite>
                 </P>
                 <P>
                   This metric also incorporates floor advocacy analysis — whether
-                  a senator actively speaks on the Senate floor about their promised issues,
+                  a member actively speaks on the floor about their committed issues,
                   parsed from Congressional Record proceedings. This captures effort that
-                  voting records miss: in a gridlocked Senate, a senator may not get bills
+                  voting records miss: in a gridlocked legislature, a member may not get bills
                   to a vote but can still demonstrate persistence through floor speeches.
                   The floor advocacy component is weighted at 15% of the promise score,
                   following research on legislative speech as a signal of commitment.
@@ -862,7 +864,7 @@ export default function AboutPage() {
                   language understanding and multi-step reasoning:
                 </P>
                 <div className="space-y-2 mt-2">
-                  <Row label="Campaign promise extraction" value="Parses platform text from senator websites to identify specific policy commitments and assess whether votes support or contradict them" />
+                  <Row label="Campaign promise extraction" value="Parses platform text from senator websites to identify specific policy commitments and assess whether votes support or contradict them. House positions never touch the LLM: they are derived from sponsored bills and evaluated with deterministic embedding similarity only." />
                   <Row label="Voting pattern narrative" value="Generates human-readable summaries of a senator's voting patterns across policy areas" />
                   <Row label="Key vote reasoning" value="Explains why specific votes were flagged as significant given a senator's donor profile and party dynamics" />
                   <Row label="PAC identification" value="Identifies the parent organization and industry behind opaque PAC names using world knowledge" />

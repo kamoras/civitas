@@ -39,14 +39,28 @@ def _embed(text: str) -> np.ndarray:
 
 
 def _embed_batch(texts: list[str]) -> np.ndarray:
-    """Embed multiple texts efficiently."""
+    """Embed multiple texts efficiently, reusing cached embeddings.
+
+    The same texts recur heavily within a pipeline run — every promise
+    of every member is scored against the same floor votes — so only
+    cache misses are encoded (in one batch), then stored in the shared
+    cache. On the Pi this collapses hundreds of thousands of encode
+    calls per House run into one pass over the unique texts.
+    """
     if not texts:
         return np.array([])
-    from app.pipeline.vector_store import get_embedding_model
-    embs = get_embedding_model().encode(texts, show_progress_bar=False, batch_size=min(64, len(texts)))
-    norms = np.linalg.norm(embs, axis=1, keepdims=True)
-    norms[norms == 0] = 1.0
-    return embs / norms
+    misses = [t for t in dict.fromkeys(texts) if t not in _embedding_cache]
+    if misses:
+        from app.pipeline.vector_store import get_embedding_model
+        embs = get_embedding_model().encode(
+            misses, show_progress_bar=False, batch_size=min(64, len(misses)),
+        )
+        norms = np.linalg.norm(embs, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        embs = embs / norms
+        for t, e in zip(misses, embs):
+            _embedding_cache[t] = e
+    return np.array([_embedding_cache[t] for t in texts])
 
 
 def clear_alignment_cache() -> None:
@@ -173,15 +187,17 @@ def compute_promise_vote_alignment(
     max_related: int = 3,
     relevance_threshold: float = 0.28,
     bill_relevance_threshold: float = 0.40,
+    use_llm: bool = True,
 ) -> dict:
-    """Determine if a senator's actions align with a campaign promise.
+    """Determine if a member's actions align with a campaign promise.
 
-    Uses DeepSeek-R1 to decompose the promise into a rich semantic query
-    before performing embedding similarity search against legislative data.
+    With ``use_llm=True`` (Senate pipeline), DeepSeek-R1 decomposes the
+    promise into a richer semantic query before the embedding search.
+    With ``use_llm=False`` (House pipeline — deterministic by design,
+    and 431 members × several promises of decomposition calls would add
+    hours), the raw promise text is embedded directly; the alignment
+    rules downstream are identical.
     """
-    from app.pipeline.analyze.prompts import promise_decomposition_prompt
-    from app.pipeline.analyze.ollama_client import call_llm, extract_json
-
     empty = {
         "alignment": "unclear",
         "relatedVotes": [],
@@ -194,23 +210,27 @@ def compute_promise_vote_alignment(
     if not votes and not sponsored_bills:
         return empty
 
-    # 1. Decompose promise via LLM for better search query
-    decomp_prompt = promise_decomposition_prompt(promise_text)
-    raw_decomp = call_llm(
-        system_prompt=decomp_prompt["systemPrompt"],
-        user_prompt=decomp_prompt["userPrompt"],
-        prompt_version=decomp_prompt["promptVersion"],
-        cache_key={"promise": promise_text},
-        max_tokens=300
-    )
-    # call_llm returns already-parsed JSON; extract_json is only needed for raw strings
-    decomp = raw_decomp if isinstance(raw_decomp, dict) else (extract_json(raw_decomp) if raw_decomp else None)
-    
-    # Use the LLM's optimized search query if available, otherwise fallback
     search_text = promise_text
-    if decomp and decomp.get("searchQuery"):
-        # Blend original + optimized for best coverage
-        search_text = f"{promise_text} {decomp['searchQuery']} {' '.join(decomp.get('keywords', []))}"
+    if use_llm:
+        # 1. Decompose promise via LLM for better search query
+        from app.pipeline.analyze.prompts import promise_decomposition_prompt
+        from app.pipeline.analyze.ollama_client import call_llm, extract_json
+
+        decomp_prompt = promise_decomposition_prompt(promise_text)
+        raw_decomp = call_llm(
+            system_prompt=decomp_prompt["systemPrompt"],
+            user_prompt=decomp_prompt["userPrompt"],
+            prompt_version=decomp_prompt["promptVersion"],
+            cache_key={"promise": promise_text},
+            max_tokens=300
+        )
+        # call_llm returns already-parsed JSON; extract_json is only needed for raw strings
+        decomp = raw_decomp if isinstance(raw_decomp, dict) else (extract_json(raw_decomp) if raw_decomp else None)
+
+        # Use the LLM's optimized search query if available, otherwise fallback
+        if decomp and decomp.get("searchQuery"):
+            # Blend original + optimized for best coverage
+            search_text = f"{promise_text} {decomp['searchQuery']} {' '.join(decomp.get('keywords', []))}"
 
     promise_emb = _embed(search_text[:1000])
 

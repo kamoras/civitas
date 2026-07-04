@@ -344,6 +344,88 @@ def _positions_from_platform_text(
     return promises
 
 
+def positions_from_sponsored_bills(
+    sponsored_bills: list[dict],
+    all_votes: list[dict],
+    max_positions: int = 8,
+) -> list[dict]:
+    """Derive legislative positions from a member's own sponsored bills.
+
+    House members have no scraped platform text (the Senate promise
+    source), so the bills a member chooses to introduce serve as the
+    statement of their positions. Each distinct topic is evaluated
+    against the member's floor votes ONLY — the sponsored bills
+    themselves are excluded from the evidence, because a position
+    derived from a bill would trivially match that same bill and
+    circularly credit introduction as fulfillment (the same failure
+    mode the effort-only sponsorship rule in
+    compute_promise_vote_alignment guards against).
+
+    Deterministic by design: embeddings only, no LLM — the House
+    pipeline must process 431 members on the same hardware budget the
+    Senate pipeline spends on 100.
+    """
+    if not sponsored_bills:
+        return []
+
+    titles = [
+        t for t in (
+            (b.get("title") or "").strip() for b in sponsored_bills
+        )
+        if len(t) >= 20
+    ]
+    if not titles:
+        return []
+
+    from app.pipeline.analyze.party_platform import classify_party_alignment
+    from app.pipeline.analyze.policy_alignment import _embed
+
+    import numpy as np
+    # Bill titles share a legislative register that inflates baseline
+    # cosine similarity: across real sponsored-bill titles the
+    # different-topic mode runs ~0.75 median / ~0.82 p90, while true
+    # duplicates and reintroductions cluster at >=0.92 (measured on
+    # 5,456 same-member title pairs, 2026-07). 0.88 sits in the gap;
+    # the platform-text path keeps 0.70 because prose topics lack this
+    # shared-register inflation.
+    DEDUP_THRESHOLD = 0.88
+    selected_topics: list[str] = []
+    selected_embs: list[np.ndarray] = []
+    for t in titles[: max_positions * 4]:
+        t_emb = _embed(t[:200])
+        if selected_embs:
+            sims = np.array(selected_embs) @ t_emb
+            if float(sims.max()) > DEDUP_THRESHOLD:
+                continue
+        selected_topics.append(t)
+        selected_embs.append(t_emb)
+        if len(selected_topics) >= max_positions:
+            break
+
+    valid_categories = set(PLATFORM_CATEGORIES.keys())
+    promises = []
+    for topic in selected_topics:
+        result = compute_promise_vote_alignment(
+            topic, all_votes, sponsored_bills=None, use_llm=False,
+        )
+        category = _classify_promise_category(topic, valid_categories)
+        party_align = classify_party_alignment(
+            topic[:300], category.upper(), "pro",
+        )
+        promises.append({
+            "promiseText": topic[:250],
+            "category": category,
+            "alignment": result["alignment"],
+            "relatedVotes": result["relatedVotes"],
+            "relatedBills": result.get("relatedBills", []),
+            "analysis": result["reasoning"],
+            "confidence": result["confidence"],
+            "partyAlignment": party_align,
+        })
+
+    return promises
+
+
 def _align_llm_promises(
     extracted_promises: list[str],
     all_votes: list[dict],

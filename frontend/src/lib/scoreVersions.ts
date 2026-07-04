@@ -17,6 +17,18 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v4.3",
+    date: "2026-07-05",
+    title: "Real House promise data",
+    changes: [
+      "House members now have evaluable promise data. Representatives' positions are derived from their sponsored legislation (bills they introduce) rather than campaign platform text, which is scarce for House members. Each representative's positions are extracted from bill topics and evaluated deterministically against their floor votes using the same embedding rules as the Senate path.",
+      "Position source integrity: sponsored bills are excluded from a position's evidence entirely — positions are evaluated against floor votes only — so a representative can never 'keep a promise' simply by introducing the bill that defines it. Sponsoring is effort, not outcome.",
+      "Near-duplicate topic deduplication uses a similarity threshold (0.88) derived empirically from the distribution of same-member bill-title similarities, rather than hand-picked. This prevents a representative with many related bills on the same topic from appearing to have independent evidence across redundant positions.",
+      "Published confidence markers (high/medium/low) now reflect real evaluable-promise counts for House representatives. Previously all 431 representatives had zero promises, collapsing their Promise Persistence scores to neutral. Now the dimension is data-driven for both chambers.",
+      "Known cross-chamber offset, disclosed rather than tuned away: House Promise Persistence runs a few points above the Senate's (shadow-validated means 64 vs 58) because representatives average ~8 evaluable positions to senators' ~2, so House scores are shrunk less toward the neutral prior. The underlying kept-rates are similar (79% vs 74%). Forcing the means equal would require a hand-fed chamber constant, which the methodology forbids.",
+    ],
+  },
+  {
     version: "v4.2",
     date: "2026-07-05",
     title: "Constituent Alignment — representation, not defection",

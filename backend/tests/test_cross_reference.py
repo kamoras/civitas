@@ -15,6 +15,7 @@ from app.pipeline.analyze.cross_reference import (
     _extract_platform_topics,
     select_key_votes,
     detect_lobbying_matches,
+    positions_from_sponsored_bills,
 )
 from app.pipeline.analyze.policy_alignment import (
     compute_promise_vote_alignment,
@@ -319,3 +320,78 @@ class TestDetectLobbyingMatches:
         if matches:
             assert matches[0]["lobbyistOrg"] == "Pfizer Inc"
             assert matches[0]["industry"] == "PHARMA"
+
+
+# ── House positions from sponsored bills ─────────────────────────
+
+
+class TestPositionsFromSponsoredBills:
+    """Deterministic House promise derivation (no platform text, no LLM)."""
+
+    def _bills(self):
+        return [
+            {"billId": "HR.10",
+             "title": "To lower prescription drug costs for seniors enrolled in Medicare",
+             "isLaw": False, "latestAction": "Referred to committee"},
+            {"billId": "HR.11",
+             "title": "To reduce the price of prescription drugs for older Americans",
+             "isLaw": False, "latestAction": "Referred to committee"},
+            {"billId": "HR.12",
+             "title": "To expand broadband internet access in rural communities",
+             "isLaw": False, "latestAction": "Referred to committee"},
+        ]
+
+    def test_empty_bills_returns_empty(self):
+        assert positions_from_sponsored_bills([], []) == []
+
+    def test_short_titles_skipped(self):
+        bills = [{"billId": "HR.1", "title": "Short title"}]
+        assert positions_from_sponsored_bills(bills, []) == []
+
+    def test_near_duplicate_topics_deduplicated(self):
+        positions = positions_from_sponsored_bills(self._bills(), [])
+        texts = [p["promiseText"] for p in positions]
+        # The two drug-pricing bills collapse into one position.
+        assert len(positions) == 2, texts
+
+    def test_promise_shape_matches_persistence_schema(self):
+        positions = positions_from_sponsored_bills(self._bills(), [])
+        for p in positions:
+            assert set(p) >= {
+                "promiseText", "category", "alignment", "relatedVotes",
+                "relatedBills", "analysis", "confidence", "partyAlignment",
+            }
+            assert p["alignment"] in ("kept", "broken", "partial", "unclear")
+
+    def test_source_bills_are_not_evidence(self):
+        """A position must not be marked kept/partial by the bill it came from."""
+        positions = positions_from_sponsored_bills(self._bills(), [])
+        for p in positions:
+            assert p["relatedBills"] == []
+            assert p["alignment"] == "unclear"
+
+    def test_floor_votes_provide_directional_evidence(self):
+        votes = [
+            {"billId": "HR.500", "vote": "Yea", "policyArea": "HEALTHCARE",
+             "billName": "Prescription Drug Pricing Act",
+             "description": "Lower prescription drug costs for Medicare recipients",
+             "stance": "pro"},
+        ]
+        positions = positions_from_sponsored_bills(self._bills(), votes)
+        drug = next(p for p in positions if "drug" in p["promiseText"].lower())
+        assert drug["alignment"] == "kept"
+        assert "HR.500" in drug["relatedVotes"]
+
+    def test_no_llm_call_in_house_path(self):
+        """The House path is deterministic: any LLM call is a regression."""
+        with patch(
+            "app.pipeline.analyze.ollama_client.call_llm",
+            side_effect=AssertionError("LLM must not be called"),
+        ):
+            votes = [
+                {"billId": "HR.500", "vote": "Yea", "policyArea": "HEALTHCARE",
+                 "billName": "Prescription Drug Pricing Act",
+                 "description": "Lower drug costs", "stance": "pro"},
+            ]
+            positions = positions_from_sponsored_bills(self._bills(), votes)
+            assert positions

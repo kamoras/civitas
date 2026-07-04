@@ -445,7 +445,7 @@ Each senator and House representative receives five sub-scores (0-100, higher = 
 | **Funding Diversity** | 15% | Donor traceability + industry diversity (inverse HHI) | Rhoades 1993 |
 | **Legislative Effectiveness** | 20% | Bill throughput + cosponsorship (PageRank) + committee success | Tauberer 2012; Brin & Page 1998 |
 
-House representatives use the same scoring framework, data sources, and classification pipeline as senators, ensuring comparable scores across chambers.
+House representatives use the same scoring framework, data sources, and classification pipeline as senators, ensuring comparable scores across chambers. One sourcing difference: senators' campaign commitments come from scraped senate.gov platform text (LLM-extracted, heuristic fallback), while representatives' positions are derived from the bills they sponsor and evaluated against their floor votes with embeddings only — the House pipeline makes no LLM calls for promise analysis.
 
 Score history is tracked in `ScoreSnapshot` records so the frontend can render historical score trends per senator/representative.
 
