@@ -251,14 +251,32 @@ async def fetch_member_detail(
     return None
 
 
+def _recent_congresses_only(bills: list[dict]) -> list[dict]:
+    """Keep only bills from the current and previous congress.
+
+    Scoring (LE volume, promise derivation, key-vote selection) operates
+    on the recent window; feeding career-length sponsorship lists into
+    the analyze phase is what blew pipeline run 69 up to 24h (58,435
+    bills for 100 senators, ~8h analyze, plus thousands of unbounded
+    official-title fetches). The full fetched list stays in ApiCache
+    verbatim; this bound applies at the point of use.
+    """
+    min_congress = settings.CURRENT_CONGRESS - 1
+    return [b for b in bills if (b.get("congress") or 0) >= min_congress]
+
+
 async def fetch_member_sponsored(
     client: httpx.AsyncClient, db: Session, bioguide_id: str
 ) -> list[dict]:
-    """Fetch a member's sponsored legislation with pagination."""
+    """Fetch a member's sponsored legislation with pagination.
+
+    Returns only bills from the current and previous congress; see
+    _recent_congresses_only for why.
+    """
     cache_key = f"member-sponsored-v2-{bioguide_id}"
     cached = api_cache_get(db, "congress", cache_key)
     if cached is not None:
-        return cached
+        return _recent_congresses_only(cached)
 
     all_results: list[dict] = []
     offset = 0
@@ -278,7 +296,7 @@ async def fetch_member_sponsored(
         offset += page_size
 
     api_cache_set(db, "congress", cache_key, all_results)
-    return all_results
+    return _recent_congresses_only(all_results)
 
 
 async def fetch_bill(

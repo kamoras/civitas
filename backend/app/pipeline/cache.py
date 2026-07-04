@@ -58,23 +58,44 @@ def api_cache_get(
     return json.loads(entry.data_json)
 
 
+# Empty responses ([] / {} / None) are cached for at most this long. A
+# transient API error or index lag that returns an empty list must not
+# poison the cache for the full TTL — senators went without sponsored
+# bills for days because an empty response persisted for 72h.
+EMPTY_RESPONSE_TTL_HOURS = 6
+
+
 def api_cache_set(db: Session, tier: str, key: str, data) -> None:
-    """Store API response in cache (upsert)."""
+    """Store API response in cache (upsert).
+
+    Empty payloads never overwrite existing non-empty data, and are
+    stored with a shortened effective TTL (implemented by backdating
+    cached_at, since expiry is computed from it at read time).
+    """
     entry = (
         db.query(ApiCache)
         .filter(ApiCache.tier == tier, ApiCache.cache_key == key)
         .first()
     )
+    is_empty = not data
+    if is_empty and entry and json.loads(entry.data_json):
+        return  # keep the existing non-empty payload
+
+    cached_at = datetime.utcnow()
+    if is_empty:
+        shorten = max(settings.PIPELINE_CACHE_TTL_HOURS - EMPTY_RESPONSE_TTL_HOURS, 0)
+        cached_at -= timedelta(hours=shorten)
+
     data_json = json.dumps(data, default=str)
     if entry:
         entry.data_json = data_json
-        entry.cached_at = datetime.utcnow()
+        entry.cached_at = cached_at
     else:
         entry = ApiCache(
             tier=tier,
             cache_key=key,
             data_json=data_json,
-            cached_at=datetime.utcnow(),
+            cached_at=cached_at,
         )
         db.add(entry)
     db.commit()

@@ -417,6 +417,8 @@ async def admin_dashboard(db: Session = Depends(get_db)):
         "totalRestarts": total_runs,
     }
 
+    from app.ops_alerts import recent_alerts
+
     return {
         "system": {
             "database": db_status,
@@ -431,6 +433,7 @@ async def admin_dashboard(db: Session = Depends(get_db)):
         "data": data_counts,
         "pipeline": pipeline_info,
         "llm": llm_stats,
+        "opsAlerts": recent_alerts(),
     }
 
 

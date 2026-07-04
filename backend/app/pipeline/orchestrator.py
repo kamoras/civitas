@@ -29,6 +29,7 @@ from app.models import (
     CampaignPromise,
     Donor,
     IndustryDonation,
+    Justice,
     KeyVote,
     LobbyingMatch,
     PipelineRun,
@@ -127,6 +128,7 @@ PIPELINE_STEPS = [
     ("fetch_recent_rcs",     "fetch",     "Fetch recent roll calls"),
     ("fetch_cosponsors",     "fetch",     "Fetch bill cosponsors"),
     ("fetch_sponsored",      "fetch",     "Fetch sponsored legislation"),
+    ("fetch_official_titles", "fetch",    "Fetch official bill titles"),
     ("fetch_fec",            "fetch",     "Fetch FEC financial data"),
     ("fetch_platforms",      "fetch",     "Fetch platform text"),
     ("fetch_floor_remarks",  "fetch",     "Fetch floor remarks"),
@@ -628,6 +630,18 @@ async def run_full_pipeline(
         Dict with pipeline run stats.
     """
     start_time = time.time()
+    db: Session = SessionLocal()
+
+    # Acquire the run lock BEFORE any global/DB mutation. In run 69 the
+    # next night's scheduled trigger fired while the run was finalizing:
+    # it reset the shared LLM counters (the run recorded llm_calls=0) and
+    # purged analysis artifacts mid-write before hitting the lock check.
+    pipeline_run = _acquire_pipeline_lock(db)
+    if pipeline_run is None:
+        logger.warning("Pipeline already running in another process — skipping")
+        db.close()
+        return {"status": "skipped", "reason": "already_running"}
+
     reset_stats()
     reset_client()
 
@@ -638,8 +652,6 @@ async def run_full_pipeline(
     clear_platform_cache()
     from app.pipeline.transform.industry_classifier import clear_industry_embedding_cache
     clear_industry_embedding_cache()
-
-    db: Session = SessionLocal()
 
     # Purge all analysis-derived data from prior runs so updated
     # algorithms always produce fresh results. Preserves the API cache
@@ -657,12 +669,6 @@ async def run_full_pipeline(
     # This implements Bayesian self-training: seed descriptions act as a
     # prior, and real bill data from previous runs updates the posterior.
     initialize_platform_embeddings(db)
-
-    pipeline_run = _acquire_pipeline_lock(db)
-    if pipeline_run is None:
-        logger.warning("Pipeline already running in another process — skipping")
-        db.close()
-        return {"status": "skipped", "reason": "already_running"}
 
     progress = ProgressTracker(pipeline_run, db, start_time)
 
@@ -997,15 +1003,26 @@ async def run_full_pipeline(
                     "Fetching official titles for %d short-title sponsored bills...",
                     len(short_title_bills),
                 )
-                for bid, (cg, bt, bn) in short_title_bills.items():
+                # Tracked as its own progress step: in run 69 this loop ran
+                # for 80 minutes between fetch_sponsored and fetch_fec with
+                # nothing in progress_detail to show for it.
+                progress.begin("fetch_official_titles", total=len(short_title_bills))
+                for ot_idx, (bid, (cg, bt, bn)) in enumerate(short_title_bills.items()):
                     titles = await fetch_bill_titles(client, db, cg, bt, bn)
                     official = _extract_official_title(titles)
                     if official:
                         official_titles_map[bid] = official
+                    progress.update("fetch_official_titles", done=ot_idx + 1)
+                progress.complete(
+                    "fetch_official_titles",
+                    detail=f"{len(official_titles_map)}/{len(short_title_bills)} titles",
+                )
                 logger.info(
                     "Official titles fetched for %d/%d bills",
                     len(official_titles_map), len(short_title_bills),
                 )
+            else:
+                progress.skip("fetch_official_titles", detail="no short-title bills")
 
             # 1e. Fetch FEC data for each senator
             logger.info("Fetching FEC financial data...")
@@ -1899,21 +1916,30 @@ async def run_full_pipeline(
         pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
         db.commit()
         logger.info("--- Phase 5: SCOTUS JUSTICES ---")
-        progress.begin("justice_scorecards")
+        # SCOTUS data changes a few times per term, but the Oyez fetch is
+        # uncached per-case crawling (5h+ in run 69). Refresh weekly
+        # (Sunday UTC), or whenever the justices table is empty.
+        justices_missing = db.query(Justice.id).first() is None
+        run_justices = justices_missing or datetime.utcnow().weekday() == 6
         justice_result: dict = {}
-        try:
-            from app.pipeline.justice_pipeline import run_justice_pipeline
-            justice_db = SessionLocal()
+        if not run_justices:
+            logger.info("Justice refresh skipped (weekly cadence; next on Sunday UTC)")
+            progress.skip("justice_scorecards", detail="weekly cadence")
+        else:
+            progress.begin("justice_scorecards")
             try:
-                justice_result = await run_justice_pipeline(justice_db)
-            finally:
-                justice_db.close()
-            justices_count = justice_result.get("justices_scored", 0)
-            logger.info("Justice pipeline scored %d justices", justices_count)
-            progress.complete("justice_scorecards", detail=f"{justices_count} scored")
-        except Exception as e:
-            logger.exception("Justice pipeline failed: %s — continuing", e)
-            progress.complete("justice_scorecards", detail="failed")
+                from app.pipeline.justice_pipeline import run_justice_pipeline
+                justice_db = SessionLocal()
+                try:
+                    justice_result = await run_justice_pipeline(justice_db)
+                finally:
+                    justice_db.close()
+                justices_count = justice_result.get("justices", 0)
+                logger.info("Justice pipeline scored %d justices", justices_count)
+                progress.complete("justice_scorecards", detail=f"{justices_count} scored")
+            except Exception as e:
+                logger.exception("Justice pipeline failed: %s — continuing", e)
+                progress.complete("justice_scorecards", detail="failed")
 
         # ========================================
         # PHASE 6: PRESIDENTS
@@ -1968,10 +1994,22 @@ async def run_full_pipeline(
             # dashboard instead of living only in logs (the 2026-06 audit
             # found reference senators failing across two algorithm
             # versions with no automated alarm).
-            pipeline_run.ground_truth_failures = json.dumps(
-                gt_report.get("failures", [])
-            )
+            gt_failures = gt_report.get("failures", [])
+            pipeline_run.ground_truth_failures = json.dumps(gt_failures)
             db.commit()
+            if gt_failures:
+                from app.ops_alerts import send_ops_alert
+                lines = "\n".join(
+                    f"- {f.get('senator', '?')} {f.get('dimension', '?')}="
+                    f"{f.get('score', '?')} expected {f.get('expected', '?')}"
+                    for f in gt_failures
+                )
+                send_ops_alert(
+                    f"Ground-truth gate failed ({len(gt_failures)})",
+                    f"Reference senators outside expected score ranges "
+                    f"(run #{pipeline_run.id}):\n{lines}",
+                    dedupe_key=f"ground-truth-run-{pipeline_run.id}",
+                )
         except Exception:
             logger.exception("Ground truth check failed (non-fatal)")
 

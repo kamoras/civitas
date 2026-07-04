@@ -22,6 +22,10 @@ via invalidate_on_model_change().
 import logging
 import os
 
+# Must be set before chromadb import: some versions spin up the PostHog
+# telemetry client at import time and ignore Settings(anonymized_telemetry).
+os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
+
 import chromadb
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer

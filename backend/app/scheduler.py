@@ -27,16 +27,29 @@ def _nightly_pipeline() -> None:
     a database-level lock and skips if another instance is already running.
     """
     def _run():
+        from app.ops_alerts import send_ops_alert
         loop = asyncio.new_event_loop()
         try:
             result = loop.run_until_complete(run_full_pipeline())
             if result.get("status") == "skipped":
                 logger.info("Pipeline skipped — another instance is already running")
+                send_ops_alert(
+                    "Nightly Senate run skipped",
+                    "The scheduled Senate pipeline did not start because a "
+                    "previous run is still active. Senate data will be a day "
+                    "stale unless triggered manually.",
+                    dedupe_key=f"skipped-{datetime.utcnow():%Y-%m-%d}",
+                )
             else:
                 logger.info("Senate pipeline done — starting House pipeline")
                 loop.run_until_complete(run_house_pipeline())
-        except BaseException:
+        except BaseException as e:
             logger.exception("Nightly pipeline failed")
+            send_ops_alert(
+                "Nightly pipeline crashed",
+                f"{type(e).__name__}: {e}",
+                dedupe_key=f"crashed-{datetime.utcnow():%Y-%m-%d}",
+            )
         finally:
             loop.close()
 
@@ -124,6 +137,17 @@ def start_scheduler() -> None:
         ).start(),
         CronTrigger(day_of_week="mon", hour=8, minute=0),
         id="weekly_digest",
+        replace_existing=True,
+    )
+
+    # Pipeline overrun watchdog — alerts once per run past the budget
+    from app.ops_alerts import check_pipeline_overrun
+    scheduler.add_job(
+        lambda: threading.Thread(
+            target=check_pipeline_overrun, daemon=True, name="pipeline-watchdog"
+        ).start(),
+        CronTrigger(minute="5,35"),
+        id="pipeline_watchdog",
         replace_existing=True,
     )
 
