@@ -17,6 +17,17 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v5.2",
+    date: "2026-07-11",
+    title: "District-level seat expectations and donor-record integrity",
+    changes: [
+      "House Constituent Alignment now measures each representative against their DISTRICT's partisan lean (Cook PVI, ingested per-district) instead of their state's. State lean was structurally unfair in split states: a member elected by a D+19 urban district in a red state was scored as holding an 'opposed seat' and expected to vote against their party ~20% of the time — when their district elected exactly the platform they vote for. Senators are unchanged (their constituency is the state).",
+      "Donor records now include only actual contributions (FEC Schedule A line 11). The receipt itemization also contains joint-fundraising transfers, campaign loans, vendor refunds, and bank interest — all of which were being listed as 'donors': one senator's #1 donor was a media-buying vendor's refunds, and banks that merely lent to campaigns appeared as top donors. This corrects top-donor concentration (part of Funding Independence), Funding Diversity, profile donor lists, and donor-vote matching.",
+      "The candidate's own contributions (line 11D) are identified by FEC line number rather than name matching, making self-funding exclusion deterministic.",
+      "All public LLM-generated content (issue facts, full stories, Bluesky posts) now passes mechanical grounding checks: numbers and titled-official references must appear in the source material the text was generated from, or the content is rejected. Spotlight posts previously also computed their headline 'overall score' as an unweighted average — they now show the same weighted composite as the leaderboard.",
+    ],
+  },
+  {
     version: "v5.1",
     date: "2026-07-10",
     title: "Funding-window and promise-evidence data corrections",

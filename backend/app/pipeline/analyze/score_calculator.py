@@ -154,7 +154,7 @@ logger = logging.getLogger(__name__)
 # shifts scores. Recorded on every ScoreSnapshot so trend charts can
 # annotate methodology changes; keep frontend/src/lib/scoreVersions.ts
 # in sync (it holds the human-readable changelog).
-ALGORITHM_VERSION = "v5.1"
+ALGORITHM_VERSION = "v5.2"
 
 NON_INDUSTRY_CODES = {"OTHER", "SMALL_DONORS", "LARGE_INDIVIDUAL", "POLITICAL"}
 
@@ -180,6 +180,36 @@ STATE_PVI: dict[str, int] = {
 def clamp(value: float, min_val: int = 0, max_val: int = 100) -> int:
     """Clamp a value to [min_val, max_val] and round to int."""
     return max(min_val, min(max_val, round(value)))
+
+
+_district_pvi_cache: dict[str, int] | None = None
+
+
+def _district_pvi() -> dict[str, int]:
+    """Per-district Cook PVI ("ST-N" -> signed int, positive = R lean).
+
+    Ingested from each district's Wikipedia infobox into
+    app/data/district_pvi.json; regenerate with
+    scripts/fetch_district_pvi.py (all 435 seats incl. vacancies;
+    ingestion gates documented there). State PVI is the wrong seat
+    expectation for House members in
+    split states — a D+19 urban district in a red state was scored as an
+    "opposed seat" whose member should cross party lines ~20% of the
+    time, when the seat actually elected exactly that platform.
+    """
+    global _district_pvi_cache
+    if _district_pvi_cache is None:
+        import json
+        import pathlib
+        path = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "district_pvi.json"
+        try:
+            _district_pvi_cache = {
+                k: int(v) for k, v in json.loads(path.read_text())["districts"].items()
+            }
+        except Exception:
+            logger.warning("district_pvi.json unavailable — falling back to state PVI")
+            _district_pvi_cache = {}
+    return _district_pvi_cache
 
 
 def calculate_scores(
@@ -214,6 +244,7 @@ def calculate_scores(
             senator.get("state", ""),
             senator.get("party", "I"),
             bipartisanship=senator.get("bipartisanshipScore"),
+            district=senator.get("district"),
         ),
         "fundingDiversity": _calc_funding_diversity(funding),
         "legislativeEffectiveness": _calc_legislative_effectiveness(
@@ -499,19 +530,28 @@ def _calc_promise_persistence(
     return clamp(final)
 
 
-def _signed_state_alignment(state: str, party: str, effective_party: str | None = None) -> float:
-    """How the senator's party aligns with their state's partisan lean.
+def _signed_state_alignment(
+    state: str,
+    party: str,
+    effective_party: str | None = None,
+    district: int | None = None,
+) -> float:
+    """How the member's party aligns with their seat's partisan lean.
 
     Returns -1.0 to +1.0, normalized at ±15 PVI points:
-      +1.0 = deep safe seat for the senator's party,
-       0.0 = swing state (or unknown party/state),
-      -1.0 = state strongly leans toward the opposing party.
+      +1.0 = deep safe seat for the member's party,
+       0.0 = swing seat (or unknown party/state),
+      -1.0 = seat strongly leans toward the opposing party.
 
-    For Independents, uses effective_party (inferred caucus) to
-    determine state alignment. Sanders (I-VT, caucuses D) gets
-    the D lean for Vermont.
+    House members are measured against their DISTRICT's lean when the
+    per-district table has it; state lean is the senator measure and the
+    House fallback. For Independents, uses effective_party (inferred
+    caucus) to determine alignment. Sanders (I-VT, caucuses D) gets the
+    D lean for Vermont.
     """
     pvi = STATE_PVI.get(state, 0)
+    if district is not None:
+        pvi = _district_pvi().get(f"{state}-{district}", pvi)
     eval_party = effective_party or party
     if eval_party == "R":
         lean = pvi
@@ -529,6 +569,7 @@ def _calc_constituent_alignment(
     state: str = "",
     party: str = "I",
     bipartisanship: float | None = None,
+    district: int | None = None,
 ) -> int:
     """
     Constituent Alignment Score (0-100, higher = better). v4.2 rebuild of
@@ -575,7 +616,9 @@ def _calc_constituent_alignment(
     expectations now carry the constituent-representation adjustment.
     """
     effective_party = voting_record.get("effectiveParty", party)
-    alignment = _signed_state_alignment(state, party, effective_party=effective_party)
+    alignment = _signed_state_alignment(
+        state, party, effective_party=effective_party, district=district,
+    )
 
     all_votes = (voting_record.get("keyVotes") or []) + (
         voting_record.get("recentVotes") or []

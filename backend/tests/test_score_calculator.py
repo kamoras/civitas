@@ -218,6 +218,37 @@ class TestConstituentAlignment:
         )
         assert 45 <= score <= 62
 
+    def test_district_lean_overrides_state_lean_for_house(self):
+        """A loyalist Democrat in a deep-blue district of a red state is a
+        safe-seat member (typical representation, ~neutral), not an
+        'opposed seat' member who should be crossing 20% of the time.
+        AL-7 is D+13 while Alabama is R+15."""
+        record = {
+            "keyVotes": self._make_votes(with_party=97, against_party=3),
+            "recentVotes": [],
+        }
+        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
+        with_state_only = _calc_constituent_alignment(
+            record, [], funding, state="AL", party="D"
+        )
+        with_district = _calc_constituent_alignment(
+            record, [], funding, state="AL", party="D", district=7
+        )
+        assert with_district > with_state_only
+        assert 45 <= with_district <= 62  # same band as any safe-seat loyalist
+
+    def test_unknown_district_falls_back_to_state(self):
+        record = {
+            "keyVotes": self._make_votes(with_party=97, against_party=3),
+            "recentVotes": [],
+        }
+        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
+        assert _calc_constituent_alignment(
+            record, [], funding, state="ID", party="R", district=99
+        ) == _calc_constituent_alignment(
+            record, [], funding, state="ID", party="R"
+        )
+
     def test_lobbying_alignment_penalizes(self):
         record = {
             "keyVotes": self._make_votes(with_party=90, against_party=10),
