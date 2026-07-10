@@ -18,6 +18,7 @@ Design principles:
 """
 
 import logging
+import re
 from functools import lru_cache
 
 import numpy as np
@@ -123,6 +124,91 @@ POLICY_ANCHORS: dict[str, str] = {
     "PROCEDURAL": "procedural motion cloture table adjourn quorum nomination confirmation",
 }
 
+# ── Promise category ↔ vote policy-area compatibility ────────────
+#
+# A raw cosine threshold alone can't cleanly separate true matches from
+# noise: the two distributions overlap (measured — see
+# compute_promise_vote_alignment docstring), so some cross-domain pairs
+# score higher than some genuine same-domain matches (e.g. a promise
+# about traffic-fatality resolutions scored 0.823 against a vote to
+# terminate a tariff national emergency — above the calibrated 0.80
+# threshold, but the two have nothing to do with each other). Gating on
+# whether the promise's classified category is even plausibly the same
+# domain as the vote's policyArea closes that gap for clear cross-domain
+# cases without relying on the embedding score to do all the work.
+# Deliberately permissive (categories map to several policy areas, not
+# one) to avoid rejecting genuine multi-domain promises; "other" and
+# categories with no clean POLICY_ANCHORS equivalent (infrastructure)
+# are left ungated since we have no reliable mapping for them.
+_CATEGORY_POLICY_COMPAT: dict[str, set[str]] = {
+    "healthcare": {"HEALTHCARE"},
+    "economy": {"TAXES", "FINANCIAL"},
+    "defense": {"DEFENSE"},
+    "environment": {"ENVIRONMENT", "ENERGY"},
+    "immigration": {"IMMIGRATION"},
+    "education": {"EDUCATION"},
+    "labor": {"LABOR"},
+    "justice": {"JUSTICE"},
+    "guns": {"GUNS"},
+    "tech": {"TECH"},
+    "finance": {"FINANCIAL", "TAXES"},
+    "energy": {"ENERGY", "ENVIRONMENT"},
+    "trade": {"TRADE"},
+    "welfare": {"WELFARE"},
+    "civil_rights": {"JUSTICE", "IMMIGRATION"},
+    "foreign_policy": {"TRADE", "DEFENSE"},
+}
+# A near-exact text match can still be a genuine cross-domain promise
+# (our category taxonomy is a heuristic, not ground truth) — let very
+# high similarity override the gate rather than hard-block it.
+_CATEGORY_GATE_OVERRIDE = 0.95
+
+# Sponsored bills mostly carry Congress.gov's raw CRS policy-area label
+# (~30 values, e.g. "ARMED_FORCES_AND_NATIONAL_SECURITY") rather than
+# this project's curated POLICY_ANCHORS taxonomy — orchestrator.py
+# prefers the CRS label verbatim whenever Congress.gov supplies one, so
+# over 98% of sponsored_bills rows are raw CRS, not curated (2026-07
+# audit). Votes (key_votes) are unaffected and already use the curated
+# taxonomy. Without this mapping the category gate would silently
+# reject nearly all sponsored-bill evidence, since e.g. "HEALTH" would
+# never match "HEALTHCARE" despite meaning the same thing.
+_CRS_TO_POLICY_ANCHOR: dict[str, str] = {
+    "ARMED_FORCES_AND_NATIONAL_SECURITY": "DEFENSE",
+    "CIVIL_RIGHTS_AND_LIBERTIES,_MINORITY_ISSUES": "JUSTICE",
+    "CONGRESS": "PROCEDURAL",
+    "CRIME_AND_LAW_ENFORCEMENT": "JUSTICE",
+    "ECONOMICS_AND_PUBLIC_FINANCE": "TAXES",
+    "ENVIRONMENTAL_PROTECTION": "ENVIRONMENT",
+    "FINANCE_AND_FINANCIAL_SECTOR": "FINANCIAL",
+    "FOREIGN_TRADE_AND_INTERNATIONAL_FINANCE": "TRADE",
+    "GOVERNMENT_OPERATIONS_AND_POLITICS": "PROCEDURAL",
+    "HEALTH": "HEALTHCARE",
+    "HOUSING_AND_COMMUNITY_DEVELOPMENT": "WELFARE",
+    "INTERNATIONAL_AFFAIRS": "TRADE",
+    "LABOR_AND_EMPLOYMENT": "LABOR",
+    "LAW": "JUSTICE",
+    "PUBLIC_LANDS_AND_NATURAL_RESOURCES": "ENVIRONMENT",
+    "SCIENCE,_TECHNOLOGY,_COMMUNICATIONS": "TECH",
+    "SOCIAL_WELFARE": "WELFARE",
+    "TAXATION": "TAXES",
+}
+
+
+def _normalize_policy_area(raw: str) -> str:
+    """Map a Congress.gov CRS policy-area label onto this project's curated taxonomy."""
+    return _CRS_TO_POLICY_ANCHOR.get(raw, raw)
+
+
+def _passes_category_gate(promise_category: str | None, policy_area: str, sim: float) -> bool:
+    """Check whether a vote/bill's policy area is a plausible match for the promise's category."""
+    if not promise_category:
+        return True
+    compat = _CATEGORY_POLICY_COMPAT.get(promise_category)
+    if not compat:
+        return True
+    return _normalize_policy_area(policy_area) in compat or sim >= _CATEGORY_GATE_OVERRIDE
+
+
 _industry_policy_scores: dict[tuple[str, str], float] | None = None
 
 
@@ -179,15 +265,66 @@ def get_related_policies(
 
 # ── Promise ↔ Vote alignment ─────────────────────────────────────
 
+_OPPOSE_LEAD_RE = re.compile(
+    r"^(?:oppose|repeal|block|stop|reject|overturn|against|"
+    r"vote against|no on|end)\b",
+    re.IGNORECASE,
+)
+
+
+def _promise_polarity(promise_text: str) -> str:
+    """Infer whether a named-bill promise means to advance or block that bill.
+
+    Defaults to "support": named-bill promises overwhelmingly come from
+    a member's own sponsored legislation or platform plank ("Support the
+    X Act", or just the bill's own title), not a bill they campaigned
+    against.
+    """
+    return "oppose" if _OPPOSE_LEAD_RE.match(promise_text.strip()) else "support"
+
+
+def _bill_name_tokens(text: str) -> set[str]:
+    return {w.lower() for w in re.findall(r"[A-Za-z']+", text) if len(w) > 3}
+
+
+def _is_named_bill_match(promise_text: str, bill_name: str) -> bool:
+    """Detect a promise that names/quotes a specific bill by title.
+
+    When a promise IS a specific bill ("Support the Ending Importation
+    of Russian Oil Act"), the bill's generic pro/anti policy-area
+    direction (from ``derive_stance``) is the wrong signal for kept vs.
+    broken. That direction describes whether the bill expands or
+    restricts its own policy area, not whether this vote fulfills THIS
+    promise — a bill titled "Ending X" is classified "anti" regardless
+    of whether X is something the member wants ended. A Yea vote on it
+    would then score as "broken" a promise to support ending X, which
+    is backwards (2026-07 audit: Sen. Peters, "Support the Ending
+    Importation of Russian Oil Act"). For a named-bill promise, whether
+    it was kept is a direct question — did they vote the way they said
+    they would — not a question of the bill's own directionality.
+    """
+    bill_tokens = _bill_name_tokens(bill_name)
+    if len(bill_tokens) < 3:
+        return False
+    promise_tokens = _bill_name_tokens(promise_text)
+    overlap = promise_tokens & bill_tokens
+    # An absolute floor alongside the ratio: a short 3-token title only
+    # needs 2 generic domain words in common to clear a 0.6 ratio (e.g.
+    # "Prescription Drug Pricing Act" vs. a promise merely about drug
+    # costs), which is topical relevance, not a title quote. Requiring
+    # >=3 shared distinctive words keeps this to genuine name matches.
+    return len(overlap) >= 3 and len(overlap) / len(bill_tokens) > 0.6
+
 
 def compute_promise_vote_alignment(
     promise_text: str,
     votes: list[dict],
     sponsored_bills: list[dict] | None = None,
     max_related: int = 3,
-    relevance_threshold: float = 0.28,
-    bill_relevance_threshold: float = 0.40,
+    relevance_threshold: float = 0.80,
+    bill_relevance_threshold: float = 0.82,
     use_llm: bool = True,
+    promise_category: str | None = None,
 ) -> dict:
     """Determine if a member's actions align with a campaign promise.
 
@@ -197,6 +334,27 @@ def compute_promise_vote_alignment(
     and 431 members × several promises of decomposition calls would add
     hours), the raw promise text is embedded directly; the alignment
     rules downstream are identical.
+
+    Thresholds are calibrated against this project's embedding model
+    (Snowflake arctic-embed-xs), not a generic 0-1 cosine scale: any two
+    pieces of formal legislative-register English score ~0.55-0.87 on
+    this model from shared register alone (measured on 300 promise/vote
+    and promise/bill pairs cross-category, i.e. genuinely unrelated —
+    p90 0.73/0.79, p99 0.80/0.83), while true matches (promise text that
+    names or quotes the actual bill) score ~0.77-1.0 (p10 0.84/0.81).
+    The old defaults (0.28, 0.40) sat entirely inside the noise floor,
+    so the "relevance" filter passed ~100% of unrelated votes/bills —
+    the alignment engine was citing whatever ranked highest among noise
+    as "evidence" for a promise. 0.80/0.82 cut cross-category false
+    positives to ~1-2% while keeping ~88-97% of true bill-quoting
+    matches, but the two distributions overlap in their tails: a
+    tariff-emergency-termination vote scored 0.823 against a
+    traffic-fatality-resolution promise (2026-07 audit), above the
+    threshold despite zero topical connection. ``promise_category``
+    (see ``_passes_category_gate``) closes that residual gap by also
+    requiring the vote/bill's policy area to be a plausible match for
+    the promise's domain, rather than relying on the embedding score
+    alone to separate signal from noise.
     """
     empty = {
         "alignment": "unclear",
@@ -261,12 +419,27 @@ def compute_promise_vote_alignment(
                 sim = float(similarities[idx])
                 if sim < relevance_threshold:
                     continue
+                if not _passes_category_gate(
+                    promise_category, substantive[idx].get("policyArea", ""), sim,
+                ):
+                    continue
 
                 vote = substantive[idx]
                 vote_cast = vote["vote"]
-                stance = vote.get("stance", "neutral")
                 related_votes.append(vote["billId"])
 
+                if _is_named_bill_match(promise_text, vote.get("billName", "")):
+                    # The promise names this exact bill — go straight to
+                    # "did they vote the way they said they would" and
+                    # skip the generic stance direction entirely.
+                    wants_yea = _promise_polarity(promise_text) == "support"
+                    if wants_yea == (vote_cast == "Yea"):
+                        kept_signals += sim
+                    else:
+                        broken_signals += sim
+                    continue
+
+                stance = vote.get("stance", "neutral")
                 if stance == "pro":
                     if vote_cast == "Yea":
                         kept_signals += sim
@@ -286,7 +459,10 @@ def compute_promise_vote_alignment(
                 # the 2026-06 audit measured 88% of promises as kept.)
 
             for idx in top_indices[:2]:
-                if float(similarities[idx]) < relevance_threshold:
+                sim = float(similarities[idx])
+                if sim < relevance_threshold:
+                    continue
+                if not _passes_category_gate(promise_category, substantive[idx].get("policyArea", ""), sim):
                     continue
                 v = substantive[idx]
                 reasons.append(
@@ -326,6 +502,10 @@ def compute_promise_vote_alignment(
                     if bsim < bill_relevance_threshold:
                         continue
                     bill = candidates[bidx]
+                    if not _passes_category_gate(
+                        promise_category, bill.get("policyArea", ""), bsim,
+                    ):
+                        continue
                     related_bills.append(bill.get("billId", ""))
 
                     action = (bill.get("latestAction") or "").lower()

@@ -352,10 +352,11 @@ def _positions_from_platform_text(
 
     promises = []
     for topic in selected_topics:
+        category = _classify_promise_category(topic, valid_categories)
         result = compute_promise_vote_alignment(
             topic, all_votes, sponsored_bills=sponsored_bills,
+            promise_category=category,
         )
-        category = _classify_promise_category(topic, valid_categories)
         party_align = classify_party_alignment(
             topic[:300], category.upper(), "pro",
         )
@@ -434,10 +435,11 @@ def positions_from_sponsored_bills(
     valid_categories = set(PLATFORM_CATEGORIES.keys())
     promises = []
     for topic in selected_topics:
+        category = _classify_promise_category(topic, valid_categories)
         result = compute_promise_vote_alignment(
             topic, all_votes, sponsored_bills=None, use_llm=False,
+            promise_category=category,
         )
-        category = _classify_promise_category(topic, valid_categories)
         party_align = classify_party_alignment(
             topic[:300], category.upper(), "pro",
         )
@@ -499,10 +501,11 @@ def _align_llm_promises(
             if float(sims.max()) > DEDUP_THRESHOLD:
                 continue
 
+        category = _classify_promise_category(promise_text, valid_categories)
         result = compute_promise_vote_alignment(
             promise_text, all_votes, sponsored_bills=sponsored_bills,
+            promise_category=category,
         )
-        category = _classify_promise_category(promise_text, valid_categories)
         party_align = classify_party_alignment(
             promise_text[:300], category.upper(), "pro",
         )

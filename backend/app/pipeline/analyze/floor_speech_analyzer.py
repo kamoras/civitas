@@ -22,11 +22,35 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-_SIMILARITY_THRESHOLD = 0.35
+_SIMILARITY_THRESHOLD = 0.70
 
 
 def _classify_remark_categories(text: str) -> set[str]:
-    """Determine which policy categories a floor remark relates to via embeddings."""
+    """Determine which policy category a floor remark relates to via embeddings.
+
+    Returns at most one category — the single best match, if it clears
+    the threshold — not "every anchor that scores above the bar." Floor
+    remarks are short-register text (ceremonial recognitions, procedural
+    announcements, substantive speeches all share the same register),
+    and this model's baseline cosine similarity for unrelated formal
+    English runs ~0.55-0.87 (see ``compute_promise_vote_alignment``
+    docstring in ``policy_alignment.py``). Measured directly on 600 real
+    floor speeches: best-anchor score ranges ceremonial junk ("JOANNA
+    SHEAF CELEBRATES 100TH BIRTHDAY" 0.51, "CELEBRATING CEREBRAL PALSY
+    DAY" 0.52) up through genuinely substantive remarks ("MIGRANTS
+    FLEEING RELIGIOUS PERSECUTION" 0.77, "HEALTH INSURANCE COMPANY
+    MEDICARE ADVANTAGE DENIALS" 0.76), p50=0.66. At the old threshold
+    (0.35, and allowing every anchor above it rather than just the
+    best), every single one of 400 sampled real speeches matched all 14
+    categories — including a school-recognition speech matching GUNS,
+    HEALTHCARE, TAXES, IMMIGRATION, FINANCIAL, ENERGY, JUSTICE, and
+    WELFARE. That fed a near-constant ~1.0 "advocacy coverage" into the
+    Promise Persistence score's 15%-weighted floor-advocacy component
+    for virtually every member with any floor remarks, regardless of
+    what they actually said (2026-07 audit). 0.70 keeps ~29% of real
+    remarks as classified (matching the ceremonial/substantive split
+    visible above), each contributing to at most one category.
+    """
     if not text or len(text.strip()) < 30:
         return set()
 
@@ -42,13 +66,12 @@ def _classify_remark_categories(text: str) -> set[str]:
         return set()
 
     similarities = anchor_embs @ remark_emb
+    best_idx = int(np.argmax(similarities))
+    best_sim = float(similarities[best_idx])
 
-    matched: set[str] = set()
-    for i, sim in enumerate(similarities):
-        if float(sim) >= _SIMILARITY_THRESHOLD:
-            matched.add(anchor_keys[i].lower())
-
-    return matched
+    if best_sim >= _SIMILARITY_THRESHOLD:
+        return {anchor_keys[best_idx].lower()}
+    return set()
 
 
 def analyze_floor_advocacy(
