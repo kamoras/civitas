@@ -110,13 +110,16 @@ class TestNormalizeFinance:
         # totalFromPACs is computed from actual donor records
         assert result["totalFromPACs"] >= 0
 
-    def test_only_two_most_recent_cycles_used(self):
+    def test_only_two_most_recent_elections_used(self):
         financials = [
-            {"receipts": 100, "other_political_committee_contributions": 0,
+            {"candidate_election_year": 2030, "receipts": 100,
+             "other_political_committee_contributions": 0,
              "individual_unitemized_contributions": 0, "individual_itemized_contributions": 0},
-            {"receipts": 200, "other_political_committee_contributions": 0,
+            {"candidate_election_year": 2024, "receipts": 200,
+             "other_political_committee_contributions": 0,
              "individual_unitemized_contributions": 0, "individual_itemized_contributions": 0},
-            {"receipts": 999_999, "other_political_committee_contributions": 0,
+            {"candidate_election_year": 2018, "receipts": 999_999,
+             "other_political_committee_contributions": 0,
              "individual_unitemized_contributions": 0, "individual_itemized_contributions": 0},
         ]
         result = normalize_finance(
@@ -126,7 +129,37 @@ class TestNormalizeFinance:
             pac_receipts=[],
             aggregated_contributors=[],
         )
-        assert result["totalRaised"] == 300  # only first two
+        assert result["totalRaised"] == 300  # 2030 + 2024, not the 2018 race
+
+    def test_same_election_rows_not_double_counted(self):
+        # /candidate/{id}/totals returns an election-full aggregate row
+        # (cycle: null) PLUS per-cycle rows for the same election. Summing
+        # the first two rows counted the same money twice and dropped the
+        # previous race entirely (184/521 cached candidates, 2026-07 audit).
+        financials = [
+            {"candidate_election_year": 2030, "cycle": None, "receipts": 1_200_000,
+             "other_political_committee_contributions": 120_000,
+             "individual_unitemized_contributions": 400_000,
+             "individual_itemized_contributions": 500_000},
+            {"candidate_election_year": 2030, "cycle": 2026, "receipts": 1_200_000,
+             "other_political_committee_contributions": 120_000,
+             "individual_unitemized_contributions": 400_000,
+             "individual_itemized_contributions": 500_000},
+            {"candidate_election_year": 2024, "cycle": None, "receipts": 52_000_000,
+             "other_political_committee_contributions": 3_500_000,
+             "individual_unitemized_contributions": 15_000_000,
+             "individual_itemized_contributions": 30_000_000},
+        ]
+        result = normalize_finance(
+            candidate=None,
+            financials=financials,
+            individual_receipts=[],
+            pac_receipts=[],
+            aggregated_contributors=[],
+        )
+        assert result["totalRaised"] == 53_200_000  # 2030 once + the 2024 race
+        assert result["totalFromPACs"] == 3_620_000
+        assert result["smallDonorPercentage"] == round(15_400_000 / 53_200_000 * 100)
 
 
 @pytest.mark.slow

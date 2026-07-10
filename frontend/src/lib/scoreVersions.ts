@@ -17,6 +17,17 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v5.1",
+    date: "2026-07-10",
+    title: "Funding-window and promise-evidence data corrections",
+    changes: [
+      "Fixed a funding-window bug that counted the same election twice for roughly a third of members: the FEC totals endpoint returns both an election-full aggregate row and partial per-cycle rows for the same race, and the 'two most recent elections' window could pick two rows from the same election — double-counting a partial window and dropping the member's previous (often much larger) race entirely. Funding totals now take one row per election. Funding Independence changes materially for affected members in both directions (recently-elected members whose real race had fallen out of the window recover; members whose small partial window was double-counted lose inflated scores).",
+      "Promise-vote relevance thresholds recalibrated against the embedding model's measured noise floor. Any two pieces of formal legislative text score ~0.55-0.87 cosine similarity from shared register alone; the old thresholds (0.28/0.40) sat entirely inside that noise, so the alignment engine cited whatever ranked highest among unrelated votes as 'evidence' for a promise. New thresholds (0.80/0.82) plus a promise-category / vote-policy-area compatibility gate cut cross-domain false positives to ~1-2% while keeping ~90% of true matches. Expect fewer but far more trustworthy kept/broken verdicts, with more promises honestly marked unclear.",
+      "Promises that name a specific bill are now scored by whether the member voted the way they said they would, instead of by the bill's generic pro/anti policy direction — a Yea on 'Ending X Act' no longer counts as breaking a promise to support ending X.",
+      "Floor-speech advocacy classification fixed: at the old similarity threshold every sampled speech matched all 14 policy categories (a school-recognition speech 'advocated' on guns, taxes, and immigration), feeding a constant near-perfect advocacy signal into Promise Persistence for anyone with any floor remarks. Remarks now match at most one category at a calibrated threshold; ~29% of real remarks classify, matching the observed ceremonial/substantive split.",
+    ],
+  },
+  {
     version: "v5",
     date: "2026-07-05",
     title: "Representing all constituents — coalition breadth and status-fair effectiveness",

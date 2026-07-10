@@ -42,6 +42,7 @@ if "/app" not in sys.path:
     sys.path.append("/app")
 
 from app.pipeline.analyze.score_calculator import calculate_scores  # noqa: E402
+from app.pipeline.fetch.fec import select_recent_elections  # noqa: E402
 from app.pipeline.transform.candidate_names import is_candidate_self_donor  # noqa: E402
 
 DB = "file:/data/civitas.db?mode=ro"
@@ -87,19 +88,31 @@ def load_fec_caches(cur):
     return search, fin
 
 
-def corrected_pac(search, fin, name, state):
+def corrected_funding(search, fin, name, state):
+    """Rebuild receipt-window totals from cached FEC financials.
+
+    Mirrors normalize_finance: one deduped totals row per election, two
+    most recent elections (select_recent_elections — raw [:2] counted the
+    same election twice for 184/521 cached candidates).
+    """
     cid = search.get(f"candidate-search-{name}-{state}-S")
     if not cid:
         return None
     rows = fin.get(f"candidate-financials-{cid}")
     if not rows:
         return None
-    rows = sorted(
-        rows,
-        key=lambda c: c.get("candidate_election_year") or c.get("cycle") or 0,
-        reverse=True,
-    )
-    return sum(c.get("other_political_committee_contributions", 0) or 0 for c in rows[:2])
+    window = select_recent_elections(rows)
+    total_raised = sum(c.get("receipts", 0) or 0 for c in window)
+    small = sum(c.get("individual_unitemized_contributions", 0) or 0 for c in window)
+    return {
+        "totalRaised": round(total_raised),
+        "totalFromPACs": round(sum(
+            c.get("other_political_committee_contributions", 0) or 0 for c in window
+        )),
+        "smallDonorPercentage": (
+            round(small / total_raised * 100) if total_raised > 0 else 0
+        ),
+    }
 
 
 def build_payload(cur, s, search, fin):
@@ -128,8 +141,15 @@ def build_payload(cur, s, search, fin):
         for r in cur.fetchall()
     ]
 
-    pac = corrected_pac(search, fin, s["name"], s["state"])
-    total_from_pacs = pac if pac and pac > 0 else (s["total_from_pacs"] or 0)
+    fec_totals = corrected_funding(search, fin, s["name"], s["state"])
+    if fec_totals and fec_totals["totalRaised"] > 0:
+        total_raised = fec_totals["totalRaised"]
+        total_from_pacs = fec_totals["totalFromPACs"]
+        small_donor_pct = fec_totals["smallDonorPercentage"]
+    else:
+        total_raised = s["total_raised"] or 0
+        total_from_pacs = s["total_from_pacs"] or 0
+        small_donor_pct = s["small_donor_percentage"] or 0
 
     cur.execute("SELECT * FROM key_votes WHERE senator_id=?", (sid,))
     key_votes = []
@@ -169,9 +189,9 @@ def build_payload(cur, s, search, fin):
     return {
         "id": sid, "party": s["party"], "state": s["state"],
         "funding": {
-            "totalRaised": s["total_raised"] or 0,
-            "totalFromPACs": min(total_from_pacs, s["total_raised"] or 0),
-            "smallDonorPercentage": s["small_donor_percentage"] or 0,
+            "totalRaised": total_raised,
+            "totalFromPACs": min(total_from_pacs, total_raised),
+            "smallDonorPercentage": small_donor_pct,
             "topDonors": top_donors[:100],
             "industryBreakdown": industry,
             "outsideSpendingFor": 0,
@@ -200,10 +220,11 @@ def main() -> int:
 
     results = []
     for s in senators:
-        new = calculate_scores(build_payload(cur, s, search, fin))
+        payload = build_payload(cur, s, search, fin)
+        new = calculate_scores(payload)
         results.append({
             "name": s["name"], "state": s["state"], "party": s["party"],
-            "raised": s["total_raised"] or 0,
+            "raised": payload["funding"]["totalRaised"] or 0,
             "old": {
                 "fi": s["score_funding_independence"], "pp": s["score_promise_persistence"],
                 "iv": s["score_independent_voting"], "fd": s["score_funding_diversity"],

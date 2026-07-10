@@ -13,6 +13,7 @@ industry classifier.
 
 import logging
 
+from app.pipeline.fetch.fec import select_recent_elections
 from app.pipeline.transform.candidate_names import is_candidate_self_donor
 from app.pipeline.transform.industry_classifier import classify_with_learning
 from app.pipeline.analyze.donor_classifier_ai import (
@@ -50,8 +51,9 @@ def normalize_finance(
     Returns:
         Normalized funding object matching Senator.funding type.
     """
-    # Sum across recent election cycles (most recent 2)
-    recent_cycles = financials[:2]
+    # Sum across the two most recent elections (one deduped row each —
+    # see select_recent_elections for why raw [:2] double-counted).
+    recent_cycles = select_recent_elections(financials)
 
     total_raised = sum(c.get("receipts", 0) or 0 for c in recent_cycles)
     total_from_pacs = sum(

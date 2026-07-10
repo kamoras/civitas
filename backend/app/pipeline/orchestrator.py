@@ -60,7 +60,9 @@ from app.pipeline.fetch.fec import (
     fetch_committee_receipts,
     fetch_outside_spending,
     fetch_pac_receipts,
+    financials_election_year,
     find_candidate,
+    select_recent_elections,
 )
 from app.pipeline.fetch.govinfo import fetch_bill_text
 from app.pipeline.fetch.congressional_record import fetch_floor_remarks
@@ -1070,14 +1072,13 @@ async def run_full_pipeline(
                     )
 
                 # Match the outside-spending window to the receipt window
-                # (normalize_finance sums the two most recent cycles).
-                # /candidate/{id}/totals returns election-period rows where
-                # `cycle` may be null — fall back to candidate_election_year,
-                # and include the preceding 2-year cycle since independent
-                # expenditures accrue across the election period.
+                # (normalize_finance sums the two most recent elections,
+                # one deduped totals row each). Include the preceding
+                # 2-year cycle since independent expenditures accrue
+                # across the election period.
                 recent_cycles = []
-                for c in financials[:2]:
-                    ey = c.get("cycle") or c.get("candidate_election_year")
+                for c in select_recent_elections(financials):
+                    ey = financials_election_year(c)
                     if ey:
                         recent_cycles.extend([int(ey), int(ey) - 2])
                 outside = await fetch_outside_spending(

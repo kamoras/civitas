@@ -43,7 +43,9 @@ from app.pipeline.fetch.fec import (
     fetch_committee_receipts,
     fetch_outside_spending,
     fetch_pac_receipts,
+    financials_election_year,
     find_candidate,
+    select_recent_elections,
 )
 from app.pipeline.transform.normalize_members import normalize_house_members
 from app.pipeline.transform.normalize_votes import (
@@ -520,8 +522,8 @@ async def run_house_pipeline() -> dict:
                                 aggregated.extend(await fetch_aggregated_contributors(client, db, comm_id))
 
                         recent_cycles = []
-                        for c in financials[:2]:
-                            ey = c.get("cycle") or c.get("candidate_election_year")
+                        for c in select_recent_elections(financials):
+                            ey = financials_election_year(c)
                             if ey:
                                 recent_cycles.extend([int(ey), int(ey) - 2])
                         outside = await fetch_outside_spending(

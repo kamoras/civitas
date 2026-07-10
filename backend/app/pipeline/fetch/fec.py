@@ -147,6 +147,39 @@ def _sort_financials_recent_first(results: list[dict]) -> list[dict]:
     )
 
 
+def financials_election_year(row: dict) -> int | None:
+    """The election year a candidate totals row belongs to."""
+    return row.get("candidate_election_year") or row.get("cycle") or None
+
+
+def select_recent_elections(financials: list[dict], n: int = 2) -> list[dict]:
+    """One totals row per election, most recent ``n`` elections first.
+
+    /candidate/{id}/totals returns overlapping rows for the same election:
+    an election-full aggregate (cycle: null) plus per-two-year-cycle rows,
+    and sometimes exact duplicates. Taking ``financials[:2]`` as "the two
+    most recent elections" therefore summed the same money twice AND
+    dropped the previous race for 184 of 521 cached candidates (2026-07
+    audit — e.g. one senator's window was her $1.2M 2030 partial counted
+    twice while her $52M 2024 race fell out entirely). Keep the
+    largest-receipts row per election year: the election-full aggregate
+    supersedes its own partial cycle rows.
+    """
+    by_year: dict[int, dict] = {}
+    for row in financials:
+        year = financials_election_year(row)
+        if not year:
+            continue
+        best = by_year.get(year)
+        if best is None or (row.get("receipts") or 0) > (best.get("receipts") or 0):
+            by_year[year] = row
+    if not by_year:
+        # No row carries an election year (not seen in real FEC data) —
+        # fall back to the caller's ordering rather than dropping everything.
+        return financials[:n]
+    return [by_year[y] for y in sorted(by_year, reverse=True)[:n]]
+
+
 async def fetch_candidate_financials(
     client: httpx.AsyncClient, db: Session, candidate_id: str
 ) -> list[dict]:
