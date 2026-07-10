@@ -79,6 +79,33 @@ def _pick_senator(db: Session) -> tuple["Senator | None", int, int]:
     return pick, rank, total
 
 
+# Deviation from the neutral midpoint (50) required before a dimension is
+# emphatic-language-eligible ("standout", "impressive", "concerning" — as
+# opposed to a plain "X/100"). Below this band a score is unremarkable no
+# matter which of the five dimensions happens to be furthest from 50: with
+# Promise Persistence's shrinkage prior compressing most senators into the
+# low-to-mid 50s (2026-07 audit), the *least-bad* of five middling scores
+# was still being called a "standout" ("Her highest score is Promise
+# Persistence at 55.0/100, indicating she maintains her promises
+# effectively" — for a senator ranked 98th of 100). Picking the dimension
+# to emphasize server-side, instead of leaving the choice and its framing
+# to the model, removes the ambiguity that produced that spin.
+_NOTABLE_DEVIATION = 20
+
+_EMPHASIS_WORDS = (
+    "standout", "impressive", "excel", "shine", "notably", "particularly",
+    "remarkable", "exceptional", "outstanding", "strong commitment",
+    "effectively", "noteworthy",
+)
+
+
+def _most_notable_score(scores: dict[str, float]) -> tuple[str, float, bool]:
+    """The dimension furthest from neutral, and whether it's actually notable."""
+    key = max(scores, key=lambda k: abs(scores[k] - 50))
+    value = scores[key]
+    return key, value, abs(value - 50) >= _NOTABLE_DEVIATION
+
+
 def _generate_spotlight_post(senator: "Senator", rank: int, total: int) -> str | None:
     """Ask the LLM to write a score highlight post for this senator."""
     scores = {
@@ -103,6 +130,19 @@ def _generate_spotlight_post(senator: "Senator", rank: int, total: int) -> str |
     else:
         standing_context = standing
 
+    notable_key, notable_value, is_notable = _most_notable_score(scores)
+    if is_notable:
+        highlight_instruction = (
+            f"2. Highlight {notable_key} ({notable_value}/100) by name and number — it is the "
+            f"most distinctive of the five scores, {'genuinely high' if notable_value > 50 else 'genuinely low'}."
+        )
+    else:
+        highlight_instruction = (
+            "2. None of the five individual scores is unusually high or low — they all sit in "
+            "the ordinary range. Do NOT single out, praise, or criticize any one dimension. "
+            "State the overall score and standing plainly without emphasizing any individual score."
+        )
+
     user_prompt = f"""Write a Bluesky post spotlighting this senator's Civitas transparency score.
 
 Senator: {senator.name} ({senator.party}-{senator.state})
@@ -112,8 +152,8 @@ Individual scores:
 
 RULES:
 1. Mention the senator's name, state, and their overall score and standing.
-2. Highlight the most notable individual score (highest or lowest) with its number.
-3. The tone must match the standing: factual praise for top performers, factual concern for low performers. Do not use "good" or "bad" — let the numbers and ranking speak.
+{highlight_instruction}
+3. The tone must match the standing: factual praise for top performers, factual concern for low performers. Do not use "good" or "bad" — let the numbers and ranking speak. Never call an unremarkable score (close to 50) a strength or a weakness.
 4. STRICT MAXIMUM: {MAX_SPOTLIGHT_CHARS} characters total.
 5. Write 1-2 complete sentences ending with proper punctuation.
 6. No hashtags, no exclamation points, no editorializing.
@@ -124,7 +164,7 @@ Return JSON: {{"post": "<your post text>"}}"""
     retry_note = ""
     for attempt in range(2):
         result = call_llm(
-            prompt_version="bsky_spotlight_v1",
+            prompt_version="bsky_spotlight_v2",
             system_prompt=_SYSTEM_PROMPT,
             user_prompt=user_prompt + retry_note,
             cache_key=None,
@@ -145,21 +185,38 @@ Return JSON: {{"post": "<your post text>"}}"""
             text = trimmed[:cut] if cut > 0 else trimmed[: trimmed.rfind(" ")]
         text = text.strip()
 
+        problems = []
+
         # Scores publish publicly under the platform's name: every number in
         # the post must be one we actually supplied (a score, the rank, or
         # the senator count). A mangled or invented figure is worse than no
         # post — skip after one corrective retry.
         novel = ungrounded_numbers(text, user_prompt)
-        if not novel:
+        if novel:
+            problems.append(f"numbers not provided above ({', '.join(novel)})")
+
+        # A middling score dressed up as a strength/weakness in prose — the
+        # number itself is grounded, but the framing isn't. Only checked
+        # when nothing is actually notable; when one dimension IS notable,
+        # emphatic language legitimately describes it.
+        if not is_notable:
+            lower = text.lower()
+            hit = next((w for w in _EMPHASIS_WORDS if w in lower), None)
+            if hit:
+                problems.append(
+                    f'emphatic language ("{hit}") for a profile with no standout score'
+                )
+
+        if not problems:
             return text
         logger.warning(
-            "Spotlight post failed number grounding for %s (attempt %d): %s | post: %s",
-            senator.name, attempt + 1, ", ".join(novel), text[:160],
+            "Spotlight post rejected for %s (attempt %d): %s | post: %s",
+            senator.name, attempt + 1, "; ".join(problems), text[:160],
         )
         retry_note = (
             "\n\nYour previous attempt was rejected because it contained "
-            f"numbers not provided above ({', '.join(novel)}). Use only the "
-            "scores and ranking given."
+            f"{' and '.join(problems)}. Use only the scores and ranking "
+            "given, and keep the tone plain when no score stands out."
         )
 
     return None

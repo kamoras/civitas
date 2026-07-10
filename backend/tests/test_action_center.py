@@ -14,6 +14,7 @@ from app.pipeline.analyze.action_center import (
     _update_national_monitors,
     _cleanup_monitor_lifecycle,
     _generate_monitor_metadata,
+    _story_word_target,
 )
 
 
@@ -294,3 +295,27 @@ class TestNationalMonitorCreation:
         result = _should_merge_monitors_llm(m1, m2, mock_db)
         assert result is True
         mock_call_llm.assert_called_once()
+
+
+class TestStoryWordTarget:
+    """Word-count band scales with fact count instead of forcing every
+    issue to the same length regardless of how much reporting backs it."""
+
+    def test_one_fact_gets_short_band(self):
+        low, high = _story_word_target(1)
+        assert low < 250
+        assert high < 400
+
+    def test_more_facts_widen_the_band(self):
+        low_1, high_1 = _story_word_target(1)
+        low_5, high_5 = _story_word_target(5)
+        assert low_5 > low_1
+        assert high_5 > high_1
+
+    def test_zero_facts_still_returns_a_valid_band(self):
+        low, high = _story_word_target(0)
+        assert 0 < low < high
+
+    def test_band_is_bounded_at_high_fact_counts(self):
+        low, high = _story_word_target(50)
+        assert high <= 750

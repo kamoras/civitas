@@ -2,6 +2,7 @@
 
 from app.pipeline.analyze.grounding import (
     grounding_violations,
+    repeated_sentences,
     ungrounded_numbers,
     ungrounded_statistics,
     ungrounded_titled_names,
@@ -66,6 +67,48 @@ class TestUngroundedStatistics:
 
     def test_grounded_statistic_passes(self):
         assert ungrounded_statistics("the $1.2 trillion package", SOURCE) == []
+
+    def test_fabricated_year_flagged(self):
+        # A bare year is a statistic even with no $/%/magnitude word nearby —
+        # it's exactly what a model invents when padding thin source facts.
+        assert ungrounded_statistics("the ban was lifted in 2023", SOURCE) == ["2023"]
+
+    def test_grounded_year_passes(self):
+        assert ungrounded_statistics("the 2026 session", SOURCE) == []
+
+    def test_four_digit_non_year_not_flagged_as_year_but_may_be_fabricated(self):
+        # 1500 falls outside the plausible calendar-year range and has no
+        # magnitude context, so it's treated as an ordinary contextual number.
+        assert ungrounded_statistics("about 1500 attendees", SOURCE) == []
+
+    def test_fabricated_magnitude_word_flagged(self):
+        assert ungrounded_statistics("a rise of 1.5 degrees", SOURCE) == ["1.5"]
+
+
+class TestRepeatedSentences:
+    def test_no_repetition_is_clean(self):
+        text = "The Senate passed the bill. The House will vote next week."
+        assert repeated_sentences(text) == []
+
+    def test_verbatim_repeat_flagged(self):
+        text = (
+            "The proposal is currently under review by the agency. "
+            "Something else happened in between. "
+            "The proposal is currently under review by the agency."
+        )
+        assert repeated_sentences(text) == ["the proposal is currently under review by the agency"]
+
+    def test_short_repeated_phrase_ignored(self):
+        text = "He said no. Later, he said no."
+        assert repeated_sentences(text) == []
+
+    def test_whitespace_differences_still_match(self):
+        text = (
+            "The  agreement   includes specific targets for both countries. "
+            "Filler sentence goes here now. "
+            "The agreement includes specific targets for both countries."
+        )
+        assert repeated_sentences(text) == ["the agreement includes specific targets for both countries"]
 
 
 class TestGroundingViolations:

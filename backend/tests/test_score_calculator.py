@@ -449,19 +449,19 @@ class TestPromisePersistence:
     """Higher score = more kept promises + floor advocacy boost."""
 
     def test_all_kept(self):
-        # Beta-Binomial posterior (Morris 1983, PRIOR_PSEUDOCOUNT=10):
-        # 3 kept → posterior = (3+5)/(3+10)*100 = 61.5, blended ≈ 65.
-        # Range updated from v1 (70-95) to reflect Beta(5,5) shrinkage —
+        # Beta-Binomial posterior (Morris 1983, PRIOR_PSEUDOCOUNT=6):
+        # 3 kept → posterior = (3+3)/(3+6)*100 = 66.7, blended ≈ 70.
+        # Range covers both the pre- and post-v5.1-threshold regime —
         # sparse samples (n=3) stay closer to the neutral prior of 50.
         promises = [{"alignment": "kept"}, {"alignment": "kept"}, {"alignment": "kept"}]
         score = _calc_promise_persistence({}, "D", promises)
         assert 58 <= score <= 85
 
     def test_all_broken(self):
-        # Beta-Binomial posterior (Morris 1983, PRIOR_PSEUDOCOUNT=10):
-        # 2 broken → posterior = (0+5)/(2+10)*100 = 41.7, blended ≈ 48.
-        # Range updated from v1 (score<=45) — n=2 sparse data should not
-        # anchor far from neutral; the prior dominates at this sample size.
+        # Beta-Binomial posterior (Morris 1983, PRIOR_PSEUDOCOUNT=6):
+        # 2 broken → posterior = (0+3)/(2+6)*100 = 37.5, blended ≈ 44.
+        # n=2 sparse data should not anchor far from neutral; the prior
+        # dominates at this sample size.
         promises = [{"alignment": "broken"}, {"alignment": "broken"}]
         score = _calc_promise_persistence({}, "D", promises)
         assert score <= 52
@@ -536,6 +536,25 @@ class TestPromisePersistence:
         score_active = _calc_promise_persistence(record_active, "D", promises)
         score_absent = _calc_promise_persistence(record_absent, "D", promises)
         assert score_active > score_absent
+
+    def test_population_retains_spread_at_typical_evaluable_count(self):
+        """The v5.1 evidence-threshold recalibration (0.80/0.82 relevance)
+        roughly halved evaluable promises per member — senators now
+        average ~2-3 scoreable promises rather than ~5 (2026-07-10 audit).
+        A population of members whose ACTUAL kept-fraction spans the full
+        range must still show real spread at that sample size, not
+        collapse toward a shared near-neutral score."""
+        profiles = [
+            [{"alignment": "broken"}] * 3,
+            [{"alignment": "broken"}, {"alignment": "broken"}, {"alignment": "partial"}],
+            [{"alignment": "partial"}] * 3,
+            [{"alignment": "kept"}, {"alignment": "partial"}, {"alignment": "broken"}],
+            [{"alignment": "kept"}, {"alignment": "kept"}, {"alignment": "partial"}],
+            [{"alignment": "kept"}] * 3,
+        ]
+        scores = [_calc_promise_persistence({}, "D", p) for p in profiles]
+        assert max(scores) - min(scores) >= 20
+        assert scores == sorted(scores)  # monotonic in kept-fraction
 
 
 class TestLegislativeEffectiveness:

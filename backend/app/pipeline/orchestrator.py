@@ -1999,13 +1999,22 @@ async def run_full_pipeline(
             logger.exception("Score calibration check failed (non-fatal)")
 
         try:
-            from app.pipeline.analyze.ground_truth import check_ground_truth
+            from app.pipeline.analyze.ground_truth import (
+                check_ground_truth,
+                check_score_distribution,
+            )
             gt_report = check_ground_truth(db)
             # Persist on the run record so failures surface in the admin
             # dashboard instead of living only in logs (the 2026-06 audit
             # found reference senators failing across two algorithm
             # versions with no automated alarm).
             gt_failures = gt_report.get("failures", [])
+            # Population-level distribution check (e.g. Promise Persistence
+            # collapsing toward a neutral prior) — no individual senator's
+            # promise record is independently verifiable, so this can't be
+            # a named-reference check, but it catches the failure mode
+            # those checks can't: everyone converging to the same score.
+            gt_failures += check_score_distribution(db)
             pipeline_run.ground_truth_failures = json.dumps(gt_failures)
             db.commit()
             if gt_failures:

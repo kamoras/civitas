@@ -118,6 +118,30 @@ class TestValidateSenator:
         for v in result["representationScore"].values():
             assert v == 0
 
+    def test_confidence_survives_validation(self):
+        confidence = {
+            "fundingIndependence": "high",
+            "promisePersistence": "low",
+            "independentVoting": "medium",
+            "fundingDiversity": "high",
+            "legislativeEffectiveness": "low",
+        }
+        senator = _make_senator(representationScore={
+            "fundingIndependence": 60,
+            "promisePersistence": 55,
+            "independentVoting": 70,
+            "fundingDiversity": 65,
+            "legislativeEffectiveness": 50,
+            "confidence": confidence,
+        })
+        result = validate_senator(senator)
+        assert result["representationScore"]["confidence"] == confidence
+
+    def test_missing_confidence_omitted_not_defaulted(self):
+        senator = _make_senator()
+        result = validate_senator(senator)
+        assert "confidence" not in result["representationScore"]
+
     def test_negative_funding_zeroed(self):
         senator = _make_senator(funding={
             "totalRaised": -500,

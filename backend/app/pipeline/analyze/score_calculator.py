@@ -154,7 +154,7 @@ logger = logging.getLogger(__name__)
 # shifts scores. Recorded on every ScoreSnapshot so trend charts can
 # annotate methodology changes; keep frontend/src/lib/scoreVersions.ts
 # in sync (it holds the human-readable changelog).
-ALGORITHM_VERSION = "v5.2"
+ALGORITHM_VERSION = "v5.3"
 
 NON_INDUSTRY_CODES = {"OTHER", "SMALL_DONORS", "LARGE_INDIVIDUAL", "POLITICAL"}
 
@@ -474,7 +474,23 @@ def _calc_promise_persistence(
             # References:
             #   Morris, C.N. (1983). JASA 78(381), 47–55.
             #   Gelman et al. (2013). BDA3, Ch. 2.
-            PRIOR_PSEUDOCOUNT = 10  # Beta(5, 5) — strong neutral prior
+            #
+            # PRIOR_PSEUDOCOUNT = 10 (Beta(5,5)) was sized when the evidence
+            # thresholds in compute_promise_vote_alignment were 0.28/0.40 —
+            # noise-floor thresholds that passed ~90% of promises as
+            # evaluable, averaging ~4.8 real observations per member
+            # (real-data weight n/(n+10) ≈ 0.32). The 2026-07-09 threshold
+            # recalibration to 0.80/0.82 fixed a genuine false-positive
+            # problem (the old thresholds matched whatever ranked highest
+            # among unrelated votes as "evidence"), but it also roughly
+            # halved evaluable promises per member (~2.7 avg) — with the
+            # pseudocount unchanged, the prior came to dominate almost
+            # everyone's score, collapsing Promise Persistence's stdev
+            # (7.2→3.4 shadow-tested on live Senate data, 2026-07-10 audit) and
+            # flattening the dimension to near-uninformative. 6 restores
+            # roughly the original real-data weight (2.7/(2.7+6) ≈ 0.31)
+            # for the new, higher-precision evidence pool.
+            PRIOR_PSEUDOCOUNT = 6  # Beta(3, 3) — neutral prior, resized for v5.1 thresholds
             posterior_num = raw_score + PRIOR_PSEUDOCOUNT * 0.5
             posterior_den = n_scoreable + PRIOR_PSEUDOCOUNT
             base_score = (posterior_num / posterior_den) * 100

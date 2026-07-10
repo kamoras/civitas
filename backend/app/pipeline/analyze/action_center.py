@@ -2163,8 +2163,26 @@ def generate_period_summaries(today_str: str, db: "Session") -> None:
         logger.info("Generated year-in-review for %d", yr)
 
 
+def _story_word_target(n_facts: int) -> tuple[int, int]:
+    """Word-count band scaled to how much source material actually exists.
+
+    A fixed 350-500 word floor forced the model to pad every issue to the
+    same length regardless of how much reporting backed it. When an issue
+    had one thin fact, the model filled the gap with invented specifics —
+    a story built from a single vague fact about a "China climate deal"
+    stated a fabricated "1.5 degrees Celsius" target and "Paris Agreement"
+    framing that appeared nowhere in the source (2026-07 audit). Scaling
+    the target to fact count removes the incentive to invent: 1 fact gets
+    a short paragraph, not a forced 350-word article.
+    """
+    low = max(120, min(550, 80 + 90 * n_facts))
+    high = max(200, min(750, 140 + 130 * n_facts))
+    return low, high
+
+
 def _generate_full_story(issue) -> str | None:
-    """Generate a thorough 600-900 word factual deep-dive for an action issue.
+    """Generate a factual deep-dive for an action issue, length scaled to
+    how many key facts actually support it (see ``_story_word_target``).
 
     Returns plain text (paragraphs separated by double newlines), or None on failure.
     Stored in action_issues.full_story so it is ready before users click through.
@@ -2186,10 +2204,13 @@ def _generate_full_story(issue) -> str | None:
         sources_with_urls.append(f"{name}: {url}" if url else name)
     sources_detail = "\n".join(f"- {s}" for s in sources_with_urls)
 
+    word_low, word_high = _story_word_target(len(facts))
+
     user_prompt = f"""Write a concise, factual article on the following civic issue for Civitas, a U.S. civic transparency platform.
 
 STRICT REQUIREMENTS:
-- 350-500 words. Stop when the facts run out — do not pad.
+- {word_low}-{word_high} words. Stop when the facts run out — do not pad. A short, \
+accurate article is far better than a longer one that repeats itself or invents detail.
 - Every sentence must add new information not already stated.
 - Do NOT repeat or rephrase information you have already written.
 - Factual and non-partisan — report what happened, not what to think about it.
@@ -2248,26 +2269,46 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
             logger.warning("Full story too short (%d chars) for issue %s", len(story), issue.id)
             return None
 
-        # Reject fabricated statistics: any money/percent/magnitude figure in
-        # the story must appear in the material the model was shown. Plain
-        # contextual numbers are left to the prompt rules — only
-        # statistic-shaped numbers are checked (see grounding.py).
-        from app.pipeline.analyze.grounding import ungrounded_statistics
+        # Reject fabricated statistics: any money/percent/magnitude/year
+        # figure in the story must appear in the material the model was
+        # shown. Plain contextual numbers are left to the prompt rules —
+        # only statistic-shaped numbers are checked (see grounding.py).
+        from app.pipeline.analyze.grounding import (
+            repeated_sentences,
+            ungrounded_statistics,
+        )
         novel = ungrounded_statistics(story, source_material)
-        if not novel:
+        dupes = repeated_sentences(story)
+        if not novel and not dupes:
             logger.info(
                 "Generated full story for issue %s (%d chars): %s",
                 issue.id, len(story), issue.title[:60],
             )
             return story
-        logger.warning(
-            "Full story failed statistic grounding for issue %s (attempt %d): %s",
-            issue.id, attempt + 1, ", ".join(novel),
-        )
+
+        problems = []
+        if novel:
+            problems.append(
+                f"figures not present in the key facts ({', '.join(novel)})"
+            )
+            logger.warning(
+                "Full story failed statistic grounding for issue %s (attempt %d): %s",
+                issue.id, attempt + 1, ", ".join(novel),
+            )
+        if dupes:
+            problems.append(
+                "sentences repeated verbatim later in the article "
+                f"({'; '.join(s[:80] for s in dupes)})"
+            )
+            logger.warning(
+                "Full story repeated itself for issue %s (attempt %d): %s",
+                issue.id, attempt + 1, "; ".join(dupes),
+            )
         retry_note = (
             "\n\nYour previous attempt was rejected because it contained "
-            f"figures not present in the key facts ({', '.join(novel)}). "
-            "Use only numbers that appear in the material above."
+            f"{' and '.join(problems)}. Stop writing once the facts are "
+            "covered instead of repeating yourself, and use only numbers "
+            "that appear in the material above."
         )
 
     return None

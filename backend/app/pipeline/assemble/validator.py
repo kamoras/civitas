@@ -84,13 +84,22 @@ def validate_senator(senator: dict) -> dict:
         )
     # Representation score
     cs = senator.get("representationScore") or {}
-    senator["representationScore"] = {
+    validated_score = {
         "fundingIndependence": clamp(cs.get("fundingIndependence", 0)),
         "promisePersistence": clamp(cs.get("promisePersistence", 0)),
         "independentVoting": clamp(cs.get("independentVoting", 0)),
         "fundingDiversity": clamp(cs.get("fundingDiversity", 0)),
         "legislativeEffectiveness": clamp(cs.get("legislativeEffectiveness", 0)),
     }
+    # Data-sufficiency grades (calculate_confidence) ride alongside the
+    # numeric scores, not IN them — pass through untouched so senator_service
+    # can persist it. Dropping this here silently zeroed score_confidence
+    # for every senator (stuck at "{}" since 2026-07-04): the House pipeline
+    # bypasses this validator and was unaffected, which is how the gap
+    # stayed invisible.
+    if cs.get("confidence") is not None:
+        validated_score["confidence"] = cs["confidence"]
+    senator["representationScore"] = validated_score
 
     # Funding
     f = senator.get("funding") or {}

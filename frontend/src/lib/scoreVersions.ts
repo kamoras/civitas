@@ -17,6 +17,18 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v5.3",
+    date: "2026-07-11",
+    title: "Promise Persistence recalibration and confidence-badge fix",
+    changes: [
+      "Promise Persistence's shrinkage prior is recalibrated for v5.1's stricter evidence thresholds. That recalibration (0.80/0.82 relevance) fixed a real false-positive problem but also roughly halved how many promises are evaluable per member — with the shrinkage prior left at its old size, it came to dominate almost every score, collapsing Promise Persistence toward a narrow neutral band regardless of a member's actual record (stdev fell from ~7 to ~3 in testing). The prior is resized to restore the original balance between evidence and shrinkage for the new, smaller-but-more-accurate evidence pool.",
+      "Fixed a bug where every senator's data-sufficiency confidence badges (the 'low data' marker shown next to sparse scores) were silently dropped before saving, since 2026-07-04 — representatives were unaffected. Confidence badges now display correctly for senators too.",
+      "Added an automatic check after each pipeline run that flags if any score dimension's spread collapses across the full senator population, so a recalibration mistake like the Promise Persistence one above gets caught immediately instead of by manual audit.",
+      "Action Center's full-length issue articles now scale their target length to how much reporting actually exists for that issue, instead of a fixed word count — thin coverage was previously padded out with invented specifics (fabricated dates, statistics, and international-agreement details not present in any source) to hit the old floor. Generated articles are also checked for and rejected if they repeat the same sentence verbatim, and mechanical fact-checking now catches fabricated years and physical-magnitude figures (e.g. degrees) in addition to money and percentages.",
+      "Bluesky senator spotlight posts no longer describe a middling score as a 'standout' — the post now highlights a specific dimension only when it's genuinely far from the population's neutral point; when none of a senator's five scores are unusual, the post states the overall ranking plainly instead of praising or criticizing an unremarkable number.",
+    ],
+  },
+  {
     version: "v5.2",
     date: "2026-07-11",
     title: "District-level seat expectations and donor-record integrity",

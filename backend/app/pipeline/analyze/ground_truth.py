@@ -35,6 +35,7 @@ Range rationale (see the score-audit skill for the investigation):
 """
 
 import logging
+import statistics
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,68 @@ GROUND_TRUTH: list[tuple[str, str, tuple[int, int], str]] = [
 _DIM_LABEL = {
     "score_independent_voting": "IV",
     "score_funding_independence": "FI",
+    "score_promise_persistence": "PP",
+    "score_funding_diversity": "FD",
+    "score_legislative_effectiveness": "LE",
 }
+
+# Population stdev floor per dimension. No individual senator's promise
+# record is independently verifiable the way Collins's break rate or
+# Sanders's donor mix is, so PP has no per-senator GROUND_TRUTH entries —
+# but a population-level check catches the failure mode those entries
+# can't: every senator converging toward the same score regardless of
+# their actual record. This is what the v5.1 promise-evidence threshold
+# recalibration did to PP (2026-07-10 audit): a stricter, more accurate
+# evidence bar roughly halved evaluable promises per senator, and the
+# existing Beta-prior shrinkage — sized for the old, higher-volume
+# evidence regime — came to dominate almost everyone's score, collapsing
+# stdev from 7.2 to 3.4 with no automated alarm (score_calibration.py's
+# drift check is relative run-over-run and log-only; this check is
+# absolute and persists to the same ground-truth failure list ops
+# already watches). 8 matches the score-audit skill's stated floor.
+MIN_STDEV: dict[str, float] = {
+    "score_funding_independence": 8.0,
+    "score_promise_persistence": 8.0,
+    "score_independent_voting": 8.0,
+    "score_funding_diversity": 8.0,
+    "score_legislative_effectiveness": 8.0,
+}
+
+
+def check_score_distribution(db) -> list[dict]:
+    """Flag any scored dimension whose population stdev has collapsed.
+
+    Returns failures in the same shape as check_ground_truth's, so
+    callers can merge the two lists.
+    """
+    from app.models import Senator
+
+    failures: list[dict] = []
+    rows = db.query(Senator).all()
+
+    for dim, min_stdev in MIN_STDEV.items():
+        values = [v for v in (getattr(s, dim, None) for s in rows) if v is not None]
+        if len(values) < 10:
+            continue
+        stdev = statistics.pstdev(values)
+        if stdev < min_stdev:
+            failures.append({
+                "senator": f"ALL ({len(values)} senators)",
+                "dimension": _DIM_LABEL.get(dim, dim),
+                "score": round(stdev, 2),
+                "expected": [min_stdev, None],
+                "rationale": (
+                    f"population stdev {stdev:.2f} below floor {min_stdev} — "
+                    "scores have lost discriminative power across the population"
+                ),
+            })
+            logger.warning(
+                "GROUND TRUTH FAIL: %s population stdev=%.2f below floor %.1f "
+                "(n=%d) — dimension may have collapsed toward a neutral prior",
+                _DIM_LABEL.get(dim, dim), stdev, min_stdev, len(values),
+            )
+
+    return failures
 
 
 def check_ground_truth(db) -> dict:
