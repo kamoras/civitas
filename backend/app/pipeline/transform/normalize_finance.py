@@ -26,6 +26,33 @@ from app.pipeline.analyze.donor_classifier_ai import (
 logger = logging.getLogger(__name__)
 
 
+def _is_contribution_row(receipt: dict) -> bool:
+    """True when a Schedule A row is an actual third-party contribution.
+
+    Schedule A on candidate filings (Form 3) itemizes every receipt, not
+    just donations. Only line 11 is contributions (11AI individuals, 11B
+    party committees, 11C other committees, 11D the candidate). The rest
+    is structurally not donor money and was polluting top-donor lists
+    fleet-wide (2026-07 audit): line 12 transfers from joint-fundraising
+    committees ($768M cached), 13A/13B loans ($219M — banks that lent to
+    campaigns listed as "donors"), 14 offsets to operating expenditures
+    ($33M — media-buy refunds, e.g. a vendor as a senator's top donor),
+    15 other receipts ($73M — bank interest), and 17A conduit totals
+    (WinRed aggregates whose underlying gifts are already itemized on
+    11AI). Rows without a line_number are kept — the memo-text and
+    donor-type classifiers still screen those.
+    """
+    line = receipt.get("line_number")
+    if line is None or line == "":
+        return True
+    return str(line).startswith("11")
+
+
+def _is_candidate_line(receipt: dict) -> bool:
+    """Line 11D — contributions from the candidate themselves."""
+    return str(receipt.get("line_number") or "") == "11D"
+
+
 def normalize_finance(
     candidate: dict | None,
     financials: list[dict],
@@ -185,6 +212,9 @@ def build_top_donors(
 
     # 1. PAC/committee contributions
     for r in pac_receipts:
+        if not _is_contribution_row(r):
+            continue
+
         name = r.get("contributor_name") or ""
         if not name:
             committee = r.get("committee") or {}
@@ -198,7 +228,12 @@ def build_top_donors(
         if memo_upper and memo_upper in transfer_memo_set:
             continue
 
-        donor_type, industry, skip = _get_classification(name, name_upper)
+        if _is_candidate_line(r):
+            # Line 11D is the candidate's own money by FEC definition —
+            # no name heuristic needed.
+            donor_type, industry, skip = "Self-Funded", "OTHER", False
+        else:
+            donor_type, industry, skip = _get_classification(name, name_upper)
         if skip:
             continue
 
@@ -210,6 +245,8 @@ def build_top_donors(
 
     # 2. Individual contributions grouped by employer
     for r in individual_receipts:
+        if not _is_contribution_row(r):
+            continue
         employer = (r.get("contributor_employer") or "").upper().strip()
         if not employer or employer in skip_employer_set:
             continue
@@ -347,6 +384,8 @@ def _build_industry_breakdown(
         return False
 
     for r in pac_receipts:
+        if not _is_contribution_row(r) or _is_candidate_line(r):
+            continue
         org = r.get("contributor_name") or r.get("contributor_organization_name") or ""
         if not org:
             continue
@@ -365,6 +404,8 @@ def _build_industry_breakdown(
 
     employer_totals: dict[str, float] = {}
     for r in individual_receipts:
+        if not _is_contribution_row(r):
+            continue
         employer = (r.get("contributor_employer") or "").upper().strip()
         if not employer or employer in skip_employer_bd:
             continue

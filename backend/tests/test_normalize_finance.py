@@ -131,6 +131,45 @@ class TestNormalizeFinance:
         )
         assert result["totalRaised"] == 300  # 2030 + 2024, not the 2018 race
 
+    def test_non_contribution_receipts_excluded_from_donors(self):
+        # Schedule A itemizes ALL receipts. Only line 11 is contributions:
+        # line 14 is vendor refunds (a media buyer appeared as a senator's
+        # top donor), 13A is loans, 15 is bank interest, 12 is JFC transfers.
+        pac_receipts = [
+            {"contributor_name": "BUYING TIME LLC", "line_number": "14",
+             "contribution_receipt_amount": 220_000},
+            {"contributor_name": "PINNACLE BANK", "line_number": "13B",
+             "contribution_receipt_amount": 2_500_000},
+            {"contributor_name": "UMPQUA BANK", "line_number": "15",
+             "contribution_receipt_amount": 56_000},
+            {"contributor_name": "SOME VICTORY FUND", "line_number": "12",
+             "contribution_receipt_amount": 300_000},
+            {"contributor_name": "GOLDMAN SACHS PAC", "line_number": "11C",
+             "contribution_receipt_amount": 10_000},
+        ]
+        donors = build_top_donors(
+            pac_receipts=pac_receipts,
+            individual_receipts=[],
+            aggregated_contributors=[],
+            candidate_name="TEST, PERSON",
+        )
+        names = {d["name"] for d in donors}
+        assert names == {"Goldman Sachs PAC"}
+
+    def test_candidate_line_11d_typed_self_funded(self):
+        pac_receipts = [
+            {"contributor_name": "SCOTT, RICK GOV.", "line_number": "11D",
+             "contribution_receipt_amount": 7_450_000},
+        ]
+        donors = build_top_donors(
+            pac_receipts=pac_receipts,
+            individual_receipts=[],
+            aggregated_contributors=[],
+            candidate_name="UNRELATED, NAME",
+        )
+        assert len(donors) == 1
+        assert donors[0]["type"] == "Self-Funded"
+
     def test_same_election_rows_not_double_counted(self):
         # /candidate/{id}/totals returns an election-full aggregate row
         # (cycle: null) PLUS per-cycle rows for the same election. Summing
