@@ -412,8 +412,9 @@ export default function AboutPage() {
                 <P>
                   Reflects approval trajectory and coalition retention. For modern
                   presidents (Truman onward), this is grounded in Gallup average approval
-                  ratings. Pre-Gallup presidents are scored based on election margins and
-                  historian consensus.
+                  ratings; pre-Gallup presidents are scored based on election margins and
+                  historian consensus. No live polling API is wired up — approval figures
+                  are a one-time snapshot in the curated seed data, not continuously updated.
                 </P>
               </div>
 
@@ -434,20 +435,25 @@ export default function AboutPage() {
                 <P>
                   Evaluates administrative execution quality. The pipeline fetches executive
                   order counts from the Federal Register API (federalregister.gov) for each
-                  presidential term. The score blends court success rate (40%), cabinet
-                  stability (30%), and EO activity rate (30%), where a moderate rate of
-                  executive action scores higher than extremes in either direction.
+                  presidential term, and EO activity rate (30% of this score) is genuinely
+                  computed from that data. The formula also defines court-success-rate (40%)
+                  and cabinet-stability (30%) components, but no live source exists for
+                  either — no structured, machine-readable API tracks EO litigation outcomes
+                  or cabinet tenure — so in practice that 70% of the weight always falls back
+                  to the curated seed estimate rather than a live figure (marked with an
+                  &ldquo;editorial estimate&rdquo; badge on the president&apos;s page).
                 </P>
               </div>
 
               <div>
-                <Label>Agency Alignment (15%)</Label>
+                <Label>Agency Alignment (15%) — Dynamic</Label>
                 <P>
                   Measures how well executive agency actions align with stated
-                  presidential priorities. Evaluates whether federal agencies
-                  pursue the policy agenda the president campaigned on, based on
-                  regulatory actions and executive directives. Currently uses
-                  curated seed data; automated regulatory tracking is planned.
+                  presidential priorities. For presidents from Clinton onward, the pipeline
+                  fetches real rulemaking activity from the Federal Register API — the count
+                  of final and proposed rules published during the term, and what fraction
+                  were finalized rather than left pending — and computes this score directly
+                  from those counts. Earlier presidents use curated seed data.
                 </P>
               </div>
             </div>
@@ -1061,7 +1067,7 @@ export default function AboutPage() {
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-neon-yellow shrink-0">-</span>
-                    <span>Historical presidential scores are editorially curated based on historian surveys, not computed from raw data. We are transparent about this distinction.</span>
+                    <span>Independence, Follow-Through, and Public Mandate are editorially curated (C-SPAN Presidential Historians Survey, Gallup, and election-margin data — see the Presidents methodology below) rather than computed from a live feed, for every president including the current one. Competence&apos;s court-success and cabinet-turnover components have no live source either, though its EO-activity-rate component is genuinely computed. Effectiveness and Agency Alignment are fully data-derived from Clinton onward. We mark editorial-estimate figures on the president&apos;s page rather than presenting them with the same certainty as measured data.</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-neon-yellow shrink-0">-</span>

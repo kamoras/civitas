@@ -20,16 +20,16 @@ function getPartyMeta(party: string) {
   return PARTY_META[party] ?? { label: party, color: "text-white/50", bg: "bg-white/10", border: "border-white/20" };
 }
 
-const METRIC_LABELS: { key: keyof President["score"]; label: string; desc: string }[] = [
-  { key: "independence", label: "INDEPENDENCE", desc: "Cabinet & advisor independence from corporate/lobbyist influence" },
-  { key: "followThrough", label: "FOLLOW-THROUGH", desc: "Campaign promise to executive/legislative action ratio" },
-  { key: "publicMandate", label: "PUBLIC MANDATE", desc: "Approval trajectory and coalition retention" },
+const METRIC_LABELS: { key: keyof President["score"]; label: string; desc: string; alwaysEstimate?: boolean }[] = [
+  { key: "independence", label: "INDEPENDENCE", desc: "Cabinet & advisor independence from corporate/lobbyist influence", alwaysEstimate: true },
+  { key: "followThrough", label: "FOLLOW-THROUGH", desc: "Campaign promise to executive/legislative action ratio", alwaysEstimate: true },
+  { key: "publicMandate", label: "PUBLIC MANDATE", desc: "Approval trajectory and coalition retention", alwaysEstimate: true },
   { key: "effectiveness", label: "EFFECTIVENESS", desc: "GDP growth, job creation, and tangible outcomes for voters" },
-  { key: "competence", label: "COMPETENCE", desc: "Executive order court success rate and administrative execution" },
+  { key: "competence", label: "COMPETENCE", desc: "Executive order activity rate and administrative execution. Court-success and cabinet-turnover rates have no live data source and are not currently part of this score." },
   { key: "agencyAlignment", label: "AGENCY ALIGNMENT", desc: "How effectively federal agencies execute the president's agenda through rulemaking" },
 ];
 
-function MetricBar({ label, value, desc }: { label: string; value: number; desc: string }) {
+function MetricBar({ label, value, desc, isEstimate }: { label: string; value: number; desc: string; isEstimate?: boolean }) {
   const color =
     value >= 81
       ? "bg-matrix-green"
@@ -44,7 +44,17 @@ function MetricBar({ label, value, desc }: { label: string; value: number; desc:
   return (
     <div className="group">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xs text-matrix-green/60 tracking-widest">{label}</span>
+        <span className="text-xs text-matrix-green/60 tracking-widest">
+          {label}
+          {isEstimate && (
+            <span
+              className="ml-1.5 text-neon-yellow/70 normal-case tracking-normal"
+              title="No live data source exists for this metric — it's a one-time editorial estimate, not computed from an API."
+            >
+              · editorial estimate
+            </span>
+          )}
+        </span>
         <span className={`text-sm font-bold tabular-nums ${getScoreColor(value)}`} aria-hidden="true">{value}</span>
       </div>
       <div
@@ -67,10 +77,20 @@ function MetricBar({ label, value, desc }: { label: string; value: number; desc:
   );
 }
 
-function StatBox({ label, value, unit }: { label: string; value: string | null; unit?: string }) {
+function StatBox({ label, value, unit, isEstimate }: { label: string; value: string | null; unit?: string; isEstimate?: boolean }) {
   return (
     <div className="border border-matrix-green/20 bg-terminal-bg/50 px-3 py-2 text-center">
-      <div className="text-[10px] text-matrix-green/40 tracking-widest mb-1">{label}</div>
+      <div className="text-[10px] text-matrix-green/40 tracking-widest mb-1">
+        {label}
+        {isEstimate && (
+          <span
+            className="text-neon-yellow/70"
+            title="No live data source exists for this figure — it's a one-time editorial estimate, not tracked or updated from an API."
+          >
+            {" "}*
+          </span>
+        )}
+      </div>
       <div className="text-lg font-bold text-white/80 tabular-nums">
         {value ?? "—"}
         {unit && value && <span className="text-xs text-matrix-green/40 ml-0.5">{unit}</span>}
@@ -163,8 +183,14 @@ function PresidentCard({ president }: { president: President }) {
         <div>
           <h3 className="text-xs text-matrix-green/50 tracking-widest mb-4">SCORE BREAKDOWN</h3>
           <div className="space-y-3">
-            {METRIC_LABELS.map(({ key, label, desc }) => (
-              <MetricBar key={key} label={label} value={president.score[key]} desc={desc} />
+            {METRIC_LABELS.map(({ key, label, desc, alwaysEstimate }) => (
+              <MetricBar
+                key={key}
+                label={label}
+                value={president.score[key]}
+                desc={desc}
+                isEstimate={alwaysEstimate || (key === "competence" && !president.competenceHasLiveData)}
+              />
             ))}
           </div>
         </div>
@@ -182,6 +208,7 @@ function PresidentCard({ president }: { president: President }) {
               label="AVG APPROVAL"
               value={president.avgApproval != null ? `${president.avgApproval.toFixed(0)}` : null}
               unit="%"
+              isEstimate
             />
             <StatBox
               label="GDP GROWTH"
@@ -205,11 +232,13 @@ function PresidentCard({ president }: { president: President }) {
               label="EO COURT WIN"
               value={president.eoCourtSuccessPct != null ? `${president.eoCourtSuccessPct.toFixed(0)}` : null}
               unit="%"
+              isEstimate
             />
             <StatBox
               label="CABINET TURNOVER"
               value={president.cabinetTurnoverPct != null ? `${president.cabinetTurnoverPct.toFixed(0)}` : null}
               unit="%"
+              isEstimate
             />
           </div>
         </div>

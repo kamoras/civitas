@@ -308,46 +308,81 @@ body {
   }
 }
 
-/* ===== A11Y: MINIMUM TEXT CONTRAST =====
-   Ensure informational text at low opacities is still readable.
-   WCAG AA requires 4.5:1 for normal text on #0d0208 background.
-   Pure green #00ff41 at 40% opacity passes; below that fails.        */
+/* ===== A11Y: MINIMUM TEXT CONTRAST (always on) =====
+   WCAG AA requires 4.5:1 for normal text on the #0d0208 background.
+   Measured (alpha-composited over #0d0208, then WCAG relative-luminance
+   contrast against #0d0208 — 2026-07 audit, not the "40% passes" claim
+   this block previously made, which was never actually checked and was
+   wrong by a wide margin: matrix-green/40 measures 2.89:1):
+     matrix-green needs >=54% opacity (54% -> 4.57:1)
+     white        needs >=46% opacity (46% -> 4.62:1)
+     neon-cyan    needs >=52% opacity (52% -> 4.62:1)
+     neon-yellow  needs >=48% opacity (48% -> 4.66:1)
+     neon-pink    needs >=82% opacity (82% -> 4.59:1) — by far the least
+       forgiving color at low alpha; below that it fails even in the
+       60-70% range other colors are safe at.
+   Editing every below-floor className at ~500 call sites risks missing
+   some and risks silently flattening the terminal-dim aesthetic in a
+   giant diff. Instead, clamp exactly the opacity steps actually used in
+   the codebase that fall under each color's floor, rounded up to the
+   nearest value already in use elsewhere (so no new visual weight is
+   introduced) — everything at or above the floor is untouched. */
+[class*="text-matrix-green/20"],
+[class*="text-matrix-green/25"],
+[class*="text-matrix-green/30"],
+[class*="text-matrix-green/35"],
+[class*="text-matrix-green/40"],
+[class*="text-matrix-green/50"] {
+  opacity: 0.6 !important; /* matrix-green/60 -> 5.49:1 */
+}
+[class*="text-white/20"],
+[class*="text-white/30"],
+[class*="text-white/40"] {
+  opacity: 0.5 !important; /* white/50 -> ~6:1 */
+}
+[class*="text-neon-cyan/40"],
+[class*="text-neon-cyan/50"] {
+  opacity: 0.6 !important; /* neon-cyan/60 -> ~5.4:1 */
+}
+[class*="text-neon-yellow/40"] {
+  opacity: 0.5 !important; /* neon-yellow/50 -> ~4.9:1 */
+}
+[class*="text-neon-pink/40"],
+[class*="text-neon-pink/50"],
+[class*="text-neon-pink/60"],
+[class*="text-neon-pink/70"],
+[class*="text-neon-pink/80"] {
+  opacity: 0.9 !important; /* neon-pink/90 -> ~4.9:1 — needs to be nearly opaque */
+}
+
+/* dem-blue (#0066ff, 4.22:1) and ind-purple (#9933ff, 4.15:1) both fail
+   4.5:1 even at full opacity — not an opacity problem, the base color
+   itself is too dark against #0d0208. Always substitute a lighter shade
+   rather than gating the fix behind prefers-contrast (dem-blue's lighter
+   variant was already used there, at 7.35:1; ind-purple gets the same
+   treatment here, at 5.16:1). rep-red passes fine at full opacity
+   (5.61:1) and needs no equivalent swap. */
+[class*="text-dem-blue"] {
+  color: #6699ff !important;
+}
+[class*="text-ind-purple"] {
+  color: #a852ff !important;
+}
+
 @media (prefers-contrast: more) {
-  [class*="text-matrix-green/1"],
-  [class*="text-matrix-green/2"],
-  [class*="text-matrix-green/3"],
-  [class*="text-matrix-green/4"],
-  [class*="text-white/1"],
-  [class*="text-white/2"],
-  [class*="text-white/3"],
-  [class*="text-white/4"] {
+  [class*="text-matrix-green/"],
+  [class*="text-white/"] {
     opacity: 1 !important;
     color: #00ff41 !important;
   }
 
-  [class*="text-neon-cyan/1"],
-  [class*="text-neon-cyan/2"],
-  [class*="text-neon-cyan/3"],
-  [class*="text-neon-cyan/4"],
-  [class*="text-neon-cyan/5"],
-  [class*="text-neon-pink/1"],
-  [class*="text-neon-pink/2"],
-  [class*="text-neon-pink/3"],
-  [class*="text-neon-pink/4"],
-  [class*="text-neon-pink/5"],
-  [class*="text-neon-pink/6"],
-  [class*="text-neon-yellow/1"],
-  [class*="text-neon-yellow/2"],
-  [class*="text-neon-yellow/3"],
-  [class*="text-neon-yellow/4"],
-  [class*="text-neon-yellow/5"] {
+  [class*="text-neon-cyan/"],
+  [class*="text-neon-pink/"],
+  [class*="text-neon-yellow/"] {
     opacity: 1 !important;
   }
 
   /* Lighter partisan colors for better contrast on dark backgrounds */
-  [class*="text-dem-blue"] {
-    color: #6699ff !important;
-  }
   [class*="text-rep-red"] {
     color: #ff6666 !important;
   }

@@ -22,6 +22,9 @@ export interface President {
   eoCount: number | null;
   eoCourtSuccessPct: number | null;
   cabinetTurnoverPct: number | null;
+  /** True if Competence blended in live EO-activity data for this term;
+   * false means it's entirely an editorial estimate (see /about). */
+  competenceHasLiveData: boolean;
   summary: string;
   keyAchievements: string[];
   keyFailures: string[];

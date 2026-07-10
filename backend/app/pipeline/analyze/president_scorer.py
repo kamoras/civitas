@@ -5,13 +5,20 @@ metric scores from real data. Falls back to seed values for metrics
 where live data is unavailable.
 
 Metrics that can be dynamically computed:
-  - Competence: Derived from EO activity patterns and cabinet stability
+  - Competence: EO activity rate only (30% of the formula's weight — see
+    calc_competence). Court-success rate and cabinet-turnover rate are
+    accepted as optional inputs for a future data source, but nothing in
+    this pipeline currently fetches them live, so in practice they are
+    never passed and the remaining 70% blends with the seed score.
   - Effectiveness: Derived from employment/GDP data
 
 Metrics that remain static (until more data sources are added):
   - Independence: Requires cabinet composition analysis
   - Follow-Through: Requires promise tracking (PolitiFact-style)
   - Public Mandate: Requires polling data aggregation
+  - Competence's court-success-rate and cabinet-turnover-rate components
+    (70% of the formula's weight): no structured, machine-readable data
+    source for EO litigation outcomes or cabinet tenure is wired up
 """
 
 import logging
@@ -30,13 +37,24 @@ def calc_competence(
     term_years: float,
     seed_score: float,
 ) -> int:
-    """Calculate competence score from live data.
+    """Calculate competence score, blending live data with the seed score.
 
     Components (weighted):
-      - Court success rate (40%): Higher = more legally sound drafting
-      - Cabinet stability (30%): Lower turnover = better management
+      - Court success rate (40%): Higher = more legally sound drafting.
+        No fetch source is wired up for this (2026-07 audit) — the
+        pipeline never passes eo_court_success_pct, so this weight
+        always falls through to seed_score via the blending below.
+      - Cabinet stability (30%): Lower turnover = better management.
+        Same — cabinet_turnover_pct is never fetched live either.
       - EO activity rate (30%): Moderate rate is ideal; very high or
-        very low rates suggest either overreliance on EOs or inaction
+        very low rates suggest either overreliance on EOs or inaction.
+        This is the only component genuinely computed from live data
+        (Federal Register EO counts).
+
+    Any component whose input is None is excluded and its weight blends
+    with seed_score instead (see the blending step below) — this is what
+    keeps the two permanently-unfetched components honest rather than
+    silently defaulting to some fixed number.
     """
     components: list[tuple[float, float]] = []
 

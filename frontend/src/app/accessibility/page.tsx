@@ -133,19 +133,17 @@ export default function AccessibilityPage() {
               </Warn>
               <Warn>
                 <strong className="text-neon-yellow">Low-opacity secondary text</strong> —
-                Some secondary labels use reduced opacity for visual hierarchy. In
-                high-contrast mode (<code>prefers-contrast: more</code>), these are overridden
-                to full opacity automatically.
+                Some secondary labels use reduced opacity for visual hierarchy. Opacity is
+                floored by default so every text color still clears WCAG AA&apos;s 4.5:1
+                minimum against the terminal background — this is enforced globally in CSS
+                rather than per element, so it can&apos;t be missed on new components. In
+                high-contrast mode (<code>prefers-contrast: more</code>), opacity is pushed
+                further, to fully solid.
               </Warn>
               <Warn>
                 <strong className="text-neon-yellow">JavaScript-dependent tooltips</strong> —
                 Metric explanation tooltips require JavaScript. If JavaScript is unavailable,
                 metric descriptions are not accessible.
-              </Warn>
-              <Warn>
-                <strong className="text-neon-yellow">Partisan colors</strong> — Democrat blue
-                (#0066ff) and Republican red (#ff3333) may have borderline contrast on dark
-                backgrounds for normal-weight text. High-contrast mode uses lighter variants.
               </Warn>
             </ul>
           </Section>
@@ -166,8 +164,11 @@ export default function AccessibilityPage() {
                 submission) verified with keyboard-only navigation.
               </Check>
               <Check>
-                <strong className="text-matrix-green">Contrast verification</strong> — Primary
-                text colors verified against WCAG 4.5:1 minimum ratio.
+                <strong className="text-matrix-green">Contrast verification</strong> — Every
+                text color and opacity level actually used in the codebase (2026-07 audit)
+                had its WCAG relative-luminance contrast ratio computed against the terminal
+                background; any combination below 4.5:1 is floored in CSS to the minimum
+                opacity, or substituted for a lighter shade, that clears it.
               </Check>
               <Check>
                 <strong className="text-matrix-green">Reduced motion</strong> — Animation

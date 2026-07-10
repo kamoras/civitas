@@ -102,9 +102,21 @@ async def run_president_pipeline(db: Session) -> dict:
 
         term_years = _term_years(president.term_start, president.term_end)
 
+        # eo_court_success_pct and cabinet_turnover_pct are NOT included
+        # here: no fetch function anywhere populates them from a live
+        # source (there is no structured, machine-readable API for EO
+        # litigation outcomes or cabinet tenure this pipeline uses) — they
+        # are one-time editorial estimates set in the seed data and never
+        # updated. Passing the stored value back in as "live" would make
+        # calc_competence's court-success (40% weight) and cabinet-
+        # stability (30% weight) components look freshly computed on
+        # every run when they're actually frozen opinion (2026-07 audit).
+        # Omitting them here lets calc_competence's existing
+        # missing-component fallback correctly blend that 70% of weight
+        # with seed_score instead — the same honest "seed" treatment
+        # already applied to Independence, Follow-Through, and Public
+        # Mandate.
         live = {
-            "eo_court_success_pct": president.eo_court_success_pct,
-            "cabinet_turnover_pct": president.cabinet_turnover_pct,
             "gdp_growth_avg": president.gdp_growth_avg,
             # Year-1-excluded GDP average (Blinder & Watson 2016)
             "gdp_growth_adjusted": gdp_adj_data.get(pid),

@@ -607,6 +607,15 @@ def seed_presidents(db: Session) -> int:
     return count
 
 
+def _competence_has_live_data(p: President) -> bool:
+    """True if this president's Competence score blended in real EO-rate
+    data rather than being pure seed (see calc_competence — court-success
+    and cabinet-turnover rates never have a live source, so this can only
+    ever reflect the EO-activity-rate component)."""
+    from app.pipeline.president_pipeline import DYNAMIC_PRESIDENTS
+    return p.id in DYNAMIC_PRESIDENTS and p.eo_count is not None
+
+
 def _build_response(p: President) -> PresidentSchema:
     return PresidentSchema(
         id=p.id,
@@ -630,6 +639,7 @@ def _build_response(p: President) -> PresidentSchema:
         eo_count=p.eo_count,
         eo_court_success_pct=p.eo_court_success_pct,
         cabinet_turnover_pct=p.cabinet_turnover_pct,
+        competence_has_live_data=_competence_has_live_data(p),
         summary=p.summary,
         key_achievements=json.loads(p.key_achievements) if p.key_achievements else [],
         key_failures=json.loads(p.key_failures) if p.key_failures else [],
