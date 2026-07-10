@@ -112,13 +112,10 @@ _US_CIVIC_PROTOTYPES = [
 
 POLICY_RELEVANCE_THRESHOLD = 0.22
 CLUSTER_TITLE_THRESHOLD = 0.40
+# Floor of the self-calibrating pass-2 merge scan (see _cluster_articles).
 CLUSTER_CENTROID_MERGE_THRESHOLD = 0.20
 MAX_ISSUES = 4
 MIN_ARTICLES_PER_CLUSTER = 2
-# Minimum policy relevance score for the LLM-generated title+summary.
-# Individual articles pass at 0.22 but the synthesized cluster description
-# must clear a higher bar to ensure the issue is a genuine civic/policy topic.
-CLUSTER_CIVIC_THRESHOLD = 0.30
 
 ACTION_CENTER_PROMPT_VERSION = "action-v20"
 
@@ -572,7 +569,38 @@ def _cluster_articles(
             centroids[ci] = centroid / norm if norm > 0 else centroid
 
         centroid_sim = centroids @ centroids.T
-        merge_groups = _agglomerative_cluster(centroid_sim, CLUSTER_CENTROID_MERGE_THRESHOLD)
+
+        # The merge is single-link, so a fixed threshold chain-merges on
+        # bad days: at 0.20 one 2026-07 run collapsed 121/125 articles
+        # into a single cluster spanning NATO, a Senate race, and a
+        # toddler human-interest story, leaving only junk as separate
+        # issues. Instead of a magic constant, self-calibrate per run:
+        # scan upward from the floor and keep the most aggressive merge
+        # whose largest cluster stays within a sanity cap — one story
+        # can dominate a news day, but not be most of it.
+        n_articles = len(items)
+        size_cap = max(8, round(0.20 * n_articles))
+        merge_groups = pass1_groups = [[ci] for ci in range(len(pass1))]
+        chosen_threshold = None
+        for threshold in np.arange(CLUSTER_CENTROID_MERGE_THRESHOLD, 0.61, 0.05):
+            candidate = _agglomerative_cluster(centroid_sim, float(threshold))
+            largest = max(sum(len(pass1[ci]) for ci in g) for g in candidate)
+            if largest <= size_cap:
+                merge_groups = candidate
+                chosen_threshold = float(threshold)
+                break
+        if chosen_threshold is None:
+            merge_groups = pass1_groups
+            logger.warning(
+                "Centroid merge skipped — every scanned threshold produced a "
+                "cluster larger than %d articles", size_cap,
+            )
+        else:
+            logger.info(
+                "Centroid merge threshold self-calibrated to %.2f "
+                "(largest cluster ≤ %d articles)",
+                chosen_threshold, size_cap,
+            )
 
         merged: list[list[int]] = []
         for group in merge_groups:
@@ -648,33 +676,148 @@ def _compute_trending_boost(
     return boosts
 
 
-def _compute_us_civic_boost(clusters: list[list[NewsArticle]]) -> list[float]:
-    """Score each cluster by its US civic action relevance.
+_TITLED_SURNAME_RE = re.compile(
+    r"\b(?:Sen(?:ator)?s?|Rep(?:resentative)?s?|Congress(?:man|woman)|Speaker)"
+    r"\.?\s+([A-Z][a-zA-Z'\-]+)"
+)
 
-    Measures how directly a cluster involves US government actors — Congress,
-    the President, federal agencies, or the US military — versus foreign-domestic
-    policy stories where US citizens have no direct action surface.
 
-    Mirrors _compute_trending_boost: embeds each cluster's articles and scores
-    them against US civic prototypes, returning the mean of the top-3 per-article
-    scores so one highly-relevant article can lift the whole cluster.
+def _load_official_names(db: "Session") -> dict:
+    """Names of officials the platform tracks, for deterministic mention counts.
+
+    Everything here comes from the platform's own member tables — no
+    hand-authored keyword lists. Returns lowercase full names and surnames
+    for sitting members of Congress, plus the current president's names.
+    """
+    member_full: list[str] = []
+    member_last: list[str] = []
+    for model in (Senator, Representative):
+        for (name,) in db.query(model.name).all():
+            if name and len(name.split()) >= 2:
+                member_full.append(name.lower())
+                member_last.append(name.split()[-1].lower())
+
+    president = (
+        db.query(President).filter(President.is_current == True).first()  # noqa: E712
+    )
+    return {
+        "member_full": member_full,
+        "member_last": member_last,
+        "president_full": president.name.lower() if president else "",
+        "president_last": president.name.split()[-1].lower() if president else "",
+    }
+
+
+def _count_official_mentions(cluster_text: str, officials: dict) -> int:
+    """Count distinct tracked officials named in a cluster's coverage.
+
+    A member counts on a full-name match, or on a titled surname match
+    ("Sen. Collins", "Rep. Crockett") — the title disambiguates surnames
+    that are also common words, so no stoplist is needed. The current
+    president counts on a bare surname (word-boundary) match.
+    """
+    text_lower = cluster_text.lower()
+    titled_surnames = {
+        m.group(1).lower() for m in _TITLED_SURNAME_RE.finditer(cluster_text)
+    }
+
+    count = 0
+    for full, last in zip(officials["member_full"], officials["member_last"]):
+        if last in titled_surnames or full in text_lower:
+            count += 1
+
+    if officials["president_last"]:
+        if re.search(
+            r"\b" + re.escape(officials["president_last"]) + r"\b", text_lower
+        ) or officials["president_full"] in text_lower:
+            count += 1
+
+    return count
+
+
+def _compute_action_link_boost(
+    clusters: list[list[NewsArticle]],
+    db: "Session",
+) -> list[float]:
+    """Score each cluster by its measurable action surface in platform data.
+
+    The platform exists so citizens can act — contact a member, track a
+    bill, respond to an executive action. Rather than scoring "civic-ness"
+    against hand-authored prototype sentences (whose absolute cosine
+    thresholds sat entirely inside the embedding model's ~0.55-0.87
+    same-register noise floor, passing 125/125 articles and scoring a
+    music performance 0.78 — 2026-07 audit), this measures two signals
+    derived only from data the platform already ingests:
+
+      1. Officials named (50%): distinct tracked officials (sitting
+         members, the president) named in the cluster's coverage,
+         deterministic string matching against the member tables,
+         capped at 3.
+
+      2. Civic-document similarity (50%): top-k cosine similarity between
+         the cluster and the platform's own explore corpus (executive
+         orders, federal rules, bills — refreshed continuously), computed
+         in batch-centered embedding space. Centering subtracts the mean
+         article embedding of the run, removing the shared "news
+         register" component that makes raw similarities uninformative;
+         the same technique clustering already uses. Measured on live
+         articles: after centering, federal-policy stories score
+         0.3-0.5 against the corpus while celebrity/sports/lifestyle
+         stories score 0.07-0.26.
     """
     if not clusters:
         return []
 
-    us_civic_embs = _embed_texts(_US_CIVIC_PROTOTYPES)
-    boosts: list[float] = []
+    officials = _load_official_names(db)
 
-    for cluster in clusters:
-        cluster_texts = [f"{a.title}. {a.summary[:100]}" for a in cluster]
-        cluster_embeddings = _embed_texts(cluster_texts)
-        per_article = (cluster_embeddings @ us_civic_embs.T).max(axis=1)
-        top_k = min(3, len(per_article))
-        boost = float(np.mean(np.sort(per_article)[-top_k:]))
-        boosts.append(boost)
+    doc_rows = (
+        db.query(ExploreDocument.title, ExploreDocument.summary)
+        .order_by(ExploreDocument.date.desc())
+        .limit(400)
+        .all()
+    )
+    doc_texts = [
+        f"{r.title}. {(r.summary or '')[:200]}" for r in doc_rows if r.title
+    ]
+
+    cluster_texts = [
+        [f"{a.title}. {a.summary[:200]}" for a in cluster] for cluster in clusters
+    ]
+    flat_texts = [t for texts in cluster_texts for t in texts]
+    flat_embs = _embed_texts(flat_texts)
+    batch_mean = flat_embs.mean(axis=0, keepdims=True)
+
+    def _center(embs: np.ndarray) -> np.ndarray:
+        centered = embs - batch_mean
+        norms = np.linalg.norm(centered, axis=1, keepdims=True)
+        return centered / np.where(norms < 1e-9, 1.0, norms)
+
+    doc_scores: list[float] = [0.0] * len(clusters)
+    if doc_texts:
+        doc_embs = _center(_embed_texts(doc_texts))
+        flat_centered = _center(flat_embs)
+        offset = 0
+        for ci, texts in enumerate(cluster_texts):
+            centroid = flat_centered[offset:offset + len(texts)].mean(axis=0)
+            offset += len(texts)
+            norm = float(np.linalg.norm(centroid))
+            if norm > 1e-9:
+                centroid = centroid / norm
+            sims = doc_embs @ centroid
+            top_k = min(10, len(sims))
+            doc_scores[ci] = max(0.0, float(np.sort(sims)[-top_k:].mean()))
+
+    max_doc = max(doc_scores) if max(doc_scores, default=0.0) > 0 else 1.0
+
+    boosts: list[float] = []
+    for ci, cluster in enumerate(clusters):
+        combined_text = " ".join(f"{a.title}. {a.summary[:200]}" for a in cluster)
+        n_officials = _count_official_mentions(combined_text, officials)
+        official_score = min(n_officials, 3) / 3.0
+        boosts.append(0.5 * official_score + 0.5 * doc_scores[ci] / max_doc)
 
     logger.info(
-        "US civic boosts: %s",
+        "Action-link boosts: %s",
         ", ".join(f"{b:.3f}" for b in boosts[:8]),
     )
     return boosts
@@ -683,17 +826,21 @@ def _compute_us_civic_boost(clusters: list[list[NewsArticle]]) -> list[float]:
 def _rank_clusters(
     clusters: list[list[NewsArticle]],
     trending: list[TrendingTopic],
+    db: "Session",
 ) -> list[list[NewsArticle]]:
-    """Rank clusters by US civic actionability, coverage breadth, and trending.
+    """Rank clusters by action surface, coverage breadth, and trending.
 
-    Final score = 0.40 * us_civic + 0.35 * coverage + 0.25 * trending.
+    Final score = 0.40 * action_link + 0.35 * coverage + 0.25 * trending.
     Actionability leads: the platform exists so citizens can act (contact
     Congress, track legislation, respond to executive action), so a story
     with a direct US action surface outranks a better-covered story
-    without one. Coverage is the stability anchor (source count doesn't
-    change hourly); trending is weighted least because it is the most
-    volatile signal (Bluesky/Google shift every run) and would otherwise
-    churn the top issues hour to hour.
+    without one. Actionability is measured from platform data (officials
+    named, similarity to the ingested civic-document corpus — see
+    _compute_action_link_boost), not hand-authored prototypes. Coverage
+    is the stability anchor (source count doesn't change hourly);
+    trending is weighted least because it is the most volatile signal
+    (Bluesky/Google shift every run) and would otherwise churn the top
+    issues hour to hour.
     """
     if not clusters:
         return []
@@ -706,7 +853,7 @@ def _rank_clusters(
     max_trend = max(trending_boosts) if trending_boosts and max(trending_boosts) > 0 else 1.0
     norm_trending = [s / max_trend for s in trending_boosts]
 
-    us_civic_boosts = _compute_us_civic_boost(clusters)
+    us_civic_boosts = _compute_action_link_boost(clusters, db)
     max_civic = max(us_civic_boosts) if us_civic_boosts and max(us_civic_boosts) > 0 else 1.0
     norm_us_civic = [s / max_civic for s in us_civic_boosts]
 
@@ -913,6 +1060,13 @@ def _validate_politician_roles(
                 extracted = m.group(1)
                 known = senator_names if role == "Senator" else rep_names
                 if not _name_in_table(extracted, known):
+                    # "Former Senator X" / "Ex-Rep. X" is a historical claim,
+                    # not a hallucinated current role — we can only verify
+                    # CURRENT membership, and stripping just the role word
+                    # produced garbled text ("Former Mitt Romney").
+                    preceding = text[max(0, m.start() - 8):m.start()].lower()
+                    if preceding.rstrip().endswith(("former", "ex-", "ex")):
+                        continue
                     # Remove the role prefix — keep just the name
                     logger.warning(
                         "Role hallucination corrected: '%s' is not a %s — stripping role label",
@@ -2820,7 +2974,7 @@ def _run_refresh(db: Session) -> int:
 
     # 5. Rank clusters using coverage breadth + trending relevance
     _set_refresh_state(stage="rank")
-    ranked_clusters = _rank_clusters(clusters, trending)
+    ranked_clusters = _rank_clusters(clusters, trending, db)
 
     # 5b. Deduplicate top clusters so two angles on the same story
     # don't both appear (e.g., "Tariff hikes" and "Market fallout from tariffs")
@@ -2829,11 +2983,6 @@ def _run_refresh(db: Session) -> int:
 
     # 6. Generate analysis for each via LLM
     from app.pipeline.analyze.ollama_client import call_llm, extract_json
-
-    # Pre-compute prototype embeddings once for the cluster-level civic check.
-    # Re-using the same prototypes as the article-level filter but applied to
-    # the LLM-generated title+summary, which is a cleaner topic signal.
-    _proto_embs = _embed_texts(_POLICY_PROTOTYPES)  # shape (N_prototypes, D)
 
     # Pre-load recent issues for topic-keyed matching.
     # Issues are keyed by TOPIC, not by (date, rank) slot — the same topic
@@ -2931,22 +3080,9 @@ def _run_refresh(db: Session) -> int:
 
         title = _validate_geographic_consistency(title, [a.title for a in filtered_cluster])
 
-        # Civic relevance gate: skip clusters that are about politicians personally
-        # but not about policy (e.g. personal scandals, biographical stories).
-        _cluster_text_emb = _embed_texts([f"{title}. {summary[:150]}"])[0]
-        _cluster_civic_score = float((_proto_embs @ _cluster_text_emb).max())
-        if _cluster_civic_score < CLUSTER_CIVIC_THRESHOLD:
-            logger.info(
-                "Skipping non-civic cluster rank %d (civic_score=%.2f < %.2f): '%s'",
-                rank, _cluster_civic_score, CLUSTER_CIVIC_THRESHOLD, title[:60],
-            )
-            continue
-
         # Politician role validator: strip hallucinated "Senator X" / "Rep. X" labels
         # that don't match anyone in the database.
         title, summary, facts = _validate_politician_roles(title, summary, facts, db)
-
-        policy_areas = llm_result.get("policyAreas", [])
 
         # Post-LLM title dedup: skip if this LLM-generated title is too
         # similar to one already selected this run. Catches cases where two
@@ -2985,6 +3121,22 @@ def _run_refresh(db: Session) -> int:
 
         # 9b. Find ALL officials (senators + reps + president + justices) for profile cross-links
         related_officials = _find_related_officials(title, summary, facts, db)
+
+        # Action-surface gate: an issue must connect to something a citizen
+        # can actually act on in platform data — a resolvable bill, a
+        # tracked official, or an ingested civic document. Replaces the
+        # prototype-similarity civic gate, whose absolute cosine threshold
+        # (0.30) sat below the embedding model's same-register noise floor
+        # and never fired (2026-07 audit: celebrity-crime and music-
+        # performance stories passed). This gate is derived entirely from
+        # what the platform has ingested, not from authored prototype text.
+        if not (resolved_bills or related_officials or related_explore_ids):
+            logger.info(
+                "Skipping rank %d — no action surface (no bills, officials, "
+                "or civic documents matched): '%s'",
+                rank, title[:60],
+            )
+            continue
 
         # 10. Build data-driven actions (no LLM hallucinations)
         actions = _build_actions_from_data(
@@ -3099,6 +3251,23 @@ def _run_refresh(db: Session) -> int:
         logger.info("Retired %d stale issues not in current clusters", n_retired)
     if n_graced:
         logger.info("Spared %d recent issues from retirement (within grace period)", n_graced)
+
+    # Renumber ranks so they are unique and dense. Skipped clusters leave
+    # gaps in this run's enumerate ranks, and grace-period survivors keep
+    # a stale rank from an earlier run — both produced duplicate ranks on
+    # the public page (two simultaneous #4s, 2026-07 audit). Issues placed
+    # by this run keep their relative order first; spared survivors follow.
+    still_current = [r for r in all_current if r.is_current]
+    touched = sorted(
+        (r for r in still_current if r.id in _matched_issue_ids),
+        key=lambda r: r.rank or 0,
+    )
+    spared = sorted(
+        (r for r in still_current if r.id not in _matched_issue_ids),
+        key=lambda r: r.rank or 0,
+    )
+    for new_rank, row in enumerate(touched + spared, start=1):
+        row.rank = new_rank
 
     db.commit()
 
