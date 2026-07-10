@@ -943,13 +943,17 @@ def _deduplicate_top_clusters(
     return [ranked_clusters[i] for i in selected]
 
 
-def _validate_facts(facts: list) -> list:
+def _validate_facts(facts: list, source_text: str | None = None) -> list:
     """Drop hallucinated or self-referential facts before saving.
 
-    Catches three LLM failure modes:
+    Catches four LLM failure modes:
     - Self-comparison: "Meta surpasses Meta Platforms" — same root word on both sides
     - Non-list return: LLM occasionally wraps facts in a dict or returns a string
     - Stale future dates: fact says "will remain until December 2025" in June 2026
+    - Fabricated statistics: when ``source_text`` (the article texts the LLM
+      was shown) is provided, any fact containing a digit group that never
+      appears in the source is dropped. The prompt already forbids inferred
+      numbers; this enforces it mechanically (see grounding.py).
     """
     if not isinstance(facts, list):
         return []
@@ -999,6 +1003,17 @@ def _validate_facts(facts: list) -> list:
                     pass
         if stale:
             continue
+
+        # Fabricated-statistic check against the articles the LLM was shown.
+        if source_text:
+            from app.pipeline.analyze.grounding import ungrounded_numbers
+            novel = ungrounded_numbers(fact, source_text)
+            if novel:
+                logger.warning(
+                    "Dropping fact with numbers not in source (%s): %s",
+                    ", ".join(novel), fact[:120],
+                )
+                continue
 
         clean.append(fact.strip())
 
@@ -2199,33 +2214,63 @@ NEWS SOURCES: {sources_text}
 
 Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}}"""
 
-    result = call_llm(
-        prompt_version="full_story_v2",
-        system_prompt=(
-            "You are a senior civic journalist writing factual, thorough, accessible "
-            "articles for Civitas — a non-partisan platform that aggregates U.S. government "
-            "data. Your goal is to give citizens a complete picture of what is happening in "
-            "Washington and why it matters to them. Write clearly for a general audience "
-            "without being condescending."
-        ),
-        user_prompt=user_prompt,
-        cache_key=f"full_story:{issue.id}:{issue.title[:80]}",
-        db_session=None,
-        max_tokens=2048,
-        num_ctx=4096,
+    system_prompt = (
+        "You are a senior civic journalist writing factual, thorough, accessible "
+        "articles for Civitas — a non-partisan platform that aggregates U.S. government "
+        "data. Your goal is to give citizens a complete picture of what is happening in "
+        "Washington and why it matters to them. Write clearly for a general audience "
+        "without being condescending."
     )
+    # Everything the model is shown — the grounding universe for statistics.
+    source_material = f"{issue.title}\n{issue.summary or ''}\n{facts_text}"
 
-    if not result or not isinstance(result.get("story"), str):
-        logger.warning("Full story generation returned no result for issue %s", issue.id)
-        return None
+    retry_note = ""
+    for attempt in range(2):
+        result = call_llm(
+            prompt_version="full_story_v2",
+            system_prompt=system_prompt,
+            user_prompt=user_prompt + retry_note,
+            # The retry must not be served the same rejected story from cache.
+            cache_key=(
+                f"full_story:{issue.id}:{issue.title[:80]}" if attempt == 0 else None
+            ),
+            db_session=None,
+            max_tokens=2048,
+            num_ctx=4096,
+        )
 
-    story = result["story"].strip()
-    if len(story) < 200:
-        logger.warning("Full story too short (%d chars) for issue %s", len(story), issue.id)
-        return None
+        if not result or not isinstance(result.get("story"), str):
+            logger.warning("Full story generation returned no result for issue %s", issue.id)
+            return None
 
-    logger.info("Generated full story for issue %s (%d chars): %s", issue.id, len(story), issue.title[:60])
-    return story
+        story = result["story"].strip()
+        if len(story) < 200:
+            logger.warning("Full story too short (%d chars) for issue %s", len(story), issue.id)
+            return None
+
+        # Reject fabricated statistics: any money/percent/magnitude figure in
+        # the story must appear in the material the model was shown. Plain
+        # contextual numbers are left to the prompt rules — only
+        # statistic-shaped numbers are checked (see grounding.py).
+        from app.pipeline.analyze.grounding import ungrounded_statistics
+        novel = ungrounded_statistics(story, source_material)
+        if not novel:
+            logger.info(
+                "Generated full story for issue %s (%d chars): %s",
+                issue.id, len(story), issue.title[:60],
+            )
+            return story
+        logger.warning(
+            "Full story failed statistic grounding for issue %s (attempt %d): %s",
+            issue.id, attempt + 1, ", ".join(novel),
+        )
+        retry_note = (
+            "\n\nYour previous attempt was rejected because it contained "
+            f"figures not present in the key facts ({', '.join(novel)}). "
+            "Use only numbers that appear in the material above."
+        )
+
+    return None
 
 
 def _save_timeline_entry(today: str, db: Session) -> None:
@@ -3076,7 +3121,12 @@ def _run_refresh(db: Session) -> int:
 
         title = llm_result.get("title", cluster[0].title)
         summary = llm_result.get("summary", "")
-        facts = _validate_facts(llm_result.get("facts", []))
+        facts = _validate_facts(
+            llm_result.get("facts", []),
+            source_text=" ".join(
+                f"{a.title} {a.summary}" for a in filtered_cluster
+            ),
+        )
 
         title = _validate_geographic_consistency(title, [a.title for a in filtered_cluster])
 

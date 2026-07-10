@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models import BskySenatorSpotlight, Senator, WeekSummary
 from app.pipeline.analyze.bluesky_utils import build_link_card
+from app.pipeline.analyze.grounding import ungrounded_numbers
 from app.pipeline.analyze.ollama_client import call_llm
 
 logger = logging.getLogger(__name__)
@@ -87,7 +88,10 @@ def _generate_spotlight_post(senator: "Senator", rank: int, total: int) -> str |
         "Funding diversity": round(senator.score_funding_diversity or 0, 1),
         "Legislative effectiveness": round(senator.score_legislative_effectiveness or 0, 1),
     }
-    overall = round(sum(scores.values()) / len(scores), 1)
+    # The posted overall must be the same weighted composite the site shows
+    # (SCORE_WEIGHTS) — a plain mean of the five dimensions published a
+    # different number than the leaderboard for every senator.
+    overall = round(_overall_score(senator), 1)
     score_lines = "\n".join(f"- {k}: {v}/100" for k, v in scores.items())
 
     # Give the LLM clear standing context so tone matches the senator's actual ranking
@@ -117,27 +121,48 @@ RULES:
 
 Return JSON: {{"post": "<your post text>"}}"""
 
-    result = call_llm(
-        prompt_version="bsky_spotlight_v1",
-        system_prompt=_SYSTEM_PROMPT,
-        user_prompt=user_prompt,
-        cache_key=None,
-        db_session=None,
-        max_tokens=200,
-        num_ctx=1024,
-    )
-    if not result or not isinstance(result.get("post"), str):
-        return None
-
-    text = re.sub(r"#(\w+)", r"\1", result["post"]).strip()
-    if len(text) > MAX_SPOTLIGHT_CHARS:
-        trimmed = text[:MAX_SPOTLIGHT_CHARS]
-        cut = max(
-            (trimmed.rfind(p) + 1 for p in (".", "!", "?") if trimmed.rfind(p) > 0),
-            default=-1,
+    retry_note = ""
+    for attempt in range(2):
+        result = call_llm(
+            prompt_version="bsky_spotlight_v1",
+            system_prompt=_SYSTEM_PROMPT,
+            user_prompt=user_prompt + retry_note,
+            cache_key=None,
+            db_session=None,
+            max_tokens=200,
+            num_ctx=1024,
         )
-        text = trimmed[:cut] if cut > 0 else trimmed[: trimmed.rfind(" ")]
-    return text.strip()
+        if not result or not isinstance(result.get("post"), str):
+            return None
+
+        text = re.sub(r"#(\w+)", r"\1", result["post"]).strip()
+        if len(text) > MAX_SPOTLIGHT_CHARS:
+            trimmed = text[:MAX_SPOTLIGHT_CHARS]
+            cut = max(
+                (trimmed.rfind(p) + 1 for p in (".", "!", "?") if trimmed.rfind(p) > 0),
+                default=-1,
+            )
+            text = trimmed[:cut] if cut > 0 else trimmed[: trimmed.rfind(" ")]
+        text = text.strip()
+
+        # Scores publish publicly under the platform's name: every number in
+        # the post must be one we actually supplied (a score, the rank, or
+        # the senator count). A mangled or invented figure is worse than no
+        # post — skip after one corrective retry.
+        novel = ungrounded_numbers(text, user_prompt)
+        if not novel:
+            return text
+        logger.warning(
+            "Spotlight post failed number grounding for %s (attempt %d): %s | post: %s",
+            senator.name, attempt + 1, ", ".join(novel), text[:160],
+        )
+        retry_note = (
+            "\n\nYour previous attempt was rejected because it contained "
+            f"numbers not provided above ({', '.join(novel)}). Use only the "
+            "scores and ranking given."
+        )
+
+    return None
 
 
 
@@ -257,27 +282,48 @@ RULES:
 
 Return JSON: {{"post": "<your post text>"}}"""
 
-    result = call_llm(
-        prompt_version="bsky_weekly_v1",
-        system_prompt=_SYSTEM_PROMPT,
-        user_prompt=user_prompt,
-        cache_key=None,
-        db_session=None,
-        max_tokens=200,
-        num_ctx=2048,
-    )
-    if not result or not isinstance(result.get("post"), str):
-        return None
-
-    text = re.sub(r"#(\w+)", r"\1", result["post"]).strip()
-    if len(text) > MAX_WEEKLY_CHARS:
-        trimmed = text[:MAX_WEEKLY_CHARS]
-        cut = max(
-            (trimmed.rfind(p) + 1 for p in (".", "!", "?") if trimmed.rfind(p) > 0),
-            default=-1,
+    retry_note = ""
+    for attempt in range(2):
+        result = call_llm(
+            prompt_version="bsky_weekly_v1",
+            system_prompt=_SYSTEM_PROMPT,
+            user_prompt=user_prompt + retry_note,
+            cache_key=None,
+            db_session=None,
+            max_tokens=200,
+            num_ctx=2048,
         )
-        text = trimmed[:cut] if cut > 0 else trimmed[: trimmed.rfind(" ")]
-    return text.strip() or None
+        if not result or not isinstance(result.get("post"), str):
+            return None
+
+        text = re.sub(r"#(\w+)", r"\1", result["post"]).strip()
+        if len(text) > MAX_WEEKLY_CHARS:
+            trimmed = text[:MAX_WEEKLY_CHARS]
+            cut = max(
+                (trimmed.rfind(p) + 1 for p in (".", "!", "?") if trimmed.rfind(p) > 0),
+                default=-1,
+            )
+            text = trimmed[:cut] if cut > 0 else trimmed[: trimmed.rfind(" ")]
+        text = text.strip()
+        if not text:
+            return None
+
+        # Same public-post guard as the spotlight: every number must come
+        # from the week summary (or the date label) we supplied.
+        novel = ungrounded_numbers(text, user_prompt)
+        if not novel:
+            return text
+        logger.warning(
+            "Weekly post failed number grounding (attempt %d): %s | post: %s",
+            attempt + 1, ", ".join(novel), text[:160],
+        )
+        retry_note = (
+            "\n\nYour previous attempt was rejected because it contained "
+            f"numbers not present in the summary ({', '.join(novel)}). "
+            "Use only figures from the week-in-review summary above."
+        )
+
+    return None
 
 
 def _publish_weekly(text: str, week: WeekSummary) -> bool:

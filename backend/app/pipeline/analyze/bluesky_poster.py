@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.pipeline.analyze.bluesky_utils import build_link_card
+from app.pipeline.analyze.grounding import grounding_violations
 from app.pipeline.analyze.ollama_client import call_llm
 
 logger = logging.getLogger(__name__)
@@ -116,18 +117,42 @@ write it as dropped/ended/resolved. Never contradict the title.
 
 Return JSON: {{"post": "<your post text>"}}"""
 
-    result = call_llm(
-        prompt_version="bsky_new_post_v3",
-        system_prompt=_SYSTEM_PROMPT,
-        user_prompt=user_prompt,
-        cache_key=None,  # never cache — these are time-sensitive
-        db_session=None,
-        max_tokens=256,
-        num_ctx=2048,
-    )
-    if not result or not isinstance(result.get("post"), str):
-        return None
-    return _sanitize(result["post"], MAX_POST_CHARS)
+    # Everything the model was shown, plus the article date it was told to
+    # reference — the grounding universe for the generated post.
+    source_material = f"{issue.title}\n{issue.summary or ''}\n{facts_text}\n{article_date} {today}"
+
+    retry_note = ""
+    for attempt in range(2):
+        result = call_llm(
+            prompt_version="bsky_new_post_v3",
+            system_prompt=_SYSTEM_PROMPT,
+            user_prompt=user_prompt + retry_note,
+            cache_key=None,  # never cache — these are time-sensitive
+            db_session=None,
+            max_tokens=256,
+            num_ctx=2048,
+        )
+        if not result or not isinstance(result.get("post"), str):
+            return None
+        post = _sanitize(result["post"], MAX_POST_CHARS)
+
+        # Posts publish publicly under the platform's name — verify rule 1
+        # mechanically instead of trusting it. Any number or titled-official
+        # reference the source material doesn't contain is a hallucination.
+        problems = grounding_violations(post, source_material)
+        if not problems:
+            return post
+        logger.warning(
+            "Bluesky post failed grounding for issue %s (attempt %d): %s | post: %s",
+            issue.id, attempt + 1, "; ".join(problems), post[:160],
+        )
+        retry_note = (
+            "\n\nYour previous attempt was rejected because it included "
+            f"information not present in the material above ({'; '.join(problems)}). "
+            "Rewrite using only the Title, Summary, and Key facts."
+        )
+
+    return None  # ungrounded twice — skip; the next refresh cycle retries
 
 
 def _publish(text: str, issue) -> bool:
