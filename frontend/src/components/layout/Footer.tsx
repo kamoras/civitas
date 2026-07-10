@@ -30,6 +30,15 @@ export default function Footer() {
           >
             ENVIRONMENTAL
           </Link>
+          <a
+            href="https://bsky.app/profile/civitas-research.bsky.social"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Civitas on Bluesky (opens in new tab)"
+            className="text-neon-cyan/50 hover:text-neon-cyan transition-colors font-mono text-xs tracking-widest uppercase"
+          >
+            🦋 BLUESKY
+          </a>
         </nav>
 
         {/* Disclaimer */}

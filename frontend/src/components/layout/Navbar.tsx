@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef, useCallback } from "react";
 
 
+const BSKY_PROFILE_URL = "https://bsky.app/profile/civitas-research.bsky.social";
+
 const NAV_LINKS: readonly { href: string; label: string; accent?: boolean }[] = [
   { href: "/action", label: "ACTION CENTER", accent: true },
   { href: "/politicians", label: "POLITICIANS" },
@@ -114,6 +116,16 @@ export default function Navbar() {
               </Link>
             );
           })}
+          <a
+            href={BSKY_PROFILE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Civitas on Bluesky (opens in new tab)"
+            title="Follow Civitas on Bluesky"
+            className="text-neon-cyan/50 hover:text-neon-cyan font-mono text-xs tracking-widest transition-colors"
+          >
+            [🦋 BSKY]
+          </a>
         </div>
 
         {/* Mobile hamburger */}
@@ -156,6 +168,16 @@ export default function Navbar() {
               </Link>
             );
           })}
+          <a
+            href={BSKY_PROFILE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Civitas on Bluesky (opens in new tab)"
+            onClick={closeMenu}
+            className="text-neon-cyan/50 hover:text-neon-cyan font-mono text-sm tracking-widest transition-colors"
+          >
+            [🦋 BSKY]
+          </a>
         </div>
       )}
     </nav>
