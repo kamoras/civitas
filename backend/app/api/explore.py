@@ -4,10 +4,11 @@ import asyncio
 import logging
 import secrets
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from app.api.rate_limit import WriteRateLimit, client_ip
 from app.config import settings
 from app.database import get_db
 from app.models import ExploreDocument
@@ -206,6 +207,7 @@ async def get_document_comments(
 @router.post("/{doc_id}/comments")
 async def post_document_comment(
     doc_id: int,
+    _rl: WriteRateLimit,
     db: Session = Depends(get_db),
     comment: str = Query(..., min_length=10, max_length=5000, description="Comment text"),
     name: str = Query("Anonymous", max_length=100, description="Your name"),
@@ -264,9 +266,16 @@ _SUMMARY_COOLDOWN = 30.0
 @router.post("/{doc_id}/summary")
 async def get_explore_document_summary(
     doc_id: int,
+    _rl: WriteRateLimit,
     db: Session = Depends(get_db),
 ):
-    """Generate an AI summary of a government document."""
+    """Generate an AI summary of a government document.
+
+    The per-doc cooldown below only stops repeated requests for the SAME
+    document — it doesn't stop a caller from fanning out across many
+    doc_ids to trigger unlimited LLM inference (2026-07 audit). The
+    per-IP WriteRateLimit dependency closes that gap.
+    """
     import time
     now = time.monotonic()
     last = _summary_timestamps.get(doc_id, 0)

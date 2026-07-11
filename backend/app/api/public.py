@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
+from app.api.rate_limit import client_ip
 from app.config_definitions import SCORE_WEIGHTS
 from app.database import get_db
 from app.models import ExploreDocument, ScoreSnapshot
@@ -49,15 +50,8 @@ def _check_rate_limit(ip: str) -> tuple[bool, int, int]:
         return True, _RATE_LIMIT - len(dq), reset_at
 
 
-def _client_ip(request: Request) -> str:
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return (request.client.host if request.client else "unknown")
-
-
 def _rate_limit_dep(request: Request) -> None:
-    ip = _client_ip(request)
+    ip = client_ip(request)
     allowed, remaining, reset_at = _check_rate_limit(ip)
     request.state.rl_remaining = remaining
     request.state.rl_reset = reset_at

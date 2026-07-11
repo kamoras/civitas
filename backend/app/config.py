@@ -32,7 +32,6 @@ class Settings(BaseSettings):
     SMTP_USER: str = ""
     SMTP_PASS: str = ""
     SMTP_FROM: str = ""
-    DIGEST_SECRET: str = "change-me-in-production"  # used for unsubscribe tokens
     # Operator alerts (pipeline overruns, skipped runs, ground-truth failures).
     # Always logged + recorded for the admin dashboard; optionally pushed:
     ALERT_NTFY_URL: str = ""    # e.g. https://ntfy.sh/<private-topic>

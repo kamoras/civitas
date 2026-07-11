@@ -48,10 +48,11 @@ async def trigger_pipeline(
     authorization: str | None = Header(default=None),
 ):
     """Trigger a president data pipeline run (fetches live data from APIs)."""
-    if settings.PIPELINE_TRIGGER_TOKEN:
-        expected = f"Bearer {settings.PIPELINE_TRIGGER_TOKEN}"
-        if not authorization or not secrets.compare_digest(authorization, expected):
-            raise HTTPException(status_code=403, detail="Invalid token")
+    if not settings.PIPELINE_TRIGGER_TOKEN:
+        raise HTTPException(status_code=503, detail="Pipeline trigger token not configured")
+    expected = f"Bearer {settings.PIPELINE_TRIGGER_TOKEN}"
+    if not authorization or not secrets.compare_digest(authorization, expected):
+        raise HTTPException(status_code=403, detail="Invalid token")
 
     background_tasks.add_task(_run_pipeline_background)
     return {"status": "started", "message": "President pipeline triggered"}

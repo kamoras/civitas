@@ -22,7 +22,14 @@ _EVICT_EVERY = 2000
 _TRUSTED_PROXIES = frozenset({"127.0.0.1", "::1"})
 
 
-def _client_ip(request: Request) -> str:
+def client_ip(request: Request) -> str:
+    """Best-effort real client IP, trusting X-Forwarded-For only when the
+    direct peer is our own reverse proxy. Any rate limiter that trusts
+    this header unconditionally can be bypassed by simply sending a
+    different fake value on every request (found in public.py's own
+    limiter, 2026-07 audit — it had a second, unguarded copy of this
+    logic that made its already-wired-in rate limit a no-op against a
+    trivial spoofed header)."""
     peer = request.client.host if request.client else None
     if peer in _TRUSTED_PROXIES:
         forwarded = request.headers.get("X-Forwarded-For")
@@ -34,7 +41,7 @@ def _client_ip(request: Request) -> str:
 def write_rate_limit(request: Request) -> None:
     """FastAPI dependency: 20 mutation requests/minute per IP."""
     global _req_count
-    ip = _client_ip(request)
+    ip = client_ip(request)
     now = time()
     cutoff = now - _WRITE_PERIOD
     with _lock:

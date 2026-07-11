@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import threading
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, field_validator
@@ -12,6 +13,7 @@ from sqlalchemy.orm import Session, selectinload
 from datetime import date
 
 from app.api.admin import require_admin
+from app.api.rate_limit import WriteRateLimit, client_ip
 from app.database import get_db
 from app.models import (
     ActionIssue, DailyTheme, ExploreDocument,
@@ -218,12 +220,36 @@ class PulseVoteRequest(BaseModel):
         return v
 
 
+_pulse_voted: dict[tuple[str, int], float] = {}
+_PULSE_DEDUP_WINDOW = 60.0 * 60 * 24  # 24h — one vote per issue per IP/day
+
+
 @router.post("/pulse")
 async def record_pulse_vote(
+    request: Request,
     body: PulseVoteRequest,
+    _rl: WriteRateLimit,
     db: Session = Depends(get_db),
 ):
-    """Record an anonymous stance vote on an issue and return updated counts."""
+    """Record an anonymous stance vote on an issue and return updated counts.
+
+    No login system exists on this platform, so "anonymous" here can only
+    ever mean IP-based — not a durable identity. The per-IP rate limit
+    stops scripted ballot-stuffing at volume; the per-(IP, issue) dedup
+    below stops a single caller from repeatedly voting on the same issue,
+    which a generic rate limit alone wouldn't (2026-07 audit found this
+    endpoint had neither).
+    """
+    ip = client_ip(request)
+    now = time.monotonic()
+    key = (ip, body.issue_id)
+    last = _pulse_voted.get(key)
+    if last is not None and now - last < _PULSE_DEDUP_WINDOW:
+        raise HTTPException(
+            status_code=429,
+            detail="You've already registered a stance on this issue today.",
+        )
+
     issue = db.query(ActionIssue).filter(ActionIssue.id == body.issue_id).first()
     if not issue:
         raise HTTPException(status_code=404, detail="Issue not found")
@@ -234,6 +260,13 @@ async def record_pulse_vote(
         issue.not_priority_count = (issue.not_priority_count or 0) + 1
     db.commit()
     db.refresh(issue)
+
+    _pulse_voted[key] = now
+    if len(_pulse_voted) > 20_000:
+        cutoff = now - _PULSE_DEDUP_WINDOW
+        stale = [k for k, v in _pulse_voted.items() if v < cutoff]
+        for k in stale:
+            del _pulse_voted[k]
 
     return {
         "issueId": issue.id,
