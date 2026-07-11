@@ -21,6 +21,9 @@ from app.pipeline.analyze.policy_alignment import (
     compute_promise_vote_alignment,
     get_related_policies,
     industry_policy_similarity,
+    _passes_relevance,
+    _should_count_as_evidence_llm,
+    VOTE_GATE_LOW,
 )
 
 
@@ -116,6 +119,124 @@ class TestPromiseVoteAlignment:
             "Lower prescription drug costs for seniors", [], sponsored_bills=bills,
         )
         assert result["alignment"] == "kept"
+
+
+# ── Promise evidence gray-zone gate ───────────────────────────────
+
+
+class TestPromiseEvidenceGate:
+    """Below-threshold candidates go through an LLM relevance gate (Senate
+    only) instead of being dropped outright, since generic (non-bill-quoting)
+    promises rarely clear the high embedding threshold even when genuinely
+    related (2026-07 audit: PP population stdev collapsed to 3.7 against an
+    8.0 floor because ~93% of promises had no evidence clear the bar)."""
+
+    def test_above_high_auto_accepts_without_llm_call(self):
+        with patch(
+            "app.pipeline.analyze.policy_alignment._should_count_as_evidence_llm"
+        ) as mock_gate:
+            result = _passes_relevance(0.85, VOTE_GATE_LOW, 0.80, True, "promise", "candidate", "vote")
+        assert result is True
+        mock_gate.assert_not_called()
+
+    def test_below_low_auto_rejects_without_llm_call(self):
+        with patch(
+            "app.pipeline.analyze.policy_alignment._should_count_as_evidence_llm"
+        ) as mock_gate:
+            result = _passes_relevance(0.50, VOTE_GATE_LOW, 0.80, True, "promise", "candidate", "vote")
+        assert result is False
+        mock_gate.assert_not_called()
+
+    def test_gray_zone_defers_to_llm_gate(self):
+        with patch(
+            "app.pipeline.analyze.policy_alignment._should_count_as_evidence_llm",
+            return_value=True,
+        ) as mock_gate:
+            result = _passes_relevance(0.70, VOTE_GATE_LOW, 0.80, True, "promise", "candidate", "vote")
+        assert result is True
+        mock_gate.assert_called_once()
+
+    def test_gray_zone_without_llm_budget_rejects(self):
+        """House pipeline (use_llm=False) keeps the pre-existing sharp cutoff."""
+        with patch(
+            "app.pipeline.analyze.policy_alignment._should_count_as_evidence_llm"
+        ) as mock_gate:
+            result = _passes_relevance(0.70, VOTE_GATE_LOW, 0.80, False, "promise", "candidate", "vote")
+        assert result is False
+        mock_gate.assert_not_called()
+
+    def test_gate_fails_closed_on_unparseable_llm_response(self):
+        with patch(
+            "app.pipeline.analyze.ollama_client.call_llm", return_value=None,
+        ):
+            assert _should_count_as_evidence_llm("promise", "candidate", "vote") is False
+
+    def test_gate_fails_closed_on_missing_relates_key(self):
+        with patch(
+            "app.pipeline.analyze.ollama_client.call_llm", return_value={"reason": "no key"},
+        ):
+            assert _should_count_as_evidence_llm("promise", "candidate", "vote") is False
+
+    def test_gate_respects_llm_relates_true(self):
+        with patch(
+            "app.pipeline.analyze.ollama_client.call_llm",
+            return_value={"relates": True, "reason": "same subject"},
+        ):
+            assert _should_count_as_evidence_llm("promise", "candidate", "vote") is True
+
+    def test_end_to_end_gray_zone_vote_confirmed_by_llm_counts_as_kept(self):
+        """A vote below the auto-accept threshold but confirmed by the LLM
+        gate should be able to resolve a promise, not leave it 'unclear'."""
+        votes = [
+            {"billId": "HR.1", "vote": "Yea", "policyArea": "HEALTHCARE",
+             "billName": "Prescription Drug Pricing Act",
+             "description": "Lower prescription drug costs for seniors",
+             "stance": "pro"},
+        ]
+        with patch(
+            "app.pipeline.analyze.policy_alignment._embed_batch"
+        ) as mock_batch, patch(
+            "app.pipeline.analyze.policy_alignment._embed"
+        ) as mock_embed, patch(
+            "app.pipeline.analyze.policy_alignment._should_count_as_evidence_llm",
+            return_value=True,
+        ) as mock_gate, patch(
+            "app.pipeline.analyze.ollama_client.call_llm", return_value=None,
+        ):
+            mock_embed.return_value = np.array([1.0, 0.0])
+            # sim = dot product = 0.70: below the 0.80 auto-accept threshold,
+            # above VOTE_GATE_LOW (0.62) — lands in the gray zone.
+            mock_batch.return_value = np.array([[0.70, np.sqrt(1 - 0.70 ** 2)]])
+            result = compute_promise_vote_alignment(
+                "Expand Medicare coverage to all Americans", votes, use_llm=True,
+            )
+        mock_gate.assert_called()
+        assert result["alignment"] == "kept"
+        assert "HR.1" in result["relatedVotes"]
+
+    def test_end_to_end_gray_zone_vote_rejected_by_llm_stays_unclear(self):
+        votes = [
+            {"billId": "HR.1", "vote": "Yea", "policyArea": "HEALTHCARE",
+             "billName": "Prescription Drug Pricing Act",
+             "description": "Lower prescription drug costs for seniors",
+             "stance": "pro"},
+        ]
+        with patch(
+            "app.pipeline.analyze.policy_alignment._embed_batch"
+        ) as mock_batch, patch(
+            "app.pipeline.analyze.policy_alignment._embed"
+        ) as mock_embed, patch(
+            "app.pipeline.analyze.policy_alignment._should_count_as_evidence_llm",
+            return_value=False,
+        ), patch(
+            "app.pipeline.analyze.ollama_client.call_llm", return_value=None,
+        ):
+            mock_embed.return_value = np.array([1.0, 0.0])
+            mock_batch.return_value = np.array([[0.70, np.sqrt(1 - 0.70 ** 2)]])
+            result = compute_promise_vote_alignment(
+                "Expand Medicare coverage to all Americans", votes, use_llm=True,
+            )
+        assert result["alignment"] == "unclear"
 
 
 # ── Industry-policy embedding similarity ─────────────────────────

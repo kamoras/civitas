@@ -209,6 +209,64 @@ def _passes_category_gate(promise_category: str | None, policy_area: str, sim: f
     return _normalize_policy_area(policy_area) in compat or sim >= _CATEGORY_GATE_OVERRIDE
 
 
+# Below the main relevance_threshold (0.80/0.82), a fixed cutoff can't tell
+# "genuinely about this promise" from "written in the same bureaucratic
+# register" — a 2026-07 audit found the best-matching vote for real,
+# non-bill-quoting promises typically lands at 0.65-0.75 regardless of
+# whether it's topically related (measured: same-category and
+# different-category best-match distributions overlap almost entirely at
+# the embedding level, medians 0.72 vs 0.76 on 56 live promises). Below
+# GATE_LOW, drop silently — this is where cross-category noise ~p50 sits,
+# so an LLM call would mostly be confirming noise. Between GATE_LOW and the
+# main threshold, ask an LLM to read the actual text and judge genuine
+# relatedness (see _should_count_as_evidence_llm) instead of trusting the
+# embedding number alone. At/above the main threshold, keep auto-accepting
+# with no LLM call, exactly as before this change.
+VOTE_GATE_LOW = 0.62
+BILL_GATE_LOW = 0.64
+
+
+def _should_count_as_evidence_llm(
+    promise_text: str, candidate_text: str, candidate_kind: str,
+) -> bool:
+    """LLM gate for borderline embedding matches: is this genuine evidence for the promise?
+
+    Fails closed — if the LLM is unavailable or returns something
+    unparseable, the candidate is treated as unrelated, same as if it had
+    scored below GATE_LOW. This only ever adds evidence relative to the
+    pre-gate behavior (dropping straight past threshold); it never removes
+    evidence that used to qualify.
+    """
+    from app.pipeline.analyze.ollama_client import call_llm
+    from app.pipeline.analyze.prompts import promise_evidence_gate_prompt
+
+    prompt = promise_evidence_gate_prompt(promise_text, candidate_text, candidate_kind)
+    result = call_llm(
+        prompt_version=prompt["promptVersion"],
+        system_prompt=prompt["systemPrompt"],
+        user_prompt=prompt["userPrompt"],
+        cache_key={"type": "promise_evidence_gate", "promise": promise_text, "candidate": candidate_text},
+        max_tokens=100,
+    )
+    if not isinstance(result, dict):
+        return False
+    return bool(result.get("relates", False))
+
+
+def _passes_relevance(
+    sim: float, low: float, high: float, use_llm: bool,
+    promise_text: str, candidate_text: str, candidate_kind: str,
+) -> bool:
+    """Three-band relevance check: auto-accept >= high, auto-reject < low,
+    LLM-judge the gray zone in between (Senate only — House has no LLM budget
+    for 431 members and stays on the pre-existing sharp threshold)."""
+    if sim >= high:
+        return True
+    if sim < low or not use_llm:
+        return False
+    return _should_count_as_evidence_llm(promise_text, candidate_text, candidate_kind)
+
+
 _industry_policy_scores: dict[tuple[str, str], float] | None = None
 
 
@@ -355,6 +413,25 @@ def compute_promise_vote_alignment(
     requiring the vote/bill's policy area to be a plausible match for
     the promise's domain, rather than relying on the embedding score
     alone to separate signal from noise.
+
+    88-97% recall was measured on bill-quoting promises specifically.
+    Most real campaign promises are generic platform language ("Expand
+    Medicare coverage"), not bill quotes, and a 2026-07 audit found their
+    best genuinely-related vote typically scores only 0.65-0.75 — below
+    threshold, and empirically no higher than same-promise unrelated
+    votes at the raw embedding level (same-category vs. different-category
+    best-match distributions overlap almost entirely: medians 0.72 vs.
+    0.76 on 56 live promises). This had been quietly collapsing Promise
+    Persistence toward a flat neutral score for most senators (93% of
+    promises landing "unclear"; population stdev 3.7 against a 8.0 floor)
+    even after the v5.3 shrinkage-prior recalibration, because that fix
+    assumed a typical evaluable-promise count the real evidence rate
+    never reached. Below the main threshold, ``_passes_relevance`` now
+    asks an LLM to read the actual promise and candidate text and judge
+    genuine relatedness (Senate only, ``use_llm=True``) rather than
+    dropping every sub-threshold candidate — see ``VOTE_GATE_LOW`` /
+    ``BILL_GATE_LOW``. At/above threshold, behavior is unchanged: no LLM
+    call, same as before this existed.
     """
     empty = {
         "alignment": "unclear",
@@ -417,7 +494,10 @@ def compute_promise_vote_alignment(
 
             for idx in top_indices:
                 sim = float(similarities[idx])
-                if sim < relevance_threshold:
+                if not _passes_relevance(
+                    sim, VOTE_GATE_LOW, relevance_threshold, use_llm,
+                    promise_text, vote_texts[idx], "vote",
+                ):
                     continue
                 if not _passes_category_gate(
                     promise_category, substantive[idx].get("policyArea", ""), sim,
@@ -460,7 +540,10 @@ def compute_promise_vote_alignment(
 
             for idx in top_indices[:2]:
                 sim = float(similarities[idx])
-                if sim < relevance_threshold:
+                if not _passes_relevance(
+                    sim, VOTE_GATE_LOW, relevance_threshold, use_llm,
+                    promise_text, vote_texts[idx], "vote",
+                ):
                     continue
                 if not _passes_category_gate(promise_category, substantive[idx].get("policyArea", ""), sim):
                     continue
@@ -499,7 +582,10 @@ def compute_promise_vote_alignment(
 
                 for bidx in top_bill_idx:
                     bsim = float(bill_sims[bidx])
-                    if bsim < bill_relevance_threshold:
+                    if not _passes_relevance(
+                        bsim, BILL_GATE_LOW, bill_relevance_threshold, use_llm,
+                        promise_text, bill_texts[bidx], "sponsored bill",
+                    ):
                         continue
                     bill = candidates[bidx]
                     if not _passes_category_gate(

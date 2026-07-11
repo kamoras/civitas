@@ -43,6 +43,35 @@ Return JSON:
 }}""",
     }
 
+def promise_evidence_gate_prompt(promise_text: str, candidate_text: str, candidate_kind: str) -> dict:
+    """Judge whether a borderline-similarity vote/bill is genuine evidence for a promise.
+
+    Used only in the embedding-similarity gray zone: below this, generic
+    legislative-register text of any topic already clears a high bar
+    purely by shared vocabulary (see policy_alignment.py calibration
+    notes), so a fixed threshold alone can't separate "genuinely relates
+    to this promise" from "written in the same bureaucratic register."
+    """
+    return {
+        "promptVersion": "promise-evidence-gate-v1",
+        "systemPrompt": (
+            "You are a political data scientist checking evidence quality. "
+            "Respond in JSON only."
+        ),
+        "userPrompt": f"""Campaign promise:
+"{promise_text}"
+
+Candidate {candidate_kind} (possible evidence):
+"{candidate_text[:500]}"
+
+Does this {candidate_kind} genuinely relate to whether this specific promise was kept? \
+Superficial overlap (both are legislation, both use similar bureaucratic phrasing) is NOT \
+enough — the subject matter must actually match the promise's substance.
+
+Return JSON: {{"relates": true/false, "reason": "one short sentence"}}""",
+    }
+
+
 def promise_decomposition_prompt(promise_text: str) -> dict:
     return {
         "promptVersion": "promise-decomp-v1",
