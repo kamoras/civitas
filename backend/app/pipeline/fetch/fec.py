@@ -101,18 +101,43 @@ async def find_candidate(
     name_parts = name.split()
     last_name = name_parts[-1] if name_parts else name
 
-    query = f"{FEC_API_BASE}/candidates/search/?name={quote(last_name)}&state={state}&office={office}&per_page=20"
-    if district:
-        query += f"&district={district}"
+    base_query = f"{FEC_API_BASE}/candidates/search/?name={quote(last_name)}&state={state}&office={office}&per_page=20"
+    query = base_query + (f"&district={district}" if district else "")
 
     data = await _fetch_with_retry(client, query)
+    results = (data or {}).get("results") or []
 
-    if not data or not data.get("results"):
+    # FEC's `district` on a candidate record can lag a member's current
+    # Congress.gov district after redistricting — the candidate ID keeps
+    # whatever district they first filed under, and the searchable
+    # `district` field doesn't always get updated for long-tenured
+    # incumbents. A district-constrained search then finds nothing even
+    # though the candidate exists (2026-07 audit: a sitting representative
+    # searched under their current district came back empty, while the
+    # same name+state+office query with no district filter found them
+    # immediately — FEC had them on file under a different district
+    # number). Retry without the district constraint; require a genuine
+    # name match on this pass (no falling back to the first hit) since
+    # nothing here disambiguates candidates the way district normally does.
+    if not results and district:
+        data = await _fetch_with_retry(client, base_query)
+        fallback_results = (data or {}).get("results") or []
+        results = [
+            c for c in fallback_results
+            if all(part.upper() in (c.get("name") or "").upper() for part in name_parts)
+        ]
+        if results:
+            logger.info(
+                "FEC candidate for %s (%s, %s) found without district filter "
+                "(district=%s on file: %s) — likely a post-redistricting mismatch",
+                name, state, office, district, results[0].get("district"),
+            )
+
+    if not results:
         logger.warning("No FEC candidate found for %s (%s, %s)", name, state, office)
         api_cache_set(db, "fec", cache_key, None)
         return None
 
-    results = data["results"]
     match = None
     for c in results:
         c_name = (c.get("name") or "").upper()

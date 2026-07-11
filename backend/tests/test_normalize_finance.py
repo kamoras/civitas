@@ -200,6 +200,54 @@ class TestNormalizeFinance:
         assert result["totalFromPACs"] == 3_620_000
         assert result["smallDonorPercentage"] == round(15_400_000 / 53_200_000 * 100)
 
+    def test_negative_receipts_averaged_with_a_positive_election_stays_nonnegative(self):
+        # A just-opened next-cycle committee can have genuinely negative
+        # FEC receipts (more refunds/adjustments than new money so far) —
+        # real upstream data, not a fetch bug (2026-07 audit: a sitting
+        # representative's still-forming committee was -$1.6M). Combined
+        # with a real prior election this usually still nets positive.
+        financials = [
+            {"candidate_election_year": 2026, "receipts": -1_618_913.64,
+             "other_political_committee_contributions": 57_000,
+             "individual_unitemized_contributions": 14_706.6,
+             "individual_itemized_contributions": 0},
+            {"candidate_election_year": 2024, "receipts": 9_660_670.47,
+             "other_political_committee_contributions": 274_500,
+             "individual_unitemized_contributions": 44_352.18,
+             "individual_itemized_contributions": 100_000},
+        ]
+        result = normalize_finance(
+            candidate=None,
+            financials=financials,
+            individual_receipts=[],
+            pac_receipts=[],
+            aggregated_contributors=[],
+        )
+        assert result["totalRaised"] == pytest.approx(8_041_756.83, abs=1)
+        assert result["totalRaised"] >= 0
+
+    def test_all_negative_receipts_floored_at_zero(self):
+        # A candidate whose only cached election has net-negative receipts
+        # (e.g. large early refunds, no second election on file yet) must
+        # never show a negative "total raised" — nothing downstream should
+        # have to defend against that possibility.
+        financials = [
+            {"candidate_election_year": 2026, "receipts": -50_000,
+             "other_political_committee_contributions": -5_000,
+             "individual_unitemized_contributions": -1_000,
+             "individual_itemized_contributions": -2_000},
+        ]
+        result = normalize_finance(
+            candidate=None,
+            financials=financials,
+            individual_receipts=[],
+            pac_receipts=[],
+            aggregated_contributors=[],
+        )
+        assert result["totalRaised"] == 0
+        assert result["totalFromPACs"] == 0
+        assert result["smallDonorPercentage"] == 0
+
 
 @pytest.mark.slow
 class TestBuildTopDonors:

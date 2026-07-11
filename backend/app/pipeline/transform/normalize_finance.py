@@ -82,19 +82,29 @@ def normalize_finance(
     # see select_recent_elections for why raw [:2] double-counted).
     recent_cycles = select_recent_elections(financials)
 
-    total_raised = sum(c.get("receipts", 0) or 0 for c in recent_cycles)
-    total_from_pacs = sum(
+    # FEC's per-cycle `receipts` (and the sub-totals below) can be
+    # genuinely negative in the raw API response — a committee with more
+    # refunds/adjustments than new money in a reporting period, most
+    # often for a just-opened next-cycle committee (2026-07 audit found
+    # a sitting representative's committee at receipts=-$1.6M for its
+    # still-forming next election, which is real upstream FEC data, not
+    # a fetch bug). Averaged against a real prior election this usually
+    # nets positive, but nothing enforced that. Floor every summed total
+    # at 0 — "negative dollars raised" is never a meaningful value to
+    # show, regardless of why the underlying FEC row was negative.
+    total_raised = max(0.0, sum(c.get("receipts", 0) or 0 for c in recent_cycles))
+    total_from_pacs = max(0.0, sum(
         c.get("other_political_committee_contributions", 0) or 0
         for c in recent_cycles
-    )
-    small_individual = sum(
+    ))
+    small_individual = max(0.0, sum(
         c.get("individual_unitemized_contributions", 0) or 0
         for c in recent_cycles
-    )
-    large_individual = sum(
+    ))
+    large_individual = max(0.0, sum(
         c.get("individual_itemized_contributions", 0) or 0
         for c in recent_cycles
-    )
+    ))
 
     small_donor_percentage = (
         round((small_individual / total_raised) * 100) if total_raised > 0 else 0
