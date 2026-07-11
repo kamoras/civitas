@@ -17,6 +17,15 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v5.4",
+    date: "2026-07-12",
+    title: "Promise-evidence gray-zone gate",
+    changes: [
+      "v5.3's Promise Persistence shrinkage-prior resize didn't fix the underlying collapse: a self-check after the 2026-07-11 run measured population stdev at 3.72, still below the 8.0 floor that check exists to enforce. The real cause was upstream — the 0.80/0.82 relevance threshold was calibrated against promises that quote a bill by name (true matches score 0.77-1.0), but most real campaign promises are generic platform language whose best genuinely-related vote typically scores only 0.65-0.75, never clearing the bar regardless of the shrinkage prior's size. Only 31 of 100 senators had any evaluable promise at all.",
+      "Below the existing high threshold, a gray zone now goes to an LLM that reads the actual promise and candidate vote/bill text and judges genuine relatedness, instead of being dropped outright. At or above the threshold nothing changes — no new LLM calls, no regression risk for bill-quoting promises — and the check fails closed on any LLM error. The House pipeline is unaffected and keeps its original deterministic cutoff.",
+    ],
+  },
+  {
     version: "v5.3",
     date: "2026-07-11",
     title: "Promise Persistence recalibration and confidence-badge fix",
