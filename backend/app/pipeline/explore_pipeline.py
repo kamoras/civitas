@@ -12,6 +12,7 @@ Each document is stored in the explore_documents table and embedded in ChromaDB
 for free-text semantic search on the Explore page.
 """
 
+import hashlib
 import logging
 import time
 
@@ -34,6 +35,21 @@ from app.pipeline.vector_store import embed_explore_documents
 logger = logging.getLogger(__name__)
 
 EXPLORE_SEED_VERSION = "v12"
+
+
+def _stable_hash(text: str) -> str:
+    """Deterministic 8-hex-char digest, unlike Python's built-in hash().
+
+    hash() on strings is randomized per-process (PYTHONHASHSEED, on since
+    Python 3.3 for hash-flooding-DoS protection) — the same real speech
+    text produces a DIFFERENT external_id after every container restart,
+    which silently defeats the ExploreDocument.external_id dedup check
+    below and re-inserts a duplicate row. Found live (2026-07 audit):
+    1,758 exact-duplicate floor-speech rows (31% of all explore_documents)
+    from repeated deploys re-ingesting the same recent-window speeches
+    under a new hash seed each time.
+    """
+    return hashlib.sha256(text.encode()).hexdigest()[:8]
 
 
 def _crec_url(date_str: str, chamber: str) -> str:
@@ -233,7 +249,7 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
                 for speaker, remarks in senate_remarks.items():
                     senator_id = senator_map.get(speaker)
                     for remark in remarks:
-                        ext_id = f"senate-floor-{speaker}-{remark['date']}-{hash(remark['text'][:80]) & 0xFFFFFFFF:08x}"
+                        ext_id = f"senate-floor-{speaker}-{remark['date']}-{_stable_hash(remark['text'][:80])}"
 
                         exists = db.query(ExploreDocument.id).filter(
                             ExploreDocument.external_id == ext_id
@@ -271,7 +287,7 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
                 )
                 for remark in house_remarks:
                     speaker = remark["speaker"]
-                    ext_id = f"house-floor-{speaker}-{remark['date']}-{hash(remark['text'][:80]) & 0xFFFFFFFF:08x}"
+                    ext_id = f"house-floor-{speaker}-{remark['date']}-{_stable_hash(remark['text'][:80])}"
 
                     exists = db.query(ExploreDocument.id).filter(
                         ExploreDocument.external_id == ext_id

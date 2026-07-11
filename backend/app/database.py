@@ -128,12 +128,24 @@ def _ensure_indexes() -> None:
         ("ix_lobbying_matches_senator_id", "lobbying_matches", "senator_id"),
         ("ix_campaign_promises_senator_id", "campaign_promises", "senator_id"),
         ("ix_sponsored_bills_senator_id", "sponsored_bills", "senator_id"),
-        ("ix_rep_lobbying_matches_rep_id", "rep_lobbying_matches", "representative_id"),
-        ("ix_rep_campaign_promises_rep_id", "rep_campaign_promises", "representative_id"),
-        ("ix_rep_sponsored_bills_rep_id", "rep_sponsored_bills", "representative_id"),
+    ]
+    # The rep_* models' representative_id column already has index=True,
+    # which SQLAlchemy names ix_{table}_representative_id — this list used
+    # to also request ix_{table}_rep_id for the same column under an older
+    # naming convention, creating a second, genuinely redundant index on
+    # every affected table (2026-07 audit: confirmed via PRAGMA index_list
+    # on rep_lobbying_matches, rep_campaign_promises, rep_sponsored_bills —
+    # each had two separately-named indexes covering the identical column).
+    # Drop the old-named duplicates once; don't recreate them.
+    legacy_duplicate_indexes = [
+        "ix_rep_lobbying_matches_rep_id",
+        "ix_rep_campaign_promises_rep_id",
+        "ix_rep_sponsored_bills_rep_id",
     ]
     inspector = inspect(engine)
     with engine.begin() as conn:
+        for idx_name in legacy_duplicate_indexes:
+            conn.execute(text(f"DROP INDEX IF EXISTS {idx_name}"))
         for idx_name, table, column in desired:
             if not inspector.has_table(table):
                 continue
