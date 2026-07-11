@@ -116,7 +116,7 @@ export default function ScoreTrend({ snapshots }: ScoreTrendProps) {
         <div className="text-[8px] text-neon-cyan/40 font-mono mt-0.5">
           ┊ methodology updated ({versionChanges.map((v) => v.version).join(", ")}) — see
           {" "}
-          <a href="/about#changelog" className="underline underline-offset-2 hover:text-neon-cyan/70">
+          <a href="/changelog" className="underline underline-offset-2 hover:text-neon-cyan/70">
             scoring changelog
           </a>
         </div>

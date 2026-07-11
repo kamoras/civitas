@@ -19,6 +19,12 @@ export default function Footer() {
             METHODOLOGY
           </Link>
           <Link
+            href="/changelog"
+            className="text-matrix-green/40 hover:text-matrix-green/80 transition-colors font-mono text-xs tracking-widest uppercase"
+          >
+            CHANGELOG
+          </Link>
+          <Link
             href="/accessibility"
             className="text-matrix-green/40 hover:text-matrix-green/80 transition-colors font-mono text-xs tracking-widest uppercase"
           >
