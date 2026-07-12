@@ -1,14 +1,19 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import MatrixRain from "@/components/effects/MatrixRain";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
+import SenatorCard from "@/components/checker/SenatorCard";
+import { PresidentCard } from "@/components/president/PresidentClient";
+import { JusticeCard } from "@/components/justice/JusticeClient";
 import { getScoreLabel, getScoreColor } from "@/lib/corruption";
 import type { PoliticianProfile, GovernmentDoc } from "@/types/politicians";
+import type { Senator } from "@/types/senator";
+import type { President } from "@/types/president";
+import type { Justice } from "@/types/justice";
 
 const DOC_TYPE_LABELS: Record<string, string> = {
   "Senate Floor Speech": "FLOOR SPEECH",
@@ -33,32 +38,6 @@ function branchLabel(branch: string) {
     scotus: "JUDICIAL",
   };
   return map[branch] ?? branch.toUpperCase();
-}
-
-function ScoreBar({ label, score, max = 100, confidence }: { label: string; score: number; max?: number; confidence?: string }) {
-  const pct = Math.min(100, Math.max(0, (score / max) * 100));
-  const color = getScoreColor(score);
-  return (
-    <div className="mb-3">
-      <div className="flex justify-between items-center mb-1">
-        <span className="font-mono text-[10px] text-matrix-green/50 tracking-widest uppercase">
-          {label}
-          {confidence === "low" && (
-            <span
-              className="ml-1.5 text-amber-500/70 normal-case tracking-normal"
-              title="Limited source data backs this score — treat it as approximate."
-            >
-              · low data
-            </span>
-          )}
-        </span>
-        <span className={`font-mono text-xs ${color}`}>{score.toFixed(0)}</span>
-      </div>
-      <div className="h-1 bg-matrix-green/10 rounded-full overflow-hidden">
-        <div className={`h-full ${color.replace("text-", "bg-")} rounded-full transition-all`} style={{ width: `${pct}%` }} />
-      </div>
-    </div>
-  );
 }
 
 function DocRow({ doc }: { doc: GovernmentDoc }) {
@@ -99,13 +78,8 @@ function SectionBlock({ title, children }: { title: string; children: React.Reac
 }
 
 export default function PoliticianProfileClient({ profile }: { profile: PoliticianProfile }) {
-  const [docPage, setDocPage] = useState(1);
   const { identity, branch, hasScorecard, overallScore, activeIssues, governmentRecord, scorecard } = profile;
   const party = partyLabel(identity.party ?? undefined);
-
-  // Build senator/rep scorecard sections from existing scorecard data
-  const isCongress = branch === "senate" || branch === "house";
-  const sc = scorecard as Record<string, unknown> | null | undefined;
 
   return (
     <div className="min-h-screen bg-crt-black text-matrix-green">
@@ -247,108 +221,32 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
           )}
 
           {/* Scorecard */}
-          {hasScorecard && sc && (
-            <SectionBlock title="scorecard.dat">
-              <p className="font-mono text-[9px] text-matrix-green/30 tracking-widest mb-4">
-                WHAT CIVITAS CAN MEASURE · NOT A VERDICT
-              </p>
+          {hasScorecard && scorecard && (
+            <div className="mb-6">
+              {branch === "senate" && (
+                <SenatorCard senator={scorecard as unknown as Senator} chamber="senate" />
+              )}
+              {branch === "house" && (
+                <SenatorCard senator={scorecard as unknown as Senator} chamber="house" />
+              )}
+              {branch === "president" && (
+                <PresidentCard president={scorecard as unknown as President} />
+              )}
+              {branch === "scotus" && (
+                <JusticeCard justice={scorecard as unknown as Justice} />
+              )}
 
-              {isCongress && (() => {
-                const rs = sc.representationScore as
-                  | (Record<string, number> & { confidence?: Record<string, string> })
-                  | undefined;
-                if (!rs) return null;
-                return (
-                  <>
-                    {(["fundingIndependence", "promisePersistence", "independentVoting", "fundingDiversity", "legislativeEffectiveness"] as const).map((key) => {
-                      const labels: Record<string, string> = {
-                        fundingIndependence: "Funding Independence",
-                        promisePersistence: "Promise Persistence",
-                        independentVoting: "Constituent Alignment",
-                        fundingDiversity: "Funding Diversity",
-                        legislativeEffectiveness: "Legislative Effectiveness",
-                      };
-                      if (rs[key] == null) return null;
-                      return <ScoreBar key={key} label={labels[key]} score={rs[key]} confidence={rs.confidence?.[key]} />;
-                    })}
-                  </>
-                );
-              })()}
-
-              {branch === "president" && (() => {
-                const s = sc.score as Record<string, number> | undefined;
-                if (!s) return null;
-                const statRows: [string, string | null][] = [
-                  ["AVG APPROVAL", sc.avgApproval != null ? `${sc.avgApproval}%` : null],
-                  ["EXEC ORDERS", sc.eoCount != null ? String(sc.eoCount) : null],
-                  ["EO COURT WIN", sc.eoCourtSuccessPct != null ? `${sc.eoCourtSuccessPct}%` : null],
-                  ["GDP GROWTH", sc.gdpGrowthAvg != null ? `${sc.gdpGrowthAvg}%/yr` : null],
-                  ["CABINET TURNOVER", sc.cabinetTurnoverPct != null ? `${sc.cabinetTurnoverPct}%` : null],
-                ];
-                return (
-                  <>
-                    {(["independence", "followThrough", "publicMandate", "effectiveness", "competence", "agencyAlignment"] as const).map((key) => {
-                      const labels: Record<string, string> = {
-                        independence: "Independence", followThrough: "Follow-Through",
-                        publicMandate: "Public Mandate", effectiveness: "Effectiveness",
-                        competence: "Competence", agencyAlignment: "Agency Alignment",
-                      };
-                      if (s[key] == null) return null;
-                      return <ScoreBar key={key} label={labels[key]} score={s[key]} />;
-                    })}
-                    <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {statRows.filter(([, v]) => v != null).map(([label, value]) => (
-                        <div key={label} className="border border-matrix-green/15 p-2 text-center">
-                          <div className="font-mono text-sm text-matrix-green">{value}</div>
-                          <div className="font-mono text-[8px] text-matrix-green/35 tracking-widest mt-0.5">{label}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                );
-              })()}
-
-              {branch === "scotus" && (() => {
-                const s = sc.score as Record<string, number> | undefined;
-                if (!s) return null;
-                const statRows: [string, string | null][] = [
-                  ["CASES", sc.casesDecided != null ? String(sc.casesDecided) : null],
-                  ["MAJORITY", sc.majorityPct != null ? `${Number(sc.majorityPct).toFixed(0)}%` : null],
-                  ["DISSENT", sc.dissentPct != null ? `${Number(sc.dissentPct).toFixed(0)}%` : null],
-                  ["UNANIMOUS", sc.unanimousPct != null ? `${Number(sc.unanimousPct).toFixed(0)}%` : null],
-                  ["CROSS-BLOC", sc.crossBlocPct != null ? `${Number(sc.crossBlocPct).toFixed(0)}%` : null],
-                ];
-                return (
-                  <>
-                    {(["consistency", "independence", "bipartisanAgreement", "judicialRestraint"] as const).map((key) => {
-                      const labels: Record<string, string> = {
-                        consistency: "Consistency", independence: "Independence",
-                        bipartisanAgreement: "Bipartisan Agreement", judicialRestraint: "Judicial Restraint",
-                      };
-                      if (s[key] == null) return null;
-                      return <ScoreBar key={key} label={labels[key]} score={s[key]} />;
-                    })}
-                    <div className="mt-4 grid grid-cols-3 sm:grid-cols-5 gap-2">
-                      {statRows.filter(([, v]) => v != null).map(([label, value]) => (
-                        <div key={label} className="border border-matrix-green/15 p-2 text-center">
-                          <div className="font-mono text-xs text-matrix-green">{value}</div>
-                          <div className="font-mono text-[8px] text-matrix-green/35 tracking-widest mt-0.5">{label}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                );
-              })()}
-
-              <div className="mt-4 pt-3 border-t border-matrix-green/10">
-                <Link
-                  href={`/politicians/${profile.id}/scorecard`}
-                  className="font-mono text-[10px] text-matrix-green/35 hover:text-matrix-green/60 transition-colors tracking-widest"
-                >
-                  FULL SCORECARD →
-                </Link>
-              </div>
-            </SectionBlock>
+              {(branch === "senate" || branch === "house") && identity.state && (
+                <div className="mt-3 text-center">
+                  <Link
+                    href={`/scorecard?branch=${branch}&state=${identity.state}`}
+                    className="font-mono text-[10px] text-matrix-green/35 hover:text-matrix-green/60 transition-colors tracking-widest"
+                  >
+                    COMPARE ALL {identity.stateName ?? identity.state} {branch === "senate" ? "SENATORS" : "REPRESENTATIVES"} →
+                  </Link>
+                </div>
+              )}
+            </div>
           )}
 
           {!hasScorecard && (
