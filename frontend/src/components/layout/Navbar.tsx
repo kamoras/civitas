@@ -124,7 +124,7 @@ export default function Navbar() {
             title="Follow Civitas on Bluesky"
             className="text-neon-cyan/50 hover:text-neon-cyan font-mono text-xs tracking-widest transition-colors"
           >
-            [🦋 BSKY]
+            [BSKY]
           </a>
         </div>
 
@@ -176,7 +176,7 @@ export default function Navbar() {
             onClick={closeMenu}
             className="text-neon-cyan/50 hover:text-neon-cyan font-mono text-sm tracking-widest transition-colors"
           >
-            [🦋 BSKY]
+            [BSKY]
           </a>
         </div>
       )}
