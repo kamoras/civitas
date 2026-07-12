@@ -57,21 +57,16 @@ jobs:
           EOF
           chmod 600 /mnt/nvme/modern-punk/.env
 
-      - name: Log in to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Pull pre-built images
-        run: |
-          docker pull ghcr.io/${{ github.repository }}/backend:latest
-          docker pull ghcr.io/${{ github.repository }}/frontend:latest
-          docker tag ghcr.io/${{ github.repository }}/backend:latest civitas-backend:latest
-          docker tag ghcr.io/${{ github.repository }}/frontend:latest civitas-frontend:latest
-
+      # TEMPORARILY building locally on the Pi again instead of pulling from
+      # GHCR — see task/AGENTS.md note: images built on GitHub's hosted
+      # ubuntu-24.04-arm runners (server-grade Ampere/Cobalt CPUs) crashed
+      # the backend on the Pi's Cortex-A76 cores with SIGILL (exit 132),
+      # consistently at ChromaDB/onnxruntime init — those runners support
+      # instruction-set extensions the Pi doesn't. Building on the Pi itself
+      # is guaranteed instruction-set-compatible since it's the target
+      # hardware. Revert to SKIP_BUILD=1 + GHCR pull once the cross-build is
+      # fixed to target a generic ARMv8-A baseline (see AGENTS.md).
       - name: Deploy
         run: |
           cd /mnt/nvme/modern-punk
-          SKIP_BUILD=1 ./deploy.sh
+          ./deploy.sh

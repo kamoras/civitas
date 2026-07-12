@@ -494,21 +494,29 @@ against this exact pattern. `ci.yml` must keep running untrusted PR code on
   before deploying (override with `FORCE_DEPLOY=1`) — redundant with the
   workflow gating above, kept as defense-in-depth and for manual local runs.
 
-**Images are built once on GitHub-hosted runners, not on the Pi.** The
-`build-and-push` job in `ci.yml` (only runs on push to `main`, after the test
-jobs pass) cross-builds ARM64 images via buildx/qemu and pushes to GHCR as
-`ghcr.io/kamoras/civitas/{backend,frontend}:latest` and `:sha-<short-sha>`.
-`cd.yml`'s deploy job pulls those images, retags them locally as
-`civitas-backend:latest` / `civitas-frontend:latest`, and runs
-`SKIP_BUILD=1 ./deploy.sh` — so the Pi never spends its own CPU compiling.
-This also gives cheap rollback by commit instead of a git revert + rebuild:
+**`cd.yml` currently builds locally on the Pi again (temporary).** The
+original design — `build-and-push` in `ci.yml` cross-builds images on
+GitHub-hosted runners and pushes to GHCR, `cd.yml` pulls and runs
+`SKIP_BUILD=1 ./deploy.sh` — is still there and still runs on every push to
+`main`, but **`cd.yml` no longer pulls from it**. Reason: `ci.yml` first used
+`ubuntu-latest` + QEMU emulation, which crashed mid-build on Node's JIT
+(2026-07-12, "Illegal instruction"). The fix was switching to
+`ubuntu-24.04-arm` — a *native* ARM64 hosted runner, no emulation. That
+introduced a worse problem: those runners are server-grade Ampere/Cobalt
+CPUs, which support instruction-set extensions the Pi 5's Cortex-A76 cores
+don't. The resulting backend image SIGILL'd (exit 132) on the Pi, consistently
+at ChromaDB/onnxruntime init, crash-looping in production until caught and
+rolled back to a locally-built image the same day. "Native ARM64" on GitHub's
+runners is not the same ISA as the Pi — cross-microarchitecture, not just
+cross-emulation.
 
-```bash
-docker pull ghcr.io/kamoras/civitas/backend:sha-<old-short-sha>
-docker tag ghcr.io/kamoras/civitas/backend:sha-<old-short-sha> civitas-backend:latest
-SKIP_BUILD=1 ./deploy.sh backend
-```
-
-(swap `backend` for `frontend` as needed). There is no separate version-tag
-release workflow — every push to `main` is already built, published, and
-deployed, so manual `v*` tags aren't needed for this to work.
+Until the build is fixed to target a generic ARMv8-A baseline (constrain the
+onnxruntime/numpy wheel selection, or equivalent), `cd.yml`'s `Deploy` step
+runs plain `./deploy.sh` (no `SKIP_BUILD`), building on the Pi itself —
+slower, but guaranteed instruction-set-compatible since it's the target
+hardware. `ci.yml`'s `build-and-push` job still runs and still pushes to
+GHCR; nothing currently deploys from those tags. Do not re-enable the GHCR
+pull path in `cd.yml` without first confirming a GHCR-built image actually
+runs on the Pi past ChromaDB init, not just that it deploys and passes the
+HTTP health check (the crash happens on first real vector-store use, which
+the health check doesn't touch).
