@@ -174,6 +174,9 @@ def list_politicians(
                 "hasScorecard": overall is not None,
                 "overallScore": overall,
                 "activeIssueCount": len(issue_map.get(s.id, [])),
+                "isCurrent": s.is_current,
+                "vacancyReason": s.vacancy_reason,
+                "leftOfficeDate": s.left_office_date,
             })
 
     if branch in (None, "house"):
@@ -199,6 +202,9 @@ def list_politicians(
                 "hasScorecard": overall is not None,
                 "overallScore": overall,
                 "activeIssueCount": len(issue_map.get(r.id, [])),
+                "isCurrent": r.is_current,
+                "vacancyReason": r.vacancy_reason,
+                "leftOfficeDate": r.left_office_date,
             })
 
     if branch in (None, "president"):
@@ -289,6 +295,9 @@ def _build_identity(branch: str, entity) -> dict:
             "websiteUrl": entity.website_url or "",
             "officePhone": entity.office_phone or "",
             "officeAddress": entity.office_address or "",
+            "isCurrent": entity.is_current,
+            "vacancyReason": entity.vacancy_reason,
+            "leftOfficeDate": entity.left_office_date,
         }
     if branch == "house":
         return {
@@ -301,6 +310,9 @@ def _build_identity(branch: str, entity) -> dict:
             "thumbnailUrl": _bioguide_photo(entity.bioguide_id),
             "contactFormUrl": entity.contact_form_url or "",
             "websiteUrl": entity.website_url or "",
+            "isCurrent": entity.is_current,
+            "vacancyReason": entity.vacancy_reason,
+            "leftOfficeDate": entity.left_office_date,
             "officePhone": entity.office_phone or "",
             "officeAddress": entity.office_address or "",
         }

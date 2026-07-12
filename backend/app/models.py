@@ -17,6 +17,15 @@ class Senator(Base):
     years_in_office: Mapped[int] = mapped_column(Integer, default=0)
     initials: Mapped[str] = mapped_column(String(4), default="")
     punk_nickname: Mapped[str] = mapped_column(String, default="")
+    # Seat vacancy — mirrors President.is_current / Justice.is_active.
+    # Set manually via the admin panel (no automated detection — see
+    # AGENTS.md). Historical scores/data are left untouched when a seat
+    # goes vacant; the directory and profile page show a banner instead
+    # of hiding or silently continuing to display the departed member
+    # as if still serving.
+    is_current: Mapped[bool] = mapped_column(Boolean, default=True)
+    vacancy_reason: Mapped[str | None] = mapped_column(String, nullable=True)  # "deceased" | "resigned" | "expelled"
+    left_office_date: Mapped[str | None] = mapped_column(String(10), nullable=True)  # YYYY-MM-DD
 
     score_funding_independence: Mapped[float] = mapped_column(Float, default=0.0)
     score_promise_persistence: Mapped[float] = mapped_column(Float, default=0.0)
@@ -199,6 +208,10 @@ class Representative(Base):
     contact_form_url: Mapped[str] = mapped_column(String, default="")
     office_phone: Mapped[str] = mapped_column(String(20), default="")
     office_address: Mapped[str] = mapped_column(String, default="")
+    # See Senator.is_current for the rationale.
+    is_current: Mapped[bool] = mapped_column(Boolean, default=True)
+    vacancy_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    left_office_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
