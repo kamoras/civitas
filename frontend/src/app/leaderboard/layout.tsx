@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Congress Scorecard Leaderboard — Civitas",
     description: "See which senators and representatives score highest for independence from corporate PAC money. Ranked from public federal records.",
-    url: "https://civitas.paramain.com/leaderboard",
+    url: "https://civitas-research.org/leaderboard",
   },
   twitter: {
     card: "summary_large_image",

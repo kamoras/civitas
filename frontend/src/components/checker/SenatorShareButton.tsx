@@ -18,7 +18,7 @@ export default function SenatorShareButton({ senatorName, score, senatorId, cham
     setCanWebShare(typeof navigator !== "undefined" && "share" in navigator);
   }, []);
 
-  const shareUrl = `https://civitas.paramain.com/scorecard?chamber=${chamber}&id=${senatorId}`;
+  const shareUrl = `https://civitas-research.org/scorecard?chamber=${chamber}&id=${senatorId}`;
   const shareText = `${senatorName} scores ${score}/100 on the Civitas representation index. See who funds them and how they vote: ${shareUrl} via @civitasvote`;
   const encodedText = encodeURIComponent(shareText);
   const emailSubject = encodeURIComponent(`${senatorName}'s Representation Score — Civitas`);

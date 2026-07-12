@@ -164,7 +164,7 @@ def _publish(text: str, issue) -> bool:
         return False
 
     text = re.sub(r"#(\w+)", r"\1", text).strip()  # final hashtag guard
-    url = f"https://civitas.paramain.com/issue/{issue.id}"
+    url = f"https://civitas-research.org/issue/{issue.id}"
     full_text = f"{text}\n\n{url}"
 
     # Hard truncate the generated body if the LLM overshot, preserving the URL.

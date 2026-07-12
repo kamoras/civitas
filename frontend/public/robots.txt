@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://civitas.vote/sitemap.xml
+Sitemap: https://civitas-research.org/sitemap.xml

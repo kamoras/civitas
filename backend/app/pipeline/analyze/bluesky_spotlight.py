@@ -23,7 +23,7 @@ from app.pipeline.analyze.ollama_client import call_llm
 logger = logging.getLogger(__name__)
 
 MAX_SPOTLIGHT_CHARS = 240
-SITE = "https://civitas.paramain.com"
+SITE = "https://civitas-research.org"
 
 _SYSTEM_PROMPT = (
     "You are a nonpartisan civic journalist writing brief, factual posts for "

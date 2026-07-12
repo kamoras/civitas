@@ -5,7 +5,7 @@ import type { PoliticianProfile } from "@/types/politicians";
 import PoliticianProfileClient from "./PoliticianProfileClient";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
-const SITE = "https://civitas.paramain.com";
+const SITE = "https://civitas-research.org";
 
 async function fetchProfile(id: string): Promise<PoliticianProfile | null> {
   try {

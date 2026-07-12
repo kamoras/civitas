@@ -97,7 +97,7 @@ export async function GET(req: NextRequest) {
           }}
         >
           <span style={{ color: "#00ff41", fontSize: 14, letterSpacing: 2 }}>
-            civitas.paramain.com
+            civitas-research.org
           </span>
           <span style={{ color: "#333", fontSize: 13, letterSpacing: 1 }}>
             PUBLIC FEDERAL DATA

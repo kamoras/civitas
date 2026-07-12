@@ -128,7 +128,7 @@ export default function OgImage() {
               letterSpacing: "0.2em",
             }}
           >
-            civitas.paramain.com
+            civitas-research.org
           </div>
         </div>
       </div>
