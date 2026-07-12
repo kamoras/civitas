@@ -800,4 +800,11 @@ Key references:
 
 ## License
 
-Private repository.
+Licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
+Unlike a permissive license (MIT, Apache), AGPL requires that anyone who runs
+a modified version of Civitas as a network service — not just anyone who
+redistributes it — must also publish their modifications. That closes the
+loophole a permissive license leaves open: someone could otherwise fork the
+scoring algorithm, quietly bias it, and host it without ever disclosing what
+changed. If you can't see the source, you can't trust the score — AGPL keeps
+that true for every fork, not just this repository.

@@ -94,4 +94,4 @@ Changes to scoring weights (`config_definitions.py`), normalization anchors (`sc
 
 ## License
 
-By contributing you agree your contributions will be licensed under the project's [MIT License](LICENSE).
+By contributing you agree your contributions will be licensed under the project's [GNU AGPL v3.0](LICENSE).
