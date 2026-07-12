@@ -19,7 +19,7 @@ cyclonedx-python-lib==11.6.0
 defusedxml==0.7.1
 distro==1.9.0
 durationpy==0.10
-fastapi==0.136.1
+fastapi==0.139.0
 filelock==3.24.3
 flatbuffers==25.12.19
 fsspec==2026.6.0
@@ -70,9 +70,9 @@ pillow==12.2.0
 pip-api==0.0.34
 pip-requirements-parser==32.0.1
 pip_audit==2.10.0
-platformdirs==4.9.4
+platformdirs==4.10.0
 pluggy==1.6.0
-posthog==7.9.3
+posthog==7.21.3
 protobuf==6.33.5
 pulsar-client==3.10.0
 py-serializable==2.1.0
@@ -118,8 +118,8 @@ tzlocal==5.3.1
 urllib3==2.7.0
 uvicorn==0.34.3
 uvloop==0.22.1
-watchfiles==1.1.1
+watchfiles==1.2.0
 websocket-client==1.9.0
 websockets==15.0.1
 wrapt==1.17.3
-zipp==3.23.0
+zipp==4.1.0
