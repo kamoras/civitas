@@ -52,7 +52,9 @@ external API calls to cloud AI services.
 │  └──────────┘   └──────────┘   └──────────┘         └──────────────────────┘ │
 │                                                                              │
 │  ──────────────────── HOUSE PIPELINE (runs after Senate) ──────────────────  │
-│  Same 6-phase structure for all 435 representatives                          │
+│  Own ~6-phase pipeline for all 435 representatives (FETCH MEMBERS, NORMALIZE,│
+│  FETCH BILLS & VOTES, CLASSIFY BILLS, SPONSORSHIP ANALYSIS, FEC + SCORING) —  │
+│  reuses the unified EXPLORE pipeline for House floor speeches                │
 └──────────────────────────┬───────────────────────────────────────────────────┘
                            │ writes
                            ▼
@@ -77,7 +79,7 @@ external API calls to cloud AI services.
 │  FastAPI backend  (port 8000)                                                │
 │  /api/senators      /api/representatives     /api/presidents                 │
 │  /api/justices      /api/action              /api/explore                    │
-│  /api/admin         /api/public  (open, rate-limited)    /health             │
+│  /api/admin         /api/public/v1  (open, rate-limited)    /health          │
 │                                              ┌────────────────────────┐      │
 │  APScheduler ──▶ nightly pipeline            │  llama.cpp server      │      │
 │  APScheduler ──▶ hourly action refresh  ────▶│  Qwen2.5 1.5B          │      │
@@ -86,9 +88,9 @@ external API calls to cloud AI services.
                            │ JSON
                            ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│  Next.js 14 frontend  (port 3000)                                            │
-│  /scorecard  /leaderboard  /action  /explore  /compare  /issue  /about       │
-│  /admin  /environmental  /accessibility                                      │
+│  Next.js 16 frontend  (port 3000)                                            │
+│  /politicians  /scorecard  /leaderboard  /action  /explore  /compare        │
+│  /issue  /about  /admin  /environmental  /accessibility                      │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -147,13 +149,18 @@ The Librarian runs one member ahead of the Analyst. While the Analyst blocks on 
 
 ### Phase 4 — EXPLORE
 
-Builds the semantic search index over government documents:
-- Splits each bill's full text into 512-token chunks with 64-token overlap
-- Encodes chunks with the sentence-transformer (384-dim, Snowflake Arctic-XS)
-- Upserts into ChromaDB with metadata: bill ID, policy area, sponsor, date
-- At query time: embed query → HNSW approximate nearest-neighbor search → return top-k chunks
+Builds the semantic search index over government activity documents — floor
+speeches (Senate and House), presidential actions (executive orders,
+proclamations, memoranda), Supreme Court opinions, and Federal Register
+rulemaking documents (including ones still open for public comment):
+- One embedding per document — no chunking — over `title + summary + body[:800 chars]`
+- Encodes with the sentence-transformer (384-dim, Snowflake Arctic-XS)
+- Upserts into ChromaDB with metadata: doc type, source, date, politician name/ID, chamber
+- At query time: embed query → HNSW approximate nearest-neighbor search → return top-k documents, filterable by doc type, chamber, and open-for-comment status
 
-The Explore index is separate from the classification embeddings — it uses raw bill text, not title-only embeddings, enabling full-text semantic search across legislation.
+This is a separate index from the tier-3 bill-classification embeddings used
+in Phase 3 — it's for browsing/searching primary-source government documents,
+not for scoring.
 
 ### Phase 5 — JUSTICES
 
@@ -335,12 +342,16 @@ Every hour at :15
        │         48-hour article window; direct URLs only (no redirect wrappers)
        ▼
   2. FILTER ── Embed each article against 18 US policy prototypes
-       │         Discard cosine_sim < 0.15 (off-topic articles)
+       │         Discard cosine_sim < 0.22 (off-topic articles)
        ▼
   3. CLUSTER ─ Pairwise cosine similarity on title embeddings
-       │         Merge clusters with centroid similarity > 0.40
+       │         Merge clusters starting at centroid similarity 0.20, self-
+       │         calibrated upward in 0.05 steps (to 0.61 max) to avoid
+       │         collapsing everything into one mega-cluster
        ▼
-  4. RANK ──── score = 0.4 × (source breadth) + 0.6 × (trending score)
+  4. RANK ──── score = 0.40 × (civic actionability) + 0.35 × (source breadth) + 0.25 × (trending score)
+       │         Actionability leads: officials mentioned + similarity to the
+       │         ingested civic-document corpus, not hand-authored keywords
        │         Select top 4 clusters (MAX_ISSUES)
        ▼
   5. LLM ───── Per cluster: neutral summary + key facts + citizen actions
@@ -370,7 +381,7 @@ Every hour at :15
 
 **Why cluster before ranking?** Articles about the same event arrive from multiple outlets within minutes. Without clustering, all 4 "top issues" would be the same story from AP, NPR, BBC, and PBS. Clustering first, then ranking by source breadth, surfaces the 4 most distinct newsworthy topics.
 
-**Why filter at 0.15 cosine similarity?** The policy prototype filter is deliberately permissive. False negatives (dropping a real policy story) are worse than false positives. The LLM step handles borderline cases through its non-partisan framing constraint.
+**Why filter at 0.22 cosine similarity?** The policy prototype filter is deliberately permissive. False negatives (dropping a real policy story) are worse than false positives. The LLM step handles borderline cases through its non-partisan framing constraint.
 
 **Why a 3-day monitor threshold?** A topic appearing on 3+ distinct days is structurally different from a one-day news spike — it indicates a developing situation citizens may need to track. A 2-day threshold creates too many ephemeral monitors.
 
@@ -471,11 +482,16 @@ All scores default to 50 when data is insufficient. No LLM input is used in scor
 
 ## Semantic Search (Explore)
 
-The Explore feature provides full-text semantic search over government documents without keyword matching. Documents are embedded offline (during pipeline runs) and stored in ChromaDB; queries are embedded at request time.
+The Explore feature provides semantic search over government activity
+documents without keyword matching. Documents are embedded offline (during
+pipeline runs) and stored in ChromaDB; queries are embedded at request time.
 
-**What is indexed:**
-- Full text of bills sponsored by any senator or representative (chunked, 512 tokens, 64-token overlap)
-- Each chunk stored with metadata: bill ID, Congress.gov URL, policy area, sponsor name, chamber, date introduced
+**What is indexed:** Senate and House floor speeches, presidential actions
+(executive orders, proclamations, memoranda), Supreme Court opinions, and
+Federal Register rulemaking documents — five source types, not bill text.
+Each document gets a single embedding (no chunking) over
+`title + summary + body[:800 chars]`, stored with metadata: doc type, source,
+date, politician name/ID, chamber.
 
 **Query flow:**
 ```
@@ -485,14 +501,17 @@ User query
     │
     ▼ HNSW approximate nearest-neighbor (ChromaDB, cosine distance)
     │
-    ▼ top-k chunks retrieved with metadata
+    ▼ top-k documents retrieved, filterable by doc type / chamber / politician / open-for-comment
     │
-    ▼ deduplicated by bill ID, ranked by similarity score
+    ▼ ranked by relevance (default) or date
     │
-    ▼ returned with excerpt, bill link, policy area, sponsor
+    ▼ returned with excerpt, source URL, doc type, and (for open rulemakings) a comment link and deadline
 ```
 
-The same embedding model used for classification is used for Explore — no separate model or index is needed. ChromaDB's HNSW index handles collections of ~500K chunks on the Pi with sub-100ms query latency.
+The same embedding model used for classification is used for Explore — no
+separate model is needed. Bill text itself is not indexed here; it's used
+separately, title-only, for the tier-3 kNN bill-classification step in the
+scoring pipeline (see Phase 3 above).
 
 ---
 
@@ -514,14 +533,22 @@ The score transparency layer deliberately surfaces the underlying `KeyVote`, `Do
 
 ## Public API
 
-A rate-limited public read-only API is available without authentication at `/api/public`:
+A rate-limited public read-only API is available without authentication at `/api/public/v1`:
 
 ```
-GET /api/public/senators          All senators with scores
-GET /api/public/representatives   All representatives with scores
-GET /api/public/action-issues     Current action center issues
-GET /api/public/config            Score weights, industry codes, policy areas
+GET /api/public/v1/senators                   All senators with scores
+GET /api/public/v1/senators/{id}               Single senator
+GET /api/public/v1/senators/{id}/history       Score history over time
+GET /api/public/v1/representatives             All representatives with scores
+GET /api/public/v1/representatives/{id}        Single representative
+GET /api/public/v1/representatives/{id}/history Score history over time
+GET /api/public/v1/states                      State metadata
+GET /api/public/v1/search                      Search politicians by name
 ```
+
+Score weights, industry codes, and policy areas are available unauthenticated
+at `GET /api/config` (not under `/api/public/v1` — it's a separate, lighter-
+weight endpoint used by the frontend itself).
 
 Rate limit: 60 requests/minute per IP. Headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`.
 
@@ -635,9 +662,9 @@ The project uses zero-downtime blue/green deployment with nginx as the traffic r
 ```
 
 `deploy.sh` follows this sequence:
-1. Build the new Docker image
+1. Build the new Docker image locally, or (in CI/CD) pull a pre-built image from GHCR — every push to `main` that passes CI is built once on GitHub-hosted ARM64 runners and pulled here instead of rebuilding on the Pi (`SKIP_BUILD=1`)
 2. Start the new container on the idle port (e.g. green on 8001)
-3. Poll `GET /health` until the container responds (up to 60s)
+3. Poll `GET /health` until the container responds — up to 180s for the backend, 60s for the frontend
 4. Rewrite the nginx upstream block to point to the new port
 5. `nginx -s reload` — zero-downtime config swap (nginx drains in-flight requests)
 6. Stop and remove the old container
@@ -665,15 +692,16 @@ llama.cpp runs as a systemd service (not Docker) so the model weights stay in RA
 ```json
 {
   "status": "ok",
-  "db": "connected",
-  "llm": "reachable" | "unreachable",
-  "pipeline_running": false,
-  "senators_count": 100,
-  "representatives_count": 435
+  "database": "ok" | "unavailable",
+  "ollama": "ok" | "unavailable",
+  "lastPipelineRun": "2026-07-12T03:00:00"
 }
 ```
 
-The deploy script considers the new container healthy when `status == "ok"` and `db == "connected"`. LLM reachability is informational and does not block deployment.
+`deploy.sh` considers the new container healthy purely by HTTP status —
+it polls until `GET /health` returns 200, without parsing the response body.
+`database`/`ollama` are informational for the admin dashboard and don't
+gate deployment.
 
 ## Development Setup
 

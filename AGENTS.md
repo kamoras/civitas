@@ -15,7 +15,7 @@ locally on a single self-hosted device with zero cloud AI calls.
 
 ## Architecture
 
-- **Frontend**: Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS — port 3000/3001
+- **Frontend**: Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS — port 3000/3001
 - **Backend**: FastAPI (Python 3.12), SQLAlchemy ORM, SQLite — port 8000/8001
 - **LLM**: Qwen2.5 1.5B via llama.cpp (native ARM, port 8070) or Ollama (Docker, port 11434)
 - **Embeddings**: sentence-transformers (Snowflake Arctic-XS), runs in-process
@@ -416,7 +416,7 @@ SQLAlchemy ORM models are in `backend/app/models.py`. Key tables: `senators`,
 
 ### Frontend (TypeScript)
 
-- Next.js 14 App Router with server components where possible
+- Next.js 16 App Router with server components where possible
 - TypeScript strict mode, types in `src/types/`
 - Tailwind CSS for styling
 - API calls go through `src/lib/api.ts`
