@@ -312,6 +312,46 @@ async def admin_visitor_breakdown(date: str | None = None, db: Session = Depends
     }
 
 
+_VACANCY_REASONS = {"deceased", "resigned", "expelled"}
+
+
+@router.post("/politicians/{politician_id}/vacancy", dependencies=[Depends(require_admin)])
+async def admin_set_vacancy(
+    politician_id: str,
+    is_current: bool = Query(...),
+    reason: str | None = Query(default=None),
+    left_office_date: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Mark a senator/representative's seat vacant, or restore it.
+
+    Manual-only — there is no automated vacancy detection (see
+    politicians.py module docstring). Historical scores/data are never
+    touched here, only the vacancy fields.
+    """
+    if reason is not None and reason not in _VACANCY_REASONS:
+        raise HTTPException(status_code=400, detail=f"reason must be one of {sorted(_VACANCY_REASONS)}")
+
+    entity = db.query(Senator).filter(Senator.id == politician_id).first()
+    if entity is None:
+        entity = db.query(Representative).filter(Representative.id == politician_id).first()
+    if entity is None:
+        raise HTTPException(status_code=404, detail="Senator or representative not found")
+
+    entity.is_current = is_current
+    entity.vacancy_reason = reason if not is_current else None
+    entity.left_office_date = left_office_date if not is_current else None
+    db.commit()
+
+    return {
+        "id": entity.id,
+        "name": entity.name,
+        "isCurrent": entity.is_current,
+        "vacancyReason": entity.vacancy_reason,
+        "leftOfficeDate": entity.left_office_date,
+    }
+
+
 @router.get("/dashboard", dependencies=[Depends(require_admin)])
 async def admin_dashboard(db: Session = Depends(get_db)):
     """Comprehensive admin dashboard with system health, data stats, and pipeline info."""
