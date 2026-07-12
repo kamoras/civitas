@@ -724,6 +724,33 @@ class TestLegislativeEffectiveness:
         score_at_extreme_outlier = _calc_legislative_effectiveness(bills_at_rate(150), None)
         assert score_at_extreme_outlier > score_at_p90
 
+    def test_house_uses_own_volume_ceiling(self):
+        """A shared Senate-calibrated ceiling made the volume component
+        structurally uncreditable for the House: House per-congress rates
+        (p90 ~29) sit far below the Senate's (p90 ~108) because 435
+        members split similar institutional bandwidth, not because
+        they're less effective. Chamber is inferred from bill-type prefix
+        so a House member at their own p90 gets meaningfully more volume
+        credit than under the Senate ceiling, without a chamber flag
+        needing to be threaded through every caller."""
+        def house_bills_at_rate(n_per_congress: int):
+            return [
+                {"title": f"B{i}", "isLaw": False, "latestAction": "Introduced",
+                 "billType": "hr", "congress": 119}
+                for i in range(n_per_congress)
+            ]
+
+        # 29 bills/congress is House's own measured p90 — should score
+        # meaningfully better than the same rate would under the Senate's
+        # 110 ceiling (29/110 = 26% raw vs 29/35 = 83% raw).
+        house_score = _calc_legislative_effectiveness(house_bills_at_rate(29), None)
+        senate_score = _calc_legislative_effectiveness(
+            [{"title": f"B{i}", "isLaw": False, "latestAction": "Introduced",
+              "billType": "s", "congress": 119} for i in range(29)],
+            None,
+        )
+        assert house_score > senate_score
+
 
 class TestCalculateScoresIntegration:
     """Full calculate_scores integration."""

@@ -168,7 +168,7 @@ logger = logging.getLogger(__name__)
 # shifts scores. Recorded on every ScoreSnapshot so trend charts can
 # annotate methodology changes; keep frontend/src/lib/scoreVersions.ts
 # in sync (it holds the human-readable changelog).
-ALGORITHM_VERSION = "v5.5"
+ALGORITHM_VERSION = "v5.6"
 
 NON_INDUSTRY_CODES = {"OTHER", "SMALL_DONORS", "LARGE_INDIVIDUAL", "POLITICAL", "UNCLASSIFIED"}
 
@@ -1010,6 +1010,15 @@ def _calc_legislative_effectiveness(
          component 1. Reset to 110/congress, just above the current p90
          (108), restoring the same ~10% top-decile saturation rate as
          the original calibration instead of a stale absolute number.
+         This ceiling is Senate-only: the House ceiling is separately
+         calibrated at 35/congress (its own measured p90, itself likely
+         a slight underestimate — see house_pipeline.py's sponsored-
+         bills truncation fix, worth re-measuring after that data
+         corrects itself over the next few pipeline runs). Applying the
+         Senate figure to the House made the component structurally
+         uncreditable there: House per-congress rates run far lower
+         (435 members splitting similar institutional bandwidth vs
+         100), which reflects chamber scale, not effectiveness.
 
     All components apply Bayesian shrinkage toward 50 when data is
     sparse, preventing extreme scores from thin evidence.
@@ -1075,9 +1084,26 @@ def _calc_legislative_effectiveness(
         leadership_pct = 40  # below neutral — we expected data
 
     # Component 3: sponsorship volume per congress served
+    #
+    # Ceiling is chamber-specific: House members structurally introduce far
+    # fewer bills per congress than senators (435 members splitting similar
+    # institutional bandwidth vs 100), not because they're less effective.
+    # A 2026-07 audit found a shared Senate-calibrated ceiling made the
+    # volume component unreachable for the House — the chamber's dataset
+    # max was itself an artifact of an unrelated 50-bill fetch truncation
+    # (since fixed; see house_pipeline.py), but even that ceiling's p90
+    # (29/congress) sits nowhere near the Senate figure. Chamber is
+    # inferred from bill-type prefix (hr/hjres = House, s/sjres = Senate)
+    # rather than passed explicitly, since sponsored_bills already carries
+    # it and every other caller in this file would need updating otherwise.
+    HOUSE_TYPES = {"hr", "hjres", "hres", "hconres"}
+    house_n = sum(1 for b in sponsored_bills if (b.get("billType") or "").lower() in HOUSE_TYPES)
+    is_house_member = house_n > (n_bills - house_n)
+    VOLUME_CEILING = 35.0 if is_house_member else 110.0
+
     congresses = {b.get("congress") for b in sponsored_bills if b.get("congress")}
     per_congress = n_bills / max(len(congresses), 1)
-    volume_raw = min(per_congress / 110.0, 1.0) * 100
+    volume_raw = min(per_congress / VOLUME_CEILING, 1.0) * 100
 
     return clamp(
         advancement_score * 0.40

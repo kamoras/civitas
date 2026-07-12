@@ -333,7 +333,19 @@ async def run_house_pipeline() -> dict:
                                     (sp.get("latestAction") or {}).get("text", "")
                                 ).lower(),
                             })
-                    r["sponsoredBills"] = sp_list[:50]
+                    # sp_list is already bounded to the current + previous
+                    # congress (min_congress filter above), so this is a
+                    # generous safety net, not a real-world limit. A flat
+                    # [:50] here silently truncated the scoring input: a
+                    # 2026-07 audit found 169/431 reps (39%) hit exactly
+                    # 50, corrupting both Legislative Effectiveness's
+                    # volume AND advancement components (advancement is
+                    # computed over this same truncated list) — worse for
+                    # longer-tenured, more prolific sponsors. Embedding
+                    # the extra titles in positions_from_sponsored_bills
+                    # is cheap (no LLM), so there's no real cost to lifting
+                    # this.
+                    r["sponsoredBills"] = sp_list[:500]
                     for sp_data in sp_list[:5]:
                         sp_bill_id = sp_data["billId"]
                         if sp_bill_id in cosponsors_map:
