@@ -403,10 +403,13 @@ class TestBillPartyAlignmentQuality:
 class TestPolicyAreaClassificationQuality:
     """Evaluate policy area classification for well-known bills."""
 
+    # "AGRIBUSINESS" was removed from this holdout: POLICY_TAXONOMY in
+    # bill_analyzer.py has no such category (17 keys, checked 2026-07),
+    # so a case asserting it was untestable by construction — no
+    # classifier quality, however good, could ever satisfy it.
     POLICY_HOLDOUT = [
         ("National Defense Authorization Act military spending armed forces", "DEFENSE"),
         ("Affordable Care Act healthcare insurance coverage hospitals", "HEALTHCARE"),
-        ("Agriculture Improvement Act farming crop subsidies food stamps", "AGRIBUSINESS"),
         ("Tax Cuts and Jobs Act federal income tax rates deductions", "TAXES"),
         ("Bipartisan Safer Communities Act gun violence prevention background checks", "GUNS"),
         ("SNAP benefits social safety net food assistance housing programs", "WELFARE"),

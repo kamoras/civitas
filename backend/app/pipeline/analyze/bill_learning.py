@@ -170,6 +170,24 @@ def classify_bill_by_reference(
     return best_area, confidence
 
 
+def reference_corpus_label_share(label: str) -> float:
+    """Fraction of the reference corpus currently labeled `label`.
+
+    A 2026-07 audit found the corpus severely imbalanced (55% PROCEDURAL,
+    82% in the top three labels combined, several categories at 0-1%
+    representation) — kNN can only ever vote for labels it has seen, so a
+    near-absent category can never win a kNN vote even when it's the
+    correct answer for genuinely on-topic text. Used to gate whether a
+    confident kNN vote against a well-represented seed-anchor alternative
+    is real evidence, or just an artifact of that alternative never
+    having had a fair sample to be found by kNN in the first place.
+    """
+    _, ref_labels = _load_reference_corpus()
+    if not ref_labels:
+        return 0.0
+    return ref_labels.count(label) / len(ref_labels)
+
+
 def lookup_exact(db: Session, bill_id: str) -> tuple[str, float] | None:
     """Check if this exact bill was classified in a prior run.
 

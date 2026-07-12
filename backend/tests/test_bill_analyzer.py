@@ -84,6 +84,56 @@ class TestPolicyAreaClassification:
         assert 0.0 <= confidence <= 1.0
 
 
+class TestReferenceCorpusOverrideGate:
+    """A confident kNN vote against a seed-anchor pick must not override
+    it when the reference corpus has near-zero examples of that pick —
+    kNN can only ever vote for labels it has seen, so its disagreement
+    isn't real evidence against a corpus-rare category. A 2026-07 audit
+    found this exact pattern silently misrouting bills genuinely about
+    near-absent categories (WELFARE, TECH) into whatever common category
+    the corpus happened to be thickest around."""
+
+    TEXT = "Hospital and medical insurance reform healthcare system regulation"
+
+    def test_confident_knn_deferred_when_alternative_is_corpus_rare(self):
+        from unittest.mock import patch
+        with patch(
+            "app.pipeline.analyze.bill_learning.classify_bill_by_reference",
+            return_value=("TAXES", 0.9),
+        ), patch(
+            "app.pipeline.analyze.bill_learning.reference_corpus_label_share",
+            return_value=0.0,
+        ):
+            area, _ = classify_policy_area(self.TEXT)
+        assert area == "HEALTHCARE"
+
+    def test_confident_knn_trusted_when_alternative_is_well_represented(self):
+        from unittest.mock import patch
+        with patch(
+            "app.pipeline.analyze.bill_learning.classify_bill_by_reference",
+            return_value=("TAXES", 0.9),
+        ), patch(
+            "app.pipeline.analyze.bill_learning.reference_corpus_label_share",
+            return_value=0.20,
+        ):
+            area, conf = classify_policy_area(self.TEXT)
+        assert area == "TAXES"
+        assert conf == 0.9
+
+    def test_knn_and_seed_agreement_always_trusted(self):
+        from unittest.mock import patch
+        with patch(
+            "app.pipeline.analyze.bill_learning.classify_bill_by_reference",
+            return_value=("HEALTHCARE", 0.9),
+        ), patch(
+            "app.pipeline.analyze.bill_learning.reference_corpus_label_share",
+            return_value=0.0,
+        ):
+            area, conf = classify_policy_area(self.TEXT)
+        assert area == "HEALTHCARE"
+        assert conf == 0.9
+
+
 class TestValidation:
     """Post-classification validation and sanitization."""
 

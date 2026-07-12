@@ -266,6 +266,16 @@ def _get_policy_embeddings() -> dict[str, np.ndarray]:
 
 EMBEDDING_CONFIDENCE_THRESHOLD = 0.25
 
+# Below this reference-corpus share, a kNN vote against a seed-anchor
+# alternative in that category isn't trusted to override it — see
+# reference_corpus_label_share's docstring in bill_learning.py. POLICY_
+# TAXONOMY has 16 non-procedural categories; a uniform corpus would put
+# every one at ~6.3% (1/16), so 3% is roughly "less than half its fair
+# share" — a deliberately loose bar that only catches categories that
+# are genuinely near-absent (a 2026-07 audit's actual failure cases were
+# at 0-0.9% representation).
+MIN_SEED_CORPUS_SHARE_FOR_KNN_TRUST = 0.03
+
 
 def _is_procedural_seed_match(text: str, threshold: float = 0.74) -> bool:
     """Check if text is procedural via embedding similarity to the procedural prototype.
@@ -302,7 +312,10 @@ def classify_policy_area(
     """Classify policy area using adaptive tiered classification.
 
     Tiers:
-      1. Reference corpus kNN (accumulated from prior pipeline runs)
+      1. Reference corpus kNN (accumulated from prior pipeline runs) —
+         only trusted over tier 2 when the corpus has meaningful
+         representation of whatever tier 2 would otherwise pick; see
+         MIN_SEED_CORPUS_SHARE_FOR_KNN_TRUST.
       2. Embedding similarity against policy seed descriptions
       3. Augmented re-embed for low-confidence cases
 
@@ -325,12 +338,16 @@ def classify_policy_area(
         return "PROCEDURAL", 1.0
 
     # Tier 1: kNN against reference corpus (prior classified bills)
-    from app.pipeline.analyze.bill_learning import classify_bill_by_reference
+    from app.pipeline.analyze.bill_learning import (
+        classify_bill_by_reference,
+        reference_corpus_label_share,
+    )
     ref_area, ref_confidence = classify_bill_by_reference(text)
-    if ref_area and ref_area != "PROCEDURAL" and ref_confidence > 0.45:
-        return ref_area, ref_confidence
 
-    # Tier 2: embedding similarity against seed policy descriptions
+    # Tier 2: embedding similarity against seed policy descriptions.
+    # Computed unconditionally (not just as a tier-1 fallback) because a
+    # confident tier-1 vote still needs a candidate to cross-check against
+    # — see the corpus-share gate below.
     from app.pipeline.vector_store import get_embedding_model
     model = get_embedding_model()
     policy_embs = _get_policy_embeddings()
@@ -348,6 +365,20 @@ def classify_policy_area(
         if score > best_score:
             best_score = score
             best_area = area
+
+    if ref_area and ref_area != "PROCEDURAL" and ref_confidence > 0.45:
+        # Trust the kNN vote unless it's overriding a seed-anchor pick in
+        # a category the reference corpus barely has any examples of.
+        # kNN can only ever vote for labels it has seen, so disagreement
+        # with a near-absent category isn't real evidence against it —
+        # a 2026-07 audit found this exact pattern silently misrouting
+        # bills genuinely about near-absent categories (WELFARE, TECH)
+        # into whichever common category the corpus happened to be
+        # thickest around, even when the seed anchor for the correct
+        # category was a strong, unambiguous match.
+        if ref_area == best_area or reference_corpus_label_share(best_area) >= MIN_SEED_CORPUS_SHARE_FOR_KNN_TRUST:
+            return ref_area, ref_confidence
+        # Else: fall through and let tier 2 (below) decide instead.
 
     # If reference corpus suggested PROCEDURAL but seed embedding disagrees,
     # trust the embedding (reference corpus may have bad labels from prior runs)

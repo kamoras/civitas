@@ -17,6 +17,16 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v5.6",
+    date: "2026-07-12",
+    title: "Fairness audit — House scoring bugs, bill/vote classification imbalance",
+    changes: [
+      "A fairness pass comparing scores across party, seat safety, seniority, and chamber found the House-vs-Senate gap in Legislative Effectiveness was mostly a bug, not real: the sponsorship-volume ceiling had been calibrated only against Senate data (435 House members structurally introduce far fewer bills per congress than 100 senators, splitting similar institutional bandwidth), and a separate pipeline bug was silently discarding any House member's sponsored-bill data past the 50th bill — 39% of the House hit that cap exactly, undercounting both the volume and advancement components. Both are fixed; House Legislative Effectiveness's population average moved from well below the neutral midpoint to in line with the Senate's.",
+      "Verified as real, not bugs: Democrats' higher average Funding Independence traces to a genuine, measurable difference in how the two parties' campaigns are financed (PAC-reliance roughly double for Republicans in current data), and House members' lower Funding Independence traces to House races being structurally cheaper and more PAC-dependent than Senate races. Both are long-documented patterns in campaign-finance research, not something the formula treats parties or chambers differently to produce.",
+      "Fixed a structural weakness in the adaptive bill/vote classifier: its self-training reference corpus is heavily imbalanced (some policy categories had zero examples), and a confident vote from that corpus was allowed to override an otherwise-correct match against the hand-written category descriptions — even when the corpus literally couldn't have produced the right answer because it had never seen an example of that category. A confident classifier vote is now only trusted over the category-description match when the corpus has meaningful representation of the alternative; otherwise the category-description match wins. Measured accuracy on a held-out policy-area test set: 78.6% before, 100% after.",
+    ],
+  },
+  {
     version: "v5.5",
     date: "2026-07-12",
     title: "Funding Diversity data bug, Legislative Effectiveness recalibration",
