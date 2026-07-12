@@ -532,8 +532,23 @@ rolled back to a locally-built image the same day. "Native ARM64" on GitHub's
 runners is not the same ISA as the Pi — cross-microarchitecture, not just
 cross-emulation.
 
-Until the build is fixed to target a generic ARMv8-A baseline (constrain the
-onnxruntime/numpy wheel selection, or equivalent), `cd.yml`'s `Deploy` step
+**Root cause, narrowed (2026-07-12 follow-up investigation):** `onnxruntime`
+was the wrong suspect — it ships a genuine prebuilt universal aarch64 wheel
+(`manylinux_2_27/2_28_aarch64`) from PyPI, so the same binary installs
+regardless of build machine. `hnswlib` (ChromaDB's HNSW vector-index C++
+library) has **no prebuilt aarch64 wheel anywhere** — `pip install` compiles
+it from source on whichever machine runs the build, and its build system
+likely auto-detects and bakes in build-host SIMD instruction support. That
+lines up exactly with the crash point (first real HNSW-index use, at
+ChromaDB init) and explains why building on the Pi itself is reliably safe:
+the Pi compiling for itself can't produce an incompatible binary. A real fix
+would pin a conservative `CXXFLAGS`/`CFLAGS` architecture target (e.g.
+`-march=armv8-a`) for the build stage so hnswlib compiles to a portable
+baseline regardless of build host — **untested**, don't ship this without
+verifying a GHCR-built image survives past ChromaDB init on the Pi first
+(the health check alone won't catch it — see the note below).
+
+Until the build is fixed and re-verified, `cd.yml`'s `Deploy` step
 runs plain `./deploy.sh` (no `SKIP_BUILD`), building on the Pi itself —
 slower, but guaranteed instruction-set-compatible since it's the target
 hardware. `ci.yml`'s `build-and-push` job still runs and still pushes to
