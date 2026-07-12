@@ -26,16 +26,9 @@ class Settings(BaseSettings):
     # Bluesky integration (leave BSKY_HANDLE empty to disable)
     BSKY_HANDLE: str = ""
     BSKY_APP_PASSWORD: str = ""
-    # Email digest (leave SMTP_HOST empty to disable)
-    SMTP_HOST: str = ""
-    SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_PASS: str = ""
-    SMTP_FROM: str = ""
     # Operator alerts (pipeline overruns, skipped runs, ground-truth failures).
     # Always logged + recorded for the admin dashboard; optionally pushed:
     ALERT_NTFY_URL: str = ""    # e.g. https://ntfy.sh/<private-topic>
-    ALERT_EMAIL: str = ""       # requires SMTP_HOST to also be set
     PIPELINE_OVERRUN_ALERT_HOURS: float = 8.0
 
 

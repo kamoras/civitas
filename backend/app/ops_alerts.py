@@ -9,7 +9,6 @@ problems. Delivery is best-effort across every configured channel:
 - always recorded in ApiCache (tier ``_ops_alerts``) so the admin
   dashboard can show recent alerts
 - pushed via ntfy if ``ALERT_NTFY_URL`` is set
-- emailed if ``SMTP_HOST`` and ``ALERT_EMAIL`` are set
 
 Alerts never raise: a broken alert channel must not take down the
 pipeline it is reporting on.
@@ -45,8 +44,6 @@ def send_ops_alert(subject: str, body: str, *, dedupe_key: str | None = None) ->
 
         if settings.ALERT_NTFY_URL:
             _send_ntfy(subject, body)
-        if settings.SMTP_HOST and settings.ALERT_EMAIL:
-            _send_email(subject, body)
         return True
     except Exception:
         logger.exception("Ops alert delivery failed (non-fatal)")
@@ -135,18 +132,6 @@ def _send_ntfy(subject: str, body: str) -> None:
         )
     except Exception:
         logger.exception("ntfy alert failed")
-
-
-def _send_email(subject: str, body: str) -> None:
-    try:
-        from app.pipeline.digest import _send_email as digest_send
-        digest_send(
-            settings.ALERT_EMAIL,
-            f"[Civitas alert] {subject}",
-            f"<pre>{body}</pre>",
-        )
-    except Exception:
-        logger.exception("Email alert failed")
 
 
 def check_pipeline_overrun() -> None:
