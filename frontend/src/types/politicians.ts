@@ -11,6 +11,9 @@ export interface PoliticianCard {
   hasScorecard: boolean;
   overallScore?: number | null;
   activeIssueCount: number;
+  isCurrent?: boolean;
+  vacancyReason?: string | null;
+  leftOfficeDate?: string | null;
 }
 
 export interface PoliticianIdentity {
@@ -25,6 +28,8 @@ export interface PoliticianIdentity {
   websiteUrl?: string;
   officePhone?: string;
   officeAddress?: string;
+  vacancyReason?: string | null;
+  leftOfficeDate?: string | null;
   // President
   number?: number;
   termStart?: string;
