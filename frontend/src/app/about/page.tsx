@@ -852,7 +852,7 @@ export default function AboutPage() {
               <div>
                 <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">LLM (NARRATIVE SYNTHESIS)</h3>
                 <P>
-                  <Label>DeepSeek-R1 1.5B</Label> via llama.cpp
+                  <Label>Qwen2.5 1.5B</Label> via llama.cpp
                   <Cite id="16">Gerganov 2023</Cite> handles tasks requiring natural
                   language understanding and multi-step reasoning:
                 </P>
@@ -917,7 +917,7 @@ export default function AboutPage() {
               <div>
                 <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">MODEL AND ARCHITECTURE</h3>
                 <P>
-                  The inference model is <Label>DeepSeek-R1 1.5B</Label>, a compact open-weight
+                  The inference model is <Label>Qwen2.5 1.5B</Label>, a compact open-weight
                   language model running natively via llama.cpp
                   <Cite id="16">Gerganov 2023</Cite> compiled with ARM-specific optimizations
                   (cortex-a76, dot-product, fp16). This provides ~3x faster inference compared
@@ -1024,7 +1024,7 @@ export default function AboutPage() {
               <div>
                 <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">OPEN-WEIGHT MODEL</h3>
                 <P>
-                  We deliberately chose DeepSeek-R1, an open-weight model, over proprietary
+                  We deliberately chose Qwen2.5, an open-weight model, over proprietary
                   alternatives like GPT-4 or Claude. This means: no per-token API costs that
                   could make the project financially unsustainable, no dependency on a third-party
                   company&apos;s continued service, full auditability of the model&apos;s behavior,
@@ -1074,7 +1074,7 @@ export default function AboutPage() {
               <Row label="Backend" value="Python 3.13, FastAPI, SQLAlchemy, SQLite" />
               <Row label="Frontend" value="Next.js 16, React 19, TypeScript, Tailwind CSS" />
               <Row label="Embedding Model" value="Snowflake Arctic-XS (22M params, Snowflake/HuggingFace)" />
-              <Row label="LLM Runtime" value="llama.cpp (native ARM build), DeepSeek-R1 1.5B" />
+              <Row label="LLM Runtime" value="llama.cpp (native ARM build), Qwen2.5 1.5B" />
               <Row label="Vector Database" value="ChromaDB (persistent, local)" />
               <Row label="Containers" value="Docker Compose (blue/green zero-downtime deploy via nginx)" />
               <Row label="Pipeline Schedule" value="Nightly at 3:00 AM via APScheduler" />
@@ -1103,7 +1103,7 @@ export default function AboutPage() {
             </P>
             <div className="space-y-2 mt-4">
               <Row label="SERVER" value="Raspberry Pi 5 — a $80 single-board computer" />
-              <Row label="LOCAL LLM" value="DeepSeek-R1 1.5B via Ollama/llama.cpp · runs entirely on-device, zero API cost" />
+              <Row label="LOCAL LLM" value="Qwen2.5 1.5B via Ollama/llama.cpp · runs entirely on-device, zero API cost" />
               <Row label="DATABASE" value="SQLite · no cloud database, no managed service" />
               <Row label="DEPLOYMENT" value="Blue-green via Docker Compose on a single machine" />
               <Row label="EXTERNAL APIs" value="Congress.gov, FEC.gov, Federal Register — all free and open" />

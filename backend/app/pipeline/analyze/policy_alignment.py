@@ -386,8 +386,9 @@ def compute_promise_vote_alignment(
 ) -> dict:
     """Determine if a member's actions align with a campaign promise.
 
-    With ``use_llm=True`` (Senate pipeline), DeepSeek-R1 decomposes the
-    promise into a richer semantic query before the embedding search.
+    With ``use_llm=True`` (Senate pipeline), the local LLM (Qwen2.5 1.5B —
+    see config.py's OLLAMA_MODEL) decomposes the promise into a richer
+    semantic query before the embedding search.
     With ``use_llm=False`` (House pipeline — deterministic by design,
     and 431 members × several promises of decomposition calls would add
     hours), the raw promise text is embedded directly; the alignment

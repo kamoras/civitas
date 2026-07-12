@@ -34,11 +34,14 @@ def _make_input_hash(prompt_version: str, input_data: Any, model: str = "") -> s
 
 
 def _strip_thinking_tokens(text: str) -> str:
-    """Strip DeepSeek-R1 <think>...</think> chain-of-thought blocks.
+    """Strip <think>...</think> chain-of-thought blocks emitted by reasoning models.
 
-    R1 models emit reasoning traces before the final answer. If not removed,
-    the greedy JSON-extraction regex matches from the first { inside the think
-    block to the last } in the output, producing an unparseable span.
+    Reasoning models (e.g. DeepSeek-R1, used previously — see config.py's
+    OLLAMA_MODEL history) emit a reasoning trace before the final answer.
+    If not removed, the greedy JSON-extraction regex matches from the
+    first { inside the think block to the last } in the output, producing
+    an unparseable span. A no-op safeguard for non-reasoning models (the
+    current default, Qwen2.5, doesn't emit these).
     """
     return re.sub(r"<think>[\s\S]*?</think>", "", text, flags=re.IGNORECASE).strip()
 
