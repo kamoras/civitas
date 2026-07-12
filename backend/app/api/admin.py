@@ -290,14 +290,19 @@ async def admin_visitor_breakdown(date: str | None = None, db: Session = Depends
     day = date or datetime.now(_UTC).date().isoformat()
 
     def _counts(column):
+        # Rows written before this column existed default to '' (the
+        # ALTER TABLE ADD COLUMN default), not the "Other" the app itself
+        # writes for an unrecognized UA — normalize both to the same
+        # group so they don't show up as two separate "Other" rows.
+        normalized = func.coalesce(func.nullif(column, ""), "Other")
         rows = (
-            db.query(column, func.count(SiteVisit.visitor_hash))
+            db.query(normalized, func.count(SiteVisit.visitor_hash))
             .filter(SiteVisit.date == day)
-            .group_by(column)
+            .group_by(normalized)
             .order_by(func.count(SiteVisit.visitor_hash).desc())
             .all()
         )
-        return [{"name": name or "Other", "count": n} for name, n in rows]
+        return [{"name": name, "count": n} for name, n in rows]
 
     return {
         "date": day,
