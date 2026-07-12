@@ -101,14 +101,21 @@ jobs:
 
   build-and-push:
     name: Build & Push Images
-    # Native ARM64 runner, not QEMU emulation on ubuntu-latest — Node's V8
-    # crashes under QEMU user-mode emulation ("Illegal instruction", 2026-07-12
-    # incident) because JIT-generated code hits instructions the emulator
-    # doesn't handle correctly. Native hardware sidesteps the whole class of
-    # bug instead of chasing individual crashes.
+    # DISABLED (2026-07-12) — cd.yml no longer consumes these images (see
+    # AGENTS.md "CI/CD & self-hosted runner"), because the backend image
+    # built here SIGILL'd in production: hnswlib (chromadb's HNSW C++ lib)
+    # has no prebuilt aarch64 wheel, so pip compiles it from source on
+    # whichever machine runs the build — this ubuntu-24.04-arm runner is a
+    # different ARM64 microarchitecture (server-grade Ampere/Cobalt) than
+    # the Pi 5 (Cortex-A76) actually running it. Running this job anyway
+    # would keep publishing a known-broken :latest to GHCR that looks fine
+    # (build succeeds) but crashes on first real use — worse than just
+    # wasted CI time. Re-enable (`if: false` -> real condition) only after
+    # verifying a build here survives past ChromaDB init on the Pi, not
+    # just the HTTP health check.
+    if: false
     runs-on: ubuntu-24.04-arm
     needs: [frontend, backend-fast, backend-image, backend-slow]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
       packages: write
