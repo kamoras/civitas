@@ -17,6 +17,16 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v5.5",
+    date: "2026-07-12",
+    title: "Funding Diversity data bug, Legislative Effectiveness recalibration",
+    changes: [
+      "Fixed a data bug in Funding Diversity's industry-concentration signal: UNCLASSIFIED (donations the classifier couldn't attribute to any industry) was being treated as a legitimate industry rather than excluded like OTHER/POLITICAL, and the concentration math used each industry's rounded display percentage instead of its actual dollar total — an industry under roughly 0.5% of a senator's total raised rounds to 0% and vanished from the calculation entirely. Together these made 95 of 100 senators look almost totally concentrated in a single 'industry' (usually UNCLASSIFIED) regardless of their real donor spread, dragging the population average well below every other dimension's neutral calibration point. Concentration is now computed from real dollar totals.",
+      "Legislative Effectiveness's sponsorship-volume ceiling (bills introduced per congress served) is recalibrated: it was set in 2026-06 against a full-credit ceiling just above that period's 90th percentile, but the live distribution has since grown enough that over a fifth of senators were fully saturating the old ceiling, scoring identically regardless of how far past it they were. Reset to restore the same top-decile headroom the ceiling originally provided.",
+      "Documented (not changed): the donor-independence component of Constituent Alignment always runs on its reduced-weight fallback, because no lobbying-disclosure source this platform ingests discloses which way a donor's industry wanted a given bill to go — only aggregate spend. Filling that in would require hand-authoring an industry-to-position assumption, which this platform's scores are built never to contain.",
+    ],
+  },
+  {
     version: "v5.4",
     date: "2026-07-12",
     title: "Promise-evidence gray-zone gate",

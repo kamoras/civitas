@@ -133,12 +133,26 @@ Changes from v3 → v4 (score audit 2026-06):
   outside spending uses complete per-cycle Schedule E totals instead of
   a single 50-row page.
 - Independent Voting: donor component reweighted 40%→25% when alignment
-  is unknown (senatorVoteAligned has never been computed — every stored
-  match is None), and the unknown-branch heuristic no longer divides the
+  is unknown (senatorVoteAligned is always None — see structural note
+  below), and the unknown-branch heuristic no longer divides the
   upstream-capped match count by 8 (a constant 1.0 that scored everyone
   80). Party-independence curve gains a 2% base rate and the state-lean
   discount is capped at a 20% full-credit break rate so safe-state party
   leaders with single-digit break rates no longer score as independents.
+
+  senatorVoteAligned structural note (2026-07 audit): this isn't an
+  unfinished feature — computing it honestly needs to know whether a
+  donor's industry *wanted* a given bill to pass or fail, and no
+  ingested source (LDA filings — fetch/lda.py — only carry aggregate
+  spend, not per-bill positions) discloses that. The only way to fill
+  it in without that data is a hand-authored industry→stance mapping
+  ("PHARMA opposes price controls," etc.), which both risks being
+  wrong (a bill's effect on an industry depends on its actual content,
+  not just which way its policy area points) and is exactly the kind
+  of authored political conclusion this platform's scores are designed
+  never to contain — see the platform's no-hardcoded-hints principle.
+  The 25%-weight fallback (donation share + non-consensus-vote share)
+  is the honest ceiling absent a real per-bill position data source.
 - Legislative Effectiveness: advancement counts substantive bills only
   (no simple/concurrent resolutions), stops double-counting laws, and
   drops "placed on calendar"/"cloture" credit; volume is per-congress
@@ -154,9 +168,9 @@ logger = logging.getLogger(__name__)
 # shifts scores. Recorded on every ScoreSnapshot so trend charts can
 # annotate methodology changes; keep frontend/src/lib/scoreVersions.ts
 # in sync (it holds the human-readable changelog).
-ALGORITHM_VERSION = "v5.4"
+ALGORITHM_VERSION = "v5.5"
 
-NON_INDUSTRY_CODES = {"OTHER", "SMALL_DONORS", "LARGE_INDIVIDUAL", "POLITICAL"}
+NON_INDUSTRY_CODES = {"OTHER", "SMALL_DONORS", "LARGE_INDIVIDUAL", "POLITICAL", "UNCLASSIFIED"}
 
 # Cook Partisan Voting Index approximation (2024 cycle, based on
 # 2020 presidential results).  Source: Cook Political Report.
@@ -620,9 +634,11 @@ def _calc_constituent_alignment(
 
       2. Donor independence (25%/40%): unchanged from v4.1 — based on
          donor-vote connection matches, with the visibility-scaled
-         baseline. senatorVoteAligned is only populated when a real
-         alignment computation exists; when it is None for every match,
-         the donation-share heuristic gets the reduced 25% weight.
+         baseline. senatorVoteAligned is always None in the current
+         pipeline (structural data limitation, not a bug — see the
+         note in the module docstring under "Independent Voting"), so
+         the donation-share heuristic always runs at the reduced 25%
+         weight rather than the real-alignment 40% path.
 
     Removed in v4.2: the "state-relevant policy" exemption that skipped
     party-line votes on policy areas related to the member's TOP DONOR
@@ -834,6 +850,19 @@ def _calc_funding_diversity(funding: dict) -> int:
     support (Bonica 2014; Malbin 2009). Treating small donors as
     "opaque" conflates traceability with diversity; this score measures
     the latter.
+
+    Uses each entry's dollar ``total``, not its stored ``percentage`` —
+    that field is rounded to the nearest integer point for display
+    (normalize_finance.py), which silently zeroes out any industry
+    under ~0.5% of total raised. A 2026-07 audit found 86.5% of
+    industry rows had percentage=0 despite a nonzero dollar total, and
+    UNCLASSIFIED (donations the classifier couldn't attribute to any
+    industry — semantically "unknown," the same as OTHER/POLITICAL, not
+    itself an industry) was left out of NON_INDUSTRY_CODES. Together
+    these collapsed the HHI calculation to near-total "concentration" in
+    UNCLASSIFIED for 95/100 senators regardless of their actual spread
+    across real industries, dragging the population mean to 37 against
+    every other dimension's ~50 neutral calibration.
     """
     industry_breakdown = funding.get("industryBreakdown", [])
     small_donor_pct = funding.get("smallDonorPercentage", 0)
@@ -848,11 +877,11 @@ def _calc_funding_diversity(funding: dict) -> int:
     # Unclassified large donors = narrowest (few large, opaque sources).
     small_frac = small_donor_pct / 100.0
 
-    classified_industry_pct = sum(
-        ind.get("percentage", 0) for ind in industry_breakdown
+    classified_industry_total = sum(
+        ind.get("total", 0) for ind in industry_breakdown
         if ind.get("industry") not in NON_INDUSTRY_CODES
     )
-    classified_frac = classified_industry_pct / 100.0
+    classified_frac = classified_industry_total / total_raised
 
     # Small donors are the most diverse source; classified industry
     # money is moderately diverse; the remainder (large unclassified,
@@ -871,7 +900,8 @@ def _calc_funding_diversity(funding: dict) -> int:
         ind for ind in industry_breakdown
         if ind.get("industry") not in NON_INDUSTRY_CODES
     ]
-    total_known_pct = sum(ind.get("percentage", 0) for ind in industries) if industries else 0
+    total_known = sum(ind.get("total", 0) for ind in industries) if industries else 0
+    total_known_pct = total_known / total_raised * 100
 
     if total_known_pct < 5:
         # Very little classified industry money — HHI is meaningless
@@ -881,7 +911,7 @@ def _calc_funding_diversity(funding: dict) -> int:
         concentration_score = 65 if small_frac > 0.3 else 50
     else:
         hhi = sum(
-            (ind.get("percentage", 0) / total_known_pct) ** 2
+            (ind.get("total", 0) / total_known) ** 2
             for ind in industries
         )
         normalized = max(0, min((hhi - 0.10) / 0.90, 1.0))
@@ -966,11 +996,20 @@ def _calc_legislative_effectiveness(
          cosponsors from influential colleagues score higher.
 
       3. Sponsorship volume (30%): bills introduced *per congress served*,
-         linear with full credit at 80/congress.  The v3 metric applied
+         linear with full credit at 110/congress.  The v3 metric applied
          log2(total career bills)/log2(100), but the bill lists span whole
          careers (audit median: 338 bills over 7 congresses), so nearly
-         every senator maxed the component.  Per-congress rates: senate
-         median ≈42 (→53), p10 ≈25 (→31), p90 ≈69 (→86).
+         every senator maxed the component.  The ceiling needs periodic
+         recalibration as the bill corpus grows: at the 2026-06 audit,
+         per-congress rates were median ≈42 / p90 ≈69, and the ceiling
+         (80) was set just above that p90. A 2026-07 audit found the live
+         distribution had drifted well past that calibration (median 53,
+         p90 108, 22/100 senators already saturating 80/congress, one at
+         150) — the old ceiling was flagged as saturated by the same
+         "full credit stays at 5%, just above p90" logic used in
+         component 1. Reset to 110/congress, just above the current p90
+         (108), restoring the same ~10% top-decile saturation rate as
+         the original calibration instead of a stale absolute number.
 
     All components apply Bayesian shrinkage toward 50 when data is
     sparse, preventing extreme scores from thin evidence.
@@ -1038,7 +1077,7 @@ def _calc_legislative_effectiveness(
     # Component 3: sponsorship volume per congress served
     congresses = {b.get("congress") for b in sponsored_bills if b.get("congress")}
     per_congress = n_bills / max(len(congresses), 1)
-    volume_raw = min(per_congress / 80.0, 1.0) * 100
+    volume_raw = min(per_congress / 110.0, 1.0) * 100
 
     return clamp(
         advancement_score * 0.40

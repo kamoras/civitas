@@ -406,10 +406,10 @@ class TestFundingDiversity:
             "totalRaised": 1_000_000,
             "smallDonorPercentage": 10,
             "industryBreakdown": [
-                {"industry": "FINANCE", "percentage": 20},
-                {"industry": "TECH", "percentage": 20},
-                {"industry": "HEALTHCARE", "percentage": 15},
-                {"industry": "DEFENSE", "percentage": 15},
+                {"industry": "FINANCE", "total": 200_000, "percentage": 20},
+                {"industry": "TECH", "total": 200_000, "percentage": 20},
+                {"industry": "HEALTHCARE", "total": 150_000, "percentage": 15},
+                {"industry": "DEFENSE", "total": 150_000, "percentage": 15},
             ],
         }
         score = _calc_funding_diversity(funding)
@@ -421,7 +421,7 @@ class TestFundingDiversity:
             "totalRaised": 1_000_000,
             "smallDonorPercentage": 90,
             "industryBreakdown": [
-                {"industry": "OTHER", "percentage": 5},
+                {"industry": "OTHER", "total": 50_000, "percentage": 5},
             ],
         }
         score = _calc_funding_diversity(funding)
@@ -433,8 +433,8 @@ class TestFundingDiversity:
             "totalRaised": 1_000_000,
             "smallDonorPercentage": 20,
             "industryBreakdown": [
-                {"industry": "OIL_GAS", "percentage": 75},
-                {"industry": "OTHER", "percentage": 5},
+                {"industry": "OIL_GAS", "total": 750_000, "percentage": 75},
+                {"industry": "OTHER", "total": 50_000, "percentage": 5},
             ],
         }
         score = _calc_funding_diversity(funding)
@@ -443,6 +443,64 @@ class TestFundingDiversity:
     def test_empty_breakdown(self):
         score = _calc_funding_diversity({})
         assert score == 50
+
+    def test_unclassified_excluded_from_concentration(self):
+        """UNCLASSIFIED (donations the classifier couldn't attribute to any
+        industry) must not itself count as a dominant 'industry' — it's an
+        unknown bucket, semantically the same as OTHER/POLITICAL. A 2026-07
+        audit found this bug alone made 95/100 senators look ~100%
+        industry-concentrated."""
+        funding = {
+            "totalRaised": 1_000_000,
+            "smallDonorPercentage": 20,
+            "industryBreakdown": [
+                {"industry": "UNCLASSIFIED", "total": 600_000, "percentage": 60},
+                {"industry": "FINANCE", "total": 100_000, "percentage": 10},
+                {"industry": "TECH", "total": 100_000, "percentage": 10},
+                {"industry": "HEALTHCARE", "total": 100_000, "percentage": 10},
+                {"industry": "DEFENSE", "total": 100_000, "percentage": 10},
+            ],
+        }
+        score = _calc_funding_diversity(funding)
+        # 4 real industries evenly split among the classified money should
+        # score as diverse, not as concentrated in UNCLASSIFIED.
+        assert score >= 55
+
+    def test_small_dollar_industries_not_rounded_to_zero(self):
+        """Real dollar totals must drive concentration, not the stored
+        display 'percentage' (rounded to the nearest integer point, which
+        zeroes out any industry under ~0.5% of a large total_raised — a
+        2026-07 audit found this true for 86.5% of industry rows)."""
+        total_raised = 10_000_000
+        # 15 industries, each $45K (0.45% of total_raised -> rounds to 0%
+        # individually), summing to a real, evenly-spread 6.75%.
+        industries = [
+            {"industry": f"IND_{i}", "total": 45_000, "percentage": 0}
+            for i in range(15)
+        ]
+        funding = {
+            "totalRaised": total_raised,
+            "smallDonorPercentage": 20,
+            "industryBreakdown": industries,
+        }
+        score = _calc_funding_diversity(funding)
+
+        # Counterfactual: same rounded-to-zero percentages, with 'total'
+        # also zeroed — equivalent to what the pre-fix percentage-only
+        # logic actually saw, since it never read 'total' at all.
+        blind_industries = [
+            {"industry": f"IND_{i}", "total": 0, "percentage": 0}
+            for i in range(15)
+        ]
+        blind_score = _calc_funding_diversity({
+            "totalRaised": total_raised,
+            "smallDonorPercentage": 20,
+            "industryBreakdown": blind_industries,
+        })
+        # Dollar totals should recover a meaningfully higher score than
+        # the percentage-blind path, which sees no classified signal at
+        # all despite ~6.75% of funding genuinely being industry-spread.
+        assert score - blind_score >= 5
 
 
 class TestPromisePersistence:
@@ -577,7 +635,7 @@ class TestLegislativeEffectiveness:
             for i in range(50)
         ]
         score = _calc_legislative_effectiveness(bills, None)
-        assert 30 <= score <= 55
+        assert 20 <= score <= 45
 
     def test_high_passage_rate(self):
         """Bills that became law should boost the score significantly."""
@@ -594,7 +652,7 @@ class TestLegislativeEffectiveness:
             for i in range(10)
         ]
         score = _calc_legislative_effectiveness(bills, 0.5)
-        assert score >= 60
+        assert score >= 55
 
     def test_leadership_matters(self):
         """Higher PageRank leadership should produce higher score."""
@@ -646,6 +704,25 @@ class TestLegislativeEffectiveness:
         score_res = _calc_legislative_effectiveness(with_resolutions, 0.5)
         # The resolutions add volume but must not count as advancement.
         assert score_res <= score_plain + 10
+
+    def test_volume_ceiling_not_saturated_by_top_decile(self):
+        """The 80/congress ceiling was calibrated in 2026-06 against a p90
+        of ~69; a 2026-07 audit found the live distribution had drifted to
+        p90=108 with 22/100 senators already saturating it, including the
+        single most active sponsor at 149.5/congress — indistinguishable
+        in score from someone at exactly 80. The ceiling (110) must give
+        real headroom above today's p90 so a genuine outlier still scores
+        higher than a merely-active senator."""
+        def bills_at_rate(n_per_congress: int):
+            return [
+                {"title": f"B{i}", "isLaw": False, "latestAction": "Introduced",
+                 "billType": "s", "congress": 119}
+                for i in range(n_per_congress)
+            ]
+
+        score_at_p90 = _calc_legislative_effectiveness(bills_at_rate(108), None)
+        score_at_extreme_outlier = _calc_legislative_effectiveness(bills_at_rate(150), None)
+        assert score_at_extreme_outlier > score_at_p90
 
 
 class TestCalculateScoresIntegration:

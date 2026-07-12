@@ -779,6 +779,15 @@ def detect_donor_vote_connections(
                 "lobbyingSpend": 0,
                 "donationToSenator": round(donor.get("total", 0)),
                 "billsInfluenced": matched_bills,
+                # Always None: determining whether this vote aligned with
+                # the donor's interest requires knowing which way the
+                # donor's industry wanted the bill to go, and no ingested
+                # source (LDA filings carry aggregate spend, not per-bill
+                # positions) discloses that. Filling it in via a hand-
+                # authored industry->stance mapping would be exactly the
+                # kind of authored political conclusion this platform's
+                # scores are designed never to contain (2026-07 audit;
+                # see score_calculator.py's Independent Voting note).
                 "senatorVoteAligned": None,
                 "isConsensusVote": all_consensus,
                 "similarity": round(best_sim, 3),
