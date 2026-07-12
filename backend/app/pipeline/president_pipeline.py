@@ -16,7 +16,6 @@ from app.pipeline.fetch.economic_data import (
     fetch_jobs_for_president,
     fetch_gdp_by_year,
     fetch_gdp_for_president,
-    TERM_YEARS,
 )
 from app.pipeline.fetch.federal_register import fetch_all_eo_data, fetch_all_rulemaking_stats
 

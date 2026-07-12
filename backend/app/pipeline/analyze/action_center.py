@@ -13,7 +13,6 @@ Flow:
   8. Persist as ActionIssue rows for the current date
 """
 
-import asyncio
 import calendar
 import json
 import logging

@@ -7,9 +7,8 @@ Covers the embedding-based (non-LLM) components:
   - Platform topic extraction
 """
 
-import pytest
 import numpy as np
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from app.pipeline.analyze.cross_reference import (
     _extract_platform_topics,

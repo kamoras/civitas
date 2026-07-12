@@ -4,8 +4,6 @@ All tests are fast (no LLM, no network) — they exercise _sanitize and
 _validate_facts which are pure functions with no external dependencies.
 """
 
-import json
-import pytest
 
 from app.pipeline.analyze.bluesky_poster import _sanitize
 from app.pipeline.analyze.action_center import _validate_facts

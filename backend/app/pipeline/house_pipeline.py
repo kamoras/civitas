@@ -52,7 +52,6 @@ from app.pipeline.transform.normalize_votes import (
     extract_representative_vote,
     find_house_roll_call,
     normalize_votes,
-    normalize_recent_votes,
     compute_party_split,
 )
 

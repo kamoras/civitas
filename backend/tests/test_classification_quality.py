@@ -11,8 +11,7 @@ Usage:
     pytest tests/test_classification_quality.py -v -k "donor_type"
 """
 
-import pytest
-from collections import Counter, defaultdict
+from collections import Counter
 
 # ── Holdout sets ────────────────────────────────────────────────
 # Ground-truth labels verified by hand. DO NOT use these entities

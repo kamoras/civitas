@@ -18,7 +18,6 @@ It does NOT make classification decisions.
 
 import logging
 import re
-from collections import Counter
 from typing import Any
 
 from app.config_definitions import PLATFORM_CATEGORIES
@@ -28,7 +27,6 @@ from app.pipeline.analyze.policy_alignment import (
     detect_donor_vote_connections,
     get_related_policies,
 )
-from app.pipeline.vector_store import search_bills
 
 logger = logging.getLogger(__name__)
 
@@ -333,7 +331,7 @@ def _positions_from_platform_text(
 
     valid_categories = set(PLATFORM_CATEGORIES.keys())
     from app.pipeline.analyze.party_platform import classify_party_alignment
-    from app.pipeline.analyze.policy_alignment import _embed, _embed_batch
+    from app.pipeline.analyze.policy_alignment import _embed
 
     import numpy as np
     DEDUP_THRESHOLD = 0.70
@@ -487,7 +485,6 @@ def _align_llm_promises(
     existing_texts = [p["promiseText"] for p in (existing_positions or [])]
     existing_embs = _embed_batch(existing_texts) if existing_texts else None
 
-    import numpy as np
     DEDUP_THRESHOLD = 0.65
 
     positions = []

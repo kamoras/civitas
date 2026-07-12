@@ -83,7 +83,7 @@ def _build_highlights(senator) -> list[str]:
     small_pct = funding.small_donor_percentage or 0
     pac_total = funding.total_from_pacs or 0
     pac_pct_raw = pac_total / total * 100 if total > 0 else 0.0
-    pac_pct_str = f"<1" if 0 < pac_pct_raw < 1 else f"{pac_pct_raw:.0f}"
+    pac_pct_str = "<1" if 0 < pac_pct_raw < 1 else f"{pac_pct_raw:.0f}"
 
     # --- Funding highlights ---
     if small_pct >= 50:
@@ -93,7 +93,7 @@ def _build_highlights(senator) -> list[str]:
             f"suggesting broad constituent support."
         )))
     elif small_pct < 15 and total > 0:
-        small_str = f"<1" if 0 < small_pct < 1 else f"{small_pct:.0f}"
+        small_str = "<1" if 0 < small_pct < 1 else f"{small_pct:.0f}"
         hints.append((10, (
             f"Only {small_str}% of {senator.name}'s "
             f"${total / 1e6:.1f}M came from small donors — "
@@ -140,7 +140,7 @@ def _build_highlights(senator) -> list[str]:
         )))
     elif len(matches) == 0:
         hints.append((3, (
-            f"No direct donor-vote industry connections detected in tracked legislation."
+            "No direct donor-vote industry connections detected in tracked legislation."
         )))
 
     # --- Promise fulfillment ---

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from app.models import ActionIssue, NationalMonitor, MonitorUpdate
+from app.models import ActionIssue, NationalMonitor
 from app.pipeline.fetch.news_feeds import NewsArticle
 from app.pipeline.analyze.action_center import (
     _deduplicate_top_clusters,

@@ -4,7 +4,6 @@ Validates sanitization, defaults, clamping, and edge case handling
 for assembled senator records before they're persisted.
 """
 
-import pytest
 
 from app.pipeline.assemble.validator import validate_senator, clamp
 

@@ -4,11 +4,11 @@ import asyncio
 import logging
 import secrets
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.api.rate_limit import WriteRateLimit, client_ip
+from app.api.rate_limit import WriteRateLimit
 from app.config import settings
 from app.database import get_db
 from app.models import ExploreDocument

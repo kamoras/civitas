@@ -17,7 +17,7 @@ from app.api.rate_limit import WriteRateLimit, client_ip
 from app.database import get_db
 from app.models import (
     ActionIssue, DailyTheme, ExploreDocument,
-    NationalMonitor, MonitorUpdate, TimelineEntry, Representative, Senator,
+    NationalMonitor, TimelineEntry, Representative, Senator,
     WeekSummary, MonthSummary, YearSummary,
 )
 from app.schemas import (

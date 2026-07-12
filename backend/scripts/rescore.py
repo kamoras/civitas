@@ -31,7 +31,6 @@ Limitations:
 import argparse
 import json
 import math
-import re
 import sqlite3
 import statistics
 import sys

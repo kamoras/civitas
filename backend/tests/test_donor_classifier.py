@@ -8,7 +8,7 @@ Tests the tiered classification strategy:
 """
 
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 from app.models import LearnedClassification
 from app.pipeline.analyze.donor_classifier_ai import (

@@ -1,6 +1,5 @@
 """Tests for the five representation sub-score calculations."""
 
-import pytest
 
 from app.pipeline.analyze.score_calculator import (
     _calc_constituent_alignment,
@@ -876,8 +875,6 @@ class TestCalculateConfidence:
 
 from app.pipeline.analyze.score_calculator import (
     _advancement_baseline,
-    _calc_legislative_effectiveness,
-    _calc_constituent_alignment,
 )
 
 

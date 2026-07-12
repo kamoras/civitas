@@ -1,7 +1,6 @@
 """Service layer for House representative data — mirrors senator_service.py."""
 
 import json
-import re
 from datetime import datetime, timedelta
 
 from sqlalchemy import func
@@ -18,30 +17,11 @@ from app.models import (
     Representative,
     ScoreSnapshot,
 )
-from app.schemas import (
-    CampaignPromiseSchema,
-    DonorSchema,
-    FundingSchema,
-    IndustryDonationSchema,
-    KeyVoteSchema,
-    LeaderboardEntrySchema,
-    LobbyingMatchSchema,
-    PaginatedVotesSchema,
-    PartisanDepthSchema,
-    PolicyAlignmentSchema,
-    PolicyAreaDetail,
-    RepresentationScoreSchema,
-    ScoreTrendSchema,
-    SponsoredBillSchema,
-    VoteCountsSchema,
-    VotingRecordSchema,
-)
 from app.services.senator_service import (
     STATE_NAMES,
     _clean_pac_sponsor,
     _clean_platform_summary,
     _compute_initials,
-    _filter_promises,
     _fixup_donor_type,
 )
 

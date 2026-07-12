@@ -5,7 +5,6 @@ prioritized insights about funding, voting, lobbying, and promises.
 These run without any LLM or database access.
 """
 
-import pytest
 
 from app.api.senators import _build_highlights
 from app.schemas import (

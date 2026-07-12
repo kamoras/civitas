@@ -1,6 +1,5 @@
 """Tests for vote normalization and party alignment logic."""
 
-import pytest
 
 from app.pipeline.transform.normalize_votes import (
     _determine_party_alignment,

@@ -567,7 +567,6 @@ async def classify_all_bills(
         return []
 
     from app.pipeline.analyze.party_platform import (
-        classify_party_alignment,
         classify_party_alignment_multi,
     )
 

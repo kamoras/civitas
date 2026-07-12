@@ -7,7 +7,6 @@ data quality issues from LLM output that was persisted to the database.
 import json
 from types import SimpleNamespace
 
-import pytest
 
 from app.services.senator_service import _filter_promises
 

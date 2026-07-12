@@ -558,7 +558,6 @@ async def fetch_recent_roll_calls(
     )
 
     # Binary-ish search: start high (500), find the highest valid roll call
-    import asyncio
 
     highest_valid = 0
 
@@ -739,7 +738,6 @@ async def fetch_recent_house_roll_calls(
 
     logger.info("Discovering recent House roll calls (year=%d)...", year)
 
-    import asyncio
 
     highest_valid = 0
 

@@ -15,7 +15,6 @@ import time
 from dataclasses import dataclass
 
 from defusedxml import ElementTree as SafeET
-from xml.etree.ElementTree import Element
 
 import httpx
 

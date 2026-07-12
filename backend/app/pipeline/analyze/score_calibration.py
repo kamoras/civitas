@@ -17,7 +17,6 @@ Only stdlib (statistics, math) — no new dependencies.
 """
 
 import logging
-import math
 import statistics
 
 from app.database import SessionLocal

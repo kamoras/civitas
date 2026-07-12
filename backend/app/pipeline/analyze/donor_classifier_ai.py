@@ -65,7 +65,6 @@ from app.pipeline.analyze.nn_classifier import (
     DONOR_TYPE_PROTOTYPES,
 )
 from app.pipeline.transform.industry_classifier import (
-    classify_industries_batch,
     classify_industries_batch_scored,
     INDUSTRY_DESCRIPTIONS,
     store_llm_classifications,
