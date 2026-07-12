@@ -17,6 +17,14 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v5.7",
+    date: "2026-07-12",
+    title: "Removed noise-driven secondary policy-area tags",
+    changes: [
+      "Bills, votes, and Action Center issues could previously be tagged with up to 3-4 policy areas each, on the theory that real legislation and news often span multiple domains. A follow-up to the classification audit measured the actual gap, across 60 real Action Center issues, between the top-scoring category and the runner-up: a median of 0.018 (90th percentile: 0.053) out of a 0-1 similarity scale. Every category clusters within a few hundredths of each other for almost any input text, so the \"secondary area\" filter was effectively noise — a story about a murder trial was tagged Technology; a story about an accounting firm's collapse was tagged Technology and Energy without ever confidently noting it was about financial matters at all. Classification is single-area only until a genuinely discriminating signal for secondary relevance exists.",
+    ],
+  },
+  {
     version: "v5.6",
     date: "2026-07-12",
     title: "Fairness audit — House scoring bugs, bill/vote classification imbalance",

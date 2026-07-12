@@ -1340,22 +1340,26 @@ def _find_related_officials(
 
 
 def _classify_issue_policy_areas(title: str, summary: str) -> list[str]:
-    """Classify an action center issue into policy areas using embeddings.
+    """Classify an action center issue into its policy area using embeddings.
 
     Uses the same embedding-based classifier as bills (tier 2) rather than
     relying on the LLM, which inconsistently returns empty or wrong labels.
+    Single-area only — see classify_policy_areas_multi's docstring for why
+    secondary-area detection was removed (2026-07 audit: raw cosine
+    similarity across the category anchors can't distinguish genuine
+    secondary relevance from noise for this embedding model).
     """
     from app.pipeline.analyze.bill_analyzer import classify_policy_areas_multi
 
     text = f"{title}. {summary}"
     try:
-        areas = classify_policy_areas_multi(text, max_areas=3)
+        areas = classify_policy_areas_multi(text)
         result = [
             a["area"] for a in areas
             if a["area"] != "PROCEDURAL" and a.get("confidence", 0) > 0.15
         ]
         if result:
-            logger.debug("Policy areas for '%s': %s", title[:50], result)
+            logger.debug("Policy area for '%s': %s", title[:50], result)
             return result
     except Exception as e:
         logger.warning("Policy area classification failed: %s", e)

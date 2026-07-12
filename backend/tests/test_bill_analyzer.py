@@ -178,7 +178,20 @@ class TestValidation:
 
 
 class TestMultiAreaClassification:
-    """Tests for multi-area bill classification (Adler & Wilkerson 2012)."""
+    """classify_policy_areas_multi now returns a single (primary) area only.
+
+    It used to also detect secondary areas (Adler & Wilkerson 2012: most
+    major bills span 2-4 policy domains) via a cosine-similarity gap
+    ratio against the primary area. A 2026-07 audit measured that gap
+    across 60 real texts and found it doesn't exist to detect: median
+    gap between the top-scoring and 2nd-place category was 0.018 (p90
+    0.053) — every category anchor clusters within a few hundredths of
+    each other for almost any input, so the "secondary area" filter was
+    really just noise (e.g. a murder-trial headline scored JUSTICE,
+    TECH, GUNS, LABOR, IMMIGRATION, and DEFENSE all within 0.05 of each
+    other). Kept as a function — not inlined — in case a genuinely
+    discriminating secondary-area signal replaces this later.
+    """
 
     def test_returns_list_of_dicts(self):
         result = classify_policy_areas_multi("Healthcare reform and Medicare expansion")
@@ -192,15 +205,17 @@ class TestMultiAreaClassification:
         multi_areas = classify_policy_areas_multi(text)
         assert multi_areas[0]["area"] == single_area
 
-    def test_multi_domain_bill_returns_multiple_areas(self):
+    def test_complex_bill_returns_single_area(self):
+        """Secondary-area detection is disabled (see class docstring) —
+        even text spanning several genuine domains should return exactly
+        the primary area, not a noise-driven secondary list."""
         text = (
             "Comprehensive legislation addressing healthcare insurance reform, "
             "tax credits for medical expenses, and environmental protections "
             "for hospital waste disposal regulations"
         )
         result = classify_policy_areas_multi(text)
-        areas = {a["area"] for a in result}
-        assert len(result) >= 2, f"Expected multi-area for complex bill, got: {areas}"
+        assert len(result) == 1
 
     def test_empty_text_returns_procedural(self):
         result = classify_policy_areas_multi("")

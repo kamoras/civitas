@@ -392,80 +392,44 @@ def classify_policy_area(
     return best_area, best_score
 
 
-MULTI_AREA_SECONDARY_THRESHOLD = 0.20
-MULTI_AREA_GAP_RATIO = 0.70
-
-
 def classify_policy_areas_multi(
     text: str,
     bill_id: str | None = None,
     db_session: Session | None = None,
-    max_areas: int = 4,
 ) -> list[dict]:
-    """Classify ALL relevant policy areas for a bill using embedding similarity.
+    """Classify policy area(s) for a bill using embedding similarity.
 
-    Real legislation rarely addresses a single policy dimension. The
-    Comparative Agendas Project (Baumgartner & Jones 1993, 2002) codes
-    bills with both a primary and secondary topic; Adler & Wilkerson
-    (2012, "Congress and the Politics of Problem Solving") show that
-    most major bills span 2-4 policy domains.
+    Real legislation often addresses more than one policy dimension (the
+    Comparative Agendas Project — Baumgartner & Jones 1993, 2002 — codes
+    bills with both a primary and secondary topic), and this used to try
+    to detect secondary areas by requiring a candidate's cosine
+    similarity to be within a gap ratio of the primary area's. A 2026-07
+    audit measured that gap across 60 real texts and found it doesn't
+    exist to detect: median gap between the top-scoring and 2nd-place
+    category was 0.018 (p90 0.053) — every category anchor clusters
+    within a few hundredths of each other for almost any input,
+    regardless of genuine relevance. Real examples: "Murder Trial of
+    Alex Murdaugh Resumes" scored JUSTICE, TECH, GUNS, LABOR, IMMIGRATION,
+    and DEFENSE all within 0.05 of each other; "KPMG's Self-Destruction"
+    (an accounting story) scored TECH secondary while never surfacing
+    FINANCIAL confidently enough to note it as unusual. No threshold
+    value can separate genuine secondary relevance from this noise
+    floor, because both live in the same narrow band — this is the same
+    noise-floor phenomenon policy_alignment.py already documents for
+    this embedding model (measured ~0.55-0.87 for genuinely unrelated
+    text), just worse here because the candidate pool is a fixed set of
+    16 broad category paragraphs rather than real bill/vote text.
 
-    Returns a list of {area, confidence} dicts ordered by confidence,
-    where:
-      - The first entry is the primary area (same as classify_policy_area)
-      - Additional entries are secondary areas whose embedding similarity
-        exceeds MULTI_AREA_SECONDARY_THRESHOLD and whose confidence is
-        at least MULTI_AREA_GAP_RATIO of the primary area's confidence.
-
-    The gap-ratio filter prevents low-confidence noise from inflating
-    the area count. A bill about healthcare (0.72) that also touches
-    taxes (0.55) will get both, but a faint procedural echo (0.22)
-    won't appear.
+    Returns a single-element list (same shape callers already expect,
+    including the len(areas) > 1 "multi-area" checks, which now always
+    evaluate false) so no caller needed to change. Kept as a function
+    rather than inlined at call sites in case a genuinely discriminating
+    secondary-area signal — e.g. requiring corroboration from the kNN
+    reference corpus rather than raw anchor-paragraph similarity —
+    replaces this later.
     """
-    if not text or len(text.strip()) < 5:
-        return [{"area": "PROCEDURAL", "confidence": 0.0}]
-
-    primary_area, primary_conf = classify_policy_area(
-        text, bill_id=bill_id, db_session=db_session,
-    )
-
-    if primary_area == "PROCEDURAL" and primary_conf >= 0.9:
-        return [{"area": "PROCEDURAL", "confidence": primary_conf}]
-
-    from app.pipeline.vector_store import get_embedding_model
-    model = get_embedding_model()
-    policy_embs = _get_policy_embeddings()
-
-    query_emb = model.encode([text[:500]], show_progress_bar=False)[0]
-    query_emb = query_emb / np.linalg.norm(query_emb)
-
-    scored: list[tuple[str, float]] = []
-    for area, area_emb in policy_embs.items():
-        if area == "PROCEDURAL":
-            continue
-        score = float(np.dot(query_emb, area_emb))
-        scored.append((area, score))
-
-    scored.sort(key=lambda x: x[1], reverse=True)
-
-    if not scored:
-        return [{"area": primary_area, "confidence": primary_conf}]
-
-    top_score = scored[0][1]
-    threshold = max(
-        MULTI_AREA_SECONDARY_THRESHOLD,
-        top_score * MULTI_AREA_GAP_RATIO,
-    )
-
-    areas: list[dict] = []
-    for area, score in scored[:max_areas]:
-        if score >= threshold or area == primary_area:
-            areas.append({"area": area, "confidence": round(score, 4)})
-
-    if not any(a["area"] == primary_area for a in areas):
-        areas.insert(0, {"area": primary_area, "confidence": primary_conf})
-
-    return areas
+    area, confidence = classify_policy_area(text, bill_id=bill_id, db_session=db_session)
+    return [{"area": area, "confidence": confidence}]
 
 
 # ── Stance derivation (embedding-based) ──────────────────────────

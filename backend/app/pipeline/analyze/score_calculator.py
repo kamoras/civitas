@@ -168,7 +168,7 @@ logger = logging.getLogger(__name__)
 # shifts scores. Recorded on every ScoreSnapshot so trend charts can
 # annotate methodology changes; keep frontend/src/lib/scoreVersions.ts
 # in sync (it holds the human-readable changelog).
-ALGORITHM_VERSION = "v5.6"
+ALGORITHM_VERSION = "v5.7"
 
 NON_INDUSTRY_CODES = {"OTHER", "SMALL_DONORS", "LARGE_INDIVIDUAL", "POLITICAL", "UNCLASSIFIED"}
 
