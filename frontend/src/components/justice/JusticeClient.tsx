@@ -109,7 +109,7 @@ function AgreementRow({ name, pct }: { name: string; pct: number }) {
   );
 }
 
-function JusticeCard({ justice }: { justice: Justice }) {
+export function JusticeCard({ justice }: { justice: Justice }) {
   const overall = calculateJusticeScore(justice.score);
   const pb = getPartyBadge(justice.appointingParty);
 

@@ -99,7 +99,7 @@ function StatBox({ label, value, unit, isEstimate }: { label: string; value: str
   );
 }
 
-function PresidentCard({ president }: { president: President }) {
+export function PresidentCard({ president }: { president: President }) {
   const overall = calculatePresidentScore(president.score);
   const pm = getPartyMeta(president.party);
   const termEnd = president.termEnd ? president.termEnd.slice(0, 4) : "Present";

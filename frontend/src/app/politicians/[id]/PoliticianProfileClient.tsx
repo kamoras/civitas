@@ -342,7 +342,7 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
 
               <div className="mt-4 pt-3 border-t border-matrix-green/10">
                 <Link
-                  href={`/scorecard?branch=${branch === "senate" ? "senate" : branch === "house" ? "house" : branch === "president" ? "president" : "scotus"}${identity.state ? `&state=${identity.state}` : ""}`}
+                  href={`/politicians/${profile.id}/scorecard`}
                   className="font-mono text-[10px] text-matrix-green/35 hover:text-matrix-green/60 transition-colors tracking-widest"
                 >
                   FULL SCORECARD →
