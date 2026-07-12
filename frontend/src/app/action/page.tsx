@@ -167,8 +167,7 @@ function SenatorChips({ issue, userState }: { issue: ActionIssue; userState: str
   const contactUrl = (s: (typeof senators)[0]) =>
     s.contactFormUrl || s.websiteUrl || null;
 
-  const scoreUrl = (s: (typeof senators)[0]) =>
-    `/scorecard?branch=${s.chamber === "house" ? "house" : "senate"}&state=${s.state}&${s.chamber === "house" ? "rep" : "senator"}=${s.id}`;
+  const scoreUrl = (s: (typeof senators)[0]) => `/politicians/${s.id}`;
 
   return (
     <div className="mb-6">

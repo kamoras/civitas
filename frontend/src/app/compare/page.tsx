@@ -239,14 +239,8 @@ function ComparisonTable({
     );
   }
 
-  const leftScorecardUrl =
-    leftChamber === "house"
-      ? `/scorecard?branch=house&state=${left.state}&senator=${left.id}`
-      : `/scorecard?branch=senate&state=${left.state}&senator=${left.id}`;
-  const rightScorecardUrl =
-    rightChamber === "house"
-      ? `/scorecard?branch=house&state=${right.state}&senator=${right.id}`
-      : `/scorecard?branch=senate&state=${right.state}&senator=${right.id}`;
+  const leftScorecardUrl = `/politicians/${left.id}`;
+  const rightScorecardUrl = `/politicians/${right.id}`;
 
   return (
     <div className="terminal-window overflow-hidden">

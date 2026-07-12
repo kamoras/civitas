@@ -55,7 +55,7 @@ function formatCountdown(days: number): { value: string; unit: string }[] {
 function SenatorRow({ senator }: { senator: ElectionSenator }) {
   return (
     <Link
-      href={`/scorecard?branch=senate&state=${senator.state}&senator=${senator.id}`}
+      href={`/politicians/${senator.id}`}
       className={`flex items-center justify-between gap-3 p-3 border ${PARTY_BORDER[senator.party]} bg-matrix-dark-green/20 hover:border-neon-cyan/40 transition-all group`}
     >
       <div className="flex items-center gap-2 min-w-0">

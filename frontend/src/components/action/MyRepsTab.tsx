@@ -203,7 +203,7 @@ function SenatorCard({ senator }: { senator: MyRepSenator }) {
       )}
 
       <Link
-        href={`/scorecard?branch=senate&state=${senator.state}&senator=${senator.id}`}
+        href={`/politicians/${senator.id}`}
         className="inline-block font-pixel text-[10px] text-neon-cyan border border-neon-cyan/30 px-3 py-1.5 hover:bg-neon-cyan/10 transition-colors"
       >
         VIEW FULL SCORECARD →
@@ -283,7 +283,7 @@ function RepCard({ rep }: { rep: MyRepRep }) {
       )}
 
       <Link
-        href={`/scorecard?branch=house&state=${rep.state}&rep=${rep.id}`}
+        href={`/politicians/${rep.id}`}
         className="inline-block font-pixel text-[10px] text-neon-cyan border border-neon-cyan/30 px-3 py-1.5 hover:bg-neon-cyan/10 transition-colors"
       >
         VIEW FULL SCORECARD →

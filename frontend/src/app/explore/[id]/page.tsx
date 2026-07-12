@@ -52,13 +52,7 @@ function resolveSourceUrl(doc: ExploreDocumentDetail): string {
 
 function scorecardHref(doc: ExploreDocumentDetail): string | null {
   if (!doc.politicianId) return null;
-  if (doc.politicianId.match(/^[a-z]+-\d+$/) && !doc.politicianId.includes("-4")) {
-    if (doc.chamber === "Executive") {
-      return `/scorecard?branch=president&id=${doc.politicianId}`;
-    }
-    return `/scorecard?branch=senate&senator=${doc.politicianId}`;
-  }
-  return null;
+  return `/politicians/${doc.politicianId}`;
 }
 
 function isCommentOpen(doc: ExploreDocumentDetail): boolean {

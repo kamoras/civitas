@@ -101,7 +101,7 @@ export default function ActionPreview() {
                   {hero.relatedSenators.map((s) => (
                     <Link
                       key={s.id}
-                      href={`/scorecard?branch=senate&state=${s.state}&senator=${s.id}`}
+                      href={`/politicians/${s.id}`}
                       className="flex items-center gap-2 px-3 py-1.5 border border-matrix-green/20 bg-matrix-dark-green/20 hover:border-neon-cyan/40 transition-colors group"
                     >
                       <span className={`font-mono text-[10px] ${PARTY_COLORS[s.party]}`}>
