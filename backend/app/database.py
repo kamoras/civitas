@@ -84,6 +84,9 @@ def _migrate_columns() -> None:
         ("week_summaries", "bsky_posted_at", "DATETIME"),
         ("senators", "bipartisanship_score", "REAL"),
         ("representatives", "bipartisanship_score", "REAL"),
+        ("site_visits", "browser", "TEXT DEFAULT ''"),
+        ("site_visits", "os", "TEXT DEFAULT ''"),
+        ("site_visits", "device_type", "TEXT DEFAULT ''"),
     ]
 
     drops: list[tuple[str, str]] = [

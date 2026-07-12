@@ -9,6 +9,7 @@ is unrecoverable across days and why this table can't grow per-request.
 import hashlib
 import hmac
 import logging
+import re
 from datetime import datetime, UTC
 
 from fastapi import APIRouter, Depends, Request
@@ -22,6 +23,46 @@ from app.models import SiteVisit
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Structural User-Agent parsing (RFC-shaped, not a classification decision —
+# UA tokens like "Chrome/" or "Firefox/" are a fixed, documented format, not
+# ambiguous real-world data). Order matters: Edge and Opera UAs also contain
+# "Chrome/" and "Safari/" boilerplate, so the more specific token must be
+# checked first.
+def _parse_browser(ua: str) -> str:
+    if re.search(r"Edg/", ua):
+        return "Edge"
+    if re.search(r"OPR/|Opera", ua):
+        return "Opera"
+    if re.search(r"Firefox/", ua):
+        return "Firefox"
+    if re.search(r"Chrome/", ua):
+        return "Chrome"
+    if re.search(r"Safari/", ua):
+        return "Safari"
+    return "Other"
+
+
+def _parse_os(ua: str) -> str:
+    if re.search(r"Windows", ua):
+        return "Windows"
+    if re.search(r"Android", ua):
+        return "Android"
+    if re.search(r"iPhone|iPad|iPod|iOS", ua):
+        return "iOS"
+    if re.search(r"Macintosh|Mac OS X", ua):
+        return "macOS"
+    if re.search(r"Linux", ua):
+        return "Linux"
+    return "Other"
+
+
+def _parse_device(ua: str) -> str:
+    if re.search(r"iPad|Tablet", ua):
+        return "tablet"
+    if re.search(r"Mobile|iPhone|Android", ua):
+        return "mobile"
+    return "desktop"
 
 
 def _hash_key() -> bytes:
@@ -65,7 +106,13 @@ async def track_visit(request: Request, db: Session = Depends(get_db)) -> None:
 
     # INSERT OR IGNORE on the (date, visitor_hash) primary key — a repeat
     # visit the same day is a cheap no-op, not a duplicate row.
-    stmt = sqlite_insert(SiteVisit).values(date=date, visitor_hash=visitor_hash)
+    stmt = sqlite_insert(SiteVisit).values(
+        date=date,
+        visitor_hash=visitor_hash,
+        browser=_parse_browser(user_agent),
+        os=_parse_os(user_agent),
+        device_type=_parse_device(user_agent),
+    )
     stmt = stmt.on_conflict_do_nothing(index_elements=["date", "visitor_hash"])
     db.execute(stmt)
     db.commit()

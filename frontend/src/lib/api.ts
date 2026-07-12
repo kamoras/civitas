@@ -631,6 +631,26 @@ export async function fetchAdminVisitorStats(
   return res.json();
 }
 
+export interface VisitorBreakdownEntry {
+  name: string;
+  count: number;
+}
+
+export interface VisitorBreakdown {
+  date: string;
+  browsers: VisitorBreakdownEntry[];
+  os: VisitorBreakdownEntry[];
+  devices: VisitorBreakdownEntry[];
+}
+
+export async function fetchAdminVisitorBreakdown(token: string): Promise<VisitorBreakdown> {
+  const res = await fetch(`${API_BASE}/admin/visitor-breakdown`, {
+    headers: adminHeaders(token),
+  });
+  if (!res.ok) throw new Error(`Visitor breakdown failed: ${res.status}`);
+  return res.json();
+}
+
 
 
 export async function fetchConfig(): Promise<AppConfig> {

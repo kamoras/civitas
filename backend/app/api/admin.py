@@ -278,6 +278,35 @@ async def admin_visitor_stats(days: int = 30, db: Session = Depends(get_db)) -> 
     return [{"date": d, "uniqueVisitors": n} for d, n in reversed(rows)]
 
 
+@router.get("/visitor-breakdown", dependencies=[Depends(require_admin)])
+async def admin_visitor_breakdown(date: str | None = None, db: Session = Depends(get_db)) -> dict:
+    """Browser/OS/device-type counts for one day (default today, UTC).
+
+    Aggregate counts only — never joined back to individual visitor_hash
+    rows in the response, so this can't be used to profile a single visit.
+    """
+    from datetime import datetime, UTC as _UTC
+
+    day = date or datetime.now(_UTC).date().isoformat()
+
+    def _counts(column):
+        rows = (
+            db.query(column, func.count(SiteVisit.visitor_hash))
+            .filter(SiteVisit.date == day)
+            .group_by(column)
+            .order_by(func.count(SiteVisit.visitor_hash).desc())
+            .all()
+        )
+        return [{"name": name or "Other", "count": n} for name, n in rows]
+
+    return {
+        "date": day,
+        "browsers": _counts(SiteVisit.browser),
+        "os": _counts(SiteVisit.os),
+        "devices": _counts(SiteVisit.device_type),
+    }
+
+
 @router.get("/dashboard", dependencies=[Depends(require_admin)])
 async def admin_dashboard(db: Session = Depends(get_db)):
     """Comprehensive admin dashboard with system health, data stats, and pipeline info."""

@@ -9,6 +9,7 @@ import {
   fetchAdminPipelineHistory,
   fetchAdminSystemStats,
   fetchAdminVisitorStats,
+  fetchAdminVisitorBreakdown,
   clearStuckHousePipeline,
   type AdminDashboard,
   type AdminPipelineStatus,
@@ -18,6 +19,7 @@ import {
   type PipelineStepInfo,
   type UptimeInfo,
   type VisitorStatsDay,
+  type VisitorBreakdown,
 } from "@/lib/api";
 
 const PHASE_LABELS: Record<string, string> = {
@@ -875,13 +877,52 @@ function SystemMonitor({
 }
 
 // --- Visitor Stats ---
+function BreakdownGroup({ title, entries }: { title: string; entries: { name: string; count: number }[] }) {
+  if (entries.length === 0) return null;
+  const max = Math.max(1, ...entries.map((e) => e.count));
+  return (
+    <div>
+      <div className="text-matrix-green/40 text-[9px] font-pixel tracking-wider mb-1.5">
+        {title}
+      </div>
+      <div className="space-y-1">
+        {entries.map((e) => (
+          <div key={e.name} className="flex items-center gap-2">
+            <span className="text-matrix-green/50 text-[10px] font-terminal w-14 shrink-0 truncate">
+              {e.name}
+            </span>
+            <div className="flex-1">
+              <UsageBar
+                pct={(e.count / max) * 100}
+                warnAt={101}
+                critAt={101}
+                ariaLabel={`${e.count} visitors used ${e.name}`}
+              />
+            </div>
+            <span className="text-matrix-green/60 text-[10px] font-terminal tabular-nums w-6 text-right shrink-0">
+              {e.count}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function VisitorStats({ token }: { token: string }) {
   const [days, setDays] = useState<VisitorStatsDay[]>([]);
+  const [breakdown, setBreakdown] = useState<VisitorBreakdown | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchAdminVisitorStats(token, 14)
-      .then(setDays)
+    Promise.all([
+      fetchAdminVisitorStats(token, 14),
+      fetchAdminVisitorBreakdown(token),
+    ])
+      .then(([d, b]) => {
+        setDays(d);
+        setBreakdown(b);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [token]);
@@ -930,8 +971,17 @@ function VisitorStats({ token }: { token: string }) {
             ))}
           </div>
         )}
+        {breakdown && (breakdown.browsers.length > 0 || breakdown.os.length > 0 || breakdown.devices.length > 0) && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4 pt-4 border-t border-matrix-green/10">
+            <BreakdownGroup title="BROWSER — TODAY" entries={breakdown.browsers} />
+            <BreakdownGroup title="OS — TODAY" entries={breakdown.os} />
+            <BreakdownGroup title="DEVICE — TODAY" entries={breakdown.devices} />
+          </div>
+        )}
         <p className="text-matrix-green/25 text-[9px] font-terminal mt-3">
           Counted by a salted, daily-rotating hash — no IP addresses are stored.
+          Browser/OS/device are coarse categories only, never the raw
+          User-Agent string.
         </p>
       </div>
     </div>

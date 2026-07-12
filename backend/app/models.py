@@ -687,3 +687,11 @@ class SiteVisit(Base):
 
     date: Mapped[str] = mapped_column(String(10), primary_key=True)  # YYYY-MM-DD
     visitor_hash: Mapped[str] = mapped_column(String(32), primary_key=True)
+    # Coarse buckets parsed from User-Agent (see api/visits.py _parse_ua) —
+    # never the raw UA string. A handful of low-cardinality categories
+    # (~5 browsers x ~6 OSes x 3 device types) isn't personally identifying
+    # on its own, and reveals nothing the hash didn't already consume: the
+    # full UA string is already an input to visitor_hash above.
+    browser: Mapped[str] = mapped_column(String(20), default="")
+    os: Mapped[str] = mapped_column(String(20), default="")
+    device_type: Mapped[str] = mapped_column(String(10), default="")
