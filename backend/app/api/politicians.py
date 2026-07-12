@@ -10,10 +10,10 @@ Individual profile pages at /politicians/{id} use branch detection across all
 four tables, then compose identity + scorecard + active issues + government
 record into a single response.
 
-NOTE: Senators and Representatives do not have an is_current flag — all rows
-are treated as current. A future election update process should remove or
-soft-delete retired members rather than adding a flag, to keep the directory
-authoritative without requiring a pipeline run.
+NOTE: Senator/Representative.is_current marks a seat vacant (death,
+resignation, expulsion) without deleting or hiding the departed member —
+historical scores stay intact and visible, with a vacancy banner instead.
+Set manually via the admin panel; there is no automated vacancy detection.
 """
 import json
 
