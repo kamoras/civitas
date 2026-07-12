@@ -11,6 +11,7 @@ from app.api.presidents import router as presidents_router
 from app.api.public import router as public_router
 from app.api.representatives import router as representatives_router
 from app.api.senators import router as senators_router
+from app.api.visits import router as visits_router
 
 api_router = APIRouter(prefix="/api")
 
@@ -25,3 +26,4 @@ api_router.include_router(action_router, tags=["action"])
 api_router.include_router(pipeline_router, tags=["pipeline"])
 api_router.include_router(admin_router, tags=["admin"])
 api_router.include_router(public_router, prefix="/public/v1", tags=["public"])
+api_router.include_router(visits_router, tags=["visits"])

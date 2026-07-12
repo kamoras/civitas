@@ -671,3 +671,19 @@ class BskySenatorSpotlight(Base):
     senator_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     posted_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     post_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class SiteVisit(Base):
+    """One row per unique visitor per day — never raw IP/PII.
+
+    `visitor_hash` is an HMAC of (IP, User-Agent, date) keyed by a secret
+    derived from ADMIN_TOKEN (see api/visits.py) — the same real visitor
+    produces a different hash every day, and the raw IP is never stored or
+    recoverable from the hash. The (date, visitor_hash) primary key means a
+    second request from the same visitor on the same day is a no-op insert,
+    so this table grows by unique visitors, not by page views.
+    """
+    __tablename__ = "site_visits"
+
+    date: Mapped[str] = mapped_column(String(10), primary_key=True)  # YYYY-MM-DD
+    visitor_hash: Mapped[str] = mapped_column(String(32), primary_key=True)

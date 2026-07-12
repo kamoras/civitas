@@ -615,6 +615,22 @@ export async function fetchAdminSystemStats(token: string): Promise<HostStats> {
   return res.json();
 }
 
+export interface VisitorStatsDay {
+  date: string;
+  uniqueVisitors: number;
+}
+
+export async function fetchAdminVisitorStats(
+  token: string,
+  days: number = 30,
+): Promise<VisitorStatsDay[]> {
+  const res = await fetch(`${API_BASE}/admin/visitor-stats?days=${days}`, {
+    headers: adminHeaders(token),
+  });
+  if (!res.ok) throw new Error(`Visitor stats failed: ${res.status}`);
+  return res.json();
+}
+
 
 
 export async function fetchConfig(): Promise<AppConfig> {

@@ -41,6 +41,7 @@ from app.models import (
     Representative,
     ScoreSnapshot,
     Senator,
+    SiteVisit,
     SponsoredBill,
     TimelineEntry,
 )
@@ -258,6 +259,23 @@ def _collect_vector_db_stats(db: Session) -> dict:
 async def admin_system_stats():
     """Lightweight endpoint for live system metrics polling."""
     return _read_system_stats()
+
+
+@router.get("/visitor-stats", dependencies=[Depends(require_admin)])
+async def admin_visitor_stats(days: int = 30, db: Session = Depends(get_db)) -> list[dict]:
+    """Daily unique-visitor counts for the last N days, oldest first.
+
+    Counts rows in SiteVisit (one per unique visitor per day, keyed by a
+    salted daily-rotating hash — see models.py) — never raw IPs.
+    """
+    rows = (
+        db.query(SiteVisit.date, func.count(SiteVisit.visitor_hash))
+        .group_by(SiteVisit.date)
+        .order_by(SiteVisit.date.desc())
+        .limit(days)
+        .all()
+    )
+    return [{"date": d, "uniqueVisitors": n} for d, n in reversed(rows)]
 
 
 @router.get("/dashboard", dependencies=[Depends(require_admin)])

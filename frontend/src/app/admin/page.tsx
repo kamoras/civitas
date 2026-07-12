@@ -8,6 +8,7 @@ import {
   fetchAdminPipelineStatus,
   fetchAdminPipelineHistory,
   fetchAdminSystemStats,
+  fetchAdminVisitorStats,
   clearStuckHousePipeline,
   type AdminDashboard,
   type AdminPipelineStatus,
@@ -16,6 +17,7 @@ import {
   type PipelineRunInfo,
   type PipelineStepInfo,
   type UptimeInfo,
+  type VisitorStatsDay,
 } from "@/lib/api";
 
 const PHASE_LABELS: Record<string, string> = {
@@ -872,6 +874,70 @@ function SystemMonitor({
   );
 }
 
+// --- Visitor Stats ---
+function VisitorStats({ token }: { token: string }) {
+  const [days, setDays] = useState<VisitorStatsDay[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchAdminVisitorStats(token, 14)
+      .then(setDays)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [token]);
+
+  if (loading) return null;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const todayCount = days.find((d) => d.date === today)?.uniqueVisitors ?? 0;
+  const maxCount = Math.max(1, ...days.map((d) => d.uniqueVisitors));
+
+  return (
+    <div className="terminal-window mb-6">
+      <TerminalTitlebar title="visitor_stats" />
+      <div className="p-4">
+        <div className="flex items-baseline justify-between mb-4">
+          <span className="text-matrix-green/50 text-[10px] font-pixel tracking-wider">
+            UNIQUE VISITORS TODAY
+          </span>
+          <span className="text-matrix-green text-2xl font-terminal tabular-nums">
+            {todayCount}
+          </span>
+        </div>
+        {days.length === 0 ? (
+          <div className="text-matrix-green/40 text-xs font-terminal">
+            No visitor data yet.
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {days.map((d) => (
+              <div key={d.date} className="flex items-center gap-3">
+                <span className="text-matrix-green/40 text-[10px] font-terminal tabular-nums w-16 shrink-0">
+                  {d.date.slice(5)}
+                </span>
+                <div className="flex-1">
+                  <UsageBar
+                    pct={(d.uniqueVisitors / maxCount) * 100}
+                    warnAt={101}
+                    critAt={101}
+                    ariaLabel={`${d.uniqueVisitors} unique visitors on ${d.date}`}
+                  />
+                </div>
+                <span className="text-matrix-green/60 text-[10px] font-terminal tabular-nums w-8 text-right shrink-0">
+                  {d.uniqueVisitors}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="text-matrix-green/25 text-[9px] font-terminal mt-3">
+          Counted by a salted, daily-rotating hash — no IP addresses are stored.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // --- Run History Table ---
 function RunHistory({ runs }: { runs: PipelineRunInfo[] }) {
   if (runs.length === 0) return <p className="text-matrix-green/40 text-xs">No pipeline runs recorded.</p>;
@@ -1414,6 +1480,9 @@ function AdminDashboardView({
 
         {/* System Monitor */}
         <SystemMonitor token={token} initialStats={d?.host} />
+
+        {/* Visitor Stats */}
+        <VisitorStats token={token} />
 
         {/* System Health */}
         <div className="grid grid-cols-1 mb-6">
