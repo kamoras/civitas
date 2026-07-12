@@ -619,7 +619,7 @@ def _embedding_producer(
     prefetch_queue.put(None)
 
 
-async def run_full_pipeline(
+async def run_senate_pipeline(
     senator_filter: str | None = None,
     fetch_only: bool = False,
 ) -> dict:

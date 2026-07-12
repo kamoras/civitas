@@ -164,7 +164,7 @@ _CATEGORY_GATE_OVERRIDE = 0.95
 
 # Sponsored bills mostly carry Congress.gov's raw CRS policy-area label
 # (~30 values, e.g. "ARMED_FORCES_AND_NATIONAL_SECURITY") rather than
-# this project's curated POLICY_ANCHORS taxonomy — orchestrator.py
+# this project's curated POLICY_ANCHORS taxonomy — senate_pipeline.py
 # prefers the CRS label verbatim whenever Congress.gov supplies one, so
 # over 98% of sponsored_bills rows are raw CRS, not curated (2026-07
 # audit). Votes (key_votes) are unaffected and already use the curated

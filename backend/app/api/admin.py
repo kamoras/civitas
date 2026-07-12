@@ -649,7 +649,7 @@ async def admin_trigger_pipeline(
 ):
     """Trigger a pipeline run from the admin panel."""
     from app.api.pipeline import _is_pipeline_running
-    from app.pipeline.orchestrator import run_full_pipeline
+    from app.pipeline.senate_pipeline import run_senate_pipeline
 
     if _is_pipeline_running(db):
         raise HTTPException(status_code=409, detail="Pipeline is already running")
@@ -659,7 +659,7 @@ async def admin_trigger_pipeline(
         loop = asyncio.new_event_loop()
         try:
             result = loop.run_until_complete(
-                run_full_pipeline(senator_filter=senator, fetch_only=fetch_only)
+                run_senate_pipeline(senator_filter=senator, fetch_only=fetch_only)
             )
             if senator is None and not fetch_only and result.get("status") not in ("skipped", "failed"):
                 logger.info("Senate pipeline done — starting House pipeline")

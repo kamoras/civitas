@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models import PipelineRun
-from app.pipeline.orchestrator import run_full_pipeline
+from app.pipeline.senate_pipeline import run_senate_pipeline
 from app.schemas import PipelineRunSchema, PipelineStatusSchema
 
 logger = logging.getLogger(__name__)
@@ -97,7 +97,7 @@ async def trigger_pipeline(
         loop = asyncio.new_event_loop()
         try:
             result = loop.run_until_complete(
-                run_full_pipeline(senator_filter=senator, fetch_only=fetch_only)
+                run_senate_pipeline(senator_filter=senator, fetch_only=fetch_only)
             )
             if senator is None and not fetch_only and result.get("status") not in ("skipped", "failed"):
                 logger.info("Senate pipeline done — starting House pipeline")

@@ -7,7 +7,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from app.config import settings
-from app.pipeline.orchestrator import run_full_pipeline
+from app.pipeline.senate_pipeline import run_senate_pipeline
 from app.pipeline.house_pipeline import run_house_pipeline, is_house_pipeline_running, house_pipeline_age
 from app.pipeline.analyze.action_center import refresh_action_issues
 
@@ -22,14 +22,14 @@ def _nightly_pipeline() -> None:
     Runs in a background thread with its own event loop so the main
     uvicorn loop stays responsive during long-running pipeline phases.
 
-    Safe to call from multiple containers: ``run_full_pipeline`` acquires
+    Safe to call from multiple containers: ``run_senate_pipeline`` acquires
     a database-level lock and skips if another instance is already running.
     """
     def _run():
         from app.ops_alerts import send_ops_alert
         loop = asyncio.new_event_loop()
         try:
-            result = loop.run_until_complete(run_full_pipeline())
+            result = loop.run_until_complete(run_senate_pipeline())
             if result.get("status") == "skipped":
                 logger.info("Pipeline skipped — another instance is already running")
                 send_ops_alert(
