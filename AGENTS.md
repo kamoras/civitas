@@ -473,8 +473,30 @@ registered directly on the production Pi (`~/actions-runner`, systemd service
 `actions.runner.kamoras-civitas.pi5-civitas`, running as user `ryan`), because
 the deploy needs the machine's own Docker daemon, `.env`, and blue/green
 slot-state files (`.deploy-frontend-slot` / `.deploy-backend-slot`) — it does
-not check out a fresh copy, it operates on the existing `/mnt/nvme/modern-punk`
-checkout in place.
+not check out a fresh copy, it operates on the existing checkout in place.
+
+**Nothing in `cd.yml` is hardcoded to this specific Pi.** The checkout path
+comes from `DEPLOY_PATH`, a runner-level environment variable set in
+`~/actions-runner/.env` (a file the GitHub Actions runner service loads into
+every job automatically) — not from the workflow file. Registering a runner
+on a new/replacement device needs only the standard runner setup plus one
+line, nothing repo-specific to edit:
+
+```bash
+mkdir -p ~/actions-runner && cd ~/actions-runner
+# download+extract the linux-arm64 runner tarball from the latest
+# github.com/actions/runner release, then:
+TOKEN=$(gh api -X POST repos/kamoras/civitas/actions/runners/registration-token --jq .token)
+./config.sh --url https://github.com/kamoras/civitas --token "$TOKEN" \
+  --name <device-name> --labels civitas-pi --work _work --unattended
+echo "DEPLOY_PATH=/path/to/your/checkout" >> .env
+sudo ./svc.sh install $(whoami) && sudo ./svc.sh start
+```
+
+All 13 deploy-time secrets already live in GitHub (see below) and get written
+to `.env` fresh on every deploy, so nothing credential-bearing needs to be
+copied to the new device by hand either — just clone the repo to whatever
+path you put in `DEPLOY_PATH` and register the runner.
 
 **Security invariant — do not violate this:** a self-hosted runner means any
 workflow job that uses it executes arbitrary shell commands on the physical

@@ -28,9 +28,23 @@ jobs:
       contents: read
       packages: read
     steps:
+      # DEPLOY_PATH is not hardcoded here — it comes from the runner's own
+      # ~/actions-runner/.env (a self-hosted GitHub Actions runner loads
+      # that file into every job's environment automatically). Registering
+      # a runner on a new device only requires setting DEPLOY_PATH there;
+      # nothing in this workflow needs to change. See AGENTS.md "CI/CD &
+      # self-hosted runner" for the full runner-setup steps.
+      - name: Check DEPLOY_PATH is configured
+        run: |
+          if [ -z "${DEPLOY_PATH:-}" ]; then
+            echo "::error::DEPLOY_PATH is not set on this runner. Add DEPLOY_PATH=/path/to/repo to ~/actions-runner/.env and restart the runner service."
+            exit 1
+          fi
+          echo "Deploying to $DEPLOY_PATH"
+
       - name: Pull latest main
         run: |
-          cd /mnt/nvme/modern-punk
+          cd "$DEPLOY_PATH"
           git fetch origin main
           git reset --hard origin/main
 
@@ -40,7 +54,7 @@ jobs:
       # `gh secret set NAME` and push (or `gh workflow run cd.yml`).
       - name: Write .env from secrets
         run: |
-          cat > /mnt/nvme/modern-punk/.env <<EOF
+          cat > "$DEPLOY_PATH/.env" <<EOF
           DATABASE_URL=${{ secrets.DATABASE_URL }}
           DATA_GOV_API_KEY=${{ secrets.DATA_GOV_API_KEY }}
           OLLAMA_BASE_URL=${{ secrets.OLLAMA_BASE_URL }}
@@ -55,7 +69,7 @@ jobs:
           BSKY_HANDLE=${{ secrets.BSKY_HANDLE }}
           BSKY_APP_PASSWORD=${{ secrets.BSKY_APP_PASSWORD }}
           EOF
-          chmod 600 /mnt/nvme/modern-punk/.env
+          chmod 600 "$DEPLOY_PATH/.env"
 
       # TEMPORARILY building locally on the Pi again instead of pulling from
       # GHCR — see task/AGENTS.md note: images built on GitHub's hosted
@@ -68,5 +82,5 @@ jobs:
       # fixed to target a generic ARMv8-A baseline (see AGENTS.md).
       - name: Deploy
         run: |
-          cd /mnt/nvme/modern-punk
+          cd "$DEPLOY_PATH"
           ./deploy.sh
