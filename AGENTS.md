@@ -371,6 +371,8 @@ SQLAlchemy ORM models are in `backend/app/models.py`. Key tables: `senators`,
 | Representative service + paginated votes | `backend/app/services/representative_service.py` |
 | Finance normalization (embedding-based skip detection) | `backend/app/pipeline/transform/normalize_finance.py` |
 | Data validation | `backend/app/pipeline/assemble/validator.py` |
+| Ground-truth regression gate | `backend/app/pipeline/analyze/ground_truth.py` |
+| Score/data-quality diagnostic playbook | `SCORE_AUDIT.md` |
 | Enums, weights, industry codes | `backend/app/config_definitions.py` |
 | Senator service + paginated votes | `backend/app/services/senator_service.py` |
 | Action Center API | `backend/app/api/action.py` |
@@ -482,3 +484,22 @@ against this exact pattern. `ci.yml` must keep running untrusted PR code on
 - `deploy.sh` also independently checks `gh run list --workflow CI` for HEAD
   before deploying (override with `FORCE_DEPLOY=1`) — redundant with the
   workflow gating above, kept as defense-in-depth and for manual local runs.
+
+**Images are built once on GitHub-hosted runners, not on the Pi.** The
+`build-and-push` job in `ci.yml` (only runs on push to `main`, after the test
+jobs pass) cross-builds ARM64 images via buildx/qemu and pushes to GHCR as
+`ghcr.io/kamoras/civitas/{backend,frontend}:latest` and `:sha-<short-sha>`.
+`cd.yml`'s deploy job pulls those images, retags them locally as
+`civitas-backend:latest` / `civitas-frontend:latest`, and runs
+`SKIP_BUILD=1 ./deploy.sh` — so the Pi never spends its own CPU compiling.
+This also gives cheap rollback by commit instead of a git revert + rebuild:
+
+```bash
+docker pull ghcr.io/kamoras/civitas/backend:sha-<old-short-sha>
+docker tag ghcr.io/kamoras/civitas/backend:sha-<old-short-sha> civitas-backend:latest
+SKIP_BUILD=1 ./deploy.sh backend
+```
+
+(swap `backend` for `frontend` as needed). There is no separate version-tag
+release workflow — every push to `main` is already built, published, and
+deployed, so manual `v*` tags aren't needed for this to work.

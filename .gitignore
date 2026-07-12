@@ -64,3 +64,11 @@ backend/*.db
 .venv/
 venv/
 .claude/worktrees/
+
+# host-specific ops scripts (not part of the shipped project)
+/backup.sh
+
+# defense-in-depth: never commit these even if something creates them
+*.key
+*.sqlite
+credentials.json

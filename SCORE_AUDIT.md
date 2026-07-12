@@ -6,6 +6,10 @@ Runs a full diagnostic on scoring algorithm accuracy and data quality. Use this 
 - A new data source is added and you want to assess its impact
 - A politician's score seems wrong and you want to investigate
 
+This is a diagnostic playbook, not part of the scoring algorithm itself —
+nothing here feeds back into how scores are computed. It only reads and
+reports on scores the pipeline already produced.
+
 ---
 
 ## Step 1 — Pull the Current Score Distribution
@@ -26,7 +30,7 @@ SELECT name, state, party,
   round(score_legislative_effectiveness,1) le,
   round((score_funding_independence*0.25 + score_promise_persistence*0.20
        + score_independent_voting*0.20 + score_funding_diversity*0.15
-       + score_legislative_effectiveness*0.20), 1) overall,  -- SCORE_WEIGHTS (config_definitions.py)
+       + score_legislative_effectiveness*0.20), 1) overall,  -- SCORE_WEIGHTS (config_definitions.py) — verify these match before trusting
   round(total_from_pacs/nullif(total_raised,0)*100, 2) pac_pct,
   round(total_raised/1e6, 2) raised_m
 FROM senators ORDER BY overall DESC
@@ -55,59 +59,40 @@ EOF
 
 ## Step 2 — Ground Truth Spot Check
 
-Compare specific senators against known facts. These should be stable reference points across any algorithm version:
+Runs the same regression gate the pipeline runs automatically after every
+scoring pass (`backend/app/pipeline/analyze/ground_truth.py`), against the
+current database state. This calls the live function directly rather than
+duplicating its reference list here, so this step can never drift out of
+sync with what the pipeline actually checks — see that module's docstring
+for the rationale behind each reference senator and range (each is chosen
+because their public record — break rate, donor mix — is independently
+verifiable, not because of any editorial judgment about them).
 
 ```bash
 docker exec mp-backend-blue python3 - <<'EOF'
-import sqlite3
-conn = sqlite3.connect('/data/civitas.db')
-conn.row_factory = sqlite3.Row
-cur = conn.cursor()
+from app.database import SessionLocal
+from app.pipeline.analyze.ground_truth import check_ground_truth, check_score_distribution
 
-GROUND_TRUTH = [
-    # (name_fragment, expected_iv_range, expected_fi_range, note)
-    # Ranges updated 2026-07 (v4) to match app/pipeline/analyze/ground_truth.py,
-    # which now runs these checks automatically at the end of each pipeline run.
-    # Notable revisions vs the 2026-05 table:
-    #  - McConnell FI ceiling raised to 90: his recent-window candidate-committee
-    #    profile (7% PAC ratio, 36% unitemized, minimal supporting Schedule E —
-    #    the big Schedule E money in 2020 was spent AGAINST him) is genuinely
-    #    mid-pack. Leadership-PAC/party-apparatus influence is invisible in
-    #    candidate FEC data and must not be faked into the score.
-    #  - Murkowski FI expectation dropped: her small-donor share is 4% — the
-    #    "grassroots AK fundraising" premise was factually wrong.
-    #  - IV floors lowered slightly: v4 measures breaks only on genuinely
-    #    divided votes, which lowers everyone's IV honestly.
-    ("Collins",    (70, 100), (40, 90),  "≈36% contested-vote break rate"),
-    ("Murkowski",  (70, 100), (10, 60),  "≈33% break rate; PAC/establishment-funded (4% small-donor)"),
-    ("Sanders",    (30, 75),  (70, 100), "Independent, strong small-donor base"),
-    ("Warren",     (30, 70),  (70, 100), "Rejected corporate PAC money explicitly"),
-    ("Cruz",       (15, 55),  (50, 95),  "High party loyalty (≈4% breaks), big small-dollar base"),
-    ("McConnell",  (15, 55),  (30, 90),  "Party leader, ≈9% break rate; see FI note above"),
-    ("Paul",       (55, 95),  (60, 100), "Libertarian crosser (≈16% breaks), small-dollar base"),
-    ("Klobuchar",  (35, 70),  (35, 75),  "Moderate D, mid-range PAC reliance"),
-]
+db = SessionLocal()
+result = check_ground_truth(db)
+print(f"Ground truth: {result['checked'] - len(result['failures'])}/{result['checked']} checks passed")
+for f in result["failures"]:
+    print(f"  ✗ {f['senator']} {f['dimension']}={f['score']} outside {f['expected']} — {f['rationale']}")
 
-print(f"{'Senator':<15} {'IV':>4} {'FI':>4}  IV-OK  FI-OK  Note")
-print("-" * 75)
-for frag, iv_range, fi_range, note in GROUND_TRUTH:
-    cur.execute("SELECT name, score_independent_voting iv, score_funding_independence fi FROM senators WHERE name LIKE ?", (f'%{frag}%',))
-    row = cur.fetchone()
-    if not row:
-        print(f"  {frag:<13} NOT FOUND")
-        continue
-    iv_ok = "✓" if iv_range[0] <= (row['iv'] or 0) <= iv_range[1] else f"✗ ({iv_range[0]}-{iv_range[1]})"
-    fi_ok = "✓" if fi_range[0] <= (row['fi'] or 0) <= fi_range[1] else f"✗ ({fi_range[0]}-{fi_range[1]})"
-    print(f"  {row['name']:<15} {row['iv'] or 0:>4} {row['fi'] or 0:>4}  {iv_ok:<6} {fi_ok:<6} {note}")
-
-conn.close()
+dist_failures = check_score_distribution(db)
+if dist_failures:
+    print("\nDistribution floor failures:")
+    for f in dist_failures:
+        print(f"  ✗ {f['dimension']}: {f['rationale']}")
+else:
+    print("\n✓ No distribution-collapse failures")
+db.close()
 EOF
 ```
 
 **What to look for:**
 - Any `✗` result means a known-bad senator scores well on that dimension, or a known-good senator scores poorly.
-- Collins and Murkowski should always rank top-5 on IV. If they don't, the party-break calculation is off.
-- McConnell FI should be notably below Sanders FI. If they're within 15 points of each other, the formula isn't discriminating.
+- This is also logged automatically as `GROUND TRUTH FAIL` warnings after every pipeline run — check backend logs first before running this manually.
 
 ---
 
@@ -260,11 +245,11 @@ EOF
 
 ## Step 5 — Outlier Investigation
 
-For any senator whose score seems wrong, run this deep-dive:
+For any senator whose score seems wrong, run this deep-dive (example uses a
+placeholder name — substitute whichever senator you're investigating):
 
 ```bash
-# Replace SENATOR_NAME with e.g. "McConnell" or "Collins"
-SENATOR_NAME="McConnell"
+SENATOR_NAME="REPLACE_ME"
 
 docker exec mp-backend-blue python3 - <<EOF
 import sqlite3, json
@@ -444,7 +429,7 @@ else:
         name = (cur.fetchone() or {}).get('name', sid)
         arrow = "↑" if delta > 0 else "↓"
         print(f"{name:<25} {prev:>5.1f} {curr:>5.1f} {arrow}{abs(delta):>4.1f}")
-    
+
     all_deltas = [s[0] for s in shifts]
     print(f"\nMean shift: {statistics.mean(all_deltas):+.2f}")
     print(f"Median shift: {statistics.median(all_deltas):+.2f}")
@@ -466,27 +451,21 @@ After running the audit, use this framework to decide what to change:
 | mean > 65 on any dimension | Missing data treated as positive | Change "no data" default from positive to neutral (50) |
 | PP×IV correlation > 0.4 | PP fallback using vote data | Remove voting fallback from PP; use 50 |
 | FI > 85 for high-fundraising senators | Outside spending not captured | Check outsideSpendingFor field; verify FEC Schedule E fetch |
-| Ground truth check ✗ on Collins/Murkowski IV | Vote matching broken | Check key_votes table; rerun normalize_votes |
+| Ground truth check ✗ | Vote/finance matching broken, or algorithm regression | See `ground_truth.py` docstring for the specific senator's rationale; check key_votes/donor tables |
 | >20% senators in data desert | API fetch failure | Check API cache, rate limits, name matching |
 | High score variance (>15 pts) on specific senator | Inconsistent vote/FEC matching | Add name normalization or use bioguide_id as primary key |
-| LE scores all below 50 | Advancement threshold too high | Lower threshold (currently 5%; Senate average ~3%) |
+| LE scores all below 50 | Advancement threshold too high | Compare against the current threshold in score_calculator.py |
 
-## Algorithm Version Log
+## Algorithm change history
 
-Track changes here to maintain an auditable history:
+Full rationale for every scoring-formula change lives in commit messages,
+not here — a static table in this doc would drift out of sync with the
+algorithm the same way an earlier version of this document did. To see it:
 
-| Date | Change | Rationale | Impact |
-|---|---|---|---|
-| 2026-05 v3 | FI: reweighted PAC 50→30%, concentration 50→70% | Direct PAC% undercounts senior senators; concentration more reliable | McConnell FI reduced; better spread |
-| 2026-05 v3 | FI: added outsideSpendingFor (Schedule E, half-weight) | Super PAC spending is key influence signal missed by direct PAC% | High-outside-spending senators penalized |
-| 2026-05 v3 | PP: removed voting fallback; neutral prior = 50 | PP×IV correlation flaw; circular dependency on same vote data | PP variance reduced; dimensions decoupled |
-| 2026-05 v3 | IV: fundraising-scaled donor default (75→50 at $50M+) | High fundraising without lobbying = data gap, not independence | McConnell/Graham IV reduced |
-| 2026-05 v3 | LE: advancement threshold 10→5%; volume ceiling log2(200)→log2(100) | 10% threshold made median senators score below 50; unreachable ceiling | LE scores spread more evenly |
-| 2026-05 fix | House pipeline: `parts[1].isdigit()` guard | `int("")` crash on bills with empty number prevented all rep data | 435 reps now populate correctly |
-| 2026-07 v4 | FI: rebuilt as PAC+outside 50% / small-donor 25% / relative concentration 25% | v3 concentration (top-10/total raised) was ≈0 for $50M+ raisers; missing PAC data scored as independence (McConnell FI 97) | FI mean 69→52, stdev 18; McConnell 97→82; Klobuchar 31→55 |
-| 2026-07 v4 | Data: totalFromPACs prefers FEC cycle totals; CandidateAffiliated excluded from topDonors; Schedule E via totals/by_candidate (was truncated at 50 rows) | Classifier-typed PAC sums recorded $34.8K vs $5.7M actual for McConnell; JFC transfers counted as donors; outside spending undercounted ~10x | Funding inputs now authoritative |
-| 2026-07 v4 | IV: donor weight 40→25% when alignment unknown; removed count/8 constant (always 1.0); base rate 3%; state-lean discount capped at 20% full-credit | senatorVoteAligned was never computed — donor component was a constant 80 inflating loyalists; safe-state leaders scored as independents | McConnell IV 75→55; all 14 ground-truth checks pass |
-| 2026-07 v4 | LE: advancement on substantive bills only (no resolutions, no law double-count, no calendar/cloture credit); volume per-congress (n/80) | v3 saturated: everyone maxed advancement (inflated median 9.4% vs real 2.5%) and volume (career bill lists vs log2(100) ceiling) | LE mean 82→52, stdev 15 |
-| 2026-07 v4 | PP data: neutral-stance votes give no kept signal; sponsored-bill introduction = effort (partial at most), only advanced bills count as kept | 88% of promises scored "kept" — circular: platform promises "kept" by sponsoring bills about the platform | Takes effect on next pipeline run (alignment recomputed) |
-| 2026-07 v4 | House: refine_with_vote_data applied (roll-call split authoritative, incl. bipartisan); recent roll calls 15→30 | LLM content labels overrode actual bipartisan splits → half the chamber "against party" on near-unanimous votes → all reps IV≈87-89 | Takes effect on next House pipeline run |
-| 2026-07 v4 | Ground-truth gate wired into pipeline (analyze/ground_truth.py) | Reference senators had failed audit expectations across two algorithm versions with no automated alarm | Logs GROUND TRUTH FAIL warnings after each run |
+```bash
+git log --oneline -- backend/app/pipeline/analyze/score_calculator.py backend/app/config_definitions.py
+```
+
+Each commit message documents what changed, why, and the measured impact
+(e.g. "FI mean 69→52, stdev 18" style before/after numbers), matching this
+project's commit convention.

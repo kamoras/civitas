@@ -24,13 +24,31 @@ jobs:
        github.event.workflow_run.head_branch == 'main' &&
        github.event.workflow_run.event == 'push')
     runs-on: [self-hosted, civitas-pi]
+    permissions:
+      contents: read
+      packages: read
     steps:
       - name: Pull latest main
         run: |
           cd /mnt/nvme/modern-punk
           git fetch origin main
           git reset --hard origin/main
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull pre-built images
+        run: |
+          docker pull ghcr.io/${{ github.repository }}/backend:latest
+          docker pull ghcr.io/${{ github.repository }}/frontend:latest
+          docker tag ghcr.io/${{ github.repository }}/backend:latest civitas-backend:latest
+          docker tag ghcr.io/${{ github.repository }}/frontend:latest civitas-frontend:latest
+
       - name: Deploy
         run: |
           cd /mnt/nvme/modern-punk
-          ./deploy.sh
+          SKIP_BUILD=1 ./deploy.sh
