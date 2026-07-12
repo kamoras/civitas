@@ -17,6 +17,14 @@ export function middleware(request: NextRequest, event: NextFetchEvent) {
     "";
   const userAgent = request.headers.get("user-agent") ?? "";
 
+  // Civitas's own link-card fetcher (backend/app/pipeline/analyze/
+  // bluesky_utils.py's build_link_card) requests the site's own pages to
+  // scrape OG metadata for Bluesky posts, self-identifying with this UA —
+  // don't count the app visiting itself as a visitor.
+  if (userAgent.startsWith("Civitas-Bot/")) {
+    return NextResponse.next();
+  }
+
   // Fire-and-forget: don't block the page response on this.
   event.waitUntil(
     fetch(`${BACKEND_URL}/api/track-visit`, {
