@@ -1,0 +1,36 @@
+name: CD (Pi Deploy)
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+  workflow_dispatch: {}   # manual "redeploy" button, Vercel-style
+
+concurrency:
+  group: civitas-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # SECURITY INVARIANT — see AGENTS.md "CI/CD & self-hosted runner" section.
+    # This job runs on a self-hosted runner (the physical Pi). It must NEVER
+    # be triggered by `pull_request`/`pull_request_target` — only by
+    # `workflow_run` gated to head_branch == main (i.e. only after a push
+    # lands on main) or manual `workflow_dispatch`. Anyone who can open a PR
+    # must never be able to cause code to execute on this runner.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: [self-hosted, civitas-pi]
+    steps:
+      - name: Pull latest main
+        run: |
+          cd /mnt/nvme/modern-punk
+          git fetch origin main
+          git reset --hard origin/main
+      - name: Deploy
+        run: |
+          cd /mnt/nvme/modern-punk
+          ./deploy.sh

@@ -451,3 +451,34 @@ SQLAlchemy ORM models are in `backend/app/models.py`. Key tables: `senators`,
 - Docker images built from `backend/Dockerfile` and `frontend/Dockerfile`
 - Data persists in Docker named volumes (`app_data`) that survive rebuilds
 - Frontend Dockerfile uses multi-stage build (deps → build → runner) with non-root user
+
+### CI/CD & self-hosted runner
+
+Pushes to `main` auto-deploy: `.github/workflows/ci.yml` runs lint/build/tests
+on GitHub-hosted runners, then `.github/workflows/cd.yml` triggers on that
+workflow's completion, pulls `origin/main`, and runs `deploy.sh` — no manual
+SSH step needed. The deploy job runs on a self-hosted GitHub Actions runner
+registered directly on the production Pi (`~/actions-runner`, systemd service
+`actions.runner.kamoras-civitas.pi5-civitas`, running as user `ryan`), because
+the deploy needs the machine's own Docker daemon, `.env`, and blue/green
+slot-state files (`.deploy-frontend-slot` / `.deploy-backend-slot`) — it does
+not check out a fresh copy, it operates on the existing `/mnt/nvme/modern-punk`
+checkout in place.
+
+**Security invariant — do not violate this:** a self-hosted runner means any
+workflow job that uses it executes arbitrary shell commands on the physical
+Pi. `cd.yml` is safe because it can only fire via `workflow_run` (gated to
+`head_branch == 'main'` and `event == 'push'`) or manual `workflow_dispatch` —
+neither of which an external contributor can trigger by opening a pull
+request. **Never add `runs-on: [self-hosted, civitas-pi]` (or any
+`self-hosted` label) to a job that runs on `pull_request` or
+`pull_request_target` events.** Once this repo is public, a malicious PR is
+the standard way self-hosted runners get compromised — GitHub's own docs warn
+against this exact pattern. `ci.yml` must keep running untrusted PR code on
+`ubuntu-latest` only.
+
+- Check the runner: `sudo systemctl status actions.runner.kamoras-civitas.pi5-civitas`
+- Trigger a deploy without a new commit: `gh workflow run cd.yml`
+- `deploy.sh` also independently checks `gh run list --workflow CI` for HEAD
+  before deploying (override with `FORCE_DEPLOY=1`) — redundant with the
+  workflow gating above, kept as defense-in-depth and for manual local runs.
