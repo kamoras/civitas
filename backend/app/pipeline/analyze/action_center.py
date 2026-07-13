@@ -3399,7 +3399,31 @@ def _run_refresh(db: Session) -> int:
                 db.add(DailyTheme(date=today, theme_json=json.dumps(theme)))
             db.commit()
 
-    # Stage 4: Generate full stories for issues that don't have one yet.
+    # Stage 4: Post new/surging issues to Bluesky.
+    # Deliberately runs BEFORE full-story generation below: posting only
+    # needs title/summary/facts, never full_story, but used to run after
+    # it anyway. A single full_story call can legitimately take up to 600s
+    # x 3 retries (see ollama_client.call_llm) — on a slow/degraded local
+    # LLM, that stage alone can run long enough to eat the entire hourly
+    # window, and posting never got a turn (confirmed live 2026-07-13:
+    # zero Bluesky posts for ~21h while story generation stalled every
+    # cycle). Posting first means a slow story backlog no longer blocks it.
+    _set_refresh_state(stage="bluesky", stage_detail=None)
+    if issues_created > 0:
+        try:
+            from app.pipeline.analyze.bluesky_poster import process_issues_for_bluesky
+            today_issues = (
+                db.query(ActionIssue)
+                .filter(ActionIssue.date == today, ActionIssue.is_current == True)  # noqa: E712
+                .order_by(ActionIssue.rank)
+                .all()
+            )
+            bsky_posted = process_issues_for_bluesky(today_issues, db)
+            _set_refresh_state(last_bsky_posted=bsky_posted or 0)
+        except Exception:
+            logger.exception("Bluesky posting failed (non-fatal)")
+
+    # Stage 5: Generate full stories for issues that don't have one yet.
     # Runs every refresh (not gated on issues_created) so that stories missed
     # due to LLM timeouts or concurrent refreshes get filled in on the next cycle.
     story_issues = (
@@ -3423,22 +3447,6 @@ def _run_refresh(db: Session) -> int:
         except Exception:
             logger.exception("Full story generation failed for issue %s (non-fatal)", issue.id)
     _set_refresh_state(last_stories_generated=_stories_done)
-
-    # Stage 5: Post new/surging issues to Bluesky
-    _set_refresh_state(stage="bluesky", stage_detail=None)
-    if issues_created > 0:
-        try:
-            from app.pipeline.analyze.bluesky_poster import process_issues_for_bluesky
-            today_issues = (
-                db.query(ActionIssue)
-                .filter(ActionIssue.date == today, ActionIssue.is_current == True)  # noqa: E712
-                .order_by(ActionIssue.rank)
-                .all()
-            )
-            bsky_posted = process_issues_for_bluesky(today_issues, db)
-            _set_refresh_state(last_bsky_posted=bsky_posted or 0)
-        except Exception:
-            logger.exception("Bluesky posting failed (non-fatal)")
 
     # Stage 6: Daily senator score spotlight + weekly civic summary
     try:

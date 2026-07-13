@@ -9,7 +9,7 @@ from apscheduler.triggers.cron import CronTrigger
 from app.config import settings
 from app.pipeline.senate_pipeline import run_senate_pipeline
 from app.pipeline.house_pipeline import run_house_pipeline, is_house_pipeline_running, house_pipeline_age
-from app.pipeline.analyze.action_center import refresh_action_issues
+from app.pipeline.analyze.action_center import get_action_refresh_state, refresh_action_issues
 
 logger = logging.getLogger(__name__)
 
@@ -59,10 +59,37 @@ def _hourly_action_refresh() -> None:
     """Refresh the action center in a background thread.
 
     Skipped when the nightly pipeline is running to avoid competing for
-    memory during the most intensive part of the pipeline.
+    memory during the most intensive part of the pipeline, or when the
+    previous hourly refresh is still running — a slow/degraded local LLM
+    can make one cycle run long enough to still be active when the next
+    cron tick fires (confirmed live 2026-07-13), and without this guard
+    that spawns a second thread competing for the same LLM, compounding
+    the slowdown rather than just running a bit late.
     """
     def _run():
         try:
+            state = get_action_refresh_state()
+            if state.get("is_running"):
+                started = state.get("started_at")
+                age = datetime.utcnow() - started if started else None
+                if age is not None and age > timedelta(hours=4):
+                    # Same reasoning as the stale-PipelineRun checks below: a
+                    # refresh this old (normal is minutes, worst case with a
+                    # degraded LLM is ~1-2h) is wedged, not just slow. This
+                    # in-memory flag only clears on completion or container
+                    # restart, so without this override a genuinely hung
+                    # thread would block every future hourly run indefinitely.
+                    logger.warning(
+                        "Stale action-center refresh detected (age %s) — "
+                        "treating as hung and proceeding with a new refresh",
+                        age,
+                    )
+                else:
+                    logger.info(
+                        "Action center refresh skipped — previous refresh still running (age %s)",
+                        age,
+                    )
+                    return
             from app.database import SessionLocal
             from app.models import PipelineRun
             db = SessionLocal()
