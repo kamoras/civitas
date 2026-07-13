@@ -26,8 +26,9 @@ export function middleware(request: NextRequest, event: NextFetchEvent) {
   }
 
   // Fire-and-forget: don't block the page response on this.
+  const path = encodeURIComponent(request.nextUrl.pathname);
   event.waitUntil(
-    fetch(`${BACKEND_URL}/api/track-visit`, {
+    fetch(`${BACKEND_URL}/api/track-visit?path=${path}`, {
       method: "POST",
       headers: { "X-Real-IP": realIp, "User-Agent": userAgent },
     }).catch(() => {}),

@@ -12,13 +12,13 @@ import logging
 import re
 from datetime import datetime, UTC
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models import SiteVisit
+from app.models import PageView, SiteVisit
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +78,32 @@ def _visitor_hash(ip: str, user_agent: str, date: str) -> str:
     return hmac.new(_hash_key(), msg, hashlib.sha256).hexdigest()[:32]
 
 
+_KNOWN_STATIC_PATHS = {
+    "/", "/about", "/accessibility", "/action", "/changelog", "/compare",
+    "/environmental", "/explore", "/leaderboard", "/politicians", "/scorecard",
+}
+_DYNAMIC_PREFIXES = ("/politicians/", "/issue/", "/explore/")
+
+
+def _normalize_path(raw: str) -> str:
+    """Collapse a request path to a stable route template for aggregation.
+
+    /politicians/chuck-grassley -> /politicians/[id], not its own row per
+    politician — otherwise "most visited pages" would fragment across
+    every individual id instead of showing which routes get read. Anything
+    outside the known route set (bad input, a since-removed route) buckets
+    to "/other" rather than growing the table with arbitrary strings from
+    an unauthenticated, public endpoint.
+    """
+    path = (raw or "/").split("?")[0].rstrip("/") or "/"
+    if path in _KNOWN_STATIC_PATHS:
+        return path
+    for prefix in _DYNAMIC_PREFIXES:
+        if path.startswith(prefix) and len(path) > len(prefix):
+            return f"{prefix}[id]"
+    return "/other"
+
+
 def _track_ip(request: Request) -> str:
     # NOT app.api.rate_limit.client_ip(): that function only trusts
     # X-Forwarded-For when the direct TCP peer is nginx (127.0.0.1), which
@@ -98,7 +124,11 @@ def _track_ip(request: Request) -> str:
 
 
 @router.post("/track-visit", status_code=204)
-async def track_visit(request: Request, db: Session = Depends(get_db)) -> None:
+async def track_visit(
+    request: Request,
+    path: str = Query("/"),
+    db: Session = Depends(get_db),
+) -> None:
     ip = _track_ip(request)
     user_agent = request.headers.get("User-Agent", "")
     date = datetime.now(UTC).date().isoformat()
@@ -115,4 +145,14 @@ async def track_visit(request: Request, db: Session = Depends(get_db)) -> None:
     )
     stmt = stmt.on_conflict_do_nothing(index_elements=["date", "visitor_hash"])
     db.execute(stmt)
+
+    # Unlike SiteVisit, this counts every page view, not unique visitors —
+    # a repeat request the same day increments count rather than no-op'ing.
+    normalized_path = _normalize_path(path)
+    page_stmt = sqlite_insert(PageView).values(date=date, path=normalized_path, count=1)
+    page_stmt = page_stmt.on_conflict_do_update(
+        index_elements=["date", "path"],
+        set_={"count": PageView.count + 1},
+    )
+    db.execute(page_stmt)
     db.commit()

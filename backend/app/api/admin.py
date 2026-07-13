@@ -30,6 +30,7 @@ from app.models import (
     LobbyingMatch,
     MonitorUpdate,
     NationalMonitor,
+    PageView,
     PipelineRun,
     President,
     RepCampaignPromise,
@@ -310,6 +311,28 @@ async def admin_visitor_breakdown(date: str | None = None, db: Session = Depends
         "os": _counts(SiteVisit.os),
         "devices": _counts(SiteVisit.device_type),
     }
+
+
+@router.get("/top-pages", dependencies=[Depends(require_admin)])
+async def admin_top_pages(days: int = 7, limit: int = 10, db: Session = Depends(get_db)) -> list[dict]:
+    """Most-visited page templates over the last N days, by raw view count.
+
+    Counts PageView rows (every page view, not deduped by visitor — see
+    models.py for why that's a separate table from SiteVisit) grouped by
+    normalized route template (e.g. "/politicians/[id]").
+    """
+    from datetime import datetime, timedelta, UTC as _UTC
+
+    cutoff = (datetime.now(_UTC).date() - timedelta(days=days - 1)).isoformat()
+    rows = (
+        db.query(PageView.path, func.sum(PageView.count).label("total"))
+        .filter(PageView.date >= cutoff)
+        .group_by(PageView.path)
+        .order_by(func.sum(PageView.count).desc())
+        .limit(limit)
+        .all()
+    )
+    return [{"path": p, "views": int(n)} for p, n in rows]
 
 
 _VACANCY_REASONS = {"deceased", "resigned", "expelled"}

@@ -10,6 +10,7 @@ import {
   fetchAdminSystemStats,
   fetchAdminVisitorStats,
   fetchAdminVisitorBreakdown,
+  fetchAdminTopPages,
   setPoliticianVacancy,
   clearStuckHousePipeline,
   type AdminDashboard,
@@ -21,6 +22,7 @@ import {
   type UptimeInfo,
   type VisitorStatsDay,
   type VisitorBreakdown,
+  type TopPageEntry,
 } from "@/lib/api";
 
 const PHASE_LABELS: Record<string, string> = {
@@ -1027,16 +1029,19 @@ function BreakdownGroup({ title, entries }: { title: string; entries: { name: st
 function VisitorStats({ token }: { token: string }) {
   const [days, setDays] = useState<VisitorStatsDay[]>([]);
   const [breakdown, setBreakdown] = useState<VisitorBreakdown | null>(null);
+  const [topPages, setTopPages] = useState<TopPageEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       fetchAdminVisitorStats(token, 14),
       fetchAdminVisitorBreakdown(token),
+      fetchAdminTopPages(token, 7),
     ])
-      .then(([d, b]) => {
+      .then(([d, b, p]) => {
         setDays(d);
         setBreakdown(b);
+        setTopPages(p);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -1093,10 +1098,42 @@ function VisitorStats({ token }: { token: string }) {
             <BreakdownGroup title="DEVICE — TODAY" entries={breakdown.devices} />
           </div>
         )}
+        {topPages.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-matrix-green/10">
+            <div className="text-matrix-green/40 text-[9px] font-pixel tracking-wider mb-1.5">
+              MOST VISITED PAGES — LAST 7 DAYS
+            </div>
+            <div className="space-y-1">
+              {topPages.map((p) => {
+                const max = Math.max(1, ...topPages.map((e) => e.views));
+                return (
+                  <div key={p.path} className="flex items-center gap-2">
+                    <span className="text-matrix-green/50 text-[10px] font-terminal w-40 shrink-0 truncate">
+                      {p.path}
+                    </span>
+                    <div className="flex-1">
+                      <UsageBar
+                        pct={(p.views / max) * 100}
+                        warnAt={101}
+                        critAt={101}
+                        ariaLabel={`${p.views} views on ${p.path}`}
+                      />
+                    </div>
+                    <span className="text-matrix-green/60 text-[10px] font-terminal tabular-nums w-10 text-right shrink-0">
+                      {p.views}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <p className="text-matrix-green/25 text-[9px] font-terminal mt-3">
           Counted by a salted, daily-rotating hash — no IP addresses are stored.
           Browser/OS/device are coarse categories only, never the raw
-          User-Agent string.
+          User-Agent string. Page views are raw counts (not deduped by
+          visitor) grouped by route, e.g. all politician profiles count under
+          one row.
         </p>
       </div>
     </div>

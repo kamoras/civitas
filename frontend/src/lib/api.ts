@@ -651,6 +651,22 @@ export async function fetchAdminVisitorBreakdown(token: string): Promise<Visitor
   return res.json();
 }
 
+export interface TopPageEntry {
+  path: string;
+  views: number;
+}
+
+export async function fetchAdminTopPages(
+  token: string,
+  days: number = 7,
+): Promise<TopPageEntry[]> {
+  const res = await fetch(`${API_BASE}/admin/top-pages?days=${days}`, {
+    headers: adminHeaders(token),
+  });
+  if (!res.ok) throw new Error(`Top pages failed: ${res.status}`);
+  return res.json();
+}
+
 export interface VacancyResult {
   id: string;
   name: string;

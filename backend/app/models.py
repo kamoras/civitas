@@ -723,3 +723,23 @@ class SiteVisit(Base):
     browser: Mapped[str] = mapped_column(String(20), default="")
     os: Mapped[str] = mapped_column(String(20), default="")
     device_type: Mapped[str] = mapped_column(String(10), default="")
+
+
+class PageView(Base):
+    """Per-page view counts, by day — a raw hit counter, not deduped by visitor.
+
+    Deliberately a separate table from SiteVisit: that table's (date,
+    visitor_hash) primary key exists specifically to dedupe repeat visits
+    from the same person in a day, which is right for "how many unique
+    people visited" but wrong for "which pages get read" — a visitor
+    hitting 5 pages in one session must count as 5 page views, not 1.
+    `path` is a normalized route template (e.g. "/politicians/[id]", not
+    "/politicians/chuck-grassley") so the count reflects page popularity
+    rather than fragmenting across every individual politician/issue id —
+    see api/visits.py's _normalize_path.
+    """
+    __tablename__ = "page_views"
+
+    date: Mapped[str] = mapped_column(String(10), primary_key=True)  # YYYY-MM-DD
+    path: Mapped[str] = mapped_column(String(100), primary_key=True)
+    count: Mapped[int] = mapped_column(Integer, default=0)
