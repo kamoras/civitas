@@ -7,6 +7,13 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
+# hnswlib has no prebuilt aarch64 wheel and compiles from source. Left to its
+# own defaults, gcc auto-detects the *build host's* CPU (-march=native-ish
+# tuning), which on GitHub's ubuntu-24.04-arm runners (server-grade
+# Ampere/Cobalt) bakes in SIMD instructions absent on a Pi 5 (Cortex-A76) ->
+# SIGILL at runtime. Pin to the portable ARMv8-A baseline so the same image
+# runs on any aarch64 target regardless of build host.
+ENV CFLAGS="-march=armv8-a" CXXFLAGS="-march=armv8-a"
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
