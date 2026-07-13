@@ -122,6 +122,26 @@ TOPIC_CHANGE_THRESHOLD = 0.82  # cosine similarity below which a rank slot is co
 # Raw cosine similarity between ANY two news headlines is ~0.74+ due to domain clustering.
 # Same-topic titles score 0.88-0.95; different topics score 0.72-0.78. Threshold at 0.82.
 
+
+def _full_story_should_invalidate(
+    old_title: str, old_facts: str, new_title: str, new_facts: str,
+) -> bool:
+    """True if an issue's title/facts changed enough that its cached
+    full_story (if any) now describes the wrong event and must be
+    regenerated rather than left stale.
+
+    A topic-similarity match (TOPIC_CHANGE_THRESHOLD) can still land on a
+    substantively different story sharing a category — e.g. two different
+    senators' health events both matching "ailing senior senator". full_story
+    is only ever generated once per issue (Stage 4 filters on
+    ``full_story IS NULL``), so if the row's content is silently replaced
+    without also clearing full_story, the page keeps showing old text about
+    a different event indefinitely. (2026-07 bug: a McConnell hospitalization
+    story's full_story survived a re-match onto a later Lindsey Graham
+    obituary issue.)
+    """
+    return old_title != new_title or old_facts != new_facts
+
 _SYSTEM_PROMPT = """\
 You are a nonpartisan civic information analyst. You present facts without \
 opinion and help citizens engage with their government regardless of their \
@@ -3286,12 +3306,17 @@ def _run_refresh(db: Session) -> int:
         if match:
             _matched_issue_ids.add(match.id)
             has_new_articles = primary_article_date > (match.primary_article_date or "1970-01-01")
+            invalidate_story = _full_story_should_invalidate(
+                match.title, match.facts, _new_values["title"], _new_values["facts"],
+            )
 
             match.rank = rank
             match.date = today
             match.is_current = True
             for attr in _update_attrs:
                 setattr(match, attr, _new_values[attr])
+            if invalidate_story:
+                match.full_story = None
 
             if has_new_articles:
                 # New articles arrived — allow the Bluesky poster to post an update.

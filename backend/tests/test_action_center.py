@@ -15,6 +15,7 @@ from app.pipeline.analyze.action_center import (
     _cleanup_monitor_lifecycle,
     _generate_monitor_metadata,
     _story_word_target,
+    _full_story_should_invalidate,
 )
 
 
@@ -319,3 +320,40 @@ class TestStoryWordTarget:
     def test_band_is_bounded_at_high_fact_counts(self):
         low, high = _story_word_target(50)
         assert high <= 750
+
+
+class TestFullStoryShouldInvalidate:
+    """A topic-similarity match can land two substantively different stories
+    on the same row (e.g. two senators' health events). full_story must be
+    regenerated when that happens, not left describing the old event."""
+
+    def test_unchanged_title_and_facts_does_not_invalidate(self):
+        assert _full_story_should_invalidate(
+            "Senator X hospitalized", '["fact a"]',
+            "Senator X hospitalized", '["fact a"]',
+        ) is False
+
+    def test_changed_title_invalidates(self):
+        # The real 2026-07 bug: a McConnell hospitalization story's row got
+        # re-matched onto a later, different senator's death.
+        assert _full_story_should_invalidate(
+            "Mitch McConnell hospitalized", '["fact a"]',
+            "Lindsey Graham dies at 71", '["fact a"]',
+        ) is True
+
+    def test_changed_facts_alone_invalidates(self):
+        # Same headline, but the underlying facts were updated (story
+        # evolved) — the old full_story may cite facts no longer true.
+        assert _full_story_should_invalidate(
+            "Senator X hospitalized", '["fact a"]',
+            "Senator X hospitalized", '["fact a", "fact b"]',
+        ) is True
+
+    def test_only_rank_or_date_changing_is_not_passed_here(self):
+        # Rank/date churn alone (no title/facts change) must not invalidate —
+        # this function only ever sees title/facts, confirming callers don't
+        # need to regenerate on every hourly refresh of an unchanged story.
+        assert _full_story_should_invalidate(
+            "Senator X hospitalized", '["fact a"]',
+            "Senator X hospitalized", '["fact a"]',
+        ) is False
