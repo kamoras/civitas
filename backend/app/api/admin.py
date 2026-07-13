@@ -566,6 +566,9 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
             "repsFailed": last_house_run.reps_failed,
             "elapsedSeconds": house_elapsed,
             "errorMessage": last_house_run.error_message,
+            "groundTruthFailures": json.loads(last_house_run.ground_truth_failures)
+            if getattr(last_house_run, "ground_truth_failures", None)
+            else [],
         }
 
     if last_run:

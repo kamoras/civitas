@@ -1,6 +1,6 @@
 """Tests for the ground-truth regression gate."""
 
-from app.models import Senator
+from app.models import Representative, Senator
 from app.pipeline.analyze.ground_truth import check_score_distribution
 
 
@@ -18,6 +18,23 @@ def _add_senator(db, id_, **scores):
     )
     db.add(s)
     return s
+
+
+def _add_representative(db, id_, **scores):
+    r = Representative(
+        id=id_,
+        name=f"Rep {id_}",
+        state="NY",
+        district=1,
+        party="D",
+        score_funding_independence=scores.get("fi", 50),
+        score_promise_persistence=scores.get("pp", 50),
+        score_independent_voting=scores.get("iv", 50),
+        score_funding_diversity=scores.get("fd", 50),
+        score_legislative_effectiveness=scores.get("le", 50),
+    )
+    db.add(r)
+    return r
 
 
 class TestCheckScoreDistribution:
@@ -71,3 +88,36 @@ class TestCheckScoreDistribution:
 
         failures = check_score_distribution(db_session)
         assert failures == []
+
+
+class TestCheckScoreDistributionHouse:
+    def test_model_param_scopes_to_representatives(self, db_session):
+        # House has no named ground-truth cases; check_score_distribution
+        # is its only regression gate, run against Representative rows via
+        # the model= param instead of the Senator default.
+        for i in range(15):
+            _add_representative(
+                db_session, f"r{i}",
+                pp=52 + (i % 3),  # collapsed, stdev ~1
+                fi=20 + i * 4, iv=20 + i * 4, fd=20 + i * 4, le=20 + i * 4,
+            )
+        db_session.commit()
+
+        failures = check_score_distribution(db_session, model=Representative)
+        dims_flagged = {f["dimension"] for f in failures}
+        assert "PP" in dims_flagged
+        assert all("representatives" in f["senator"] for f in failures)
+
+    def test_house_and_senate_rows_dont_cross_contaminate(self, db_session):
+        # A Senator population that would fail on its own must not affect
+        # the House check when scoped to Representative, and vice versa.
+        for i in range(15):
+            _add_senator(db_session, f"s{i}", pp=52 + (i % 3))
+            _add_representative(
+                db_session, f"r{i}",
+                pp=20 + i * 4, fi=20 + i * 4, iv=20 + i * 4,
+                fd=20 + i * 4, le=20 + i * 4,
+            )
+        db_session.commit()
+
+        assert check_score_distribution(db_session, model=Representative) == []

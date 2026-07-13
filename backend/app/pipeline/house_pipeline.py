@@ -11,6 +11,7 @@ computed deterministically and don't need LLM calls.
 """
 
 
+import json
 import logging
 import time
 from datetime import datetime, timedelta
@@ -645,6 +646,33 @@ async def run_house_pipeline() -> dict:
                     logger.info("Score calibration: no drift detected")
             except Exception:
                 logger.exception("Score calibration check failed (non-fatal)")
+
+            try:
+                # Population-stdev regression gate — House's counterpart to
+                # senate_pipeline.py's ground-truth check. No named House
+                # reference cases exist yet (GROUND_TRUTH in ground_truth.py
+                # is Senate-only), so this is the stdev floor only: it still
+                # catches the failure mode a term-window change risks most —
+                # scores collapsing toward a neutral prior population-wide.
+                from app.pipeline.analyze.ground_truth import check_score_distribution
+                gt_failures = check_score_distribution(db, model=Representative)
+                house_run.ground_truth_failures = json.dumps(gt_failures)
+                db.commit()
+                if gt_failures:
+                    from app.ops_alerts import send_ops_alert
+                    lines = "\n".join(
+                        f"- {f.get('dimension', '?')}={f.get('score', '?')} "
+                        f"expected {f.get('expected', '?')}"
+                        for f in gt_failures
+                    )
+                    send_ops_alert(
+                        f"House ground-truth gate failed ({len(gt_failures)})",
+                        f"House score distribution outside expected ranges "
+                        f"(run #{house_run.id}):\n{lines}",
+                        dedupe_key=f"house-ground-truth-run-{house_run.id}",
+                    )
+            except Exception:
+                logger.exception("House ground truth check failed (non-fatal)")
 
             elapsed = time.time() - start_time
             logger.info("=== HOUSE PIPELINE COMPLETE ===")

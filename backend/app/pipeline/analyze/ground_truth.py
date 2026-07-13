@@ -97,16 +97,22 @@ MIN_STDEV: dict[str, float] = {
 }
 
 
-def check_score_distribution(db) -> list[dict]:
+def check_score_distribution(db, model=None) -> list[dict]:
     """Flag any scored dimension whose population stdev has collapsed.
+
+    ``model`` defaults to Senator; pass Representative to run the same
+    check for the House (both share the same score_* column names).
 
     Returns failures in the same shape as check_ground_truth's, so
     callers can merge the two lists.
     """
-    from app.models import Senator
+    if model is None:
+        from app.models import Senator
+        model = Senator
 
     failures: list[dict] = []
-    rows = db.query(Senator).all()
+    rows = db.query(model).all()
+    entity_label = "senators" if model.__name__ == "Senator" else "representatives"
 
     for dim, min_stdev in MIN_STDEV.items():
         values = [v for v in (getattr(s, dim, None) for s in rows) if v is not None]
@@ -115,7 +121,7 @@ def check_score_distribution(db) -> list[dict]:
         stdev = statistics.pstdev(values)
         if stdev < min_stdev:
             failures.append({
-                "senator": f"ALL ({len(values)} senators)",
+                "senator": f"ALL ({len(values)} {entity_label})",
                 "dimension": _DIM_LABEL.get(dim, dim),
                 "score": round(stdev, 2),
                 "expected": [min_stdev, None],

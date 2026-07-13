@@ -93,6 +93,7 @@ def _migrate_columns() -> None:
         ("representatives", "is_current", "BOOLEAN DEFAULT 1"),
         ("representatives", "vacancy_reason", "TEXT"),
         ("representatives", "left_office_date", "TEXT"),
+        ("house_pipeline_runs", "ground_truth_failures", "TEXT"),
     ]
 
     drops: list[tuple[str, str]] = [

@@ -673,6 +673,7 @@ class HousePipelineRun(Base):
     reps_failed: Mapped[int] = mapped_column(Integer, default=0)
     elapsed_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ground_truth_failures: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class BskySenatorSpotlight(Base):
