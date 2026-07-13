@@ -10,6 +10,7 @@ import {
   fetchAdminSystemStats,
   fetchAdminVisitorStats,
   fetchAdminVisitorBreakdown,
+  setPoliticianVacancy,
   clearStuckHousePipeline,
   type AdminDashboard,
   type AdminPipelineStatus,
@@ -876,6 +877,120 @@ function SystemMonitor({
   );
 }
 
+// --- Seat Vacancy Control ---
+const VACANCY_REASONS = ["deceased", "resigned", "expelled"] as const;
+
+function VacancyControl({ token }: { token: string }) {
+  const [politicianId, setPoliticianId] = useState("");
+  const [action, setAction] = useState<"vacate" | "restore">("vacate");
+  const [reason, setReason] = useState<(typeof VACANCY_REASONS)[number]>("deceased");
+  const [leftOfficeDate, setLeftOfficeDate] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    if (!politicianId.trim()) return;
+    setSubmitting(true);
+    setResult(null);
+    setError(null);
+    try {
+      const res = await setPoliticianVacancy(
+        token,
+        politicianId.trim(),
+        action === "restore",
+        action === "vacate" ? reason : undefined,
+        action === "vacate" && leftOfficeDate ? leftOfficeDate : undefined,
+      );
+      setResult(
+        action === "vacate"
+          ? `${res.name}'s seat marked vacant (${res.vacancyReason}).`
+          : `${res.name}'s seat restored to current.`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="terminal-window mb-6">
+      <TerminalTitlebar title="seat_vacancy" />
+      <div className="p-4 space-y-3">
+        <p className="text-matrix-green/40 text-[10px] font-terminal">
+          Marks a senator/representative&apos;s seat vacant (or restores it) without
+          deleting their historical data. No automated detection — this is manual only.
+        </p>
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="flex flex-col gap-1">
+            <label className="text-matrix-green/50 text-[9px] font-pixel tracking-wider">
+              POLITICIAN ID
+            </label>
+            <input
+              value={politicianId}
+              onChange={(e) => setPoliticianId(e.target.value)}
+              placeholder="e.g. lindsey-graham"
+              className="bg-terminal-bg/50 border border-matrix-green/20 text-matrix-green text-xs font-terminal px-2 py-1.5 w-48 focus:outline-none focus:border-matrix-green/50"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-matrix-green/50 text-[9px] font-pixel tracking-wider">
+              ACTION
+            </label>
+            <select
+              value={action}
+              onChange={(e) => setAction(e.target.value as "vacate" | "restore")}
+              className="bg-terminal-bg/50 border border-matrix-green/20 text-matrix-green text-xs font-terminal px-2 py-1.5 focus:outline-none focus:border-matrix-green/50"
+            >
+              <option value="vacate">Mark vacant</option>
+              <option value="restore">Restore to current</option>
+            </select>
+          </div>
+          {action === "vacate" && (
+            <>
+              <div className="flex flex-col gap-1">
+                <label className="text-matrix-green/50 text-[9px] font-pixel tracking-wider">
+                  REASON
+                </label>
+                <select
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value as (typeof VACANCY_REASONS)[number])}
+                  className="bg-terminal-bg/50 border border-matrix-green/20 text-matrix-green text-xs font-terminal px-2 py-1.5 focus:outline-none focus:border-matrix-green/50"
+                >
+                  {VACANCY_REASONS.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-matrix-green/50 text-[9px] font-pixel tracking-wider">
+                  LEFT OFFICE
+                </label>
+                <input
+                  type="date"
+                  value={leftOfficeDate}
+                  onChange={(e) => setLeftOfficeDate(e.target.value)}
+                  className="bg-terminal-bg/50 border border-matrix-green/20 text-matrix-green text-xs font-terminal px-2 py-1.5 focus:outline-none focus:border-matrix-green/50"
+                />
+              </div>
+            </>
+          )}
+          <button
+            onClick={submit}
+            disabled={submitting || !politicianId.trim()}
+            className="font-pixel text-[10px] text-neon-cyan border border-neon-cyan/30 px-3 py-1.5 hover:bg-neon-cyan/10 transition-colors disabled:opacity-40"
+          >
+            {submitting ? "SUBMITTING..." : "SUBMIT"}
+          </button>
+        </div>
+        {result && <p className="text-matrix-green text-xs font-terminal">{result}</p>}
+        {error && <p className="text-neon-pink text-xs font-terminal">{error}</p>}
+      </div>
+    </div>
+  );
+}
+
 // --- Visitor Stats ---
 function BreakdownGroup({ title, entries }: { title: string; entries: { name: string; count: number }[] }) {
   if (entries.length === 0) return null;
@@ -1530,6 +1645,9 @@ function AdminDashboardView({
 
         {/* System Monitor */}
         <SystemMonitor token={token} initialStats={d?.host} />
+
+        {/* Seat Vacancy Control */}
+        <VacancyControl token={token} />
 
         {/* Visitor Stats */}
         <VisitorStats token={token} />
