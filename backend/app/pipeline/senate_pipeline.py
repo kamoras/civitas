@@ -150,7 +150,7 @@ PIPELINE_STEPS = [
 STALE_PIPELINE_TIMEOUT_S = 43200  # 12 hours
 MAX_SIGNIFICANT_BILLS = 100
 RECENT_RC_COUNT_PER_SESSION = 100
-RECENT_RC_SESSIONS = 4
+RECENT_RC_SESSIONS = 2
 MIN_CONGRESS_FOR_BILL_TITLES = 116
 
 
@@ -843,10 +843,8 @@ async def run_senate_pipeline(
             )
             progress.complete("fetch_roll_calls", detail=f"{len(roll_call_data_map)} matched")
 
-            # 1d.2 Fetch recent roll calls from Senate.gov across multiple sessions.
-            # We fetch from the current congress AND the previous congress (both sessions)
-            # to get a richer history — the 119th congress has many nomination votes
-            # (classified "mixed"); the 118th had more substantive legislation.
+            # 1d.2 Fetch recent roll calls from Senate.gov, current congress only —
+            # "current term" is defined as the current congress; see AGENTS.md.
             logger.info("Fetching recent Senate roll calls (multi-session)...")
             progress.begin("fetch_recent_rcs", total=RECENT_RC_SESSIONS)
             all_recent_roll_calls: list[dict] = []
@@ -855,8 +853,6 @@ async def run_senate_pipeline(
             fetch_sessions = [
                 (settings.CURRENT_CONGRESS, 1),      # e.g. 119th sess 1 (2025)
                 (settings.CURRENT_CONGRESS, 2),      # 119th sess 2 (2026, if started)
-                (settings.CURRENT_CONGRESS - 1, 2),  # 118th sess 2 (2024)
-                (settings.CURRENT_CONGRESS - 1, 1),  # 118th sess 1 (2023)
             ]
 
             for sess_idx, (congress_num, session_num) in enumerate(fetch_sessions):
@@ -1057,14 +1053,14 @@ async def run_senate_pipeline(
                 )
 
                 # Match the receipt-detail and outside-spending windows to
-                # the receipt-totals window (normalize_finance sums the two
-                # most recent elections, one deduped totals row each).
+                # the receipt-totals window (normalize_finance sums only the
+                # most recent election, one deduped totals row).
                 # Include the preceding 2-year cycle since both independent
                 # expenditures and a campaign's own receipts accrue across
                 # the full election period, not just the election year.
                 # Without this, top-donor/industry-breakdown detail was
                 # drawn from the committee's entire career while the totals
-                # it's compared against were windowed to 2 recent elections
+                # it's compared against were windowed to the recent election
                 # (2026-07 audit finding).
                 recent_cycles = []
                 for c in select_recent_elections(financials):

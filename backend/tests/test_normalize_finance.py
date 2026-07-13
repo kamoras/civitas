@@ -92,7 +92,10 @@ class TestNormalizeFinance:
         assert result["totalRaised"] == 0
         assert result["smallDonorPercentage"] == 0
 
-    def test_multiple_cycles_summed(self):
+    def test_no_election_year_falls_back_to_first_row(self):
+        # Rows with no discernible election year can't be deduped by year,
+        # so select_recent_elections falls back to financials[:n] — with
+        # n=1 (most recent election only) that's just the first row.
         financials = [
             {"receipts": 500_000, "other_political_committee_contributions": 100_000,
              "individual_unitemized_contributions": 50_000, "individual_itemized_contributions": 300_000},
@@ -106,11 +109,14 @@ class TestNormalizeFinance:
             pac_receipts=[],
             aggregated_contributors=[],
         )
-        assert result["totalRaised"] == 800_000
+        assert result["totalRaised"] == 500_000
         # totalFromPACs is computed from actual donor records
         assert result["totalFromPACs"] >= 0
 
-    def test_only_two_most_recent_elections_used(self):
+    def test_only_most_recent_election_used(self):
+        # Funding is windowed to the candidate's most recent election (their
+        # current mandate's campaign), not a career-spanning lookback —
+        # see select_recent_elections for why.
         financials = [
             {"candidate_election_year": 2030, "receipts": 100,
              "other_political_committee_contributions": 0,
@@ -129,7 +135,7 @@ class TestNormalizeFinance:
             pac_receipts=[],
             aggregated_contributors=[],
         )
-        assert result["totalRaised"] == 300  # 2030 + 2024, not the 2018 race
+        assert result["totalRaised"] == 100  # 2030 only, not 2024 or 2018
 
     def test_non_contribution_receipts_excluded_from_donors(self):
         # Schedule A itemizes ALL receipts. Only line 11 is contributions:
@@ -173,8 +179,9 @@ class TestNormalizeFinance:
     def test_same_election_rows_not_double_counted(self):
         # /candidate/{id}/totals returns an election-full aggregate row
         # (cycle: null) PLUS per-cycle rows for the same election. Summing
-        # the first two rows counted the same money twice and dropped the
-        # previous race entirely (184/521 cached candidates, 2026-07 audit).
+        # both would count the same money twice (184/521 cached candidates,
+        # 2026-07 audit) — and with funding windowed to only the most
+        # recent election, the older 2024 race must not be counted at all.
         financials = [
             {"candidate_election_year": 2030, "cycle": None, "receipts": 1_200_000,
              "other_political_committee_contributions": 120_000,
@@ -196,16 +203,18 @@ class TestNormalizeFinance:
             pac_receipts=[],
             aggregated_contributors=[],
         )
-        assert result["totalRaised"] == 53_200_000  # 2030 once + the 2024 race
-        assert result["totalFromPACs"] == 3_620_000
-        assert result["smallDonorPercentage"] == round(15_400_000 / 53_200_000 * 100)
+        assert result["totalRaised"] == 1_200_000  # 2030 once, not the 2024 race
+        assert result["totalFromPACs"] == 120_000
+        assert result["smallDonorPercentage"] == round(400_000 / 1_200_000 * 100)
 
-    def test_negative_receipts_averaged_with_a_positive_election_stays_nonnegative(self):
+    def test_negative_receipts_on_most_recent_election_floors_at_zero_not_masked_by_prior(self):
         # A just-opened next-cycle committee can have genuinely negative
         # FEC receipts (more refunds/adjustments than new money so far) —
         # real upstream data, not a fetch bug (2026-07 audit: a sitting
-        # representative's still-forming committee was -$1.6M). Combined
-        # with a real prior election this usually still nets positive.
+        # representative's still-forming committee was -$1.6M). With
+        # funding windowed to only the most recent election, a strongly
+        # positive prior election must NOT dilute/mask that negative value —
+        # it's excluded entirely, and the negative floors at zero on its own.
         financials = [
             {"candidate_election_year": 2026, "receipts": -1_618_913.64,
              "other_political_committee_contributions": 57_000,
@@ -223,8 +232,7 @@ class TestNormalizeFinance:
             pac_receipts=[],
             aggregated_contributors=[],
         )
-        assert result["totalRaised"] == pytest.approx(8_041_756.83, abs=1)
-        assert result["totalRaised"] >= 0
+        assert result["totalRaised"] == 0
 
     def test_all_negative_receipts_floored_at_zero(self):
         # A candidate whose only cached election has net-negative receipts

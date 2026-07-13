@@ -78,8 +78,9 @@ def normalize_finance(
     Returns:
         Normalized funding object matching Senator.funding type.
     """
-    # Sum across the two most recent elections (one deduped row each —
-    # see select_recent_elections for why raw [:2] double-counted).
+    # Sum across the candidate's most recent election only (their current
+    # mandate's campaign) — see select_recent_elections for rationale and
+    # why raw [:2] double-counted.
     recent_cycles = select_recent_elections(financials)
 
     # FEC's per-cycle `receipts` (and the sub-totals below) can be

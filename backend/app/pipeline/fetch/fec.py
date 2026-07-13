@@ -177,8 +177,15 @@ def financials_election_year(row: dict) -> int | None:
     return row.get("candidate_election_year") or row.get("cycle") or None
 
 
-def select_recent_elections(financials: list[dict], n: int = 2) -> list[dict]:
+def select_recent_elections(financials: list[dict], n: int = 1) -> list[dict]:
     """One totals row per election, most recent ``n`` elections first.
+
+    Funding dimensions are windowed to the candidate's most recent election
+    (their current mandate's campaign) rather than "current congress only"
+    like the vote/bill dimensions — Senators legitimately raise little money
+    in the non-election years of a 6-year term, so a 2-year funding window
+    would go near-empty for reasons unrelated to coasting. See AGENTS.md
+    "current term" for the full rationale.
 
     /candidate/{id}/totals returns overlapping rows for the same election:
     an election-full aggregate (cycle: null) plus per-two-year-cycle rows,

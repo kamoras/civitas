@@ -7,7 +7,7 @@ totals it's compared against are windowed to the 2 most recent elections
 (select_recent_elections). 2026-07 audit finding; see fetch/fec.py.
 """
 
-from app.pipeline.fetch.fec import _cycle_query, _cycle_tag
+from app.pipeline.fetch.fec import _cycle_query, _cycle_tag, select_recent_elections
 
 
 def test_cycle_query_formats_repeated_params():
@@ -39,3 +39,17 @@ def test_cycle_tag_differs_for_different_windows():
     # key regardless of window" bug.
     assert _cycle_tag([2024, 2022]) != _cycle_tag([2018, 2016])
     assert _cycle_tag([2024, 2022]) != _cycle_tag(None)
+
+
+def test_select_recent_elections_defaults_to_most_recent_only():
+    # Funding is windowed to the candidate's most recent election only
+    # (their current mandate's campaign), not a 2-election lookback —
+    # see select_recent_elections's docstring for the "current term"
+    # rationale.
+    financials = [
+        {"candidate_election_year": 2024, "receipts": 100},
+        {"candidate_election_year": 2018, "receipts": 200},
+    ]
+    result = select_recent_elections(financials)
+    assert len(result) == 1
+    assert result[0]["candidate_election_year"] == 2024

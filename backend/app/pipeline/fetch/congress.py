@@ -18,6 +18,11 @@ RETRY_BACKOFF_S = 2.0
 
 _rate_limiter = RateLimiter(settings.CONGRESS_RPS)
 
+
+def congress_first_year(congress: int) -> int:
+    """First calendar year of the given Congress (the 1st Congress convened 1789)."""
+    return 1789 + (congress - 1) * 2
+
 async def fetch_significant_bills(
     client: httpx.AsyncClient,
     db: Session,
@@ -32,15 +37,15 @@ async def fetch_significant_bills(
     Args:
         client: HTTP client.
         db: Database session for caching.
-        congresses: Congress numbers to search (default: current + two previous).
+        congresses: Congress numbers to search (default: current congress only —
+            "current term" is defined as the current congress; see AGENTS.md).
         max_bills: Maximum number of bills to return.
 
     Returns:
         List of bill reference dicts with keys: congress, type, number, name.
     """
     if congresses is None:
-        current = settings.CURRENT_CONGRESS
-        congresses = [current, current - 1, current - 2]
+        congresses = [settings.CURRENT_CONGRESS]
 
     cache_key = f"significant-bills-{'_'.join(str(c) for c in congresses)}-{max_bills}"
     cached = api_cache_get(db, "congress", cache_key)
@@ -252,7 +257,7 @@ async def fetch_member_detail(
 
 
 def _recent_congresses_only(bills: list[dict]) -> list[dict]:
-    """Keep only bills from the current and previous congress.
+    """Keep only bills from the current congress ("current term"; see AGENTS.md).
 
     Scoring (LE volume, promise derivation, key-vote selection) operates
     on the recent window; feeding career-length sponsorship lists into
@@ -261,7 +266,7 @@ def _recent_congresses_only(bills: list[dict]) -> list[dict]:
     official-title fetches). The full fetched list stays in ApiCache
     verbatim; this bound applies at the point of use.
     """
-    min_congress = settings.CURRENT_CONGRESS - 1
+    min_congress = settings.CURRENT_CONGRESS
     return [b for b in bills if (b.get("congress") or 0) >= min_congress]
 
 
@@ -270,8 +275,8 @@ async def fetch_member_sponsored(
 ) -> list[dict]:
     """Fetch a member's sponsored legislation with pagination.
 
-    Returns only bills from the current and previous congress; see
-    _recent_congresses_only for why.
+    Returns only bills from the current congress; see _recent_congresses_only
+    for why.
     """
     cache_key = f"member-sponsored-v2-{bioguide_id}"
     cached = api_cache_get(db, "congress", cache_key)

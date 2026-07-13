@@ -24,6 +24,7 @@ from app.models import HousePipelineRun, Representative, ScoreSnapshot
 from app.services.representative_service import upsert_representative
 
 from app.pipeline.fetch.congress import (
+    congress_first_year,
     fetch_bill,
     fetch_bill_actions,
     fetch_bill_cosponsors,
@@ -176,10 +177,14 @@ async def run_house_pipeline() -> dict:
             # roll-call XML is cheap and cached; classification of each
             # vote is also cached, so the marginal cost after the first
             # run is zero. Pull the prior year too when the current year
-            # is young (fewer than 60 roll calls yet).
+            # is young (fewer than 60 roll calls yet) — but only if that
+            # prior year is still within the current congress (2 calendar
+            # years/term; see AGENTS.md "current term"), otherwise it would
+            # silently pull in the previous congress's votes.
             current_year = datetime.now().year
             recent_rcs = await fetch_recent_house_roll_calls(client, db, year=current_year, count=120)
-            if len(recent_rcs) < 60 and datetime.now().month <= 6:
+            same_congress_prior_year = current_year > congress_first_year(settings.CURRENT_CONGRESS)
+            if len(recent_rcs) < 60 and datetime.now().month <= 6 and same_congress_prior_year:
                 recent_rcs += await fetch_recent_house_roll_calls(
                     client, db, year=current_year - 1, count=120 - len(recent_rcs),
                 )
@@ -300,8 +305,10 @@ async def run_house_pipeline() -> dict:
                     })
 
                 # Enrich with per-rep sponsored bills (up to 5 per rep,
-                # recent Congress only) to make the cosponsorship matrix denser.
-                min_congress = settings.CURRENT_CONGRESS - 1
+                # current Congress only — fetch_member_sponsored already
+                # filters this via _recent_congresses_only) to make the
+                # cosponsorship matrix denser.
+                min_congress = settings.CURRENT_CONGRESS
                 sponsored_for_cosponsor: list[dict] = []
                 for r in reps:
                     bio_id = r.get("bioguideId", "")
