@@ -450,13 +450,13 @@ class TestPositionsFromSponsoredBills:
 
     def _bills(self):
         return [
-            {"billId": "HR.10",
+            {"billId": "HR.10", "billType": "hr",
              "title": "To lower prescription drug costs for seniors enrolled in Medicare",
              "isLaw": False, "latestAction": "Referred to committee"},
-            {"billId": "HR.11",
+            {"billId": "HR.11", "billType": "hr",
              "title": "To reduce the price of prescription drugs for older Americans",
              "isLaw": False, "latestAction": "Referred to committee"},
-            {"billId": "HR.12",
+            {"billId": "HR.12", "billType": "hr",
              "title": "To expand broadband internet access in rural communities",
              "isLaw": False, "latestAction": "Referred to committee"},
         ]
@@ -465,8 +465,32 @@ class TestPositionsFromSponsoredBills:
         assert positions_from_sponsored_bills([], []) == []
 
     def test_short_titles_skipped(self):
-        bills = [{"billId": "HR.1", "title": "Short title"}]
+        bills = [{"billId": "HR.1", "billType": "hr", "title": "Short title"}]
         assert positions_from_sponsored_bills(bills, []) == []
+
+    def test_resolutions_excluded_from_derived_positions(self):
+        """v5.9 bug: a member's ceremonial resolutions (a sorority-
+        anniversary resolution, an awareness-day designation) were being
+        fed in as 'positions', then inevitably scored 'unclear' since a
+        resolution agreed to without debate has no matchable floor votes —
+        inflating the unclear count and collapsing Promise Persistence's
+        population spread. Simple/concurrent resolutions must never
+        become derived positions at all, regardless of title length."""
+        bills = self._bills() + [
+            {"billId": "HRES.5", "billType": "hres",
+             "title": "A resolution recognizing the 175th anniversary of "
+                      "the founding of Alpha Delta Pi Sorority.",
+             "isLaw": False, "latestAction": "Agreed to by unanimous consent"},
+            {"billId": "SRES.9", "billType": "sres",
+             "title": "A resolution recognizing and honoring National "
+                      "Mushroom Day and the contributions of Chester and "
+                      "Berks Counties to the national mushroom industry.",
+             "isLaw": False, "latestAction": "Agreed to by unanimous consent"},
+        ]
+        positions = positions_from_sponsored_bills(bills, [])
+        texts = " ".join(p["promiseText"] for p in positions)
+        assert "Mushroom" not in texts
+        assert "Sorority" not in texts
 
     def test_near_duplicate_topics_deduplicated(self):
         positions = positions_from_sponsored_bills(self._bills(), [])

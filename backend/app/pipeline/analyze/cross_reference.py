@@ -27,6 +27,7 @@ from app.pipeline.analyze.policy_alignment import (
     detect_donor_vote_connections,
     get_related_policies,
 )
+from app.pipeline.analyze.score_calculator import SUBSTANTIVE_BILL_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -392,13 +393,28 @@ def positions_from_sponsored_bills(
     Deterministic by design: embeddings only, no LLM — the House
     pipeline must process 431 members on the same hardware budget the
     Senate pipeline spends on 100.
+
+    Substantive bills only (same SUBSTANTIVE_BILL_TYPES filter as
+    Legislative Effectiveness) — a simple/concurrent resolution
+    ("recognizing National Mushroom Day", designating an awareness day,
+    honoring a sorority's anniversary) is not a position a member is
+    staking their credibility on, and is unmatchable against real votes
+    by construction (agreed to without debate). Left unfiltered, these
+    inflated the "unclear" count and collapsed Promise Persistence's
+    population spread (2026-07 finding: several "promises" in production
+    were literally ceremonial resolution titles, not stated positions).
     """
     if not sponsored_bills:
         return []
 
+    substantive_bills = [
+        b for b in sponsored_bills
+        if (b.get("billType") or "").lower() in SUBSTANTIVE_BILL_TYPES
+    ]
+
     titles = [
         t for t in (
-            (b.get("title") or "").strip() for b in sponsored_bills
+            (b.get("title") or "").strip() for b in substantive_bills
         )
         if len(t) >= 20
     ]

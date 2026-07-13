@@ -188,6 +188,15 @@ ALGORITHM_VERSION = "v5.9"
 
 NON_INDUSTRY_CODES = {"OTHER", "SMALL_DONORS", "LARGE_INDIVIDUAL", "POLITICAL", "UNCLASSIFIED"}
 
+# Substantive legislation only — excludes simple/concurrent resolutions
+# (sres/hres/sconres/hconres), which are routinely ceremonial ("National
+# Mushroom Day", a sorority-anniversary resolution) and agreed to without
+# debate. Used wherever "did this member do real legislative work" needs
+# to exclude commemorative content: Legislative Effectiveness (both
+# advancement and volume) and, via cross_reference.py, promise derivation
+# from a member's own sponsored bills.
+SUBSTANTIVE_BILL_TYPES = {"s", "hr", "sjres", "hjres"}
+
 # Cook Partisan Voting Index approximation (2024 cycle, based on
 # 2020 presidential results).  Source: Cook Political Report.
 # Positive = R lean, negative = D lean.  Updated per election cycle;
@@ -1060,10 +1069,9 @@ def _calc_legislative_effectiveness(
     n_bills = len(sponsored_bills)
 
     # Component 1: advancement rate over substantive bills only
-    SUBSTANTIVE_TYPES = {"s", "hr", "sjres", "hjres"}
     substantive = [
         b for b in sponsored_bills
-        if (b.get("billType") or "").lower() in SUBSTANTIVE_TYPES
+        if (b.get("billType") or "").lower() in SUBSTANTIVE_BILL_TYPES
     ]
 
     became_law = 0
@@ -1108,7 +1116,7 @@ def _calc_legislative_effectiveness(
 
     # Component 3: sponsorship volume per congress served
     #
-    # Substantive bills only — same SUBSTANTIVE_TYPES set as Component 1.
+    # Substantive bills only — same SUBSTANTIVE_BILL_TYPES set as Component 1.
     # Simple/concurrent resolutions (sres/hres/sconres/hconres) are
     # routinely ceremonial ("recognizing National Mushroom Day", agreed to
     # by unanimous consent with zero debate) and free to sponsor in
