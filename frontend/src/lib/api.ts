@@ -651,6 +651,35 @@ export async function fetchAdminVisitorBreakdown(token: string): Promise<Visitor
   return res.json();
 }
 
+export interface VacancyResult {
+  id: string;
+  name: string;
+  isCurrent: boolean;
+  vacancyReason: string | null;
+  leftOfficeDate: string | null;
+}
+
+export async function setPoliticianVacancy(
+  token: string,
+  politicianId: string,
+  isCurrent: boolean,
+  reason?: string,
+  leftOfficeDate?: string,
+): Promise<VacancyResult> {
+  const params = new URLSearchParams({ is_current: String(isCurrent) });
+  if (reason) params.set("reason", reason);
+  if (leftOfficeDate) params.set("left_office_date", leftOfficeDate);
+  const res = await fetch(
+    `${API_BASE}/admin/politicians/${encodeURIComponent(politicianId)}/vacancy?${params}`,
+    { method: "POST", headers: adminHeaders(token) },
+  );
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `Vacancy update failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 
 
 export async function fetchConfig(): Promise<AppConfig> {
