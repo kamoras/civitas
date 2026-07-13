@@ -579,7 +579,6 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
         progress_steps = None
         if last_run.progress_detail:
             try:
-                import json
                 progress_steps = json.loads(last_run.progress_detail)
             except (json.JSONDecodeError, TypeError):
                 pass
