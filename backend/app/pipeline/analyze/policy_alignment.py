@@ -656,26 +656,83 @@ def compute_promise_vote_alignment(
 def detect_donor_vote_connections(
     donors: list[dict],
     votes: list[dict],
-    similarity_threshold: float = 0.35,
+    industry_breakdown: list[dict] | None = None,
+    min_industry_share: float = 25.0,
+    policy_similarity_threshold: float = 0.75,
     max_matches: int = 8,
 ) -> list[dict]:
-    """Detect connections between donors and votes using embedding similarity.
+    """Detect connections between a senator's donor base and their votes.
 
-    Replaces the hardcoded _INDUSTRY_POLICY_MAP approach in cross_reference.py.
-    Instead of mapping FINANCE→{FINANCIAL,TAXES}, we compute the actual
-    semantic similarity between each donor's industry description and each
-    vote's content.
+    Two-stage gate, both required, addressing a 2026-07 audit finding that
+    the previous per-donor/raw-text-similarity design flagged essentially
+    every vote near any donor regardless of size or topical relevance
+    ("voted yea on the annual budget, a small donor benefits" is not a
+    finding — this looks for cases like a real regulatory-capture story:
+    a substantial share of a member's classifiable industry funding comes
+    from one industry, AND they voted on legislation squarely in that
+    industry's domain):
+
+    1. **Substantial funding, not any funding.** Industry share is
+       computed against the CLASSIFIED-industry-only total (excluding
+       SMALL_DONORS/LARGE_INDIVIDUAL/UNCLASSIFIED/OTHER/POLITICAL — these
+       are structurally not "an industry": unitemized small-dollar
+       donors, individuals with no useful employer data, and non-
+       contribution receipts like loans/transfers/interest; see
+       normalize_finance.py's _build_industry_breakdown). Measured
+       2026-07: against total_raised (including those buckets) even a
+       senator's single largest industry rarely clears 5% — that
+       denominator makes "substantial" mean nothing. Against classified-
+       industry-only total, the same population's top industry share
+       has a median of 32%, a usable, discriminating signal. Default
+       threshold (25%) sits just below that median.
+
+    2. **Policy-area-anchored matching, not raw free-text similarity.**
+       The old approach embedded a donor's industry description against
+       each vote's full free-text description — noisy, uncalibrated
+       (any two pieces of formal legislative-register text share enough
+       vocabulary to score misleadingly high). Votes already carry a
+       classified policyArea; industry_policy_similarity() gives a
+       stable, pre-computed similarity between an industry anchor and a
+       policy-area anchor — both small, fixed taxonomies, not raw text.
+       Measured 2026-07 (375 industry x policy-area pairs): genuine
+       matches (TECH vs TECH, ENERGY vs ENERGY, DEFENSE vs DEFENSE)
+       score 0.87-0.93; the cross-category noise floor sits at
+       mean 0.66 / p90 0.71 — a clean gap. Default threshold (0.75)
+       sits in that gap.
     """
-    # Self-Funded excluded: a senator's own money is not a donor interest.
-    # (The 2026-07 audit found self-loans surfacing as senators' biggest
-    # "lobbying connection" — e.g. "Scott, Rick — $19M" matched to
-    # rick-scott's own votes.)
-    external = [
-        d for d in donors
-        if d.get("type") not in ("CandidateAffiliated", "Self-Funded", "SKIP")
-        and d.get("industry") not in ("OTHER", "POLITICAL", "SMALL_DONORS", "LARGE_INDIVIDUAL")
+    if not industry_breakdown:
+        return []
+
+    from app.pipeline.analyze.score_calculator import NON_INDUSTRY_CODES
+
+    # LOBBYISTS is a service profession, not a policy domain — a lobbying
+    # firm's PAC represents whichever clients pay it, across every policy
+    # area, so its industry label doesn't reveal a specific interest the
+    # way TECH/ENERGY/DEFENSE do (those directly name an economic sector).
+    # Measured: LOBBYISTS is the only industry anchor that crosses the
+    # 0.75 policy-similarity gate at all (0.751 vs TAXES, right at the
+    # edge) — not because it's genuinely tax-focused, but because
+    # "lobbying government relations public affairs advocacy" is broad
+    # enough to drift near every policy area. Still counts as real
+    # industry money for the funding-share denominator (it's not
+    # SMALL_DONORS/UNCLASSIFIED-style non-money) — just not a valid
+    # candidate for "this industry cares about this policy area."
+    _NOT_POLICY_SPECIFIC = {"LOBBYISTS"}
+
+    real_industries = [
+        i for i in industry_breakdown
+        if i.get("industry") not in NON_INDUSTRY_CODES and (i.get("total") or 0) > 0
     ]
-    if not external:
+    classified_total = sum(i["total"] for i in real_industries)
+    if classified_total <= 0:
+        return []
+
+    substantial = [
+        i for i in real_industries
+        if i.get("industry") not in _NOT_POLICY_SPECIFIC
+        and (i["total"] / classified_total * 100) >= min_industry_share
+    ]
+    if not substantial:
         return []
 
     substantive = [
@@ -686,46 +743,31 @@ def detect_donor_vote_connections(
     if not substantive:
         return []
 
-    # Embed donor industry descriptions
-    donor_texts = [
-        INDUSTRY_ANCHORS.get(d.get("industry", ""), d.get("industry", ""))
-        for d in external[:8]
-    ]
-    donor_embs = _embed_batch(donor_texts)
-    if donor_embs.size == 0:
-        return []
+    # Largest individual donor within each qualifying industry, for a
+    # concrete, human-readable headline name — the gating decision itself
+    # is aggregate-level (above), this is display only.
+    donors_by_industry: dict[str, list[dict]] = {}
+    for d in donors:
+        if d.get("type") in ("CandidateAffiliated", "Self-Funded", "SKIP"):
+            continue
+        donors_by_industry.setdefault(d.get("industry", ""), []).append(d)
 
-    # Embed vote descriptions
-    vote_texts = [
-        f"{v.get('billName', '')} {v.get('description', '')} {v.get('policyArea', '')}"
-        for v in substantive
-    ]
-    vote_embs = _embed_batch(vote_texts)
-    if vote_embs.size == 0:
-        return []
+    industry_matches: list[dict] = []
 
-    # Compute similarity matrix: donors x votes
-    sim_matrix = donor_embs @ vote_embs.T
+    for ind in substantial:
+        industry = ind["industry"]
+        share = ind["total"] / classified_total * 100
 
-    # Consolidate per donor: one match entry per unique donor org,
-    # with all related bills aggregated into billsInfluenced.
-    donor_matches: dict[str, dict] = {}
-
-    for i, donor in enumerate(external[:8]):
-        donor_name = donor.get("name", "")
-        donor_key = donor_name.upper().strip()
-
-        best_vote_indices = np.argsort(sim_matrix[i])[::-1]
-        best_sim = 0.0
         matched_bills: list[str] = []
         desc_parts: list[str] = []
+        best_sim = 0.0
+        all_consensus = True
 
-        for j in best_vote_indices[:3]:
-            sim = float(sim_matrix[i, j])
-            if sim < similarity_threshold:
-                break
+        for vote in substantive:
+            sim = industry_policy_similarity(industry, vote.get("policyArea", ""))
+            if sim < policy_similarity_threshold:
+                continue
 
-            vote = substantive[j]
             bid = vote["billId"]
             if bid in matched_bills:
                 continue
@@ -735,14 +777,14 @@ def detect_donor_vote_connections(
             vote_cast = vote["vote"]
             bill_name = vote.get("billName", bid)[:80]
             is_amendment = "amdt" in bid.lower() or "amendment" in bill_name.lower()
-            
-            # Determine if this was a consensus vote (overwhelming majority)
-            # using whatever tally info is available.
+
             yeas = vote.get("totalYeas") or vote.get("yeas", 0)
             nays = vote.get("totalNays") or vote.get("nays", 0)
             is_consensus = False
             if yeas + nays > 20:
                 is_consensus = (max(yeas, nays) / (yeas + nays)) >= 0.85
+            if not is_consensus:
+                all_consensus = False
 
             desc_parts.append(
                 f"Voted {vote_cast} on {'amendment ' if is_amendment else ''}"
@@ -752,62 +794,40 @@ def detect_donor_vote_connections(
 
         if not matched_bills:
             continue
-        
-        # Check if ALL matched bills for this donor were consensus votes
-        all_consensus = True
-        for bid in matched_bills:
-            vote_obj = next((v for v in substantive if v["billId"] == bid), None)
-            if vote_obj:
-                y = vote_obj.get("totalYeas") or vote_obj.get("yeas", 0)
-                n = vote_obj.get("totalNays") or vote_obj.get("nays", 0)
-                if y + n <= 20 or (max(y, n) / (y + n)) < 0.85:
-                    all_consensus = False
-                    break
 
-        if donor_key in donor_matches:
-            existing = donor_matches[donor_key]
-            for b in matched_bills:
-                if b not in existing["billsInfluenced"]:
-                    existing["billsInfluenced"].append(b)
-            existing["similarity"] = max(existing["similarity"], best_sim)
-            if not all_consensus:
-                existing["isConsensusVote"] = False
-        else:
-            donor_matches[donor_key] = {
-                "lobbyistOrg": donor_name,
-                "industry": donor.get("industry", "OTHER"),
-                "lobbyingSpend": 0,
-                "donationToSenator": round(donor.get("total", 0)),
-                "billsInfluenced": matched_bills,
-                # Always None: determining whether this vote aligned with
-                # the donor's interest requires knowing which way the
-                # donor's industry wanted the bill to go, and no ingested
-                # source (LDA filings carry aggregate spend, not per-bill
-                # positions) discloses that. Filling it in via a hand-
-                # authored industry->stance mapping would be exactly the
-                # kind of authored political conclusion this platform's
-                # scores are designed never to contain (2026-07 audit;
-                # see score_calculator.py's Independent Voting note).
-                "senatorVoteAligned": None,
-                "isConsensusVote": all_consensus,
-                "similarity": round(best_sim, 3),
-                # Careful phrasing: these totals are employer-aggregated
-                # individual contributions plus PAC money (often far above
-                # the per-PAC legal limit), and topical overlap is not
-                # evidence of influence. Describe the overlap; don't imply
-                # causation or a single org-level donation.
-                "description": (
-                    f"Individuals and PACs associated with {donor_name} "
-                    f"({donor.get('industry', '?')}) contributed "
-                    f"${donor.get('total', 0):,.0f} across recent cycles. "
-                    f"Votes on related topics: "
-                    + ". ".join(desc_parts) + "."
-                ),
-            }
+        top_donor_name = None
+        if donors_by_industry.get(industry):
+            top_donor_name = max(
+                donors_by_industry[industry], key=lambda d: d.get("total", 0),
+            ).get("name")
 
-    matches = sorted(
-        donor_matches.values(),
-        key=lambda m: m["donationToSenator"],
-        reverse=True,
-    )
-    return matches[:max_matches]
+        industry_matches.append({
+            "lobbyistOrg": top_donor_name or f"{industry.replace('_', ' ').title()} industry",
+            "industry": industry,
+            "lobbyingSpend": 0,
+            "donationToSenator": round(ind["total"]),
+            "billsInfluenced": matched_bills,
+            # Always None: determining whether this vote aligned with
+            # the donor's interest requires knowing which way the
+            # donor's industry wanted the bill to go, and no ingested
+            # source (LDA filings carry aggregate spend, not per-bill
+            # positions) discloses that. Filling it in via a hand-
+            # authored industry->stance mapping would be exactly the
+            # kind of authored political conclusion this platform's
+            # scores are designed never to contain (2026-07 audit;
+            # see score_calculator.py's Independent Voting note).
+            "senatorVoteAligned": None,
+            "isConsensusVote": all_consensus,
+            "similarity": round(best_sim, 3),
+            "description": (
+                f"{industry.replace('_', ' ').title()} accounts for "
+                f"{share:.0f}% of this member's classifiable industry "
+                f"funding (${ind['total']:,.0f}) "
+                f"— a substantial concentration, not a typical spread "
+                f"across many industries. Votes on related topics: "
+                + ". ".join(desc_parts) + "."
+            ),
+        })
+
+    industry_matches.sort(key=lambda m: m["donationToSenator"], reverse=True)
+    return industry_matches[:max_matches]

@@ -38,13 +38,14 @@ logger = logging.getLogger(__name__)
 def detect_lobbying_matches(
     donors: list[dict],
     all_votes: list[dict],
+    industry_breakdown: list[dict] | None = None,
 ) -> list[dict]:
-    """Detect donor-vote connections using embedding cosine similarity.
-
-    Uses semantic similarity between donor industry descriptions and
-    vote content, replacing the hardcoded _INDUSTRY_POLICY_MAP.
+    """Detect donor-vote connections: substantial industry funding share
+    (of classifiable industry money) matched against policy-area-anchored
+    vote similarity. See detect_donor_vote_connections's docstring for the
+    full two-stage gate rationale.
     """
-    return detect_donor_vote_connections(donors, all_votes)
+    return detect_donor_vote_connections(donors, all_votes, industry_breakdown)
 
 
 # ── Embedding-based key vote selection ───────────────────────────
@@ -162,10 +163,14 @@ def precompute_senator_analysis(item: dict) -> dict:
     all_votes = item.get("allVotes", [])
     platform_text = item.get("platformText", "")
     sponsored_bills = item.get("sponsoredBills", [])
+    industry_breakdown = item.get("industryBreakdown", [])
 
     has_data = len(donors) > 0 or len(all_votes) > 0
 
-    lobbying_matches = detect_lobbying_matches(donors, all_votes) if has_data else []
+    lobbying_matches = (
+        detect_lobbying_matches(donors, all_votes, industry_breakdown)
+        if has_data else []
+    )
     key_vote_ids = select_key_votes(all_votes, donors) if has_data else []
     computed_promises = _compute_promise_alignments(
         platform_text, all_votes, sponsored_bills=sponsored_bills,
@@ -217,6 +222,7 @@ async def analyze_senator_batch(
         all_votes = item.get("allVotes", [])
         platform_text = item.get("platformText", "")
         sponsored_bills = item.get("sponsoredBills", [])
+        industry_breakdown = item.get("industryBreakdown", [])
 
         has_data = len(donors) > 0 or len(key_votes) > 0
 
@@ -226,7 +232,10 @@ async def analyze_senator_batch(
             fallback_promises = precomputed["computedPromises"]
             platform_topics = precomputed.get("platformTopics", [])
         else:
-            lobbying_matches = detect_lobbying_matches(donors, all_votes) if has_data else []
+            lobbying_matches = (
+                detect_lobbying_matches(donors, all_votes, industry_breakdown)
+                if has_data else []
+            )
             key_vote_ids = select_key_votes(all_votes, donors) if has_data else []
             fallback_promises = _compute_promise_alignments(
                 platform_text, all_votes, sponsored_bills=sponsored_bills,

@@ -578,6 +578,7 @@ def _build_analysis_input(prepared: dict, platform_texts: dict) -> dict:
     return {
         "senator": senator,
         "donors": funding.get("topDonors", []),
+        "industryBreakdown": funding.get("industryBreakdown", []),
         "keyVotes": voting_record.get("keyVotes", []),
         "allVotes": all_votes,
         "platformText": platform_texts.get(senator["id"], ""),

@@ -194,6 +194,28 @@ Changes from v3 → v4 (score audit 2026-06):
   vs. genuinely few promises naming legislation that gets an actual
   floor vote within one congress — is flagged as still open, not solved
   by this pass.
+- v5.11 (2026-07): Redesigned donor-vote "lobbying connection" detection
+  (detect_donor_vote_connections, policy_alignment.py), which feeds
+  Constituent Alignment's donor-influence penalty (senatorVoteAligned is
+  always None with today's data sources, so every detected match applies
+  a real penalty via the donation-ratio/non-consensus-share path — see
+  _calc_constituent_alignment). User report: essentially every vote near
+  any donor was flagging as a "connection" regardless of size or topical
+  relevance. Root cause was two uncalibrated pieces: a 0.35 raw-text
+  similarity threshold (far below the noise floor for this text pair
+  type) and no donor-magnitude gate at all. Replaced with a two-stage
+  gate: (1) donor's INDUSTRY must be a substantial share (>=25%) of the
+  member's CLASSIFIED-industry-only funding — not total raised, which is
+  mostly small-dollar/non-industry money by construction (measured: real
+  median top-industry share is 1.5% of total raised vs 32% of
+  classified-industry-only money; the latter is the actually meaningful
+  denominator), (2) the industry's already-classified policy-area
+  similarity to the vote must clear 0.75 (measured: genuine matches like
+  TECH-vs-TECH score 0.87-0.93, cross-category noise floor sits at
+  mean 0.66/p90 0.71 — a clean, calibrated gap, replacing the old raw
+  free-text embedding approach). Expect fewer, more meaningful lobbying
+  matches, which will reduce the donor-influence penalty for senators
+  whose previous matches were mostly false positives.
 """
 
 import logging
@@ -204,7 +226,7 @@ logger = logging.getLogger(__name__)
 # shifts scores. Recorded on every ScoreSnapshot so trend charts can
 # annotate methodology changes; keep frontend/src/lib/scoreVersions.ts
 # in sync (it holds the human-readable changelog).
-ALGORITHM_VERSION = "v5.10"
+ALGORITHM_VERSION = "v5.11"
 
 NON_INDUSTRY_CODES = {"OTHER", "SMALL_DONORS", "LARGE_INDIVIDUAL", "POLITICAL", "UNCLASSIFIED"}
 

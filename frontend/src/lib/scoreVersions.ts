@@ -17,6 +17,16 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v5.11",
+    date: "2026-07-13",
+    title: "Lobbying-connection detection: substantial funding, not any funding",
+    changes: [
+      "User report: essentially any vote near any donor was being flagged as a \"lobbying connection,\" regardless of how small the donor was or how loosely related the vote actually was — a senator voting for the annual budget with an unrelated small donor shouldn't register as a finding.",
+      "Donor-vote connections now require two things together: the donor's industry must represent a substantial share (25%+) of the member's classifiable industry funding — not total funding raised, which is mostly small-dollar and non-industry money by nature and made \"substantial\" meaningless as a bar — and the vote must be in that industry's actual policy domain, checked against a properly calibrated similarity measure instead of raw, noisy text comparison.",
+      "This feeds the donor-influence component of Constituent Alignment, so scores may shift for members whose previous matches were mostly false positives under the old, much looser criteria.",
+    ],
+  },
+  {
     version: "v5.10",
     date: "2026-07-13",
     title: "Promise Persistence data-scarcity fixes",
