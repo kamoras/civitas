@@ -97,6 +97,21 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
             <span className="text-matrix-green/50">{branchLabel(branch)}</span>
           </div>
 
+          {/* Vacancy banner */}
+          {identity.isCurrent === false && (
+            <div className="mb-6 border border-neon-pink/40 bg-neon-pink/5 px-4 py-3">
+              <p className="font-mono text-xs text-neon-pink tracking-widest uppercase mb-1">
+                Seat Vacant
+              </p>
+              <p className="font-mono text-[11px] text-matrix-green/60">
+                {identity.name} is no longer serving
+                {identity.vacancyReason ? ` (${identity.vacancyReason})` : ""}
+                {identity.leftOfficeDate ? ` as of ${identity.leftOfficeDate}` : ""}.
+                The scores and data below reflect their record while in office.
+              </p>
+            </div>
+          )}
+
           {/* Identity header */}
           <div className="mb-6 flex flex-col sm:flex-row items-start gap-4">
             {identity.thumbnailUrl ? (
