@@ -17,6 +17,16 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v5.12",
+    date: "2026-07-13",
+    title: "Legislative Effectiveness no longer penalizes freshman senators for lack of time",
+    changes: [
+      "A leaderboard review found newer senators scoring dramatically lower on Legislative Effectiveness for reasons that traced back to time in office rather than actual behavior — freshman senators (2 years or less) averaged 29.5 on this dimension versus 54.1 for senators with 10+ years, a gap far larger than any other dimension shows.",
+      "The main driver: the coalition-building sub-component measures how central a member is in the chamber's cosponsorship network, which takes years to build regardless of how effective a new member is — and missing data was previously defaulting to a below-neutral penalty instead of a neutral score. Both are fixed: missing data now defaults to neutral like every other component, and the raw network-centrality measure is now weighted toward neutral for members still in their first term, reaching full weight by the 6-year mark.",
+      "This narrows the freshman/veteran gap by about a quarter — a real improvement, not a complete fix. Some of the remaining gap likely comes from other sub-components (bill advancement genuinely takes time regardless of effectiveness) that weren't touched in this pass.",
+    ],
+  },
+  {
     version: "v5.11",
     date: "2026-07-13",
     title: "Lobbying-connection detection: substantial funding, not any funding",

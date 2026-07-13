@@ -216,6 +216,29 @@ Changes from v3 → v4 (score audit 2026-06):
   free-text embedding approach). Expect fewer, more meaningful lobbying
   matches, which will reduce the donor-influence penalty for senators
   whose previous matches were mostly false positives.
+- v5.12 (2026-07): Legislative Effectiveness's leadership component
+  (30% weight, cosponsorship PageRank) previously defaulted to a flat 40
+  when no leadership_score existed — an explicit below-neutral punitive
+  value ("below neutral — we expected data"), and otherwise took the raw
+  PageRank percentile at full face value regardless of tenure. PageRank
+  centrality is structurally a function of network size, which takes
+  years to build — a freshman senator's near-zero raw percentile
+  reflects time, not ineffectiveness. A 2026-07 leaderboard review found
+  this the dominant driver of a real tenure-vs-LE correlation (r=+0.24
+  across the Senate; freshmen <=2yrs averaged LE=29.5 vs veterans
+  >=10yrs at 54.1), directly contradicting this project's own "seniority
+  alone is never penalized" design principle. Fixed: missing data now
+  defaults to neutral 50 (matching every other component's treatment of
+  missing data), and the raw percentile is shrunk toward neutral with a
+  confidence factor scaled to a full 6-year Senate term — a first-year
+  member's leadership score sits close to neutral, a 6+-year member's
+  reflects their full raw percentile. Shadow-tested: freshman/veteran LE
+  gap narrows from 24.6 to 19.1 points (r: +0.241 -> +0.164) — a real,
+  partial improvement, not a full fix. The remaining gap most likely
+  traces to Components 1 (advancement — bills genuinely take time to
+  move regardless of a sponsor's effectiveness) and 3 (volume —
+  accumulates over congresses served), which this pass did not touch;
+  flagged as a candidate follow-up, not solved here.
 """
 
 import logging
@@ -226,7 +249,7 @@ logger = logging.getLogger(__name__)
 # shifts scores. Recorded on every ScoreSnapshot so trend charts can
 # annotate methodology changes; keep frontend/src/lib/scoreVersions.ts
 # in sync (it holds the human-readable changelog).
-ALGORITHM_VERSION = "v5.11"
+ALGORITHM_VERSION = "v5.12"
 
 NON_INDUSTRY_CODES = {"OTHER", "SMALL_DONORS", "LARGE_INDIVIDUAL", "POLITICAL", "UNCLASSIFIED"}
 
@@ -332,6 +355,7 @@ def calculate_scores(
             senator.get("sponsoredBills", []),
             senator.get("leadershipScore"),
             party=voting_record.get("effectiveParty") or senator.get("party", "I"),
+            years_in_office=senator.get("yearsInOffice"),
         ),
     }
 
@@ -1063,6 +1087,7 @@ def _calc_legislative_effectiveness(
     sponsored_bills: list[dict],
     leadership_score: float | None = None,
     party: str | None = None,
+    years_in_office: float | None = None,
 ) -> int:
     """
     Legislative Effectiveness Score (0-100, higher = better).
@@ -1174,11 +1199,30 @@ def _calc_legislative_effectiveness(
         advancement_score = 50.0
 
     # Component 2: leadership score from cosponsorship PageRank
+    #
+    # PageRank centrality is structurally a function of network size,
+    # which takes time to build — a freshman senator's raw percentile is
+    # near-zero not because they're ineffective but because they haven't
+    # had years to accumulate cosponsorship connections yet. A 2026-07
+    # audit found this the dominant driver of a real tenure-vs-LE
+    # correlation (r=+0.24 across the population; freshmen (<=2yrs)
+    # averaged LE=29.5 vs veterans (>=10yrs) at 54.1), directly
+    # contradicting this project's own "seniority alone is never
+    # penalized" design principle (AGENTS.md). Shrink the raw percentile
+    # toward neutral 50 with the same confidence-scaling pattern already
+    # used for Component 1's advancement rate, scaled to a full 6-year
+    # Senate term (long enough to plausibly build a real network; short
+    # enough that a second-term member isn't still getting a pass).
     if leadership_score is not None and leadership_score > 0:
         # Raw score is 0-1 from PageRank (percentile-like). Scale to 0-100.
-        leadership_pct = min(leadership_score, 1.0) * 100
+        leadership_raw = min(leadership_score, 1.0) * 100
     else:
-        leadership_pct = 40  # below neutral — we expected data
+        # No data yet — neutral prior, never a punitive below-50 default
+        # (this repo's design principle: missing data is never "bad").
+        leadership_raw = 50.0
+
+    leadership_conf = min((years_in_office or 0) / 6.0, 1.0)
+    leadership_pct = leadership_raw * leadership_conf + 50 * (1 - leadership_conf)
 
     # Component 3: sponsorship volume per congress served
     #

@@ -674,11 +674,36 @@ class TestLegislativeEffectiveness:
         assert score >= 55
 
     def test_leadership_matters(self):
-        """Higher PageRank leadership should produce higher score."""
+        """Higher PageRank leadership should produce higher score — at full
+        tenure confidence (6+ years), where the raw percentile counts in
+        full rather than being shrunk toward neutral."""
         bills = [{"title": f"B{i}", "isLaw": False, "latestAction": "Introduced"} for i in range(20)]
-        score_low = _calc_legislative_effectiveness(bills, 0.1)
-        score_high = _calc_legislative_effectiveness(bills, 0.9)
+        score_low = _calc_legislative_effectiveness(bills, 0.1, years_in_office=6)
+        score_high = _calc_legislative_effectiveness(bills, 0.9, years_in_office=6)
         assert score_high > score_low
+
+    def test_leadership_shrunk_toward_neutral_for_freshmen(self):
+        """A freshman's raw PageRank percentile is near-zero not because
+        they're ineffective but because they haven't had years to build a
+        cosponsorship network — the same senator's leadership component
+        must sit close to neutral 50 as a freshman, and only reflect the
+        full raw percentile once they've had a real term's worth of time
+        (2026-07 fix: this was previously a flat, unshrunk percentile,
+        producing a real tenure-vs-LE correlation of r=+0.24 and a 24.6
+        point mean gap between freshmen and veterans)."""
+        bills = [{"title": f"B{i}", "isLaw": False, "latestAction": "Introduced"} for i in range(20)]
+        score_freshman = _calc_legislative_effectiveness(bills, 0.9, years_in_office=1)
+        score_veteran = _calc_legislative_effectiveness(bills, 0.9, years_in_office=6)
+        assert score_freshman < score_veteran
+
+    def test_missing_leadership_data_is_neutral_not_punitive(self):
+        """Missing leadership data (None) must default to the same neutral
+        50 raw value that an explicit 0.5 PageRank score would produce —
+        never a below-50 punitive value like the old flat 40 default."""
+        bills = [{"title": f"B{i}", "isLaw": False, "latestAction": "Introduced"} for i in range(20)]
+        score_missing = _calc_legislative_effectiveness(bills, None, years_in_office=6)
+        score_neutral_raw = _calc_legislative_effectiveness(bills, 0.5, years_in_office=6)
+        assert score_missing == score_neutral_raw
 
     def test_advancement_keywords(self):
         """Committee/chamber milestones count as advanced; calendar placement doesn't.
