@@ -6,6 +6,22 @@ interface ScoreTrendProps {
   snapshots: ScoreSnapshot[];
 }
 
+function congressForDate(dateStr: string): number {
+  const year = parseInt(dateStr.slice(0, 4), 10);
+  return Math.floor((year - 1789) / 2) + 1;
+}
+
+function ordinal(n: number): string {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1: return `${n}st`;
+    case 2: return `${n}nd`;
+    case 3: return `${n}rd`;
+    default: return `${n}th`;
+  }
+}
+
 export default function ScoreTrend({ snapshots }: ScoreTrendProps) {
   if (snapshots.length < 2) return null;
 
@@ -38,6 +54,21 @@ export default function ScoreTrend({ snapshots }: ScoreTrendProps) {
     const cur = snapshots[i].algorithmVersion ?? null;
     if (cur && cur !== prev) {
       versionChanges.push({ i, version: cur });
+    }
+  }
+
+  // Congress-boundary markers: scores are windowed to the current congress
+  // only (see AGENTS.md "current term"), so a jump at a new-congress
+  // boundary reflects the score resetting to a fresh 2-year window, not a
+  // behavior change. congressForDate mirrors the backend's
+  // congress_first_year formula (1st Congress convened 1789) — a fixed
+  // historical fact, not a value that needs to be kept in sync by hand.
+  const congressChanges: { i: number; congress: number }[] = [];
+  for (let i = 1; i < snapshots.length; i++) {
+    const prevCongress = congressForDate(snapshots[i - 1].date);
+    const curCongress = congressForDate(snapshots[i].date);
+    if (curCongress !== prevCongress) {
+      congressChanges.push({ i, congress: curCongress });
     }
   }
 
@@ -75,6 +106,20 @@ export default function ScoreTrend({ snapshots }: ScoreTrendProps) {
             stroke="#00e5ff"
             strokeWidth="0.75"
             strokeDasharray="2,2"
+            opacity="0.6"
+          />
+        ))}
+        {/* Congress-boundary markers */}
+        {congressChanges.map(({ i, congress }) => (
+          <line
+            key={`c-${congress}-${i}`}
+            x1={toX(i)}
+            y1={PAD}
+            x2={toX(i)}
+            y2={H - PAD}
+            stroke="#ffaa00"
+            strokeWidth="0.75"
+            strokeDasharray="4,2"
             opacity="0.6"
           />
         ))}
@@ -119,6 +164,12 @@ export default function ScoreTrend({ snapshots }: ScoreTrendProps) {
           <a href="/changelog" className="underline underline-offset-2 hover:text-neon-cyan/70">
             scoring changelog
           </a>
+        </div>
+      )}
+      {congressChanges.length > 0 && (
+        <div className="text-[8px] text-[#ffaa00]/50 font-mono mt-0.5">
+          ┊ {congressChanges.map((c) => `${ordinal(c.congress)} Congress`).join(", ")} began —
+          scores reset to reflect the new term
         </div>
       )}
     </div>

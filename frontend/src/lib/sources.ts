@@ -6,6 +6,21 @@
 const CURRENT_CONGRESS = 119;
 
 /**
+ * "119th Congress (2025–2026)" — scores are windowed to the current
+ * congress only (see AGENTS.md "current term"); this labels that window
+ * on the scorecard so a sparser score isn't read as a bug.
+ */
+export function currentCongressLabel(): string {
+  const firstYear = 1789 + (CURRENT_CONGRESS - 1) * 2;
+  const mod100 = CURRENT_CONGRESS % 100;
+  const suffix =
+    mod100 >= 11 && mod100 <= 13
+      ? "th"
+      : { 1: "st", 2: "nd", 3: "rd" }[CURRENT_CONGRESS % 10] ?? "th";
+  return `${CURRENT_CONGRESS}${suffix} Congress (${firstYear}–${firstYear + 1})`;
+}
+
+/**
  * Build a congress.gov URL for a bill.
  * Bill IDs come in formats like "HR.5371", "S.1234", "PN373", "HJRES.100"
  * and lobbying bills as "H.R. 7147", "S. 1234".

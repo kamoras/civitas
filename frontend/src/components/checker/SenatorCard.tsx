@@ -1,7 +1,7 @@
 import { Senator } from "@/types/senator";
 import { formatCurrency } from "@/lib/formatting";
 import { safeHref } from "@/lib/formatting";
-import { fecCommitteeSearchUrl } from "@/lib/sources";
+import { fecCommitteeSearchUrl, currentCongressLabel } from "@/lib/sources";
 import CorruptionScore from "./CorruptionScore";
 import IndustryBreakdown from "./IndustryBreakdown";
 import VotingRecord from "./VotingRecord";
@@ -271,6 +271,12 @@ export default function SenatorCard({ senator, chamber = "senate" }: SenatorCard
           funding={senator.funding}
           sponsoredBills={senator.sponsoredBills}
         />
+        <p className="font-mono text-[10px] text-matrix-green/40 -mt-2">
+          Reflects the {currentCongressLabel()} only — see{" "}
+          <Link href="/changelog" className="underline underline-offset-2 hover:text-matrix-green/70">
+            scoring changelog
+          </Link>
+        </p>
 
         {/* ── Score Trend ── shows historical sparkline if snapshots exist */}
         <ScoreTrendSection entityId={senator.id} entityType={chamber} />
