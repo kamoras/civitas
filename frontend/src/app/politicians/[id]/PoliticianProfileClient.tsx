@@ -149,6 +149,11 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
                     CURRENT
                   </span>
                 )}
+                {identity.leadershipTitle && (
+                  <span className="font-mono text-[9px] tracking-widest border border-amber-400/40 text-amber-400/80 bg-amber-400/5 px-2 py-0.5">
+                    {identity.leadershipTitle.toUpperCase()}
+                  </span>
+                )}
               </div>
               <p className="font-mono text-xs text-matrix-green/50 mb-3">{identity.role}</p>
 
@@ -232,6 +237,24 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
                   VIEW ALL {governmentRecord.totalDocs} DOCUMENTS →
                 </Link>
               )}
+            </SectionBlock>
+          )}
+
+          {/* Committee Memberships */}
+          {(branch === "senate" || branch === "house") && identity.committees && identity.committees.length > 0 && (
+            <SectionBlock title="committee-assignments.dat">
+              <div className="space-y-1.5">
+                {identity.committees.map((c, i) => (
+                  <div key={i} className="flex items-center justify-between gap-3 py-1 border-b border-matrix-green/10 last:border-0">
+                    <span className="font-mono text-xs text-matrix-green/70">{c.committeeName}</span>
+                    {c.title && (
+                      <span className="font-mono text-[9px] tracking-widest border border-neon-cyan/30 text-neon-cyan/60 px-1.5 py-0.5 shrink-0">
+                        {c.title.toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
             </SectionBlock>
           )}
 

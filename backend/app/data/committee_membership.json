@@ -1,0 +1,7684 @@
+{
+ "_source": "unitedstates/congress-legislators (CC0-1.0), retrieved 2026-07-13; regenerate with backend/scripts/fetch_committee_data.py",
+ "membership": {
+  "A000055": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "A000148": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "A000369": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "A000370": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "A000371": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "A000372": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "A000375": [
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Economic Committee",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": "Chair"
+   }
+  ],
+  "A000379": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Small Business",
+    "title": null
+   }
+  ],
+  "A000380": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "A000381": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   }
+  ],
+  "A000382": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Banking, Housing, and Urban Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Environment and Public Works",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Health, Education, Labor, and Pensions",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Special Committee on Aging",
+    "title": null
+   }
+  ],
+  "A000383": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Health, Education, Labor, and Pensions",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Indian Affairs",
+    "title": null
+   }
+  ],
+  "B000490": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "B000668": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "B000740": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on House Administration",
+    "title": null
+   }
+  ],
+  "B000825": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   }
+  ],
+  "B001230": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Health, Education, Labor, and Pensions",
+    "title": null
+   }
+  ],
+  "B001236": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Agriculture, Nutrition, and Forestry",
+    "title": "Chairman"
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Environment and Public Works",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Rules and Administration",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Veterans' Affairs",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Commission on Security and Cooperation in Europe",
+    "title": null
+   }
+  ],
+  "B001243": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Veterans' Affairs",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Economic Committee",
+    "title": null
+   }
+  ],
+  "B001257": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Committee on the Strategic Competition Between the United States and the Chinese Communist Party",
+    "title": null
+   }
+  ],
+  "B001260": [
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee on Taxation",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   }
+  ],
+  "B001261": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Energy and Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Foreign Relations",
+    "title": null
+   }
+  ],
+  "B001267": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Agriculture, Nutrition, and Forestry",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Rules and Administration",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Intelligence",
+    "title": null
+   }
+  ],
+  "B001277": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Homeland Security and Governmental Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Veterans' Affairs",
+    "title": "Ranking Member"
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "United States Senate Caucus on International Narcotics Control",
+    "title": null
+   }
+  ],
+  "B001278": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "B001281": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "B001282": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Committee on the Strategic Competition Between the United States and the Chinese Communist Party",
+    "title": null
+   }
+  ],
+  "B001285": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "B001287": [
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "B001288": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Agriculture, Nutrition, and Forestry",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Foreign Relations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Small Business and Entrepreneurship",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Judiciary",
+    "title": null
+   }
+  ],
+  "B001291": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": "Chair"
+   }
+  ],
+  "B001292": [
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Economic Committee",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   }
+  ],
+  "B001295": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Veterans' Affairs",
+    "title": "Chair"
+   }
+  ],
+  "B001296": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": "Ranking Member"
+   }
+  ],
+  "B001298": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   }
+  ],
+  "B001299": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Banking, Housing, and Urban Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Health, Education, Labor, and Pensions",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "B001300": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "B001301": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Veterans' Affairs",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "B001302": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   }
+  ],
+  "B001303": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Banking, Housing, and Urban Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Environment and Public Works",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Health, Education, Labor, and Pensions",
+    "title": null
+   }
+  ],
+  "B001305": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Small Business and Entrepreneurship",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Economic Committee",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Intelligence",
+    "title": null
+   }
+  ],
+  "B001306": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "B001307": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "B001309": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "B001313": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Committee on the Strategic Competition Between the United States and the Chinese Communist Party",
+    "title": null
+   }
+  ],
+  "B001314": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   }
+  ],
+  "B001315": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "B001316": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   }
+  ],
+  "B001317": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "B001318": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "B001319": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Banking, Housing, and Urban Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Rules and Administration",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Commission on Security and Cooperation in Europe",
+    "title": null
+   }
+  ],
+  "B001321": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "B001322": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "B001323": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   }
+  ],
+  "B001324": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   }
+  ],
+  "B001325": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "B001326": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "B001327": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Small Business",
+    "title": null
+   }
+  ],
+  "C000059": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "C000127": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": "Ranking Member"
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Energy and Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Indian Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Small Business and Entrepreneurship",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee on Taxation",
+    "title": null
+   }
+  ],
+  "C000537": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "C000880": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Banking, Housing, and Urban Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": "Chairman"
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Budget",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee on Taxation",
+    "title": "Chairman"
+   }
+  ],
+  "C001035": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": "Chairman"
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Health, Education, Labor, and Pensions",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Intelligence",
+    "title": null
+   }
+  ],
+  "C001039": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "C001047": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Environment and Public Works",
+    "title": "Chairman"
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Rules and Administration",
+    "title": null
+   }
+  ],
+  "C001051": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "C001053": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": "Chair"
+   }
+  ],
+  "C001055": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "C001056": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Foreign Relations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Budget",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee on Taxation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Intelligence",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "United States Senate Caucus on International Narcotics Control",
+    "title": "Chairman"
+   }
+  ],
+  "C001059": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "C001061": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "C001063": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "C001066": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Committee on the Strategic Competition Between the United States and the Chinese Communist Party",
+    "title": null
+   }
+  ],
+  "C001067": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "C001068": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": null
+   }
+  ],
+  "C001069": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "C001072": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Committee on the Strategic Competition Between the United States and the Chinese Communist Party",
+    "title": null
+   }
+  ],
+  "C001075": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Energy and Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Health, Education, Labor, and Pensions",
+    "title": "Chairman"
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "C001080": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "C001087": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": "Vice Chair"
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": "Chairman"
+   }
+  ],
+  "C001088": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Foreign Relations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Small Business and Entrepreneurship",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Ethics",
+    "title": "Vice Chairman"
+   }
+  ],
+  "C001091": [
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "C001095": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Energy and Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Economic Committee",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Intelligence",
+    "title": "Chairman"
+   }
+  ],
+  "C001096": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Banking, Housing, and Urban Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Environment and Public Works",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "C001098": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": "Chairman"
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Foreign Relations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Rules and Administration",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Judiciary",
+    "title": null
+   }
+  ],
+  "C001103": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "C001108": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": "Chair"
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "C001110": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   }
+  ],
+  "C001112": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   }
+  ],
+  "C001113": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Banking, Housing, and Urban Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Energy and Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Indian Affairs",
+    "title": null
+   }
+  ],
+  "C001114": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Environment and Public Works",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Foreign Relations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Small Business and Entrepreneurship",
+    "title": null
+   }
+  ],
+  "C001115": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   }
+  ],
+  "C001116": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "C001117": [
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Economic Committee",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "C001118": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "C001119": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": "Ranking Member"
+   }
+  ],
+  "C001120": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": null
+   }
+  ],
+  "C001121": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": null
+   }
+  ],
+  "C001123": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Small Business",
+    "title": null
+   }
+  ],
+  "C001125": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "C001126": [
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee of Congress on the Library",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on House Administration",
+    "title": null
+   }
+  ],
+  "C001129": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   }
+  ],
+  "C001130": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Subcommittee to Investigate the Remaining Questions Surrounding January 6, 2021",
+    "title": null
+   }
+  ],
+  "C001131": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "C001132": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   }
+  ],
+  "C001133": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "C001136": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "C001137": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   }
+  ],
+  "D000032": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "D000096": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   }
+  ],
+  "D000197": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "D000216": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": "Ranking Member"
+   }
+  ],
+  "D000230": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   }
+  ],
+  "D000399": [
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee on Taxation",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "D000530": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   }
+  ],
+  "D000563": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Agriculture, Nutrition, and Forestry",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Judiciary",
+    "title": "Ranking Member"
+   }
+  ],
+  "D000594": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "D000600": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": "Vice Chair"
+   }
+  ],
+  "D000616": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   }
+  ],
+  "D000617": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   }
+  ],
+  "D000618": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Energy and Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Foreign Relations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Indian Affairs",
+    "title": null
+   }
+  ],
+  "D000622": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Foreign Relations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "D000623": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ethics",
+    "title": "Ranking Member"
+   }
+  ],
+  "D000624": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "D000626": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "D000628": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": "Vice Chair"
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Committee on the Strategic Competition Between the United States and the Chinese Communist Party",
+    "title": null
+   }
+  ],
+  "D000629": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   }
+  ],
+  "D000631": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "D000634": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "D000635": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "E000071": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Small Business",
+    "title": null
+   }
+  ],
+  "E000235": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   }
+  ],
+  "E000246": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "E000294": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "E000295": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Agriculture, Nutrition, and Forestry",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Homeland Security and Governmental Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Small Business and Entrepreneurship",
+    "title": "Chairman"
+   }
+  ],
+  "E000296": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   }
+  ],
+  "E000297": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "E000298": [
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Economic Committee",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "E000299": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "E000300": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "E000301": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   }
+  ],
+  "F000110": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "F000246": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": null
+   }
+  ],
+  "F000446": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   }
+  ],
+  "F000450": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Rules",
+    "title": "Chair"
+   }
+  ],
+  "F000454": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "F000459": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "F000462": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "F000463": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Agriculture, Nutrition, and Forestry",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Rules and Administration",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee on Printing",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee of Congress on the Library",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Ethics",
+    "title": null
+   }
+  ],
+  "F000466": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": null
+   }
+  ],
+  "F000468": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "F000469": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "F000470": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Rules",
+    "title": null
+   }
+  ],
+  "F000471": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "F000472": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "F000474": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "F000475": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Small Business",
+    "title": null
+   }
+  ],
+  "F000476": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   }
+  ],
+  "F000477": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   }
+  ],
+  "F000478": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "F000479": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Agriculture, Nutrition, and Forestry",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Homeland Security and Governmental Affairs",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Commission on Security and Cooperation in Europe",
+    "title": null
+   }
+  ],
+  "F000480": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   }
+  ],
+  "F000481": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   }
+  ],
+  "F000482": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "F000483": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   }
+  ],
+  "F000484": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "G000386": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Agriculture, Nutrition, and Forestry",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Budget",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Judiciary",
+    "title": "Chairman"
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee on Taxation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "United States Senate Caucus on International Narcotics Control",
+    "title": null
+   }
+  ],
+  "G000546": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": "Chair"
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   }
+  ],
+  "G000553": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "G000555": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Intelligence",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Special Committee on Aging",
+    "title": "Ranking Member"
+   }
+  ],
+  "G000558": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": "Chair"
+   }
+  ],
+  "G000559": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   }
+  ],
+  "G000565": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   }
+  ],
+  "G000568": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Rules",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on House Administration",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Subcommittee to Investigate the Remaining Questions Surrounding January 6, 2021",
+    "title": null
+   }
+  ],
+  "G000574": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Banking, Housing, and Urban Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Energy and Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Homeland Security and Governmental Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Veterans' Affairs",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Commission on Security and Cooperation in Europe",
+    "title": null
+   }
+  ],
+  "G000576": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "G000581": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "G000583": [
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "G000585": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": null
+   }
+  ],
+  "G000586": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   }
+  ],
+  "G000587": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ethics",
+    "title": null
+   }
+  ],
+  "G000589": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   }
+  ],
+  "G000591": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ethics",
+    "title": "Chair"
+   }
+  ],
+  "G000592": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   }
+  ],
+  "G000593": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Committee on the Strategic Competition Between the United States and the Chinese Communist Party",
+    "title": null
+   }
+  ],
+  "G000597": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": "Chair"
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ethics",
+    "title": null
+   }
+  ],
+  "G000598": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": "Ranking Member"
+   }
+  ],
+  "G000599": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   }
+  ],
+  "G000600": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "G000601": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "G000602": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   }
+  ],
+  "G000603": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "G000604": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Small Business",
+    "title": null
+   }
+  ],
+  "G000605": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   }
+  ],
+  "G000606": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "H000273": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Energy and Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Health, Education, Labor, and Pensions",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Small Business and Entrepreneurship",
+    "title": null
+   }
+  ],
+  "H000601": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Banking, Housing, and Urban Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Foreign Relations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Rules and Administration",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee on Printing",
+    "title": null
+   }
+  ],
+  "H000874": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "H001042": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Energy and Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Small Business and Entrepreneurship",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "H001046": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Energy and Natural Resources",
+    "title": "Ranking Member"
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Economic Committee",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Intelligence",
+    "title": null
+   }
+  ],
+  "H001047": [
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": "Ranking Member"
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "H001052": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "H001058": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "H001061": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Agriculture, Nutrition, and Forestry",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Energy and Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Indian Affairs",
+    "title": null
+   }
+  ],
+  "H001066": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   }
+  ],
+  "H001067": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "H001068": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": "Ranking Member"
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   }
+  ],
+  "H001072": [
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": "Chair"
+   }
+  ],
+  "H001076": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Health, Education, Labor, and Pensions",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Homeland Security and Governmental Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Veterans' Affairs",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Economic Committee",
+    "title": "Ranking Member"
+   }
+  ],
+  "H001077": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Subcommittee to Investigate the Remaining Questions Surrounding January 6, 2021",
+    "title": null
+   }
+  ],
+  "H001079": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Agriculture, Nutrition, and Forestry",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Energy and Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Rules and Administration",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee of Congress on the Library",
+    "title": null
+   }
+  ],
+  "H001081": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "H001082": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   }
+  ],
+  "H001085": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": null
+   }
+  ],
+  "H001086": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "H001089": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Health, Education, Labor, and Pensions",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Homeland Security and Governmental Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Small Business and Entrepreneurship",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Judiciary",
+    "title": null
+   }
+  ],
+  "H001090": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "H001091": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Committee on the Strategic Competition Between the United States and the Chinese Communist Party",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ethics",
+    "title": null
+   }
+  ],
+  "H001093": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Rules",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "H001094": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   }
+  ],
+  "H001095": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   }
+  ],
+  "H001096": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Subcommittee to Investigate the Remaining Questions Surrounding January 6, 2021",
+    "title": null
+   }
+  ],
+  "H001098": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "H001099": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "H001100": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   }
+  ],
+  "H001101": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   }
+  ],
+  "H001102": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "H001103": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   }
+  ],
+  "H001104": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Environment and Public Works",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Health, Education, Labor, and Pensions",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Small Business and Entrepreneurship",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Special Committee on Aging",
+    "title": null
+   }
+  ],
+  "I000056": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "I000058": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ethics",
+    "title": null
+   }
+  ],
+  "J000288": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   }
+  ],
+  "J000289": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": "Chair"
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   }
+  ],
+  "J000293": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Homeland Security and Governmental Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Budget",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Special Committee on Aging",
+    "title": null
+   }
+  ],
+  "J000295": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "J000298": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "J000301": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Committee on the Strategic Competition Between the United States and the Chinese Communist Party",
+    "title": null
+   }
+  ],
+  "J000302": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "J000304": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "J000305": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "J000307": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "J000309": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "J000310": [
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee of Congress on the Library",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on House Administration",
+    "title": null
+   }
+  ],
+  "J000311": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Small Business",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Rules",
+    "title": null
+   }
+  ],
+  "J000312": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Agriculture, Nutrition, and Forestry",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Energy and Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Small Business and Entrepreneurship",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Special Committee on Aging",
+    "title": null
+   }
+  ],
+  "K000009": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "K000367": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Agriculture, Nutrition, and Forestry",
+    "title": "Ranking Member"
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Rules and Administration",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee of Congress on the Library",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Economic Committee",
+    "title": null
+   }
+  ],
+  "K000375": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "K000376": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   }
+  ],
+  "K000377": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Environment and Public Works",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Economic Committee",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Intelligence",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Special Committee on Aging",
+    "title": null
+   }
+  ],
+  "K000383": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Energy and Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Veterans' Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Intelligence",
+    "title": null
+   }
+  ],
+  "K000384": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Foreign Relations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Health, Education, Labor, and Pensions",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Budget",
+    "title": null
+   }
+  ],
+  "K000385": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "K000388": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": null
+   }
+  ],
+  "K000389": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Committee on the Strategic Competition Between the United States and the Chinese Communist Party",
+    "title": "Ranking Member"
+   }
+  ],
+  "K000391": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Committee on the Strategic Competition Between the United States and the Chinese Communist Party",
+    "title": null
+   }
+  ],
+  "K000392": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   }
+  ],
+  "K000393": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Banking, Housing, and Urban Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Budget",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Judiciary",
+    "title": null
+   }
+  ],
+  "K000394": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Banking, Housing, and Urban Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Health, Education, Labor, and Pensions",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Homeland Security and Governmental Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Special Committee on Aging",
+    "title": null
+   }
+  ],
+  "K000397": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Committee on the Strategic Competition Between the United States and the Chinese Communist Party",
+    "title": null
+   }
+  ],
+  "K000398": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "K000399": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "K000400": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "K000402": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "K000403": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   }
+  ],
+  "K000404": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Veterans' Affairs",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Small Business",
+    "title": null
+   }
+  ],
+  "K000405": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ethics",
+    "title": null
+   }
+  ],
+  "L000273": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Rules",
+    "title": null
+   }
+  ],
+  "L000397": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": "Ranking Member"
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   }
+  ],
+  "L000491": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "L000557": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   }
+  ],
+  "L000560": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": "Ranking Member"
+   }
+  ],
+  "L000562": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "L000566": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "L000570": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Agriculture, Nutrition, and Forestry",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Indian Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Budget",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "United States Senate Caucus on International Narcotics Control",
+    "title": null
+   }
+  ],
+  "L000571": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Banking, Housing, and Urban Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Environment and Public Works",
+    "title": null
+   }
+  ],
+  "L000575": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Homeland Security and Governmental Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Ethics",
+    "title": "Chairman"
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Intelligence",
+    "title": null
+   }
+  ],
+  "L000577": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Energy and Natural Resources",
+    "title": "Chairman"
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Foreign Relations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Budget",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Judiciary",
+    "title": null
+   }
+  ],
+  "L000582": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "L000583": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on House Administration",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Subcommittee to Investigate the Remaining Questions Surrounding January 6, 2021",
+    "title": "Chair"
+   }
+  ],
+  "L000585": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Committee on the Strategic Competition Between the United States and the Chinese Communist Party",
+    "title": null
+   }
+  ],
+  "L000590": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "L000593": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "L000595": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "L000596": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "L000597": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on House Administration",
+    "title": "Vice Chair"
+   }
+  ],
+  "L000598": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   }
+  ],
+  "L000599": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "L000600": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Rules",
+    "title": null
+   }
+  ],
+  "L000601": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "L000602": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "L000603": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "L000606": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Small Business",
+    "title": null
+   }
+  ],
+  "L000607": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "M000133": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Environment and Public Works",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Health, Education, Labor, and Pensions",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Small Business and Entrepreneurship",
+    "title": "Ranking Member"
+   }
+  ],
+  "M000194": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "M000312": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Rules",
+    "title": "Ranking Member"
+   }
+  ],
+  "M000317": [
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Economic Committee",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   }
+  ],
+  "M000355": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Agriculture, Nutrition, and Forestry",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Rules and Administration",
+    "title": "Chairman"
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee on Printing",
+    "title": "Chairman"
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee of Congress on the Library",
+    "title": "Vice Chairman"
+   }
+  ],
+  "M000687": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "M000871": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   }
+  ],
+  "M000934": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Agriculture, Nutrition, and Forestry",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Indian Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Veterans' Affairs",
+    "title": "Chairman"
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Intelligence",
+    "title": null
+   }
+  ],
+  "M001111": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": "Ranking Member"
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Health, Education, Labor, and Pensions",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Budget",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "M001136": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "M001137": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": "Ranking Member"
+   }
+  ],
+  "M001143": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "M001153": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Energy and Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Health, Education, Labor, and Pensions",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Indian Affairs",
+    "title": "Chairman"
+   }
+  ],
+  "M001157": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": "Vice Chair"
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "M001160": [
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Economic Committee",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   }
+  ],
+  "M001163": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "M001169": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Foreign Relations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Health, Education, Labor, and Pensions",
+    "title": null
+   }
+  ],
+  "M001176": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Environment and Public Works",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Foreign Relations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Rules and Administration",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Budget",
+    "title": "Ranking Member"
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee on Printing",
+    "title": null
+   }
+  ],
+  "M001177": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "M001184": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   }
+  ],
+  "M001188": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "M001194": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Committee on the Strategic Competition Between the United States and the Chinese Communist Party",
+    "title": "Chairman"
+   }
+  ],
+  "M001196": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Committee on the Strategic Competition Between the United States and the Chinese Communist Party",
+    "title": null
+   }
+  ],
+  "M001198": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Agriculture, Nutrition, and Forestry",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Health, Education, Labor, and Pensions",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Budget",
+    "title": null
+   }
+  ],
+  "M001199": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": "Chair"
+   }
+  ],
+  "M001204": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Small Business",
+    "title": null
+   }
+  ],
+  "M001205": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   }
+  ],
+  "M001206": [
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee on Printing",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee of Congress on the Library",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on House Administration",
+    "title": "Ranking Member"
+   }
+  ],
+  "M001208": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "M001210": [
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee on Printing",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Veterans' Affairs",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on House Administration",
+    "title": null
+   }
+  ],
+  "M001211": [
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee on Printing",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on House Administration",
+    "title": null
+   }
+  ],
+  "M001212": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   }
+  ],
+  "M001213": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "M001214": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "M001215": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "M001216": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "M001217": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Subcommittee to Investigate the Remaining Questions Surrounding January 6, 2021",
+    "title": null
+   }
+  ],
+  "M001218": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   }
+  ],
+  "M001219": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "M001220": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Veterans' Affairs",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Small Business",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "M001222": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "M001223": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   }
+  ],
+  "M001224": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Committee on the Strategic Competition Between the United States and the Chinese Communist Party",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ethics",
+    "title": null
+   }
+  ],
+  "M001225": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "M001226": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "M001227": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "M001228": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "M001229": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Small Business",
+    "title": null
+   }
+  ],
+  "M001230": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "M001231": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "M001232": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   }
+  ],
+  "M001233": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "M001234": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Veterans' Affairs",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Small Business",
+    "title": null
+   }
+  ],
+  "M001235": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "M001236": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "M001237": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   }
+  ],
+  "M001238": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "M001239": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   }
+  ],
+  "M001240": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "M001241": [
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Economic Committee",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   }
+  ],
+  "M001242": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Banking, Housing, and Urban Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Homeland Security and Governmental Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Budget",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "United States Senate Caucus on International Narcotics Control",
+    "title": null
+   }
+  ],
+  "M001243": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Banking, Housing, and Urban Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Energy and Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Foreign Relations",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Economic Committee",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Special Committee on Aging",
+    "title": null
+   }
+  ],
+  "M001244": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Health, Education, Labor, and Pensions",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Homeland Security and Governmental Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Economic Committee",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Special Committee on Aging",
+    "title": null
+   }
+  ],
+  "M001245": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   }
+  ],
+  "N000002": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   }
+  ],
+  "N000015": [
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee on Taxation",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": "Ranking Member"
+   }
+  ],
+  "N000026": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Subcommittee to Investigate the Remaining Questions Surrounding January 6, 2021",
+    "title": null
+   }
+  ],
+  "N000147": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   }
+  ],
+  "N000188": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "N000189": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Committee on the Strategic Competition Between the United States and the Chinese Communist Party",
+    "title": null
+   }
+  ],
+  "N000190": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Rules",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "N000191": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Rules",
+    "title": null
+   }
+  ],
+  "N000193": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Committee on the Strategic Competition Between the United States and the Chinese Communist Party",
+    "title": null
+   }
+  ],
+  "O000019": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "O000086": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "O000172": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "O000173": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "O000174": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Rules and Administration",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Intelligence",
+    "title": null
+   }
+  ],
+  "O000175": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "O000176": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Small Business",
+    "title": null
+   }
+  ],
+  "O000177": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "P000034": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": "Ranking Member"
+   }
+  ],
+  "P000048": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "P000145": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Energy and Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Environment and Public Works",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Rules and Administration",
+    "title": "Ranking Member"
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Budget",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee on Printing",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee of Congress on the Library",
+    "title": null
+   }
+  ],
+  "P000595": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Homeland Security and Governmental Affairs",
+    "title": "Ranking Member"
+   }
+  ],
+  "P000597": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "P000603": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Foreign Relations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Health, Education, Labor, and Pensions",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Homeland Security and Governmental Affairs",
+    "title": "Chairman"
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Small Business and Entrepreneurship",
+    "title": null
+   }
+  ],
+  "P000605": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "P000607": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "P000608": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "P000609": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "P000610": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "P000613": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "P000614": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "P000617": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "P000620": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "P000621": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   }
+  ],
+  "P000622": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Small Business",
+    "title": null
+   }
+  ],
+  "Q000023": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": null
+   }
+  ],
+  "R000122": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": "Ranking Member"
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Banking, Housing, and Urban Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Intelligence",
+    "title": "Ex Officio"
+   }
+  ],
+  "R000305": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ethics",
+    "title": null
+   }
+  ],
+  "R000395": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "R000575": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": "Chair"
+   }
+  ],
+  "R000579": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   }
+  ],
+  "R000584": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Energy and Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Foreign Relations",
+    "title": "Chairman"
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Small Business and Entrepreneurship",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Ethics",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Intelligence",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "United States Senate Caucus on International Narcotics Control",
+    "title": null
+   }
+  ],
+  "R000599": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "R000600": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "R000603": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   }
+  ],
+  "R000605": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Banking, Housing, and Urban Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Indian Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Intelligence",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Commission on Security and Cooperation in Europe",
+    "title": null
+   }
+  ],
+  "R000606": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": "Ranking Member"
+   }
+  ],
+  "R000608": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Foreign Relations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Small Business and Entrepreneurship",
+    "title": null
+   }
+  ],
+  "R000609": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "R000610": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "R000612": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "R000614": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Rules",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "R000617": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "R000618": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Banking, Housing, and Urban Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Environment and Public Works",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Foreign Relations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Budget",
+    "title": null
+   }
+  ],
+  "R000619": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "R000620": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   }
+  ],
+  "R000621": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   }
+  ],
+  "R000622": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   }
+  ],
+  "S000033": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Environment and Public Works",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Health, Education, Labor, and Pensions",
+    "title": "Ranking Member"
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Budget",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "S000148": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Rules and Administration",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Intelligence",
+    "title": "Ex Officio"
+   }
+  ],
+  "S000168": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "S000185": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": "Ranking Member"
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "S000250": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "S000344": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "S000510": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": "Ranking Member"
+   }
+  ],
+  "S000522": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "S000929": [
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Economic Committee",
+    "title": null
+   }
+  ],
+  "S001145": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "S001148": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "S001150": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Agriculture, Nutrition, and Forestry",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Environment and Public Works",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Small Business and Entrepreneurship",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Judiciary",
+    "title": null
+   }
+  ],
+  "S001156": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   }
+  ],
+  "S001159": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   }
+  ],
+  "S001172": [
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee on Taxation",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   }
+  ],
+  "S001181": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Foreign Relations",
+    "title": "Ranking Member"
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Small Business and Entrepreneurship",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Ethics",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Commission on Security and Cooperation in Europe",
+    "title": null
+   }
+  ],
+  "S001183": [
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Economic Committee",
+    "title": "Chairman"
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   }
+  ],
+  "S001184": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Banking, Housing, and Urban Affairs",
+    "title": "Chairman"
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Health, Education, Labor, and Pensions",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Small Business and Entrepreneurship",
+    "title": null
+   }
+  ],
+  "S001185": [
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee on Printing",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on House Administration",
+    "title": null
+   }
+  ],
+  "S001188": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "S001189": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": "Vice Chair"
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Rules",
+    "title": null
+   }
+  ],
+  "S001190": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "S001194": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Foreign Relations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Indian Affairs",
+    "title": "Vice Chairman"
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Ethics",
+    "title": null
+   }
+  ],
+  "S001195": [
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee on Taxation",
+    "title": "Vice Chairman"
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": "Chair"
+   }
+  ],
+  "S001196": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "S001198": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Environment and Public Works",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "S001199": [
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Economic Committee",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "S001200": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "S001201": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   }
+  ],
+  "S001203": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Agriculture, Nutrition, and Forestry",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Banking, Housing, and Urban Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Indian Affairs",
+    "title": null
+   }
+  ],
+  "S001205": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Rules",
+    "title": null
+   }
+  ],
+  "S001208": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Agriculture, Nutrition, and Forestry",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Homeland Security and Governmental Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "S001211": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Committee on the Strategic Competition Between the United States and the Chinese Communist Party",
+    "title": null
+   }
+  ],
+  "S001212": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Small Business",
+    "title": null
+   }
+  ],
+  "S001213": [
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee on Printing",
+    "title": "Vice Chair"
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee of Congress on the Library",
+    "title": "Chair"
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on House Administration",
+    "title": "Chair"
+   }
+  ],
+  "S001214": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": null
+   }
+  ],
+  "S001215": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Committee on the Strategic Competition Between the United States and the Chinese Communist Party",
+    "title": null
+   }
+  ],
+  "S001216": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "S001217": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Foreign Relations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Homeland Security and Governmental Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Budget",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Special Committee on Aging",
+    "title": "Chairman"
+   }
+  ],
+  "S001218": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   }
+  ],
+  "S001220": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   }
+  ],
+  "S001221": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Small Business",
+    "title": null
+   }
+  ],
+  "S001223": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   }
+  ],
+  "S001224": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "S001225": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   }
+  ],
+  "S001226": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   }
+  ],
+  "S001227": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Economic Committee",
+    "title": "Vice Chairman"
+   }
+  ],
+  "S001228": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Small Business",
+    "title": null
+   }
+  ],
+  "S001229": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "S001230": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ethics",
+    "title": null
+   }
+  ],
+  "S001231": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Small Business",
+    "title": null
+   }
+  ],
+  "S001232": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "T000165": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   }
+  ],
+  "T000193": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": "Ranking Member"
+   }
+  ],
+  "T000250": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Agriculture, Nutrition, and Forestry",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Intelligence",
+    "title": "Ex Officio"
+   }
+  ],
+  "T000278": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Agriculture, Nutrition, and Forestry",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Health, Education, Labor, and Pensions",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Veterans' Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Special Committee on Aging",
+    "title": null
+   }
+  ],
+  "T000460": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   }
+  ],
+  "T000463": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   }
+  ],
+  "T000467": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": "Chair"
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "T000468": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ],
+  "T000469": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "T000472": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Veterans' Affairs",
+    "title": "Ranking Member"
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "T000474": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on House Administration",
+    "title": null
+   }
+  ],
+  "T000476": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Banking, Housing, and Urban Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Veterans' Affairs",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Commission on Security and Cooperation in Europe",
+    "title": null
+   }
+  ],
+  "T000478": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": null
+   }
+  ],
+  "T000480": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "T000481": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "T000482": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "T000486": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Committee on the Strategic Competition Between the United States and the Chinese Communist Party",
+    "title": null
+   }
+  ],
+  "T000487": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Committee on the Strategic Competition Between the United States and the Chinese Communist Party",
+    "title": null
+   }
+  ],
+  "T000488": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   }
+  ],
+  "T000490": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   }
+  ],
+  "T000491": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Small Business",
+    "title": null
+   }
+  ],
+  "U000040": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "V000081": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Small Business",
+    "title": "Ranking Member"
+   }
+  ],
+  "V000128": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Banking, Housing, and Urban Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Foreign Relations",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Budget",
+    "title": null
+   }
+  ],
+  "V000129": [
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee of Congress on the Library",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "V000130": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "V000131": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "V000133": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Judiciary",
+    "title": null
+   }
+  ],
+  "V000134": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Small Business",
+    "title": null
+   }
+  ],
+  "V000135": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Veterans' Affairs",
+    "title": null
+   }
+  ],
+  "V000136": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   }
+  ],
+  "V000138": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   }
+  ],
+  "V000139": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   }
+  ],
+  "W000187": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": "Ranking Member"
+   }
+  ],
+  "W000437": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": "Chairman"
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Environment and Public Works",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Rules and Administration",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Intelligence",
+    "title": "Ex Officio"
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Commission on Security and Cooperation in Europe",
+    "title": "Cochairman"
+   }
+  ],
+  "W000779": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Energy and Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": "Ranking Member"
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Budget",
+    "title": null
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Joint Committee on Taxation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Intelligence",
+    "title": null
+   }
+  ],
+  "W000788": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "W000790": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Agriculture, Nutrition, and Forestry",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Banking, Housing, and Urban Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Special Committee on Aging",
+    "title": null
+   }
+  ],
+  "W000795": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "W000797": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "W000798": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": "Chair"
+   }
+  ],
+  "W000800": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Agriculture, Nutrition, and Forestry",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Rules and Administration",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Judiciary",
+    "title": null
+   }
+  ],
+  "W000802": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Environment and Public Works",
+    "title": "Ranking Member"
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Budget",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Judiciary",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "United States Senate Caucus on International Narcotics Control",
+    "title": "Chairman"
+   },
+   {
+    "chamber": "joint",
+    "committeeName": "Commission on Security and Cooperation in Europe",
+    "title": null
+   }
+  ],
+  "W000804": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": "Vice Chair"
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Select Committee on the Strategic Competition Between the United States and the Chinese Communist Party",
+    "title": null
+   }
+  ],
+  "W000805": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Banking, Housing, and Urban Affairs",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Rules and Administration",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on the Budget",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Intelligence",
+    "title": "Vice Chairman"
+   }
+  ],
+  "W000806": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   }
+  ],
+  "W000808": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Education and Workforce",
+    "title": null
+   }
+  ],
+  "W000809": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   }
+  ],
+  "W000812": [
+   {
+    "chamber": "house",
+    "committeeName": "House Permanent Select Committee on Intelligence",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   }
+  ],
+  "W000814": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Energy and Commerce",
+    "title": null
+   }
+  ],
+  "W000816": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Financial Services",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Small Business",
+    "title": "Chair"
+   }
+  ],
+  "W000817": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Armed Services",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Banking, Housing, and Urban Affairs",
+    "title": "Ranking Member"
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Special Committee on Aging",
+    "title": null
+   }
+  ],
+  "W000821": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Natural Resources",
+    "title": "Chair"
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   }
+  ],
+  "W000822": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on the Budget",
+    "title": null
+   }
+  ],
+  "W000829": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Agriculture",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Small Business",
+    "title": null
+   }
+  ],
+  "W000830": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Science, Space, and Technology",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Armed Services",
+    "title": null
+   }
+  ],
+  "W000831": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Homeland Security",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Oversight and Government Reform",
+    "title": null
+   }
+  ],
+  "Y000064": [
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Commerce, Science, and Transportation",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Finance",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Committee on Small Business and Entrepreneurship",
+    "title": null
+   },
+   {
+    "chamber": "senate",
+    "committeeName": "Senate Select Committee on Intelligence",
+    "title": null
+   }
+  ],
+  "Y000067": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Transportation and Infrastructure",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Ways and Means",
+    "title": null
+   }
+  ],
+  "Z000018": [
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Appropriations",
+    "title": null
+   },
+   {
+    "chamber": "house",
+    "committeeName": "House Committee on Foreign Affairs",
+    "title": null
+   }
+  ]
+ }
+}

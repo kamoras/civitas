@@ -263,6 +263,8 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
         party=senator.party,
         years_in_office=senator.years_in_office,
         initials=initials,
+        leadership_title=senator.leadership_title,
+        committees=json.loads(senator.committees or "[]"),
         representation_score=RepresentationScoreSchema(
             funding_independence=senator.score_funding_independence,
             promise_persistence=senator.score_promise_persistence,
@@ -519,6 +521,9 @@ def upsert_senator(db: Session, senator_data: dict) -> Senator:
     existing.party = senator_data.get("party", existing.party)
     existing.years_in_office = senator_data.get("yearsInOffice", existing.years_in_office)
     existing.initials = senator_data.get("initials", existing.initials)
+    existing.leadership_title = senator_data.get("leadershipTitle", existing.leadership_title)
+    if "committees" in senator_data:
+        existing.committees = json.dumps(senator_data["committees"])
 
     # Only overwrite scores when representationScore is explicitly provided.
     # A partial update (bio/contact only) must not zero out previously computed scores.

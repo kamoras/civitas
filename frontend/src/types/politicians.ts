@@ -14,6 +14,13 @@ export interface PoliticianCard {
   isCurrent?: boolean;
   vacancyReason?: string | null;
   leftOfficeDate?: string | null;
+  leadershipTitle?: string | null;
+}
+
+export interface Committee {
+  committeeName: string;
+  chamber: string;
+  title?: string | null;
 }
 
 export interface PoliticianIdentity {
@@ -30,6 +37,8 @@ export interface PoliticianIdentity {
   officeAddress?: string;
   vacancyReason?: string | null;
   leftOfficeDate?: string | null;
+  leadershipTitle?: string | null;
+  committees?: Committee[];
   // President
   number?: number;
   termStart?: string;

@@ -177,6 +177,7 @@ def list_politicians(
                 "isCurrent": s.is_current,
                 "vacancyReason": s.vacancy_reason,
                 "leftOfficeDate": s.left_office_date,
+                "leadershipTitle": s.leadership_title,
             })
 
     if branch in (None, "house"):
@@ -205,6 +206,7 @@ def list_politicians(
                 "isCurrent": r.is_current,
                 "vacancyReason": r.vacancy_reason,
                 "leftOfficeDate": r.left_office_date,
+                "leadershipTitle": r.leadership_title,
             })
 
     if branch in (None, "president"):
@@ -298,6 +300,8 @@ def _build_identity(branch: str, entity) -> dict:
             "isCurrent": entity.is_current,
             "vacancyReason": entity.vacancy_reason,
             "leftOfficeDate": entity.left_office_date,
+            "leadershipTitle": entity.leadership_title,
+            "committees": json.loads(entity.committees or "[]"),
         }
     if branch == "house":
         return {
@@ -315,6 +319,8 @@ def _build_identity(branch: str, entity) -> dict:
             "leftOfficeDate": entity.left_office_date,
             "officePhone": entity.office_phone or "",
             "officeAddress": entity.office_address or "",
+            "leadershipTitle": entity.leadership_title,
+            "committees": json.loads(entity.committees or "[]"),
         }
     if branch == "president":
         return {

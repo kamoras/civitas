@@ -1,0 +1,33 @@
+{
+ "_source": "unitedstates/congress-legislators (CC0-1.0), retrieved 2026-07-13; regenerate with backend/scripts/fetch_committee_data.py",
+ "roles": {
+  "A000371": "House Democratic Caucus Chair",
+  "B001230": "Senate Democratic Conference Secretary",
+  "B001261": "Senate Majority Whip",
+  "B001288": "Senate Democratic Strategic Communications Committee Chair",
+  "C001047": "Senate Republican Policy Committee Chair",
+  "C001095": "Senate Republican Conference Chair",
+  "C001101": "House Minority Whip",
+  "C001113": "Senate Democratic Outreach Vice Chair",
+  "D000563": "Senate Minority Whip",
+  "E000294": "House Majority Whip",
+  "G000386": "President Pro Tempore of the Senate",
+  "H001082": "House Republican Policy Committee Chair",
+  "J000294": "House Minority Leader",
+  "J000299": "Speaker of the House",
+  "K000367": "Senate Democratic Steering Committee Chair",
+  "L000575": "Senate Republican Conference Vice Chair",
+  "L000582": "House Democratic Caucus Vice Chair",
+  "M001136": "House Republican Conference Chair",
+  "M001169": "Senate Democratic Conference Deputy Secretary",
+  "N000191": "Assistant House Minority Leader",
+  "S000033": "Senate Democratic Outreach Chair",
+  "S000148": "Senate Minority Leader",
+  "S001176": "House Majority Leader",
+  "S001184": "Senate Republican Committee Chair",
+  "S001194": "Senate Democratic Conference Deputy Secretary",
+  "T000250": "Senate Majority Leader",
+  "W000805": "Senate Democratic Conference Vice Chair",
+  "W000817": "Senate Democratic Conference Vice Chair"
+ }
+}

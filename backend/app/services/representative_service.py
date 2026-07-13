@@ -76,6 +76,8 @@ def build_rep_response(rep: Representative, _db: Session = None) -> dict:
         "party": rep.party,
         "yearsInOffice": rep.years_in_office,
         "initials": initials,
+        "leadershipTitle": rep.leadership_title,
+        "committees": json.loads(rep.committees or "[]"),
         "representationScore": {
             "fundingIndependence": rep.score_funding_independence,
             "promisePersistence": rep.score_promise_persistence,
@@ -372,6 +374,9 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
     existing.party = rep_data.get("party", existing.party)
     existing.years_in_office = rep_data.get("yearsInOffice", existing.years_in_office)
     existing.initials = rep_data.get("initials", existing.initials)
+    existing.leadership_title = rep_data.get("leadershipTitle", existing.leadership_title)
+    if "committees" in rep_data:
+        existing.committees = json.dumps(rep_data["committees"])
 
     existing.score_funding_independence = cs.get("fundingIndependence", 0)
     existing.score_promise_persistence = cs.get("promisePersistence", 0)

@@ -83,6 +83,12 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
           </div>
           <p className="font-mono text-[10px] text-matrix-green/40 mb-2 truncate">{subtitle}</p>
 
+          {p.leadershipTitle && (
+            <span className="inline-block font-mono text-[9px] text-amber-400/80 tracking-widest border border-amber-400/30 px-1.5 py-0.5 mb-2">
+              {p.leadershipTitle.toUpperCase()}
+            </span>
+          )}
+
           {p.isCurrent === false ? (
             <span className="font-mono text-[9px] text-neon-pink/70 tracking-widest border border-neon-pink/30 px-1.5 py-0.5">
               SEAT VACANT{p.vacancyReason ? ` — ${p.vacancyReason.toUpperCase()}` : ""}

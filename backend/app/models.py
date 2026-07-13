@@ -26,6 +26,17 @@ class Senator(Base):
     vacancy_reason: Mapped[str | None] = mapped_column(String, nullable=True)  # "deceased" | "resigned" | "expelled"
     left_office_date: Mapped[str | None] = mapped_column(String(10), nullable=True)  # YYYY-MM-DD
 
+    # Chamber/party leadership title (e.g. "Senate Majority Leader") and
+    # committee assignments. Ingested from unitedstates/congress-legislators
+    # (CC0-1.0) via scripts/fetch_committee_data.py — Congress.gov's own API
+    # exposes neither (confirmed 2026-07: member records carry no
+    # committee/leadership fields, and committee-detail records list
+    # bills/reports/nominations but never a member roster). committees is
+    # a JSON list of {committeeName, chamber, title} — same JSON-TEXT-column
+    # pattern already used elsewhere (e.g. ActionIssue.facts).
+    leadership_title: Mapped[str | None] = mapped_column(String, nullable=True)
+    committees: Mapped[str] = mapped_column(Text, default="[]")
+
     score_funding_independence: Mapped[float] = mapped_column(Float, default=0.0)
     score_promise_persistence: Mapped[float] = mapped_column(Float, default=0.0)
     score_independent_voting: Mapped[float] = mapped_column(Float, default=0.0)
@@ -180,6 +191,10 @@ class Representative(Base):
     party: Mapped[str] = mapped_column(String(1), nullable=False)
     years_in_office: Mapped[int] = mapped_column(Integer, default=0)
     initials: Mapped[str] = mapped_column(String(4), default="")
+
+    # See Senator.leadership_title/committees for the rationale and source.
+    leadership_title: Mapped[str | None] = mapped_column(String, nullable=True)
+    committees: Mapped[str] = mapped_column(Text, default="[]")
 
     score_funding_independence: Mapped[float] = mapped_column(Float, default=0.0)
     score_promise_persistence: Mapped[float] = mapped_column(Float, default=0.0)

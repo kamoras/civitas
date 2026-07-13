@@ -104,6 +104,12 @@ class PaginatedVotesSchema(CamelModel):
     counts: VoteCountsSchema
 
 
+class CommitteeSchema(CamelModel):
+    committee_name: str
+    chamber: str
+    title: str | None = None  # "Chairman" / "Ranking Member", else None
+
+
 class LobbyingMatchSchema(CamelModel):
     lobbyist_org: str
     industry: str
@@ -160,6 +166,8 @@ class SenatorSchema(CamelModel):
     party: Literal["D", "R", "I"]
     years_in_office: int
     initials: str
+    leadership_title: str | None = None
+    committees: list[CommitteeSchema] = []
     representation_score: RepresentationScoreSchema
     funding: FundingSchema
     voting_record: VotingRecordSchema

@@ -5,6 +5,11 @@ import re
 import unicodedata
 from datetime import datetime
 
+from app.pipeline.transform.committee_data import (
+    load_committee_membership,
+    load_leadership_roles,
+)
+
 logger = logging.getLogger(__name__)
 
 STATE_NAME_TO_CODE = {
@@ -123,14 +128,17 @@ def normalize_members(
         if official_url:
             contact_form = f"{official_url}/contact"
 
+        bioguide_id = m.get("bioguideId", "")
         results.append({
-            "bioguideId": m.get("bioguideId", ""),
+            "bioguideId": bioguide_id,
             "id": senator_id,
             "name": name,
             "lastNameForVoteMatch": last_name_for_match,
             "state": state,
             "party": party,
             "yearsInOffice": years_in_office,
+            "leadershipTitle": load_leadership_roles().get(bioguide_id),
+            "committees": load_committee_membership().get(bioguide_id, []),
             "initials": initials,
             "officialWebsiteUrl": official_url,
             "officePhone": office_phone,
@@ -224,8 +232,9 @@ def normalize_house_members(
         if official_url:
             contact_form = f"{official_url}/contact"
 
+        bioguide_id = m.get("bioguideId", "")
         results.append({
-            "bioguideId": m.get("bioguideId", ""),
+            "bioguideId": bioguide_id,
             "id": rep_id,
             "name": name,
             "lastNameForVoteMatch": last_name_for_match,
@@ -233,6 +242,8 @@ def normalize_house_members(
             "district": district,
             "party": party,
             "yearsInOffice": years_in_office,
+            "leadershipTitle": load_leadership_roles().get(bioguide_id),
+            "committees": load_committee_membership().get(bioguide_id, []),
             "initials": initials,
             "officialWebsiteUrl": official_url,
             "officePhone": office_phone,
