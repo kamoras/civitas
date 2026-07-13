@@ -53,7 +53,7 @@ export default function TypewriterText({
   }, [text, speed, started, reducedMotion]);
 
   return (
-    <span className={className} aria-label={text}>
+    <span className={className} role="img" aria-label={text}>
       <span aria-hidden="true">
         {displayed}
         {!reducedMotion && started && displayed.length < text.length && (

@@ -247,6 +247,7 @@ export default function PoliticiansPage() {
                 <select
                   value={state}
                   onChange={e => setState(e.target.value)}
+                  aria-label="Filter by state"
                   className="font-mono text-[10px] bg-crt-black border border-matrix-green/20 text-matrix-green/60 px-2 py-1 outline-none"
                 >
                   <option value="">ALL STATES</option>

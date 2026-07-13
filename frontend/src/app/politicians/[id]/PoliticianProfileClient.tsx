@@ -145,7 +145,7 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
                   </span>
                 )}
                 {identity.isCurrent && (
-                  <span className="font-mono text-[9px] tracking-widest border border-matrix-green/30 text-matrix-green/60 px-2 py-0.5 animate-pulse">
+                  <span className="font-mono text-[9px] tracking-widest border border-matrix-green/30 text-matrix-green/60 px-2 py-0.5 pulse-subtle">
                     CURRENT
                   </span>
                 )}

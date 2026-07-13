@@ -89,6 +89,7 @@ function TrendIndicator({ trend }: { trend?: ScoreTrend }) {
       <span
         className="inline-flex items-center gap-0.5 text-xs text-matrix-green"
         title={`Up ${formatted} pts from previous score of ${trend.previousScore?.toFixed(1) ?? "?"}`}
+        role="img"
         aria-label={`Trending up ${formatted} points`}
       >
         <svg className="w-3 h-3" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
@@ -104,6 +105,7 @@ function TrendIndicator({ trend }: { trend?: ScoreTrend }) {
       <span
         className="inline-flex items-center gap-0.5 text-xs text-red-400"
         title={`Down ${formatted} pts from previous score of ${trend.previousScore?.toFixed(1) ?? "?"}`}
+        role="img"
         aria-label={`Trending down ${formatted} points`}
       >
         <svg className="w-3 h-3" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
@@ -118,6 +120,7 @@ function TrendIndicator({ trend }: { trend?: ScoreTrend }) {
     <span
       className="inline-flex items-center text-xs text-white/30"
       title="Score stable (no significant change)"
+      role="img"
       aria-label="Score stable"
     >
       <svg className="w-3 h-3" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
@@ -586,11 +589,11 @@ function LeaderboardContent() {
   }, [branch, entries, houseTotal]);
 
   return (
-    <main id="main-content" tabIndex={-1} className="min-h-screen bg-terminal-bg text-matrix-green font-terminal overflow-x-hidden">
+    <div className="min-h-screen bg-terminal-bg text-matrix-green font-terminal overflow-x-hidden">
       <MatrixRain />
       <Navbar />
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-16">
+      <main id="main-content" tabIndex={-1} className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-16">
         {/* Header */}
         <div className="mb-8 text-center">
           <h1
@@ -880,10 +883,10 @@ function LeaderboardContent() {
         )}
         </>}
         </div>
-      </div>
+      </main>
       <Footer />
       <BackToTop />
-    </main>
+    </div>
   );
 }
 

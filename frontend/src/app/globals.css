@@ -326,33 +326,45 @@ body {
    giant diff. Instead, clamp exactly the opacity steps actually used in
    the codebase that fall under each color's floor, rounded up to the
    nearest value already in use elsewhere (so no new visual weight is
-   introduced) — everything at or above the floor is untouched. */
-[class*="text-matrix-green/20"],
-[class*="text-matrix-green/25"],
-[class*="text-matrix-green/30"],
-[class*="text-matrix-green/35"],
-[class*="text-matrix-green/40"],
-[class*="text-matrix-green/50"] {
-  opacity: 0.6 !important; /* matrix-green/60 -> 5.49:1 */
+   introduced) — everything at or above the floor is untouched.
+
+   IMPORTANT — this previously used `opacity: N !important` instead of
+   `color`. Tailwind v4 bakes the /NN opacity modifier directly into the
+   `color` value itself (e.g. `color: lab(... / 0.4)`), so an element-level
+   `opacity` on top doesn't replace that alpha, it MULTIPLIES with it:
+   matrix-green/40 (0.4 alpha) with `opacity: 0.6` rendered at an effective
+   0.4 * 0.6 = 0.24 alpha — well below even the original unfixed 0.4, i.e.
+   the "fix" made contrast measurably worse than doing nothing (live-audit
+   confirmed via axe-core: 1.68:1, not the intended ~5.5:1). Overriding
+   `color` directly replaces Tailwind's alpha instead of compounding with
+   it. `:not(:hover)` keeps each color's hover-variant class (a different,
+   unaffected className) working as a distinct brightening cue. */
+[class*="text-matrix-green/20"]:not(:hover),
+[class*="text-matrix-green/25"]:not(:hover),
+[class*="text-matrix-green/30"]:not(:hover),
+[class*="text-matrix-green/35"]:not(:hover),
+[class*="text-matrix-green/40"]:not(:hover),
+[class*="text-matrix-green/50"]:not(:hover) {
+  color: rgb(0 255 65 / 0.6) !important; /* matrix-green/60 -> 5.49:1 */
 }
-[class*="text-white/20"],
-[class*="text-white/30"],
-[class*="text-white/40"] {
-  opacity: 0.5 !important; /* white/50 -> ~6:1 */
+[class*="text-white/20"]:not(:hover),
+[class*="text-white/30"]:not(:hover),
+[class*="text-white/40"]:not(:hover) {
+  color: rgb(255 255 255 / 0.5) !important; /* white/50 -> ~6:1 */
 }
-[class*="text-neon-cyan/40"],
-[class*="text-neon-cyan/50"] {
-  opacity: 0.6 !important; /* neon-cyan/60 -> ~5.4:1 */
+[class*="text-neon-cyan/40"]:not(:hover),
+[class*="text-neon-cyan/50"]:not(:hover) {
+  color: rgb(0 255 255 / 0.6) !important; /* neon-cyan/60 -> ~5.4:1 */
 }
-[class*="text-neon-yellow/40"] {
-  opacity: 0.5 !important; /* neon-yellow/50 -> ~4.9:1 */
+[class*="text-neon-yellow/40"]:not(:hover) {
+  color: rgb(255 255 0 / 0.5) !important; /* neon-yellow/50 -> ~4.9:1 */
 }
-[class*="text-neon-pink/40"],
-[class*="text-neon-pink/50"],
-[class*="text-neon-pink/60"],
-[class*="text-neon-pink/70"],
-[class*="text-neon-pink/80"] {
-  opacity: 0.9 !important; /* neon-pink/90 -> ~4.9:1 — needs to be nearly opaque */
+[class*="text-neon-pink/40"]:not(:hover),
+[class*="text-neon-pink/50"]:not(:hover),
+[class*="text-neon-pink/60"]:not(:hover),
+[class*="text-neon-pink/70"]:not(:hover),
+[class*="text-neon-pink/80"]:not(:hover) {
+  color: rgb(255 0 255 / 0.9) !important; /* neon-pink/90 -> ~4.9:1 — needs to be nearly opaque */
 }
 
 /* dem-blue (#0066ff, 4.22:1) and ind-purple (#9933ff, 4.15:1) both fail
@@ -360,13 +372,19 @@ body {
    itself is too dark against #0d0208. Always substitute a lighter shade
    rather than gating the fix behind prefers-contrast (dem-blue's lighter
    variant was already used there, at 7.35:1; ind-purple gets the same
-   treatment here, at 5.16:1). rep-red passes fine at full opacity
-   (5.61:1) and needs no equivalent swap. */
+   treatment here, at 5.37:1 against #0d0208). rep-red passes fine at
+   full opacity (5.61:1) and needs no equivalent swap.
+   ind-purple's swap needed a second pass (a852ff -> ac56ff): party
+   badges render it on a tinted bg-ind-purple/20 chip background
+   (~#290c3a, lighter than the page's #0d0208), which — being a lighter
+   background — reduces contrast against this light foreground color to
+   4.40:1. #ac56ff clears 4.5:1 against both the plain page background
+   and that chip background. */
 [class*="text-dem-blue"] {
   color: #6699ff !important;
 }
 [class*="text-ind-purple"] {
-  color: #a852ff !important;
+  color: #ac56ff !important;
 }
 
 @media (prefers-contrast: more) {
@@ -376,10 +394,21 @@ body {
     color: #00ff41 !important;
   }
 
-  [class*="text-neon-cyan/"],
-  [class*="text-neon-pink/"],
+  /* Same compounding pitfall as above: `opacity: 1` alone doesn't strip
+     the alpha already baked into Tailwind's `color` value, so these
+     stayed at their original low alpha under forced-contrast mode. Force
+     each family's solid hue directly. */
+  [class*="text-neon-cyan/"] {
+    opacity: 1 !important;
+    color: #00ffff !important;
+  }
+  [class*="text-neon-pink/"] {
+    opacity: 1 !important;
+    color: #ff00ff !important;
+  }
   [class*="text-neon-yellow/"] {
     opacity: 1 !important;
+    color: #ffff00 !important;
   }
 
   /* Lighter partisan colors for better contrast on dark backgrounds */
@@ -397,6 +426,22 @@ body {
     outline-width: 3px !important;
     outline-offset: 3px !important;
   }
+}
+
+/* Tailwind's built-in animate-pulse dips to 50% opacity at its keyframe
+   midpoint — fine for a bare decorative dot, but on TEXT it multiplies
+   against whatever alpha is already baked into the color (same pitfall as
+   the contrast overrides above) and drives contrast under 4.5:1 for a
+   portion of every cycle, live-audit confirmed via axe-core on the
+   "CURRENT" officeholder badge (2.23:1 at the dim phase, text-matrix-
+   green/60 which is otherwise a passing 5.49:1 at rest). Use this instead
+   of animate-pulse on persistent (non-loading-spinner) text so the dim
+   phase never drops below the color's own safe floor. */
+@keyframes pulse-subtle {
+  50% { opacity: 0.92; }
+}
+.pulse-subtle {
+  animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 /* ===== FOCUS VISIBLE ===== */

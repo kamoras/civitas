@@ -654,6 +654,41 @@ function SecondaryIssue({
   );
 }
 
+/* theme.accent is an arbitrary hex color picked per daily theme (LLM-derived,
+   not a fixed palette), so a flat opacity-40 text class can't guarantee WCAG
+   4.5:1 the way the fixed-palette clamps in globals.css can — some accent
+   hues fail well below that at 40% alpha (confirmed live via axe-core:
+   1.95:1 for one theme's accent). Compute the minimum opacity this specific
+   color needs against the page background, rather than picking one fixed
+   percentage that only happens to work for some hues. */
+function contrastSafeOpacity(hex: string, minRatio = 4.5): number {
+  const bg: [number, number, number] = [0x0d, 0x02, 0x08]; // crt-black
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  if (!m) return 1;
+  const fg: [number, number, number] = [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)];
+
+  const lin = (c: number) => {
+    const cs = c / 255;
+    return cs <= 0.03928 ? cs / 12.92 : Math.pow((cs + 0.055) / 1.055, 2.4);
+  };
+  const luminance = (rgb: [number, number, number]) =>
+    0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2]);
+  const bgLum = luminance(bg);
+
+  for (let pct = 40; pct <= 100; pct += 2) {
+    const alpha = pct / 100;
+    const composited: [number, number, number] = [
+      alpha * fg[0] + (1 - alpha) * bg[0],
+      alpha * fg[1] + (1 - alpha) * bg[1],
+      alpha * fg[2] + (1 - alpha) * bg[2],
+    ];
+    const fgLum = luminance(composited);
+    const [l1, l2] = fgLum > bgLum ? [fgLum, bgLum] : [bgLum, fgLum];
+    if ((l1 + 0.05) / (l2 + 0.05) >= minRatio) return alpha;
+  }
+  return 1;
+}
+
 function sanitizeLLMCss(raw: string): string {
   const allowed: string[] = [];
   const blocks = raw.split(/(?=\.theme-hero-panel|@keyframes|@media)/g);
@@ -999,7 +1034,8 @@ function IssuesTab({
           <div className="inline-flex items-center gap-3">
             <div className="theme-data-strip w-12" />
             <span
-              className="text-[10px] font-pixel tracking-[0.2em] theme-accent-text opacity-40"
+              className="text-[10px] font-pixel tracking-[0.2em] theme-accent-text"
+              style={{ opacity: contrastSafeOpacity(theme.accent) }}
             >
               {theme.tagline.toUpperCase()}
             </span>
