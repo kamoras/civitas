@@ -482,6 +482,10 @@ deploy_backend() {
   fi
 
   log "Starting $container_name..."
+  # Explicit log retention (2026-07): a long pipeline run's own logs had
+  # rotated out of reach by the time we needed to diagnose an overnight
+  # slowdown — 200MB/10 files per container is generous enough to cover
+  # several days of even a chatty run.
   docker run -d \
     --name "$container_name" \
     --network "$NETWORK" \
@@ -498,6 +502,7 @@ deploy_backend() {
       [ -d "/sys/class/net/br-${br}/statistics" ] && echo "-v /sys/class/net/br-${br}/statistics:/host/net/docker-br:ro") \
     -p "127.0.0.1:${new_port}:8000" \
     --memory=4g \
+    --log-driver json-file --log-opt max-size=20m --log-opt max-file=10 \
     --restart unless-stopped \
     civitas-backend:latest
 
@@ -558,6 +563,7 @@ deploy_frontend() {
     -e NEXT_PUBLIC_API_URL=/api \
     -p "127.0.0.1:${new_port}:3000" \
     --memory=512m \
+    --log-driver json-file --log-opt max-size=20m --log-opt max-file=10 \
     --restart unless-stopped \
     civitas-frontend:latest
 

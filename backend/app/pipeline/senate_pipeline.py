@@ -1690,27 +1690,37 @@ async def run_senate_pipeline(
                 # match before 2026-07; now it reflects actual disclosed
                 # federal lobbying by the matched organization. Cached per
                 # org+year, so only the first pipeline run pays the fetch.
+                #
+                # Uses its own short-lived client, not the outer `client` —
+                # that one is scoped to the FETCH phase (closed at the
+                # "if fetch_only:" boundary long before this analysis loop
+                # runs) and reusing its name here after it's closed silently
+                # failed every LDA lookup with "client has been closed"
+                # (2026-07 finding: 184 failures in a single run, present
+                # since this enrichment was added — lobbyingSpend has
+                # effectively always been 0 in production).
                 if lobbying_matches:
                     from datetime import datetime as _dt
                     from app.pipeline.fetch.lda import fetch_lobbying_spend
                     lda_year = _dt.utcnow().year - 1  # last complete filing year
-                    for m in lobbying_matches:
-                        try:
-                            spend = await fetch_lobbying_spend(
-                                client, db, m.get("lobbyistOrg", ""), lda_year,
-                            )
-                            m["lobbyingSpend"] = round(spend)
-                            if spend > 0:
-                                m["description"] = (
-                                    m.get("description", "")
-                                    + f" Registered federal lobbying (LDA "
-                                    f"{lda_year}): ${spend:,.0f}."
+                    async with httpx.AsyncClient() as lda_client:
+                        for m in lobbying_matches:
+                            try:
+                                spend = await fetch_lobbying_spend(
+                                    lda_client, db, m.get("lobbyistOrg", ""), lda_year,
                                 )
-                        except Exception:
-                            logger.exception(
-                                "LDA enrichment failed for %s (non-fatal)",
-                                m.get("lobbyistOrg", "?"),
-                            )
+                                m["lobbyingSpend"] = round(spend)
+                                if spend > 0:
+                                    m["description"] = (
+                                        m.get("description", "")
+                                        + f" Registered federal lobbying (LDA "
+                                        f"{lda_year}): ${spend:,.0f}."
+                                    )
+                            except Exception:
+                                logger.exception(
+                                    "LDA enrichment failed for %s (non-fatal)",
+                                    m.get("lobbyistOrg", "?"),
+                                )
 
                 # Match Congressional Record floor remarks to this senator
                 senator_last_name = senator.get("lastNameForVoteMatch", "")
