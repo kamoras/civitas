@@ -243,11 +243,33 @@ async def fetch_candidate_committees(
     return results
 
 
+def _cycle_query(cycles: list[int] | None) -> str:
+    """FEC's Schedule A cycle filter — repeat the param for OR semantics."""
+    if not cycles:
+        return ""
+    return "".join(f"&two_year_transaction_period={c}" for c in sorted(set(cycles)))
+
+
+def _cycle_tag(cycles: list[int] | None) -> str:
+    return "-".join(str(c) for c in sorted(set(cycles))) if cycles else "all"
+
+
 async def fetch_committee_receipts(
-    client: httpx.AsyncClient, db: Session, committee_id: str
+    client: httpx.AsyncClient, db: Session, committee_id: str,
+    cycles: list[int] | None = None,
 ) -> list[dict]:
-    """Fetch individual contribution receipts to a committee."""
-    cache_key = f"committee-receipts-indiv-{committee_id}"
+    """Fetch individual contribution receipts to a committee.
+
+    Args:
+        cycles: Election cycles to include (FEC two_year_transaction_period
+            values). Should match the window used for the candidate's
+            receipt totals (select_recent_elections) — otherwise top-donor
+            and industry-breakdown detail is drawn from the committee's
+            entire career while the totals it's compared against are
+            windowed to 2 recent elections (2026-07 audit finding).
+            Omit to fetch unwindowed (career-lifetime) data.
+    """
+    cache_key = f"committee-receipts-indiv-v2-{committee_id}-{_cycle_tag(cycles)}"
     cached = api_cache_get(db, "fec", cache_key)
     if cached is not None:
         return cached
@@ -256,7 +278,8 @@ async def fetch_committee_receipts(
     data = await _fetch_with_retry(
         client,
         f"{FEC_API_BASE}/schedules/schedule_a/?committee_id={committee_id}"
-        f"&sort=-contribution_receipt_amount&per_page=100&is_individual=true",
+        f"&sort=-contribution_receipt_amount&per_page=100&is_individual=true"
+        f"{_cycle_query(cycles)}",
     )
     results = (data or {}).get("results", [])
     api_cache_set(db, "fec", cache_key, results)
@@ -264,14 +287,17 @@ async def fetch_committee_receipts(
 
 
 async def fetch_pac_receipts(
-    client: httpx.AsyncClient, db: Session, committee_id: str
+    client: httpx.AsyncClient, db: Session, committee_id: str,
+    cycles: list[int] | None = None,
 ) -> list[dict]:
     """Fetch PAC/committee contributions to a candidate's campaign committee.
 
     These are contributions from PACs, party committees, and other committees
     directly to the senator's campaign -- the core corporate money flow.
+    See fetch_committee_receipts for why `cycles` should match the window
+    used for receipt totals.
     """
-    cache_key = f"committee-receipts-pac-{committee_id}"
+    cache_key = f"committee-receipts-pac-v2-{committee_id}-{_cycle_tag(cycles)}"
     cached = api_cache_get(db, "fec", cache_key)
     if cached is not None:
         return cached
@@ -280,7 +306,8 @@ async def fetch_pac_receipts(
     data = await _fetch_with_retry(
         client,
         f"{FEC_API_BASE}/schedules/schedule_a/?committee_id={committee_id}"
-        f"&sort=-contribution_receipt_amount&per_page=100&is_individual=false",
+        f"&sort=-contribution_receipt_amount&per_page=100&is_individual=false"
+        f"{_cycle_query(cycles)}",
     )
     results = (data or {}).get("results", [])
     api_cache_set(db, "fec", cache_key, results)
@@ -288,18 +315,21 @@ async def fetch_pac_receipts(
 
 
 async def fetch_aggregated_contributors(
-    client: httpx.AsyncClient, db: Session, committee_id: str
+    client: httpx.AsyncClient, db: Session, committee_id: str,
+    cycles: list[int] | None = None,
 ) -> list[dict]:
     """Fetch aggregated totals by contributor for a committee.
 
     Uses best-effort fallbacks for FEC endpoints that don't support the
     preferred `-total` sort field (some committees return 422). The
     function will try a small set of alternative queries before giving up
-    and returning an empty list — the pipeline will continue.
+    and returning an empty list — the pipeline will continue. See
+    fetch_committee_receipts for why `cycles` should match the window
+    used for receipt totals.
     """
     global _by_contributor_broken
 
-    cache_key = f"aggregated-contributors-{committee_id}"
+    cache_key = f"aggregated-contributors-v2-{committee_id}-{_cycle_tag(cycles)}"
     cached = api_cache_get(db, "fec", cache_key)
     if cached is not None:
         return cached
@@ -310,12 +340,13 @@ async def fetch_aggregated_contributors(
         api_cache_set(db, "fec", cache_key, [])
         return []
 
+    cq = _cycle_query(cycles)
     # Try preferred query first, then fall back to alternatives when a
     # 422/other failures are encountered.
     urls = [
-        f"{FEC_API_BASE}/schedules/schedule_a/by_contributor/?committee_id={committee_id}&sort=-total&per_page=20",
-        f"{FEC_API_BASE}/schedules/schedule_a/by_contributor/?committee_id={committee_id}&sort=-contribution_receipt_amount&per_page=20",
-        f"{FEC_API_BASE}/schedules/schedule_a/by_contributor/?committee_id={committee_id}&per_page=20",
+        f"{FEC_API_BASE}/schedules/schedule_a/by_contributor/?committee_id={committee_id}&sort=-total&per_page=20{cq}",
+        f"{FEC_API_BASE}/schedules/schedule_a/by_contributor/?committee_id={committee_id}&sort=-contribution_receipt_amount&per_page=20{cq}",
+        f"{FEC_API_BASE}/schedules/schedule_a/by_contributor/?committee_id={committee_id}&per_page=20{cq}",
     ]
 
     data = None

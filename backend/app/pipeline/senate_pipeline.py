@@ -1056,30 +1056,36 @@ async def run_senate_pipeline(
                     else None
                 )
 
-                receipts: list = []
-                pac_receipts_data: list = []
-                aggregated: list = []
-                if committee_id:
-                    receipts = await fetch_committee_receipts(
-                        client, db, committee_id
-                    )
-                    pac_receipts_data = await fetch_pac_receipts(
-                        client, db, committee_id
-                    )
-                    aggregated = await fetch_aggregated_contributors(
-                        client, db, committee_id
-                    )
-
-                # Match the outside-spending window to the receipt window
-                # (normalize_finance sums the two most recent elections,
-                # one deduped totals row each). Include the preceding
-                # 2-year cycle since independent expenditures accrue
-                # across the election period.
+                # Match the receipt-detail and outside-spending windows to
+                # the receipt-totals window (normalize_finance sums the two
+                # most recent elections, one deduped totals row each).
+                # Include the preceding 2-year cycle since both independent
+                # expenditures and a campaign's own receipts accrue across
+                # the full election period, not just the election year.
+                # Without this, top-donor/industry-breakdown detail was
+                # drawn from the committee's entire career while the totals
+                # it's compared against were windowed to 2 recent elections
+                # (2026-07 audit finding).
                 recent_cycles = []
                 for c in select_recent_elections(financials):
                     ey = financials_election_year(c)
                     if ey:
                         recent_cycles.extend([int(ey), int(ey) - 2])
+
+                receipts: list = []
+                pac_receipts_data: list = []
+                aggregated: list = []
+                if committee_id:
+                    receipts = await fetch_committee_receipts(
+                        client, db, committee_id, cycles=recent_cycles
+                    )
+                    pac_receipts_data = await fetch_pac_receipts(
+                        client, db, committee_id, cycles=recent_cycles
+                    )
+                    aggregated = await fetch_aggregated_contributors(
+                        client, db, committee_id, cycles=recent_cycles
+                    )
+
                 outside = await fetch_outside_spending(
                     client, db, candidate_id, cycles=recent_cycles
                 )

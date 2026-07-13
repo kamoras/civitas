@@ -521,6 +521,15 @@ async def run_house_pipeline() -> dict:
                         financials = await fetch_candidate_financials(client, db, cand_id)
                         committees = await fetch_candidate_committees(client, db, cand_id)
 
+                        # See senate_pipeline.py's equivalent block for why
+                        # this window must match the receipt-totals window
+                        # (2026-07 audit finding).
+                        recent_cycles = []
+                        for c in select_recent_elections(financials):
+                            ey = financials_election_year(c)
+                            if ey:
+                                recent_cycles.extend([int(ey), int(ey) - 2])
+
                         raw_receipts = []
                         raw_pac_receipts = []
                         aggregated = []
@@ -528,15 +537,10 @@ async def run_house_pipeline() -> dict:
                         for comm in committees:
                             comm_id = comm.get("committee_id", "")
                             if comm_id:
-                                raw_receipts.extend(await fetch_committee_receipts(client, db, comm_id))
-                                raw_pac_receipts.extend(await fetch_pac_receipts(client, db, comm_id))
-                                aggregated.extend(await fetch_aggregated_contributors(client, db, comm_id))
+                                raw_receipts.extend(await fetch_committee_receipts(client, db, comm_id, cycles=recent_cycles))
+                                raw_pac_receipts.extend(await fetch_pac_receipts(client, db, comm_id, cycles=recent_cycles))
+                                aggregated.extend(await fetch_aggregated_contributors(client, db, comm_id, cycles=recent_cycles))
 
-                        recent_cycles = []
-                        for c in select_recent_elections(financials):
-                            ey = financials_election_year(c)
-                            if ey:
-                                recent_cycles.extend([int(ey), int(ey) - 2])
                         outside = await fetch_outside_spending(
                             client, db, cand_id, cycles=recent_cycles
                         )
