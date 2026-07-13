@@ -72,7 +72,7 @@ pip-requirements-parser==32.0.1
 pip_audit==2.10.0
 platformdirs==4.10.0
 pluggy==1.6.0
-posthog==7.21.3
+posthog==7.22.1
 protobuf==6.33.5
 pulsar-client==3.10.0
 py-serializable==2.1.0
