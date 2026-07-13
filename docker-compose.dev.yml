@@ -1,0 +1,25 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/tests:/app/tests
+      - app_data:/data
+    environment:
+      - PIPELINE_LOG_LEVEL=debug
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      context: ./frontend
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    command: npx next dev --hostname 0.0.0.0
+    environment:
+      - NEXT_PUBLIC_API_URL=/api
+
+volumes:
+  app_data:
+    driver: local

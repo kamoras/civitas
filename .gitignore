@@ -1,0 +1,74 @@
+# dependencies
+node_modules/
+__pycache__/
+*.pyc
+.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# testing
+coverage/
+.pytest_cache/
+
+# next.js
+.next/
+out/
+
+# production
+build/
+dist/
+
+# misc
+.DS_Store
+*.pem
+Thumbs.db
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# local env files
+.env
+.env*.local
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# docker volume mount
+/data/
+
+# Claude Code local settings (session data, worktrees)
+.claude/settings.local.json
+
+# deploy state
+.deploy-*-slot
+
+# database files (never commit data to the repo)
+backend/*.db
+
+# python
+*.egg-info/
+.venv/
+venv/
+.claude/worktrees/
+
+# host-specific ops scripts (not part of the shipped project)
+/backup.sh
+
+# defense-in-depth: never commit these even if something creates them
+*.key
+*.sqlite
+credentials.json

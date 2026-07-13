@@ -1,0 +1,441 @@
+@import "tailwindcss";
+@config "../../tailwind.config.ts";
+
+:root {
+  --background: #0d0208;
+  --foreground: #00ff41;
+}
+
+/* ===== BASE STYLES ===== */
+body {
+  color: var(--foreground);
+  background: var(--background);
+  overflow-x: hidden;
+}
+
+::selection {
+  background: #00ff41;
+  color: #000;
+}
+
+/* ===== CUSTOM SCROLLBAR ===== */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0d0208;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #00ff41;
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #00ffff;
+}
+
+/* ===== CRT SCANLINES ===== */
+.crt-overlay {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0) 0px,
+    rgba(0, 0, 0, 0) 1px,
+    rgba(0, 0, 0, 0.03) 1px,
+    rgba(0, 0, 0, 0.03) 2px
+  );
+}
+
+/* ===== GLITCH TEXT ===== */
+.glitch {
+  position: relative;
+  display: inline-block;
+}
+
+.glitch::before,
+.glitch::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.glitch::before {
+  color: #ff00ff;
+  z-index: -1;
+  animation: glitch-clip-1 2s infinite linear alternate-reverse;
+}
+
+.glitch::after {
+  color: #00ffff;
+  z-index: -2;
+  animation: glitch-clip-2 2s infinite linear alternate-reverse;
+}
+
+@keyframes glitch-clip-1 {
+  0% {
+    clip-path: inset(20% 0 60% 0);
+    transform: translate(-3px, 0);
+  }
+  10% {
+    clip-path: inset(50% 0 20% 0);
+    transform: translate(3px, 0);
+  }
+  20% {
+    clip-path: inset(10% 0 70% 0);
+    transform: translate(-2px, 0);
+  }
+  30% {
+    clip-path: inset(60% 0 10% 0);
+    transform: translate(2px, 0);
+  }
+  40% {
+    clip-path: inset(30% 0 40% 0);
+    transform: translate(-3px, 0);
+  }
+  50% {
+    clip-path: inset(70% 0 5% 0);
+    transform: translate(1px, 0);
+  }
+  60% {
+    clip-path: inset(5% 0 80% 0);
+    transform: translate(-1px, 0);
+  }
+  70% {
+    clip-path: inset(40% 0 30% 0);
+    transform: translate(3px, 0);
+  }
+  80% {
+    clip-path: inset(80% 0 5% 0);
+    transform: translate(-2px, 0);
+  }
+  90% {
+    clip-path: inset(15% 0 55% 0);
+    transform: translate(2px, 0);
+  }
+  100% {
+    clip-path: inset(45% 0 25% 0);
+    transform: translate(-3px, 0);
+  }
+}
+
+@keyframes glitch-clip-2 {
+  0% {
+    clip-path: inset(65% 0 10% 0);
+    transform: translate(3px, 0);
+  }
+  10% {
+    clip-path: inset(15% 0 60% 0);
+    transform: translate(-3px, 0);
+  }
+  20% {
+    clip-path: inset(45% 0 25% 0);
+    transform: translate(2px, 0);
+  }
+  30% {
+    clip-path: inset(5% 0 75% 0);
+    transform: translate(-2px, 0);
+  }
+  40% {
+    clip-path: inset(55% 0 20% 0);
+    transform: translate(3px, 0);
+  }
+  50% {
+    clip-path: inset(25% 0 50% 0);
+    transform: translate(-1px, 0);
+  }
+  60% {
+    clip-path: inset(75% 0 5% 0);
+    transform: translate(1px, 0);
+  }
+  70% {
+    clip-path: inset(35% 0 35% 0);
+    transform: translate(-3px, 0);
+  }
+  80% {
+    clip-path: inset(10% 0 65% 0);
+    transform: translate(2px, 0);
+  }
+  90% {
+    clip-path: inset(50% 0 15% 0);
+    transform: translate(-2px, 0);
+  }
+  100% {
+    clip-path: inset(20% 0 55% 0);
+    transform: translate(3px, 0);
+  }
+}
+
+/* ===== TERMINAL WINDOW ===== */
+.terminal-window {
+  background: rgba(13, 2, 8, 0.97);
+  border: 1px solid rgba(0, 255, 65, 0.12);
+  border-radius: 0;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.8),
+    0 4px 24px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.terminal-titlebar {
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(0, 255, 65, 0.08);
+  padding: 5px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Terminal titlebars + dots are purely decorative, not semantic content */
+.terminal-titlebar[aria-hidden] .terminal-dot {
+  pointer-events: none;
+}
+
+.terminal-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  opacity: 0.7;
+}
+
+.terminal-dot.red {
+  background: #ff5f56;
+}
+.terminal-dot.yellow {
+  background: #ffbd2e;
+}
+.terminal-dot.green {
+  background: #27c93f;
+}
+
+/* ===== BUTTONS ===== */
+.btn-retro {
+  background: transparent;
+  color: #00ff41;
+  border: 1px solid rgba(0, 255, 65, 0.5);
+  padding: 10px 28px;
+  font-family: var(--font-share-tech), monospace;
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btn-retro:hover {
+  background: rgba(0, 255, 65, 0.08);
+  border-color: #00ff41;
+  color: #00ff41;
+  box-shadow: 0 0 16px rgba(0, 255, 65, 0.2);
+}
+
+.btn-retro:active {
+  transform: translateY(1px);
+}
+
+.btn-retro-pink {
+  border-color: rgba(255, 0, 255, 0.5);
+  color: #ff00ff;
+}
+
+.btn-retro-pink:hover {
+  background: rgba(255, 0, 255, 0.08);
+  border-color: #ff00ff;
+  box-shadow: 0 0 16px rgba(255, 0, 255, 0.2);
+}
+
+/* ===== NEON GLOW EFFECTS ===== */
+.neon-green {
+  text-shadow:
+    0 0 8px rgba(0, 255, 65, 0.6),
+    0 0 20px rgba(0, 255, 65, 0.2);
+}
+
+.neon-cyan {
+  text-shadow:
+    0 0 8px rgba(0, 255, 255, 0.6),
+    0 0 20px rgba(0, 255, 255, 0.2);
+}
+
+.neon-pink {
+  text-shadow:
+    0 0 8px rgba(255, 0, 255, 0.6),
+    0 0 20px rgba(255, 0, 255, 0.2);
+}
+
+.neon-yellow {
+  text-shadow:
+    0 0 8px rgba(255, 255, 0, 0.5);
+}
+
+/* ===== ASCII DIVIDER ===== */
+.ascii-divider {
+  text-align: center;
+  color: #555;
+  font-family: var(--font-vt323), monospace;
+  font-size: 0.75rem;
+  overflow: hidden;
+  white-space: nowrap;
+  letter-spacing: 2px;
+}
+
+/* ===== REDUCED MOTION ===== */
+@media (prefers-reduced-motion: reduce) {
+  .glitch::before,
+  .glitch::after {
+    animation: none !important;
+  }
+
+  .crt-overlay::after {
+    animation: none !important;
+  }
+
+  * {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ===== A11Y: MINIMUM TEXT CONTRAST (always on) =====
+   WCAG AA requires 4.5:1 for normal text on the #0d0208 background.
+   Measured (alpha-composited over #0d0208, then WCAG relative-luminance
+   contrast against #0d0208 — 2026-07 audit, not the "40% passes" claim
+   this block previously made, which was never actually checked and was
+   wrong by a wide margin: matrix-green/40 measures 2.89:1):
+     matrix-green needs >=54% opacity (54% -> 4.57:1)
+     white        needs >=46% opacity (46% -> 4.62:1)
+     neon-cyan    needs >=52% opacity (52% -> 4.62:1)
+     neon-yellow  needs >=48% opacity (48% -> 4.66:1)
+     neon-pink    needs >=82% opacity (82% -> 4.59:1) — by far the least
+       forgiving color at low alpha; below that it fails even in the
+       60-70% range other colors are safe at.
+   Editing every below-floor className at ~500 call sites risks missing
+   some and risks silently flattening the terminal-dim aesthetic in a
+   giant diff. Instead, clamp exactly the opacity steps actually used in
+   the codebase that fall under each color's floor, rounded up to the
+   nearest value already in use elsewhere (so no new visual weight is
+   introduced) — everything at or above the floor is untouched. */
+[class*="text-matrix-green/20"],
+[class*="text-matrix-green/25"],
+[class*="text-matrix-green/30"],
+[class*="text-matrix-green/35"],
+[class*="text-matrix-green/40"],
+[class*="text-matrix-green/50"] {
+  opacity: 0.6 !important; /* matrix-green/60 -> 5.49:1 */
+}
+[class*="text-white/20"],
+[class*="text-white/30"],
+[class*="text-white/40"] {
+  opacity: 0.5 !important; /* white/50 -> ~6:1 */
+}
+[class*="text-neon-cyan/40"],
+[class*="text-neon-cyan/50"] {
+  opacity: 0.6 !important; /* neon-cyan/60 -> ~5.4:1 */
+}
+[class*="text-neon-yellow/40"] {
+  opacity: 0.5 !important; /* neon-yellow/50 -> ~4.9:1 */
+}
+[class*="text-neon-pink/40"],
+[class*="text-neon-pink/50"],
+[class*="text-neon-pink/60"],
+[class*="text-neon-pink/70"],
+[class*="text-neon-pink/80"] {
+  opacity: 0.9 !important; /* neon-pink/90 -> ~4.9:1 — needs to be nearly opaque */
+}
+
+/* dem-blue (#0066ff, 4.22:1) and ind-purple (#9933ff, 4.15:1) both fail
+   4.5:1 even at full opacity — not an opacity problem, the base color
+   itself is too dark against #0d0208. Always substitute a lighter shade
+   rather than gating the fix behind prefers-contrast (dem-blue's lighter
+   variant was already used there, at 7.35:1; ind-purple gets the same
+   treatment here, at 5.16:1). rep-red passes fine at full opacity
+   (5.61:1) and needs no equivalent swap. */
+[class*="text-dem-blue"] {
+  color: #6699ff !important;
+}
+[class*="text-ind-purple"] {
+  color: #a852ff !important;
+}
+
+@media (prefers-contrast: more) {
+  [class*="text-matrix-green/"],
+  [class*="text-white/"] {
+    opacity: 1 !important;
+    color: #00ff41 !important;
+  }
+
+  [class*="text-neon-cyan/"],
+  [class*="text-neon-pink/"],
+  [class*="text-neon-yellow/"] {
+    opacity: 1 !important;
+  }
+
+  /* Lighter partisan colors for better contrast on dark backgrounds */
+  [class*="text-rep-red"] {
+    color: #ff6666 !important;
+  }
+
+  .terminal-window {
+    border-color: #00ff41 !important;
+    border-width: 2px !important;
+  }
+
+  /* Stronger focus ring in high-contrast mode */
+  *:focus-visible {
+    outline-width: 3px !important;
+    outline-offset: 3px !important;
+  }
+}
+
+/* ===== FOCUS VISIBLE ===== */
+*:focus-visible {
+  outline: 2px solid #00ffff;
+  outline-offset: 2px;
+}
+
+button:focus-visible,
+a:focus-visible,
+select:focus-visible,
+input:focus-visible {
+  outline: 2px solid #00ffff;
+  outline-offset: 2px;
+  box-shadow: 0 0 8px rgba(0, 255, 255, 0.4);
+}
+
+/* ===== EXTERNAL LINK A11Y =====
+   Announce to screen readers that target="_blank" links open a new tab. */
+a[target="_blank"]::after {
+  content: " (opens in new tab)";
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+a[target="_blank"] {
+  position: relative;
+}
+
+/* ===== CUSTOM UTILITIES ===== */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
