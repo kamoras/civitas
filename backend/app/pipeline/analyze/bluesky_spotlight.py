@@ -65,6 +65,7 @@ def _pick_senator(db: Session) -> tuple["Senator | None", int, int]:
     senators = (
         db.query(Senator)
         .filter(Senator.score_funding_independence.isnot(None))
+        .filter(Senator.is_current.is_(True))
         .all()
     )
     if not senators:
