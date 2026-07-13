@@ -158,6 +158,13 @@ Changes from v3 → v4 (score audit 2026-06):
   drops "placed on calendar"/"cloture" credit; volume is per-congress
   (total/80) instead of career-log2. v3 saturated: LE mean was 81.6 with
   everyone maxing advancement and volume.
+- v5.8 (2026-07): "current term" redefined as the current congress for
+  votes/bills/effectiveness (fetch/congress.py, senate_pipeline.py,
+  house_pipeline.py) and as the most recent election for funding
+  (fetch/fec.py select_recent_elections) — a member who did great work a
+  decade ago and has coasted since no longer gets credit for it every
+  run. See AGENTS.md "current term" for the full rationale, including
+  why funding uses a different rule than votes/bills.
 """
 
 import logging
@@ -168,7 +175,7 @@ logger = logging.getLogger(__name__)
 # shifts scores. Recorded on every ScoreSnapshot so trend charts can
 # annotate methodology changes; keep frontend/src/lib/scoreVersions.ts
 # in sync (it holds the human-readable changelog).
-ALGORITHM_VERSION = "v5.7"
+ALGORITHM_VERSION = "v5.8"
 
 NON_INDUSTRY_CODES = {"OTHER", "SMALL_DONORS", "LARGE_INDIVIDUAL", "POLITICAL", "UNCLASSIFIED"}
 

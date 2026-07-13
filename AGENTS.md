@@ -230,6 +230,53 @@ All dynamic enums, category codes, industry definitions, score weights, and
 policy areas are defined in `config_definitions.py`. The frontend fetches
 these from `GET /api/config`. Never duplicate these definitions.
 
+### 6. Current term, not career
+
+Scores are windowed to a member's current term, not their whole career — a
+member who did great work a decade ago and has coasted since shouldn't get
+credit for it on every run.
+
+"Current term" is defined as **the current congress** (`settings.CURRENT_CONGRESS`,
+a 2-year window), for both chambers, for votes/bills/sponsorship/effectiveness
+(`fetch_significant_bills`, `_recent_congresses_only`, the Senate roll-call
+session list — all in `fetch/congress.py`/`senate_pipeline.py`). This was a
+deliberate simplification, not an oversight: Congress.gov's `terms` array is
+a list of 2-year congresses served, not real 6-year Senate term boundaries —
+verified live against a senator who finished a colleague's term via special
+election then won a full term with zero visible seam between the two in the
+API response. There's no Senate "class" field either, and deriving true term
+boundaries from FEC election history is fragile (a sitting senator can
+already be fundraising for their *next* re-election, which would misread as
+their current term starting early). Redefining "current term" as "current
+congress" sidesteps that fragility entirely and is *stricter* than a literal
+6-year term (resets every 2 years, not 6) — it pushes harder on the "no
+resting on laurels" goal, not softer.
+
+**Funding is the one exception**: Funding Independence and Funding Diversity
+window to the member's **most recent election only**
+(`select_recent_elections` in `fetch/fec.py`, `n=1`), not the current
+congress. Senators legitimately raise little money in the 4 non-election
+years of a 6-year term — a strict 2-year funding window would go near-empty
+most of the time for reasons that have nothing to do with coasting. Tying it
+to their current mandate's campaign instead fixes the same staleness problem
+without that sparsity trap.
+
+This needed no new schema: since `ScoreSnapshot.date` already exists, the
+congress a snapshot falls in is a pure function of its date
+(`congress_first_year(n) = 1789 + (n-1)*2`, the 1st Congress convened in
+1789 — a fixed historical fact, not a lookup table). The score trend chart
+(`ScoreTrend.tsx`) marks congress-boundary crossings the same way it already
+marks `ALGORITHM_VERSION` changes, so a score reset at the start of a new
+congress reads as intentional, not a bug.
+
+Narrower windows mean less data backs each dimension by design, not because
+coverage got worse — `calculate_confidence`'s vote/bill thresholds are
+recalibrated accordingly (see `score_calculator.py`), and `ground_truth.py`'s
+population-stdev floor is the backstop that would catch a real collapse.
+House has no named ground-truth reference cases (`GROUND_TRUTH` is
+Senate-only) — `check_score_distribution` is House's only automated
+regression gate, wired into `house_pipeline.py` alongside Senate's.
+
 ## Data Pipeline
 
 The pipeline runs nightly (configurable via `PIPELINE_CRON_SCHEDULE`) or can

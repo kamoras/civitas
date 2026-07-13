@@ -17,6 +17,17 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v5.8",
+    date: "2026-07-12",
+    title: "Scores reflect the current term, not a member's whole career",
+    changes: [
+      "Votes, sponsored bills, and Legislative Effectiveness now window to the current congress only, down from a rolling 2-3 congress lookback. A member who did strong work a decade ago and has coasted since no longer gets credit for it on every run — scores now measure what a member is doing right now, and reset at the start of each new congress.",
+      "Funding Independence and Funding Diversity window to the member's most recent election only, down from the two most recent. This uses a different rule than votes/bills on purpose: Senators legitimately raise little money in the non-election years of a 6-year term, so tying funding to a strict 2-year window would go near-empty most of the time for reasons that have nothing to do with coasting. Tying it to their current campaign instead fixes the same staleness problem without that gap.",
+      "Confidence badges (the data-sufficiency marker shown next to sparse scores) are recalibrated for the narrower vote/bill windows, so a member isn't marked low-confidence purely because the window got stricter by design.",
+      "The score trend chart now marks congress boundaries (in addition to methodology-version changes) so a shift at the start of a new congress reads as an intentional reset, not a bug.",
+    ],
+  },
+  {
     version: "v5.7",
     date: "2026-07-12",
     title: "Removed noise-driven secondary policy-area tags",
