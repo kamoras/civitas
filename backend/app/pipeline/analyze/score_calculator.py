@@ -165,6 +165,15 @@ Changes from v3 → v4 (score audit 2026-06):
   decade ago and has coasted since no longer gets credit for it every
   run. See AGENTS.md "current term" for the full rationale, including
   why funding uses a different rule than votes/bills.
+- v5.9 (2026-07): Legislative Effectiveness's volume component (30%
+  weight) now excludes simple/concurrent resolutions, matching the filter
+  the advancement component (40%) already had since v4. A real member's
+  National Mushroom Day resolution — ceremonial, agreed to without debate
+  by unanimous consent — was inflating their volume score even though the
+  same resolution correctly earned zero advancement credit; the two
+  components had silently drifted out of sync. Volume ceilings
+  recalibrated to the substantive-only distribution (resolutions had
+  inflated the raw per-congress p90 by ~14-16%).
 """
 
 import logging
@@ -175,7 +184,7 @@ logger = logging.getLogger(__name__)
 # shifts scores. Recorded on every ScoreSnapshot so trend charts can
 # annotate methodology changes; keep frontend/src/lib/scoreVersions.ts
 # in sync (it holds the human-readable changelog).
-ALGORITHM_VERSION = "v5.8"
+ALGORITHM_VERSION = "v5.9"
 
 NON_INDUSTRY_CODES = {"OTHER", "SMALL_DONORS", "LARGE_INDIVIDUAL", "POLITICAL", "UNCLASSIFIED"}
 
@@ -1099,25 +1108,49 @@ def _calc_legislative_effectiveness(
 
     # Component 3: sponsorship volume per congress served
     #
+    # Substantive bills only — same SUBSTANTIVE_TYPES set as Component 1.
+    # Simple/concurrent resolutions (sres/hres/sconres/hconres) are
+    # routinely ceremonial ("recognizing National Mushroom Day", agreed to
+    # by unanimous consent with zero debate) and free to sponsor in
+    # volume; counting them here let a member inflate 30% of their
+    # Legislative Effectiveness score with commemorative resolutions while
+    # Component 1 correctly excluded that same content from advancement
+    # credit (2026-07 bug report — a real Senator's mushroom-industry
+    # resolution was counted as legislative volume). Measured impact of
+    # the fix, current live data: resolutions inflated the raw per-congress
+    # p90 by ~14-16% (Senate raw p90=107 -> substantive-only p90=92; House
+    # raw p90=43 -> substantive-only p90=36). Ceilings below are
+    # recalibrated to the substantive-only distribution, just above its
+    # p90, same "full credit at top-decile" methodology as every prior
+    # recalibration of this component.
+    #
     # Ceiling is chamber-specific: House members structurally introduce far
     # fewer bills per congress than senators (435 members splitting similar
     # institutional bandwidth vs 100), not because they're less effective.
-    # A 2026-07 audit found a shared Senate-calibrated ceiling made the
-    # volume component unreachable for the House — the chamber's dataset
-    # max was itself an artifact of an unrelated 50-bill fetch truncation
-    # (since fixed; see house_pipeline.py), but even that ceiling's p90
-    # (29/congress) sits nowhere near the Senate figure. Chamber is
-    # inferred from bill-type prefix (hr/hjres = House, s/sjres = Senate)
-    # rather than passed explicitly, since sponsored_bills already carries
-    # it and every other caller in this file would need updating otherwise.
+    # Chamber is inferred from bill-type prefix (hr/hjres = House, s/sjres
+    # = Senate) rather than passed explicitly, since sponsored_bills
+    # already carries it and every other caller in this file would need
+    # updating otherwise. Chamber inference itself still uses the full
+    # sponsored set (not substantive-only) since it's a classification
+    # signal, not a credit calculation, and benefits from the larger
+    # sample.
     HOUSE_TYPES = {"hr", "hjres", "hres", "hconres"}
     house_n = sum(1 for b in sponsored_bills if (b.get("billType") or "").lower() in HOUSE_TYPES)
     is_house_member = house_n > (n_bills - house_n)
-    VOLUME_CEILING = 35.0 if is_house_member else 110.0
+    VOLUME_CEILING = 40.0 if is_house_member else 95.0
 
-    congresses = {b.get("congress") for b in sponsored_bills if b.get("congress")}
-    per_congress = n_bills / max(len(congresses), 1)
-    volume_raw = min(per_congress / VOLUME_CEILING, 1.0) * 100
+    if n_sub > 0:
+        congresses = {b.get("congress") for b in substantive if b.get("congress")}
+        per_congress = n_sub / max(len(congresses), 1)
+        volume_raw = min(per_congress / VOLUME_CEILING, 1.0) * 100
+    else:
+        # No substantive bills — same "missing signal defaults to neutral,
+        # never a punitive 0" treatment Component 1 already gives this
+        # exact case just above. A member who sponsors only ceremonial
+        # resolutions has zero *substantive* volume signal, the same as a
+        # member who sponsors nothing at all; scoring them worse than pure
+        # inactivity would be backwards.
+        volume_raw = 50.0
 
     return clamp(
         advancement_score * 0.40

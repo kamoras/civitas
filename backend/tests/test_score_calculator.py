@@ -686,6 +686,30 @@ class TestLegislativeEffectiveness:
         assert score_reported > score_none
         assert score_calendar == score_none
 
+    def test_resolutions_excluded_from_volume(self):
+        """v5.9 bug: a real Senator's 'National Mushroom Day' resolution
+        (SRES, agreed to without debate by unanimous consent) inflated
+        their Legislative Effectiveness volume component even though the
+        same resolution correctly earned zero advancement credit — the two
+        components had drifted out of sync since v4 first excluded
+        resolutions from advancement only. Sponsoring only ceremonial
+        resolutions must score identically to sponsoring nothing at all."""
+        mushroom_day = {
+            "title": "A resolution recognizing and honoring National Mushroom "
+                     "Day and the contributions of Chester and Berks Counties "
+                     "to the national mushroom industry and to healthy diets.",
+            "isLaw": False,
+            "latestAction": "Resolution agreed to in Senate without amendment "
+                             "and with a preamble by Unanimous Consent.",
+            "billType": "sres",
+            "congress": 119,
+        }
+        score_no_bills = _calc_legislative_effectiveness([], 0.5)
+        score_only_resolutions = _calc_legislative_effectiveness(
+            [mushroom_day] * 20, 0.5,
+        )
+        assert score_only_resolutions == score_no_bills
+
     def test_resolutions_excluded_from_advancement(self):
         """Commemorative resolutions being 'agreed to' must not inflate advancement."""
         substantive_only = [
@@ -705,13 +729,11 @@ class TestLegislativeEffectiveness:
         assert score_res <= score_plain + 10
 
     def test_volume_ceiling_not_saturated_by_top_decile(self):
-        """The 80/congress ceiling was calibrated in 2026-06 against a p90
-        of ~69; a 2026-07 audit found the live distribution had drifted to
-        p90=108 with 22/100 senators already saturating it, including the
-        single most active sponsor at 149.5/congress — indistinguishable
-        in score from someone at exactly 80. The ceiling (110) must give
-        real headroom above today's p90 so a genuine outlier still scores
-        higher than a merely-active senator."""
+        """The volume ceiling must give real headroom above today's p90 so
+        a genuine outlier still scores higher than a merely-active senator.
+        Recalibrated 2026-07 to the substantive-bills-only distribution
+        (v5.9 — resolutions no longer count toward volume): p90=92,
+        ceiling=95, measured max=139."""
         def bills_at_rate(n_per_congress: int):
             return [
                 {"title": f"B{i}", "isLaw": False, "latestAction": "Introduced",
@@ -719,19 +741,20 @@ class TestLegislativeEffectiveness:
                 for i in range(n_per_congress)
             ]
 
-        score_at_p90 = _calc_legislative_effectiveness(bills_at_rate(108), None)
-        score_at_extreme_outlier = _calc_legislative_effectiveness(bills_at_rate(150), None)
+        score_at_p90 = _calc_legislative_effectiveness(bills_at_rate(92), None)
+        score_at_extreme_outlier = _calc_legislative_effectiveness(bills_at_rate(139), None)
         assert score_at_extreme_outlier > score_at_p90
 
     def test_house_uses_own_volume_ceiling(self):
         """A shared Senate-calibrated ceiling made the volume component
         structurally uncreditable for the House: House per-congress rates
-        (p90 ~29) sit far below the Senate's (p90 ~108) because 435
-        members split similar institutional bandwidth, not because
-        they're less effective. Chamber is inferred from bill-type prefix
-        so a House member at their own p90 gets meaningfully more volume
-        credit than under the Senate ceiling, without a chamber flag
-        needing to be threaded through every caller."""
+        sit far below the Senate's because 435 members split similar
+        institutional bandwidth, not because they're less effective.
+        Chamber is inferred from bill-type prefix so a House member at
+        their own p90 gets meaningfully more volume credit than under the
+        Senate ceiling, without a chamber flag needing to be threaded
+        through every caller. Recalibrated 2026-07 to substantive-only
+        (v5.9): House p90=36/ceiling=40, Senate p90=92/ceiling=95."""
         def house_bills_at_rate(n_per_congress: int):
             return [
                 {"title": f"B{i}", "isLaw": False, "latestAction": "Introduced",
@@ -739,13 +762,13 @@ class TestLegislativeEffectiveness:
                 for i in range(n_per_congress)
             ]
 
-        # 29 bills/congress is House's own measured p90 — should score
+        # 36 bills/congress is House's own measured p90 — should score
         # meaningfully better than the same rate would under the Senate's
-        # 110 ceiling (29/110 = 26% raw vs 29/35 = 83% raw).
-        house_score = _calc_legislative_effectiveness(house_bills_at_rate(29), None)
+        # 95 ceiling (36/95 = 38% raw vs 36/40 = 90% raw).
+        house_score = _calc_legislative_effectiveness(house_bills_at_rate(36), None)
         senate_score = _calc_legislative_effectiveness(
             [{"title": f"B{i}", "isLaw": False, "latestAction": "Introduced",
-              "billType": "s", "congress": 119} for i in range(29)],
+              "billType": "s", "congress": 119} for i in range(36)],
             None,
         )
         assert house_score > senate_score
