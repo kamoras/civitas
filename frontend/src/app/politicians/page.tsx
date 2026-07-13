@@ -83,7 +83,11 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
           </div>
           <p className="font-mono text-[10px] text-matrix-green/40 mb-2 truncate">{subtitle}</p>
 
-          {p.hasScorecard && p.overallScore != null ? (
+          {p.isCurrent === false ? (
+            <span className="font-mono text-[9px] text-neon-pink/70 tracking-widest border border-neon-pink/30 px-1.5 py-0.5">
+              SEAT VACANT{p.vacancyReason ? ` — ${p.vacancyReason.toUpperCase()}` : ""}
+            </span>
+          ) : p.hasScorecard && p.overallScore != null ? (
             <ScoreBar score={p.overallScore} />
           ) : (
             <span className="font-mono text-[9px] text-matrix-green/25 tracking-widest">
