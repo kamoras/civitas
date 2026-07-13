@@ -16,7 +16,6 @@ class Senator(Base):
     party: Mapped[str] = mapped_column(String(1), nullable=False)
     years_in_office: Mapped[int] = mapped_column(Integer, default=0)
     initials: Mapped[str] = mapped_column(String(4), default="")
-    punk_nickname: Mapped[str] = mapped_column(String, default="")
     # Seat vacancy — mirrors President.is_current / Justice.is_active.
     # Set manually via the admin panel (no automated detection — see
     # AGENTS.md). Historical scores/data are left untouched when a seat

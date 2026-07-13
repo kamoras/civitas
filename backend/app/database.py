@@ -105,6 +105,7 @@ def _migrate_columns() -> None:
         ("key_votes", "stance_vote"),
         ("key_votes", "pro_business_vote"),
         ("key_votes", "affected_industries"),
+        ("senators", "punk_nickname"),
     ]
 
     with engine.begin() as conn:

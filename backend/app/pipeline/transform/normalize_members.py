@@ -136,7 +136,6 @@ def normalize_members(
             "officePhone": office_phone,
             "officeAddress": office_address,
             "contactFormUrl": contact_form,
-            "punkNickname": "",
             "representationScore": {
                 "fundingIndependence": 0,
                 "promisePersistence": 0,
@@ -239,7 +238,6 @@ def normalize_house_members(
             "officePhone": office_phone,
             "officeAddress": office_address,
             "contactFormUrl": contact_form,
-            "punkNickname": "",
             "representationScore": {
                 "fundingIndependence": 0,
                 "promisePersistence": 0,

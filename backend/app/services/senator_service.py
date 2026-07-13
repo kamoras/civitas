@@ -521,7 +521,6 @@ def upsert_senator(db: Session, senator_data: dict) -> Senator:
     existing.party = senator_data.get("party", existing.party)
     existing.years_in_office = senator_data.get("yearsInOffice", existing.years_in_office)
     existing.initials = senator_data.get("initials", existing.initials)
-    existing.punk_nickname = senator_data.get("punkNickname", existing.punk_nickname)
 
     # Only overwrite scores when representationScore is explicitly provided.
     # A partial update (bio/contact only) must not zero out previously computed scores.

@@ -244,7 +244,6 @@ def upsert_senator(db: Session, data: dict) -> None:
         "party": data.get("party") or "I",
         "years_in_office": data.get("yearsInOffice") or 0,
         "initials": data.get("initials") or "",
-        "punk_nickname": data.get("punkNickname") or "TBD",
         "score_funding_independence": corruption.get("fundingIndependence") or 0,
         "score_promise_persistence": corruption.get("promisePersistence") or 0,
         "score_independent_voting": corruption.get("independentVoting") or 0,

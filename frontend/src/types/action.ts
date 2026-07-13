@@ -59,7 +59,6 @@ export interface MyRepSenator {
   state: string;
   party: "D" | "R" | "I";
   initials: string;
-  punkNickname: string;
   scores: {
     fundingIndependence: number;
     promisePersistence: number;

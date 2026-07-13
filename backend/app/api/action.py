@@ -531,7 +531,7 @@ async def get_my_reps(
             Senator.score_independent_voting, Senator.score_funding_diversity,
             Senator.score_legislative_effectiveness,
             Senator.leadership_score, Senator.ideology_score,
-            Senator.years_in_office, Senator.punk_nickname, Senator.initials,
+            Senator.years_in_office, Senator.initials,
             Senator.contact_form_url, Senator.office_phone, Senator.website_url,
         )
         .filter(Senator.state == state_upper)
@@ -602,7 +602,6 @@ async def get_my_reps(
             "state": s.state,
             "party": s.party,
             "initials": s.initials,
-            "punkNickname": s.punk_nickname if s.punk_nickname and s.punk_nickname != "TBD" else "",
             "scores": {
                 "fundingIndependence": round(s.score_funding_independence, 1),
                 "promisePersistence": round(s.score_promise_persistence, 1),

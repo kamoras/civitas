@@ -161,11 +161,6 @@ function SenatorCard({ senator }: { senator: MyRepSenator }) {
           <h3 className="font-pixel text-base sm:text-lg text-matrix-green leading-snug">
             {senator.name}
           </h3>
-          {senator.punkNickname && (
-            <div className="text-[10px] text-matrix-green/30 font-pixel mt-0.5 italic">
-              &quot;{senator.punkNickname}&quot;
-            </div>
-          )}
         </div>
         <div className="text-right shrink-0">
           <div className="font-pixel text-2xl text-matrix-green">{Math.round(s.overall)}</div>
