@@ -48,7 +48,7 @@ civitas/
 │   │   ├── config.py            # Pydantic settings from .env
 │   │   ├── config_definitions.py # Enums, weights, industry codes (single source of truth)
 │   │   └── main.py              # FastAPI app with lifespan hooks
-│   ├── tests/                   # 359 pytest tests
+│   ├── tests/                   # 572 pytest tests
 │   ├── requirements.txt
 │   ├── pytest.ini
 │   └── Dockerfile
@@ -109,6 +109,18 @@ to distinguish corporate PACs from political PACs, that should be the semantic
 classifier, not a set of business suffixes. If you need to strip "PAC" from
 entity names, that should be margin-based decontextualization using an
 embedding-based PAC naming context detector.
+
+Three narrow, disclosed exceptions exist today (bill stance direction's
+tier-0 verb check, industry classification's hotel-brand tier, and donor
+classification's PAC-suffix/payment-processor tier — see README
+"Classification Strategy" for the full list and each one's empirical
+justification). Each earns its place by the same bar: a *specific,
+measured* embedding-model failure mode, documented in code at the point of
+definition, running only as a precision pre-filter ahead of a genuine
+embedding classifier that still handles everything the pre-filter doesn't
+catch — never a replacement for one. That bar is deliberately high. "I
+think this keyword would help" does not clear it; a comment citing a
+concrete before/after measurement does.
 
 The correct way to handle a new classification need:
 

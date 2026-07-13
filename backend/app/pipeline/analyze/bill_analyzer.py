@@ -6,12 +6,15 @@ reference corpus of classified bills in ChromaDB. Subsequent runs classify
 new bills by kNN against that corpus, with embedding similarity against
 seed policy descriptions as a cold-start fallback.
 
-Classification tiers (in priority order):
+Topic/policy-area classification tiers (in priority order):
   1. Reference corpus kNN (most accurate, uses accumulated examples)
   2. Embedding similarity against policy seed descriptions (cold-start)
   3. Augmented re-embed for low-confidence cases
 
-No hardcoded keyword lists. The system adapts as it processes more data.
+No hardcoded keyword lists for topic classification. The system adapts as
+it processes more data. (Stance DIRECTION — pro/anti/neutral, a separate
+concern from topic — is handled by derive_stance() below, which does use a
+small, disclosed keyword tier; see its docstring.)
 
 Academic rationale
 ------------------
@@ -454,8 +457,20 @@ def _get_stance_embeddings() -> dict[str, np.ndarray]:
 def derive_stance(bill_name: str, summary: str, policy_area: str) -> tuple[str, str]:
     """Derive a brief stance description and direction from bill name and summary.
 
-    Uses embedding cosine similarity against stance direction prototypes
-    (pro/anti/neutral) instead of keyword pattern matching.
+    Primarily embedding cosine similarity against stance direction
+    prototypes (pro/anti/neutral) — but disclosed exception: a small tier-0
+    keyword check runs first (see below) as a precision fix for a measured
+    embedding-model weakness on short phrases. It never classifies alone;
+    it only breaks ties/lowers the acceptance margin when the embedding
+    result is already ambiguous, and it draws from the exact same word set
+    used to build the embedding prototypes (_STANCE_PROTOTYPES above), not
+    an independent hardcoded ruleset. Measured impact (2026-07, n=2979 real
+    cached bill titles): removing this tier changes the outcome for 1.5%
+    of bills, always by rescuing a genuinely directional bill ("STOP CCP
+    Act", "End Veterans Overdose Act") that the embedding alone scored as
+    neutral — never the reverse. Kept for that reason; see README
+    "Classification Strategy" for how this fits the project's broader
+    embeddings-first, disclosed-exceptions approach.
 
     Returns:
         (stance_text, stance_direction) where direction is "pro", "anti", or "neutral".

@@ -281,9 +281,9 @@ The choice of Qwen2.5 1.5B over larger alternatives (7B+) is deliberate. The inf
 
 ---
 
-## Classification Strategy — Zero Hardcoded Rules
+## Classification Strategy
 
-Every classification decision in the pipeline is made mathematically. There are no hardcoded keyword lists, regex patterns, or if/else string-matching heuristics. The pipeline uses a tiered strategy following computational parsimony (Jurafsky & Martin 2023):
+Classification decisions — what industry a donor belongs to, which direction a bill leans, whether an entity should be skipped from donor attribution — are made by embedding similarity against natural-language category prototypes, kNN over an accumulated reference corpus, or exact structured-data lookups, never by an arbitrary keyword-to-category judgment call. The pipeline uses a tiered strategy following computational parsimony (Jurafsky & Martin 2023):
 
 | Tier | Technique | Speed | Used For |
 |------|-----------|-------|----------|
@@ -299,8 +299,17 @@ Key embedding-based classification features:
 - **Self-funded detection** uses SequenceMatcher ratio (Ratcliff & Obershelp 1988) for fuzzy name similarity instead of exact string matching.
 - **Batch skip detection** classifies employer names and memo texts against skip prototypes in vectorized batches for performance.
 - **Semantic category normalization** maps stale/unknown category labels to valid industries via embedding similarity, replacing a hardcoded alias table.
-- **Stance direction** is derived from embedding similarity against pro/anti/neutral action prototypes instead of keyword patterns.
+- **Stance direction** is derived primarily from embedding similarity against pro/anti/neutral action prototypes — see the disclosed exception below.
 - **Procedural bill detection** uses embedding similarity against a procedural prototype instead of substring matching.
+
+### Disclosed exceptions
+
+A small number of narrow, code-commented precision pre-filters run ahead of the embedding classifier for specific, measured embedding-model weaknesses. Each is a fast-path for a case the embedding model demonstrably mis-scores, not a replacement for it — everything not caught by the pre-filter still goes through the real classifier below it:
+- **Bill stance direction** (`bill_analyzer.py::derive_stance`): a tier-0 check against the same word set used to build the pro/anti embedding prototypes, used only to break ties or lower the acceptance margin when the embedding result is already ambiguous. Verified empirically (2026-07, n=2979 real bill titles): removing it changes 1.5% of outcomes, always by recovering a genuinely directional bill ("STOP CCP Act") the embedding alone scored as neutral.
+- **Hotel/lodging industry classification** (`industry_classifier.py::classify_industry_with_provenance`): hotel brand names measurably score as MEDIA rather than REAL_ESTATE in the embedding space (a specific, verified anomaly); a small brand/suffix check corrects this before the embedding path runs.
+- **PAC and payment-processor detection** (`donor_classifier_ai.py`): an org name containing "PAC" (an FEC filing convention) or matching a handful of named payment-processor brands (ActBlue, WinRed, Anedot, etc. — a closed, real-world set, not a category judgment) is caught by a keyword check ahead of the embedding path, since ALL-CAPS FEC-formatted names score inconsistently against mixed-case prototypes.
+
+These three are documented at the point of definition in code, alongside two purely structural lookups that decode already-known facts rather than classify anything: an FEC entity-type-code map (`CCM`→`CandidateAffiliated`, etc. — decoding an enum FEC itself assigned) and a Congress-number→majority-party table used for effectiveness baselines.
 
 ### Retrieval-Augmented Classification (RAC)
 
