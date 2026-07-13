@@ -24,7 +24,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@types/react-simple-maps": "^3.0.6",
-    "eslint": "^10.6.0",
+    "eslint": "^10.7.0",
     "eslint-config-next": "^16.2.10",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "postcss": "^8.5.12",
