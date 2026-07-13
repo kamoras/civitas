@@ -402,7 +402,7 @@ Every hour at :15
 
 ## Bluesky Integration
 
-The Civitas Bluesky account (`@civitas-research.bsky.social`) is updated automatically by the hourly pipeline:
+The Civitas Bluesky account (`@civitas-research.org`) is updated automatically by the hourly pipeline:
 
 | Post type | Trigger | Content |
 |-----------|---------|---------|
@@ -812,7 +812,7 @@ See `.env.example` for all options. Key variables:
 | `DATABASE_URL` | No | SQLite path (default: `sqlite:///data/civitas.db`) |
 | `PIPELINE_CRON_SCHEDULE` | No | Cron schedule for nightly pipeline (default: `0 3 * * *`) |
 | `PIPELINE_CACHE_TTL_HOURS` | No | API response cache TTL (default: `72`) |
-| `BSKY_HANDLE` | No | Bluesky handle (e.g. `civitas-research.bsky.social`) |
+| `BSKY_HANDLE` | No | Bluesky handle (e.g. `civitas-research.org`) |
 | `BSKY_APP_PASSWORD` | No | Bluesky app password (from Settings → App Passwords) |
 
 ## References

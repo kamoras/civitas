@@ -37,7 +37,7 @@ export default function Footer() {
             ENVIRONMENTAL
           </Link>
           <a
-            href="https://bsky.app/profile/civitas-research.bsky.social"
+            href="https://bsky.app/profile/civitas-research.org"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Civitas on Bluesky (opens in new tab)"

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef, useCallback } from "react";
 
 
-const BSKY_PROFILE_URL = "https://bsky.app/profile/civitas-research.bsky.social";
+const BSKY_PROFILE_URL = "https://bsky.app/profile/civitas-research.org";
 
 const NAV_LINKS: readonly { href: string; label: string; accent?: boolean }[] = [
   { href: "/action", label: "ACTION CENTER", accent: true },
