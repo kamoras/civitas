@@ -506,17 +506,17 @@ class TestPromisePersistence:
     """Higher score = more kept promises + floor advocacy boost."""
 
     def test_all_kept(self):
-        # Beta-Binomial posterior (Morris 1983, PRIOR_PSEUDOCOUNT=6):
-        # 3 kept → posterior = (3+3)/(3+6)*100 = 66.7, blended ≈ 70.
-        # Range covers both the pre- and post-v5.1-threshold regime —
+        # Beta-Binomial posterior (Morris 1983, PRIOR_PSEUDOCOUNT=3):
+        # 3 kept → posterior = (3+1.5)/(3+3)*100 = 75, blended ≈ 77.5.
+        # Range covers both the pre- and post-2026-07 pseudocount regime —
         # sparse samples (n=3) stay closer to the neutral prior of 50.
         promises = [{"alignment": "kept"}, {"alignment": "kept"}, {"alignment": "kept"}]
         score = _calc_promise_persistence({}, "D", promises)
         assert 58 <= score <= 85
 
     def test_all_broken(self):
-        # Beta-Binomial posterior (Morris 1983, PRIOR_PSEUDOCOUNT=6):
-        # 2 broken → posterior = (0+3)/(2+6)*100 = 37.5, blended ≈ 44.
+        # Beta-Binomial posterior (Morris 1983, PRIOR_PSEUDOCOUNT=3):
+        # 2 broken → posterior = (0+1.5)/(2+3)*100 = 30, blended ≈ 37.
         # n=2 sparse data should not anchor far from neutral; the prior
         # dominates at this sample size.
         promises = [{"alignment": "broken"}, {"alignment": "broken"}]
@@ -612,6 +612,26 @@ class TestPromisePersistence:
         scores = [_calc_promise_persistence({}, "D", p) for p in profiles]
         assert max(scores) - min(scores) >= 20
         assert scores == sorted(scores)  # monotonic in kept-fraction
+
+    def test_population_retains_spread_at_real_evaluable_count(self):
+        """2026-07-13 finding: the ~2-3avg the v5.1/v5.3 recalibration
+        assumed didn't hold up in production — the real figure is ~0.5
+        evaluable promises/senator (59/100 have zero), a genuine data-
+        scarcity floor, not a threshold bug (see the ceremonial-resolution
+        fix in cross_reference.py for the one real bug found in this
+        pass). PRIOR_PSEUDOCOUNT resized 6->3 so that even at this much
+        harsher sample size — most members with 0-1 evaluable promises,
+        a few with 2 — the population doesn't collapse to a single
+        indistinguishable near-50 band."""
+        profiles = (
+            [[]] * 10  # zero evaluable — ties at exactly 50, the honest floor
+            + [[{"alignment": "broken"}]] * 3
+            + [[{"alignment": "kept"}]] * 3
+            + [[{"alignment": "kept"}, {"alignment": "kept"}]] * 2
+            + [[{"alignment": "broken"}, {"alignment": "broken"}]] * 2
+        )
+        scores = [_calc_promise_persistence({}, "D", p) for p in profiles]
+        assert max(scores) - min(scores) >= 15
 
 
 class TestLegislativeEffectiveness:

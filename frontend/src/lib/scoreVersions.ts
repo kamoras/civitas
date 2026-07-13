@@ -17,6 +17,25 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v5.10",
+    date: "2026-07-13",
+    title: "Promise Persistence data-scarcity fixes",
+    changes: [
+      "Fixed a bug where a member's own ceremonial resolutions (e.g. a sorority-anniversary resolution, an 'awareness day' designation) could be converted into a tracked \"promise\" when platform text was sparse — then inevitably scored unclear, since a resolution agreed to without floor debate has no matching vote to check against. These no longer count as promises at all.",
+      "Promise Persistence's confidence-shrinkage math is recalibrated for how little verifiable promise evidence actually exists today (average under 1 evaluable promise per senator — most campaign promises are broad and aspirational, not tied to a specific bill that comes up for a floor vote within one congress). Without this, nearly every senator was scoring in a narrow, nearly-identical band regardless of their real record. This is a stopgap for today's evidence volume, not a claim that the underlying evidence-matching is now complete — that's flagged as ongoing work.",
+    ],
+  },
+  {
+    version: "v5.9",
+    date: "2026-07-13",
+    title: "Legislative Effectiveness: resolutions no longer count as volume",
+    changes: [
+      "Fixed a live bug: a Senator's \"National Mushroom Day\" resolution — a ceremonial measure agreed to without debate — was inflating their Legislative Effectiveness score. The advancement component already excluded commemorative resolutions (since v4); the volume component didn't, so the two had silently drifted out of sync. Volume now counts substantive legislation only.",
+      "Volume ceilings recalibrated to the substantive-only distribution now that resolutions are excluded (they had inflated the raw per-congress top-decile by roughly 14-16%).",
+      "Fixed a related inconsistency this exposed: a member with zero substantive bills but some resolutions was scoring worse on volume than a member who sponsored nothing at all. Both now score the same honest neutral baseline.",
+    ],
+  },
+  {
     version: "v5.8",
     date: "2026-07-12",
     title: "Scores reflect the current term, not a member's whole career",

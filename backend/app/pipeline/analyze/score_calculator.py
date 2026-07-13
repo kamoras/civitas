@@ -174,6 +174,26 @@ Changes from v3 → v4 (score audit 2026-06):
   components had silently drifted out of sync. Volume ceilings
   recalibrated to the substantive-only distribution (resolutions had
   inflated the raw per-congress p90 by ~14-16%).
+- v5.10 (2026-07): Two Promise Persistence fixes, prompted by the same
+  audit that found the Mushroom Day bug (nobody was scoring above ~68
+  overall; PP had failed its own 8.0 population-stdev floor every night
+  since 2026-07-11). First, positions_from_sponsored_bills() (derives
+  "promises" from a member's own bills when platform text is sparse) was
+  feeding in ceremonial resolutions unfiltered — a real production
+  example was a sorority-anniversary resolution converted into a
+  "promise," then inevitably marked unclear. Now excludes the same
+  SUBSTANTIVE_BILL_TYPES resolutions do. Second — the deeper finding —
+  the real average is ~0.5 evaluable promises/senator (59/100 have
+  zero), far below the ~2.7avg the v5.1/v5.3 pseudocount resize assumed;
+  this is a genuine data-scarcity floor (see the module docstring at
+  PRIOR_PSEUDOCOUNT's definition), not primarily a threshold bug.
+  PRIOR_PSEUDOCOUNT resized 6->3 to restore population spread at this
+  harsher real sample size. Both changes shadow-tested against live
+  data; population stdev restored from ~5.0 to ~9.2. Why evidence volume
+  is this low in the first place — LLM gray-zone gate underperforming,
+  vs. genuinely few promises naming legislation that gets an actual
+  floor vote within one congress — is flagged as still open, not solved
+  by this pass.
 """
 
 import logging
@@ -184,7 +204,7 @@ logger = logging.getLogger(__name__)
 # shifts scores. Recorded on every ScoreSnapshot so trend charts can
 # annotate methodology changes; keep frontend/src/lib/scoreVersions.ts
 # in sync (it holds the human-readable changelog).
-ALGORITHM_VERSION = "v5.9"
+ALGORITHM_VERSION = "v5.10"
 
 NON_INDUSTRY_CODES = {"OTHER", "SMALL_DONORS", "LARGE_INDIVIDUAL", "POLITICAL", "UNCLASSIFIED"}
 
@@ -533,10 +553,34 @@ def _calc_promise_persistence(
             # pseudocount unchanged, the prior came to dominate almost
             # everyone's score, collapsing Promise Persistence's stdev
             # (7.2→3.4 shadow-tested on live Senate data, 2026-07-10 audit) and
-            # flattening the dimension to near-uninformative. 6 restores
+            # flattening the dimension to near-uninformative. 6 restored
             # roughly the original real-data weight (2.7/(2.7+6) ≈ 0.31)
-            # for the new, higher-precision evidence pool.
-            PRIOR_PSEUDOCOUNT = 6  # Beta(3, 3) — neutral prior, resized for v5.1 thresholds
+            # for the new, higher-precision evidence pool — but that 2.7avg
+            # estimate didn't hold up once the threshold change actually ran
+            # against real data: the ground-truth stdev floor (8.0) has
+            # failed every night since 2026-07-11, and a 2026-07-13 audit
+            # found the real average is 0.54 evaluable promises/senator
+            # (59/100 have ZERO — a genuine "no matching legislative
+            # activity exists for this promise in the search window"
+            # reality, not a threshold bug; see cross_reference.py's
+            # ceremonial-resolution fix for the one real bug found in this
+            # pass, which only recovered ~9% of the "unclear" mass). At
+            # n≈0.5, no pseudocount preserves both floor-clearing spread
+            # and real-data weight simultaneously — 6 gives everyone with
+            # zero evaluable promises (the majority) an identical 50, which
+            # is correct, but leaves too little room for the minority with
+            # 1-2 real observations to move the population stdev above 8.0.
+            # Resized to 3 (Beta(1.5, 1.5)): real-data weight at n=1 goes
+            # from 1/7≈14% to 1/4=25% — still meaningfully shrunk (a single
+            # promise can't swing a senator to an extreme), but enough to
+            # restore population stdev to ~9.2 (shadow-tested with the
+            # ceremonial-resolution fix applied). This is a stopgap for
+            # today's evidence volume, not a fix for why it's so low — that
+            # needs its own investigation (is the LLM gray-zone gate
+            # under-matching, or is 0.5 evaluable/senator just the honest
+            # ceiling given how few promises name a bill that actually gets
+            # a floor vote within one congress).
+            PRIOR_PSEUDOCOUNT = 3  # Beta(1.5, 1.5) — resized 2026-07 for the real ~0.5avg evidence volume
             posterior_num = raw_score + PRIOR_PSEUDOCOUNT * 0.5
             posterior_den = n_scoreable + PRIOR_PSEUDOCOUNT
             base_score = (posterior_num / posterior_den) * 100
