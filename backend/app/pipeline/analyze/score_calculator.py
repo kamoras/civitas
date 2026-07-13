@@ -307,12 +307,20 @@ def calculate_confidence(senator: dict) -> dict[str, str]:
         if isinstance(p, dict) and p.get("alignment") in ("kept", "partial", "broken")
     )
 
+    # independentVoting/legislativeEffectiveness thresholds are halved from
+    # their original 10/40 and 3/10: both dimensions' underlying windows
+    # were cut from ~2-3 congresses to the current congress only (see
+    # AGENTS.md "current term"), so the old volume thresholds would grade
+    # most members down for less data purely as an artifact of the window
+    # change, not because they're actually under-covered. Funding's window
+    # only narrowed from 2 elections to 1 (much smaller cut), so its
+    # thresholds are unchanged.
     return {
         "fundingIndependence": grade(n_donors, 3, 10) if has_funding else "low",
         "promisePersistence": grade(n_evaluable, 3, 8),
-        "independentVoting": grade(n_party_votes, 10, 40),
+        "independentVoting": grade(n_party_votes, 5, 20),
         "fundingDiversity": grade(n_industries, 3, 6) if has_funding else "low",
-        "legislativeEffectiveness": grade(len(bills), 3, 10),
+        "legislativeEffectiveness": grade(len(bills), 2, 5),
     }
 
 
