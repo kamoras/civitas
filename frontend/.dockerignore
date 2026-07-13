@@ -2,3 +2,5 @@ node_modules
 .next
 .git
 *.md
+.env*
+!.env.example

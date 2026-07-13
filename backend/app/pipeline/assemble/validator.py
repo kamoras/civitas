@@ -5,9 +5,9 @@ Ports all validation rules, valid sets, and the clamp function.
 
 import logging
 
-logger = logging.getLogger(__name__)
-
 from app.config_definitions import VALID_INDUSTRIES
+
+logger = logging.getLogger(__name__)
 
 VALID_PARTIES = {"D", "R", "I"}
 VALID_VOTES = {"Yea", "Nay", "Not Voting"}

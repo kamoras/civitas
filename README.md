@@ -543,7 +543,8 @@ GET /api/public/v1/representatives             All representatives with scores
 GET /api/public/v1/representatives/{id}        Single representative
 GET /api/public/v1/representatives/{id}/history Score history over time
 GET /api/public/v1/states                      State metadata
-GET /api/public/v1/search                      Search politicians by name
+GET /api/public/v1/search                      Semantic search over bills, lobbying records,
+                                                and federal-register documents (not politician names)
 ```
 
 Score weights, industry codes, and policy areas are available unauthenticated

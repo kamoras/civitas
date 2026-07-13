@@ -1624,10 +1624,6 @@ async def run_senate_pipeline(
             progress.update("analyze_senators", done=senator_idx, detail=senator["name"])
 
             try:
-                all_votes = (voting_record.get("keyVotes") or []) + (
-                    voting_record.get("recentVotes") or []
-                )
-
                 if not analysis_input:
                     analysis_input = _build_analysis_input(prepared, platform_texts)
 

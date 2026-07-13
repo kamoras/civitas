@@ -470,7 +470,6 @@ def _calc_promise_persistence(
     base_score: float | None = None
 
     if campaign_promises:
-        n_total = len(campaign_promises)
         scoreable = [
             p for p in campaign_promises
             if p.get("alignment") in ("kept", "broken", "partial")

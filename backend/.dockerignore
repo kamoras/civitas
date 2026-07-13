@@ -6,3 +6,5 @@ venv
 *.egg-info
 .git
 *.md
+.env*
+!.env.example

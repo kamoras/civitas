@@ -697,7 +697,6 @@ def classify_party_alignment_batch(
     for i, bill in enumerate(bills):
         bill_id = bill.get("billId", "")
         policy_area = bill.get("policyArea", "PROCEDURAL")
-        stance = bill.get("stance", "neutral")
         query_emb = embs[i]
 
         if policy_area == "PROCEDURAL":

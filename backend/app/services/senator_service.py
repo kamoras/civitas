@@ -1,9 +1,11 @@
 import json
 import re
+from datetime import datetime, timedelta
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
+from app.config_definitions import SCORE_WEIGHTS
 from app.models import CampaignPromise, Donor, IndustryDonation, KeyVote, LobbyingMatch, ScoreSnapshot, Senator
 
 # Promise quality rules are shared with the pipeline (which now cleans
@@ -375,10 +377,6 @@ def get_states_with_counts(db: Session) -> list[StateCountSchema]:
         for row in rows
     ]
 
-
-from datetime import datetime, timedelta
-
-from app.config_definitions import SCORE_WEIGHTS
 
 _FIELD_TO_WEIGHT_KEY = {
     "score_funding_independence": "fundingIndependence",

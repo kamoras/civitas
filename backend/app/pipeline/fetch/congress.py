@@ -1,6 +1,7 @@
 """Fetch modules for Congress.gov and Senate.gov APIs."""
 
 import logging
+import re
 
 import httpx
 from lxml import etree
@@ -790,8 +791,6 @@ async def fetch_recent_house_roll_calls(
     return results
 
 
-import re as _re
-
 _platform_rate_limiter = RateLimiter(0.5)  # max 0.5 req/s to senator websites
 
 _STRIP_TAGS = {
@@ -812,8 +811,8 @@ def _extract_body_text(raw_html: str) -> str:
     try:
         doc = etree.HTML(raw_html)
     except Exception:
-        plain = _re.sub(r"<[^>]+>", " ", raw_html)
-        return _re.sub(r"\s+", " ", plain).strip()
+        plain = re.sub(r"<[^>]+>", " ", raw_html)
+        return re.sub(r"\s+", " ", plain).strip()
 
     for tag in _STRIP_TAGS:
         for el in doc.iter(tag):
@@ -835,12 +834,12 @@ def _extract_body_text(raw_html: str) -> str:
         content_root = body if body is not None else doc
 
     plain = " ".join(content_root.itertext())
-    plain = _re.sub(r"\s+", " ", plain).strip()
+    plain = re.sub(r"\s+", " ", plain).strip()
     plain = _strip_nav_artifacts(plain)
     return plain
 
 
-_NAV_ARTIFACT_PATTERNS = _re.compile(
+_NAV_ARTIFACT_PATTERNS = re.compile(
     r"(?:Skip to (?:primary navigation|main content|content)|"
     r"Toggle (?:navigation|submenu|menu)|"
     r"× Close (?:Mobile Nav|Menu)|"
@@ -854,14 +853,14 @@ _NAV_ARTIFACT_PATTERNS = _re.compile(
     r"Flag Request Servi\w*|"
     r"Appropriations & CDS Requests|"
     r"Schedule a Tour)",
-    _re.IGNORECASE,
+    re.IGNORECASE,
 )
 
 
 def _strip_nav_artifacts(text: str) -> str:
     """Remove common navigation/UI artifacts from extracted text."""
     text = _NAV_ARTIFACT_PATTERNS.sub("", text)
-    text = _re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"\s+", " ", text).strip()
     if text.startswith(". ") or text.startswith(", "):
         text = text[2:].strip()
     return text

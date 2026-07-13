@@ -285,7 +285,8 @@ async def get_explore_document_summary(
 
     if len(_summary_timestamps) > 500:
         cutoff = now - _SUMMARY_COOLDOWN * 2
-        _summary_timestamps.clear()
+        for k in [k for k, ts in _summary_timestamps.items() if ts < cutoff]:
+            del _summary_timestamps[k]
 
     from app.pipeline.analyze.ollama_client import call_llm
     from app.pipeline.analyze.prompts import explore_document_summary_prompt

@@ -52,6 +52,11 @@ jobs:
 
       - run: pip install -r requirements.txt
 
+      - name: Lint (ruff)
+        run: |
+          pip install ruff
+          ruff check app/
+
       - name: Run fast tests (no embedding model)
         run: python -m pytest tests/ -v -m "not slow"
 

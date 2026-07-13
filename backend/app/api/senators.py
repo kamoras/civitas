@@ -75,7 +75,6 @@ async def get_highlights(senator_id: str, db: Session = Depends(get_db)) -> JSON
 def _build_highlights(senator) -> list[str]:
     """Generate factual, data-driven insights from senator records."""
     funding = senator.funding
-    voting = senator.voting_record
     score = senator.representation_score
     hints: list[tuple[int, str]] = []  # (priority, text)
 

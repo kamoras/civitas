@@ -180,8 +180,6 @@ def compute_distribution(entity_type: str, date: str | None = None) -> dict:
         # _entity_scores: dimension → {entity_id: score} for Spearman
         entity_scores: dict[str, dict[str, float]] = {dim: {} for dim, _ in DIMENSIONS}
 
-        col_map = {col: dim for dim, col in DIMENSIONS}
-
         for snap in snapshots:
             for dim, col in DIMENSIONS:
                 val = getattr(snap, col, None)

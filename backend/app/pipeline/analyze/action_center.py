@@ -22,21 +22,31 @@ import time
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-_US_EAST = ZoneInfo("America/New_York")
-
 import httpx
 import numpy as np
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
-from app.models import ActionIssue, DailyTheme, ExploreDocument, Justice, President, Representative, Senator
+from app.models import (
+    ActionIssue,
+    DailyTheme,
+    ExploreDocument,
+    Justice,
+    MonitorUpdate,
+    NationalMonitor,
+    President,
+    Representative,
+    Senator,
+)
 from app.pipeline.fetch.news_feeds import NewsArticle, fetch_news_articles
 from app.pipeline.fetch.trending import TrendingTopic, fetch_trending_topics
 from app.pipeline.vector_store import (
     get_embedding_model,
     search_explore_documents,
 )
+
+_US_EAST = ZoneInfo("America/New_York")
 
 logger = logging.getLogger(__name__)
 
@@ -180,20 +190,8 @@ Articles:
 Respond with ONLY the JSON object."""
 
 
-_ACTION_TYPE_KEYWORDS: dict[str, list[str]] = {
-    "contact_senator": ["senator", "senate"],
-    "contact_representative": ["representative", "congress", "house"],
-    "contact_whitehouse": ["president", "white house", "executive"],
-    "public_comment": ["public comment", "comment period", "regulations.gov"],
-    "track_legislation": ["bill", "legislation", "track", "congress.gov"],
-    "register_vote": ["register", "vote", "voter"],
-    "attend_hearing": ["hearing", "town hall", "meeting", "attend"],
-}
-
-
 def _infer_action_type(text: str) -> str:
     """Infer an action type from free-text using embedding similarity."""
-    lower = text.lower()
     prototypes = {
         "contact_senator": "Contact your US senators about this issue",
         "contact_representative": "Contact your House representative",
@@ -203,9 +201,6 @@ def _infer_action_type(text: str) -> str:
         "register_vote": "Register to vote or check voter registration",
         "attend_hearing": "Attend a town hall or public hearing",
     }
-    for atype, keywords in _ACTION_TYPE_KEYWORDS.items():
-        if any(kw in lower for kw in keywords):
-            return atype
     try:
         action_emb = _embed_texts([text])
         proto_texts = list(prototypes.values())
@@ -269,7 +264,6 @@ def _enrich_actions(
     bill_url = resolved_bills[0]["url"] if resolved_bills else None
     bill_name = resolved_bills[0].get("name", "") if resolved_bills else ""
     primary_source = source_urls[0] if source_urls else None
-    primary_source_name = source_names[0] if source_names else ""
     senator_names = [s["name"] for s in related_senators[:3]] if related_senators else []
 
     def _is_generic(text: str) -> bool:
@@ -2045,7 +2039,6 @@ def generate_period_summaries(today_str: str, db: "Session") -> None:
     current_month = today.month
 
     # ISO week containing today (week starts Monday)
-    current_week_monday = today - timedelta(days=today.weekday())
     current_week_num = today.isocalendar()[1]
 
     # --- Week summaries ---
@@ -2214,18 +2207,11 @@ def _generate_full_story(issue) -> str | None:
 
     facts = json.loads(issue.facts or "[]")
     source_names = json.loads(issue.source_names or "[]")
-    source_urls = json.loads(issue.source_urls or "[]")
     policy_areas = json.loads(issue.policy_areas or "[]")
 
     facts_text = "\n".join(f"- {f}" for f in facts) if facts else "(none provided)"
     sources_text = ", ".join(source_names[:10]) if source_names else "(none provided)"
     policy_text = ", ".join(policy_areas) if policy_areas else "(none provided)"
-
-    sources_with_urls = []
-    for i, name in enumerate(source_names[:10]):
-        url = source_urls[i] if i < len(source_urls) else ""
-        sources_with_urls.append(f"{name}: {url}" if url else name)
-    sources_detail = "\n".join(f"- {s}" for s in sources_with_urls)
 
     word_low, word_high = _story_word_target(len(facts))
 
@@ -2439,8 +2425,8 @@ def _slugify(text: str) -> str:
 
 
 def _should_merge_monitors_llm(
-    a: "NationalMonitor",
-    b: "NationalMonitor",
+    a: NationalMonitor,
+    b: NationalMonitor,
     db: Session,
 ) -> bool:
     """Use LLM to decide if two monitors should be merged."""
@@ -2473,7 +2459,7 @@ def _should_merge_monitors_llm(
 def _should_match_monitor_llm(
     issue_title: str,
     issue_summary: str,
-    monitor: "NationalMonitor",
+    monitor: NationalMonitor,
     db: Session,
 ) -> bool:
     """LLM gate for borderline embedding matches: does this issue genuinely belong to this monitor?"""
@@ -2507,7 +2493,7 @@ def _should_match_monitor_llm(
 
 
 def _reclassify_monitor_llm(
-    monitor: "NationalMonitor",
+    monitor: NationalMonitor,
     db: Session,
 ) -> None:
     """Use LLM to re-evaluate and potentially re-categorize an existing monitor."""
@@ -2555,11 +2541,9 @@ Return JSON: {{"category": "CATEGORY_NAME", "reason": "why"}}
                             monitor.title, old_cat, monitor.category, result.get("reason"))
 
 
-def _merge_monitors(keep: "NationalMonitor", absorb: "NationalMonitor",
+def _merge_monitors(keep: NationalMonitor, absorb: NationalMonitor,
                     db: Session) -> None:
     """Merge two monitors: move updates from `absorb` into `keep`, delete `absorb`."""
-    from app.models import MonitorUpdate
-
     existing_keys = {
         (u.date, u.source_url)
         for u in db.query(MonitorUpdate).filter(
@@ -2652,9 +2636,6 @@ def _update_national_monitors(today: str, db: Session) -> None:
     Every monitor update traces to a specific source article — no LLM-generated
     facts, only condensed summaries of sourced articles.
     """
-    from app.models import NationalMonitor, MonitorUpdate
-    from datetime import timedelta
-
     try:
         from app.pipeline.vector_store import get_embedding_model
         model = get_embedding_model()
@@ -2958,9 +2939,6 @@ def _update_national_monitors(today: str, db: Session) -> None:
 
 def _cleanup_monitor_lifecycle(today: str, db: Session) -> None:
     """Close inactive monitors and delete insignificant ones."""
-    from datetime import timedelta
-    from app.models import NationalMonitor
-
     dormant_cutoff = (
         datetime.strptime(today, "%Y-%m-%d") - timedelta(days=_MONITOR_DORMANT_DAYS)
     ).strftime("%Y-%m-%d")

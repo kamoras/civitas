@@ -707,7 +707,6 @@ async def get_election_info(response: Response, db: Session = Depends(get_db)):
     is_election_season = days_until <= 60
 
     seats_up = _seats_up_for_year(el_year)
-    all_house = True
 
     senators = (
         db.query(Senator.id, Senator.name, Senator.state, Senator.party,
