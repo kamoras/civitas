@@ -6,11 +6,25 @@ Uses the shared in-memory-SQLite `db_session` fixture from conftest.py.
 
 import json
 
+import pytest
+
 from app.config import settings
 from app.models import ActionIssue, Representative, RepSponsoredBill, Senator, SponsoredBill
-from app.services.bill_service import get_bills_in_flight
+from app.services.bill_service import clear_bill_collection_cache, get_bills_in_flight
 
 CURRENT = settings.CURRENT_CONGRESS
+
+
+@pytest.fixture(autouse=True)
+def _reset_bill_collection_cache():
+    # _collect_bills caches its result at module scope for 120s in
+    # production (see bill_service.py) — without this, a cache populated
+    # by an earlier test's in-memory SQLite db would leak into a later
+    # test's assertions, since the cache doesn't know db_session gives
+    # every test a fresh database.
+    clear_bill_collection_cache()
+    yield
+    clear_bill_collection_cache()
 
 
 def _make_senator(db, id="s1", name="Sen. Alpha", state="CA", party="D", is_current=True):
@@ -282,3 +296,46 @@ class TestStaleSort:
 
         assert result.total == 1
         assert result.bills[0].bill_id == "S.1"
+
+
+class TestCollectionCache:
+    def test_cached_result_reflects_data_at_first_call(self, db_session):
+        senator = _make_senator(db_session)
+        _make_sponsored_bill(db_session, senator.id, "S.1", "INTRODUCED")
+
+        first = get_bills_in_flight(db_session)
+        assert first.total == 1
+
+        # Written after the cache was populated — within the TTL window a
+        # second call should still see the cached (pre-S.2) snapshot, not
+        # requery the database.
+        _make_sponsored_bill(db_session, senator.id, "S.2", "INTRODUCED")
+        second = get_bills_in_flight(db_session)
+
+        assert second.total == 1
+
+    def test_clearing_cache_picks_up_new_data(self, db_session):
+        senator = _make_senator(db_session)
+        _make_sponsored_bill(db_session, senator.id, "S.1", "INTRODUCED")
+        get_bills_in_flight(db_session)
+
+        _make_sponsored_bill(db_session, senator.id, "S.2", "INTRODUCED")
+        clear_bill_collection_cache()
+        result = get_bills_in_flight(db_session)
+
+        assert result.total == 2
+
+    def test_unfiltered_call_does_not_mutate_the_cached_list_order(self, db_session):
+        # get_bills_in_flight sorts `filtered` in place; when no filter is
+        # active `filtered is all_rows`, the exact list _collect_bills
+        # returned. If that were the cached list itself (not a copy), the
+        # first call's sort would permanently reorder every later cache hit.
+        senator = _make_senator(db_session)
+        _make_sponsored_bill(db_session, senator.id, "S.1", "INTRODUCED", latest_action_date="2026-01-01")
+        _make_sponsored_bill(db_session, senator.id, "S.2", "INTRODUCED", latest_action_date="2026-06-01")
+
+        recent = get_bills_in_flight(db_session, sort="recent")
+        stale = get_bills_in_flight(db_session, sort="stale")
+
+        assert [b.bill_id for b in recent.bills] == ["S.2", "S.1"]
+        assert [b.bill_id for b in stale.bills] == ["S.1", "S.2"]
