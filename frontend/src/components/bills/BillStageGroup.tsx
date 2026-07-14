@@ -7,10 +7,6 @@ import { useConfig } from "@/hooks/useConfig";
 import type { BillInFlight } from "@/types/bill";
 
 const GROUP_PER_PAGE = 25;
-// Below this a group's rows fit on one screen, so showing them up front
-// costs little; above it (e.g. IN_COMMITTEE's several thousand) default to
-// collapsed so the page doesn't open already showing an unscannable wall.
-const AUTO_EXPAND_THRESHOLD = 200;
 
 type RowSort = "recent" | "stale";
 
@@ -47,7 +43,7 @@ export default function BillStageGroup({ stageCode, chamber, party, q, forceExpa
       .then((res) => {
         if (cancelled) return;
         setTotal(res.total);
-        if (forceExpanded || (res.total > 0 && res.total <= AUTO_EXPAND_THRESHOLD)) {
+        if (forceExpanded && res.total > 0) {
           setExpanded(true);
         }
       })

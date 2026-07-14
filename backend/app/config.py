@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     # the endpoint returns 503 rather than silently dropping submissions).
     # Needs a token scoped to Issues: write on GITHUB_FEEDBACK_REPO only —
     # a fine-grained PAT, not a classic repo-scope token.
-    GITHUB_FEEDBACK_TOKEN: str = ""
+    FEEDBACK_TOKEN: str = ""
     GITHUB_FEEDBACK_REPO: str = "kamoras/civitas"
     # Operator alerts (pipeline overruns, skipped runs, ground-truth failures).
     # Always logged + recorded for the admin dashboard; optionally pushed:
