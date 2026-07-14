@@ -7,6 +7,7 @@ the cross-chamber counterpart to how politicians.py unions Senator/
 Representative/President/Justice into one directory.
 """
 import json
+import time
 from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
@@ -14,6 +15,19 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models import ActionIssue, Representative, RepSponsoredBill, Senator, SponsoredBill
 from app.schemas import BillInFlightSchema, PaginatedBillsSchema
+
+# _collect_bills rebuilds ~17k rows (query + join + Pydantic construction)
+# from scratch on every call — ~1.3-1.7s measured in production, even for a
+# perPage=1 request, because none of that cost is in the pagination. Every
+# filter/sort combination starts from the same unfiltered base set, so
+# caching that base set for a short window (matching the 120s the API
+# already promises callers via Cache-Control) turns every call after the
+# first into an in-memory filter/sort instead of a fresh DB round trip —
+# without this, a page that fires several of these concurrently (e.g. one
+# per stage group in the grouped bills view) serializes into many seconds
+# of wait on the single-worker Pi backend.
+_COLLECT_CACHE_TTL_SECONDS = 120
+_collect_cache: tuple[float, list["_Row"]] | None = None
 
 
 def _bioguide_photo(bioguide_id: str | None) -> str | None:
@@ -59,6 +73,14 @@ class _Row:
 
 
 def _collect_bills(db: Session) -> list[_Row]:
+    global _collect_cache
+    now = time.monotonic()
+    if _collect_cache is not None and (now - _collect_cache[0]) < _COLLECT_CACHE_TTL_SECONDS:
+        # A fresh list every call — callers (get_bills_in_flight) sort this
+        # in place, and when no filter is active that's the very list we'd
+        # be handing back out of the cache on the next call too.
+        return list(_collect_cache[1])
+
     rows: list[_Row] = []
     min_congress = settings.CURRENT_CONGRESS
     mention_counts = _bill_mention_counts(db)
@@ -127,7 +149,15 @@ def _collect_bills(db: Session) -> list[_Row]:
             mention_count=mention_count,
         ))
 
-    return rows
+    _collect_cache = (now, rows)
+    return list(rows)
+
+
+def clear_bill_collection_cache() -> None:
+    """Drop the cached row list (e.g. between test runs, or after a write
+    that should be visible immediately rather than waiting out the TTL)."""
+    global _collect_cache
+    _collect_cache = None
 
 
 def get_bills_in_flight(
