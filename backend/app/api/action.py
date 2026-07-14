@@ -16,7 +16,7 @@ from app.api.admin import require_admin
 from app.api.rate_limit import WriteRateLimit, client_ip
 from app.database import get_db
 from app.models import (
-    ActionIssue, DailyTheme, ExploreDocument,
+    ActionIssue, ExploreDocument,
     NationalMonitor, TimelineEntry, Representative, Senator,
     WeekSummary, MonthSummary, YearSummary,
 )
@@ -157,16 +157,9 @@ async def get_action_issues(
         )
 
     if not issues:
-        return {"date": date, "issues": [], "theme": None}
+        return {"date": date, "issues": []}
 
     issue_date = issues[0].date
-    theme_row = db.query(DailyTheme).filter(DailyTheme.date == issue_date).first()
-    theme = None
-    if theme_row:
-        try:
-            theme = json.loads(theme_row.theme_json)
-        except (json.JSONDecodeError, TypeError):
-            pass
 
     available_dates = [
         row[0] for row in
@@ -192,7 +185,6 @@ async def get_action_issues(
     return {
         "date": issue_date,
         "issues": [_build_issue_response(i, db, explore_docs_map) for i in issues],
-        "theme": theme,
         "availableDates": available_dates,
     }
 

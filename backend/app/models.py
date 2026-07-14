@@ -515,15 +515,6 @@ class ScoreSnapshot(Base):
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
 
 
-class DailyTheme(Base):
-    """Daily visual theme for the Action Center, generated from top issues."""
-    __tablename__ = "daily_themes"
-
-    date: Mapped[str] = mapped_column(String(10), primary_key=True)
-    theme_json: Mapped[str] = mapped_column(Text, default="{}")
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-
-
 class LearnedClassification(Base):
     """Persistent learning store for entity classifications.
 

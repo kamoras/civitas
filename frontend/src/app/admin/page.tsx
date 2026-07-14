@@ -1321,7 +1321,6 @@ const INVENTORY_SECTIONS: { label: string; keys: { key: string; label: string }[
       { key: "nationalMonitors", label: "MONITORS" },
       { key: "monitorUpdates", label: "MONITOR UPDATES" },
       { key: "timelineEntries", label: "TIMELINE ENTRIES" },
-      { key: "dailyThemes", label: "DAILY THEMES" },
       { key: "exploreDocuments", label: "EXPLORE DOCS" },
     ],
   },

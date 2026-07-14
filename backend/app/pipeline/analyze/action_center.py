@@ -30,7 +30,6 @@ from app.config import settings
 from app.database import SessionLocal
 from app.models import (
     ActionIssue,
-    DailyTheme,
     ExploreDocument,
     Justice,
     MonitorUpdate,
@@ -170,7 +169,12 @@ Name the actual countries or entities involved. Do NOT add "U.S." or \
 "America" to the title unless the United States is a direct actor in \
 these specific articles.
 - "summary": A factual 2-4 sentence summary of what is happening and why \
-it matters. No opinion.
+it matters. No opinion. Be precise about WHO did WHAT to WHOM — double-check \
+the direction of every action and legal outcome before writing it. In legal \
+or disputed matters, do not confuse the accuser/plaintiff/victim with the \
+accused/defendant, and never state that someone was "found guilty" or \
+"found liable" unless the articles say THAT SPECIFIC PERSON was the one \
+found guilty or liable, not the person who brought the case against them.
 - "facts": An array of 3-5 key factual bullet points citizens should know. \
 Each fact must cite specific numbers, dates, or names when available. \
 CRITICAL fact rules: (1) Every fact must be directly stated in the articles — \
@@ -1718,264 +1722,6 @@ def _search_congress_bill(query: str) -> dict | None:
     return result
 
 
-_THEME_ICON_LIBRARY: dict[str, str] = {
-    "flag": "M4 2v20M4 4h12l-2 4 2 4H4",
-    "globe": "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM2 12h20M12 2c-3 3-4.5 7-4.5 10s1.5 7 4.5 10M12 2c3 3 4.5 7 4.5 10s-1.5 7-4.5 10",
-    "shield": "M12 2L3 7v5c0 5.5 3.8 10.7 9 12 5.2-1.3 9-6.5 9-12V7Z",
-    "gavel": "M14.5 2.5l7 7-1.4 1.4-7-7ZM3 21l5-5M7.5 9.5l7 7M2.5 14.5l7 7-1.4 1.4-7-7Z",
-    "money": "M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6",
-    "scales": "M12 2v20M2 7l10-3 10 3M4 7l-2 8c0 2.2 2 4 4 4s4-1.8 4-4L8 7M14 7l-2 8c0 2.2 2 4 4 4s4-1.8 4-4l-2-8",
-    "health": "M8 2h8v6h6v8h-6v6H8v-6H2v-8h6Z",
-    "lightning": "M13 2L3 14h8l-1 8 10-12h-8Z",
-    "fire": "M12 22c4.4 0 8-3.6 8-8 0-4-2.5-6-4-8-1.5-2-2-4-2-6-1 2-3.5 4-4 6-1 4-4 6-4 6 0 4.4 2.6 8 6 8Z",
-    "target": "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12ZM12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z",
-    "handshake": "M2 14l5-5 4 4 6-6 5 5M7 9l-5 5M20 12l-3 3",
-    "megaphone": "M3 11v3a1 1 0 0 0 1 1h2l5 5V6L6 11H4a1 1 0 0 0-1 0ZM16 8a4 4 0 0 1 0 8M19 5a8 8 0 0 1 0 14",
-    "warning": "M12 2L1 21h22ZM12 9v4M12 17h0",
-    "military": "M12 2l4 3h4v4l3 4-3 4v4h-4l-4 3-4-3H4v-4L1 13l3-4V5h4Z",
-    "capitol": "M2 20h20M4 20v-6h16v6M6 14v-4h12v4M10 10V6h4v4M12 6V2",
-    "vote": "M9 11l3 3L22 4M20 12v7a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h11",
-    "document": "M4 2h10l6 6v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2ZM14 2v6h6M8 13h8M8 17h8M8 9h4",
-    "oil": "M12 2c-4 4-8 6-8 12a8 8 0 0 0 16 0c0-6-4-8-8-12Z",
-    "atom": "M12 12m-1 0a1 1 0 1 0 2 0 1 1 0 1 0-2 0ZM12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10M12 2a15.3 15.3 0 0 0-4 10 15.3 15.3 0 0 0 4 10M2 12h20",
-    "chart": "M4 20V10M10 20V4M16 20v-6M22 20v-4",
-    "users": "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
-    "prison": "M4 2v20M20 2v20M8 2v20M12 2v20M16 2v20M2 12h20",
-    "plane": "M22 2L11 13M22 2l-7 20-4-9-9-4Z",
-    "factory": "M2 20V8l5 4V8l5 4V8l5 4V2h5v18Z",
-    "tree": "M12 22v-6M8 16l4-12 4 12H8ZM5 20l7-8 7 8H5Z",
-    "home": "M3 12l9-9 9 9M5 10v10h14V10",
-}
-
-_THEME_SYSTEM_PROMPT = """\
-You generate JSON. No explanation, no markdown, just a raw JSON object."""
-
-
-_THEME_CONCEPT_TEMPLATE = """\
-Today's #1 headline on a dark cyberpunk-themed civic news dashboard:
-Title: {title}
-Summary: {summary}
-
-Choose an icon and colors that SPECIFICALLY represent this topic.
-
-Icon choices: {icon_list}
-
-Color guidance — pick colors that SYMBOLIZE the specific subject:
-- Foreign policy with Russia: use Russian flag colors (#ff0000 red, #0039a6 blue)
-- Foreign policy with China: use Chinese flag colors (#de2910 red, #ffde00 gold)
-- Foreign policy with Ukraine: use Ukrainian flag colors (#0057b8 blue, #ffd700 gold)
-- Foreign policy with Iran: use Iranian flag colors (#239f40 green, #da0000 red)
-- Military/defense: use olive/military green (#556b2f, #8b0000 dark red)
-- Economy/finance/trade: use gold/money green (#ffd700, #00c853)
-- Healthcare: use medical blue/red (#0077b6, #e63946)
-- Climate/environment: use earth green/sky blue (#2d6a4f, #48cae4)
-- Gun policy: use gunmetal/amber (#4a4a4a, #ff8f00)
-- Immigration: use warm amber/teal (#f4a261, #2a9d8f)
-- Supreme Court/justice: use judicial purple/gold (#6a0dad, #daa520)
-- Elections/voting: use patriotic red/blue (#b22234, #3c3b6e)
-- Technology/AI: use electric cyan/purple (#00ffff, #9d4edd)
-- Energy/oil: use petroleum black-gold/orange (#1a1a2e, #e76f51)
-DO NOT default to generic orange/purple. The colors must match the TOPIC.
-
-Return a JSON object:
-{{"tagline":"<3-6 word evocative tagline about this specific topic>",\
-"mood":"<urgent|tense|volatile|hopeful|somber|charged|divided|uncertain>",\
-"icon":"<one of: {icon_list}>",\
-"accent":"<hex color that symbolizes the topic — see guidance above>",\
-"accentAlt":"<second hex color, complementary, also topic-specific>"}}
-
-JSON only:"""
-
-
-def _generate_daily_theme(
-    issues: list[ActionIssue],
-    today: str,
-    db: Session,
-) -> dict | None:
-    """Generate a topic-specific visual theme for the hero issue."""
-    from app.pipeline.analyze.ollama_client import call_llm, extract_json
-
-    if not issues:
-        return None
-
-    hero = issues[0]
-    icon_list = ", ".join(sorted(_THEME_ICON_LIBRARY.keys()))
-
-    concept_result = call_llm(
-        prompt_version=ACTION_CENTER_PROMPT_VERSION + "-theme-concept",
-        system_prompt=_THEME_SYSTEM_PROMPT,
-        user_prompt=_THEME_CONCEPT_TEMPLATE.format(
-            title=hero.title,
-            summary=hero.summary or "",
-            icon_list=icon_list,
-        ),
-        cache_key={"date": today, "type": "theme-concept", "title": hero.title},
-        db_session=db,
-        max_tokens=512,
-        num_ctx=4096,
-    )
-
-    if not concept_result:
-        logger.warning("Theme concept LLM returned empty")
-        return None
-
-    if isinstance(concept_result, str):
-        concept_result = extract_json(concept_result)
-    if isinstance(concept_result, list) and concept_result:
-        concept_result = concept_result[0] if isinstance(concept_result[0], dict) else None
-    if not isinstance(concept_result, dict):
-        logger.warning("Theme concept not a dict: %s", type(concept_result))
-        return None
-
-    _HEX_RE = re.compile(r'^#[0-9a-fA-F]{6}$')
-    _MOOD_VALID = {"urgent", "tense", "volatile", "hopeful", "somber", "charged", "divided", "uncertain"}
-
-    tagline = re.sub(r'[^\w\s\-\'",.:!?/]', '', concept_result.get("tagline", "BREAKING"))[:60]
-    raw_mood = concept_result.get("mood", "urgent")
-    mood = raw_mood if raw_mood in _MOOD_VALID else "urgent"
-
-    icon_key = concept_result.get("icon", "globe")
-    if icon_key not in _THEME_ICON_LIBRARY:
-        icon_key = "globe"
-    svg_path = _THEME_ICON_LIBRARY[icon_key]
-
-    accent = concept_result.get("accent", "#ff6644")
-    accent_alt = concept_result.get("accentAlt", "#6644ff")
-
-    if not _HEX_RE.match(accent):
-        accent = "#ff6644"
-    if not _HEX_RE.match(accent_alt):
-        accent_alt = "#6644ff"
-
-    accent = _ensure_vibrant(accent)
-    accent_alt = _ensure_vibrant(accent_alt)
-
-    glow = 0.7 if mood in ("urgent", "volatile", "charged") else 0.4
-    speed = 2 if mood in ("urgent", "volatile") else 3
-
-    custom_css = _build_watermark_css(svg_path, accent, accent_alt)
-
-    logger.info(
-        "Theme: mood=%s icon=%s accent=%s/%s tagline='%s'",
-        mood, icon_key, accent, accent_alt, tagline,
-    )
-
-    result = {
-        "tagline": tagline,
-        "mood": mood,
-        "accent": accent,
-        "accentAlt": accent_alt,
-        "glowIntensity": glow,
-        "animationSpeed": speed,
-        "borderStyle": "solid",
-        "heroGradient": [
-            _darken(accent, 0.06),
-            _darken(accent_alt, 0.07),
-            _darken(accent, 0.05),
-        ],
-        "customCSS": custom_css,
-    }
-    return result
-
-
-def _build_watermark_css(svg_path: str, accent: str, accent_alt: str) -> str:
-    """Build CSS for a prominent tiled SVG watermark across the hero panel.
-
-    Uses curated SVG path data from the icon library. Renders a subtle
-    repeating tile plus a larger accent icon in the bottom-right.
-    """
-    if not svg_path or len(svg_path) < 5:
-        return ""
-
-    if not re.match(r'^[MLCZAHVSQTmlczahvsqt0-9.,\- ]+$', svg_path):
-        return ""
-
-    from urllib.parse import quote
-
-    tile_svg = (
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
-        f'fill="none" stroke="{accent}" stroke-width="0.8" '
-        f'opacity="0.4" '
-        f'stroke-linecap="round" stroke-linejoin="round">'
-        f'<path d="{svg_path}"/></svg>'
-    )
-    encoded_tile = quote(tile_svg, safe='')
-
-    hero_svg = (
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
-        f'fill="none" stroke="{accent_alt}" stroke-width="1.2" '
-        f'stroke-linecap="round" stroke-linejoin="round">'
-        f'<path d="{svg_path}"/></svg>'
-    )
-    encoded_hero = quote(hero_svg, safe='')
-
-    hex_encoded = accent.replace("#", "%23")
-
-    return (
-        ".theme-hero-panel::before {\n"
-        "  content: '';\n"
-        "  position: absolute;\n"
-        "  inset: 0;\n"
-        "  pointer-events: none;\n"
-        "  z-index: 0;\n"
-        f"  background-image: url(\"data:image/svg+xml,{encoded_tile}\");\n"
-        "  background-repeat: repeat;\n"
-        "  background-size: 48px 48px;\n"
-        "  opacity: 0.035;\n"
-        "}\n"
-        ".theme-hero-panel::after {\n"
-        "  content: '';\n"
-        "  position: absolute;\n"
-        "  bottom: 12px;\n"
-        "  right: 12px;\n"
-        "  width: 120px;\n"
-        "  height: 120px;\n"
-        "  pointer-events: none;\n"
-        "  z-index: 1;\n"
-        f"  background-image: url(\"data:image/svg+xml,{encoded_hero}\");\n"
-        "  background-repeat: no-repeat;\n"
-        "  background-size: contain;\n"
-        "  opacity: 0.08;\n"
-        f"  filter: drop-shadow(0 0 8px {hex_encoded});\n"
-        "}\n"
-    )
-
-
-def _ensure_vibrant(hex_color: str) -> str:
-    """Boost a hex color if its perceived brightness is too low.
-
-    Uses ITU-R BT.601 luminance weights. Targets a minimum perceived
-    brightness of ~60/255 so the accent is visible on near-black.
-    """
-    try:
-        c = hex_color.lstrip("#")
-        r, g, b = int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
-        lum = 0.299 * r + 0.587 * g + 0.114 * b
-        if lum < 60:
-            scale = 80 / max(lum, 1)
-            r = min(int(r * scale), 255)
-            g = min(int(g * scale), 255)
-            b = min(int(b * scale), 255)
-            return f"#{r:02x}{g:02x}{b:02x}"
-    except (ValueError, IndexError):
-        pass
-    return hex_color
-
-
-def _darken(hex_color: str, darkness: float = 0.12) -> str:
-    """Produce a near-black color that preserves the hue of *hex_color*.
-
-    *darkness* controls the target brightness (0 = black, 1 = full).
-    """
-    try:
-        c = hex_color.lstrip("#")
-        r, g, b = int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
-        r, g, b = int(r * darkness), int(g * darkness), int(b * darkness)
-        return f"#{max(r,5):02x}{max(g,5):02x}{max(b,5):02x}"
-    except (ValueError, IndexError):
-        return "#0a0a0f"
-
-
 _PERIOD_REVIEW_SYSTEM = (
     "You are a nonpartisan civic analyst. Summarize the period's top civic issues "
     "factually and briefly. Never advocate for any position."
@@ -3034,6 +2780,76 @@ def _validate_geographic_consistency(title: str, source_titles: list[str]) -> st
     return fixed if len(fixed) >= 10 else title
 
 
+_ROLE_CHECK_SYSTEM = (
+    "You are a rigorous fact-checker. You check ONE thing: whether a summary "
+    "correctly attributes actions and outcomes to the right people — who did "
+    "what to whom, who sued whom, who was found guilty or liable versus who "
+    "brought the case or made the accusation. You are not checking style, "
+    "completeness, or opinion — only whether any party's role has been "
+    "reversed or confused with another party's."
+)
+
+_ROLE_CHECK_TEMPLATE = """\
+Source articles:
+{articles}
+
+Generated summary:
+{summary}
+
+Does the summary correctly attribute every action, accusation, and legal \
+outcome to the right person — with nobody's role reversed (e.g. describing \
+an accuser/plaintiff/victim as the one found guilty or liable, or crediting \
+one party's action or outcome to the other party)?
+
+Respond with ONLY a JSON object:
+{{"accurate": true}}
+or
+{{"accurate": false, "reason": "<one sentence naming what was reversed>"}}"""
+
+
+def _check_summary_roles(summary: str, articles_text: str, db: Session) -> tuple[bool, str]:
+    """Second-pass check for subject/object role reversal in a generated
+    summary (confirmed live, 2026-07: issue #376 stated E. Jean Carroll "was
+    found guilty of sexual assault and defamation" when Trump was the party
+    a jury found liable — Carroll was the plaintiff).
+
+    Mechanical grounding checks (grounding.py) can't catch this class of
+    error: both parties' names genuinely appear in the source near the
+    relevant legal language, so keyword/proximity matching can't tell which
+    direction is correct — that needs actual reading comprehension. This
+    runs a second, independently-prompted LLM pass focused only on role
+    correctness, since the same generation pass that made the error is
+    unlikely to catch its own mistake.
+
+    Fails open (returns accurate=True) on any error or unparseable response
+    — a broken verification call should not block issue creation, only a
+    confirmed reversal should trigger a retry.
+    """
+    from app.pipeline.analyze.ollama_client import call_llm, extract_json
+
+    try:
+        result = call_llm(
+            prompt_version=ACTION_CENTER_PROMPT_VERSION + "-role-check",
+            system_prompt=_ROLE_CHECK_SYSTEM,
+            user_prompt=_ROLE_CHECK_TEMPLATE.format(articles=articles_text[:3000], summary=summary),
+            cache_key=None,  # always re-check a freshly (re)generated summary
+            db_session=db,
+            max_tokens=150,
+            num_ctx=4096,
+        )
+    except Exception:
+        logger.exception("Summary role-check LLM call failed")
+        return True, ""
+
+    if isinstance(result, str):
+        result = extract_json(result)
+    if not isinstance(result, dict):
+        return True, ""
+    if result.get("accurate", True):
+        return True, ""
+    return False, str(result.get("reason", "role reversal suspected"))[:200]
+
+
 def refresh_action_issues(db: Session | None = None) -> int:
     """Run the full action center pipeline. Returns number of issues created."""
     own_session = db is None
@@ -3195,6 +3011,48 @@ def _run_refresh(db: Session) -> int:
         # Politician role validator: strip hallucinated "Senator X" / "Rep. X" labels
         # that don't match anyone in the database.
         title, summary, facts = _validate_politician_roles(title, summary, facts, db)
+
+        # Second-pass check for who-did-what-to-whom role reversal (see
+        # _check_summary_roles). One retry with a corrective note; if the
+        # retry still fails, skip this cluster entirely for today rather
+        # than publish a summary we have specific reason to believe
+        # misattributes an action or legal outcome to the wrong person —
+        # same fail-closed posture as _generate_full_story's grounding retry.
+        source_text_for_check = " ".join(f"{a.title} {a.summary}" for a in filtered_cluster)
+        accurate, reason = _check_summary_roles(summary, source_text_for_check, db)
+        if not accurate:
+            logger.warning(
+                "Summary role-check failed for rank %d ('%s'): retrying with correction",
+                rank, reason,
+            )
+            retry_result = call_llm(
+                prompt_version=ACTION_CENTER_PROMPT_VERSION,
+                system_prompt=_SYSTEM_PROMPT,
+                user_prompt=user_prompt + (
+                    f"\n\nYour previous summary had a factual error: {reason}. "
+                    "Rewrite the summary making sure every action, accusation, "
+                    "and legal outcome is attributed to the correct person."
+                ),
+                cache_key=None,
+                db_session=db,
+                max_tokens=1024,
+                num_ctx=4096,
+            )
+            if isinstance(retry_result, str):
+                retry_result = extract_json(retry_result)
+            retry_summary = retry_result.get("summary") if isinstance(retry_result, dict) else None
+            if retry_summary:
+                accurate, reason = _check_summary_roles(str(retry_summary), source_text_for_check, db)
+                if accurate:
+                    summary = str(retry_summary)
+
+            if not accurate:
+                logger.error(
+                    "Summary role-check failed twice for rank %d ('%s') — "
+                    "skipping this issue rather than publish it: %s",
+                    rank, reason, summary[:200],
+                )
+                continue
 
         # Post-LLM title dedup: skip if this LLM-generated title is too
         # similar to one already selected this run. Catches cases where two
@@ -3396,28 +3254,10 @@ def _run_refresh(db: Session) -> int:
         _update_national_monitors(today, db)
 
     # Preserve today's #1 issue in the permanent timeline
-    _set_refresh_state(stage="theme")
+    _set_refresh_state(stage="timeline")
     if issues_created > 0:
         _save_timeline_entry(today, db)
         generate_period_summaries(today, db)
-
-    # Stage 3: Generate daily visual theme from the top issues
-    if issues_created > 0:
-        created_issues = (
-            db.query(ActionIssue)
-            .filter(ActionIssue.date == today, ActionIssue.is_current == True)  # noqa: E712
-            .order_by(ActionIssue.rank)
-            .all()
-        )
-        theme = _generate_daily_theme(created_issues, today, db)
-        if theme:
-            existing_theme = db.query(DailyTheme).filter(DailyTheme.date == today).first()
-            if existing_theme:
-                existing_theme.theme_json = json.dumps(theme)
-                existing_theme.created_at = datetime.utcnow()
-            else:
-                db.add(DailyTheme(date=today, theme_json=json.dumps(theme)))
-            db.commit()
 
     # Stage 4: Post new/surging issues to Bluesky.
     # Deliberately runs BEFORE full-story generation below: posting only
