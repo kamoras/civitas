@@ -1809,7 +1809,7 @@ async def run_senate_pipeline(
                 # official title (from pre-fetched titles), CRS policy area,
                 # and the short display title.
                 from app.pipeline.analyze.bill_analyzer import classify_policy_areas_multi
-                from app.pipeline.analyze.bill_stage import classify_bill_stage
+                from app.pipeline.analyze.bill_stage import classify_bill_stage_from_actions
                 from app.pipeline.analyze.party_platform import classify_party_alignment_multi
                 raw_sponsored = prepared.get("sponsoredBills", [])
                 classified_sponsored: list[dict] = []
@@ -1817,8 +1817,14 @@ async def run_senate_pipeline(
                     title = sp.get("title", "")
                     api_policy = sp.get("policyArea", "")
                     bill_id = sp.get("billId", "")
-                    sp["stage"] = classify_bill_stage(
-                        sp.get("latestAction", ""), sp.get("isLaw", False),
+                    bill_number_str = "".join(ch for ch in bill_id.split(".")[-1] if ch.isdigit())
+                    bill_actions: list[dict] = []
+                    if sp.get("billType") and bill_number_str and sp.get("congress"):
+                        bill_actions = await fetch_bill_actions(
+                            client, db, sp["congress"], sp["billType"].lower(), int(bill_number_str),
+                        )
+                    sp["stage"] = classify_bill_stage_from_actions(
+                        bill_actions, sp.get("isLaw", False),
                     )
                     if api_policy:
                         sp["policyArea"] = api_policy.upper().replace(" ", "_")

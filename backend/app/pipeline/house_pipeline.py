@@ -287,7 +287,7 @@ async def run_house_pipeline() -> dict:
             ideology_scores: dict[str, float] = {}
             bipartisanship_scores: dict[str, float] = {}
 
-            from app.pipeline.analyze.bill_stage import classify_bill_stage
+            from app.pipeline.analyze.bill_stage import classify_bill_stage_from_actions
 
             try:
                 # Fetch cosponsors for significant bills to build the
@@ -329,6 +329,10 @@ async def run_house_pipeline() -> dict:
                             sp_key = f"{sp_type}.{sp_num}"
                             latest_action_text = (sp.get("latestAction") or {}).get("text", "")
                             is_law = "became public law" in latest_action_text.lower()
+                            sp_congress = sp.get("congress", 0)
+                            bill_actions = await fetch_bill_actions(
+                                client, db, sp_congress, sp_type.lower(), int(sp_num),
+                            )
                             sp_list.append({
                                 "billId": sp_key,
                                 "title": sp.get("title", ""),
@@ -338,10 +342,10 @@ async def run_house_pipeline() -> dict:
                                 "policyArea": "",
                                 "policyAreas": [],
                                 "partyLeaning": None,
-                                "congress": sp.get("congress", 0),
+                                "congress": sp_congress,
                                 "billType": sp.get("type", ""),
                                 "isLaw": is_law,
-                                "stage": classify_bill_stage(latest_action_text, is_law),
+                                "stage": classify_bill_stage_from_actions(bill_actions, is_law),
                             })
                     # sp_list is already bounded to the current + previous
                     # congress (min_congress filter above), so this is a
