@@ -140,7 +140,7 @@ export async function fetchBillsInFlight(options?: {
   chamber?: "senate" | "house";
   party?: "D" | "R" | "I";
   q?: string;
-  sort?: "recent" | "hot";
+  sort?: "recent" | "hot" | "stale";
   page?: number;
   perPage?: number;
 }): Promise<PaginatedBills> {

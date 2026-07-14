@@ -155,7 +155,12 @@ def get_bills_in_flight(
         filtered = [r for r in filtered if r.bill.sponsor_party == party]
     if q:
         q_lower = q.lower()
-        filtered = [r for r in filtered if q_lower in r.bill.title.lower()]
+        filtered = [
+            r for r in filtered
+            if q_lower in r.bill.title.lower()
+            or q_lower in r.bill.sponsor_name.lower()
+            or q_lower in r.bill.bill_id.lower()
+        ]
 
     if sort == "hot":
         # "Active in Congress right now" — bills currently referenced by a
@@ -163,6 +168,14 @@ def get_bills_in_flight(
         # how recently Congress acted on them.
         filtered = [r for r in filtered if r.mention_count > 0]
         filtered.sort(key=lambda r: (r.mention_count, r.latest_action_date), reverse=True)
+    elif sort == "stale":
+        # Oldest action first. Only meaningful within a single stage (a
+        # committee bill idling for months is normal; the same idle time
+        # for a bill already passed and sitting in the other chamber is
+        # not) — callers should pass `stage` alongside this, since sorting
+        # a mixed-stage set this way would just surface ancient dead bills
+        # from every stage rather than "what's stuck right now."
+        filtered.sort(key=lambda r: r.latest_action_date)
     else:
         filtered.sort(key=lambda r: r.latest_action_date, reverse=True)
 

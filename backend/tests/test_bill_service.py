@@ -152,6 +152,27 @@ class TestFiltering:
         assert result.total == 1
         assert result.bills[0].bill_id == "S.1"
 
+    def test_search_matches_sponsor_name(self, db_session):
+        warren = _make_senator(db_session, id="s1", name="Sen. Elizabeth Warren")
+        other = _make_senator(db_session, id="s2", name="Sen. Someone Else")
+        _make_sponsored_bill(db_session, warren.id, "S.1", "INTRODUCED", title="A bill")
+        _make_sponsored_bill(db_session, other.id, "S.2", "INTRODUCED", title="Another bill")
+
+        result = get_bills_in_flight(db_session, q="warren")
+
+        assert result.total == 1
+        assert result.bills[0].bill_id == "S.1"
+
+    def test_search_matches_bill_id(self, db_session):
+        senator = _make_senator(db_session)
+        _make_sponsored_bill(db_session, senator.id, "S.4521", "INTRODUCED", title="A bill")
+        _make_sponsored_bill(db_session, senator.id, "S.99", "INTRODUCED", title="Another bill")
+
+        result = get_bills_in_flight(db_session, q="4521")
+
+        assert result.total == 1
+        assert result.bills[0].bill_id == "S.4521"
+
     def test_stage_counts_reflect_unfiltered_set(self, db_session):
         # The funnel counts should describe the whole pipeline, not just
         # whatever the current filter narrowed the list down to.
@@ -237,3 +258,27 @@ class TestHotSort:
         result = get_bills_in_flight(db_session, sort="recent")
 
         assert result.bills[0].mention_count == 1
+
+
+class TestStaleSort:
+    def test_stale_sort_orders_oldest_action_first(self, db_session):
+        senator = _make_senator(db_session)
+        _make_sponsored_bill(db_session, senator.id, "S.1", "IN_COMMITTEE", latest_action_date="2026-06-01")
+        _make_sponsored_bill(db_session, senator.id, "S.2", "IN_COMMITTEE", latest_action_date="2025-01-01")
+        _make_sponsored_bill(db_session, senator.id, "S.3", "IN_COMMITTEE", latest_action_date="2026-01-01")
+
+        result = get_bills_in_flight(db_session, sort="stale")
+
+        assert [b.bill_id for b in result.bills] == ["S.2", "S.3", "S.1"]
+
+    def test_stale_sort_combines_with_stage_filter(self, db_session):
+        # The intended usage: staleness is only meaningful within one
+        # stage, since normal dwell time varies wildly by stage.
+        senator = _make_senator(db_session)
+        _make_sponsored_bill(db_session, senator.id, "S.1", "IN_COMMITTEE", latest_action_date="2025-01-01")
+        _make_sponsored_bill(db_session, senator.id, "S.2", "ENACTED", latest_action_date="2024-01-01")
+
+        result = get_bills_in_flight(db_session, sort="stale", stage="IN_COMMITTEE")
+
+        assert result.total == 1
+        assert result.bills[0].bill_id == "S.1"

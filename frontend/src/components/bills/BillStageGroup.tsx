@@ -12,6 +12,8 @@ const GROUP_PER_PAGE = 25;
 // collapsed so the page doesn't open already showing an unscannable wall.
 const AUTO_EXPAND_THRESHOLD = 200;
 
+type RowSort = "recent" | "stale";
+
 interface BillStageGroupProps {
   stageCode: string;
   chamber?: "senate" | "house";
@@ -31,6 +33,7 @@ export default function BillStageGroup({ stageCode, chamber, party, q, forceExpa
   const [totalPages, setTotalPages] = useState(0);
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [sort, setSort] = useState<RowSort>("recent");
 
   // Filters changed (or this group mounted) — get an accurate count for
   // the header regardless of expand state, and decide the default.
@@ -52,12 +55,19 @@ export default function BillStageGroup({ stageCode, chamber, party, q, forceExpa
     return () => { cancelled = true; };
   }, [stageCode, chamber, party, q, forceExpanded]);
 
-  // Load the first page of rows the first time this group is expanded.
+  // Sort choice changed — throw away whatever's loaded and refetch page 1.
+  useEffect(() => {
+    setBills([]);
+    setPage(0);
+  }, [sort]);
+
+  // Load the first page of rows the first time this group is expanded
+  // (or after a sort change reset page back to 0).
   useEffect(() => {
     if (!expanded || page !== 0) return;
     let cancelled = false;
     setLoading(true);
-    fetchBillsInFlight({ stage: stageCode, chamber, party, q, sort: "recent", page: 1, perPage: GROUP_PER_PAGE })
+    fetchBillsInFlight({ stage: stageCode, chamber, party, q, sort, page: 1, perPage: GROUP_PER_PAGE })
       .then((res) => {
         if (cancelled) return;
         setBills(res.bills);
@@ -66,12 +76,12 @@ export default function BillStageGroup({ stageCode, chamber, party, q, forceExpa
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [expanded, page, stageCode, chamber, party, q]);
+  }, [expanded, page, stageCode, chamber, party, q, sort]);
 
   const loadMore = () => {
     const nextPage = page + 1;
     setLoading(true);
-    fetchBillsInFlight({ stage: stageCode, chamber, party, q, sort: "recent", page: nextPage, perPage: GROUP_PER_PAGE })
+    fetchBillsInFlight({ stage: stageCode, chamber, party, q, sort, page: nextPage, perPage: GROUP_PER_PAGE })
       .then((res) => {
         setBills((prev) => [...prev, ...res.bills]);
         setPage(nextPage);
@@ -101,25 +111,49 @@ export default function BillStageGroup({ stageCode, chamber, party, q, forceExpa
       </button>
 
       {expanded && (
-        <div className="divide-y divide-matrix-green/10 border-t border-matrix-green/10">
-          {bills.map((bill) => (
-            <BillRow key={`${bill.chamber}-${bill.billId}-${bill.sponsorId}`} bill={bill} />
-          ))}
-          {loading && (
-            <div className="text-center py-4 font-mono text-[10px] text-matrix-green/30 tracking-widest animate-pulse">
-              LOADING...
-            </div>
-          )}
-          {!loading && page > 0 && page < totalPages && (
-            <div className="flex justify-center py-3">
+        <div className="border-t border-matrix-green/10">
+          <div className="flex items-center justify-end gap-1 px-3 py-1.5 border-b border-matrix-green/10">
+            <span className="font-mono text-[9px] text-matrix-green/25 uppercase tracking-widest mr-1">Sort</span>
+            {([
+              { value: "recent" as const, label: "Newest" },
+              { value: "stale" as const, label: "Stuck longest" },
+            ]).map((opt) => (
               <button
-                onClick={loadMore}
-                className="font-mono text-[10px] tracking-widest px-3 py-1.5 border border-matrix-green/20 text-matrix-green/60 hover:text-matrix-green hover:border-matrix-green/40 transition-colors"
+                key={opt.value}
+                type="button"
+                onClick={() => setSort(opt.value)}
+                aria-pressed={sort === opt.value}
+                className={`font-mono text-[9px] px-2 py-0.5 border transition-colors uppercase tracking-wider ${
+                  sort === opt.value
+                    ? "border-neon-cyan/50 text-neon-cyan bg-neon-cyan/10"
+                    : "border-matrix-green/15 text-matrix-green/35 hover:text-matrix-green/60"
+                }`}
               >
-                LOAD MORE ({((total ?? 0) - bills.length).toLocaleString()} REMAINING)
+                {opt.label}
               </button>
-            </div>
-          )}
+            ))}
+          </div>
+
+          <div className="divide-y divide-matrix-green/10">
+            {bills.map((bill) => (
+              <BillRow key={`${bill.chamber}-${bill.billId}-${bill.sponsorId}`} bill={bill} />
+            ))}
+            {loading && (
+              <div className="text-center py-4 font-mono text-[10px] text-matrix-green/30 tracking-widest animate-pulse">
+                LOADING...
+              </div>
+            )}
+            {!loading && page > 0 && page < totalPages && (
+              <div className="flex justify-center py-3">
+                <button
+                  onClick={loadMore}
+                  className="font-mono text-[10px] tracking-widest px-3 py-1.5 border border-matrix-green/20 text-matrix-green/60 hover:text-matrix-green hover:border-matrix-green/40 transition-colors"
+                >
+                  LOAD MORE ({((total ?? 0) - bills.length).toLocaleString()} REMAINING)
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

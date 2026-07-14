@@ -25,7 +25,7 @@ def list_bills_in_flight(
     chamber: str | None = Query(None, pattern="^(senate|house)$"),
     party: str | None = Query(None, pattern="^[DRI]$"),
     q: str | None = Query(None, max_length=100),
-    sort: str = Query("recent", pattern="^(recent|hot)$"),
+    sort: str = Query("recent", pattern="^(recent|hot|stale)$"),
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -33,7 +33,8 @@ def list_bills_in_flight(
     """Return bills currently moving through Congress, paginated and filterable.
 
     sort=hot restricts to bills currently referenced by a live Action
-    Center issue, ranked by mention count.
+    Center issue, ranked by mention count. sort=stale orders oldest-action-
+    first — pass `stage` alongside it, since "stuck" is stage-relative.
     """
     data = get_bills_in_flight(
         db, stage=stage, chamber=chamber, party=party, q=q, sort=sort, page=page, per_page=per_page,
