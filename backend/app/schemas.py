@@ -177,6 +177,7 @@ class BillInFlightSchema(CamelModel):
     congress: int = 0
     bill_type: str = ""
     is_law: bool = False
+    mention_count: int = 0
 
 
 class PaginatedBillsSchema(CamelModel):

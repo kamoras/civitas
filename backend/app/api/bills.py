@@ -25,12 +25,17 @@ def list_bills_in_flight(
     chamber: str | None = Query(None, pattern="^(senate|house)$"),
     party: str | None = Query(None, pattern="^[DRI]$"),
     q: str | None = Query(None, max_length=100),
+    sort: str = Query("recent", pattern="^(recent|hot)$"),
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
-    """Return bills currently moving through Congress, paginated and filterable."""
+    """Return bills currently moving through Congress, paginated and filterable.
+
+    sort=hot restricts to bills currently referenced by a live Action
+    Center issue, ranked by mention count.
+    """
     data = get_bills_in_flight(
-        db, stage=stage, chamber=chamber, party=party, q=q, page=page, per_page=per_page,
+        db, stage=stage, chamber=chamber, party=party, q=q, sort=sort, page=page, per_page=per_page,
     )
     return _cached_json(data.model_dump(by_alias=True), max_age=120)
