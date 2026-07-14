@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models import Representative, RepSponsoredBill, Senator, SponsoredBill
 from app.schemas import BillInFlightSchema, PaginatedBillsSchema
-from app.services.senator_service import STATE_NAMES
 
 
 def _bioguide_photo(bioguide_id: str | None) -> str | None:
