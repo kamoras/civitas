@@ -26,11 +26,14 @@ STAGE_PROTOTYPES: dict[str, str] = {
         "measure."
     ),
     "IN_COMMITTEE": (
-        "Referred to the Committee on the subject matter for "
-        "consideration. Ordered to be reported by the committee. "
-        "Reported by the committee with an amendment. Placed on the "
-        "Union Calendar. Placed on the Senate Legislative Calendar. "
-        "Committee markup completed. Discharged from committee."
+        "Referred to the House Committee on the subject matter for "
+        "consideration. Referred to the Senate Committee on the subject "
+        "matter for consideration. Referred to the Committee on the "
+        "subject matter for consideration. Ordered to be reported by the "
+        "committee. Reported by the committee with an amendment. Placed "
+        "on the Union Calendar. Placed on the Senate Legislative "
+        "Calendar. Committee markup completed. Discharged from "
+        "committee."
     ),
     "PASSED_CHAMBER": (
         "Passed House. Passed Senate. Passed the House of "
@@ -39,10 +42,10 @@ STAGE_PROTOTYPES: dict[str, str] = {
         "passage passed. Motion to reconsider laid on the table."
     ),
     "IN_OTHER_CHAMBER": (
-        "Received in the Senate after passing the House. Received in "
-        "the House after passing the Senate. Held at the desk. Referred "
-        "to the other body's committee after passage in the originating "
-        "chamber."
+        "Received in the Senate after passing the House, before any "
+        "committee action there. Received in the House after passing "
+        "the Senate, before any committee action there. Held at the "
+        "desk in the chamber that has not yet acted on it."
     ),
     "TO_PRESIDENT": (
         "Presented to the President. Cleared for White House. Sent to "
