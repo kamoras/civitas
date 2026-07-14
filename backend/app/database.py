@@ -98,6 +98,8 @@ def _migrate_columns() -> None:
         ("senators", "committees", "TEXT DEFAULT '[]'"),
         ("representatives", "leadership_title", "TEXT"),
         ("representatives", "committees", "TEXT DEFAULT '[]'"),
+        ("sponsored_bills", "stage", "TEXT DEFAULT ''"),
+        ("rep_sponsored_bills", "stage", "TEXT DEFAULT ''"),
     ]
 
     drops: list[tuple[str, str]] = [
@@ -143,6 +145,8 @@ def _ensure_indexes() -> None:
         ("ix_lobbying_matches_senator_id", "lobbying_matches", "senator_id"),
         ("ix_campaign_promises_senator_id", "campaign_promises", "senator_id"),
         ("ix_sponsored_bills_senator_id", "sponsored_bills", "senator_id"),
+        ("ix_sponsored_bills_stage", "sponsored_bills", "stage"),
+        ("ix_rep_sponsored_bills_stage", "rep_sponsored_bills", "stage"),
     ]
     # The rep_* models' representative_id column already has index=True,
     # which SQLAlchemy names ix_{table}_representative_id — this list used

@@ -391,6 +391,7 @@ def upsert_senator(db: Session, data: dict) -> None:
                 congress=sp_data.get("congress") or 0,
                 bill_type=sp_data.get("billType") or "",
                 is_law=sp_data.get("isLaw") or False,
+                stage=sp_data.get("stage") or "",
             )
         )
 
@@ -1808,6 +1809,7 @@ async def run_senate_pipeline(
                 # official title (from pre-fetched titles), CRS policy area,
                 # and the short display title.
                 from app.pipeline.analyze.bill_analyzer import classify_policy_areas_multi
+                from app.pipeline.analyze.bill_stage import classify_bill_stage
                 from app.pipeline.analyze.party_platform import classify_party_alignment_multi
                 raw_sponsored = prepared.get("sponsoredBills", [])
                 classified_sponsored: list[dict] = []
@@ -1815,6 +1817,9 @@ async def run_senate_pipeline(
                     title = sp.get("title", "")
                     api_policy = sp.get("policyArea", "")
                     bill_id = sp.get("billId", "")
+                    sp["stage"] = classify_bill_stage(
+                        sp.get("latestAction", ""), sp.get("isLaw", False),
+                    )
                     if api_policy:
                         sp["policyArea"] = api_policy.upper().replace(" ", "_")
                     parts = [title]
