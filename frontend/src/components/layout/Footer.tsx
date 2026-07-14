@@ -36,6 +36,12 @@ export default function Footer() {
           >
             ENVIRONMENTAL
           </Link>
+          <Link
+            href="/feedback"
+            className="text-matrix-green/40 hover:text-matrix-green/80 transition-colors font-mono text-xs tracking-widest uppercase"
+          >
+            FEEDBACK
+          </Link>
           <a
             href="https://bsky.app/profile/civitas-research.org"
             target="_blank"

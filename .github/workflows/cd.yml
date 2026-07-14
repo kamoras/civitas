@@ -68,6 +68,7 @@ jobs:
           ADMIN_TOKEN=${{ secrets.ADMIN_TOKEN }}
           BSKY_HANDLE=${{ secrets.BSKY_HANDLE }}
           BSKY_APP_PASSWORD=${{ secrets.BSKY_APP_PASSWORD }}
+          GITHUB_FEEDBACK_TOKEN=${{ secrets.GITHUB_FEEDBACK_TOKEN }}
           EOF
           chmod 600 "$DEPLOY_PATH/.env"
 

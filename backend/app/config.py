@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     # Bluesky integration (leave BSKY_HANDLE empty to disable)
     BSKY_HANDLE: str = ""
     BSKY_APP_PASSWORD: str = ""
+    # Site feedback form -> GitHub issue creation (leave empty to disable;
+    # the endpoint returns 503 rather than silently dropping submissions).
+    # Needs a token scoped to Issues: write on GITHUB_FEEDBACK_REPO only —
+    # a fine-grained PAT, not a classic repo-scope token.
+    GITHUB_FEEDBACK_TOKEN: str = ""
+    GITHUB_FEEDBACK_REPO: str = "kamoras/civitas"
     # Operator alerts (pipeline overruns, skipped runs, ground-truth failures).
     # Always logged + recorded for the admin dashboard; optionally pushed:
     ALERT_NTFY_URL: str = ""    # e.g. https://ntfy.sh/<private-topic>

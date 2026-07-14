@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import MatrixRain from "@/components/effects/MatrixRain";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
@@ -109,7 +110,11 @@ export default function AccessibilityPage() {
                 Plain language toggle — all five score metrics available in everyday language
                 (e.g., &ldquo;PAC Money Reliance&rdquo; instead of &ldquo;Funding Independence&rdquo;)
               </Check>
-              <Check>Score tooltips explain every metric — no number is shown without context</Check>
+              <Check>
+                Score tooltips explain every metric — no number is shown without context; the
+                explanation text is always present in the page (not injected only on hover), so
+                it&apos;s reachable via CSS-only hover/focus even with JavaScript disabled
+              </Check>
               <Check>External links announce &ldquo;opens in new tab&rdquo; to screen readers</Check>
               <Check>Decorative elements marked aria-hidden to prevent screen reader noise</Check>
               <Check>Data tables use proper th scope attributes and accessible captions</Check>
@@ -139,11 +144,6 @@ export default function AccessibilityPage() {
                 rather than per element, so it can&apos;t be missed on new components. In
                 high-contrast mode (<code>prefers-contrast: more</code>), opacity is pushed
                 further, to fully solid.
-              </Warn>
-              <Warn>
-                <strong className="text-neon-yellow">JavaScript-dependent tooltips</strong> —
-                Metric explanation tooltips require JavaScript. If JavaScript is unavailable,
-                metric descriptions are not accessible.
               </Warn>
             </ul>
           </Section>
@@ -184,16 +184,14 @@ export default function AccessibilityPage() {
             </P>
             <div className="space-y-2 mt-4">
               <Row
-                label="GitHub Issues"
+                label="Feedback form"
                 value={
-                  <a
-                    href="https://github.com/ryanmack/civitas/issues"
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <Link
+                    href="/feedback"
                     className="text-neon-cyan/80 hover:text-neon-cyan transition-colors"
                   >
-                    github.com/ryanmack/civitas/issues
-                  </a>
+                    civitas-research.org/feedback
+                  </Link>
                 }
               />
               <Row label="Response time" value="We aim to respond within 5 business days" />
