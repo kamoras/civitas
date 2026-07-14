@@ -1030,3 +1030,31 @@ export async function fetchPoliticianDocuments(
   if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
   return res.json();
 }
+
+export interface FeedbackSubmission {
+  category: "bug" | "idea" | "accessibility" | "data" | "other";
+  message: string;
+  email?: string;
+  pageUrl?: string;
+}
+
+export async function submitFeedback(
+  submission: FeedbackSubmission,
+): Promise<{ ok: boolean; issueUrl: string | null }> {
+  const res = await fetch(`${API_BASE}/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      category: submission.category,
+      message: submission.message,
+      email: submission.email || undefined,
+      page_url: submission.pageUrl,
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `Failed to submit feedback: ${res.status}`);
+  }
+  const data = await res.json();
+  return { ok: data.ok, issueUrl: data.issueUrl ?? data.issue_url ?? null };
+}
