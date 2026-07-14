@@ -1,4 +1,4 @@
-import { LeaderboardEntry, PaginatedVotes, Senator } from "@/types/senator";
+import { LeaderboardEntry, PaginatedStockTrades, PaginatedVotes, Senator } from "@/types/senator";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 import type { Justice, JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssuesResponse, MyRepsResponse } from "@/types/action";
@@ -132,6 +132,30 @@ export async function fetchSenatorVotes(
   if (options?.filter) params.set("filter", options.filter);
   const res = await fetch(`${API_BASE}/senators/${senatorId}/votes?${params}`);
   if (!res.ok) throw new Error(`Failed to load votes: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchRepStockTrades(
+  repId: string,
+  options?: { page?: number; perPage?: number },
+): Promise<PaginatedStockTrades> {
+  const params = new URLSearchParams();
+  if (options?.page) params.set("page", String(options.page));
+  if (options?.perPage) params.set("per_page", String(options.perPage));
+  const res = await fetch(`${API_BASE}/representatives/${repId}/stock-trades?${params}`);
+  if (!res.ok) throw new Error(`Failed to load stock trades: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchSenatorStockTrades(
+  senatorId: string,
+  options?: { page?: number; perPage?: number },
+): Promise<PaginatedStockTrades> {
+  const params = new URLSearchParams();
+  if (options?.page) params.set("page", String(options.page));
+  if (options?.perPage) params.set("per_page", String(options.perPage));
+  const res = await fetch(`${API_BASE}/senators/${senatorId}/stock-trades?${params}`);
+  if (!res.ok) throw new Error(`Failed to load stock trades: ${res.status}`);
   return res.json();
 }
 

@@ -6,6 +6,7 @@ import CorruptionScore from "./CorruptionScore";
 import IndustryBreakdown from "./IndustryBreakdown";
 import VotingRecord from "./VotingRecord";
 import LobbyingMatches from "./LobbyingMatches";
+import StockTrades from "./StockTrades";
 import PlatformTracker from "./PlatformTracker";
 import PunkCommentary from "./PunkCommentary";
 import SponsoredBills from "./SponsoredBills";
@@ -373,6 +374,8 @@ export default function SenatorCard({ senator, chamber = "senate" }: SenatorCard
         </CollapsibleSection>
 
         <VotingRecord senatorId={senator.id} votingRecord={senator.votingRecord} chamber={chamber} />
+
+        <StockTrades politicianId={senator.id} chamber={chamber} />
 
         {senator.sponsoredBills && senator.sponsoredBills.length > 0 && (
           <SponsoredBills bills={senator.sponsoredBills} />

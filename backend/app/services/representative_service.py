@@ -14,6 +14,7 @@ from app.models import (
     RepKeyVote,
     RepLobbyingMatch,
     RepSponsoredBill,
+    RepStockTrade,
     Representative,
     ScoreSnapshot,
 )
@@ -568,4 +569,59 @@ def get_rep_votes(
         "category": category,
         "filter": vote_filter,
         "counts": {"all": count_all, "yea": count_yea, "nay": count_nay, "againstParty": count_against},
+    }
+
+
+def get_rep_stock_trades(
+    db: Session,
+    rep_id: str,
+    page: int = 1,
+    per_page: int = 15,
+) -> dict | None:
+    """Return paginated STOCK Act trade disclosures for a representative.
+
+    Informational only — see senator_service.get_senator_stock_trades for
+    the scoring rationale (issue #45).
+    """
+    rep = db.query(Representative).filter(Representative.id == rep_id).first()
+    if rep is None:
+        return None
+
+    query = db.query(RepStockTrade).filter(RepStockTrade.representative_id == rep_id)
+    total = query.count()
+    late_count = query.filter(RepStockTrade.days_to_disclose > 45).count()
+    total_pages = max(1, -(-total // per_page))
+    page = max(1, min(page, total_pages))
+
+    trades_db = (
+        query.order_by(RepStockTrade.transaction_date.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+
+    return {
+        "trades": [
+            {
+                "ticker": t.ticker,
+                "assetName": t.asset_name,
+                "owner": t.owner,
+                "transactionType": t.transaction_type,
+                "transactionDate": t.transaction_date,
+                "disclosureDate": t.disclosure_date,
+                "daysToDisclose": t.days_to_disclose,
+                "late": t.days_to_disclose > 45,
+                "amountLow": t.amount_low,
+                "amountHigh": t.amount_high,
+                "industry": t.industry,
+                "sourceUrl": t.source_url,
+                "parseConfidence": t.parse_confidence,
+            }
+            for t in trades_db
+        ],
+        "total": total,
+        "page": page,
+        "perPage": per_page,
+        "totalPages": total_pages,
+        "lateCount": late_count,
     }

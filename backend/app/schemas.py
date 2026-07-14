@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 def to_camel(string: str) -> str:
@@ -102,6 +102,42 @@ class PaginatedVotesSchema(CamelModel):
     category: str
     filter: str
     counts: VoteCountsSchema
+
+
+# Statutory disclosure deadline under the STOCK Act (2012) — see issue #45.
+STOCK_ACT_DISCLOSURE_DEADLINE_DAYS = 45
+
+
+class StockTradeSchema(CamelModel):
+    ticker: str | None = None
+    asset_name: str
+    owner: Literal["self", "spouse", "joint", "dependent"] = "self"
+    transaction_type: Literal["purchase", "sale_full", "sale_partial", "exchange"]
+    transaction_date: str
+    disclosure_date: str
+    days_to_disclose: int
+    late: bool = False
+    amount_low: float
+    amount_high: float
+    industry: str = "UNCLASSIFIED"
+    source_url: str
+    parse_confidence: Literal["text", "ocr"] = "text"
+
+    @model_validator(mode="after")
+    def _compute_late(self) -> "StockTradeSchema":
+        # Derived, not stored — see StockTrade model comment on
+        # days_to_disclose for why this isn't a separate DB column.
+        self.late = self.days_to_disclose > STOCK_ACT_DISCLOSURE_DEADLINE_DAYS
+        return self
+
+
+class PaginatedStockTradesSchema(CamelModel):
+    trades: list[StockTradeSchema]
+    total: int
+    page: int
+    per_page: int
+    total_pages: int
+    late_count: int
 
 
 class CommitteeSchema(CamelModel):

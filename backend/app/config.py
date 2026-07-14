@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     CONGRESS_RPS: float = 1.2
     FEC_RPS: float = 0.25
     GOVINFO_RPS: float = 1.0
+    HOUSE_PTR_RPS: float = 1.0
+    SENATE_PTR_RPS: float = 0.5
     CURRENT_CONGRESS: int = 119
     # Bluesky integration (leave BSKY_HANDLE empty to disable)
     BSKY_HANDLE: str = ""

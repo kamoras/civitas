@@ -6,7 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from app.config_definitions import SCORE_WEIGHTS
-from app.models import CampaignPromise, Donor, IndustryDonation, KeyVote, LobbyingMatch, ScoreSnapshot, Senator
+from app.models import CampaignPromise, Donor, IndustryDonation, KeyVote, LobbyingMatch, ScoreSnapshot, Senator, StockTrade
 
 # Promise quality rules are shared with the pipeline (which now cleans
 # promises before scoring/persisting); the read path keeps applying them
@@ -30,9 +30,11 @@ from app.schemas import (
     LeaderboardEntrySchema,
     ScoreTrendSchema,
     LobbyingMatchSchema,
+    PaginatedStockTradesSchema,
     SenatorSchema,
     SponsoredBillSchema,
     StateCountSchema,
+    StockTradeSchema,
     VoteCountsSchema,
     VotingRecordSchema,
 )
@@ -710,4 +712,59 @@ def get_senator_votes(
         category=category,
         filter=vote_filter,
         counts=counts,
+    )
+
+
+def get_senator_stock_trades(
+    db: Session,
+    senator_id: str,
+    page: int = 1,
+    per_page: int = 15,
+) -> PaginatedStockTradesSchema | None:
+    """Return paginated STOCK Act trade disclosures for a senator.
+
+    Informational only — not part of the weighted score dimensions, since
+    trade-disclosure completeness varies too much per member to score
+    fairly (see issue #45).
+    """
+    senator = db.query(Senator).filter(Senator.id == senator_id).first()
+    if senator is None:
+        return None
+
+    query = db.query(StockTrade).filter(StockTrade.senator_id == senator_id)
+    total = query.count()
+    late_count = query.filter(StockTrade.days_to_disclose > 45).count()
+    total_pages = max(1, -(-total // per_page))
+    page = max(1, min(page, total_pages))
+
+    trades_db = (
+        query.order_by(StockTrade.transaction_date.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+
+    return PaginatedStockTradesSchema(
+        trades=[
+            StockTradeSchema(
+                ticker=t.ticker,
+                asset_name=t.asset_name,
+                owner=t.owner,
+                transaction_type=t.transaction_type,
+                transaction_date=t.transaction_date,
+                disclosure_date=t.disclosure_date,
+                days_to_disclose=t.days_to_disclose,
+                amount_low=t.amount_low,
+                amount_high=t.amount_high,
+                industry=t.industry,
+                source_url=t.source_url,
+                parse_confidence=t.parse_confidence,
+            )
+            for t in trades_db
+        ],
+        total=total,
+        page=page,
+        per_page=per_page,
+        total_pages=total_pages,
+        late_count=late_count,
     )

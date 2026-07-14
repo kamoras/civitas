@@ -6,6 +6,7 @@ from app.database import get_db
 from app.services.representative_service import (
     get_rep_leaderboard,
     get_rep_states_with_counts,
+    get_rep_stock_trades,
     get_rep_votes,
     get_representative_by_id,
     get_representatives_by_state,
@@ -77,6 +78,20 @@ def get_votes(
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     result = get_rep_votes(db, rep_id, category, page, per_page, filter)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Representative not found")
+    return _cached_json(result, max_age=120)
+
+
+@router.get("/representatives/{rep_id}/stock-trades")
+def get_rep_stock_trades_route(
+    rep_id: str,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(15, ge=1, le=100),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Return paginated STOCK Act trade disclosures for a representative."""
+    result = get_rep_stock_trades(db, rep_id, page, per_page)
     if result is None:
         raise HTTPException(status_code=404, detail="Representative not found")
     return _cached_json(result, max_age=120)
