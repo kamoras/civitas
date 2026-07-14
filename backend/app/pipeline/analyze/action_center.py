@@ -2225,6 +2225,8 @@ accurate article is far better than a longer one that repeats itself or invents 
 - Factual and non-partisan — report what happened, not what to think about it.
 - Flowing paragraphs only (no headers, no bullet points).
 - Do not speculate beyond what the sources support.
+- Do not name, quote, or attribute a statement or role to any person not \
+named in the key facts above.
 
 STRUCTURE (3 natural paragraphs):
 1. What is happening and why it matters right now
@@ -2278,17 +2280,26 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
             logger.warning("Full story too short (%d chars) for issue %s", len(story), issue.id)
             return None
 
-        # Reject fabricated statistics: any money/percent/magnitude/year
-        # figure in the story must appear in the material the model was
-        # shown. Plain contextual numbers are left to the prompt rules —
-        # only statistic-shaped numbers are checked (see grounding.py).
+        # Reject fabricated statistics and fabricated named officials: any
+        # money/percent/magnitude/year figure, or any titled/role-described
+        # person, must appear in the material the model was shown. Plain
+        # contextual numbers and untitled bare names are left to the prompt
+        # rules (see grounding.py) — this only catches the two highest-
+        # precision hallucination signals mechanically. (2026-07: a full
+        # story invented "The Senate Republican leader, Chuck Schumer, has
+        # said Graham's death has made a hard month harder for the Senate
+        # agenda" — no Schumer mention anywhere in the source material, and
+        # this generator had no check for fabricated names at all until
+        # then, unlike the Bluesky poster which already ran this check.)
         from app.pipeline.analyze.grounding import (
             repeated_sentences,
             ungrounded_statistics,
+            ungrounded_titled_names,
         )
         novel = ungrounded_statistics(story, source_material)
+        names = ungrounded_titled_names(story, source_material)
         dupes = repeated_sentences(story)
-        if not novel and not dupes:
+        if not novel and not names and not dupes:
             logger.info(
                 "Generated full story for issue %s (%d chars): %s",
                 issue.id, len(story), issue.title[:60],
@@ -2304,6 +2315,14 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
                 "Full story failed statistic grounding for issue %s (attempt %d): %s",
                 issue.id, attempt + 1, ", ".join(novel),
             )
+        if names:
+            problems.append(
+                f"officials not present in the key facts ({', '.join(names)})"
+            )
+            logger.warning(
+                "Full story failed named-official grounding for issue %s (attempt %d): %s",
+                issue.id, attempt + 1, ", ".join(names),
+            )
         if dupes:
             problems.append(
                 "sentences repeated verbatim later in the article "
@@ -2316,8 +2335,9 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
         retry_note = (
             "\n\nYour previous attempt was rejected because it contained "
             f"{' and '.join(problems)}. Stop writing once the facts are "
-            "covered instead of repeating yourself, and use only numbers "
-            "that appear in the material above."
+            "covered instead of repeating yourself, use only numbers "
+            "that appear in the material above, and do not name or quote "
+            "anyone who isn't named in the material above."
         )
 
     return None
