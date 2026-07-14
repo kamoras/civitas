@@ -73,6 +73,7 @@ class Senator(Base):
     lobbying_matches: Mapped[list["LobbyingMatch"]] = relationship(back_populates="senator", cascade="all, delete-orphan")
     campaign_promises: Mapped[list["CampaignPromise"]] = relationship(back_populates="senator", cascade="all, delete-orphan")
     sponsored_bills: Mapped[list["SponsoredBill"]] = relationship(back_populates="senator", cascade="all, delete-orphan")
+    stock_trades: Mapped[list["StockTrade"]] = relationship(back_populates="senator", cascade="all, delete-orphan")
 
 
 class Donor(Base):
@@ -180,6 +181,34 @@ class SponsoredBill(Base):
     senator: Mapped["Senator"] = relationship(back_populates="sponsored_bills")
 
 
+class StockTrade(Base):
+    """STOCK Act periodic transaction report (PTR) entry. See issue #45."""
+    __tablename__ = "stock_trades"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    senator_id: Mapped[str] = mapped_column(String, ForeignKey("senators.id", ondelete="CASCADE"), nullable=False, index=True)
+    ticker: Mapped[str | None] = mapped_column(String, nullable=True)  # not all disclosed assets are tickered equities
+    asset_name: Mapped[str] = mapped_column(String, nullable=False)
+    owner: Mapped[str] = mapped_column(String, default="self")  # self | spouse | joint | dependent
+    transaction_type: Mapped[str] = mapped_column(String, nullable=False)  # purchase | sale_full | sale_partial | exchange
+    transaction_date: Mapped[str] = mapped_column(String, nullable=False)
+    disclosure_date: Mapped[str] = mapped_column(String, nullable=False)
+    days_to_disclose: Mapped[int] = mapped_column(Integer, default=0)
+    amount_low: Mapped[float] = mapped_column(Float, default=0.0)
+    amount_high: Mapped[float] = mapped_column(Float, default=0.0)
+    industry: Mapped[str] = mapped_column(String, default="UNCLASSIFIED")
+    source_url: Mapped[str] = mapped_column(String, default="")
+    filing_id: Mapped[str] = mapped_column(String, nullable=False, index=True)  # dedupe key
+    # "text" = parsed from a PDF/HTML text layer, "ocr" = OCR fallback on a
+    # scanned filing. Surfaced to the frontend/API so low-confidence OCR
+    # rows can be visually flagged rather than presented as equally
+    # reliable — see grounding.py's precedent of never silently trusting
+    # unverified extracted content.
+    parse_confidence: Mapped[str] = mapped_column(String, default="text")
+
+    senator: Mapped["Senator"] = relationship(back_populates="stock_trades")
+
+
 class Representative(Base):
     """U.S. House of Representatives member with representation scores."""
     __tablename__ = "representatives"
@@ -237,6 +266,7 @@ class Representative(Base):
     lobbying_matches: Mapped[list["RepLobbyingMatch"]] = relationship(back_populates="representative", cascade="all, delete-orphan")
     campaign_promises: Mapped[list["RepCampaignPromise"]] = relationship(back_populates="representative", cascade="all, delete-orphan")
     sponsored_bills: Mapped[list["RepSponsoredBill"]] = relationship(back_populates="representative", cascade="all, delete-orphan")
+    stock_trades: Mapped[list["RepStockTrade"]] = relationship(back_populates="representative", cascade="all, delete-orphan")
 
 
 class RepDonor(Base):
@@ -342,6 +372,29 @@ class RepSponsoredBill(Base):
     stage: Mapped[str] = mapped_column(String, default="", index=True)  # see config_definitions.BILL_STAGES
 
     representative: Mapped["Representative"] = relationship(back_populates="sponsored_bills")
+
+
+class RepStockTrade(Base):
+    """STOCK Act periodic transaction report (PTR) entry. See issue #45."""
+    __tablename__ = "rep_stock_trades"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    representative_id: Mapped[str] = mapped_column(String, ForeignKey("representatives.id", ondelete="CASCADE"), nullable=False, index=True)
+    ticker: Mapped[str | None] = mapped_column(String, nullable=True)
+    asset_name: Mapped[str] = mapped_column(String, nullable=False)
+    owner: Mapped[str] = mapped_column(String, default="self")
+    transaction_type: Mapped[str] = mapped_column(String, nullable=False)
+    transaction_date: Mapped[str] = mapped_column(String, nullable=False)
+    disclosure_date: Mapped[str] = mapped_column(String, nullable=False)
+    days_to_disclose: Mapped[int] = mapped_column(Integer, default=0)
+    amount_low: Mapped[float] = mapped_column(Float, default=0.0)
+    amount_high: Mapped[float] = mapped_column(Float, default=0.0)
+    industry: Mapped[str] = mapped_column(String, default="UNCLASSIFIED")
+    source_url: Mapped[str] = mapped_column(String, default="")
+    filing_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    parse_confidence: Mapped[str] = mapped_column(String, default="text")
+
+    representative: Mapped["Representative"] = relationship(back_populates="stock_trades")
 
 
 class President(Base):

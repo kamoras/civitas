@@ -102,6 +102,31 @@ export interface PolicyAreaDetail {
   party: "R" | "D" | "bipartisan";
 }
 
+export interface StockTrade {
+  ticker: string | null;
+  assetName: string;
+  owner: "self" | "spouse" | "joint" | "dependent";
+  transactionType: "purchase" | "sale_full" | "sale_partial" | "exchange";
+  transactionDate: string;
+  disclosureDate: string;
+  daysToDisclose: number;
+  late: boolean;
+  amountLow: number;
+  amountHigh: number;
+  industry: string;
+  sourceUrl: string;
+  parseConfidence: "text" | "ocr";
+}
+
+export interface PaginatedStockTrades {
+  trades: StockTrade[];
+  total: number;
+  page: number;
+  perPage: number;
+  totalPages: number;
+  lateCount: number;
+}
+
 export interface KeyVote {
   billName: string;
   billId: string;

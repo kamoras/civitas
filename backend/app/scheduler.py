@@ -9,6 +9,7 @@ from apscheduler.triggers.cron import CronTrigger
 from app.config import settings
 from app.pipeline.senate_pipeline import run_senate_pipeline
 from app.pipeline.house_pipeline import run_house_pipeline, is_house_pipeline_running, house_pipeline_age
+from app.pipeline.stock_pipeline import run_stock_trades_pipeline
 from app.pipeline.analyze.action_center import get_action_refresh_state, refresh_action_issues
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,9 @@ def _nightly_pipeline() -> None:
             else:
                 logger.info("Senate pipeline done — starting House pipeline")
                 loop.run_until_complete(run_house_pipeline())
+                logger.info("House pipeline done — starting stock trades pipeline")
+                stock_result = loop.run_until_complete(run_stock_trades_pipeline())
+                logger.info("Stock trades pipeline: %s", stock_result)
         except BaseException as e:
             logger.exception("Nightly pipeline failed")
             send_ops_alert(

@@ -7,6 +7,7 @@ from app.database import get_db
 from app.services.senator_service import (
     get_leaderboard,
     get_senator_by_id,
+    get_senator_stock_trades,
     get_senator_votes,
     get_senators_by_state,
     get_states_with_counts,
@@ -226,6 +227,20 @@ def get_votes(
 ) -> JSONResponse:
     """Return paginated votes for a senator."""
     result = get_senator_votes(db, senator_id, category, page, per_page, filter)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Senator not found")
+    return _cached_json(result.model_dump(by_alias=True), max_age=120)
+
+
+@router.get("/senators/{senator_id}/stock-trades")
+def get_stock_trades(
+    senator_id: str,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(15, ge=1, le=100),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Return paginated STOCK Act trade disclosures for a senator."""
+    result = get_senator_stock_trades(db, senator_id, page, per_page)
     if result is None:
         raise HTTPException(status_code=404, detail="Senator not found")
     return _cached_json(result.model_dump(by_alias=True), max_age=120)
