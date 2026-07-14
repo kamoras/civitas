@@ -29,6 +29,25 @@ _TITLED_NAME_RE = re.compile(
     r"([A-Z][a-zA-Z'\-]+(?:\s+[A-Z][a-zA-Z'\-]+)?)"
 )
 
+# Appositive form: a role description set off by commas rather than a title
+# word directly prefixing the name — "the Senate Republican leader, Chuck
+# Schumer, has said ...". _TITLED_NAME_RE requires the title word immediately
+# before the name and doesn't cover this at all, which is exactly how a
+# fabricated name reached production ungrounded (2026-07: a full-story
+# generation invented "The Senate Republican leader, Chuck Schumer, has said
+# Graham's death has made a hard month harder for the Senate agenda" — no
+# Schumer mention anywhere in the source material, and the only grounding
+# check run on full-story text was for fabricated statistics). A short
+# unclaimed span between the role keyword and the comma keeps this from
+# crossing into an unrelated clause; requiring the trailing comma (not just
+# any capitalized word) keeps it from matching an ordinary sentence start.
+_APPOSITIVE_ROLE_RE = re.compile(
+    r"\b(?:leader|chairman|chairwoman|chair|whip|speaker|majority|minority|"
+    r"secretary|director|governor|president)\b[^,\n]{0,40},\s*"
+    r"([A-Z][a-zA-Z'\-]+(?:\s+[A-Z][a-zA-Z'\-]+)?),",
+    re.IGNORECASE,
+)
+
 
 def _normalize_token(raw: str) -> str:
     tok = raw.replace(",", "").rstrip(".")
@@ -122,6 +141,11 @@ def ungrounded_titled_names(generated: str, source: str) -> list[str]:
     """Titled-official references in ``generated`` whose surname is absent
     from ``source``.
 
+    Covers both a title word directly prefixing a name ("Sen. Collins") and
+    a role description set off by commas ("the Senate Republican leader,
+    Chuck Schumer,") — see _APPOSITIVE_ROLE_RE for why the second form
+    matters.
+
     Only the surname (last token of the captured name) is required to
     appear, so "Sen. Collins" is grounded by source text that says
     "Susan Collins" without a title.
@@ -132,6 +156,11 @@ def ungrounded_titled_names(generated: str, source: str) -> list[str]:
         surname = m.group(1).split()[-1].lower()
         if surname not in source_lower:
             missing.append(m.group(0))
+    for m in _APPOSITIVE_ROLE_RE.finditer(generated or ""):
+        name = m.group(1)
+        surname = name.split()[-1].lower()
+        if surname not in source_lower:
+            missing.append(name)
     return sorted(set(missing))
 
 

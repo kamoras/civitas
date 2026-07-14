@@ -4,8 +4,10 @@
 Uses the shared in-memory-SQLite `db_session` fixture from conftest.py.
 """
 
+import json
+
 from app.config import settings
-from app.models import Representative, RepSponsoredBill, Senator, SponsoredBill
+from app.models import ActionIssue, Representative, RepSponsoredBill, Senator, SponsoredBill
 from app.services.bill_service import get_bills_in_flight
 
 CURRENT = settings.CURRENT_CONGRESS
@@ -51,6 +53,19 @@ def _make_rep_sponsored_bill(db, representative_id, bill_id, stage, congress=CUR
     db.add(bill)
     db.flush()
     return bill
+
+
+def _make_action_issue(db, bill_ids, is_current=True, date="2026-07-01", rank=1):
+    issue = ActionIssue(
+        date=date,
+        rank=rank,
+        title="Some trending issue",
+        related_bill_ids=json.dumps([{"name": b, "id": b, "url": ""} for b in bill_ids]),
+        is_current=is_current,
+    )
+    db.add(issue)
+    db.flush()
+    return issue
 
 
 class TestUnionAcrossChambers:
@@ -173,3 +188,52 @@ class TestPagination:
         result = get_bills_in_flight(db_session)
 
         assert [b.bill_id for b in result.bills] == ["S.2", "S.1"]
+
+
+class TestHotSort:
+    def test_hot_sort_excludes_bills_with_no_action_center_mentions(self, db_session):
+        senator = _make_senator(db_session)
+        _make_sponsored_bill(db_session, senator.id, "S.1", "INTRODUCED")
+        _make_action_issue(db_session, ["S.1"])
+
+        _make_sponsored_bill(db_session, senator.id, "S.2", "INTRODUCED")
+
+        result = get_bills_in_flight(db_session, sort="hot")
+
+        assert result.total == 1
+        assert result.bills[0].bill_id == "S.1"
+
+    def test_hot_sort_ranks_by_mention_count(self, db_session):
+        senator = _make_senator(db_session)
+        _make_sponsored_bill(db_session, senator.id, "S.1", "INTRODUCED")
+        _make_sponsored_bill(db_session, senator.id, "S.2", "INTRODUCED")
+        _make_action_issue(db_session, ["S.1"])
+        _make_action_issue(db_session, ["S.1", "S.2"])
+        _make_action_issue(db_session, ["S.2"])
+        # S.2 is mentioned by 2 issues, S.1 by 2 issues as well — bump S.2
+        # with one more so ranking is unambiguous.
+        _make_action_issue(db_session, ["S.2"])
+
+        result = get_bills_in_flight(db_session, sort="hot")
+
+        assert [b.bill_id for b in result.bills] == ["S.2", "S.1"]
+        assert result.bills[0].mention_count == 3
+        assert result.bills[1].mention_count == 2
+
+    def test_hot_sort_ignores_non_current_issues(self, db_session):
+        senator = _make_senator(db_session)
+        _make_sponsored_bill(db_session, senator.id, "S.1", "INTRODUCED")
+        _make_action_issue(db_session, ["S.1"], is_current=False)
+
+        result = get_bills_in_flight(db_session, sort="hot")
+
+        assert result.total == 0
+
+    def test_mention_count_is_populated_regardless_of_sort_mode(self, db_session):
+        senator = _make_senator(db_session)
+        _make_sponsored_bill(db_session, senator.id, "S.1", "INTRODUCED")
+        _make_action_issue(db_session, ["S.1"])
+
+        result = get_bills_in_flight(db_session, sort="recent")
+
+        assert result.bills[0].mention_count == 1

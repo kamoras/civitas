@@ -7,26 +7,26 @@ import MatrixRain from "@/components/effects/MatrixRain";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import GlitchText from "@/components/effects/GlitchText";
-import BillStageFlow from "@/components/bills/BillStageFlow";
-import BillCard from "@/components/bills/BillCard";
+import BillStageFlow, { ALL_STAGE_CODES } from "@/components/bills/BillStageFlow";
+import BillStageGroup from "@/components/bills/BillStageGroup";
+import BillRow from "@/components/bills/BillRow";
 import { fetchBillsInFlight } from "@/lib/api";
-import type { PaginatedBills } from "@/types/bill";
+import type { BillInFlight } from "@/types/bill";
 
 type ChamberFilter = "all" | "senate" | "house";
 type PartyFilter = "ALL" | "D" | "R" | "I";
+type ViewMode = "hot" | "all";
 
-const PER_PAGE = 24;
+const PER_PAGE = 50;
 
 export default function BillsPage() {
-  const [data, setData] = useState<PaginatedBills | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [stageCounts, setStageCounts] = useState<Record<string, number>>({});
 
+  const [mode, setMode] = useState<ViewMode>("hot");
   const [stage, setStage] = useState<string | null>(null);
   const [chamber, setChamber] = useState<ChamberFilter>("all");
   const [party, setParty] = useState<PartyFilter>("ALL");
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -37,26 +37,21 @@ export default function BillsPage() {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [search]);
 
-  useEffect(() => { setPage(1); }, [stage, chamber, party, debouncedSearch]);
-
+  // The stage-flow funnel is a global overview of the whole pipeline,
+  // independent of the chamber/party/search filters below it — fetch it
+  // once, decoupled from everything else on the page.
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    fetchBillsInFlight({
-      stage: stage ?? undefined,
-      chamber: chamber === "all" ? undefined : chamber,
-      party: party === "ALL" ? undefined : party,
-      q: debouncedSearch || undefined,
-      page,
-      perPage: PER_PAGE,
-    })
-      .then((res) => { if (!cancelled) { setData(res); setError(null); } })
-      .catch((err) => { if (!cancelled) setError(err.message || "Failed to load bills"); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+    fetchBillsInFlight({ sort: "recent", page: 1, perPage: 1 })
+      .then((res) => { if (!cancelled) setStageCounts(res.stageCounts); })
+      .catch(() => {});
     return () => { cancelled = true; };
-  }, [stage, chamber, party, debouncedSearch, page]);
+  }, []);
 
-  const stageCounts = data?.stageCounts ?? {};
+  const chamberParam = chamber === "all" ? undefined : chamber;
+  const partyParam = party === "ALL" ? undefined : party;
+  const qParam = debouncedSearch || undefined;
+
   const totalMoving = Object.entries(stageCounts)
     .filter(([code]) => code !== "INTRODUCED")
     .reduce((sum, [, count]) => sum + count, 0);
@@ -77,6 +72,29 @@ export default function BillsPage() {
             <p className="font-mono text-xs text-matrix-green/40">
               WHERE {totalMoving.toLocaleString()} BILLS SIT IN THE LEGISLATIVE PIPELINE RIGHT NOW
             </p>
+          </div>
+
+          <div className="flex justify-center gap-2 mb-4">
+            <button
+              onClick={() => setMode("hot")}
+              className={`font-mono text-xs px-4 py-1.5 border transition-colors uppercase tracking-widest ${
+                mode === "hot"
+                  ? "border-neon-cyan text-neon-cyan bg-neon-cyan/10"
+                  : "border-matrix-green/15 text-matrix-green/40 hover:text-matrix-green/70"
+              }`}
+            >
+              Active Now
+            </button>
+            <button
+              onClick={() => setMode("all")}
+              className={`font-mono text-xs px-4 py-1.5 border transition-colors uppercase tracking-widest ${
+                mode === "all"
+                  ? "border-neon-cyan text-neon-cyan bg-neon-cyan/10"
+                  : "border-matrix-green/15 text-matrix-green/40 hover:text-matrix-green/70"
+              }`}
+            >
+              All Bills
+            </button>
           </div>
 
           <TerminalTitlebar title="bill_pipeline.dat" />
@@ -139,49 +157,18 @@ export default function BillsPage() {
             </div>
           </div>
 
-          {loading ? (
-            <div className="text-center py-16 font-mono text-xs text-matrix-green/30 tracking-widest animate-pulse">
-              LOADING...
-            </div>
-          ) : error ? (
-            <div className="text-center py-16 font-mono text-xs text-red-400/60">{error}</div>
-          ) : !data || data.bills.length === 0 ? (
-            <div className="text-center py-16 font-mono text-xs text-matrix-green/30 tracking-widest">
-              NO RESULTS
-            </div>
+          {mode === "hot" ? (
+            <HotBillsList
+              stage={stage}
+              chamber={chamberParam}
+              party={partyParam}
+              q={qParam}
+              onViewAll={() => setMode("all")}
+            />
+          ) : stage ? (
+            <BillStageGroup stageCode={stage} chamber={chamberParam} party={partyParam} q={qParam} forceExpanded />
           ) : (
-            <>
-              <p className="font-mono text-[10px] text-matrix-green/30 mb-3 tracking-widest">
-                {data.total.toLocaleString()} BILL{data.total !== 1 ? "S" : ""}
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {data.bills.map((bill) => (
-                  <BillCard key={`${bill.chamber}-${bill.billId}-${bill.sponsorId}`} bill={bill} />
-                ))}
-              </div>
-
-              {data.totalPages > 1 && (
-                <div className="flex items-center justify-center gap-4 mt-8">
-                  <button
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={page <= 1}
-                    className="font-mono text-[10px] tracking-widest px-3 py-1.5 border border-matrix-green/20 text-matrix-green/60 hover:text-matrix-green hover:border-matrix-green/40 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  >
-                    PREV
-                  </button>
-                  <span className="font-mono text-[10px] text-matrix-green/40">
-                    {page} / {data.totalPages}
-                  </span>
-                  <button
-                    onClick={() => setPage((p) => Math.min(data.totalPages, p + 1))}
-                    disabled={page >= data.totalPages}
-                    className="font-mono text-[10px] tracking-widest px-3 py-1.5 border border-matrix-green/20 text-matrix-green/60 hover:text-matrix-green hover:border-matrix-green/40 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  >
-                    NEXT
-                  </button>
-                </div>
-              )}
-            </>
+            <AllBillsGroups chamber={chamberParam} party={partyParam} q={qParam} />
           )}
 
         </div>
@@ -189,5 +176,132 @@ export default function BillsPage() {
       <BackToTop />
       <Footer />
     </div>
+  );
+}
+
+function AllBillsGroups({
+  chamber, party, q,
+}: {
+  chamber?: "senate" | "house";
+  party?: "D" | "R" | "I";
+  q?: string;
+}) {
+  const [anyResults, setAnyResults] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setAnyResults(null);
+    fetchBillsInFlight({ chamber, party, q, sort: "recent", page: 1, perPage: 1 })
+      .then((res) => { if (!cancelled) setAnyResults(res.total > 0); })
+      .catch(() => { if (!cancelled) setAnyResults(true); }); // fail open — let the groups themselves surface the error
+    return () => { cancelled = true; };
+  }, [chamber, party, q]);
+
+  if (anyResults === null) {
+    return (
+      <div className="text-center py-16 font-mono text-xs text-matrix-green/30 tracking-widest animate-pulse">
+        LOADING...
+      </div>
+    );
+  }
+  if (!anyResults) {
+    return (
+      <div className="text-center py-16 font-mono text-xs text-matrix-green/30 tracking-widest">
+        NO RESULTS
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {ALL_STAGE_CODES.map((code) => (
+        <BillStageGroup key={code} stageCode={code} chamber={chamber} party={party} q={q} />
+      ))}
+    </div>
+  );
+}
+
+function HotBillsList({
+  stage, chamber, party, q, onViewAll,
+}: {
+  stage: string | null;
+  chamber?: "senate" | "house";
+  party?: "D" | "R" | "I";
+  q?: string;
+  onViewAll: () => void;
+}) {
+  const [results, setResults] = useState<BillInFlight[]>([]);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => { setPage(1); }, [stage, chamber, party, q]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const isFirstPage = page === 1;
+    if (isFirstPage) setLoading(true); else setLoadingMore(true);
+
+    fetchBillsInFlight({ stage: stage ?? undefined, chamber, party, q, sort: "hot", page, perPage: PER_PAGE })
+      .then((res) => {
+        if (cancelled) return;
+        setResults((prev) => (isFirstPage ? res.bills : [...prev, ...res.bills]));
+        setTotal(res.total);
+        setTotalPages(res.totalPages);
+        setError(null);
+      })
+      .catch((err) => { if (!cancelled) setError(err.message || "Failed to load bills"); })
+      .finally(() => { if (!cancelled) { setLoading(false); setLoadingMore(false); } });
+
+    return () => { cancelled = true; };
+  }, [stage, chamber, party, q, page]);
+
+  if (loading) {
+    return (
+      <div className="text-center py-16 font-mono text-xs text-matrix-green/30 tracking-widest animate-pulse">
+        LOADING...
+      </div>
+    );
+  }
+  if (error) {
+    return <div className="text-center py-16 font-mono text-xs text-red-400/60">{error}</div>;
+  }
+  if (results.length === 0) {
+    return (
+      <div className="text-center py-16 font-mono text-xs text-matrix-green/30 tracking-widest space-y-3">
+        <p>NOTHING CURRENTLY TRENDING IN ACTION CENTER FOR THIS FILTER</p>
+        <button onClick={onViewAll} className="font-mono text-[10px] text-neon-cyan hover:underline tracking-widest">
+          VIEW ALL BILLS INSTEAD
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <p className="font-mono text-[10px] text-matrix-green/30 mb-3 tracking-widest">
+        SHOWING {results.length.toLocaleString()} OF {total.toLocaleString()} BILL{total !== 1 ? "S" : ""}
+      </p>
+      <div className="border border-matrix-green/10 divide-y divide-matrix-green/10">
+        {results.map((bill) => (
+          <BillRow key={`${bill.chamber}-${bill.billId}-${bill.sponsorId}`} bill={bill} />
+        ))}
+      </div>
+
+      {page < totalPages && (
+        <div className="flex justify-center mt-6">
+          <button
+            onClick={() => setPage((p) => p + 1)}
+            disabled={loadingMore}
+            className="font-mono text-[10px] tracking-widest px-4 py-2 border border-matrix-green/20 text-matrix-green/60 hover:text-matrix-green hover:border-matrix-green/40 disabled:opacity-40 disabled:cursor-wait transition-colors"
+          >
+            {loadingMore ? "LOADING..." : `LOAD MORE (${(total - results.length).toLocaleString()} REMAINING)`}
+          </button>
+        </div>
+      )}
+    </>
   );
 }

@@ -15,6 +15,7 @@ export interface BillInFlight {
   congress: number;
   billType: string;
   isLaw: boolean;
+  mentionCount: number;
 }
 
 export interface PaginatedBills {

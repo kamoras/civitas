@@ -52,6 +52,28 @@ class TestUngroundedTitledNames:
         # Bare names aren't titled-official claims; other validators own those.
         assert ungrounded_titled_names("Whitfield objected", SOURCE) == []
 
+    def test_appositive_role_fabrication_flagged(self):
+        # The exact production failure: a role description set off by
+        # commas, not a title word directly prefixing the name — the form
+        # ungrounded_titled_names didn't cover until this was found.
+        text = (
+            "The Senate Republican leader, Chuck Schumer, has said Graham's "
+            "death has made a hard month harder for the Senate agenda."
+        )
+        assert ungrounded_titled_names(text, SOURCE) == ["Chuck Schumer"]
+
+    def test_appositive_role_grounded_by_source(self):
+        source = SOURCE + " Senate Majority Leader John Thune spoke afterward."
+        text = "The Senate Majority Leader, John Thune, praised the vote."
+        assert ungrounded_titled_names(text, source) == []
+
+    def test_appositive_without_trailing_comma_not_matched(self):
+        # Guards against over-matching an ordinary sentence start following
+        # some unrelated use of a role word.
+        assert ungrounded_titled_names(
+            "He is the chair. Whitfield spoke next.", SOURCE
+        ) == []
+
 
 class TestUngroundedStatistics:
     def test_fabricated_money_flagged(self):

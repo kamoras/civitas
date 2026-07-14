@@ -35,15 +35,8 @@ const config: Config = {
         "pulse-neon": "pulse-neon 1.5s ease-in-out infinite alternate",
         "fade-in-up": "fade-in-up 0.6s ease-out",
         blink: "blink 1s step-end infinite",
-        "flow-pulse": "flow-pulse 2.2s linear infinite",
       },
       keyframes: {
-        "flow-pulse": {
-          "0%": { left: "0%", opacity: "0" },
-          "10%": { opacity: "1" },
-          "90%": { opacity: "1" },
-          "100%": { left: "100%", opacity: "0" },
-        },
         glitch: {
           "0%, 100%": {
             transform: "translate(0)",

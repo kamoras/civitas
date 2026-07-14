@@ -6,12 +6,13 @@ current members into a single normalized, filterable, paginated list —
 the cross-chamber counterpart to how politicians.py unions Senator/
 Representative/President/Justice into one directory.
 """
+import json
 from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models import Representative, RepSponsoredBill, Senator, SponsoredBill
+from app.models import ActionIssue, Representative, RepSponsoredBill, Senator, SponsoredBill
 from app.schemas import BillInFlightSchema, PaginatedBillsSchema
 
 
@@ -21,15 +22,46 @@ def _bioguide_photo(bioguide_id: str | None) -> str | None:
     return f"https://bioguide.congress.gov/bioguide/photo/{bioguide_id[0]}/{bioguide_id}.jpg"
 
 
+def _bill_mention_counts(db: Session) -> dict[str, int]:
+    """Return {bill_id: mention_count} across current Action Center issues.
+
+    Mirrors politicians._build_active_issue_map's JSON-field-scan approach —
+    no LLM, just counting how many currently-live issues reference each
+    bill (ActionIssue.related_bill_ids entries are {name, id, url} dicts
+    with `id` already in our bill_id format, e.g. "HR.22", produced by
+    action_center._resolve_bills).
+    """
+    issues = (
+        db.query(ActionIssue.related_bill_ids)
+        .filter(ActionIssue.is_current == True)  # noqa: E712
+        .all()
+    )
+    counts: dict[str, int] = {}
+    for (related_bill_ids,) in issues:
+        if not related_bill_ids:
+            continue
+        try:
+            entries = json.loads(related_bill_ids)
+        except Exception:
+            continue
+        for entry in entries:
+            bill_id = entry.get("id")
+            if bill_id:
+                counts[bill_id] = counts.get(bill_id, 0) + 1
+    return counts
+
+
 @dataclass
 class _Row:
     bill: BillInFlightSchema
     latest_action_date: str
+    mention_count: int
 
 
 def _collect_bills(db: Session) -> list[_Row]:
     rows: list[_Row] = []
     min_congress = settings.CURRENT_CONGRESS
+    mention_counts = _bill_mention_counts(db)
 
     senate_query = (
         db.query(SponsoredBill, Senator)
@@ -38,6 +70,7 @@ def _collect_bills(db: Session) -> list[_Row]:
         .filter(Senator.is_current == True)  # noqa: E712
     )
     for sp, senator in senate_query.all():
+        mention_count = mention_counts.get(sp.bill_id, 0)
         rows.append(_Row(
             bill=BillInFlightSchema(
                 bill_id=sp.bill_id,
@@ -56,8 +89,10 @@ def _collect_bills(db: Session) -> list[_Row]:
                 congress=sp.congress,
                 bill_type=sp.bill_type,
                 is_law=sp.is_law,
+                mention_count=mention_count,
             ),
             latest_action_date=sp.latest_action_date,
+            mention_count=mention_count,
         ))
 
     house_query = (
@@ -67,6 +102,7 @@ def _collect_bills(db: Session) -> list[_Row]:
         .filter(Representative.is_current == True)  # noqa: E712
     )
     for sp, rep in house_query.all():
+        mention_count = mention_counts.get(sp.bill_id, 0)
         rows.append(_Row(
             bill=BillInFlightSchema(
                 bill_id=sp.bill_id,
@@ -85,8 +121,10 @@ def _collect_bills(db: Session) -> list[_Row]:
                 congress=sp.congress,
                 bill_type=sp.bill_type,
                 is_law=sp.is_law,
+                mention_count=mention_count,
             ),
             latest_action_date=sp.latest_action_date,
+            mention_count=mention_count,
         ))
 
     return rows
@@ -98,6 +136,7 @@ def get_bills_in_flight(
     chamber: str | None = None,
     party: str | None = None,
     q: str | None = None,
+    sort: str = "recent",
     page: int = 1,
     per_page: int = 25,
 ) -> PaginatedBillsSchema:
@@ -118,7 +157,14 @@ def get_bills_in_flight(
         q_lower = q.lower()
         filtered = [r for r in filtered if q_lower in r.bill.title.lower()]
 
-    filtered.sort(key=lambda r: r.latest_action_date, reverse=True)
+    if sort == "hot":
+        # "Active in Congress right now" — bills currently referenced by a
+        # live Action Center issue, most-mentioned first, ties broken by
+        # how recently Congress acted on them.
+        filtered = [r for r in filtered if r.mention_count > 0]
+        filtered.sort(key=lambda r: (r.mention_count, r.latest_action_date), reverse=True)
+    else:
+        filtered.sort(key=lambda r: r.latest_action_date, reverse=True)
 
     total = len(filtered)
     total_pages = max(1, (total + per_page - 1) // per_page)

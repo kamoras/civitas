@@ -140,6 +140,7 @@ export async function fetchBillsInFlight(options?: {
   chamber?: "senate" | "house";
   party?: "D" | "R" | "I";
   q?: string;
+  sort?: "recent" | "hot";
   page?: number;
   perPage?: number;
 }): Promise<PaginatedBills> {
@@ -148,6 +149,7 @@ export async function fetchBillsInFlight(options?: {
   if (options?.chamber) params.set("chamber", options.chamber);
   if (options?.party) params.set("party", options.party);
   if (options?.q) params.set("q", options.q);
+  if (options?.sort) params.set("sort", options.sort);
   if (options?.page) params.set("page", String(options.page));
   if (options?.perPage) params.set("per_page", String(options.perPage));
   const res = await fetch(`${API_BASE}/bills?${params}`);
