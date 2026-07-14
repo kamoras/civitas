@@ -16,6 +16,7 @@ from app.pipeline.analyze.action_center import (
     _generate_monitor_metadata,
     _story_word_target,
     _full_story_should_invalidate,
+    _check_summary_roles,
 )
 
 
@@ -357,3 +358,72 @@ class TestFullStoryShouldInvalidate:
             "Senator X hospitalized", '["fact a"]',
             "Senator X hospitalized", '["fact a"]',
         ) is False
+
+class TestCheckSummaryRoles:
+    """Second-pass check for subject/object role reversal in a generated
+    summary (see docstring on _check_summary_roles — confirmed live 2026-07:
+    issue #376 stated the plaintiff in a defamation case "was found guilty",
+    when the defendant was the one a jury found liable)."""
+
+    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    def test_accurate_summary_passes(self, mock_call_llm):
+        mock_call_llm.return_value = json.dumps({"accurate": True})
+        mock_db = MagicMock()
+
+        accurate, reason = _check_summary_roles("A correct summary.", "source text", mock_db)
+
+        assert accurate is True
+        assert reason == ""
+
+    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    def test_reversed_roles_flagged_with_reason(self, mock_call_llm):
+        mock_call_llm.return_value = json.dumps({
+            "accurate": False,
+            "reason": "The plaintiff was described as the one found guilty.",
+        })
+        mock_db = MagicMock()
+
+        accurate, reason = _check_summary_roles("A reversed summary.", "source text", mock_db)
+
+        assert accurate is False
+        assert "plaintiff" in reason
+
+    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    def test_unparseable_response_fails_open(self, mock_call_llm):
+        # A broken verification call must not block issue creation — only a
+        # confirmed reversal should trigger a retry.
+        mock_call_llm.return_value = "not valid json and no accurate key"
+        mock_db = MagicMock()
+
+        accurate, reason = _check_summary_roles("Some summary.", "source text", mock_db)
+
+        assert accurate is True
+
+    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    def test_empty_response_fails_open(self, mock_call_llm):
+        mock_call_llm.return_value = None
+        mock_db = MagicMock()
+
+        accurate, reason = _check_summary_roles("Some summary.", "source text", mock_db)
+
+        assert accurate is True
+
+    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    def test_llm_exception_fails_open(self, mock_call_llm):
+        mock_call_llm.side_effect = RuntimeError("LLM backend unreachable")
+        mock_db = MagicMock()
+
+        accurate, reason = _check_summary_roles("Some summary.", "source text", mock_db)
+
+        assert accurate is True
+
+    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    def test_missing_accurate_key_defaults_to_true(self, mock_call_llm):
+        # A dict response with no "accurate" key at all shouldn't be treated
+        # as a reversal — only an explicit accurate:false should.
+        mock_call_llm.return_value = json.dumps({"reason": "unrelated"})
+        mock_db = MagicMock()
+
+        accurate, reason = _check_summary_roles("Some summary.", "source text", mock_db)
+
+        assert accurate is True

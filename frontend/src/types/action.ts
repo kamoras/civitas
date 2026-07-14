@@ -107,22 +107,9 @@ export interface MyRepsResponse {
   issueDate: string | null;
 }
 
-export interface DailyTheme {
-  tagline: string;
-  mood: string;
-  accent: string;
-  accentAlt: string;
-  glowIntensity: number;
-  animationSpeed: number;
-  borderStyle: string;
-  heroGradient: string[];
-  customCSS?: string;
-}
-
 export interface ActionIssuesResponse {
   date: string | null;
   issues: ActionIssue[];
-  theme?: DailyTheme | null;
   availableDates?: string[];
   generatedAt?: string;
 }

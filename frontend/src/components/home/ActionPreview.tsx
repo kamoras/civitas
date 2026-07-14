@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchActionIssues, fetchMonitors } from "@/lib/api";
 import type { NationalMonitor } from "@/lib/api";
-import type { ActionIssue, DailyTheme } from "@/types/action";
+import type { ActionIssue } from "@/types/action";
 
 const PARTY_COLORS: Record<string, string> = {
   D: "text-dem-blue",
@@ -15,14 +15,12 @@ const PARTY_COLORS: Record<string, string> = {
 export default function ActionPreview() {
   const [issues, setIssues] = useState<ActionIssue[]>([]);
   const [monitors, setMonitors] = useState<NationalMonitor[]>([]);
-  const [theme, setTheme] = useState<DailyTheme | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     Promise.all([
       fetchActionIssues().then((data) => {
         setIssues(data.issues || []);
-        setTheme(data.theme || null);
       }).catch(() => {}),
       fetchMonitors().then((data) => setMonitors(data.monitors || [])).catch(() => {}),
     ]).finally(() => setLoaded(true));
@@ -56,28 +54,11 @@ export default function ActionPreview() {
 
         {hero && (
           <>
-            {theme && <HeroThemeStyle theme={theme} />}
-            <div className={theme ? "hero-preview-panel terminal-window border p-5 sm:p-8 mb-6" : "terminal-window border-t-2 border-t-neon-cyan/50 p-5 sm:p-8 mb-6"}>
-              {theme && (
-                <>
-                  <div className="hero-corner hero-corner--tl" aria-hidden="true" />
-                  <div className="hero-corner hero-corner--tr" aria-hidden="true" />
-                  <div className="hero-corner hero-corner--bl" aria-hidden="true" />
-                  <div className="hero-corner hero-corner--br" aria-hidden="true" />
-                  <div className="hero-urgency-bar mb-4" aria-hidden="true" />
-                </>
-              )}
-
+            <div className="terminal-window border-t-2 border-t-neon-cyan/50 p-5 sm:p-8 mb-6">
               <div className="flex items-center gap-3 mb-4 flex-wrap">
-                <span className={`font-mono text-[10px] tracking-widest px-2 py-0.5 border ${theme ? "hero-tag" : "text-neon-cyan/60 bg-neon-cyan/10 border-neon-cyan/30"}`}>
+                <span className="font-mono text-[10px] tracking-widest px-2 py-0.5 border text-neon-cyan/60 bg-neon-cyan/10 border-neon-cyan/30">
                   #1 ISSUE
                 </span>
-                {theme && (
-                  <span className="hero-mood-badge font-pixel">
-                    <span className="hero-mood-dot" />
-                    {theme.mood}
-                  </span>
-                )}
                 {hero.policyAreas.map((area) => (
                   <span
                     key={area}
@@ -88,7 +69,7 @@ export default function ActionPreview() {
                 ))}
               </div>
 
-              <h3 className={`font-pixel text-base sm:text-xl mb-3 leading-relaxed ${theme ? "hero-accent-text" : "text-matrix-green"}`}>
+              <h3 className="font-pixel text-base sm:text-xl mb-3 leading-relaxed text-matrix-green">
                 {hero.title}
               </h3>
 
@@ -209,99 +190,4 @@ export default function ActionPreview() {
       </div>
     </section>
   );
-}
-
-function HeroThemeStyle({ theme }: { theme: DailyTheme }) {
-  const glow = theme.glowIntensity;
-  const speed = theme.animationSpeed;
-  const alt = theme.accentAlt || theme.accent;
-
-  const css = `
-    @keyframes hero-border-glow {
-      0%, 100% { box-shadow: 0 0 ${8 * glow}px ${theme.accent}20, inset 0 0 ${12 * glow}px ${theme.accent}08; border-color: ${theme.accent}30; }
-      50% { box-shadow: 0 0 ${20 * glow}px ${theme.accent}35, inset 0 0 ${25 * glow}px ${theme.accent}12; border-color: ${theme.accent}60; }
-    }
-    @keyframes hero-accent-pulse {
-      0%, 100% { opacity: 0.5; }
-      50% { opacity: 1; }
-    }
-    @keyframes hero-urgency-crawl {
-      0% { transform: translateX(-100%); }
-      100% { transform: translateX(100%); }
-    }
-    @keyframes hero-corner-flash {
-      0%, 70%, 100% { opacity: 0.3; }
-      80% { opacity: 0.8; }
-    }
-
-    .hero-preview-panel {
-      position: relative;
-      overflow: hidden;
-      border-left: 3px solid ${theme.accent}80;
-      border-color: ${theme.accent}40;
-      background:
-        linear-gradient(180deg, ${theme.heroGradient?.[0] || "#0a0a0f"} 0%, ${theme.heroGradient?.[1] || "#0d1117"} 50%, ${theme.heroGradient?.[2] || "#0a0f0a"} 100%);
-      animation: hero-border-glow ${speed}s ease-in-out infinite;
-    }
-    .hero-preview-panel > * { position: relative; z-index: 2; }
-
-    .hero-corner { position: absolute; width: 16px; height: 16px; pointer-events: none; z-index: 3; }
-    .hero-corner--tl { top: 0; left: 0; border-top: 2px solid ${theme.accent}60; border-left: 2px solid ${theme.accent}60; animation: hero-corner-flash ${speed * 2}s ease-in-out infinite; }
-    .hero-corner--tr { top: 0; right: 0; border-top: 2px solid ${theme.accent}60; border-right: 2px solid ${theme.accent}60; animation: hero-corner-flash ${speed * 2}s ease-in-out infinite ${speed * 0.5}s; }
-    .hero-corner--bl { bottom: 0; left: 0; border-bottom: 2px solid ${alt}60; border-left: 2px solid ${alt}60; animation: hero-corner-flash ${speed * 2}s ease-in-out infinite ${speed}s; }
-    .hero-corner--br { bottom: 0; right: 0; border-bottom: 2px solid ${alt}60; border-right: 2px solid ${alt}60; animation: hero-corner-flash ${speed * 2}s ease-in-out infinite ${speed * 1.5}s; }
-
-    .hero-urgency-bar {
-      position: relative;
-      height: 2px;
-      background: ${theme.accent}15;
-      overflow: hidden;
-    }
-    .hero-urgency-bar::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      width: 40%;
-      background: linear-gradient(90deg, transparent, ${theme.accent}80, ${alt}80, transparent);
-      animation: hero-urgency-crawl ${speed * 1.5}s linear infinite;
-    }
-
-    .hero-tag {
-      color: ${theme.accent}cc;
-      background: ${theme.accent}15;
-      border-color: ${theme.accent}40;
-    }
-
-    .hero-accent-text {
-      color: ${theme.accent};
-      text-shadow: 0 0 ${8 * glow}px ${theme.accent}40;
-    }
-
-    .hero-mood-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 10px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: ${theme.accent}aa;
-      border: 1px solid ${theme.accent}25;
-      background: ${theme.accent}08;
-      padding: 2px 8px;
-    }
-    .hero-mood-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: ${theme.accent};
-      animation: hero-accent-pulse ${speed}s ease-in-out infinite;
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .hero-preview-panel, .hero-preview-panel::before, .hero-preview-panel::after,
-      .hero-urgency-bar::after, .hero-corner, .hero-mood-dot { animation: none !important; }
-    }
-  `;
-
-  return <style dangerouslySetInnerHTML={{ __html: css }} />;
 }

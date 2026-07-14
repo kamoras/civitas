@@ -20,7 +20,7 @@ const CivicActionWidget = dynamic(
   () => import("@/components/action/CivicTracker"),
   { ssr: false },
 );
-import type { ActionIssue, ActionIssuesResponse, DailyTheme } from "@/types/action";
+import type { ActionIssue, ActionIssuesResponse } from "@/types/action";
 import { STATES } from "@/data/states";
 
 const GlobeTab = dynamic(() => import("@/components/action/GlobeTab"), {
@@ -131,9 +131,9 @@ const TABS: { id: Tab; label: string; color: string }[] = [
   { id: "world", label: "GLOBE", color: "text-green-400 border-green-400" },
 ];
 
-function PolicyBadge({ area, themed = false }: { area: string; themed?: boolean }) {
+function PolicyBadge({ area }: { area: string }) {
   return (
-    <span className={`text-[10px] px-2 py-0.5 border font-mono tracking-wide ${themed ? "theme-tag" : "border-neon-yellow/25 text-neon-yellow/70 bg-neon-yellow/5"}`}>
+    <span className="text-[10px] px-2 py-0.5 border font-mono tracking-wide border-neon-yellow/25 text-neon-yellow/70 bg-neon-yellow/5">
       {area}
     </span>
   );
@@ -264,13 +264,11 @@ function MonitorLinks({ slugs, onNavigate }: { slugs?: string[]; onNavigate?: (t
 function HeroIssue({
   issue,
   userState,
-  themed = false,
   onNavigate,
   isDeepLinked = false,
 }: {
   issue: ActionIssue;
   userState: string | null;
-  themed?: boolean;
   onNavigate?: (tab: Tab) => void;
   isDeepLinked?: boolean;
 }) {
@@ -282,38 +280,18 @@ function HeroIssue({
     }
   }, [isDeepLinked]);
 
-  const panelClass = themed
-    ? "theme-hero-panel terminal-window border p-6 sm:p-8"
-    : "terminal-window border-t-2 border-t-neon-cyan/50 p-6 sm:p-8";
-
   return (
-    <div ref={heroRef} className={panelClass}>
-      {/* Corner accents */}
-      {themed && (
-        <>
-          <div className="theme-corner theme-corner--tl" aria-hidden="true" />
-          <div className="theme-corner theme-corner--tr" aria-hidden="true" />
-          <div className="theme-corner theme-corner--bl" aria-hidden="true" />
-          <div className="theme-corner theme-corner--br" aria-hidden="true" />
-        </>
-      )}
-
-      {/* Urgency strip */}
-      {themed && <div className="theme-urgency-bar mb-5" aria-hidden="true" />}
-
+    <div ref={heroRef} className="terminal-window border-t-2 border-t-neon-cyan/50 p-6 sm:p-8">
       <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <span className={`font-mono text-[10px] tracking-widest px-2 py-1 border ${themed ? "theme-tag" : "text-neon-cyan/60 bg-neon-cyan/10 border-neon-cyan/30"}`}>
+        <span className="font-mono text-[10px] tracking-widest px-2 py-1 border text-neon-cyan/60 bg-neon-cyan/10 border-neon-cyan/30">
           TOP ISSUE
         </span>
         <span className="text-[11px] font-mono text-matrix-green/35">{issue.date}</span>
       </div>
 
-      <h2 className={`font-pixel text-lg sm:text-2xl mb-4 leading-relaxed ${themed ? "theme-accent-text theme-accent-glow" : "text-matrix-green"}`}>
+      <h2 className="font-pixel text-lg sm:text-2xl mb-4 leading-relaxed text-matrix-green">
         {issue.title}
       </h2>
-
-      {/* Data strip separator */}
-      {themed && <div className="theme-data-strip mb-4" aria-hidden="true" />}
 
       <p className="text-matrix-green/80 text-sm sm:text-base leading-relaxed mb-6">
         {issue.summary}
@@ -654,173 +632,6 @@ function SecondaryIssue({
   );
 }
 
-/* theme.accent is an arbitrary hex color picked per daily theme (LLM-derived,
-   not a fixed palette), so a flat opacity-40 text class can't guarantee WCAG
-   4.5:1 the way the fixed-palette clamps in globals.css can — some accent
-   hues fail well below that at 40% alpha (confirmed live via axe-core:
-   1.95:1 for one theme's accent). Compute the minimum opacity this specific
-   color needs against the page background, rather than picking one fixed
-   percentage that only happens to work for some hues. */
-function contrastSafeOpacity(hex: string, minRatio = 4.5): number {
-  const bg: [number, number, number] = [0x0d, 0x02, 0x08]; // crt-black
-  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
-  if (!m) return 1;
-  const fg: [number, number, number] = [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)];
-
-  const lin = (c: number) => {
-    const cs = c / 255;
-    return cs <= 0.03928 ? cs / 12.92 : Math.pow((cs + 0.055) / 1.055, 2.4);
-  };
-  const luminance = (rgb: [number, number, number]) =>
-    0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2]);
-  const bgLum = luminance(bg);
-
-  for (let pct = 40; pct <= 100; pct += 2) {
-    const alpha = pct / 100;
-    const composited: [number, number, number] = [
-      alpha * fg[0] + (1 - alpha) * bg[0],
-      alpha * fg[1] + (1 - alpha) * bg[1],
-      alpha * fg[2] + (1 - alpha) * bg[2],
-    ];
-    const fgLum = luminance(composited);
-    const [l1, l2] = fgLum > bgLum ? [fgLum, bgLum] : [bgLum, fgLum];
-    if ((l1 + 0.05) / (l2 + 0.05) >= minRatio) return alpha;
-  }
-  return 1;
-}
-
-function sanitizeLLMCss(raw: string): string {
-  const allowed: string[] = [];
-  const blocks = raw.split(/(?=\.theme-hero-panel|@keyframes|@media)/g);
-
-  for (const block of blocks) {
-    const trimmed = block.trim();
-    if (!trimmed) continue;
-
-    const isPseudo = /^\.theme-hero-panel\s*::/.test(trimmed);
-    const isKeyframes = /^@keyframes\s+theme-/.test(trimmed);
-    const isMedia = /^@media\s/.test(trimmed);
-
-    if (isPseudo || isKeyframes || isMedia) {
-      allowed.push(trimmed);
-    }
-  }
-
-  return allowed.join("\n\n");
-}
-
-function ThemeStyleInjector({ theme }: { theme: DailyTheme }) {
-  const glow = theme.glowIntensity;
-  const speed = theme.animationSpeed;
-  const alt = theme.accentAlt || theme.accent;
-
-  const baseCss = `
-    :root {
-      --theme-accent: ${theme.accent};
-      --theme-accent-alt: ${alt};
-      --theme-glow: ${glow};
-      --theme-speed: ${speed}s;
-    }
-
-    @keyframes theme-border-glow {
-      0%, 100% { box-shadow: 0 0 ${8 * glow}px ${theme.accent}20, inset 0 0 ${12 * glow}px ${theme.accent}08; border-color: ${theme.accent}30; }
-      50% { box-shadow: 0 0 ${20 * glow}px ${theme.accent}35, inset 0 0 ${25 * glow}px ${theme.accent}12; border-color: ${theme.accent}60; }
-    }
-    @keyframes theme-accent-pulse {
-      0%, 100% { opacity: 0.5; }
-      50% { opacity: 1; }
-    }
-    @keyframes theme-urgency-crawl {
-      0% { transform: translateX(-100%); }
-      100% { transform: translateX(100%); }
-    }
-    @keyframes theme-corner-flash {
-      0%, 70%, 100% { opacity: 0.3; }
-      80% { opacity: 0.8; }
-    }
-
-    .theme-hero-panel {
-      position: relative;
-      overflow: hidden;
-      border-left: 3px solid ${theme.accent}80;
-      border-color: ${theme.accent}40;
-      background:
-        linear-gradient(180deg, ${(theme.heroGradient?.[0]) || "#0a0a0f"} 0%, ${(theme.heroGradient?.[1]) || "#0d1117"} 50%, ${(theme.heroGradient?.[2]) || "#0a0f0a"} 100%);
-      animation: theme-border-glow ${speed}s ease-in-out infinite;
-    }
-    .theme-hero-panel > * { position: relative; z-index: 2; }
-
-    .theme-corner { position: absolute; width: 16px; height: 16px; pointer-events: none; z-index: 3; }
-    .theme-corner--tl { top: 0; left: 0; border-top: 2px solid ${theme.accent}60; border-left: 2px solid ${theme.accent}60; animation: theme-corner-flash ${speed * 2}s ease-in-out infinite; }
-    .theme-corner--tr { top: 0; right: 0; border-top: 2px solid ${theme.accent}60; border-right: 2px solid ${theme.accent}60; animation: theme-corner-flash ${speed * 2}s ease-in-out infinite ${speed * 0.5}s; }
-    .theme-corner--bl { bottom: 0; left: 0; border-bottom: 2px solid ${alt}60; border-left: 2px solid ${alt}60; animation: theme-corner-flash ${speed * 2}s ease-in-out infinite ${speed}s; }
-    .theme-corner--br { bottom: 0; right: 0; border-bottom: 2px solid ${alt}60; border-right: 2px solid ${alt}60; animation: theme-corner-flash ${speed * 2}s ease-in-out infinite ${speed * 1.5}s; }
-
-    .theme-urgency-bar {
-      position: relative;
-      height: 2px;
-      background: ${theme.accent}15;
-      overflow: hidden;
-    }
-    .theme-urgency-bar::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      width: 40%;
-      background: linear-gradient(90deg, transparent, ${theme.accent}80, ${alt}80, transparent);
-      animation: theme-urgency-crawl ${speed * 1.5}s linear infinite;
-    }
-
-    .theme-mood-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 10px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: ${theme.accent}aa;
-      border: 1px solid ${theme.accent}25;
-      background: ${theme.accent}08;
-      padding: 2px 8px;
-    }
-    .theme-mood-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: ${theme.accent};
-      animation: theme-accent-pulse ${speed}s ease-in-out infinite;
-    }
-
-    .theme-accent-text { color: ${theme.accent}; }
-    .theme-accent-border { border-color: ${theme.accent}40; }
-    .theme-accent-glow { text-shadow: 0 0 ${10 * glow}px ${theme.accent}50, 0 0 ${30 * glow}px ${theme.accent}20; }
-
-    .theme-section-line {
-      height: 1px;
-      background: linear-gradient(90deg, transparent, ${theme.accent}40, ${alt}40, transparent);
-    }
-    .theme-tag {
-      border-color: ${theme.accent}30;
-      color: ${theme.accent}cc;
-      background: ${theme.accent}08;
-    }
-
-    .theme-data-strip {
-      height: 1px;
-      background: repeating-linear-gradient(90deg, ${theme.accent}20 0px, ${theme.accent}20 4px, transparent 4px, transparent 8px);
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .theme-hero-panel, .theme-hero-panel::before, .theme-hero-panel::after,
-      .theme-urgency-bar::after, .theme-corner, .theme-mood-dot { animation: none !important; }
-    }
-  `;
-
-  const customCss = theme.customCSS ? sanitizeLLMCss(theme.customCSS) : "";
-
-  return <style dangerouslySetInnerHTML={{ __html: baseCss + "\n" + customCss }} />;
-}
-
 function IssuesTab({
   userState,
   setUserState,
@@ -882,7 +693,6 @@ function IssuesTab({
     }
   }, [currentIdx, availableDates, selectedDate, loadIssues, onDateChange]);
 
-  const theme = data?.theme;
   const generatedAt = data?.generatedAt;
 
   function formatGeneratedAt(iso: string): string {
@@ -934,8 +744,6 @@ function IssuesTab({
 
   return (
     <div className="space-y-6">
-      {theme && <ThemeStyleInjector theme={theme} />}
-
       {/* Date navigation */}
       {availableDates.length > 1 && (
         <div className="flex items-center justify-center gap-4 font-mono text-[11px] tracking-widest">
@@ -996,20 +804,15 @@ function IssuesTab({
         )}
       </div>
 
-      {/* Themed divider line above hero */}
-      {theme && <div className="theme-section-line" aria-hidden="true" />}
-
       <HeroIssue
         issue={heroIssue}
         userState={userState}
-        themed={!!theme}
         onNavigate={onNavigate}
         isDeepLinked={initialIssueId === heroIssue.id}
       />
 
       {secondaryIssues.length > 0 && (
         <div>
-          {theme && <div className="theme-section-line mb-4" aria-hidden="true" />}
           <h2 className="font-mono text-[10px] tracking-[0.3em] text-matrix-green/40 mb-3 px-1 uppercase">
             More Issues to Watch
           </h2>
@@ -1024,22 +827,6 @@ function IssuesTab({
                 onToggle={(id, expanded) => onIssueChange?.(expanded ? id : null)}
               />
             ))}
-          </div>
-        </div>
-      )}
-
-      {theme && (
-        <div className="text-center mt-2" aria-hidden="true">
-          <div className="theme-section-line mb-3" />
-          <div className="inline-flex items-center gap-3">
-            <div className="theme-data-strip w-12" />
-            <span
-              className="text-[10px] font-pixel tracking-[0.2em] theme-accent-text"
-              style={{ opacity: contrastSafeOpacity(theme.accent) }}
-            >
-              {theme.tagline.toUpperCase()}
-            </span>
-            <div className="theme-data-strip w-12" />
           </div>
         </div>
       )}

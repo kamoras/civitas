@@ -228,7 +228,6 @@ def reset_all_data() -> dict:
             models.AnalysisCache,
             models.ExploreDocument,
             models.ScoreSnapshot,
-            models.DailyTheme,
             models.PipelineRun,
             models.Senator,
             models.Representative,
