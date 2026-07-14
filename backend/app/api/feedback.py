@@ -85,7 +85,7 @@ def _build_issue_body(body: FeedbackRequest) -> str:
 @router.post("/feedback", response_model=FeedbackResponse)
 async def submit_feedback(body: FeedbackRequest, _rl: WriteRateLimit) -> FeedbackResponse:
     """Create a GitHub issue from a feedback form submission."""
-    if not settings.GITHUB_FEEDBACK_TOKEN:
+    if not settings.FEEDBACK_TOKEN:
         raise HTTPException(
             status_code=503,
             detail="Feedback submission is temporarily unavailable. Please try again later.",
@@ -104,7 +104,7 @@ async def submit_feedback(body: FeedbackRequest, _rl: WriteRateLimit) -> Feedbac
 
     url = f"https://api.github.com/repos/{settings.GITHUB_FEEDBACK_REPO}/issues"
     headers = {
-        "Authorization": f"Bearer {settings.GITHUB_FEEDBACK_TOKEN}",
+        "Authorization": f"Bearer {settings.FEEDBACK_TOKEN}",
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
     }

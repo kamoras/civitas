@@ -54,7 +54,7 @@ class TestSubmitFeedback:
     @pytest.mark.asyncio
     async def test_returns_503_when_token_not_configured(self):
         with patch("app.api.feedback.settings") as mock_settings:
-            mock_settings.GITHUB_FEEDBACK_TOKEN = ""
+            mock_settings.FEEDBACK_TOKEN = ""
             with pytest.raises(HTTPException) as exc:
                 await submit_feedback(_request(), None)
             assert exc.value.status_code == 503
@@ -71,7 +71,7 @@ class TestSubmitFeedback:
 
         with patch("app.api.feedback.settings") as mock_settings, \
              patch("app.api.feedback.httpx.AsyncClient") as mock_client_cls:
-            mock_settings.GITHUB_FEEDBACK_TOKEN = "fake-token"
+            mock_settings.FEEDBACK_TOKEN = "fake-token"
             mock_settings.GITHUB_FEEDBACK_REPO = "kamoras/civitas"
             mock_client_cls.return_value.__aenter__.return_value = mock_client
 
@@ -93,7 +93,7 @@ class TestSubmitFeedback:
 
         with patch("app.api.feedback.settings") as mock_settings, \
              patch("app.api.feedback.httpx.AsyncClient") as mock_client_cls:
-            mock_settings.GITHUB_FEEDBACK_TOKEN = "fake-token"
+            mock_settings.FEEDBACK_TOKEN = "fake-token"
             mock_settings.GITHUB_FEEDBACK_REPO = "kamoras/civitas"
             mock_client_cls.return_value.__aenter__.return_value = mock_client
 
@@ -110,7 +110,7 @@ class TestSubmitFeedback:
 
         with patch("app.api.feedback.settings") as mock_settings, \
              patch("app.api.feedback.httpx.AsyncClient") as mock_client_cls:
-            mock_settings.GITHUB_FEEDBACK_TOKEN = "fake-token"
+            mock_settings.FEEDBACK_TOKEN = "fake-token"
             mock_settings.GITHUB_FEEDBACK_REPO = "kamoras/civitas"
             mock_client_cls.return_value.__aenter__.return_value = mock_client
 
