@@ -3,6 +3,7 @@ import type { President, PresidentLeaderboardEntry } from "@/types/president";
 import type { Justice, JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssuesResponse, MyRepsResponse } from "@/types/action";
 import type { PaginatedDocs, PoliticianCard, PoliticianProfile } from "@/types/politicians";
+import type { PaginatedBills } from "@/types/bill";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -134,6 +135,26 @@ export async function fetchSenatorVotes(
   return res.json();
 }
 
+export async function fetchBillsInFlight(options?: {
+  stage?: string;
+  chamber?: "senate" | "house";
+  party?: "D" | "R" | "I";
+  q?: string;
+  page?: number;
+  perPage?: number;
+}): Promise<PaginatedBills> {
+  const params = new URLSearchParams();
+  if (options?.stage) params.set("stage", options.stage);
+  if (options?.chamber) params.set("chamber", options.chamber);
+  if (options?.party) params.set("party", options.party);
+  if (options?.q) params.set("q", options.q);
+  if (options?.page) params.set("page", String(options.page));
+  if (options?.perPage) params.set("per_page", String(options.perPage));
+  const res = await fetch(`${API_BASE}/bills?${params}`);
+  if (!res.ok) throw new Error(`Failed to load bills: ${res.status}`);
+  return res.json();
+}
+
 export async function fetchSenatorHighlights(senatorId: string): Promise<string[]> {
   const res = await fetch(`${API_BASE}/senators/${senatorId}/highlights`);
   if (!res.ok) return [];
@@ -146,12 +167,19 @@ export interface IndustryInfo {
   color: string;
 }
 
+export interface BillStageInfo {
+  name: string;
+  color: string;
+  order: number;
+}
+
 export interface AppConfig {
   scoreWeights: Record<string, number>;
   presidentScoreWeights: Record<string, number>;
   industries: Record<string, IndustryInfo>;
   platformCategories: Record<string, string>;
   policyAreas: string[];
+  billStages: Record<string, BillStageInfo>;
 }
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -173,6 +201,15 @@ const DEFAULT_CONFIG: AppConfig = {
   industries: {},
   platformCategories: {},
   policyAreas: [],
+  billStages: {
+    INTRODUCED: { name: "Introduced", color: "#6b7280", order: 1 },
+    IN_COMMITTEE: { name: "In Committee", color: "#3b82f6", order: 2 },
+    PASSED_CHAMBER: { name: "Passed Chamber", color: "#8b5cf6", order: 3 },
+    IN_OTHER_CHAMBER: { name: "In Other Chamber", color: "#f59e0b", order: 4 },
+    TO_PRESIDENT: { name: "To President", color: "#ec4899", order: 5 },
+    ENACTED: { name: "Enacted", color: "#00ff41", order: 6 },
+    VETOED: { name: "Vetoed", color: "#ef4444", order: 7 },
+  },
 };
 
 let _cachedConfig: AppConfig | null = null;

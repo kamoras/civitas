@@ -287,6 +287,8 @@ async def run_house_pipeline() -> dict:
             ideology_scores: dict[str, float] = {}
             bipartisanship_scores: dict[str, float] = {}
 
+            from app.pipeline.analyze.bill_stage import classify_bill_stage
+
             try:
                 # Fetch cosponsors for significant bills to build the
                 # rep-rep cosponsorship graph. This reuses bills already
@@ -325,20 +327,21 @@ async def run_house_pipeline() -> dict:
                             if not sp_num:
                                 continue
                             sp_key = f"{sp_type}.{sp_num}"
+                            latest_action_text = (sp.get("latestAction") or {}).get("text", "")
+                            is_law = "became public law" in latest_action_text.lower()
                             sp_list.append({
                                 "billId": sp_key,
                                 "title": sp.get("title", ""),
                                 "introducedDate": sp.get("introducedDate", ""),
-                                "latestAction": (sp.get("latestAction") or {}).get("text", ""),
+                                "latestAction": latest_action_text,
                                 "latestActionDate": (sp.get("latestAction") or {}).get("actionDate", ""),
                                 "policyArea": "",
                                 "policyAreas": [],
                                 "partyLeaning": None,
                                 "congress": sp.get("congress", 0),
                                 "billType": sp.get("type", ""),
-                                "isLaw": "became public law" in (
-                                    (sp.get("latestAction") or {}).get("text", "")
-                                ).lower(),
+                                "isLaw": is_law,
+                                "stage": classify_bill_stage(latest_action_text, is_law),
                             })
                     # sp_list is already bounded to the current + previous
                     # congress (min_congress filter above), so this is a

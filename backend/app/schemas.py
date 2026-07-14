@@ -157,6 +157,35 @@ class SponsoredBillSchema(CamelModel):
     congress: int = 0
     bill_type: str = ""
     is_law: bool = False
+    stage: str = ""
+
+
+class BillInFlightSchema(CamelModel):
+    bill_id: str
+    title: str
+    chamber: Literal["senate", "house"]
+    sponsor_id: str
+    sponsor_name: str
+    sponsor_party: Literal["D", "R", "I"]
+    sponsor_state: str
+    sponsor_thumbnail_url: str | None = None
+    introduced_date: str = ""
+    latest_action: str = ""
+    latest_action_date: str = ""
+    stage: str = ""
+    policy_area: str = ""
+    congress: int = 0
+    bill_type: str = ""
+    is_law: bool = False
+
+
+class PaginatedBillsSchema(CamelModel):
+    bills: list[BillInFlightSchema]
+    total: int
+    page: int
+    per_page: int
+    total_pages: int
+    stage_counts: dict[str, int]
 
 
 class SenatorSchema(CamelModel):

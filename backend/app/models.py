@@ -175,6 +175,7 @@ class SponsoredBill(Base):
     congress: Mapped[int] = mapped_column(Integer, default=0)
     bill_type: Mapped[str] = mapped_column(String, default="")
     is_law: Mapped[bool] = mapped_column(Boolean, default=False)
+    stage: Mapped[str] = mapped_column(String, default="", index=True)  # see config_definitions.BILL_STAGES
 
     senator: Mapped["Senator"] = relationship(back_populates="sponsored_bills")
 
@@ -338,6 +339,7 @@ class RepSponsoredBill(Base):
     congress: Mapped[int] = mapped_column(Integer, default=0)
     bill_type: Mapped[str] = mapped_column(String, default="")
     is_law: Mapped[bool] = mapped_column(Boolean, default=False)
+    stage: Mapped[str] = mapped_column(String, default="", index=True)  # see config_definitions.BILL_STAGES
 
     representative: Mapped["Representative"] = relationship(back_populates="sponsored_bills")
 

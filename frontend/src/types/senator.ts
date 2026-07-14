@@ -10,6 +10,7 @@ export interface SponsoredBill {
   congress: number;
   billType: string;
   isLaw: boolean;
+  stage: string;
 }
 
 export interface Senator {

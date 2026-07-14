@@ -31,6 +31,7 @@ def get_config() -> JSONResponse:
     so the frontend never needs to hardcode these values.
     """
     from app.config_definitions import (
+        BILL_STAGES,
         INDUSTRIES,
         PLATFORM_CATEGORIES,
         POLICY_AREAS,
@@ -44,6 +45,7 @@ def get_config() -> JSONResponse:
         "industries": INDUSTRIES,
         "platformCategories": PLATFORM_CATEGORIES,
         "policyAreas": POLICY_AREAS,
+        "billStages": BILL_STAGES,
     }, max_age=3600)
 
 

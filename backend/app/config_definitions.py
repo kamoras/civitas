@@ -83,3 +83,17 @@ POLICY_AREAS: list[str] = [
 ]
 
 VALID_INDUSTRIES = set(INDUSTRIES.keys())
+
+# Legislative pipeline stages for the "bills currently moving through
+# Congress" view. `order` drives the left-to-right position in the
+# process-flow visualization. Codes are produced by
+# app.pipeline.analyze.bill_stage.classify_bill_stage.
+BILL_STAGES: dict[str, dict] = {
+    "INTRODUCED":       {"name": "Introduced",        "color": "#6b7280", "order": 1},
+    "IN_COMMITTEE":     {"name": "In Committee",       "color": "#3b82f6", "order": 2},
+    "PASSED_CHAMBER":   {"name": "Passed Chamber",     "color": "#8b5cf6", "order": 3},
+    "IN_OTHER_CHAMBER": {"name": "In Other Chamber",   "color": "#f59e0b", "order": 4},
+    "TO_PRESIDENT":     {"name": "To President",       "color": "#ec4899", "order": 5},
+    "ENACTED":          {"name": "Enacted",            "color": "#00ff41", "order": 6},
+    "VETOED":           {"name": "Vetoed",             "color": "#ef4444", "order": 7},
+}
