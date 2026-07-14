@@ -5,7 +5,10 @@ server-side which of the five score dimensions is worth emphasizing,
 instead of leaving that choice and its framing to the model.
 """
 
-from app.pipeline.analyze.bluesky_spotlight import _most_notable_score
+from unittest.mock import MagicMock, patch
+
+from app.models import Senator
+from app.pipeline.analyze.bluesky_spotlight import _most_notable_score, _publish_spotlight
 
 
 def _scores(**overrides):
@@ -62,3 +65,28 @@ class TestMostNotableScore:
         scores = _scores(**{"Funding independence": 80.0, "Legislative effectiveness": 80.0})
         key, _, _ = _most_notable_score(scores)
         assert key == "Funding independence"
+
+
+class TestPublishSpotlightUrl:
+    """The spotlight post's link previously pointed at the old
+    /scorecard?branch=senate&state=..&senator=.. query-param route instead
+    of the current /politicians/{id} profile page (reported live via a
+    Bluesky post 2026-07-13)."""
+
+    def test_links_to_politicians_profile_not_old_scorecard_route(self):
+        senator = Senator(id="chuck-grassley", name="Chuck Grassley", state="IA", party="R")
+
+        with patch("app.pipeline.analyze.bluesky_spotlight.settings") as mock_settings, \
+             patch("app.pipeline.analyze.bluesky_spotlight.build_link_card", return_value=None), \
+             patch("atproto.Client") as mock_client_cls:
+            mock_settings.BSKY_HANDLE = "civitas-research.org"
+            mock_settings.BSKY_APP_PASSWORD = "unused-in-test"
+            mock_client = MagicMock()
+            mock_client_cls.return_value = mock_client
+
+            result = _publish_spotlight("Some spotlight text.", senator)
+
+        assert result is True
+        posted_text = mock_client.send_post.call_args.args[0]
+        assert "/politicians/chuck-grassley" in posted_text
+        assert "/scorecard?" not in posted_text
