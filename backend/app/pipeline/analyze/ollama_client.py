@@ -173,6 +173,21 @@ def call_llm(
     """
     Call the configured LLM backend with structured JSON output.
     Results are cached by prompt version + input hash in the database.
+
+    ``cache_key=None`` disables caching entirely for this call (both the
+    lookup and the write-back) — several callers pass it explicitly for
+    time-sensitive or always-fresh generations (role-reversal re-checks,
+    Bluesky post text, spotlight highlights). Caching used to be keyed off
+    ``_make_input_hash(prompt_version, None, model)``, which JSON-serializes
+    ``None`` to the constant string ``"null"`` — every call sharing a
+    prompt_version and model then collided on the *same* cache row
+    regardless of actual content. Confirmed live 2026-07-15: a single
+    stale/wrong role-check verdict about an unrelated story got cached
+    under that shared slot and was then returned for every subsequent
+    role-check regardless of topic, silently rejecting every generated
+    action-center summary for 26+ hours (zero new issues, zero Bluesky
+    posts) since the check never reflected what was actually being
+    verified.
     """
     global _total_calls, _cache_hits, _cache_misses, _prompt_stats
 
@@ -181,8 +196,9 @@ def call_llm(
 
     pstats = _prompt_stats.setdefault(prompt_version, {"hits": 0, "misses": 0})
 
-    input_hash = _make_input_hash(prompt_version, cache_key, use_model)
-    if db_session is not None:
+    use_cache = cache_key is not None and db_session is not None
+    input_hash = _make_input_hash(prompt_version, cache_key, use_model) if use_cache else None
+    if use_cache:
         try:
             cached = _cache_get_with_own_session(prompt_version, input_hash)
             if cached is not None:
@@ -234,7 +250,7 @@ def call_llm(
                 )
                 return None
 
-            if db_session is not None:
+            if use_cache:
                 try:
                     _cache_set_with_own_session(prompt_version, input_hash, parsed)
                 except Exception:
