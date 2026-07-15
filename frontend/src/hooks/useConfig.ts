@@ -21,11 +21,6 @@ export function useConfig(): AppConfig | null {
   return useContext(ConfigContext);
 }
 
-export function useIndustryInfo(code: string): IndustryInfo {
-  const config = useConfig();
-  return config?.industries[code] ?? { name: code.replace(/_/g, " "), color: "#444444" };
-}
-
 export function useIndustries(): Record<string, IndustryInfo> {
   const config = useConfig();
   return config?.industries ?? {};

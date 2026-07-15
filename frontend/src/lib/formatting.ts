@@ -11,14 +11,6 @@ export function formatCurrency(amount: number): string {
   return `$${amount.toLocaleString()}`;
 }
 
-export function formatPercent(value: number): string {
-  return `${Math.round(value)}%`;
-}
-
-export function formatNumber(value: number): string {
-  return value.toLocaleString();
-}
-
 /** Returns the local date as "YYYY-MM-DD" — never UTC, so it matches the user's calendar. */
 export function localDateStr(d: Date = new Date()): string {
   const y = d.getFullYear();

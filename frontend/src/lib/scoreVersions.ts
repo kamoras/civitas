@@ -209,8 +209,3 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
     ],
   },
 ];
-
-/** Map version -> date for chart annotation lookups. */
-export const VERSION_DATES: Record<string, string> = Object.fromEntries(
-  SCORE_VERSIONS.map((v) => [v.version, v.date]),
-);
