@@ -958,8 +958,14 @@ def _calc_funding_diversity(funding: dict) -> int:
          funding (<$200) represents the widest possible base — hundreds
          of thousands of individual contributors, none with outsized
          influence. Large itemized donors with classified industries
-         add breadth only when spread across sectors. Funding dominated
-         by a few large unclassified sources is the least diverse.
+         add breadth only when spread across sectors. UNCLASSIFIED money
+         (see note below — a residual we cannot attribute at all, not
+         evidence of concentration) is weighted neutrally rather than
+         penalized. Only OTHER/POLITICAL/large-individual-unclassified-
+         by-employer money — donors we *attempted* to classify by name
+         and came up empty — keeps the "least diverse" weighting, since
+         that at least carries a weak opacity signal UNCLASSIFIED does
+         not.
 
       2. Industry concentration (50%): inverse HHI among ALL funding
          source categories (including SMALL_DONORS as its own category).
@@ -985,6 +991,23 @@ def _calc_funding_diversity(funding: dict) -> int:
     UNCLASSIFIED for 95/100 senators regardless of their actual spread
     across real industries, dragging the population mean to 37 against
     every other dimension's ~50 neutral calibration.
+
+    UNCLASSIFIED-as-neutral (2026-07): UNCLASSIFIED is a pure residual —
+    ``total_raised`` minus everything else we *could* categorize
+    (normalize_finance.py) — not donors the classifier examined and
+    failed to place. It swallows committee transfers, joint-fundraising
+    splits, and donations lacking employer data: money with no
+    attribution path at all, which says nothing about whether it's
+    concentrated in one source or spread across thousands. A live audit
+    found a 32% median UNCLASSIFIED share (56% at p90) driving a strong
+    negative correlation with this score (r=-0.66) purely from missing
+    attribution, not measured concentration — directly contradicting
+    this project's own "missing data defaults to neutral, never
+    punitive" principle applied everywhere else. Weighted neutrally here
+    (0.5, matching the population's ~50 baseline) rather than folded
+    into the "least diverse" bucket with OTHER/POLITICAL/unclassified-
+    large-individual money, which at least represents a real (if failed)
+    classification attempt.
     """
     industry_breakdown = funding.get("industryBreakdown", [])
     small_donor_pct = funding.get("smallDonorPercentage", 0)
@@ -1005,10 +1028,24 @@ def _calc_funding_diversity(funding: dict) -> int:
     )
     classified_frac = classified_industry_total / total_raised
 
+    unclassified_total = sum(
+        ind.get("total", 0) for ind in industry_breakdown
+        if ind.get("industry") == "UNCLASSIFIED"
+    )
+    unclassified_frac = unclassified_total / total_raised
+
     # Small donors are the most diverse source; classified industry
-    # money is moderately diverse; the remainder (large unclassified,
-    # OTHER, POLITICAL) is least diverse.
-    breadth = small_frac * 1.0 + classified_frac * 0.6 + max(0, 1 - small_frac - classified_frac) * 0.2
+    # money is moderately diverse; UNCLASSIFIED (unattributable, not
+    # evidence of concentration — see docstring) is neutral; the true
+    # remainder (OTHER, POLITICAL, large individuals whose employer
+    # didn't match any industry) is least diverse.
+    other_frac = max(0, 1 - small_frac - classified_frac - unclassified_frac)
+    breadth = (
+        small_frac * 1.0
+        + classified_frac * 0.6
+        + unclassified_frac * 0.5
+        + other_frac * 0.2
+    )
     breadth_score = min(breadth, 1.0) * 100
 
     # Signal 2: industry concentration (inverse HHI)

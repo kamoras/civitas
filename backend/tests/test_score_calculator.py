@@ -465,6 +465,29 @@ class TestFundingDiversity:
         # score as diverse, not as concentrated in UNCLASSIFIED.
         assert score >= 55
 
+    def test_unclassified_treated_neutrally_not_as_least_diverse(self):
+        """UNCLASSIFIED is a pure residual (total_raised minus everything we
+        could attribute — committee transfers, missing employer data, etc.),
+        not donors the classifier examined and rejected. A live 2026-07
+        audit found a 32% median UNCLASSIFIED share driving a strong
+        negative correlation with this score (r=-0.66) purely from missing
+        attribution, contradicting the "missing data defaults to neutral"
+        principle used everywhere else. It must score better than a
+        same-sized bucket of OTHER/POLITICAL money, which at least reflects
+        a real (failed) classification attempt."""
+        base = {"totalRaised": 1_000_000, "smallDonorPercentage": 0}
+        unclassified_funding = {
+            **base,
+            "industryBreakdown": [{"industry": "UNCLASSIFIED", "total": 1_000_000, "percentage": 100}],
+        }
+        other_funding = {
+            **base,
+            "industryBreakdown": [{"industry": "OTHER", "total": 1_000_000, "percentage": 100}],
+        }
+        unclassified_score = _calc_funding_diversity(unclassified_funding)
+        other_score = _calc_funding_diversity(other_funding)
+        assert unclassified_score > other_score
+
     def test_small_dollar_industries_not_rounded_to_zero(self):
         """Real dollar totals must drive concentration, not the stored
         display 'percentage' (rounded to the nearest integer point, which
