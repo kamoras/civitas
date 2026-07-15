@@ -23,7 +23,7 @@ class _SyncThread:
         self._target()
 
 
-def _run_hourly_refresh(refresh_state: dict):
+def _run_hourly_refresh(refresh_state: dict, house_running: bool = False, stock_running: bool = False, stock_age=None):
     from app import scheduler
 
     with patch("app.scheduler.threading.Thread", _SyncThread), \
@@ -34,7 +34,9 @@ def _run_hourly_refresh(refresh_state: dict):
         mock_db.query.return_value.filter.return_value.first.return_value = None
         mock_session_local.return_value = mock_db
 
-        with patch("app.scheduler.is_house_pipeline_running", return_value=False):
+        with patch("app.scheduler.is_house_pipeline_running", return_value=house_running), \
+             patch("app.scheduler.is_stock_pipeline_running", return_value=stock_running), \
+             patch("app.scheduler.stock_pipeline_age", return_value=stock_age):
             scheduler._hourly_action_refresh()
 
     return mock_refresh
@@ -65,3 +67,26 @@ class TestActionRefreshOverlapGuard:
         state = {"is_running": True, "started_at": datetime.utcnow() - timedelta(hours=3, minutes=59)}
         mock_refresh = _run_hourly_refresh(state)
         mock_refresh.assert_not_called()
+
+
+class TestStockTradesOverlapGuard:
+    """Stock trades runs sequentially after House within the same nightly
+    thread, so by the time it starts, House's own running flag is already
+    cleared — the pre-existing Senate/House guards can't see it. Without
+    this guard the hourly refresh could run concurrently with stock trades,
+    the same SQLite-write-conflict risk the House guard exists to prevent."""
+
+    def test_skips_when_stock_pipeline_is_running_and_recent(self):
+        state = {"is_running": False, "started_at": None}
+        mock_refresh = _run_hourly_refresh(state, stock_running=True, stock_age=timedelta(minutes=30))
+        mock_refresh.assert_not_called()
+
+    def test_proceeds_when_stock_pipeline_running_flag_is_stale_beyond_2_hours(self):
+        state = {"is_running": False, "started_at": None}
+        mock_refresh = _run_hourly_refresh(state, stock_running=True, stock_age=timedelta(hours=3))
+        mock_refresh.assert_called_once()
+
+    def test_proceeds_when_stock_pipeline_is_not_running(self):
+        state = {"is_running": False, "started_at": None}
+        mock_refresh = _run_hourly_refresh(state, stock_running=False)
+        mock_refresh.assert_called_once()

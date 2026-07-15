@@ -9,7 +9,9 @@ from apscheduler.triggers.cron import CronTrigger
 from app.config import settings
 from app.pipeline.senate_pipeline import run_senate_pipeline
 from app.pipeline.house_pipeline import run_house_pipeline, is_house_pipeline_running, house_pipeline_age
-from app.pipeline.stock_pipeline import run_stock_trades_pipeline
+from app.pipeline.stock_pipeline import (
+    run_stock_trades_pipeline, is_stock_pipeline_running, stock_pipeline_age,
+)
 from app.pipeline.analyze.action_center import get_action_refresh_state, refresh_action_issues
 
 logger = logging.getLogger(__name__)
@@ -142,6 +144,29 @@ def _hourly_action_refresh() -> None:
                     )
                 else:
                     logger.info("Action center refresh skipped — house pipeline is running")
+                    return
+            if is_stock_pipeline_running():
+                stock_age = stock_pipeline_age()
+                # Shorter overrun threshold than House's 8h: stock trades is
+                # PDF/OCR parsing over a bounded PTR filing set, not a
+                # 431-member scoring pass — a confirmed live run took ~90min
+                # (2026-07-15), so 2h already gives 20x headroom over that.
+                if stock_age is not None and stock_age > timedelta(hours=2):
+                    from app.ops_alerts import send_ops_alert
+                    logger.warning(
+                        "Stock trades pipeline has been running for %s — "
+                        "treating as hung and proceeding with action center refresh",
+                        stock_age,
+                    )
+                    send_ops_alert(
+                        "Stock trades pipeline overrun",
+                        f"The stock trades pipeline has been running for {stock_age} "
+                        "(normal is under 2h) and is likely hung. The action center "
+                        "is no longer waiting for it.",
+                        dedupe_key=f"stock-overrun-{datetime.utcnow():%Y-%m-%d}",
+                    )
+                else:
+                    logger.info("Action center refresh skipped — stock trades pipeline is running")
                     return
             count = refresh_action_issues()
             logger.info("Action center hourly refresh: %d issues", count)
