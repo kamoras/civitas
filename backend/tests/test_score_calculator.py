@@ -2,6 +2,7 @@
 
 
 from app.pipeline.analyze.score_calculator import (
+    _advancement_baseline,
     _calc_constituent_alignment,
     _calc_funding_diversity,
     _calc_funding_independence,
@@ -248,18 +249,24 @@ class TestConstituentAlignment:
             record, [], funding, state="ID", party="R"
         )
 
-    def test_lobbying_alignment_penalizes(self):
+    def test_lobbying_matches_penalize_via_donation_and_non_consensus_share(self):
+        """senatorVoteAligned is always None in production (detect_donor_vote_connections
+        never sets it — see score_calculator.py's structural note); the only
+        donor-independence branch runs on donation share + non-consensus-vote
+        share, not on alignment. Non-consensus votes (isConsensusVote omitted
+        or False) plus real donation amounts should score worse than a
+        member with no detected matches at all."""
         record = {
             "keyVotes": self._make_votes(with_party=90, against_party=10),
             "recentVotes": [],
         }
-        all_aligned = [
-            {"senatorVoteAligned": True},
-            {"senatorVoteAligned": True},
-            {"senatorVoteAligned": True},
+        matches = [
+            {"donationToSenator": 200_000, "isConsensusVote": False},
+            {"donationToSenator": 150_000, "isConsensusVote": False},
+            {"donationToSenator": 100_000, "isConsensusVote": False},
         ]
         score_with = _calc_constituent_alignment(
-            record, all_aligned,
+            record, matches,
             {"totalRaised": 1_000_000, "totalFromPACs": 500_000},
         )
         score_without = _calc_constituent_alignment(
@@ -963,10 +970,6 @@ class TestCalculateConfidence:
 
 
 # ── v5: majority-adjusted effectiveness + coalition breadth ──────
-
-from app.pipeline.analyze.score_calculator import (
-    _advancement_baseline,
-)
 
 
 class TestMajorityAdjustedAdvancement:
