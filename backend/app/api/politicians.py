@@ -23,9 +23,10 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.api.response_helpers import cached_json
-from app.config_definitions import PRESIDENT_SCORE_WEIGHTS, SCORE_WEIGHTS
+from app.config_definitions import PRESIDENT_SCORE_WEIGHTS
 from app.database import get_db
 from app.models import ActionIssue, ExploreDocument, Justice, President, Representative, Senator
+from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.services.senator_service import STATE_NAMES
 
 router = APIRouter()
@@ -54,6 +55,9 @@ _JUSTICE_WEIGHTS = {
 
 
 def _senator_overall(s) -> float | None:
+    """Overall score for a Senator or Representative — duck-typed, both
+    models expose the same score_* field names, so this one function
+    already covers both branches (see call sites below)."""
     scores = [
         s.score_funding_independence,
         s.score_promise_persistence,
@@ -65,14 +69,7 @@ def _senator_overall(s) -> float | None:
     # (each returns 50 for missing data, never 0).
     if all(v == 0.0 for v in scores):
         return None
-    return round(
-        s.score_funding_independence * SCORE_WEIGHTS["fundingIndependence"]
-        + s.score_promise_persistence * SCORE_WEIGHTS["promisePersistence"]
-        + s.score_independent_voting * SCORE_WEIGHTS["independentVoting"]
-        + s.score_funding_diversity * SCORE_WEIGHTS["fundingDiversity"]
-        + s.score_legislative_effectiveness * SCORE_WEIGHTS["legislativeEffectiveness"],
-        1,
-    )
+    return round(compute_overall_score(s), 1)
 
 
 def _president_overall(p: President) -> float | None:
