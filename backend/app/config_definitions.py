@@ -5,12 +5,29 @@ hardcode industry codes, category labels, score weights, or policy areas.
 Backend modules import from here instead of defining their own copies.
 """
 
+
+# Weight rationale (2026-07 composite-validity audit): fundingIndependence
+# and fundingDiversity correlate at r=0.72 across the live Senate population
+# — both driven by the same underlying funding-profile signal (grassroots
+# small-dollar money scores well on both; PAC/large-donor-heavy fundraising
+# scores poorly on both), not the "distinct dimension" each is meant to
+# measure independently. At the prior 25%/15% weights, that correlated pair
+# carried 40% combined — nearly double any other single dimension's 20% —
+# and could single-handedly override strong performance elsewhere (the
+# audit's reference case: the sitting Senate Majority Leader ranked 2nd from
+# last Senate-wide, driven almost entirely by this pair, despite
+# above-median scores on the other three dimensions). Rebalanced so the
+# correlated pair's combined weight (25%) matches what one genuinely
+# distinct dimension gets, split proportionally to the prior 25:15 ratio;
+# the freed 15% distributed evenly across the three dimensions that
+# empirically ARE distinct (pairwise |r| < 0.31 among promisePersistence,
+# independentVoting, legislativeEffectiveness against everything else).
 SCORE_WEIGHTS: dict[str, float] = {
-    "fundingIndependence": 0.25,
-    "promisePersistence": 0.20,
-    "independentVoting": 0.20,
-    "fundingDiversity": 0.15,
-    "legislativeEffectiveness": 0.20,
+    "fundingIndependence": 0.15,
+    "promisePersistence": 0.25,
+    "independentVoting": 0.25,
+    "fundingDiversity": 0.10,
+    "legislativeEffectiveness": 0.25,
 }
 
 PRESIDENT_SCORE_WEIGHTS: dict[str, float] = {

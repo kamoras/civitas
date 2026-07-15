@@ -210,11 +210,11 @@ export interface AppConfig {
 
 const DEFAULT_CONFIG: AppConfig = {
   scoreWeights: {
-    fundingIndependence: 0.25,
-    promisePersistence: 0.20,
-    independentVoting: 0.20,
-    fundingDiversity: 0.15,
-    legislativeEffectiveness: 0.20,
+    fundingIndependence: 0.15,
+    promisePersistence: 0.25,
+    independentVoting: 0.25,
+    fundingDiversity: 0.10,
+    legislativeEffectiveness: 0.25,
   },
   presidentScoreWeights: {
     independence: 0.15,

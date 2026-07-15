@@ -45,10 +45,10 @@ export function usePolicyLabel(area: string): string {
 export function useScoreWeights(): Record<string, number> {
   const config = useConfig();
   return config?.scoreWeights ?? {
-    fundingIndependence: 0.25,
-    promisePersistence: 0.20,
-    independentVoting: 0.20,
-    fundingDiversity: 0.15,
-    legislativeEffectiveness: 0.20,
+    fundingIndependence: 0.15,
+    promisePersistence: 0.25,
+    independentVoting: 0.25,
+    fundingDiversity: 0.10,
+    legislativeEffectiveness: 0.25,
   };
 }
