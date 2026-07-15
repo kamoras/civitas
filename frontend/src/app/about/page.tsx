@@ -125,10 +125,24 @@ export default function AboutPage() {
               Each senator receives five sub-scores on a 0-100 scale, weighted into an
               overall Representation Score. Higher is better.
             </P>
+            <P>
+              <em className="text-matrix-green/80">On the weights below:</em> a 2026-07
+              audit found Funding Independence and Funding Diversity correlate at r=0.72
+              across the live Senate population — both driven by the same underlying
+              funding-profile signal, not two independent dimensions. At the prior
+              25%/15% weights that pair carried 40% combined, double any other single
+              dimension, and could silently override strong performance elsewhere (the
+              audit&apos;s reference case: the sitting Senate Majority Leader ranked
+              2nd-from-last Senate-wide almost entirely because of this pair, despite
+              above-median scores on the other three). Rebalanced so the pair&apos;s
+              combined weight matches one genuinely distinct dimension&apos;s weight, with
+              the difference redistributed to the three dimensions that are empirically
+              uncorrelated with each other and with this pair.
+            </P>
 
             <div className="space-y-4 mt-4">
               <div>
-                <Label>Funding Independence (25%)</Label>
+                <Label>Funding Independence (15%)</Label>
                 <P>
                   Measures three dimensions: (1) PAC dependency — a blend of the share of
                   funding from PACs and the absolute PAC dollars received, so that very
@@ -149,7 +163,7 @@ export default function AboutPage() {
               </div>
 
               <div>
-                <Label>Promise Persistence (20%)</Label>
+                <Label>Promise Persistence (25%)</Label>
                 <P>
                   Tracks whether a member&apos;s voting record aligns with their stated commitments.
                   For senators, commitments are extracted from official senate.gov campaign
@@ -179,7 +193,7 @@ export default function AboutPage() {
               </div>
 
               <div>
-                <Label>Constituent Alignment (20%)</Label>
+                <Label>Constituent Alignment (25%)</Label>
                 <P>
                   Measures how a member&apos;s voting compares to what their state elected them
                   to do — not raw defection from party. Each member&apos;s contested-vote break
@@ -223,34 +237,55 @@ export default function AboutPage() {
               </div>
 
               <div>
-                <Label>Funding Diversity (15%)</Label>
+                <Label>Funding Diversity (10%)</Label>
                 <P>
-                  Evaluates how traceable and diverse a senator&apos;s funding sources are.
-                  The score blends donor traceability (50%) — the fraction of funding from
-                  itemized ({">"}$200), disclosed sources versus anonymous small-dollar
-                  contributions — with industry diversity (50%), measured as the inverse
-                  Herfindahl-Hirschman Index (HHI) of industry donations. HHI is a standard
-                  concentration metric from industrial organization economics;
+                  Evaluates how broad and distributed a senator&apos;s funding base is —
+                  distinct from Funding Independence&apos;s focus on PAC dependency and
+                  top-donor concentration. Blends source breadth (50%) — small-donor money
+                  counts fully, industry-classified money counts moderately, and
+                  the remaining opaque money counts least — with industry concentration
+                  (50%), the inverse Herfindahl-Hirschman Index (HHI) of industry
+                  donations. HHI is a standard concentration metric from industrial
+                  organization economics;
                   <Cite id="6">Rhoades 1993</Cite>
                   in this context, funding concentrated in a single industry suggests
                   potential regulatory capture, while broad funding suggests diverse
                   constituent support.
                 </P>
+                <P>
+                  &quot;UNCLASSIFIED&quot; money (committee transfers, joint-fundraising
+                  splits, donations lacking employer data — a real 32% median share of
+                  total funding across the Senate) is scored neutrally rather than
+                  penalized. It is a residual we cannot attribute at all, not evidence of
+                  concentration in one source — the same &quot;missing data defaults to
+                  neutral&quot; principle applied everywhere else on this page.
+                </P>
               </div>
 
               <div>
-                <Label>Legislative Effectiveness (20%)</Label>
+                <Label>Legislative Effectiveness (25%)</Label>
                 <P>
-                  Measures how effective a member is at advancing legislation. The score
-                  combines bill advancement rates, cosponsorship network influence
-                  (PageRank), and sponsorship volume. Since v5, advancement is benchmarked
-                  against the sponsor&apos;s majority/minority status per congress — minority
-                  sponsors advance bills at a fraction of the majority rate (Volden &amp;
-                  Wiseman 2014; our own corpus measures senate 3.6% vs 2.4%, house 6.4% vs
-                  2.4%), so scoring everyone against one absolute threshold would silently
-                  penalize whichever party is out of power. Matching the baseline for your
-                  status scores 50; the thresholds are measured from the data, identical
-                  for both parties.
+                  Measures whether a member is producing tangible legislative outcomes,
+                  following Volden &amp; Wiseman (2014)
+                  <Cite id="34">Volden &amp; Wiseman 2014</Cite>
+                  who showed bill sponsorship volume, advancement rate, and coalition
+                  breadth are distinct, measurable dimensions of lawmaking productivity.
+                  Three components: bill advancement rate (40%) — the fraction of
+                  sponsored substantive bills (S./H.R./joint resolutions; simple and
+                  concurrent resolutions are excluded as routinely ceremonial) that became
+                  law, passed a chamber, or were ordered reported; legislative leadership
+                  (30%) — cosponsorship-network PageRank, see below; and sponsorship
+                  volume (30%) — substantive bills introduced per congress served, which
+                  directly credits prolific sponsors rather than penalizing them.
+                </P>
+                <P>
+                  Advancement is benchmarked against the sponsor&apos;s majority/minority
+                  status per congress — minority sponsors advance bills at a fraction of
+                  the majority rate (Volden &amp; Wiseman 2014; our own corpus measures
+                  senate 3.6% vs 2.4%, house 6.4% vs 2.4%), so scoring everyone against one
+                  absolute threshold would silently penalize whichever party is out of
+                  power. Matching the baseline for your status scores 50; the thresholds
+                  are measured from the data, identical for both parties.
                 </P>
               </div>
             </div>
@@ -313,10 +348,14 @@ export default function AboutPage() {
           {/* ── Sponsorship Analysis ── */}
           <Section title="SPONSORSHIP ANALYSIS (LEADERSHIP &amp; IDEOLOGY)">
             <P>
-              Beyond the four scored metrics, each senator receives two informational
-              metrics derived from cosponsorship networks — the pattern of which senators
-              sign onto each other&apos;s bills. These metrics are not part of the Representation
-              Score but provide additional context about a senator&apos;s role and positioning.
+              Each senator also receives two metrics derived from cosponsorship
+              networks — the pattern of which senators sign onto each other&apos;s bills.
+              Ideology is purely informational context. Legislative Leadership is
+              <em className="text-matrix-green/80"> not</em> purely informational — it
+              already feeds into Legislative Effectiveness above at 30% weight; the
+              number shown on a senator&apos;s card is the same underlying score, displayed
+              directly (with a tenure adjustment, see below) rather than hidden inside
+              the composite.
             </P>
 
             <div className="space-y-4 mt-4">
@@ -337,6 +376,17 @@ export default function AboutPage() {
                   converges in ~50 iterations. Raw PageRank values are rescaled to [0, 1]
                   using a logarithmic transformation to compress the heavy-tailed distribution,
                   then displayed as 0-100.
+                </P>
+                <P>
+                  Network centrality structurally takes years to build — a freshman
+                  senator&apos;s raw score is near-zero not because they lead poorly but
+                  because they haven&apos;t had time to accumulate cosponsorship connections
+                  yet (a 2026-07 audit found freshmen averaging Legislative Effectiveness
+                  29.5 vs. veterans&apos; 54.1, driven mostly by this). Both the score
+                  component and the displayed number shrink the raw value toward neutral
+                  50 for senators with under 6 years in office, confidence-scaled to a
+                  full term, so a brand-new senator reads as &quot;not enough track record
+                  yet&quot; rather than &quot;bad at leadership.&quot;
                 </P>
               </div>
 
@@ -1219,6 +1269,9 @@ export default function AboutPage() {
               </Ref>
               <Ref id="33">
                 Tauberer, J. (2012). <em className="text-matrix-green/60">Open Government Data: The Book</em>. GovTrack.us methodology for ideology and leadership scoring via cosponsorship analysis. govtrack.us/about/analysis
+              </Ref>
+              <Ref id="34">
+                Volden, C. &amp; Wiseman, A. E. (2014). <em className="text-matrix-green/60">Legislative Effectiveness in the United States Congress: The Lawmakers</em>. Cambridge University Press.
               </Ref>
             </ol>
           </Section>
