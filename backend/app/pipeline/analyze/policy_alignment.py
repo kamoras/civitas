@@ -216,32 +216,40 @@ def _passes_category_gate(promise_category: str | None, policy_area: str, sim: f
 # different-category best-match distributions overlap almost entirely at
 # the embedding level, medians 0.72 vs 0.76 on 56 live promises). Below
 # GATE_LOW, drop silently — this is where cross-category noise ~p50 sits,
-# so an LLM call would mostly be confirming noise. Between GATE_LOW and the
-# main threshold, ask an LLM to read the actual text and judge genuine
-# relatedness (see _should_count_as_evidence_llm) instead of trusting the
-# embedding number alone. At/above the main threshold, keep auto-accepting
-# with no LLM call, exactly as before this change.
+# so an LLM call would mostly be confirming noise. At/above GATE_LOW
+# (Senate only, use_llm=True), classify via LLM instead of trusting the
+# embedding number alone — see _classify_evidence.
 VOTE_GATE_LOW = 0.62
 BILL_GATE_LOW = 0.64
 
+# The five-way judgment _classify_promise_evidence_llm can return — see
+# promise_evidence_gate_prompt for what each means. Any other value from
+# the LLM (malformed response) is treated as a call failure.
+_RELATIONSHIPS = {
+    "unrelated", "contradicts", "related_neutral", "fulfills_partially", "fulfills_fully",
+}
 
-def _should_count_as_evidence_llm(
+
+def _classify_promise_evidence_llm(
     promise_text: str, candidate_text: str, candidate_kind: str,
-    default_on_failure: bool = False,
-) -> bool:
-    """LLM gate: is this genuine evidence for the promise?
+    default_relationship: str = "unrelated",
+) -> str:
+    """LLM classification: how does this candidate relate to the promise,
+    and to what degree does it fulfill it (see promise_evidence_gate_prompt
+    — a single combined judgment, not a separate relatedness question and
+    a separate fulfillment question, since the two aren't independent).
 
     On a call/parse FAILURE (network error, unparseable response, or a
-    response with no "relates" key — call_llm never raises, it returns
-    None on any internal failure) this returns ``default_on_failure``
-    rather than always False. A broken verification call must not
-    silently override a signal the caller already trusted — see
-    _passes_relevance for how the two callers set this differently:
-    a borderline match (no prior confidence) still defaults to reject
-    on failure, unchanged from before; a match that already cleared the
-    high embedding threshold defaults to keep its accept, since the
-    embedding score — not this call — was the actual evidence for it.
-    Only an explicit ``{"relates": false}`` judgment fails closed.
+    value outside the five known relationships — call_llm never raises,
+    it returns None on any internal failure) this returns
+    ``default_relationship`` rather than always "unrelated". A broken
+    verification call must not silently override a signal the caller
+    already trusted, nor fabricate a fulfillment claim it didn't actually
+    confirm — see _classify_evidence for how the default is set
+    differently depending on whether the embedding score alone already
+    carried some confidence. Only an explicit LLM judgment can produce
+    "fulfills_partially"/"fulfills_fully"/"contradicts" — a failure never
+    invents fulfillment or contradiction on its own.
     """
     from app.pipeline.analyze.ollama_client import call_llm
     from app.pipeline.analyze.prompts import promise_evidence_gate_prompt
@@ -251,40 +259,48 @@ def _should_count_as_evidence_llm(
         prompt_version=prompt["promptVersion"],
         system_prompt=prompt["systemPrompt"],
         user_prompt=prompt["userPrompt"],
-        cache_key={"type": "promise_evidence_gate", "promise": promise_text, "candidate": candidate_text},
+        cache_key={"type": "promise_evidence_gate_v2", "promise": promise_text, "candidate": candidate_text},
         max_tokens=100,
     )
-    if not isinstance(result, dict) or "relates" not in result:
-        return default_on_failure
-    return bool(result["relates"])
+    if not isinstance(result, dict):
+        return default_relationship
+    relationship = result.get("relationship")
+    if relationship not in _RELATIONSHIPS:
+        return default_relationship
+    return relationship
 
 
-def _passes_relevance(
-    sim: float, low: float, high: float, use_llm: bool,
+def _classify_evidence(
+    sim: float, low: float, high: float,
     promise_text: str, candidate_text: str, candidate_kind: str,
-) -> bool:
-    """Relevance check. House (use_llm=False) keeps the original sharp
-    threshold with no LLM call ever — 431 members, no budget for it.
+) -> str:
+    """Senate-only (callers gate this behind ``use_llm``). Classifies every
+    candidate at/above ``low`` via LLM, not just the old gray zone between
+    ``low`` and ``high``: a same-category, high-embedding-similarity match
+    can still be a poor fit for the SPECIFIC promise (e.g. a "expand
+    Medicare" promise satisfied by a vote on HSA contributions — both
+    HEALTHCARE-tagged and sharing enough legislative-register vocabulary to
+    clear the embedding threshold, despite being different, even opposed,
+    policy approaches — 2026-07 external audit finding), and even a
+    genuinely on-topic, directionally-favorable match may not fulfill the
+    promise's actual SCOPE (a narrow incremental bill satisfying a sweeping
+    promise — the same audit's second finding). A confirmed LLM judgment
+    now drives kept/broken/partial directly instead of the old embedding-
+    score-plus-stance-direction heuristic.
 
-    Senate (use_llm=True) LLM-verifies every candidate at/above ``low``,
-    not just the old gray zone between ``low`` and ``high``: a same-
-    category, high-embedding-similarity match can still be a poor fit
-    for the SPECIFIC promise (e.g. a "expand Medicare" promise satisfied
-    by a vote on HSA contributions — both HEALTHCARE-tagged and sharing
-    enough legislative-register vocabulary to clear the embedding
-    threshold, despite being different, even opposed, policy approaches
-    — 2026-07 external audit finding). A confirmed LLM negative now
-    rejects a match that used to auto-accept purely on embedding score.
-
-    Below ``low``: still auto-reject with no LLM call — that's where
+    Below ``low``: still auto-"unrelated" with no LLM call — that's where
     cross-category noise sits at the embedding level, so a call would
-    mostly be confirming noise, same reasoning as before this change.
+    mostly be confirming noise, unchanged from before this function
+    existed. At/above ``high``, a call failure defaults to "related_neutral"
+    (still counted as considered evidence, but no unearned kept credit)
+    rather than "unrelated", since the embedding score alone already
+    established genuine relatedness — only the fulfillment call failed.
     """
-    if sim < low or not use_llm:
-        return sim >= high
-    return _should_count_as_evidence_llm(
-        promise_text, candidate_text, candidate_kind,
-        default_on_failure=(sim >= high),
+    if sim < low:
+        return "unrelated"
+    default = "related_neutral" if sim >= high else "unrelated"
+    return _classify_promise_evidence_llm(
+        promise_text, candidate_text, candidate_kind, default_relationship=default,
     )
 
 
@@ -460,10 +476,26 @@ def compute_promise_vote_alignment(
     poor fit for the specific promise (a "expand Medicare" promise
     satisfied by an HSA-contribution vote; both HEALTHCARE-tagged and
     close enough in legislative register to clear threshold, despite being
-    different policy approaches). See ``_passes_relevance`` for the
-    fail-open-on-call-failure / fail-closed-on-confirmed-negative split
-    that keeps this from regressing high-confidence matches when the LLM
-    call itself fails.
+    different policy approaches).
+
+    v3 (2026-07, same external audit): being genuinely related and
+    directionally favorable is still not the same as fulfilling the
+    promise's actual SCOPE. A promise to "expand Medicare to all
+    Americans" satisfied by a narrow, incremental drug-pricing amendment
+    the member voted yes on used to earn full "kept" credit purely from
+    topical relevance + stance direction, with no check on whether the
+    vote/bill actually delivered what was promised. For Senate
+    (use_llm=True), the relevance gate and the stance/named-bill-match
+    heuristic are both superseded by one combined LLM classification
+    (_classify_evidence / promise_evidence_gate_prompt) that judges
+    relatedness AND fulfillment degree together — "fulfills_fully" earns
+    full credit, "fulfills_partially" earns half credit (same weight as
+    the existing sponsored-bill effort signal), "contradicts" is broken
+    evidence, "related_neutral" counts as considered evidence with no
+    directional signal, matching how an ambiguous stance was already
+    treated. House (use_llm=False, no LLM budget for 431 members) is
+    unaffected — it keeps the original embedding-threshold + stance +
+    named-bill-match path exactly as before this change.
     """
     empty = {
         "alignment": "unclear",
@@ -511,6 +543,15 @@ def compute_promise_vote_alignment(
     related_votes: list[str] = []
     kept_signals = 0.0
     broken_signals = 0.0
+    # Partial-credit evidence (Senate "fulfills_partially" votes, and
+    # sponsored-but-not-advanced bills below) — kept separate from
+    # kept_signals/broken_signals rather than blended at reduced weight,
+    # so a single partially-fulfilling vote can't out-ratio a zero
+    # broken_signals count into a false "kept" (0.35 > 0*1.3 is trivially
+    # true). Only consulted when there's no stronger kept/broken evidence
+    # from elsewhere — same "backup signal" role sponsorship effort
+    # already played before this existed.
+    effort_signals = 0.0
     reasons: list[str] = []
 
     if substantive:
@@ -523,22 +564,56 @@ def compute_promise_vote_alignment(
         if vote_embs.size > 0:
             similarities = vote_embs @ promise_emb
             top_indices = np.argsort(similarities)[::-1][:max_related]
+            considered: list[int] = []
 
             for idx in top_indices:
                 sim = float(similarities[idx])
-                if not _passes_relevance(
-                    sim, VOTE_GATE_LOW, relevance_threshold, use_llm,
-                    promise_text, vote_texts[idx], "vote",
-                ):
-                    continue
-                if not _passes_category_gate(
-                    promise_category, substantive[idx].get("policyArea", ""), sim,
-                ):
-                    continue
-
                 vote = substantive[idx]
                 vote_cast = vote["vote"]
+
+                if use_llm:
+                    # Senate: the LLM's combined relatedness+fulfillment
+                    # judgment drives kept/broken/partial directly — see
+                    # _classify_evidence. Supersedes the named-bill-match
+                    # and stance-direction heuristics below (House-only
+                    # now), since the LLM reads the actual promise and
+                    # candidate text rather than proxying through a
+                    # separately-computed stance label.
+                    relationship = _classify_evidence(
+                        sim, VOTE_GATE_LOW, relevance_threshold,
+                        promise_text, vote_texts[idx], "vote",
+                    )
+                    if relationship == "unrelated":
+                        continue
+                    if not _passes_category_gate(
+                        promise_category, vote.get("policyArea", ""), sim,
+                    ):
+                        continue
+                    related_votes.append(vote["billId"])
+                    considered.append(idx)
+                    if relationship == "fulfills_fully":
+                        kept_signals += sim
+                    elif relationship == "fulfills_partially":
+                        effort_signals += sim * 0.5
+                    elif relationship == "contradicts":
+                        broken_signals += sim
+                    # related_neutral: counted as considered evidence
+                    # (appears in relatedVotes/reasoning below) but
+                    # contributes no directional signal — same treatment
+                    # neutral stance got before this classification existed.
+                    continue
+
+                # House: no LLM budget for 431 members — original sharp
+                # embedding threshold + precomputed stance + named-bill
+                # heuristic, unchanged.
+                if sim < relevance_threshold:
+                    continue
+                if not _passes_category_gate(
+                    promise_category, vote.get("policyArea", ""), sim,
+                ):
+                    continue
                 related_votes.append(vote["billId"])
+                considered.append(idx)
 
                 if _is_named_bill_match(promise_text, vote.get("billName", "")):
                     # The promise names this exact bill — go straight to
@@ -570,15 +645,7 @@ def compute_promise_vote_alignment(
                 # pass — biased promise evaluation heavily toward "kept":
                 # the 2026-06 audit measured 88% of promises as kept.)
 
-            for idx in top_indices[:2]:
-                sim = float(similarities[idx])
-                if not _passes_relevance(
-                    sim, VOTE_GATE_LOW, relevance_threshold, use_llm,
-                    promise_text, vote_texts[idx], "vote",
-                ):
-                    continue
-                if not _passes_category_gate(promise_category, substantive[idx].get("policyArea", ""), sim):
-                    continue
+            for idx in considered[:2]:
                 v = substantive[idx]
                 reasons.append(
                     f"Voted {v['vote']} on {v.get('billName', v['billId'])} "
@@ -598,7 +665,6 @@ def compute_promise_vote_alignment(
     # "partial" alignment.
     BILL_WEIGHT = 0.5
     related_bills: list[str] = []
-    effort_signals = 0.0
 
     if sponsored_bills:
         candidates = [b for b in sponsored_bills if b.get("title")]
@@ -614,12 +680,23 @@ def compute_promise_vote_alignment(
 
                 for bidx in top_bill_idx:
                     bsim = float(bill_sims[bidx])
-                    if not _passes_relevance(
-                        bsim, BILL_GATE_LOW, bill_relevance_threshold, use_llm,
-                        promise_text, bill_texts[bidx], "sponsored bill",
-                    ):
-                        continue
                     bill = candidates[bidx]
+
+                    if use_llm:
+                        relationship = _classify_evidence(
+                            bsim, BILL_GATE_LOW, bill_relevance_threshold,
+                            promise_text, bill_texts[bidx], "sponsored bill",
+                        )
+                        # "contradicts" doesn't apply to a member's own
+                        # sponsored bill in practice — treat the same as
+                        # unrelated rather than as counter-evidence.
+                        if relationship in ("unrelated", "contradicts"):
+                            continue
+                    else:
+                        if bsim < bill_relevance_threshold:
+                            continue
+                        relationship = None
+
                     if not _passes_category_gate(
                         promise_category, bill.get("policyArea", ""), bsim,
                     ):
@@ -632,7 +709,13 @@ def compute_promise_vote_alignment(
                             "passed", "agreed to", "ordered to be reported",
                         ]
                     )
-                    if bill_advanced:
+                    # Full kept credit requires BOTH the bill actually
+                    # advancing AND (Senate only) the LLM confirming it
+                    # fulfills the promise's scope — an advanced bill that
+                    # only partially delivers, or House's status-only
+                    # signal (relationship is None there), stays at the
+                    # effort/partial weight rather than full credit.
+                    if bill_advanced and (relationship is None or relationship == "fulfills_fully"):
                         kept_signals += bsim * BILL_WEIGHT
                         reasons.append(
                             f"Advanced {bill.get('title', bill.get('billId', ''))[:80]}"

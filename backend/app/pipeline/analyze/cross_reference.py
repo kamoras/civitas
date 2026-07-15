@@ -259,7 +259,13 @@ async def analyze_senator_batch(
         # LLM-extracted promises are primary (higher quality, actual
         # campaign commitments from platform text). Heuristic extraction
         # from the Librarian is a fallback when the LLM doesn't produce any.
-        llm_extracted = llm_result.get("extractedPromises", [])
+        # Its own dedicated call (not gated on has_data — extraction only
+        # needs platform text, not vote/donor data) — see
+        # _extract_campaign_promises for why this is separate from
+        # _narrative_analysis's bundled prompt.
+        llm_extracted = _extract_campaign_promises(
+            platform_text, senator["name"], db_session=db_session,
+        )
         if llm_extracted:
             final_promises = _align_llm_promises(
                 llm_extracted, all_votes,
@@ -680,16 +686,10 @@ async def _narrative_analysis(
     )
     if has_platform:
         prompt += ',"platformSummary":"1 sentence summary of platform"'
-        prompt += (
-            ',"extractedPromises":["<extract 4-8 specific policy commitments from the '
-            'PLATFORM section. Each should be a concrete position, e.g. '
-            "'Expand Medicare coverage to all Americans' not 'Healthcare'. "
-            "Only include promises explicitly stated in the platform text.>]"
-        )
     prompt += "}"
 
     result = call_llm(
-        prompt_version="senator-narrative-v12",
+        prompt_version="senator-narrative-v13",
         system_prompt=(
             "You summarize U.S. senator data into short JSON fields. Rules:\n"
             "1. Use ONLY the data provided. NEVER invent facts.\n"
@@ -697,12 +697,9 @@ async def _narrative_analysis(
             "Mention specific policy areas and whether they vote with/against party.\n"
             "3. platformSummary: 1 sentence listing their top policy priorities.\n"
             "4. pacAnalysis: what industry/cause each PAC represents.\n"
-            "5. extractedPromises: extract SPECIFIC policy commitments from the platform text. "
-            "Each promise should be a concrete, verifiable position (not just a topic name). "
-            "Use the senator's own framing from the platform text.\n"
-            "6. Use the senator's actual name. Never say 'Against Party' or 'member of party X' — "
+            "5. Use the senator's actual name. Never say 'Against Party' or 'member of party X' — "
             "say 'voted against their party' or 'broke with Democrats/Republicans'.\n"
-            "7. Return ONLY valid JSON, no markdown."
+            "6. Return ONLY valid JSON, no markdown."
         ),
         user_prompt=prompt,
         cache_key={
@@ -711,7 +708,7 @@ async def _narrative_analysis(
             "voteCount": len(substantive),
             "keyIds": sorted(key_vote_ids),
             "platformLen": len(platform_text),
-            "v": 12,
+            "v": 13,
         },
         db_session=db_session,
         max_tokens=1500,
@@ -746,22 +743,56 @@ async def _narrative_analysis(
             "pacAnalysis": analysis,
         })
 
-    extracted_promises: list[str] = []
-    raw_promises = result.get("extractedPromises")
-    if isinstance(raw_promises, list):
-        for p in raw_promises:
-            text = str(p).strip() if p else ""
-            if text and len(text) > 10 and not text.startswith("<"):
-                extracted_promises.append(text[:250])
-
     return {
         "reasoning": reasoning,
         "votingSummary": str(result.get("votingSummary", ""))[:500],
         "pacDetails": pac_details,
         "platformSummary": str(result.get("platformSummary", ""))[:500],
-        "extractedPromises": extracted_promises,
         "campaignPromises": [],
     }
+
+
+def _extract_campaign_promises(
+    platform_text: str, senator_name: str, db_session: Any | None = None,
+) -> list[str]:
+    """Extract concrete campaign promises from platform text — its own
+    single-purpose LLM call rather than one field in _narrative_analysis's
+    bundled multi-field prompt (see promise_extraction_prompt). Promise
+    extraction is the one field the entire fulfillment-scoring pipeline
+    downstream depends on, and a 2026-07 audit found the bundled version
+    frequently padded thin platform text with vague topic restatements
+    ("Healthcare" reworded as a pseudo-promise) to hit its old fixed
+    "extract 4-8" instruction — this asks for as many or as few as the
+    text genuinely supports, with explicit permission to return none.
+    """
+    if not platform_text or _ERROR_PAGE_SIGS.search(platform_text):
+        return []
+
+    from app.pipeline.analyze.prompts import promise_extraction_prompt
+
+    prompt = promise_extraction_prompt(platform_text, senator_name)
+    result = call_llm(
+        prompt_version=prompt["promptVersion"],
+        system_prompt=prompt["systemPrompt"],
+        user_prompt=prompt["userPrompt"],
+        cache_key={"senatorName": senator_name, "platformLen": len(platform_text)},
+        db_session=db_session,
+        max_tokens=600,
+        num_ctx=4096,
+    )
+    if not isinstance(result, dict):
+        return []
+
+    raw_promises = result.get("promises")
+    if not isinstance(raw_promises, list):
+        return []
+
+    extracted: list[str] = []
+    for p in raw_promises:
+        text = str(p).strip() if p else ""
+        if text and len(text) > 10 and not text.startswith("<"):
+            extracted.append(text[:250])
+    return extracted
 
 
 _FILLER_ANALYSIS = re.compile(
