@@ -20,8 +20,8 @@ from app.pipeline.analyze.policy_alignment import (
     compute_promise_vote_alignment,
     get_related_policies,
     industry_policy_similarity,
-    _passes_relevance,
-    _should_count_as_evidence_llm,
+    _classify_evidence,
+    _classify_promise_evidence_llm,
     VOTE_GATE_LOW,
 )
 
@@ -50,13 +50,19 @@ class TestPromiseVoteAlignment:
         assert result["alignment"] == "unclear"
 
     def test_returns_valid_alignment(self):
+        # use_llm=False: tests the deterministic embedding+stance path
+        # (shared by House, and by Senate before a candidate reaches the
+        # LLM classifier). Senate's LLM-classification-driven path is
+        # covered separately in TestPromiseEvidenceGate with the LLM
+        # properly mocked — these general alignment-computation tests
+        # shouldn't depend on an unmocked real LLM call.
         votes = [
             {"billId": "HR.1", "vote": "Yea", "policyArea": "HEALTHCARE",
              "billName": "Prescription Drug Pricing Act", "description": "Lower drug costs",
              "stance": "pro"},
         ]
         result = compute_promise_vote_alignment(
-            "Lower prescription drug costs for seniors", votes
+            "Lower prescription drug costs for seniors", votes, use_llm=False,
         )
         assert result["alignment"] in ("kept", "broken", "partial", "unclear")
         assert isinstance(result["confidence"], float)
@@ -71,7 +77,7 @@ class TestPromiseVoteAlignment:
              "stance": "pro"},
         ]
         result = compute_promise_vote_alignment(
-            "Expand Medicare coverage and lower healthcare costs", votes
+            "Expand Medicare coverage and lower healthcare costs", votes, use_llm=False,
         )
         if result["relatedVotes"]:
             assert "HR.1" in result["relatedVotes"]
@@ -81,7 +87,9 @@ class TestPromiseVoteAlignment:
 
         The 2026-06 audit found 88% of promises scored "kept" partly
         because a Yea on any related bill counted as half-kept regardless
-        of direction.
+        of direction. use_llm=False: this specifically exercises the
+        stance-based path (Senate now bypasses stance entirely in favor
+        of the LLM's direct fulfillment judgment — see TestPromiseEvidenceGate).
         """
         votes = [
             {"billId": "HR.1", "vote": "Yea", "policyArea": "HEALTHCARE",
@@ -90,7 +98,7 @@ class TestPromiseVoteAlignment:
              "stance": "neutral"},
         ]
         result = compute_promise_vote_alignment(
-            "Lower prescription drug costs for seniors", votes
+            "Lower prescription drug costs for seniors", votes, use_llm=False,
         )
         assert result["alignment"] != "kept"
 
@@ -103,12 +111,18 @@ class TestPromiseVoteAlignment:
         ]
         result = compute_promise_vote_alignment(
             "Lower prescription drug costs for seniors", [], sponsored_bills=bills,
+            use_llm=False,
         )
         assert result["alignment"] in ("partial", "unclear")
         assert result["alignment"] != "kept"
 
     def test_advanced_sponsored_bill_counts_as_kept(self):
-        """A sponsored bill that became law is genuine promise fulfillment."""
+        """A sponsored bill that became law is genuine promise fulfillment
+        (status-only signal — use_llm=False path). Senate additionally
+        requires the LLM to confirm the bill fulfills the promise's scope
+        even once advanced — see
+        TestPromiseEvidenceGate.test_advanced_bill_still_needs_fulfillment_confirmation_on_senate.
+        """
         bills = [
             {"billId": "S.100",
              "title": "A bill to lower prescription drug costs for seniors",
@@ -116,6 +130,7 @@ class TestPromiseVoteAlignment:
         ]
         result = compute_promise_vote_alignment(
             "Lower prescription drug costs for seniors", [], sponsored_bills=bills,
+            use_llm=False,
         )
         assert result["alignment"] == "kept"
 
@@ -124,118 +139,181 @@ class TestPromiseVoteAlignment:
 
 
 class TestPromiseEvidenceGate:
-    """Below-threshold candidates go through an LLM relevance gate (Senate
-    only) instead of being dropped outright, since generic (non-bill-quoting)
-    promises rarely clear the high embedding threshold even when genuinely
-    related (2026-07 audit: PP population stdev collapsed to 3.7 against an
-    8.0 floor because ~93% of promises had no evidence clear the bar)."""
+    """Senate (use_llm=True) classifies every candidate at/above VOTE_GATE_LOW
+    via a single combined LLM judgment covering both relevance AND
+    fulfillment degree — not a plain relatedness gate — since generic
+    (non-bill-quoting) promises rarely clear the high embedding threshold
+    even when genuinely related (2026-07 audit: PP population stdev
+    collapsed to 3.7 against an 8.0 floor because ~93% of promises had no
+    evidence clear the bar), AND a genuinely related, directionally
+    favorable match can still fail to fulfill the promise's actual scope
+    (a sweeping "expand Medicare" promise satisfied by a narrow,
+    incremental amendment — a second, distinct finding from the same
+    audit). House (use_llm=False) is untouched by any of this."""
 
-    def test_above_high_auto_accepts_without_llm_call(self):
+    def test_above_high_still_gets_llm_classified_on_senate(self):
         with patch(
-            "app.pipeline.analyze.policy_alignment._should_count_as_evidence_llm"
+            "app.pipeline.analyze.policy_alignment._classify_promise_evidence_llm",
+            return_value="unrelated",
         ) as mock_gate:
-            result = _passes_relevance(0.85, VOTE_GATE_LOW, 0.80, True, "promise", "candidate", "vote")
-        assert result is True
-        mock_gate.assert_not_called()
-
-    def test_below_low_auto_rejects_without_llm_call(self):
-        with patch(
-            "app.pipeline.analyze.policy_alignment._should_count_as_evidence_llm"
-        ) as mock_gate:
-            result = _passes_relevance(0.50, VOTE_GATE_LOW, 0.80, True, "promise", "candidate", "vote")
-        assert result is False
-        mock_gate.assert_not_called()
-
-    def test_gray_zone_defers_to_llm_gate(self):
-        with patch(
-            "app.pipeline.analyze.policy_alignment._should_count_as_evidence_llm",
-            return_value=True,
-        ) as mock_gate:
-            result = _passes_relevance(0.70, VOTE_GATE_LOW, 0.80, True, "promise", "candidate", "vote")
-        assert result is True
+            result = _classify_evidence(0.85, VOTE_GATE_LOW, 0.80, "promise", "candidate", "vote")
+        assert result == "unrelated"
         mock_gate.assert_called_once()
+        # A confident embedding match must default to "related_neutral" (not
+        # "unrelated") if the LLM call itself fails — only an explicit
+        # negative judgment should discard evidence the embedding score
+        # already established as genuinely related.
+        assert mock_gate.call_args.kwargs["default_relationship"] == "related_neutral"
 
-    def test_gray_zone_without_llm_budget_rejects(self):
-        """House pipeline (use_llm=False) keeps the pre-existing sharp cutoff."""
+    def test_below_low_auto_unrelated_without_llm_call(self):
         with patch(
-            "app.pipeline.analyze.policy_alignment._should_count_as_evidence_llm"
+            "app.pipeline.analyze.policy_alignment._classify_promise_evidence_llm"
         ) as mock_gate:
-            result = _passes_relevance(0.70, VOTE_GATE_LOW, 0.80, False, "promise", "candidate", "vote")
-        assert result is False
+            result = _classify_evidence(0.50, VOTE_GATE_LOW, 0.80, "promise", "candidate", "vote")
+        assert result == "unrelated"
         mock_gate.assert_not_called()
 
-    def test_gate_fails_closed_on_unparseable_llm_response(self):
+    def test_gray_zone_defers_to_llm_with_unrelated_default(self):
+        with patch(
+            "app.pipeline.analyze.policy_alignment._classify_promise_evidence_llm",
+            return_value="fulfills_fully",
+        ) as mock_gate:
+            result = _classify_evidence(0.70, VOTE_GATE_LOW, 0.80, "promise", "candidate", "vote")
+        assert result == "fulfills_fully"
+        mock_gate.assert_called_once()
+        # No prior confidence in the gray zone — a call failure must still
+        # default to "unrelated", unchanged from the original gate design.
+        assert mock_gate.call_args.kwargs["default_relationship"] == "unrelated"
+
+    def test_gate_defaults_on_unparseable_llm_response(self):
         with patch(
             "app.pipeline.analyze.ollama_client.call_llm", return_value=None,
         ):
-            assert _should_count_as_evidence_llm("promise", "candidate", "vote") is False
+            assert _classify_promise_evidence_llm("promise", "candidate", "vote") == "unrelated"
+            assert _classify_promise_evidence_llm(
+                "promise", "candidate", "vote", default_relationship="related_neutral",
+            ) == "related_neutral"
 
-    def test_gate_fails_closed_on_missing_relates_key(self):
-        with patch(
-            "app.pipeline.analyze.ollama_client.call_llm", return_value={"reason": "no key"},
-        ):
-            assert _should_count_as_evidence_llm("promise", "candidate", "vote") is False
-
-    def test_gate_respects_llm_relates_true(self):
+    def test_gate_defaults_on_invalid_relationship_value(self):
         with patch(
             "app.pipeline.analyze.ollama_client.call_llm",
-            return_value={"relates": True, "reason": "same subject"},
+            return_value={"relationship": "sort_of_maybe", "reason": "not a real value"},
         ):
-            assert _should_count_as_evidence_llm("promise", "candidate", "vote") is True
+            assert _classify_promise_evidence_llm("promise", "candidate", "vote") == "unrelated"
 
-    def test_end_to_end_gray_zone_vote_confirmed_by_llm_counts_as_kept(self):
-        """A vote below the auto-accept threshold but confirmed by the LLM
-        gate should be able to resolve a promise, not leave it 'unclear'."""
-        votes = [
-            {"billId": "HR.1", "vote": "Yea", "policyArea": "HEALTHCARE",
-             "billName": "Prescription Drug Pricing Act",
-             "description": "Lower prescription drug costs for seniors",
-             "stance": "pro"},
-        ]
+    def test_gate_respects_each_valid_relationship(self):
+        for rel in ("unrelated", "contradicts", "related_neutral", "fulfills_partially", "fulfills_fully"):
+            with patch(
+                "app.pipeline.analyze.ollama_client.call_llm",
+                return_value={"relationship": rel, "reason": "test"},
+            ):
+                assert _classify_promise_evidence_llm("promise", "candidate", "vote") == rel
+
+    def test_gate_explicit_negative_overrides_default(self):
+        with patch(
+            "app.pipeline.analyze.ollama_client.call_llm",
+            return_value={"relationship": "unrelated", "reason": "different mechanism"},
+        ):
+            assert _classify_promise_evidence_llm(
+                "promise", "candidate", "vote", default_relationship="related_neutral",
+            ) == "unrelated"
+
+    def _mocked_alignment(self, votes, relationship, sim=0.70):
+        """Run compute_promise_vote_alignment with embeddings and the LLM
+        classification both mocked, for deterministic end-to-end tests of
+        the Senate (use_llm=True) path."""
         with patch(
             "app.pipeline.analyze.policy_alignment._embed_batch"
         ) as mock_batch, patch(
             "app.pipeline.analyze.policy_alignment._embed"
         ) as mock_embed, patch(
-            "app.pipeline.analyze.policy_alignment._should_count_as_evidence_llm",
-            return_value=True,
-        ) as mock_gate, patch(
-            "app.pipeline.analyze.ollama_client.call_llm", return_value=None,
+            "app.pipeline.analyze.policy_alignment._classify_promise_evidence_llm",
+            return_value=relationship,
         ):
             mock_embed.return_value = np.array([1.0, 0.0])
-            # sim = dot product = 0.70: below the 0.80 auto-accept threshold,
-            # above VOTE_GATE_LOW (0.62) — lands in the gray zone.
-            mock_batch.return_value = np.array([[0.70, np.sqrt(1 - 0.70 ** 2)]])
-            result = compute_promise_vote_alignment(
+            mock_batch.return_value = np.array([[sim, np.sqrt(1 - sim ** 2)]])
+            return compute_promise_vote_alignment(
                 "Expand Medicare coverage to all Americans", votes, use_llm=True,
             )
-        mock_gate.assert_called()
+
+    def test_end_to_end_fulfills_fully_counts_as_kept(self):
+        votes = [
+            {"billId": "HR.1", "vote": "Yea", "policyArea": "HEALTHCARE",
+             "billName": "Medicare Expansion Act",
+             "description": "Expand Medicare to all Americans", "stance": "pro"},
+        ]
+        result = self._mocked_alignment(votes, "fulfills_fully")
         assert result["alignment"] == "kept"
         assert "HR.1" in result["relatedVotes"]
 
-    def test_end_to_end_gray_zone_vote_rejected_by_llm_stays_unclear(self):
+    def test_end_to_end_fulfills_partially_yields_partial_not_kept(self):
+        """The core external-audit finding this fixes: a related,
+        directionally-favorable vote that only partially delivers on a
+        sweeping promise must not earn full 'kept' credit."""
+        votes = [
+            {"billId": "HR.1", "vote": "Yea", "policyArea": "HEALTHCARE",
+             "billName": "Narrow Drug Pricing Amendment",
+             "description": "Incremental Medicare drug pricing change", "stance": "pro"},
+        ]
+        result = self._mocked_alignment(votes, "fulfills_partially")
+        assert result["alignment"] != "kept"
+        assert "HR.1" in result["relatedVotes"]
+
+    def test_end_to_end_related_neutral_stays_unclear_not_kept(self):
         votes = [
             {"billId": "HR.1", "vote": "Yea", "policyArea": "HEALTHCARE",
              "billName": "Prescription Drug Pricing Act",
-             "description": "Lower prescription drug costs for seniors",
-             "stance": "pro"},
+             "description": "Lower prescription drug costs for seniors", "stance": "pro"},
+        ]
+        result = self._mocked_alignment(votes, "related_neutral")
+        assert result["alignment"] != "kept"
+        # Still counted as considered evidence even though it carries no
+        # directional signal.
+        assert "HR.1" in result["relatedVotes"]
+
+    def test_end_to_end_contradicts_counts_as_broken(self):
+        votes = [
+            {"billId": "HR.1", "vote": "Nay", "policyArea": "HEALTHCARE",
+             "billName": "Medicare Expansion Act",
+             "description": "Expand Medicare to all Americans", "stance": "pro"},
+        ]
+        result = self._mocked_alignment(votes, "contradicts")
+        assert result["alignment"] == "broken"
+
+    def test_end_to_end_unrelated_stays_unclear(self):
+        votes = [
+            {"billId": "HR.1", "vote": "Yea", "policyArea": "DEFENSE",
+             "billName": "Defense Authorization",
+             "description": "Military spending", "stance": "pro"},
+        ]
+        result = self._mocked_alignment(votes, "unrelated")
+        assert result["alignment"] == "unclear"
+        assert result["relatedVotes"] == []
+
+    def test_advanced_bill_still_needs_fulfillment_confirmation_on_senate(self):
+        """A sponsored bill that became law is NOT automatically 'kept' on
+        Senate — the LLM must also confirm it fulfills the promise's scope,
+        not just that something with this general topic became law."""
+        bills = [
+            {"billId": "S.100", "title": "A narrow drug-pricing pilot program",
+             "isLaw": True, "latestAction": "Became Public Law No: 119-45"},
         ]
         with patch(
             "app.pipeline.analyze.policy_alignment._embed_batch"
         ) as mock_batch, patch(
             "app.pipeline.analyze.policy_alignment._embed"
         ) as mock_embed, patch(
-            "app.pipeline.analyze.policy_alignment._should_count_as_evidence_llm",
-            return_value=False,
-        ), patch(
-            "app.pipeline.analyze.ollama_client.call_llm", return_value=None,
+            "app.pipeline.analyze.policy_alignment._classify_promise_evidence_llm",
+            return_value="fulfills_partially",
         ):
             mock_embed.return_value = np.array([1.0, 0.0])
-            mock_batch.return_value = np.array([[0.70, np.sqrt(1 - 0.70 ** 2)]])
+            mock_batch.return_value = np.array([[0.85, np.sqrt(1 - 0.85 ** 2)]])
             result = compute_promise_vote_alignment(
-                "Expand Medicare coverage to all Americans", votes, use_llm=True,
+                "Expand Medicare coverage to all Americans", [],
+                sponsored_bills=bills, use_llm=True,
             )
-        assert result["alignment"] == "unclear"
+        assert result["alignment"] != "kept"
+        assert "S.100" in result["relatedBills"]
 
 
 # ── Industry-policy embedding similarity ─────────────────────────

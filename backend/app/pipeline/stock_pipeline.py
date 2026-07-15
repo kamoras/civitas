@@ -65,7 +65,9 @@ def _match_senator(db: Session, last: str, first: str) -> Senator | None:
         for c in candidates:
             if first.lower() in c.name.lower():
                 return c
-    return candidates[0] if len(candidates) == 1 else None
+    # Ambiguous (multiple same-last-name matches, none disambiguated by
+    # first name) — skip rather than guess which one filed the PTR.
+    return None
 
 
 def _match_representative(db: Session, last: str, first: str, state_district: str) -> Representative | None:
@@ -84,7 +86,9 @@ def _match_representative(db: Session, last: str, first: str, state_district: st
         for c in candidates:
             if first.lower() in c.name.lower():
                 return c
-    return candidates[0] if len(candidates) == 1 else None
+    # Ambiguous (multiple same-last-name matches, none disambiguated by
+    # first name) — skip rather than guess which one filed the PTR.
+    return None
 
 
 def _compute_days_to_disclose(transaction_date: str, disclosure_date: str) -> int:
