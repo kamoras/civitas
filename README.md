@@ -89,8 +89,8 @@ external API calls to cloud AI services.
                            ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │  Next.js 16 frontend  (port 3000)                                            │
-│  /politicians  /scorecard  /leaderboard  /action  /explore  /compare        │
-│  /issue  /about  /admin  /environmental  /accessibility                      │
+│  /politicians  /bills  /leaderboard  /action  /explore  /compare             │
+│  /issue  /about  /admin  /environmental  /accessibility  /feedback           │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -100,7 +100,7 @@ external API calls to cloud AI services.
 
 ## Nightly Pipeline: Phase by Phase
 
-The nightly pipeline processes every senator and House representative through six sequential phases before persisting scores and snapshots.
+The nightly pipeline processes every senator and House representative through seven sequential phases before persisting scores and snapshots, followed by a stock-trade-disclosure ingestion pass (`stock_pipeline.py`) that runs as a sibling phase after both member pipelines complete.
 
 ### Phase 1 — FETCH
 
@@ -116,6 +116,8 @@ Pulls raw data from each government API and stores the complete response verbati
 | BLS | Unemployment, inflation, job growth by administration | batch |
 | BEA | GDP growth by quarter | batch |
 | Federal Register | Executive orders signed per administration | 1.0 RPS |
+| House Clerk / Senate eFD | STOCK Act periodic transaction reports (PDF/HTML, parsed) | 1.0 / 0.5 RPS |
+| SEC | Ticker -> company name resolution for trade-industry classification | batch |
 
 Nothing from the API cache is ever cleared — it represents immutable source data. A fresh run can replay against the cached responses without re-hitting the external APIs (controlled by `PIPELINE_CACHE_TTL_HOURS`).
 
@@ -424,34 +426,18 @@ The scoring formulas deliberately avoid any ground truth that encodes partisan a
 ```
 Overall = 0.25 × FundingIndependence
         + 0.20 × PromisePersistence
-        + 0.20 × IndependentVoting
+        + 0.20 × ConstituentAlignment
         + 0.15 × FundingDiversity
         + 0.20 × LegislativeEffectiveness
-
-FundingIndependence = (1 − PAC_fraction) × 100
-  where PAC_fraction = total_PAC_receipts / total_raised
-  Outside spending (super PACs) blended at 0.5× since less direct than PAC contributions
-
-PromisePersistence = (kept / (kept + broken + partial)) × 100
-  with Bayesian shrinkage:
-    α = 1 / (1 + n_promises/5)     [stronger shrinkage for fewer promises]
-    score_shrunk = α × prior_mean + (1−α) × raw_score
-  Prevents small-sample score inflation (Efron & Morris 1975)
-
-IndependentVoting = (against_party_count / total_votes) × PVI_weight × 100
-  where PVI_weight = 1 + (district_partisan_lean × 0.1)
-  A Democrat in D+30 district needs higher deviation to reach same score
-  as one in R+10 district (Carson et al. 2010)
-
-FundingDiversity = (1 − HHI(industry_donations)) × 100
-  where HHI = Σ(industry_share_i²)   [Herfindahl-Hirschman Index]
-  High score = broadly-funded; low score = dominated by one sector
-
-LegislativeEffectiveness = f(bills_sponsored, cosponsors, committee_passage_rate,
-                             floor_passage_rate, leadership_score)
-  Composite of bill throughput, peer support (PageRank-weighted cosponsorship),
-  and committee + floor success rates
 ```
+
+The exact formulas are actively iterated (v1 → v5.12 as of this writing, each change measured against real data) and are documented in full — every component's weight, calibration source, and academic citation — in the module docstring of `backend/app/pipeline/analyze/score_calculator.py`, which is the source of truth. Rather than duplicate formulas here that will drift out of sync as the algorithm evolves (as this section previously did), a summary:
+
+- **Funding Independence**: PAC dependency (dollar-scaled, not just share — a mega-campaign diluting PAC money to a tiny share isn't automatically "independent"), small-donor share, and relative top-donor concentration.
+- **Promise Persistence**: campaign promises kept vs. broken, with Beta-Binomial shrinkage toward neutral for senators with few evaluable promises (most have very few — this is a genuine data-scarcity floor, not a bug), plus floor advocacy and vote participation.
+- **Constituent Alignment** (stored/keyed as `independentVoting` for API compatibility — the dimension was rebuilt in v4.2): how a member's voting compares to what their *seat* elected them to do, using Cook PVI as a proxy for constituent preference. Party-line voting in a safe seat that elected that platform scores as representation, not as a failure of independence — the delegate model of representation (Miller & Stokes 1963), not independence as an intrinsic virtue.
+- **Funding Diversity**: source breadth (small donors are the most diverse base) plus inverse-HHI industry concentration.
+- **Legislative Effectiveness**: bill advancement rate (benchmarked against the sponsor's majority/minority baseline, not an absolute threshold), cosponsorship-network leadership (PageRank, confidence-scaled by tenure), and sponsorship volume per congress served.
 
 ### Senate & House Scores
 
@@ -461,7 +447,7 @@ Each senator and House representative receives five sub-scores (0-100, higher = 
 |--------|--------|------------------|---------------|
 | **Funding Independence** | 25% | PAC dependency + top-donor concentration + outside spending | Bonica 2014; Stratmann 2005 |
 | **Promise Persistence** | 20% | Campaign commitments kept + floor advocacy + participation | Naurin 2011; Martin 2011 |
-| **Independent Voting** | 20% | Seat-relative voting + cross-party coalition breadth + donor independence | Carson et al. 2010; Harbridge 2015 |
+| **Constituent Alignment** | 20% | Seat-relative voting + cross-party coalition breadth + donor independence | Carson et al. 2010; Harbridge 2015 |
 | **Funding Diversity** | 15% | Donor traceability + industry diversity (inverse HHI) | Rhoades 1993 |
 | **Legislative Effectiveness** | 20% | Majority-status-benchmarked advancement + cosponsorship (PageRank) + volume | Volden & Wiseman 2014; Brin & Page 1998 |
 
@@ -532,7 +518,7 @@ Each score shown in the UI links to a "data basis" view that surfaces the raw da
 |-------|------------|
 | Funding Independence | Top 10 donors by amount, PAC fraction, outside spending total |
 | Promise Persistence | Per-promise verdict (kept/broken/partial), supporting vote or speech |
-| Independent Voting | Key votes where member broke with party, bill title + vote |
+| Constituent Alignment | Key votes where member broke with party, bill title + vote |
 | Funding Diversity | Industry breakdown pie chart from `IndustryDonation` records |
 | Legislative Effectiveness | Sponsored bills, cosponsor counts, committee/floor passage rate |
 
@@ -766,7 +752,12 @@ civitas/
 │   │   │   │   └── bluesky_utils.py          # Shared link-card builder
 │   │   │   ├── assemble/     # Senator scorecard builder + validator
 │   │   │   ├── vector_store.py  # ChromaDB + sentence-transformer
-│   │   │   └── orchestrator.py  # Pipeline control flow
+│   │   │   ├── senate_pipeline.py, house_pipeline.py  # FETCH -> TRANSFORM ->
+│   │   │   │                 #   ANALYZE -> ASSEMBLE+SAVE orchestration per chamber
+│   │   │   ├── stock_pipeline.py  # STOCK Act trade-disclosure ingestion (sibling
+│   │   │   │                 #   phase, runs after the member pipelines)
+│   │   │   └── president_pipeline.py, justice_pipeline.py, explore_pipeline.py
+│   │   ├── scheduler.py      # Nightly cron entrypoint — calls the pipelines above
 │   │   ├── models.py         # SQLAlchemy ORM (Senator, Representative, KeyVote,
 │   │   │                     #   Justice, ActionIssue, NationalMonitor,
 │   │   │                     #   TimelineEntry, ScoreSnapshot, etc.)
@@ -782,12 +773,17 @@ civitas/
 │   │   ├── about/            # Methodology page with full citations
 │   │   ├── action/           # Action Center (issues, monitors, timeline)
 │   │   ├── issue/[id]/       # Permanent issue permalinks (Bluesky link target)
+│   │   ├── politicians/      # Unified directory + per-member profile
+│   │   │   └── [id]/         #   (senator, representative, president, and justice
+│   │   │                     #    scorecards all render into this one page)
+│   │   ├── bills/            # Bills-in-motion — grouped by stage, sortable
 │   │   ├── compare/          # Side-by-side senator/representative comparison
 │   │   ├── explore/          # Semantic search over government documents
-│   │   ├── scorecard/        # Senator, representative, president, and justice scorecards
 │   │   ├── leaderboard/      # Rankings across all branches (House paginated)
 │   │   ├── environmental/    # Environmental policy tracking
 │   │   ├── accessibility/    # Accessibility statement
+│   │   ├── feedback/         # On-site feedback form -> files a GitHub issue
+│   │   ├── changelog/        # Scoring-algorithm version history
 │   │   └── admin/            # Pipeline control panel with granular progress
 │   ├── src/components/       # React components
 │   └── Dockerfile
@@ -814,6 +810,8 @@ See `.env.example` for all options. Key variables:
 | `PIPELINE_CACHE_TTL_HOURS` | No | API response cache TTL (default: `72`) |
 | `BSKY_HANDLE` | No | Bluesky handle (e.g. `civitas-research.org`) |
 | `BSKY_APP_PASSWORD` | No | Bluesky app password (from Settings → App Passwords) |
+| `FEEDBACK_TOKEN` | No | Fine-grained GitHub PAT (Issues: write only) for the on-site feedback form; leave unset to disable it (returns 503, never silently drops) |
+| `GITHUB_FEEDBACK_REPO` | No | Repo the feedback form files issues against (default: `kamoras/civitas`) |
 
 ## References
 

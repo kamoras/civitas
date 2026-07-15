@@ -85,7 +85,7 @@ export default function AccessibilityPage() {
             <div className="space-y-2 mt-4">
               <Row label="Standard" value="WCAG 2.1 Level AA" />
               <Row label="Status" value="Partially conformant" />
-              <Row label="Last reviewed" value="2026-05-20" />
+              <Row label="Last reviewed" value="2026-07-15" />
             </div>
           </Section>
 

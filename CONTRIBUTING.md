@@ -14,7 +14,7 @@ Thanks for your interest in contributing. Civitas is a civic transparency projec
 
 - Docker and Docker Compose
 - Node.js 20+
-- Python 3.11+
+- Python 3.13+
 - A local LLM: either [llama.cpp](https://github.com/ggerganov/llama.cpp) server or [Ollama](https://ollama.ai)
 - A free [api.data.gov](https://api.data.gov/signup/) key (covers Congress.gov, FEC, GovInfo, Regulations.gov)
 
