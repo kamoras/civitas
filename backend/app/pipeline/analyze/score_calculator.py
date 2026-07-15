@@ -140,19 +140,26 @@ Changes from v3 → v4 (score audit 2026-06):
   discount is capped at a 20% full-credit break rate so safe-state party
   leaders with single-digit break rates no longer score as independents.
 
-  senatorVoteAligned structural note (2026-07 audit): this isn't an
-  unfinished feature — computing it honestly needs to know whether a
-  donor's industry *wanted* a given bill to pass or fail, and no
-  ingested source (LDA filings — fetch/lda.py — only carry aggregate
-  spend, not per-bill positions) discloses that. The only way to fill
-  it in without that data is a hand-authored industry→stance mapping
-  ("PHARMA opposes price controls," etc.), which both risks being
-  wrong (a bill's effect on an industry depends on its actual content,
-  not just which way its policy area points) and is exactly the kind
-  of authored political conclusion this platform's scores are designed
-  never to contain — see the platform's no-hardcoded-hints principle.
-  The 25%-weight fallback (donation share + non-consensus-vote share)
-  is the honest ceiling absent a real per-bill position data source.
+  senatorVoteAligned structural note (2026-07 audit): computing it
+  honestly needs to know whether a donor's industry *wanted* a given
+  bill to pass or fail, and no ingested source (LDA filings —
+  fetch/lda.py — only carry aggregate spend, not per-bill positions)
+  discloses that. The only way to fill it in without that data is a
+  hand-authored industry→stance mapping ("PHARMA opposes price
+  controls," etc.), which both risks being wrong (a bill's effect on
+  an industry depends on its actual content, not just which way its
+  policy area points) and is exactly the kind of authored political
+  conclusion this platform's scores are designed never to contain —
+  see the platform's no-hardcoded-hints principle. The 25%-weight
+  donation-share/non-consensus-vote-share formula is the honest
+  ceiling absent a real per-bill position data source — this is the
+  ONLY donor-independence branch (removed 2026-07-15: a dead 40%-weight
+  "real alignment data" branch, gated on senatorVoteAligned being
+  non-None, could never execute since the sole producer of
+  lobbyingMatches hardcodes that field to None; kept as unreachable
+  scaffolding for a data source that doesn't exist and wasn't planned).
+  If a real per-bill position source is ever ingested, add the richer
+  branch back then, not speculatively now.
 - Legislative Effectiveness: advancement counts substantive bills only
   (no simple/concurrent resolutions), stops double-counting laws, and
   drops "placed on calendar"/"cloture" credit; volume is per-congress
@@ -754,13 +761,13 @@ def _calc_constituent_alignment(
          swing or opposed seat drifts down to at most 25 — below
          neutral, but never the old failure-grade floor.
 
-      2. Donor independence (25%/40%): unchanged from v4.1 — based on
-         donor-vote connection matches, with the visibility-scaled
-         baseline. senatorVoteAligned is always None in the current
-         pipeline (structural data limitation, not a bug — see the
-         note in the module docstring under "Independent Voting"), so
-         the donation-share heuristic always runs at the reduced 25%
-         weight rather than the real-alignment 40% path.
+      2. Donor independence (25%): based on donor-vote connection
+         matches, with the visibility-scaled baseline. senatorVoteAligned
+         is always None (structural data limitation, not a bug — see
+         the note in the module docstring under "Independent Voting"),
+         so this always runs the donation-share/non-consensus-vote-share
+         formula; a higher-weight "real alignment data" tier was removed
+         2026-07-15 as dead code (see module docstring).
 
     Removed in v4.2: the "state-relevant policy" exemption that skipped
     party-line votes on policy areas related to the member's TOP DONOR
@@ -852,11 +859,6 @@ def _calc_constituent_alignment(
 
     # Donor independence via donor-vote connection matches
     total_raised = funding.get("totalRaised", 0)
-    pac_ratio = (
-        funding.get("totalFromPACs", 0) / total_raised
-        if total_raised > 0
-        else 0
-    )
 
     # Baseline reflects data visibility: a small operation with no visible
     # donor-vote connections is plausibly independent; a $100M+ fundraiser
@@ -872,34 +874,13 @@ def _calc_constituent_alignment(
     else:
         base_donor = 72.0
 
-    with_alignment = [
-        m for m in lobbying_matches
-        if m.get("senatorVoteAligned") is not None
-    ] if lobbying_matches else []
-
-    if with_alignment:
-        # Real alignment data: weighted alignment rate, where consensus
-        # votes (bipartisan majority) carry much less weight as a signal
-        # of capture than divided votes.
-        weighted_aligned = 0.0
-        total_weight = 0.0
-        for m in with_alignment:
-            weight = 0.2 if m.get("isConsensusVote") else 1.0
-            total_weight += weight
-            if m.get("senatorVoteAligned"):
-                weighted_aligned += weight
-
-        lobby_alignment_rate = weighted_aligned / total_weight if total_weight > 0 else 0
-        # Floor at 0.25 so lobbying alignment always carries some penalty
-        # even when direct PAC contributions are zero.
-        pac_amplifier = max(0.25, min(pac_ratio * 2, 1.0))
-        donor_score = (1 - lobby_alignment_rate * pac_amplifier) * 100
-        donor_weight = 0.40
-    elif lobbying_matches:
-        # Matches exist but alignment is unknown (senatorVoteAligned is
-        # None for all of them — the current state of the pipeline data).
+    if lobbying_matches:
         # Penalize the visibility baseline by how much money the matched
         # donors represent and how many matches involve divided votes.
+        # senatorVoteAligned is always None (see module docstring's
+        # structural note) -- there's no live-or-planned code path that
+        # produces a real value for it, so there is no separate
+        # "real alignment data" tier here; this is the only branch.
         # NOTE: do not use raw match count against a fixed divisor — the
         # match list is capped upstream, which made count/8 a constant.
         total_lobby_donations = sum(

@@ -81,6 +81,36 @@ def house_pipeline_age() -> "timedelta | None":
     return timedelta(seconds=time.time() - _house_pipeline_started_at)
 
 
+async def _enrich_lobbying_matches_with_lda(matches: list[dict], db: Session, lda_year: int) -> None:
+    """Mutate matches in place, adding real registered lobbying spend (LDA
+    filings) to each. Own short-lived httpx client, not the caller's FETCH-
+    phase client — see senate_pipeline.py's equivalent block for why
+    reusing a closed client here silently fails every lookup. Best-effort
+    per match: one org's lookup failing doesn't block the others.
+    """
+    from app.pipeline.fetch.lda import fetch_lobbying_spend
+
+    if not matches:
+        return
+
+    async with httpx.AsyncClient() as lda_client:
+        for m in matches:
+            try:
+                spend = await fetch_lobbying_spend(
+                    lda_client, db, m.get("lobbyistOrg", ""), lda_year,
+                )
+                m["lobbyingSpend"] = round(spend)
+                if spend > 0:
+                    m["description"] = (
+                        m.get("description", "")
+                        + f" Registered federal lobbying (LDA {lda_year}): ${spend:,.0f}."
+                    )
+            except Exception:
+                logger.exception(
+                    "LDA enrichment failed for %s (non-fatal)", m.get("lobbyistOrg", "?"),
+                )
+
+
 async def run_house_pipeline() -> dict:
     """Run the full House representative pipeline."""
     global _house_pipeline_running, _house_pipeline_started_at
@@ -421,7 +451,9 @@ async def run_house_pipeline() -> dict:
             logger.info("--- House Phase 5: FEC DATA + SCORING ---")
 
             from app.pipeline.transform.normalize_finance import normalize_finance
-            from app.pipeline.analyze.cross_reference import positions_from_sponsored_bills
+            from app.pipeline.analyze.cross_reference import (
+                detect_lobbying_matches, positions_from_sponsored_bills,
+            )
             from app.pipeline.analyze.policy_alignment import clear_alignment_cache
             from app.pipeline.analyze.score_calculator import calculate_confidence, calculate_scores
 
@@ -589,9 +621,9 @@ async def run_house_pipeline() -> dict:
                     # Promise Persistence scores from real data instead
                     # of collapsing to the neutral prior.
                     vr = rep.get("votingRecord") or {}
+                    all_votes = (vr.get("keyVotes") or []) + (vr.get("recentVotes") or [])
                     rep["campaignPromises"] = positions_from_sponsored_bills(
-                        rep["sponsoredBills"],
-                        (vr.get("keyVotes") or []) + (vr.get("recentVotes") or []),
+                        rep["sponsoredBills"], all_votes,
                     )
                     promise_total += len(rep["campaignPromises"])
                     promise_evaluable += sum(
@@ -600,6 +632,23 @@ async def run_house_pipeline() -> dict:
                     )
                     if rep["campaignPromises"]:
                         reps_with_promises += 1
+
+                    # Detect donor-industry-vs-vote connections (embeddings
+                    # only, zero LLM — see cross_reference.detect_lobbying_matches).
+                    # Senate has had this since 2026-07; House never got it
+                    # wired up, so Constituent Alignment's donor-independence
+                    # component silently defaulted to a flat, fundraising-
+                    # size-based score for every House member regardless of
+                    # actual donor-vote behavior (2026-07 audit finding).
+                    lobbying_matches = detect_lobbying_matches(
+                        rep["funding"].get("topDonors", []),
+                        all_votes,
+                        rep["funding"].get("industryBreakdown", []),
+                    )
+                    await _enrich_lobbying_matches_with_lda(
+                        lobbying_matches, db, datetime.utcnow().year - 1,
+                    )
+                    rep["lobbyingMatches"] = lobbying_matches
 
                     # Set leadership/ideology from sponsorship analysis
                     l_score = leadership_scores.get(bio_id)
