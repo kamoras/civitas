@@ -29,6 +29,19 @@ const PARTY_COLORS = {
   I: "text-ind-purple",
 };
 
+// Mirrors the tenure-confidence shrinkage in
+// backend/.../score_calculator.py's _calc_legislative_effectiveness:
+// raw PageRank centrality takes years to build, so a freshman's near-zero
+// raw score reflects "no track record yet," not "bad at leadership." The
+// score itself already shrinks this toward neutral 50 for scoring purposes
+// (confidence scaled to a full 6-year term) — the displayed stat needs the
+// same treatment, or a freshman shows a misleading "LEADER: 0" the backend
+// has already decided not to trust.
+function displayedLeaderScore(rawScore: number, yearsInOffice: number): number {
+  const confidence = Math.min(yearsInOffice / 6, 1);
+  return Math.round(rawScore * 100 * confidence + 50 * (1 - confidence));
+}
+
 const PARTY_BORDER = {
   D: "border-dem-blue/30",
   R: "border-rep-red/30",
@@ -212,9 +225,9 @@ export default function SenatorCard({ senator, chamber = "senate" }: SenatorCard
               {senator.leadershipScore != null ? (
                 <>
                   <div className="text-sm sm:text-lg font-pixel whitespace-nowrap text-matrix-green">
-                    {Math.round(senator.leadershipScore * 100)}
+                    {displayedLeaderScore(senator.leadershipScore, senator.yearsInOffice)}
                   </div>
-                  <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Legislative influence score (0–100) based on PageRank of cosponsorship networks. Higher = more senators cosponsor this senator's bills.">LEADER</MetricTooltip></div>
+                  <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Legislative influence score (0–100) based on PageRank of cosponsorship networks, weighted toward neutral (50) for senators with less than 6 years in office since network centrality takes time to build. Higher = more senators cosponsor this senator's bills.">LEADER</MetricTooltip></div>
                 </>
               ) : (
                 <>
