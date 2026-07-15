@@ -13,6 +13,7 @@ import {
   fetchAdminTopPages,
   setPoliticianVacancy,
   clearStuckHousePipeline,
+  clearStuckStockTradesPipeline,
   type AdminDashboard,
   type AdminPipelineStatus,
   type ActionRefreshState,
@@ -1160,6 +1161,7 @@ function RunHistory({ runs }: { runs: PipelineRunInfo[] }) {
         <tbody>
           {runs.map((r) => {
             const isHouse = r.pipelineType === "house";
+            const isStockTrades = r.pipelineType === "stock_trades";
             const statusColor = r.status === "completed"
               ? "text-matrix-green"
               : r.status === "partial"
@@ -1175,8 +1177,8 @@ function RunHistory({ runs }: { runs: PipelineRunInfo[] }) {
                 className="border-b border-matrix-green/10 hover:bg-matrix-green/5"
               >
                 <td className="py-1.5 pr-3">
-                  <span className={isHouse ? "text-neon-cyan/70" : "text-matrix-green/50"}>
-                    {isHouse ? "HOUSE" : "SENATE"}
+                  <span className={isHouse || isStockTrades ? "text-neon-cyan/70" : "text-matrix-green/50"}>
+                    {isStockTrades ? "STOCK" : isHouse ? "HOUSE" : "SENATE"}
                   </span>
                 </td>
                 <td className="py-1.5 pr-3 text-matrix-green/70">{formatTime(r.startedAt)}</td>
@@ -1190,7 +1192,9 @@ function RunHistory({ runs }: { runs: PipelineRunInfo[] }) {
                 </td>
                 <td className="py-1.5 pr-3 text-matrix-green/60">{formatDuration(r.elapsedSeconds)}</td>
                 <td className="py-1.5 pr-3 text-right text-matrix-green/60">
-                  {isHouse ? (
+                  {isStockTrades ? (
+                    <>{r.houseTradesIngested ?? 0}H/{r.senateTradesIngested ?? 0}S</>
+                  ) : isHouse ? (
                     <>
                       {r.repsProcessed ?? 0}/{r.repsTotal ?? 0}
                       {(r.repsFailed ?? 0) > 0 && (
@@ -1207,10 +1211,10 @@ function RunHistory({ runs }: { runs: PipelineRunInfo[] }) {
                   )}
                 </td>
                 <td className="py-1.5 pr-3 text-right text-matrix-green/60">
-                  {isHouse ? "—" : r.llmCalls}
+                  {isHouse || isStockTrades ? "—" : r.llmCalls}
                 </td>
                 <td className="py-1.5 text-right text-matrix-green/60">
-                  {!isHouse && r.cacheHits + r.cacheMisses > 0
+                  {!isHouse && !isStockTrades && r.cacheHits + r.cacheMisses > 0
                     ? `${Math.round((r.cacheHits / (r.cacheHits + r.cacheMisses)) * 100)}%`
                     : "—"}
                 </td>
@@ -1534,6 +1538,7 @@ function AdminDashboardView({
     duration: string;
   } | null>(null);
   const [clearingHouse, setClearingHouse] = useState(false);
+  const [clearingStockTrades, setClearingStockTrades] = useState(false);
 
   const wasRunningRef = useRef(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1790,6 +1795,53 @@ function AdminDashboardView({
                                        px-2 py-0.5 rounded transition-colors disabled:opacity-40"
                           >
                             {clearingHouse ? "CLEARING..." : "[CLEAR STUCK RUN]"}
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+
+                {/* Stock trades pipeline */}
+                {(() => {
+                  const run = pipelineStatus?.stockTradesLastRun;
+                  const isStuck = run?.status === "running" && !pipelineStatus?.stockTradesIsRunning;
+                  return (
+                    <>
+                      <div className="flex justify-between items-center">
+                        <span className="text-matrix-green/60">STOCK TRADES</span>
+                        <span className={pipelineStatus?.stockTradesIsRunning ? "text-neon-cyan animate-pulse" : "text-matrix-green/60"}>
+                          {pipelineStatus?.stockTradesIsRunning ? "RUNNING" : run ? (
+                            <span>
+                              <span className={
+                                run.status === "completed" ? "text-matrix-green" :
+                                run.status === "failed" ? "text-neon-pink" :
+                                isStuck ? "text-yellow-400" : "text-matrix-green/50"
+                              }>
+                                {isStuck ? "STUCK" : run.status.toUpperCase()}
+                              </span>
+                              <span className="text-matrix-green/60"> · {run.houseTradesIngested}H/{run.senateTradesIngested}S</span>
+                            </span>
+                          ) : "IDLE"}
+                        </span>
+                      </div>
+                      {isStuck && (
+                        <div className="flex justify-end">
+                          <button
+                            disabled={clearingStockTrades}
+                            onClick={async () => {
+                              setClearingStockTrades(true);
+                              try {
+                                await clearStuckStockTradesPipeline(token);
+                                await pollStatus();
+                              } catch {}
+                              setClearingStockTrades(false);
+                            }}
+                            className="text-[9px] font-pixel text-yellow-400/70 hover:text-yellow-400
+                                       border border-yellow-400/30 hover:border-yellow-400/60
+                                       px-2 py-0.5 rounded transition-colors disabled:opacity-40"
+                          >
+                            {clearingStockTrades ? "CLEARING..." : "[CLEAR STUCK RUN]"}
                           </button>
                         </div>
                       )}

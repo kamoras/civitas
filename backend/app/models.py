@@ -737,6 +737,20 @@ class HousePipelineRun(Base):
     ground_truth_failures: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class StockTradesPipelineRun(Base):
+    """Tracks each STOCK Act PTR ingestion run — mirrors HousePipelineRun."""
+    __tablename__ = "stock_trades_pipeline_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    started_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    status: Mapped[str] = mapped_column(String, default="running")
+    house_trades_ingested: Mapped[int] = mapped_column(Integer, default=0)
+    senate_trades_ingested: Mapped[int] = mapped_column(Integer, default=0)
+    elapsed_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class BskySenatorSpotlight(Base):
     """Tracks which senators have been highlighted in daily Bluesky score posts."""
     __tablename__ = "bsky_senator_spotlights"

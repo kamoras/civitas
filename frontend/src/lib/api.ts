@@ -254,7 +254,7 @@ export interface PipelineStepInfo {
 
 export interface PipelineRunInfo {
   id: number;
-  pipelineType?: "senate" | "house";
+  pipelineType?: "senate" | "house" | "stock_trades";
   startedAt: string;
   completedAt: string | null;
   status: string;
@@ -273,6 +273,9 @@ export interface PipelineRunInfo {
   repsProcessed?: number;
   repsTotal?: number;
   repsFailed?: number;
+  // Stock-trades-only fields
+  houseTradesIngested?: number;
+  senateTradesIngested?: number;
 }
 
 export interface HouseRunInfo {
@@ -283,6 +286,17 @@ export interface HouseRunInfo {
   repsProcessed: number;
   repsTotal: number;
   repsFailed: number;
+  elapsedSeconds: number | null;
+  errorMessage: string | null;
+}
+
+export interface StockTradesRunInfo {
+  id: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  status: string;
+  houseTradesIngested: number;
+  senateTradesIngested: number;
   elapsedSeconds: number | null;
   errorMessage: string | null;
 }
@@ -614,8 +628,10 @@ export interface ActionRefreshState {
 export interface AdminPipelineStatus {
   isRunning: boolean;
   houseIsRunning?: boolean;
+  stockTradesIsRunning?: boolean;
   lastRun?: PipelineRunInfo;
   houseLastRun?: HouseRunInfo;
+  stockTradesLastRun?: StockTradesRunInfo;
   actionRefresh?: ActionRefreshState;
 }
 
@@ -629,6 +645,15 @@ export async function fetchAdminPipelineStatus(token: string): Promise<AdminPipe
 
 export async function clearStuckHousePipeline(token: string): Promise<{ cleared: number; message: string }> {
   const res = await fetch(`${API_BASE}/admin/pipeline/clear-stuck-house`, {
+    method: "POST",
+    headers: adminHeaders(token),
+  });
+  if (!res.ok) throw new Error(`Clear failed: ${res.status}`);
+  return res.json();
+}
+
+export async function clearStuckStockTradesPipeline(token: string): Promise<{ cleared: number; message: string }> {
+  const res = await fetch(`${API_BASE}/admin/pipeline/clear-stuck-stock-trades`, {
     method: "POST",
     headers: adminHeaders(token),
   });
