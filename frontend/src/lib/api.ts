@@ -7,6 +7,20 @@ import type { PaginatedBills } from "@/types/bill";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
+// Chamber selector for the two near-identical endpoints below (votes,
+// stock trades) — an enum instead of a raw string so call sites can't pass
+// an arbitrary/misspelled value. The enum is just the choice; its URL path
+// segment is a separate concern, kept in CHAMBER_PATH below.
+enum Chamber {
+  Senate,
+  House,
+}
+
+const CHAMBER_PATH: Record<Chamber, string> = {
+  [Chamber.Senate]: "senators",
+  [Chamber.House]: "representatives",
+};
+
 const _fetchCache = new Map<string, { data: unknown; expiry: number }>();
 
 async function cachedFetch<T>(url: string, ttlMs: number): Promise<T> {
@@ -107,8 +121,12 @@ export async function fetchRepLeaderboard(
   return res.json();
 }
 
-export async function fetchRepVotes(
-  repId: string,
+// Shared by the fetchRepVotes/fetchSenatorVotes and fetchRepStockTrades/
+// fetchSenatorStockTrades pairs below — same query-building and fetch
+// shape, differing only in the "representatives"/"senators" URL segment.
+async function fetchPaginatedVotes(
+  chamber: Chamber,
+  entityId: string,
   options?: { category?: "recent" | "key"; page?: number; perPage?: number; filter?: string },
 ): Promise<PaginatedVotes> {
   const params = new URLSearchParams();
@@ -116,22 +134,35 @@ export async function fetchRepVotes(
   if (options?.page) params.set("page", String(options.page));
   if (options?.perPage) params.set("per_page", String(options.perPage));
   if (options?.filter) params.set("filter", options.filter);
-  const res = await fetch(`${API_BASE}/representatives/${repId}/votes?${params}`);
+  const res = await fetch(`${API_BASE}/${CHAMBER_PATH[chamber]}/${entityId}/votes?${params}`);
   if (!res.ok) throw new Error(`Failed to load votes: ${res.status}`);
   return res.json();
+}
+
+export async function fetchRepVotes(
+  repId: string,
+  options?: { category?: "recent" | "key"; page?: number; perPage?: number; filter?: string },
+): Promise<PaginatedVotes> {
+  return fetchPaginatedVotes(Chamber.House, repId, options);
 }
 
 export async function fetchSenatorVotes(
   senatorId: string,
   options?: { category?: "recent" | "key"; page?: number; perPage?: number; filter?: string },
 ): Promise<PaginatedVotes> {
+  return fetchPaginatedVotes(Chamber.Senate, senatorId, options);
+}
+
+async function fetchPaginatedStockTrades(
+  chamber: Chamber,
+  entityId: string,
+  options?: { page?: number; perPage?: number },
+): Promise<PaginatedStockTrades> {
   const params = new URLSearchParams();
-  if (options?.category) params.set("category", options.category);
   if (options?.page) params.set("page", String(options.page));
   if (options?.perPage) params.set("per_page", String(options.perPage));
-  if (options?.filter) params.set("filter", options.filter);
-  const res = await fetch(`${API_BASE}/senators/${senatorId}/votes?${params}`);
-  if (!res.ok) throw new Error(`Failed to load votes: ${res.status}`);
+  const res = await fetch(`${API_BASE}/${CHAMBER_PATH[chamber]}/${entityId}/stock-trades?${params}`);
+  if (!res.ok) throw new Error(`Failed to load stock trades: ${res.status}`);
   return res.json();
 }
 
@@ -139,24 +170,14 @@ export async function fetchRepStockTrades(
   repId: string,
   options?: { page?: number; perPage?: number },
 ): Promise<PaginatedStockTrades> {
-  const params = new URLSearchParams();
-  if (options?.page) params.set("page", String(options.page));
-  if (options?.perPage) params.set("per_page", String(options.perPage));
-  const res = await fetch(`${API_BASE}/representatives/${repId}/stock-trades?${params}`);
-  if (!res.ok) throw new Error(`Failed to load stock trades: ${res.status}`);
-  return res.json();
+  return fetchPaginatedStockTrades(Chamber.House, repId, options);
 }
 
 export async function fetchSenatorStockTrades(
   senatorId: string,
   options?: { page?: number; perPage?: number },
 ): Promise<PaginatedStockTrades> {
-  const params = new URLSearchParams();
-  if (options?.page) params.set("page", String(options.page));
-  if (options?.perPage) params.set("per_page", String(options.perPage));
-  const res = await fetch(`${API_BASE}/senators/${senatorId}/stock-trades?${params}`);
-  if (!res.ok) throw new Error(`Failed to load stock trades: ${res.status}`);
-  return res.json();
+  return fetchPaginatedStockTrades(Chamber.Senate, senatorId, options);
 }
 
 export async function fetchBillsInFlight(options?: {
