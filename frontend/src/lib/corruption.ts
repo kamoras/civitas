@@ -10,21 +10,6 @@ const DEFAULT_WEIGHTS: Record<string, number> = {
   legislativeEffectiveness: 0.20,
 };
 
-export function calculateOverallScore(
-  breakdown: Senator["representationScore"] | undefined | null,
-  weights?: Record<string, number>,
-): number {
-  if (!breakdown) return 0;
-  const w = weights ?? DEFAULT_WEIGHTS;
-  return Math.round(
-    (breakdown.fundingIndependence ?? 0) * (w.fundingIndependence ?? 0.25) +
-      (breakdown.promisePersistence ?? 0) * (w.promisePersistence ?? 0.20) +
-      (breakdown.independentVoting ?? 0) * (w.independentVoting ?? 0.20) +
-      (breakdown.fundingDiversity ?? 0) * (w.fundingDiversity ?? 0.15) +
-      (breakdown.legislativeEffectiveness ?? 0) * (w.legislativeEffectiveness ?? 0.20)
-  );
-}
-
 const DEFAULT_PRESIDENT_WEIGHTS: Record<string, number> = {
   independence: 0.15,
   followThrough: 0.20,
@@ -34,21 +19,6 @@ const DEFAULT_PRESIDENT_WEIGHTS: Record<string, number> = {
   agencyAlignment: 0.15,
 };
 
-export function calculatePresidentScore(
-  s: PresidentialScore,
-  weights?: Record<string, number>,
-): number {
-  const w = weights ?? DEFAULT_PRESIDENT_WEIGHTS;
-  return Math.round(
-    s.independence * (w.independence ?? 0.15) +
-      s.followThrough * (w.followThrough ?? 0.20) +
-      s.publicMandate * (w.publicMandate ?? 0.15) +
-      s.effectiveness * (w.effectiveness ?? 0.20) +
-      s.competence * (w.competence ?? 0.15) +
-      s.agencyAlignment * (w.agencyAlignment ?? 0.15),
-  );
-}
-
 const DEFAULT_JUSTICE_WEIGHTS: Record<string, number> = {
   consistency: 0.35,
   independence: 0.30,
@@ -56,17 +26,48 @@ const DEFAULT_JUSTICE_WEIGHTS: Record<string, number> = {
   judicialRestraint: 0.20,
 };
 
+// Shared by calculateOverallScore/calculatePresidentScore/calculateJusticeScore
+// below — each was its own copy-pasted "round(sum of field * (weight ?? default))"
+// with only the field names and default weights differing.
+function weightedScore(
+  // `object`, not Record<string, number>: none of the three score-breakdown
+  // interfaces declare an index signature (so TS won't structurally accept
+  // them as a Record), and some carry non-numeric fields alongside the
+  // score_* ones (e.g. representationScore.confidence) that this never reads.
+  breakdown: object,
+  defaultWeights: Record<string, number>,
+  weights?: Record<string, number>,
+): number {
+  const b = breakdown as Record<string, unknown>;
+  const w = weights ?? defaultWeights;
+  let sum = 0;
+  for (const key of Object.keys(defaultWeights)) {
+    const value = b[key];
+    sum += (typeof value === "number" ? value : 0) * (w[key] ?? defaultWeights[key]);
+  }
+  return Math.round(sum);
+}
+
+export function calculateOverallScore(
+  breakdown: Senator["representationScore"] | undefined | null,
+  weights?: Record<string, number>,
+): number {
+  if (!breakdown) return 0;
+  return weightedScore(breakdown, DEFAULT_WEIGHTS, weights);
+}
+
+export function calculatePresidentScore(
+  s: PresidentialScore,
+  weights?: Record<string, number>,
+): number {
+  return weightedScore(s, DEFAULT_PRESIDENT_WEIGHTS, weights);
+}
+
 export function calculateJusticeScore(
   s: JusticeScore,
   weights?: Record<string, number>,
 ): number {
-  const w = weights ?? DEFAULT_JUSTICE_WEIGHTS;
-  return Math.round(
-    s.consistency * (w.consistency ?? 0.35) +
-      s.independence * (w.independence ?? 0.30) +
-      s.bipartisanAgreement * (w.bipartisanAgreement ?? 0.15) +
-      s.judicialRestraint * (w.judicialRestraint ?? 0.20),
-  );
+  return weightedScore(s, DEFAULT_JUSTICE_WEIGHTS, weights);
 }
 
 export function getJusticeLabel(score: number): string {
