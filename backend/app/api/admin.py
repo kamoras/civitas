@@ -64,6 +64,58 @@ def require_admin(authorization: str | None = Header(default=None)) -> None:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
+def _live_elapsed(run) -> float | None:
+    """Elapsed seconds for a pipeline run row, computed live if still running.
+
+    A "running" row's stored elapsed_seconds is stale (only written on
+    completion), so while it's in flight we compute it against now instead.
+    """
+    if run.status == "running" and run.started_at:
+        return round((datetime.utcnow() - run.started_at).total_seconds(), 1)
+    return run.elapsed_seconds
+
+
+def _history_entry(run, pipeline_type: str, extra: dict) -> dict:
+    """Shared fields for a pipeline_history row; `extra` adds the type-specific ones."""
+    return {
+        "id": run.id,
+        "pipelineType": pipeline_type,
+        "startedAt": run.started_at.isoformat() if run.started_at else None,
+        "completedAt": run.completed_at.isoformat() if run.completed_at else None,
+        "status": run.status,
+        "elapsedSeconds": run.elapsed_seconds,
+        "errorMessage": run.error_message,
+        **extra,
+    }
+
+
+def _clear_stuck_runs(db: Session, model, is_running: bool, pipeline_label: str) -> dict:
+    """Mark any stuck (status=running) run of `model` as failed.
+
+    Shared by the House and Stock Trades "clear stuck run" admin endpoints —
+    use when the in-memory flag says idle but the DB record still shows
+    running (e.g. after a container restart mid-run).
+    """
+    if is_running:
+        raise HTTPException(
+            status_code=409, detail=f"{pipeline_label} pipeline is actively running — stop it first"
+        )
+
+    stuck = db.query(model).filter(model.status == "running").all()
+    if not stuck:
+        return {"cleared": 0, "message": "No stuck runs found"}
+
+    now = datetime.utcnow()
+    for run in stuck:
+        run.status = "failed"
+        run.error_message = "Cleared by admin (container restart)"
+        run.completed_at = now
+        if run.started_at:
+            run.elapsed_seconds = round((now - run.started_at).total_seconds(), 1)
+    db.commit()
+    return {"cleared": len(stuck), "message": f"Marked {len(stuck)} run(s) as failed"}
+
+
 @router.post("/auth")
 async def admin_auth(authorization: str | None = Header(default=None)):
     """Validate an admin token. Returns 200 on success, 401 on failure."""
@@ -584,9 +636,6 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
     }
 
     if last_stock_run:
-        stock_elapsed = last_stock_run.elapsed_seconds
-        if last_stock_run.status == "running" and last_stock_run.started_at:
-            stock_elapsed = round((datetime.utcnow() - last_stock_run.started_at).total_seconds(), 1)
         result["stockTradesLastRun"] = {
             "id": last_stock_run.id,
             "startedAt": last_stock_run.started_at.isoformat() if last_stock_run.started_at else None,
@@ -594,14 +643,11 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
             "status": last_stock_run.status,
             "houseTradesIngested": last_stock_run.house_trades_ingested,
             "senateTradesIngested": last_stock_run.senate_trades_ingested,
-            "elapsedSeconds": stock_elapsed,
+            "elapsedSeconds": _live_elapsed(last_stock_run),
             "errorMessage": last_stock_run.error_message,
         }
 
     if last_house_run:
-        house_elapsed = last_house_run.elapsed_seconds
-        if last_house_run.status == "running" and last_house_run.started_at:
-            house_elapsed = round((datetime.utcnow() - last_house_run.started_at).total_seconds(), 1)
         result["houseLastRun"] = {
             "id": last_house_run.id,
             "startedAt": last_house_run.started_at.isoformat() if last_house_run.started_at else None,
@@ -610,7 +656,7 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
             "repsProcessed": last_house_run.reps_processed,
             "repsTotal": last_house_run.reps_total,
             "repsFailed": last_house_run.reps_failed,
-            "elapsedSeconds": house_elapsed,
+            "elapsedSeconds": _live_elapsed(last_house_run),
             "errorMessage": last_house_run.error_message,
             "groundTruthFailures": json.loads(last_house_run.ground_truth_failures)
             if getattr(last_house_run, "ground_truth_failures", None)
@@ -618,10 +664,6 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
         }
 
     if last_run:
-        elapsed = last_run.elapsed_seconds
-        if last_run.status == "running" and last_run.started_at:
-            elapsed = round((datetime.utcnow() - last_run.started_at).total_seconds(), 1)
-
         progress_steps = None
         if last_run.progress_detail:
             try:
@@ -642,7 +684,7 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
             "llmCalls": last_run.llm_calls,
             "cacheHits": last_run.cache_hits,
             "cacheMisses": last_run.cache_misses,
-            "elapsedSeconds": elapsed,
+            "elapsedSeconds": _live_elapsed(last_run),
             "errorMessage": last_run.error_message,
             "progressSteps": progress_steps,
         }
@@ -692,12 +734,7 @@ async def admin_pipeline_history(
     )
 
     senate_entries = [
-        {
-            "id": r.id,
-            "pipelineType": "senate",
-            "startedAt": r.started_at.isoformat() if r.started_at else None,
-            "completedAt": r.completed_at.isoformat() if r.completed_at else None,
-            "status": r.status,
+        _history_entry(r, "senate", {
             "currentPhase": r.current_phase,
             "senatorsProcessed": r.senators_processed,
             "senatorsTotal": r.senators_total or 0,
@@ -706,38 +743,22 @@ async def admin_pipeline_history(
             "llmCalls": r.llm_calls,
             "cacheHits": r.cache_hits,
             "cacheMisses": r.cache_misses,
-            "elapsedSeconds": r.elapsed_seconds,
-            "errorMessage": r.error_message,
-        }
+        })
         for r in senate_runs
     ]
     house_entries = [
-        {
-            "id": r.id,
-            "pipelineType": "house",
-            "startedAt": r.started_at.isoformat() if r.started_at else None,
-            "completedAt": r.completed_at.isoformat() if r.completed_at else None,
-            "status": r.status,
+        _history_entry(r, "house", {
             "repsProcessed": r.reps_processed,
             "repsTotal": r.reps_total,
             "repsFailed": r.reps_failed,
-            "elapsedSeconds": r.elapsed_seconds,
-            "errorMessage": r.error_message,
-        }
+        })
         for r in house_runs
     ]
     stock_entries = [
-        {
-            "id": r.id,
-            "pipelineType": "stock_trades",
-            "startedAt": r.started_at.isoformat() if r.started_at else None,
-            "completedAt": r.completed_at.isoformat() if r.completed_at else None,
-            "status": r.status,
+        _history_entry(r, "stock_trades", {
             "houseTradesIngested": r.house_trades_ingested,
             "senateTradesIngested": r.senate_trades_ingested,
-            "elapsedSeconds": r.elapsed_seconds,
-            "errorMessage": r.error_message,
-        }
+        })
         for r in stock_runs
     ]
 
@@ -860,26 +881,7 @@ async def admin_clear_stuck_house(db: Session = Depends(get_db)):
     from app.models import HousePipelineRun
     from app.pipeline.house_pipeline import is_house_pipeline_running
 
-    if is_house_pipeline_running():
-        raise HTTPException(status_code=409, detail="House pipeline is actively running — stop it first")
-
-    stuck = (
-        db.query(HousePipelineRun)
-        .filter(HousePipelineRun.status == "running")
-        .all()
-    )
-    if not stuck:
-        return {"cleared": 0, "message": "No stuck runs found"}
-
-    now = datetime.utcnow()
-    for run in stuck:
-        run.status = "failed"
-        run.error_message = "Cleared by admin (container restart)"
-        run.completed_at = now
-        if run.started_at:
-            run.elapsed_seconds = round((now - run.started_at).total_seconds(), 1)
-    db.commit()
-    return {"cleared": len(stuck), "message": f"Marked {len(stuck)} run(s) as failed"}
+    return _clear_stuck_runs(db, HousePipelineRun, is_house_pipeline_running(), "House")
 
 
 @router.post("/pipeline/clear-stuck-stock-trades", dependencies=[Depends(require_admin)])
@@ -892,26 +894,7 @@ async def admin_clear_stuck_stock_trades(db: Session = Depends(get_db)):
     from app.models import StockTradesPipelineRun
     from app.pipeline.stock_pipeline import is_stock_pipeline_running
 
-    if is_stock_pipeline_running():
-        raise HTTPException(status_code=409, detail="Stock trades pipeline is actively running — stop it first")
-
-    stuck = (
-        db.query(StockTradesPipelineRun)
-        .filter(StockTradesPipelineRun.status == "running")
-        .all()
-    )
-    if not stuck:
-        return {"cleared": 0, "message": "No stuck runs found"}
-
-    now = datetime.utcnow()
-    for run in stuck:
-        run.status = "failed"
-        run.error_message = "Cleared by admin (container restart)"
-        run.completed_at = now
-        if run.started_at:
-            run.elapsed_seconds = round((now - run.started_at).total_seconds(), 1)
-    db.commit()
-    return {"cleared": len(stuck), "message": f"Marked {len(stuck)} run(s) as failed"}
+    return _clear_stuck_runs(db, StockTradesPipelineRun, is_stock_pipeline_running(), "Stock trades")
 
 
 @router.post("/data/reset", dependencies=[Depends(require_admin)])
