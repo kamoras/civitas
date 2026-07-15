@@ -19,13 +19,25 @@ const PARTY_BADGE: Record<string, { label: string; className: string }> = {
 
 const INITIAL_VISIBLE = 8;
 
+// Matches SUBSTANTIVE_BILL_TYPES in backend/app/pipeline/analyze/score_calculator.py —
+// simple/concurrent resolutions (sres/hres/sconres/hconres) are routinely
+// ceremonial ("designating April as Second Chance Month") and "agreed to"
+// without debate by unanimous consent. The Legislative Effectiveness score
+// already excludes them from its advancement count for exactly this reason
+// (the "Mushroom Day" fix) — this summary count must use the same filter,
+// or it displays a bigger, more impressive "advancing" number right next
+// to a score that didn't credit any of it, an unexplained contradiction
+// on the same card.
+const SUBSTANTIVE_BILL_TYPES = new Set(["s", "hr", "sjres", "hjres"]);
+
 export default function SponsoredBills({ bills }: SponsoredBillsProps) {
   const [showAll, setShowAll] = useState(false);
 
   if (!bills || bills.length === 0) return null;
 
-  const lawCount = bills.filter((b) => b.isLaw).length;
-  const advancedCount = bills.filter((b) => {
+  const substantive = bills.filter((b) => SUBSTANTIVE_BILL_TYPES.has((b.billType || "").toLowerCase()));
+  const lawCount = substantive.filter((b) => b.isLaw).length;
+  const advancedCount = substantive.filter((b) => {
     if (b.isLaw) return false;
     const action = (b.latestAction || "").toLowerCase();
     return (
@@ -57,13 +69,13 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
             <div className={`text-xl font-pixel ${lawCount > 0 ? "text-neon-cyan" : "text-matrix-green/30"}`}>
               {lawCount}
             </div>
-            <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="How many of this senator's sponsored bills were signed into law. Most bills never pass — even 1 is notable.">BECAME LAW</MetricTooltip></div>
+            <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="How many of this senator's sponsored bills (S./H.R./joint resolutions — not simple/concurrent resolutions) were signed into law. Most bills never pass — even 1 is notable.">BECAME LAW</MetricTooltip></div>
           </div>
           <div className="terminal-window p-2">
             <div className={`text-xl font-pixel ${advancedCount > 0 ? "text-neon-yellow" : "text-matrix-green/30"}`}>
               {advancedCount}
             </div>
-            <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Bills that passed at least one chamber or were reported out of committee — meaningful legislative progress beyond introduction.">ADVANCING</MetricTooltip></div>
+            <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Substantive bills (S./H.R./joint resolutions) that passed at least one chamber or were reported out of committee. Simple/concurrent resolutions (commemorative, e.g. designating an awareness month) are excluded — they're routinely agreed to without debate and aren't meaningful legislative progress, matching how the Legislative Effectiveness score itself counts advancement.">ADVANCING</MetricTooltip></div>
           </div>
         </div>
 
