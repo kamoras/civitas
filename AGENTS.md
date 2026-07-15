@@ -16,14 +16,14 @@ locally on a single self-hosted device with zero cloud AI calls.
 ## Architecture
 
 - **Frontend**: Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS — port 3000/3001
-- **Backend**: FastAPI (Python 3.12), SQLAlchemy ORM, SQLite — port 8000/8001
+- **Backend**: FastAPI (Python 3.13), SQLAlchemy ORM, SQLite — port 8000/8001
 - **LLM**: Qwen2.5 1.5B via llama.cpp (native ARM, port 8070) or Ollama (Docker, port 11434)
 - **Embeddings**: sentence-transformers (Snowflake Arctic-XS), runs in-process
 - **Vector Store**: ChromaDB for semantic search document store
 - **Deployment**: Docker Compose, blue/green zero-downtime via `deploy.sh`, nginx reverse proxy with caching
 - **Branches covered**: Senate (100 senators), House (435 representatives), Presidents (historical + modern), Supreme Court (9 justices)
 - **News Feeds**: RSS parsing (AP, NPR, Reuters, PBS) + Google Trends + Reddit trending for Action Center
-- **Action Center**: National monitors (auto-detected ongoing concerns), year-in-review timeline, elections tab, dynamic theme styling
+- **Action Center**: National monitors (auto-detected ongoing concerns), year-in-review timeline, elections tab
 
 All services, models, and data run on-device. No data leaves the server.
 
@@ -40,7 +40,8 @@ civitas/
 │   │   │   ├── transform/       # Data normalization, embedding-based industry classification
 │   │   │   ├── analyze/         # Bill analysis, scoring, cross-referencing, LLM narratives, justice scoring
 │   │   │   ├── assemble/        # Scorecard builder + validator
-│   │   │   ├── orchestrator.py  # Pipeline control flow (FETCH→TRANSFORM→ANALYZE→ASSEMBLE+SAVE)
+│   │   │   ├── senate_pipeline.py, house_pipeline.py  # FETCH→TRANSFORM→ANALYZE→ASSEMBLE+SAVE per chamber
+│   │   │   ├── stock_pipeline.py  # STOCK Act trade-disclosure ingestion (sibling phase)
 │   │   │   └── vector_store.py  # ChromaDB + sentence-transformer model management
 │   │   ├── models.py            # SQLAlchemy ORM (Senator, Representative, KeyVote, Justice, NationalMonitor, TimelineEntry, etc.)
 │   │   ├── schemas.py           # Pydantic response schemas (incl. PaginatedVotesSchema)
@@ -48,13 +49,15 @@ civitas/
 │   │   ├── config.py            # Pydantic settings from .env
 │   │   ├── config_definitions.py # Enums, weights, industry codes (single source of truth)
 │   │   └── main.py              # FastAPI app with lifespan hooks
-│   ├── tests/                   # 572 pytest tests
+│   ├── tests/                   # pytest test suite (see `pytest tests/` for current count)
 │   ├── requirements.txt
 │   ├── pytest.ini
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
-│   │   ├── app/                 # Next.js App Router pages (action [issues/monitors/timeline/elections/branches/globe], about, admin, explore, leaderboard, scorecard)
+│   │   ├── app/                 # Next.js App Router pages (action [issues/monitors/timeline/elections/branches/globe],
+│   │   │                        #   politicians [directory + per-member profile], bills, compare, explore, leaderboard,
+│   │   │                        #   about, changelog, accessibility, environmental, feedback, admin)
 │   │   ├── components/          # React components (action, checker, president, justice, explore, home, effects)
 │   │   ├── hooks/               # Custom React hooks
 │   │   ├── lib/                 # API client (with paginated vote fetching), utilities
@@ -190,9 +193,10 @@ alias table. This prevents label fragmentation from diluting kNN vote weights.
 
 ### 3. Deterministic, auditable scoring
 
-The four representation sub-scores (Funding Independence, Promise Persistence,
-Independent Voting, Funding Diversity) use transparent statistical formulas
-with no LLM input. All formulas include inline academic citations.
+The five representation sub-scores (Funding Independence, Promise Persistence,
+Constituent Alignment, Funding Diversity, Legislative Effectiveness) use
+transparent statistical formulas with no LLM input. All formulas include
+inline academic citations.
 
 Key mathematical properties:
 - **Bayesian shrinkage**: Scores regress toward 50 when data is sparse (e.g.,
@@ -293,7 +297,8 @@ regression gate, wired into `house_pipeline.py` alongside Senate's.
 
 The pipeline runs nightly (configurable via `PIPELINE_CRON_SCHEDULE`) or can
 be triggered manually via `POST /api/admin/pipeline/trigger`. It executes in
-4 phases defined in `orchestrator.py`:
+4 phases per chamber, defined in `senate_pipeline.py`/`house_pipeline.py` and
+invoked by `scheduler.py`'s `_nightly_pipeline()`:
 
 1. **FETCH** — Pull senators, House representatives, bills, roll-call votes,
    bill cosponsors, floor speeches, FEC financial data, Supreme Court cases,
@@ -326,15 +331,18 @@ After issues are committed, the Action Center pipeline also:
   days are auto-detected and tracked in `national_monitors` with sourced
   timeline updates in `monitor_updates`. Existing monitors are deduplicated
   by embedding similarity; dormant monitors are marked "watching"
-- **Generates dynamic styling** — LLM describes a visual concept for the
-  day's theme (SVG watermark + accent colors), applied deterministically
+
+After both member pipelines complete, `stock_pipeline.py` runs as a sibling
+phase — fetches House (PDF) and Senate (HTML) STOCK Act periodic transaction
+reports, matches filer to a known member, classifies trade industry (reusing
+the donor-industry embedding classifier), and computes disclosure timeliness.
 
 Each senator is processed independently. The pipeline uses `PipelineRun`
 records to track progress and supports resumption.
 
 The ANALYZE phase uses a **producer-consumer pattern** to overlap embedding
 work with LLM inference. A background "Librarian" thread
-(`_embedding_producer` in `orchestrator.py`) pre-computes all embedding-based
+(`_embedding_producer` in `senate_pipeline.py`) pre-computes all embedding-based
 analyses for the next senator via `precompute_senator_analysis()` in
 `cross_reference.py`, while the main "Analyst" thread waits for the LLM HTTP
 response. Results flow through a bounded `queue.Queue(maxsize=3)`. On a Pi 5,
@@ -421,7 +429,8 @@ SQLAlchemy ORM models are in `backend/app/models.py`. Key tables: `senators`,
 
 | What | Where |
 |------|-------|
-| Pipeline orchestration | `backend/app/pipeline/orchestrator.py` |
+| Pipeline orchestration | `backend/app/scheduler.py` (entrypoint), `backend/app/pipeline/senate_pipeline.py` / `house_pipeline.py` |
+| Stock trade disclosures | `backend/app/pipeline/stock_pipeline.py` |
 | Scoring formulas | `backend/app/pipeline/analyze/score_calculator.py` |
 | Industry classification (embeddings + PAC decontextualization) | `backend/app/pipeline/transform/industry_classifier.py` |
 | Donor type classification (tiered + batch skip detection) | `backend/app/pipeline/analyze/donor_classifier_ai.py` |
@@ -457,9 +466,9 @@ SQLAlchemy ORM models are in `backend/app/models.py`. Key tables: `senators`,
 
 ### Backend (Python)
 
-- Python 3.12+, type hints throughout
+- Python 3.13+, type hints throughout
 - FastAPI for HTTP, SQLAlchemy 2.0 ORM (mapped_column style), Pydantic v2 for schemas
-- `async def` for API routes and fetch functions; pipeline orchestrator runs synchronously in a background thread
+- `async def` for API routes and fetch functions; the nightly pipeline itself runs synchronously in a background thread
 - Logging via `logging.getLogger(__name__)` — structured, no print statements
 - All pipeline modules use dependency injection for DB sessions
 - Never store secrets in source code — all credentials come from `.env` via `pydantic-settings`
