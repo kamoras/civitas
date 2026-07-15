@@ -76,7 +76,6 @@ References
 """
 
 import logging
-from collections import Counter
 
 import numpy as np
 from sqlalchemy.orm import Session
@@ -662,71 +661,6 @@ def classify_party_alignment_multi(
         "weight": round(weight, 4),
         "areas": area_results,
     }
-
-
-def classify_party_alignment_batch(
-    bills: list[dict],
-) -> dict[str, str]:
-    """Batch classify party alignment for multiple bills.
-
-    Args:
-        bills: list of dicts with billId, billName, policyArea, stance.
-
-    Returns:
-        Dict mapping billId → "R" | "D" | "bipartisan"
-    """
-    if not bills:
-        return {}
-
-    _ensure_platform_embeddings()
-
-    from app.pipeline.vector_store import get_embedding_model
-    model = get_embedding_model()
-
-    texts = [
-        _stance_conditioned_query(b.get("billName", ""), b.get("stance", "neutral"))
-        for b in bills
-    ]
-    embs = model.encode(texts, show_progress_bar=False, batch_size=min(64, len(texts)))
-    norms = np.linalg.norm(embs, axis=1, keepdims=True)
-    norms[norms == 0] = 1.0
-    embs = embs / norms
-
-    results: dict[str, str] = {}
-
-    for i, bill in enumerate(bills):
-        bill_id = bill.get("billId", "")
-        policy_area = bill.get("policyArea", "PROCEDURAL")
-        query_emb = embs[i]
-
-        if policy_area == "PROCEDURAL":
-            results[bill_id] = "bipartisan"
-            continue
-
-        r_policy_emb = _r_embeddings.get(policy_area)
-        d_policy_emb = _d_embeddings.get(policy_area)
-
-        if r_policy_emb is not None and d_policy_emb is not None:
-            r_score = float(np.dot(query_emb, r_policy_emb))
-            d_score = float(np.dot(query_emb, d_policy_emb))
-        else:
-            r_score = float(np.dot(query_emb, _r_aggregate))
-            d_score = float(np.dot(query_emb, _d_aggregate))
-
-        margin = abs(r_score - d_score)
-
-        if margin < 0.06:
-            results[bill_id] = "bipartisan"
-            continue
-
-        results[bill_id] = "R" if r_score > d_score else "D"
-
-    dist = Counter(results.values())
-    logger.info(
-        "Party alignment (content-based): %s",
-        ", ".join(f"{k}={v}" for k, v in dist.most_common()),
-    )
-    return results
 
 
 def refine_with_vote_data(

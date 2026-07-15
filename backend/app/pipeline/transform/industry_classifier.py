@@ -409,19 +409,6 @@ def classify_industries_batch_scored(org_names: list[str]) -> dict[str, tuple[st
     return results
 
 
-def classify_industries_batch(org_names: list[str]) -> dict[str, str]:
-    """Batch-classify org names using embedding cosine similarity.
-
-    Convenience wrapper around classify_industries_batch_scored that
-    returns plain industry codes (scores discarded).
-    """
-    scored = classify_industries_batch_scored(org_names)
-    results: dict[str, str] = {name: "OTHER" for name in org_names}
-    for name, (industry, _score) in scored.items():
-        results[name] = industry
-    return results
-
-
 def classify_with_learning(
     org_name: str,
     db_session: Session | None = None,

@@ -83,38 +83,9 @@ export function fecCommitteeSearchUrl(name: string): string {
 }
 
 /**
- * Link to the Senate contact page.
- */
-export function senateGovUrl(): string {
-  return `https://www.senate.gov/senators/senators-contact.htm`;
-}
-
-/**
- * Link to the Congressional Record daily edition on GovInfo.
- */
-export function congressionalRecordUrl(date: string): string {
-  if (!date) return "";
-  return `https://www.congress.gov/congressional-record/${date.replace(/-/g, "/")}`;
-}
-
-/**
  * Build a source link for a vote (bill or roll call).
  */
 export function voteSourceUrl(billId: string): string {
   if (billId.startsWith("Roll-")) return rollCallUrl(billId);
   return billUrl(billId);
-}
-
-/**
- * Federal Register search for presidential documents.
- */
-export function federalRegisterPresidentUrl(): string {
-  return `https://www.federalregister.gov/presidential-documents`;
-}
-
-/**
- * BLS employment data page.
- */
-export function blsEmploymentUrl(): string {
-  return "https://data.bls.gov/timeseries/CES0000000001";
 }

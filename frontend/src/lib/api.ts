@@ -2,7 +2,7 @@ import { LeaderboardEntry, PaginatedStockTrades, PaginatedVotes, Senator } from 
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 import type { Justice, JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssuesResponse, MyRepsResponse } from "@/types/action";
-import type { PaginatedDocs, PoliticianCard, PoliticianProfile } from "@/types/politicians";
+import type { PoliticianCard } from "@/types/politicians";
 import type { PaginatedBills } from "@/types/bill";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
@@ -670,31 +670,6 @@ export async function fetchAdminPipelineHistory(token: string): Promise<Pipeline
   return res.json();
 }
 
-export async function triggerAdminPipeline(
-  token: string,
-  options?: { senator?: string; fetchOnly?: boolean },
-): Promise<{ message: string }> {
-  const params = new URLSearchParams();
-  if (options?.senator) params.set("senator", options.senator);
-  if (options?.fetchOnly) params.set("fetch_only", "true");
-  const res = await fetch(`${API_BASE}/admin/pipeline/trigger?${params}`, {
-    method: "POST",
-    headers: adminHeaders(token),
-  });
-  if (res.status === 409) throw new Error("Pipeline is already running");
-  if (!res.ok) throw new Error(`Trigger failed: ${res.status}`);
-  return res.json();
-}
-
-export async function triggerHousePipeline(token: string): Promise<{ message: string }> {
-  const res = await fetch(`${API_BASE}/admin/pipeline/trigger-house`, {
-    method: "POST",
-    headers: adminHeaders(token),
-  });
-  if (!res.ok) throw new Error(`Trigger failed: ${res.status}`);
-  return res.json();
-}
-
 export async function fetchAdminSystemStats(token: string): Promise<HostStats> {
   const res = await fetch(`${API_BASE}/admin/system/stats`, {
     headers: adminHeaders(token),
@@ -865,27 +840,6 @@ export interface OpenCommentItem {
 
 export async function fetchOpenComments(): Promise<OpenCommentItem[]> {
   return cachedFetch(`${API_BASE}/action/open-comments`, 3_600_000);
-}
-
-export interface BranchDocument {
-  id: number;
-  title: string;
-  docType: string;
-  date: string;
-  url: string;
-  chamber: string;
-  summary: string;
-  politicianName: string;
-}
-
-export interface BranchRecentResponse {
-  branch: string;
-  documents: BranchDocument[];
-  count: number;
-}
-
-export async function fetchRecentByBranch(branch: string, limit = 15): Promise<BranchRecentResponse> {
-  return cachedFetch(`${API_BASE}/action/recent/${branch}?limit=${limit}`, 120_000);
 }
 
 export interface CountryArticle {
@@ -1063,23 +1017,6 @@ export async function fetchPoliticianDirectory(params?: {
   if (params?.q) qs.set("q", params.q);
   const query = qs.toString() ? `?${qs.toString()}` : "";
   return cachedFetch(`${API_BASE}/politicians${query}`, 120_000);
-}
-
-export async function fetchPoliticianProfile(id: string): Promise<PoliticianProfile> {
-  return cachedFetch(`${API_BASE}/politicians/${encodeURIComponent(id)}`, 120_000);
-}
-
-export async function fetchPoliticianDocuments(
-  id: string,
-  page = 1,
-  perPage = 20,
-  docType?: string,
-): Promise<PaginatedDocs> {
-  const qs = new URLSearchParams({ page: String(page), per_page: String(perPage) });
-  if (docType) qs.set("doc_type", docType);
-  const res = await fetch(`${API_BASE}/politicians/${encodeURIComponent(id)}/documents?${qs}`);
-  if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
-  return res.json();
 }
 
 export interface FeedbackSubmission {
