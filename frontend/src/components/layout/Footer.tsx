@@ -7,10 +7,10 @@ export default function Footer() {
         {/* Links */}
         <nav aria-label="Footer navigation" className="flex flex-wrap justify-center gap-6">
           <Link
-            href="/scorecard"
+            href="/politicians"
             className="text-matrix-green/40 hover:text-matrix-green/80 transition-colors font-mono text-xs tracking-widest uppercase"
           >
-            SCORECARD
+            POLITICIANS
           </Link>
           <Link
             href="/about"
