@@ -40,6 +40,71 @@ def _parse_json_field(raw: str, default: list | None = None) -> list:
         return default or []
 
 
+def _latest_current_issues(db: Session, for_date: str | None = None) -> list[ActionIssue]:
+    """Return the most recent day's action issues, tolerating a wedged refresh.
+
+    Normally this is just "issues for `for_date` (or the latest current day)
+    where is_current is true." But the hourly refresh's retirement pass can
+    mark every row untouched-by-this-run as not-current before it's
+    confirmed anything new to replace them — if that run then wedges (a
+    slow/hung LLM call with no overall time budget, 2026-07-14), is_current
+    can go false table-wide for hours with nothing new inserted. The strict
+    query then returns nothing even though the DB holds a perfectly good
+    "current" set — the site should keep showing that rather than going
+    blank. Fall back to the most recent date with ANY rows, is_current or
+    not, only when the strict query comes up empty.
+    """
+    if for_date:
+        issues = (
+            db.query(ActionIssue)
+            .filter(ActionIssue.date == for_date, ActionIssue.is_current == True)  # noqa: E712
+            .order_by(ActionIssue.rank)
+            .all()
+        )
+        if issues:
+            return issues
+        # Requested date has rows but none are current (or has none at
+        # all) — fall back to whatever that date has rather than nothing.
+        return (
+            db.query(ActionIssue)
+            .filter(ActionIssue.date == for_date)
+            .order_by(ActionIssue.rank)
+            .all()
+        )
+
+    latest_date = (
+        db.query(ActionIssue.date)
+        .filter(ActionIssue.is_current == True)  # noqa: E712
+        .order_by(ActionIssue.date.desc())
+        .limit(1)
+        .scalar()
+    )
+    if latest_date:
+        return (
+            db.query(ActionIssue)
+            .filter(ActionIssue.date == latest_date, ActionIssue.is_current == True)  # noqa: E712
+            .order_by(ActionIssue.rank)
+            .all()
+        )
+
+    # Nothing anywhere is marked current — fall back to the most recent
+    # date with any data at all rather than rendering nothing.
+    fallback_date = (
+        db.query(ActionIssue.date)
+        .order_by(ActionIssue.date.desc())
+        .limit(1)
+        .scalar()
+    )
+    if not fallback_date:
+        return []
+    return (
+        db.query(ActionIssue)
+        .filter(ActionIssue.date == fallback_date)
+        .order_by(ActionIssue.rank)
+        .all()
+    )
+
+
 def _build_issue_response(
     issue: ActionIssue, db: Session,
     explore_docs_map: dict[int, ExploreDocument] | None = None,
@@ -132,29 +197,7 @@ async def get_action_issues(
 ):
     response.headers["Cache-Control"] = "public, max-age=300"
     """Return the current day's action issues (or most recent available)."""
-    if date:
-        issues = (
-            db.query(ActionIssue)
-            .filter(ActionIssue.date == date, ActionIssue.is_current == True)  # noqa: E712
-            .order_by(ActionIssue.rank)
-            .all()
-        )
-    else:
-        latest_date = (
-            db.query(ActionIssue.date)
-            .filter(ActionIssue.is_current == True)  # noqa: E712
-            .order_by(ActionIssue.date.desc())
-            .limit(1)
-            .scalar()
-        )
-        if not latest_date:
-            return {"date": None, "issues": []}
-        issues = (
-            db.query(ActionIssue)
-            .filter(ActionIssue.date == latest_date, ActionIssue.is_current == True)  # noqa: E712
-            .order_by(ActionIssue.rank)
-            .all()
-        )
+    issues = _latest_current_issues(db, for_date=date)
 
     if not issues:
         return {"date": date, "issues": []}
@@ -547,26 +590,7 @@ async def get_my_reps(
     )
 
     today_str = date.today().isoformat()
-    issues = (
-        db.query(ActionIssue)
-        .filter(ActionIssue.date == today_str, ActionIssue.is_current == True)  # noqa: E712
-        .order_by(ActionIssue.rank)
-        .all()
-    )
-    if not issues:
-        latest_date = (
-            db.query(ActionIssue.date)
-            .filter(ActionIssue.is_current == True)  # noqa: E712
-            .order_by(ActionIssue.date.desc())
-            .first()
-        )
-        if latest_date:
-            issues = (
-                db.query(ActionIssue)
-                .filter(ActionIssue.date == latest_date[0], ActionIssue.is_current == True)  # noqa: E712
-                .order_by(ActionIssue.rank)
-                .all()
-            )
+    issues = _latest_current_issues(db, for_date=today_str)
 
     member_ids = {s.id for s in senators} | {r.id for r in representatives}
     senator_issues: dict[str, list[dict]] = {sid: [] for sid in member_ids}
