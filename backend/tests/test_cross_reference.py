@@ -130,11 +130,31 @@ class TestPromiseEvidenceGate:
     related (2026-07 audit: PP population stdev collapsed to 3.7 against an
     8.0 floor because ~93% of promises had no evidence clear the bar)."""
 
-    def test_above_high_auto_accepts_without_llm_call(self):
+    def test_above_high_still_gets_llm_verified_on_senate(self):
+        """2026-07 external audit finding: a same-category, high-similarity
+        match can still be a poor fit for the SPECIFIC promise (an "expand
+        Medicare" promise satisfied by an HSA-contribution vote — both
+        HEALTHCARE-tagged, close enough in register to clear threshold,
+        but different policy approaches). Senate now LLM-verifies matches
+        at/above `high` too, not just the old gray zone."""
+        with patch(
+            "app.pipeline.analyze.policy_alignment._should_count_as_evidence_llm",
+            return_value=False,
+        ) as mock_gate:
+            result = _passes_relevance(0.85, VOTE_GATE_LOW, 0.80, True, "promise", "candidate", "vote")
+        assert result is False
+        mock_gate.assert_called_once()
+        # A confident embedding match must fail OPEN if the LLM call itself
+        # fails (network/parse error) — only an explicit negative rejects.
+        assert mock_gate.call_args.kwargs["default_on_failure"] is True
+
+    def test_above_high_on_house_still_auto_accepts_without_llm_call(self):
+        """House (use_llm=False) keeps the original sharp threshold — no
+        LLM budget for 431 members."""
         with patch(
             "app.pipeline.analyze.policy_alignment._should_count_as_evidence_llm"
         ) as mock_gate:
-            result = _passes_relevance(0.85, VOTE_GATE_LOW, 0.80, True, "promise", "candidate", "vote")
+            result = _passes_relevance(0.85, VOTE_GATE_LOW, 0.80, False, "promise", "candidate", "vote")
         assert result is True
         mock_gate.assert_not_called()
 
@@ -182,6 +202,29 @@ class TestPromiseEvidenceGate:
             return_value={"relates": True, "reason": "same subject"},
         ):
             assert _should_count_as_evidence_llm("promise", "candidate", "vote") is True
+
+    def test_gate_defaults_to_failure_default_not_always_false(self):
+        """A verification-call failure must fail open when the caller had
+        prior confidence (default_on_failure=True) — a confirmed negative
+        judgment is the only thing that should reject a strong match."""
+        with patch(
+            "app.pipeline.analyze.ollama_client.call_llm", return_value=None,
+        ):
+            assert _should_count_as_evidence_llm(
+                "promise", "candidate", "vote", default_on_failure=True,
+            ) is True
+            assert _should_count_as_evidence_llm(
+                "promise", "candidate", "vote", default_on_failure=False,
+            ) is False
+
+    def test_gate_explicit_negative_always_rejects_regardless_of_default(self):
+        with patch(
+            "app.pipeline.analyze.ollama_client.call_llm",
+            return_value={"relates": False, "reason": "different mechanism"},
+        ):
+            assert _should_count_as_evidence_llm(
+                "promise", "candidate", "vote", default_on_failure=True,
+            ) is False
 
     def test_end_to_end_gray_zone_vote_confirmed_by_llm_counts_as_kept(self):
         """A vote below the auto-accept threshold but confirmed by the LLM

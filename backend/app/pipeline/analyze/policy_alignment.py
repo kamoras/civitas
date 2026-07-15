@@ -227,14 +227,21 @@ BILL_GATE_LOW = 0.64
 
 def _should_count_as_evidence_llm(
     promise_text: str, candidate_text: str, candidate_kind: str,
+    default_on_failure: bool = False,
 ) -> bool:
-    """LLM gate for borderline embedding matches: is this genuine evidence for the promise?
+    """LLM gate: is this genuine evidence for the promise?
 
-    Fails closed — if the LLM is unavailable or returns something
-    unparseable, the candidate is treated as unrelated, same as if it had
-    scored below GATE_LOW. This only ever adds evidence relative to the
-    pre-gate behavior (dropping straight past threshold); it never removes
-    evidence that used to qualify.
+    On a call/parse FAILURE (network error, unparseable response, or a
+    response with no "relates" key — call_llm never raises, it returns
+    None on any internal failure) this returns ``default_on_failure``
+    rather than always False. A broken verification call must not
+    silently override a signal the caller already trusted — see
+    _passes_relevance for how the two callers set this differently:
+    a borderline match (no prior confidence) still defaults to reject
+    on failure, unchanged from before; a match that already cleared the
+    high embedding threshold defaults to keep its accept, since the
+    embedding score — not this call — was the actual evidence for it.
+    Only an explicit ``{"relates": false}`` judgment fails closed.
     """
     from app.pipeline.analyze.ollama_client import call_llm
     from app.pipeline.analyze.prompts import promise_evidence_gate_prompt
@@ -247,23 +254,38 @@ def _should_count_as_evidence_llm(
         cache_key={"type": "promise_evidence_gate", "promise": promise_text, "candidate": candidate_text},
         max_tokens=100,
     )
-    if not isinstance(result, dict):
-        return False
-    return bool(result.get("relates", False))
+    if not isinstance(result, dict) or "relates" not in result:
+        return default_on_failure
+    return bool(result["relates"])
 
 
 def _passes_relevance(
     sim: float, low: float, high: float, use_llm: bool,
     promise_text: str, candidate_text: str, candidate_kind: str,
 ) -> bool:
-    """Three-band relevance check: auto-accept >= high, auto-reject < low,
-    LLM-judge the gray zone in between (Senate only — House has no LLM budget
-    for 431 members and stays on the pre-existing sharp threshold)."""
-    if sim >= high:
-        return True
+    """Relevance check. House (use_llm=False) keeps the original sharp
+    threshold with no LLM call ever — 431 members, no budget for it.
+
+    Senate (use_llm=True) LLM-verifies every candidate at/above ``low``,
+    not just the old gray zone between ``low`` and ``high``: a same-
+    category, high-embedding-similarity match can still be a poor fit
+    for the SPECIFIC promise (e.g. a "expand Medicare" promise satisfied
+    by a vote on HSA contributions — both HEALTHCARE-tagged and sharing
+    enough legislative-register vocabulary to clear the embedding
+    threshold, despite being different, even opposed, policy approaches
+    — 2026-07 external audit finding). A confirmed LLM negative now
+    rejects a match that used to auto-accept purely on embedding score.
+
+    Below ``low``: still auto-reject with no LLM call — that's where
+    cross-category noise sits at the embedding level, so a call would
+    mostly be confirming noise, same reasoning as before this change.
+    """
     if sim < low or not use_llm:
-        return False
-    return _should_count_as_evidence_llm(promise_text, candidate_text, candidate_kind)
+        return sim >= high
+    return _should_count_as_evidence_llm(
+        promise_text, candidate_text, candidate_kind,
+        default_on_failure=(sim >= high),
+    )
 
 
 _industry_policy_scores: dict[tuple[str, str], float] | None = None
@@ -430,8 +452,18 @@ def compute_promise_vote_alignment(
     asks an LLM to read the actual promise and candidate text and judge
     genuine relatedness (Senate only, ``use_llm=True``) rather than
     dropping every sub-threshold candidate — see ``VOTE_GATE_LOW`` /
-    ``BILL_GATE_LOW``. At/above threshold, behavior is unchanged: no LLM
-    call, same as before this existed.
+    ``BILL_GATE_LOW``.
+
+    v2 (2026-07, external audit finding): at/above threshold now ALSO gets
+    an LLM check (Senate only) rather than auto-accepting on embedding
+    score alone — a same-category, high-similarity match can still be a
+    poor fit for the specific promise (a "expand Medicare" promise
+    satisfied by an HSA-contribution vote; both HEALTHCARE-tagged and
+    close enough in legislative register to clear threshold, despite being
+    different policy approaches). See ``_passes_relevance`` for the
+    fail-open-on-call-failure / fail-closed-on-confirmed-negative split
+    that keeps this from regressing high-confidence matches when the LLM
+    call itself fails.
     """
     empty = {
         "alignment": "unclear",
