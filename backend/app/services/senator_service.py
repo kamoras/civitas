@@ -1,12 +1,10 @@
 import json
 import re
-from datetime import datetime, timedelta
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
-from app.config_definitions import SCORE_WEIGHTS
-from app.models import CampaignPromise, Donor, IndustryDonation, KeyVote, LobbyingMatch, ScoreSnapshot, Senator, StockTrade
+from app.models import CampaignPromise, Donor, IndustryDonation, KeyVote, LobbyingMatch, Senator, StockTrade
 
 # Promise quality rules are shared with the pipeline (which now cleans
 # promises before scoring/persisting); the read path keeps applying them
@@ -16,6 +14,9 @@ from app.pipeline.analyze.promise_quality import (
     _FILLER_RE,
     clean_promises,
 )
+from app.pipeline.analyze.score_calculator import compute_overall_score
+from app.services.pagination import paginate_bounds
+from app.services.score_trends import compute_score_trend_map
 from app.schemas import (
     CampaignPromiseSchema,
     PaginatedVotesSchema,
@@ -382,74 +383,19 @@ def get_states_with_counts(db: Session) -> list[StateCountSchema]:
     ]
 
 
-_FIELD_TO_WEIGHT_KEY = {
-    "score_funding_independence": "fundingIndependence",
-    "score_promise_persistence":  "promisePersistence",
-    "score_independent_voting":   "independentVoting",
-    "score_funding_diversity":    "fundingDiversity",
-    "score_legislative_effectiveness": "legislativeEffectiveness",
-}
-
-_TREND_LOOKBACK_DAYS = 7
-_TREND_THRESHOLD = 0.5
-
-
 def _compute_trend_map(db: Session) -> dict[str, ScoreTrendSchema]:
     """Compare latest snapshots to the best available prior snapshot.
 
     Prefers a snapshot from ~7 days ago; falls back to the oldest available
     snapshot that is at least 1 day older than the latest.
     """
-    today = datetime.utcnow().date()
-    target_date = today - timedelta(days=_TREND_LOOKBACK_DAYS)
-
-    latest_snapshots = (
-        db.query(ScoreSnapshot)
-        .filter(
-            ScoreSnapshot.entity_type == "senator",
-            ScoreSnapshot.date == today.isoformat(),
+    raw = compute_score_trend_map(db, "senator")
+    return {
+        sid: ScoreTrendSchema(
+            direction=d["direction"], change=d["change"], previous_score=d["previousScore"],
         )
-        .all()
-    )
-
-    if not latest_snapshots:
-        return {}
-
-    yesterday = (today - timedelta(days=1)).isoformat()
-    older_snapshots = (
-        db.query(ScoreSnapshot)
-        .filter(
-            ScoreSnapshot.entity_type == "senator",
-            ScoreSnapshot.date <= min(target_date.isoformat(), yesterday),
-        )
-        .order_by(ScoreSnapshot.date.desc())
-        .all()
-    )
-
-    older_map: dict[str, float] = {}
-    for snap in older_snapshots:
-        if snap.entity_id not in older_map:
-            older_map[snap.entity_id] = snap.overall_score
-
-    result: dict[str, ScoreTrendSchema] = {}
-    for snap in latest_snapshots:
-        prev = older_map.get(snap.entity_id)
-        if prev is None:
-            result[snap.entity_id] = ScoreTrendSchema(direction="new", change=0.0)
-        else:
-            change = round(snap.overall_score - prev, 2)
-            if change > _TREND_THRESHOLD:
-                direction = "up"
-            elif change < -_TREND_THRESHOLD:
-                direction = "down"
-            else:
-                direction = "stable"
-            result[snap.entity_id] = ScoreTrendSchema(
-                direction=direction,
-                change=change,
-                previous_score=prev,
-            )
-    return result
+        for sid, d in raw.items()
+    }
 
 
 def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
@@ -468,13 +414,7 @@ def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
 
     trend_map = _compute_trend_map(db)
 
-    def _weighted_score(s: Senator) -> float:
-        return sum(
-            getattr(s, db_field, 0) * SCORE_WEIGHTS[weight_key]
-            for db_field, weight_key in _FIELD_TO_WEIGHT_KEY.items()
-        )
-
-    senators.sort(key=_weighted_score, reverse=True)
+    senators.sort(key=compute_overall_score, reverse=True)
 
     return [
         LeaderboardEntrySchema(
@@ -664,8 +604,7 @@ def get_senator_votes(
         query = query.filter(KeyVote.voted_with_party == False)  # noqa: E712
 
     total = query.count()
-    total_pages = max(1, -(-total // per_page))
-    page = max(1, min(page, total_pages))
+    total_pages, page = paginate_bounds(total, page, per_page)
 
     votes_db = query.order_by(KeyVote.date.desc()).offset((page - 1) * per_page).limit(per_page).all()
 
@@ -734,8 +673,7 @@ def get_senator_stock_trades(
     query = db.query(StockTrade).filter(StockTrade.senator_id == senator_id)
     total = query.count()
     late_count = query.filter(StockTrade.days_to_disclose > 45).count()
-    total_pages = max(1, -(-total // per_page))
-    page = max(1, min(page, total_pages))
+    total_pages, page = paginate_bounds(total, page, per_page)
 
     trades_db = (
         query.order_by(StockTrade.transaction_date.desc())

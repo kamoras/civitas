@@ -22,6 +22,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
+from app.api.response_helpers import cached_json
 from app.config_definitions import PRESIDENT_SCORE_WEIGHTS, SCORE_WEIGHTS
 from app.database import get_db
 from app.models import ActionIssue, ExploreDocument, Justice, President, Representative, Senator
@@ -37,10 +38,7 @@ def _bioguide_photo(bioguide_id: str | None) -> str | None:
 
 
 def _cached_json(data, max_age: int = 120) -> JSONResponse:
-    return JSONResponse(
-        content=data,
-        headers={"Cache-Control": f"public, max-age={max_age}, stale-while-revalidate={max_age}"},
-    )
+    return cached_json(data, max_age=max_age)
 
 
 # ---------------------------------------------------------------------------

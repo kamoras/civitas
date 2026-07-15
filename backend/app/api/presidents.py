@@ -5,12 +5,12 @@ import logging
 import secrets
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
-from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.config_definitions import PRESIDENT_SCORE_WEIGHTS
 from app.database import SessionLocal, get_db
+from app.api.response_helpers import cached_json as _cached_json
 from app.services.president_service import (
     get_all_presidents,
     get_president,
@@ -20,13 +20,6 @@ from app.services.president_service import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/presidents")
-
-
-def _cached_json(data, max_age: int = 300) -> JSONResponse:
-    return JSONResponse(
-        content=data,
-        headers={"Cache-Control": f"public, max-age={max_age}, stale-while-revalidate={max_age}"},
-    )
 
 
 @router.get("/leaderboard")
