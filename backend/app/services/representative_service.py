@@ -1,12 +1,10 @@
 """Service layer for House representative data — mirrors senator_service.py."""
 
 import json
-from datetime import datetime, timedelta
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
-from app.config_definitions import SCORE_WEIGHTS
 from app.models import (
     RepCampaignPromise,
     RepDonor,
@@ -16,8 +14,10 @@ from app.models import (
     RepSponsoredBill,
     RepStockTrade,
     Representative,
-    ScoreSnapshot,
 )
+from app.pipeline.analyze.score_calculator import compute_overall_score
+from app.services.pagination import paginate_bounds
+from app.services.score_trends import compute_score_trend_map
 from app.services.senator_service import (
     STATE_NAMES,
     _clean_pac_sponsor,
@@ -188,8 +188,7 @@ def get_representatives_by_state(
         .order_by(Representative.district)
     )
     total = base_q.count()
-    total_pages = max(1, -(-total // per_page))
-    page = max(1, min(page, total_pages))
+    total_pages, page = paginate_bounds(total, page, per_page)
 
     reps = base_q.offset((page - 1) * per_page).limit(per_page).all()
 
@@ -227,63 +226,8 @@ def get_rep_states_with_counts(db: Session) -> list[dict]:
     ]
 
 
-_FIELD_TO_WEIGHT_KEY = {
-    "score_funding_independence": "fundingIndependence",
-    "score_promise_persistence":  "promisePersistence",
-    "score_independent_voting":   "independentVoting",
-    "score_funding_diversity":    "fundingDiversity",
-    "score_legislative_effectiveness": "legislativeEffectiveness",
-}
-
-_TREND_LOOKBACK_DAYS = 7
-_TREND_THRESHOLD = 0.5
-
-
 def _compute_rep_trend_map(db: Session) -> dict[str, dict]:
-    today = datetime.utcnow().date()
-    target_date = today - timedelta(days=_TREND_LOOKBACK_DAYS)
-
-    latest_snapshots = (
-        db.query(ScoreSnapshot)
-        .filter(
-            ScoreSnapshot.entity_type == "representative",
-            ScoreSnapshot.date == today.isoformat(),
-        )
-        .all()
-    )
-    if not latest_snapshots:
-        return {}
-
-    yesterday = (today - timedelta(days=1)).isoformat()
-    older_snapshots = (
-        db.query(ScoreSnapshot)
-        .filter(
-            ScoreSnapshot.entity_type == "representative",
-            ScoreSnapshot.date <= min(target_date.isoformat(), yesterday),
-        )
-        .order_by(ScoreSnapshot.date.desc())
-        .all()
-    )
-    older_map: dict[str, float] = {}
-    for snap in older_snapshots:
-        if snap.entity_id not in older_map:
-            older_map[snap.entity_id] = snap.overall_score
-
-    result: dict[str, dict] = {}
-    for snap in latest_snapshots:
-        prev = older_map.get(snap.entity_id)
-        if prev is None:
-            result[snap.entity_id] = {"direction": "new", "change": 0.0, "previousScore": None}
-        else:
-            change = round(snap.overall_score - prev, 2)
-            if change > _TREND_THRESHOLD:
-                direction = "up"
-            elif change < -_TREND_THRESHOLD:
-                direction = "down"
-            else:
-                direction = "stable"
-            result[snap.entity_id] = {"direction": direction, "change": change, "previousScore": prev}
-    return result
+    return compute_score_trend_map(db, "representative")
 
 
 def get_rep_leaderboard(
@@ -306,20 +250,13 @@ def get_rep_leaderboard(
 
     trend_map = _compute_rep_trend_map(db)
 
-    def _weighted_score(r: Representative) -> float:
-        return sum(
-            getattr(r, db_field, 0) * SCORE_WEIGHTS[weight_key]
-            for db_field, weight_key in _FIELD_TO_WEIGHT_KEY.items()
-        )
-
-    reps.sort(key=_weighted_score, reverse=True)
+    reps.sort(key=compute_overall_score, reverse=True)
 
     if party:
         reps = [r for r in reps if r.party == party.upper()]
 
     total = len(reps)
-    total_pages = max(1, -(-total // per_page))
-    page = max(1, min(page, total_pages))
+    total_pages, page = paginate_bounds(total, page, per_page)
     page_reps = reps[(page - 1) * per_page : page * per_page]
 
     entries = [
@@ -538,8 +475,7 @@ def get_rep_votes(
         query = query.filter(RepKeyVote.voted_with_party == False)  # noqa: E712
 
     total = query.count()
-    total_pages = max(1, -(-total // per_page))
-    page = max(1, min(page, total_pages))
+    total_pages, page = paginate_bounds(total, page, per_page)
 
     votes_db = query.order_by(RepKeyVote.date.desc()).offset((page - 1) * per_page).limit(per_page).all()
 
@@ -590,8 +526,7 @@ def get_rep_stock_trades(
     query = db.query(RepStockTrade).filter(RepStockTrade.representative_id == rep_id)
     total = query.count()
     late_count = query.filter(RepStockTrade.days_to_disclose > 45).count()
-    total_pages = max(1, -(-total // per_page))
-    page = max(1, min(page, total_pages))
+    total_pages, page = paginate_bounds(total, page, per_page)
 
     trades_db = (
         query.order_by(RepStockTrade.transaction_date.desc())
