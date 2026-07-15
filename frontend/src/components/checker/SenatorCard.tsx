@@ -2,6 +2,7 @@ import { Senator } from "@/types/senator";
 import { formatCurrency } from "@/lib/formatting";
 import { safeHref } from "@/lib/formatting";
 import { fecCommitteeSearchUrl, currentCongressLabel } from "@/lib/sources";
+import { getScoreColor } from "@/lib/corruption";
 import CorruptionScore from "./CorruptionScore";
 import IndustryBreakdown from "./IndustryBreakdown";
 import VotingRecord from "./VotingRecord";
@@ -178,18 +179,21 @@ export default function SenatorCard({ senator, chamber = "senate" }: SenatorCard
           </div>
         </div>
 
-        {/* ── Quick Stats ── always visible */}
+        {/* ── Quick Stats ── always visible
+             Color follows meaning, not decoration: informational magnitudes
+             (RAISED, PACs $, PARTISAN depth, LEADER influence) stay neutral
+             matrix-green — none of them are inherently good or bad on their
+             own. Only the two ratios the scoring system actually treats as
+             quality signals (PAC %, SMALL $) get the same green→red scale
+             used for the overall score, computed the same way
+             score_calculator.py weighs them (low PAC% / high small-donor%
+             = favorable) rather than a fixed color regardless of value. */}
         <div>
           <div className="flex flex-wrap gap-2 text-center">
             <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2 flex-1 basis-[calc(33%-0.5rem)] sm:basis-auto sm:min-w-[5rem]">
               {senator.partisanDepth && senator.partisanDepth.totalPositions > 0 ? (
                 <>
-                  <div className={`text-sm sm:text-lg font-pixel whitespace-nowrap ${
-                    senator.partisanDepth.depth === "deep" ? "text-neon-pink"
-                    : senator.partisanDepth.depth === "cross-cutting" ? "text-neon-cyan"
-                    : senator.partisanDepth.depth === "moderate" ? "text-yellow-500"
-                    : "text-matrix-green"
-                  }`}>
+                  <div className="text-sm sm:text-lg font-pixel whitespace-nowrap text-matrix-green">
                     {senator.partisanDepth.depth === "deep" ? "DEEP"
                     : senator.partisanDepth.depth === "cross-cutting" ? "XCUT"
                     : senator.partisanDepth.depth === "moderate" ? "MOD"
@@ -207,11 +211,7 @@ export default function SenatorCard({ senator, chamber = "senate" }: SenatorCard
             <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2 flex-1 basis-[calc(33%-0.5rem)] sm:basis-auto sm:min-w-[5rem]">
               {senator.leadershipScore != null ? (
                 <>
-                  <div className={`text-sm sm:text-lg font-pixel whitespace-nowrap ${
-                    senator.leadershipScore > 0.75 ? "text-neon-yellow"
-                    : senator.leadershipScore < 0.25 ? "text-matrix-green/40"
-                    : "text-matrix-green"
-                  }`}>
+                  <div className="text-sm sm:text-lg font-pixel whitespace-nowrap text-matrix-green">
                     {Math.round(senator.leadershipScore * 100)}
                   </div>
                   <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Legislative influence score (0–100) based on PageRank of cosponsorship networks. Higher = more senators cosponsor this senator's bills.">LEADER</MetricTooltip></div>
@@ -224,23 +224,23 @@ export default function SenatorCard({ senator, chamber = "senate" }: SenatorCard
               )}
             </div>
             <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2 flex-1 basis-[calc(33%-0.5rem)] sm:basis-auto sm:min-w-[5rem]">
-              <div className="text-sm sm:text-lg font-pixel text-neon-cyan whitespace-nowrap">
+              <div className="text-sm sm:text-lg font-pixel text-matrix-green whitespace-nowrap">
                 {formatCurrency(senator.funding.totalRaised)}
               </div>
               <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Total campaign contributions received this cycle from all sources (individuals, PACs, and self-funding). Source: FEC filings.">RAISED</MetricTooltip></div>
             </div>
             <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2 flex-1 basis-[calc(33%-0.5rem)] sm:basis-auto sm:min-w-[5rem]">
-              <div className="text-sm sm:text-lg font-pixel text-neon-pink whitespace-nowrap">
+              <div className="text-sm sm:text-lg font-pixel text-matrix-green whitespace-nowrap">
                 {formatCurrency(senator.funding.totalFromPACs)}
               </div>
               <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Money received from Political Action Committees — organizations that pool contributions from members to donate to campaigns. Includes corporate, labor, and ideological PACs.">PACs</MetricTooltip></div>
             </div>
             <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2 flex-1 basis-[calc(33%-0.5rem)] sm:basis-auto sm:min-w-[5rem]">
-              <div className="text-sm sm:text-lg font-pixel text-red-500 whitespace-nowrap">{pacPercent}%</div>
+              <div className={`text-sm sm:text-lg font-pixel whitespace-nowrap ${getScoreColor(Math.max(0, 100 - pacPercentRaw * 2))}`}>{pacPercent}%</div>
               <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="What percentage of total funds come from PACs rather than individual donors. Higher % = more reliance on organized interest group money.">PAC %</MetricTooltip></div>
             </div>
             <div className="bg-matrix-dark-green/20 border border-matrix-green/10 p-2 flex-1 basis-[calc(33%-0.5rem)] sm:basis-auto sm:min-w-[5rem]">
-              <div className="text-sm sm:text-lg font-pixel text-matrix-green whitespace-nowrap">
+              <div className={`text-sm sm:text-lg font-pixel whitespace-nowrap ${getScoreColor(Math.min(senator.funding.smallDonorPercentage / 40, 1) * 100)}`}>
                 {senator.funding.smallDonorPercentage}%
               </div>
               <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Percentage of funds from individual donations under $200. Higher = more grassroots support from everyday people vs. large donors.">SMALL $</MetricTooltip></div>
