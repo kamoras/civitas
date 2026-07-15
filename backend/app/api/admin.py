@@ -557,7 +557,8 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
 
     from app.api.pipeline import _is_pipeline_running
     from app.pipeline.house_pipeline import is_house_pipeline_running
-    from app.models import HousePipelineRun
+    from app.pipeline.stock_pipeline import is_stock_pipeline_running
+    from app.models import HousePipelineRun, StockTradesPipelineRun
     is_running = _is_pipeline_running(db)
 
     last_run = (
@@ -570,8 +571,32 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
         .order_by(HousePipelineRun.started_at.desc())
         .first()
     )
+    last_stock_run = (
+        db.query(StockTradesPipelineRun)
+        .order_by(StockTradesPipelineRun.started_at.desc())
+        .first()
+    )
 
-    result: dict = {"isRunning": is_running, "houseIsRunning": is_house_pipeline_running()}
+    result: dict = {
+        "isRunning": is_running,
+        "houseIsRunning": is_house_pipeline_running(),
+        "stockTradesIsRunning": is_stock_pipeline_running(),
+    }
+
+    if last_stock_run:
+        stock_elapsed = last_stock_run.elapsed_seconds
+        if last_stock_run.status == "running" and last_stock_run.started_at:
+            stock_elapsed = round((datetime.utcnow() - last_stock_run.started_at).total_seconds(), 1)
+        result["stockTradesLastRun"] = {
+            "id": last_stock_run.id,
+            "startedAt": last_stock_run.started_at.isoformat() if last_stock_run.started_at else None,
+            "completedAt": last_stock_run.completed_at.isoformat() if last_stock_run.completed_at else None,
+            "status": last_stock_run.status,
+            "houseTradesIngested": last_stock_run.house_trades_ingested,
+            "senateTradesIngested": last_stock_run.senate_trades_ingested,
+            "elapsedSeconds": stock_elapsed,
+            "errorMessage": last_stock_run.error_message,
+        }
 
     if last_house_run:
         house_elapsed = last_house_run.elapsed_seconds
@@ -645,8 +670,8 @@ async def admin_pipeline_history(
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    """Return recent pipeline run history (Senate + House interleaved by date)."""
-    from app.models import HousePipelineRun
+    """Return recent pipeline run history (Senate + House + stock trades interleaved by date)."""
+    from app.models import HousePipelineRun, StockTradesPipelineRun
     senate_runs = (
         db.query(PipelineRun)
         .order_by(PipelineRun.started_at.desc())
@@ -656,6 +681,12 @@ async def admin_pipeline_history(
     house_runs = (
         db.query(HousePipelineRun)
         .order_by(HousePipelineRun.started_at.desc())
+        .limit(limit)
+        .all()
+    )
+    stock_runs = (
+        db.query(StockTradesPipelineRun)
+        .order_by(StockTradesPipelineRun.started_at.desc())
         .limit(limit)
         .all()
     )
@@ -695,9 +726,23 @@ async def admin_pipeline_history(
         }
         for r in house_runs
     ]
+    stock_entries = [
+        {
+            "id": r.id,
+            "pipelineType": "stock_trades",
+            "startedAt": r.started_at.isoformat() if r.started_at else None,
+            "completedAt": r.completed_at.isoformat() if r.completed_at else None,
+            "status": r.status,
+            "houseTradesIngested": r.house_trades_ingested,
+            "senateTradesIngested": r.senate_trades_ingested,
+            "elapsedSeconds": r.elapsed_seconds,
+            "errorMessage": r.error_message,
+        }
+        for r in stock_runs
+    ]
 
     combined = sorted(
-        senate_entries + house_entries,
+        senate_entries + house_entries + stock_entries,
         key=lambda x: x["startedAt"] or "",
         reverse=True,
     )
@@ -821,6 +866,38 @@ async def admin_clear_stuck_house(db: Session = Depends(get_db)):
     stuck = (
         db.query(HousePipelineRun)
         .filter(HousePipelineRun.status == "running")
+        .all()
+    )
+    if not stuck:
+        return {"cleared": 0, "message": "No stuck runs found"}
+
+    now = datetime.utcnow()
+    for run in stuck:
+        run.status = "failed"
+        run.error_message = "Cleared by admin (container restart)"
+        run.completed_at = now
+        if run.started_at:
+            run.elapsed_seconds = round((now - run.started_at).total_seconds(), 1)
+    db.commit()
+    return {"cleared": len(stuck), "message": f"Marked {len(stuck)} run(s) as failed"}
+
+
+@router.post("/pipeline/clear-stuck-stock-trades", dependencies=[Depends(require_admin)])
+async def admin_clear_stuck_stock_trades(db: Session = Depends(get_db)):
+    """Mark any stuck (status=running) stock-trades pipeline run as failed.
+
+    Use when the in-memory flag says idle but the DB record still shows
+    running (e.g. after a container restart mid-run).
+    """
+    from app.models import StockTradesPipelineRun
+    from app.pipeline.stock_pipeline import is_stock_pipeline_running
+
+    if is_stock_pipeline_running():
+        raise HTTPException(status_code=409, detail="Stock trades pipeline is actively running — stop it first")
+
+    stuck = (
+        db.query(StockTradesPipelineRun)
+        .filter(StockTradesPipelineRun.status == "running")
         .all()
     )
     if not stuck:

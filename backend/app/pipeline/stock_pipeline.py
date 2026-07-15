@@ -13,13 +13,17 @@ timeliness -> upsert.
 """
 
 import logging
+import time
 from datetime import date, datetime, timedelta
 
 import httpx
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
-from app.models import PipelineRun, HousePipelineRun, Representative, Senator, StockTrade, RepStockTrade
+from app.models import (
+    PipelineRun, HousePipelineRun, Representative, Senator, StockTrade,
+    RepStockTrade, StockTradesPipelineRun,
+)
 from app.pipeline.fetch.house_ptr import fetch_and_parse_ptr as fetch_house_ptr, fetch_ptr_filing_index
 from app.pipeline.fetch.sec_tickers import resolve_tickers
 from app.pipeline.fetch.senate_ptr import (
@@ -35,6 +39,24 @@ logger = logging.getLogger(__name__)
 # Once trades exist, each chamber's search/index window starts from the
 # most recent disclosure_date already stored, so this only matters once.
 COLD_START_LOOKBACK_DAYS = 120
+
+# In-memory flag mirroring house_pipeline.py's pattern — lets the admin
+# dashboard detect a "stuck" run (DB row still says "running" but this
+# flag is False after a restart) rather than only the DB row, which a
+# crashed/killed process can never update to "failed" itself.
+_stock_pipeline_running: bool = False
+_stock_pipeline_started_at: float | None = None
+
+
+def is_stock_pipeline_running() -> bool:
+    return _stock_pipeline_running
+
+
+def stock_pipeline_age() -> "timedelta | None":
+    """Wall-clock age of the in-process stock-trades run, or None when idle."""
+    if not _stock_pipeline_running or _stock_pipeline_started_at is None:
+        return None
+    return timedelta(seconds=time.time() - _stock_pipeline_started_at)
 
 
 def _other_pipeline_running(db: Session) -> bool:
@@ -217,25 +239,53 @@ async def run_stock_trades_pipeline() -> dict:
     Best-effort per chamber: a failure fetching/parsing one chamber's
     filings does not prevent the other from being ingested.
     """
+    global _stock_pipeline_running, _stock_pipeline_started_at
+
     db: Session = SessionLocal()
     try:
         if _other_pipeline_running(db):
             logger.info("Stock trades pipeline skipped — a member pipeline is currently running")
             return {"status": "skipped", "reason": "member_pipeline_running"}
 
+        _stock_pipeline_running = True
+        _stock_pipeline_started_at = time.time()
+        start_time = time.time()
+
+        run = StockTradesPipelineRun(started_at=datetime.utcnow(), status="running")
+        db.add(run)
+        db.commit()
+
         house_count = 0
         senate_count = 0
+        error_parts: list[str] = []
         async with httpx.AsyncClient() as client:
             try:
                 house_count = await _ingest_house(db, client)
-            except Exception:
+            except Exception as e:
                 logger.exception("House PTR ingestion failed")
+                error_parts.append(f"House: {e}")
             try:
                 senate_count = await _ingest_senate(db, client)
-            except Exception:
+            except Exception as e:
                 logger.exception("Senate PTR ingestion failed")
+                error_parts.append(f"Senate: {e}")
 
+        elapsed = round(time.time() - start_time, 1)
         logger.info("Stock trades pipeline: %d House rows, %d Senate rows", house_count, senate_count)
-        return {"status": "completed", "house_trades": house_count, "senate_trades": senate_count}
+
+        run.status = "failed" if len(error_parts) == 2 else "completed"
+        run.completed_at = datetime.utcnow()
+        run.house_trades_ingested = house_count
+        run.senate_trades_ingested = senate_count
+        run.elapsed_seconds = elapsed
+        run.error_message = "; ".join(error_parts) or None
+        db.commit()
+
+        return {
+            "status": run.status, "house_trades": house_count, "senate_trades": senate_count,
+            "elapsed_seconds": elapsed,
+        }
     finally:
+        _stock_pipeline_running = False
+        _stock_pipeline_started_at = None
         db.close()
