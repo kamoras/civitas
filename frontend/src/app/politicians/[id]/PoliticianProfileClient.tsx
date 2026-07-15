@@ -277,7 +277,7 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
               {(branch === "senate" || branch === "house") && identity.state && (
                 <div className="mt-3 text-center">
                   <Link
-                    href={`/scorecard?branch=${branch}&state=${identity.state}`}
+                    href={`/politicians?branch=${branch}&state=${identity.state}`}
                     className="font-mono text-[10px] text-matrix-green/35 hover:text-matrix-green/60 transition-colors tracking-widest"
                   >
                     COMPARE ALL {identity.stateName ?? identity.state} {branch === "senate" ? "SENATORS" : "REPRESENTATIVES"} →

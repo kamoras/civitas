@@ -41,8 +41,8 @@ export default function HeroSection() {
         <Link href="/action" className="btn-retro">
           ACTION CENTER
         </Link>
-        <Link href="/scorecard" className="btn-retro btn-retro-pink">
-          SCORECARDS
+        <Link href="/politicians" className="btn-retro btn-retro-pink">
+          POLITICIANS
         </Link>
       </div>
 

@@ -651,7 +651,7 @@ function LeaderboardContent() {
             <span id="sort-label">SORT:</span>
             {(
               [
-                ["score", "INFLUENCE SCORE"],
+                ["score", "REPRESENTATION SCORE"],
                 ["pac_dollars", "PAC $"],
                 ["pac_pct", "PAC %"],
               ] as [SortKey, string][]

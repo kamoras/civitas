@@ -7,7 +7,6 @@ import dynamic from "next/dynamic";
 import MatrixRain from "@/components/effects/MatrixRain";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
-import GlitchText from "@/components/effects/GlitchText";
 import { fetchActionIssues, fetchOpenComments, OpenCommentItem } from "@/lib/api";
 import { useUserState } from "@/hooks/useUserState";
 import { safeHref, formatUtcDate } from "@/lib/formatting";
@@ -223,7 +222,7 @@ function SenatorChips({ issue, userState }: { issue: ActionIssue; userState: str
         </div>
       ) : userState ? (
         <a
-          href={`/scorecard?branch=senate&state=${userState}`}
+          href={`/politicians?branch=senate&state=${userState}`}
           className="inline-flex items-center gap-2 text-[10px] font-mono tracking-widest text-neon-cyan border border-neon-cyan/40 hover:border-neon-cyan hover:bg-neon-cyan/10 px-3 py-1.5 transition-colors"
         >
           VIEW {userState} SENATORS &amp; CONTACT INFO →

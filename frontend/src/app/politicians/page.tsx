@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import MatrixRain from "@/components/effects/MatrixRain";
@@ -116,9 +117,20 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
 }
 
 export default function PoliticiansPage() {
-  const [branch, setBranch] = useState<BranchFilter>("all");
+  return (
+    <Suspense fallback={null}>
+      <PoliticiansPageContent />
+    </Suspense>
+  );
+}
+
+function PoliticiansPageContent() {
+  const searchParams = useSearchParams();
+  const initialBranch = (searchParams.get("branch") as BranchFilter) || "all";
+  const initialState = searchParams.get("state") || "";
+  const [branch, setBranch] = useState<BranchFilter>(initialBranch);
   const [party, setParty] = useState<PartyFilter>("ALL");
-  const [state, setState] = useState<string>("");
+  const [state, setState] = useState<string>(initialState);
   const [search, setSearch] = useState<string>("");
   const [all, setAll] = useState<PoliticianCard[]>([]);
   const [loading, setLoading] = useState(true);
