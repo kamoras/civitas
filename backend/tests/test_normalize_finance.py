@@ -118,13 +118,13 @@ class TestNormalizeFinance:
         # current mandate's campaign), not a career-spanning lookback —
         # see select_recent_elections for why.
         financials = [
-            {"candidate_election_year": 2030, "receipts": 100,
+            {"candidate_election_year": 2024, "receipts": 100,
              "other_political_committee_contributions": 0,
              "individual_unitemized_contributions": 0, "individual_itemized_contributions": 0},
-            {"candidate_election_year": 2024, "receipts": 200,
+            {"candidate_election_year": 2018, "receipts": 200,
              "other_political_committee_contributions": 0,
              "individual_unitemized_contributions": 0, "individual_itemized_contributions": 0},
-            {"candidate_election_year": 2018, "receipts": 999_999,
+            {"candidate_election_year": 2012, "receipts": 999_999,
              "other_political_committee_contributions": 0,
              "individual_unitemized_contributions": 0, "individual_itemized_contributions": 0},
         ]
@@ -135,7 +135,7 @@ class TestNormalizeFinance:
             pac_receipts=[],
             aggregated_contributors=[],
         )
-        assert result["totalRaised"] == 100  # 2030 only, not 2024 or 2018
+        assert result["totalRaised"] == 100  # 2024 only, not 2018 or 2012
 
     def test_non_contribution_receipts_excluded_from_donors(self):
         # Schedule A itemizes ALL receipts. Only line 11 is contributions:
@@ -183,15 +183,15 @@ class TestNormalizeFinance:
         # 2026-07 audit) — and with funding windowed to only the most
         # recent election, the older 2024 race must not be counted at all.
         financials = [
-            {"candidate_election_year": 2030, "cycle": None, "receipts": 1_200_000,
+            {"candidate_election_year": 2024, "cycle": None, "receipts": 1_200_000,
              "other_political_committee_contributions": 120_000,
              "individual_unitemized_contributions": 400_000,
              "individual_itemized_contributions": 500_000},
-            {"candidate_election_year": 2030, "cycle": 2026, "receipts": 1_200_000,
+            {"candidate_election_year": 2024, "cycle": 2024, "receipts": 1_200_000,
              "other_political_committee_contributions": 120_000,
              "individual_unitemized_contributions": 400_000,
              "individual_itemized_contributions": 500_000},
-            {"candidate_election_year": 2024, "cycle": None, "receipts": 52_000_000,
+            {"candidate_election_year": 2018, "cycle": None, "receipts": 52_000_000,
              "other_political_committee_contributions": 3_500_000,
              "individual_unitemized_contributions": 15_000_000,
              "individual_itemized_contributions": 30_000_000},
@@ -203,7 +203,7 @@ class TestNormalizeFinance:
             pac_receipts=[],
             aggregated_contributors=[],
         )
-        assert result["totalRaised"] == 1_200_000  # 2030 once, not the 2024 race
+        assert result["totalRaised"] == 1_200_000  # 2024 once, not the 2018 race
         assert result["totalFromPACs"] == 120_000
         assert result["smallDonorPercentage"] == round(400_000 / 1_200_000 * 100)
 

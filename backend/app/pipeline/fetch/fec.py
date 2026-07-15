@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import re
+from datetime import datetime
 from urllib.parse import quote
 
 import httpx
@@ -156,6 +157,40 @@ async def find_candidate(
     return match
 
 
+def financials_election_year(row: dict) -> int | None:
+    """The confirmed election year a candidate totals row belongs to.
+
+    Deliberately does NOT fall back to the row's raw `cycle` value when
+    `candidate_election_year` is absent. `cycle` only identifies which
+    2-year FILING PERIOD a row covers, not whether an election actually
+    happened in it — a 6-year-term Senator's committee keeps filing (and
+    often keeps receiving small residual contributions) in cycles years
+    away from their next race. Falling back to `cycle` conflated "most
+    recent filing period" with "most recent election": a dormant
+    off-cycle row with near-zero receipts and no real
+    `candidate_election_year` would outrank the actual election that
+    raised millions, purely because its raw cycle number was numerically
+    larger (2026-07 audit — a senator re-elected in 2024 with $5.8M
+    raised showed totalRaised near $50K, sourced from an off-cycle
+    filing-period row masquerading as "the most recent election").
+    """
+    return row.get("candidate_election_year")
+
+
+def _is_confirmed_past_or_current_election(row: dict, current_year: int) -> bool:
+    """True if a row's election year has actually occurred (or is in progress).
+
+    A `candidate_election_year` in the future (relative to today) cannot
+    be "the most recent election" — no election has been held there yet.
+    This guards against the same class of bug as the `cycle` fallback
+    removal above, in case FEC ever populates `candidate_election_year`
+    itself with a forward-looking "next scheduled election" value for a
+    currently-serving, not-yet-up-for-reelection member.
+    """
+    year = financials_election_year(row)
+    return year is not None and year <= current_year
+
+
 def _sort_financials_recent_first(results: list[dict]) -> list[dict]:
     """Order candidate totals rows most-recent-first.
 
@@ -163,18 +198,20 @@ def _sort_financials_recent_first(results: list[dict]) -> list[dict]:
     `cycle: null`), so row order is not guaranteed — the 2026-07 audit
     found one senator whose `[:2]` window was his 1984 and 2014 races
     while his most recent (and largest) race was dropped. Sort explicitly
-    by election year.
+    by confirmed election year; rows with no confirmed (past/current)
+    election year sort last rather than being treated as "most recent"
+    (see financials_election_year / _is_confirmed_past_or_current_election).
     """
+    current_year = datetime.utcnow().year
     return sorted(
         results,
-        key=lambda c: c.get("candidate_election_year") or c.get("cycle") or 0,
+        key=lambda c: (
+            c.get("candidate_election_year")
+            if _is_confirmed_past_or_current_election(c, current_year)
+            else -1
+        ),
         reverse=True,
     )
-
-
-def financials_election_year(row: dict) -> int | None:
-    """The election year a candidate totals row belongs to."""
-    return row.get("candidate_election_year") or row.get("cycle") or None
 
 
 def select_recent_elections(financials: list[dict], n: int = 1) -> list[dict]:
@@ -196,18 +233,24 @@ def select_recent_elections(financials: list[dict], n: int = 1) -> list[dict]:
     twice while her $52M 2024 race fell out entirely). Keep the
     largest-receipts row per election year: the election-full aggregate
     supersedes its own partial cycle rows.
+
+    Only rows with a confirmed past/current election year are eligible —
+    see financials_election_year for why an off-cycle dormant row must
+    not outrank the real most recent election.
     """
+    current_year = datetime.utcnow().year
     by_year: dict[int, dict] = {}
     for row in financials:
-        year = financials_election_year(row)
-        if not year:
+        if not _is_confirmed_past_or_current_election(row, current_year):
             continue
+        year = financials_election_year(row)
         best = by_year.get(year)
         if best is None or (row.get("receipts") or 0) > (best.get("receipts") or 0):
             by_year[year] = row
     if not by_year:
-        # No row carries an election year (not seen in real FEC data) —
-        # fall back to the caller's ordering rather than dropping everything.
+        # No row carries a confirmed election year (not seen in real FEC
+        # data) — fall back to the caller's ordering rather than dropping
+        # everything.
         return financials[:n]
     return [by_year[y] for y in sorted(by_year, reverse=True)[:n]]
 
