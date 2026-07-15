@@ -3,14 +3,15 @@
 import { useEffect, useState } from "react";
 import { Senator } from "@/types/senator";
 import { generateCommentary } from "@/data/commentary";
-import { fetchSenatorHighlights } from "@/lib/api";
+import { fetchRepHighlights, fetchSenatorHighlights } from "@/lib/api";
 import CollapsibleSection from "./CollapsibleSection";
 
-interface PunkCommentaryProps {
+interface DataHighlightsProps {
   senator: Senator;
+  chamber?: "senate" | "house";
 }
 
-export default function PunkCommentary({ senator }: PunkCommentaryProps) {
+export default function DataHighlights({ senator, chamber = "senate" }: DataHighlightsProps) {
   const staticComments = generateCommentary(senator);
   const [highlights, setHighlights] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -18,13 +19,14 @@ export default function PunkCommentary({ senator }: PunkCommentaryProps) {
   useEffect(() => {
     setHighlights(null);
     setLoading(true);
-    fetchSenatorHighlights(senator.id)
+    const fetcher = chamber === "house" ? fetchRepHighlights : fetchSenatorHighlights;
+    fetcher(senator.id)
       .then((h) => {
         if (h.length > 0) setHighlights(h);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [senator.id]);
+  }, [senator.id, chamber]);
 
   const comments = highlights ?? staticComments;
 

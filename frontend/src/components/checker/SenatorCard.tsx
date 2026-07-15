@@ -9,7 +9,7 @@ import VotingRecord from "./VotingRecord";
 import LobbyingMatches from "./LobbyingMatches";
 import StockTrades from "./StockTrades";
 import PlatformTracker from "./PlatformTracker";
-import PunkCommentary from "./PunkCommentary";
+import DataHighlights from "./DataHighlights";
 import SponsoredBills from "./SponsoredBills";
 import CollapsibleSection from "./CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
@@ -419,7 +419,7 @@ export default function SenatorCard({ senator, chamber = "senate" }: SenatorCard
           </CollapsibleSection>
         )}
 
-        <PunkCommentary senator={senator} />
+        <DataHighlights senator={senator} chamber={chamber} />
       </div>
     </div>
   );
