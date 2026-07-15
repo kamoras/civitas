@@ -255,6 +255,25 @@ def select_recent_elections(financials: list[dict], n: int = 1) -> list[dict]:
     return [by_year[y] for y in sorted(by_year, reverse=True)[:n]]
 
 
+def compute_recent_election_cycles(financials: list[dict]) -> list[int]:
+    """The receipt-query cycle window for a candidate's most recent election.
+
+    Includes the preceding 2-year cycle since both independent expenditures
+    and a campaign's own receipts accrue across the full election period,
+    not just the election year. Without this, top-donor/industry-breakdown
+    detail was drawn from the committee's entire career while the totals it's
+    compared against were windowed to the recent election (2026-07 audit
+    finding). Shared by senate_pipeline.py and house_pipeline.py's funding
+    fetch phases — both window committee-receipt queries to this same range.
+    """
+    cycles: list[int] = []
+    for c in select_recent_elections(financials):
+        election_year = financials_election_year(c)
+        if election_year:
+            cycles.extend([int(election_year), int(election_year) - 2])
+    return cycles
+
+
 async def fetch_candidate_financials(
     client: httpx.AsyncClient, db: Session, candidate_id: str
 ) -> list[dict]:

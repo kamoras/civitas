@@ -40,6 +40,7 @@ from app.models import (
 
 # Fetch modules
 from app.pipeline.fetch.congress import (
+    extract_official_title,
     fetch_bill,
     fetch_bill_actions,
     fetch_bill_cosponsors,
@@ -54,18 +55,18 @@ from app.pipeline.fetch.congress import (
     fetch_significant_bills,
 )
 from app.pipeline.fetch.fec import (
+    compute_recent_election_cycles,
     fetch_aggregated_contributors,
     fetch_candidate_committees,
     fetch_candidate_financials,
     fetch_committee_receipts,
     fetch_outside_spending,
     fetch_pac_receipts,
-    financials_election_year,
     find_candidate,
-    select_recent_elections,
 )
 from app.pipeline.fetch.govinfo import fetch_bill_text
 from app.pipeline.fetch.congressional_record import fetch_floor_remarks
+from app.pipeline.fetch.lda import enrich_lobbying_matches_with_lda
 # Transform modules
 from app.pipeline.transform.normalize_finance import normalize_finance
 from app.pipeline.transform.normalize_members import normalize_members
@@ -99,25 +100,6 @@ from app.pipeline.analyze.score_calculator import calculate_confidence, calculat
 from app.pipeline.assemble.senator_builder import build_senator
 
 logger = logging.getLogger(__name__)
-
-
-def _extract_official_title(titles: list[dict]) -> str:
-    """Extract the official descriptive title from Congress.gov title data.
-
-    The official title (titleTypeCode 6) is the full legislative description
-    (e.g., 'A bill to prevent the purchase of ammunition by prohibited
-    purchasers') as opposed to the short display title (e.g., 'Jaime's Law').
-    This provides the embedding classifier with semantically rich text for
-    bills that have uninformative short names.
-    """
-    for t in titles:
-        if t.get("titleTypeCode") == 6:
-            return t.get("title", "")
-    for t in titles:
-        title_type = (t.get("titleType") or "").lower()
-        if "official" in title_type:
-            return t.get("title", "")
-    return ""
 
 
 PIPELINE_STEPS = [
@@ -415,7 +397,7 @@ def upsert_senator(db: Session, data: dict) -> None:
 
 def _record_score_snapshots(db: Session) -> None:
     """Snapshot today's scores for all senators so we can compute trends."""
-    from app.config_definitions import SCORE_WEIGHTS
+    from app.pipeline.analyze.score_calculator import ALGORITHM_VERSION, compute_overall_score
 
     today = datetime.utcnow().strftime("%Y-%m-%d")
     existing = db.query(ScoreSnapshot).filter(
@@ -430,19 +412,11 @@ def _record_score_snapshots(db: Session) -> None:
 
     senators = db.query(Senator).all()
     for s in senators:
-        overall = (
-            s.score_funding_independence * SCORE_WEIGHTS["fundingIndependence"]
-            + s.score_promise_persistence * SCORE_WEIGHTS["promisePersistence"]
-            + s.score_independent_voting * SCORE_WEIGHTS["independentVoting"]
-            + s.score_funding_diversity * SCORE_WEIGHTS["fundingDiversity"]
-            + s.score_legislative_effectiveness * SCORE_WEIGHTS["legislativeEffectiveness"]
-        )
-        from app.pipeline.analyze.score_calculator import ALGORITHM_VERSION
         db.add(ScoreSnapshot(
             entity_type="senator",
             entity_id=s.id,
             date=today,
-            overall_score=round(overall, 2),
+            overall_score=compute_overall_score(s),
             score_1=s.score_funding_independence,
             score_2=s.score_promise_persistence,
             score_3=s.score_independent_voting,
@@ -792,7 +766,7 @@ async def run_senate_pipeline(
                         sponsor_party = sponsors[0].get("party")
                         sponsor_bioguide = sponsors[0].get("bioguideId")
 
-                    official_title = _extract_official_title(titles)
+                    official_title = extract_official_title(titles)
                     crs_policy_area = (bill.get("policyArea") or {}).get("name", "")
 
                     bills_data.append(
@@ -1010,7 +984,7 @@ async def run_senate_pipeline(
                 progress.begin("fetch_official_titles", total=len(short_title_bills))
                 for ot_idx, (bid, (cg, bt, bn)) in enumerate(short_title_bills.items()):
                     titles = await fetch_bill_titles(client, db, cg, bt, bn)
-                    official = _extract_official_title(titles)
+                    official = extract_official_title(titles)
                     if official:
                         official_titles_map[bid] = official
                     progress.update("fetch_official_titles", done=ot_idx + 1)
@@ -1057,18 +1031,7 @@ async def run_senate_pipeline(
                 # Match the receipt-detail and outside-spending windows to
                 # the receipt-totals window (normalize_finance sums only the
                 # most recent election, one deduped totals row).
-                # Include the preceding 2-year cycle since both independent
-                # expenditures and a campaign's own receipts accrue across
-                # the full election period, not just the election year.
-                # Without this, top-donor/industry-breakdown detail was
-                # drawn from the committee's entire career while the totals
-                # it's compared against were windowed to the recent election
-                # (2026-07 audit finding).
-                recent_cycles = []
-                for c in select_recent_elections(financials):
-                    ey = financials_election_year(c)
-                    if ey:
-                        recent_cycles.extend([int(ey), int(ey) - 2])
+                recent_cycles = compute_recent_election_cycles(financials)
 
                 receipts: list = []
                 pac_receipts_data: list = []
@@ -1691,37 +1654,9 @@ async def run_senate_pipeline(
                 # match before 2026-07; now it reflects actual disclosed
                 # federal lobbying by the matched organization. Cached per
                 # org+year, so only the first pipeline run pays the fetch.
-                #
-                # Uses its own short-lived client, not the outer `client` —
-                # that one is scoped to the FETCH phase (closed at the
-                # "if fetch_only:" boundary long before this analysis loop
-                # runs) and reusing its name here after it's closed silently
-                # failed every LDA lookup with "client has been closed"
-                # (2026-07 finding: 184 failures in a single run, present
-                # since this enrichment was added — lobbyingSpend has
-                # effectively always been 0 in production).
-                if lobbying_matches:
-                    from datetime import datetime as _dt
-                    from app.pipeline.fetch.lda import fetch_lobbying_spend
-                    lda_year = _dt.utcnow().year - 1  # last complete filing year
-                    async with httpx.AsyncClient() as lda_client:
-                        for m in lobbying_matches:
-                            try:
-                                spend = await fetch_lobbying_spend(
-                                    lda_client, db, m.get("lobbyistOrg", ""), lda_year,
-                                )
-                                m["lobbyingSpend"] = round(spend)
-                                if spend > 0:
-                                    m["description"] = (
-                                        m.get("description", "")
-                                        + f" Registered federal lobbying (LDA "
-                                        f"{lda_year}): ${spend:,.0f}."
-                                    )
-                            except Exception:
-                                logger.exception(
-                                    "LDA enrichment failed for %s (non-fatal)",
-                                    m.get("lobbyistOrg", "?"),
-                                )
+                await enrich_lobbying_matches_with_lda(
+                    lobbying_matches, db, datetime.utcnow().year - 1,
+                )
 
                 # Match Congressional Record floor remarks to this senator
                 senator_last_name = senator.get("lastNameForVoteMatch", "")
