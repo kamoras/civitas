@@ -428,6 +428,27 @@ async def fetch_bill_titles(
     return results
 
 
+def extract_official_title(titles: list[dict]) -> str:
+    """Extract the official descriptive title from fetch_bill_titles's result.
+
+    The official title (titleTypeCode 6) is the full legislative description
+    (e.g., 'A bill to prevent the purchase of ammunition by prohibited
+    purchasers') as opposed to the short display title (e.g., 'Jaime's Law').
+    This provides the embedding classifier with semantically rich text for
+    bills that have uninformative short names. Falls back to a titleType
+    string match if no row has the numeric code (seen in a handful of older
+    bills). Shared by senate_pipeline.py and house_pipeline.py.
+    """
+    for t in titles:
+        if t.get("titleTypeCode") in (6, "6"):
+            return t.get("title", "")
+    for t in titles:
+        title_type = (t.get("titleType") or "").lower()
+        if "official" in title_type:
+            return t.get("title", "")
+    return ""
+
+
 async def fetch_roll_call_vote(
     client: httpx.AsyncClient,
     db: Session,

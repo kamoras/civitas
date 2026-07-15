@@ -258,6 +258,26 @@ logger = logging.getLogger(__name__)
 # in sync (it holds the human-readable changelog).
 ALGORITHM_VERSION = "v5.12"
 
+
+def compute_overall_score(entity) -> float:
+    """Weighted overall score from a scored Senator/Representative row.
+
+    Shared by senate_pipeline.py's and house_pipeline.py's daily
+    ScoreSnapshot recorders — both weight the same five score_* columns by
+    the same config_definitions.SCORE_WEIGHTS, previously copy-pasted.
+    """
+    from app.config_definitions import SCORE_WEIGHTS
+
+    overall = (
+        entity.score_funding_independence * SCORE_WEIGHTS["fundingIndependence"]
+        + entity.score_promise_persistence * SCORE_WEIGHTS["promisePersistence"]
+        + entity.score_independent_voting * SCORE_WEIGHTS["independentVoting"]
+        + entity.score_funding_diversity * SCORE_WEIGHTS["fundingDiversity"]
+        + entity.score_legislative_effectiveness * SCORE_WEIGHTS["legislativeEffectiveness"]
+    )
+    return round(overall, 2)
+
+
 NON_INDUSTRY_CODES = {"OTHER", "SMALL_DONORS", "LARGE_INDIVIDUAL", "POLITICAL", "UNCLASSIFIED"}
 
 # Substantive legislation only — excludes simple/concurrent resolutions

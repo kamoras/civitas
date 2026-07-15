@@ -95,3 +95,36 @@ async def fetch_lobbying_spend(
     total = _sum_filing_amounts(data.get("results", []))
     api_cache_set(db, "lda", cache_key, {"total": round(total, 2)})
     return total
+
+
+async def enrich_lobbying_matches_with_lda(matches: list[dict], db: Session, lda_year: int) -> None:
+    """Mutate donor-vote lobbying matches in place, adding real registered
+    lobbying spend (LDA filings) to each.
+
+    Uses its own short-lived httpx client rather than a caller-supplied one:
+    an earlier version reused the FETCH-phase client here, which was already
+    closed by the time the analysis loop ran, and silently failed every LDA
+    lookup with "client has been closed" (2026-07 finding: 184 failures in a
+    single run — lobbyingSpend had effectively always been 0 in production).
+    Best-effort per match: one org's lookup failing doesn't block the others.
+    Shared by senate_pipeline.py and house_pipeline.py.
+    """
+    if not matches:
+        return
+
+    async with httpx.AsyncClient() as lda_client:
+        for m in matches:
+            try:
+                spend = await fetch_lobbying_spend(
+                    lda_client, db, m.get("lobbyistOrg", ""), lda_year,
+                )
+                m["lobbyingSpend"] = round(spend)
+                if spend > 0:
+                    m["description"] = (
+                        m.get("description", "")
+                        + f" Registered federal lobbying (LDA {lda_year}): ${spend:,.0f}."
+                    )
+            except Exception:
+                logger.exception(
+                    "LDA enrichment failed for %s (non-fatal)", m.get("lobbyistOrg", "?"),
+                )

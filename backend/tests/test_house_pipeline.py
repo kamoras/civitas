@@ -4,69 +4,15 @@ House never got detect_lobbying_matches (embeddings-only, zero LLM) wired
 up, unlike Senate — Constituent Alignment's donor-independence component
 (25% weight) silently defaulted to a flat, fundraising-size-based score
 for every House member regardless of actual donor-vote behavior (2026-07
-audit finding). These tests cover the new wiring: the LDA-enrichment
-helper directly, and that a real (non-empty) lobbying_matches list
+audit finding). This covers that a real (non-empty) lobbying_matches list
 actually changes _calc_constituent_alignment's computation path instead
-of falling through to the flat fallback.
+of falling through to the flat fallback. (The LDA-enrichment helper itself
+is tested in test_lda.py — it's shared with senate_pipeline.py, not
+House-specific.)
 """
-
-from unittest.mock import AsyncMock, patch
-
-import pytest
 
 from app.pipeline.analyze.cross_reference import detect_lobbying_matches
 from app.pipeline.analyze.score_calculator import _calc_constituent_alignment
-from app.pipeline.house_pipeline import _enrich_lobbying_matches_with_lda
-
-
-class TestEnrichLobbyingMatchesWithLda:
-    @pytest.mark.asyncio
-    async def test_adds_spend_and_description_when_spend_found(self, db_session):
-        matches = [{"lobbyistOrg": "Big Pharma Inc", "description": "base description"}]
-        with patch(
-            "app.pipeline.fetch.lda.fetch_lobbying_spend", new_callable=AsyncMock,
-        ) as mock_fetch:
-            mock_fetch.return_value = 250_000.0
-            await _enrich_lobbying_matches_with_lda(matches, db_session, 2025)
-
-        assert matches[0]["lobbyingSpend"] == 250_000
-        assert "250,000" in matches[0]["description"]
-        assert matches[0]["description"].startswith("base description")
-
-    @pytest.mark.asyncio
-    async def test_zero_spend_does_not_alter_description(self, db_session):
-        matches = [{"lobbyistOrg": "Small Org", "description": "base description"}]
-        with patch(
-            "app.pipeline.fetch.lda.fetch_lobbying_spend", new_callable=AsyncMock,
-        ) as mock_fetch:
-            mock_fetch.return_value = 0.0
-            await _enrich_lobbying_matches_with_lda(matches, db_session, 2025)
-
-        assert matches[0]["lobbyingSpend"] == 0
-        assert matches[0]["description"] == "base description"
-
-    @pytest.mark.asyncio
-    async def test_empty_matches_list_is_a_noop(self, db_session):
-        matches = []
-        # No mocking needed — if this tried to create a client or call the
-        # backend it would fail without network access.
-        await _enrich_lobbying_matches_with_lda(matches, db_session, 2025)
-        assert matches == []
-
-    @pytest.mark.asyncio
-    async def test_one_org_failing_does_not_block_the_others(self, db_session):
-        matches = [
-            {"lobbyistOrg": "Failing Org", "description": ""},
-            {"lobbyistOrg": "Working Org", "description": ""},
-        ]
-        with patch(
-            "app.pipeline.fetch.lda.fetch_lobbying_spend", new_callable=AsyncMock,
-        ) as mock_fetch:
-            mock_fetch.side_effect = [RuntimeError("LDA API down"), 100_000.0]
-            await _enrich_lobbying_matches_with_lda(matches, db_session, 2025)
-
-        assert "lobbyingSpend" not in matches[0]
-        assert matches[1]["lobbyingSpend"] == 100_000
 
 
 class TestHouseLobbyingMatchesFeedConstituentAlignment:

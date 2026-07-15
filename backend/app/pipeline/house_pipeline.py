@@ -26,6 +26,7 @@ from app.services.representative_service import upsert_representative
 
 from app.pipeline.fetch.congress import (
     congress_first_year,
+    extract_official_title,
     fetch_bill,
     fetch_bill_actions,
     fetch_bill_cosponsors,
@@ -39,16 +40,16 @@ from app.pipeline.fetch.congress import (
     fetch_significant_bills,
 )
 from app.pipeline.fetch.fec import (
+    compute_recent_election_cycles,
     fetch_aggregated_contributors,
     fetch_candidate_committees,
     fetch_candidate_financials,
     fetch_committee_receipts,
     fetch_outside_spending,
     fetch_pac_receipts,
-    financials_election_year,
     find_candidate,
-    select_recent_elections,
 )
+from app.pipeline.fetch.lda import enrich_lobbying_matches_with_lda
 from app.pipeline.transform.normalize_members import normalize_house_members
 from app.pipeline.transform.normalize_votes import (
     extract_representative_vote,
@@ -79,36 +80,6 @@ def house_pipeline_age() -> "timedelta | None":
     if not _house_pipeline_running or _house_pipeline_started_at is None:
         return None
     return timedelta(seconds=time.time() - _house_pipeline_started_at)
-
-
-async def _enrich_lobbying_matches_with_lda(matches: list[dict], db: Session, lda_year: int) -> None:
-    """Mutate matches in place, adding real registered lobbying spend (LDA
-    filings) to each. Own short-lived httpx client, not the caller's FETCH-
-    phase client — see senate_pipeline.py's equivalent block for why
-    reusing a closed client here silently fails every lookup. Best-effort
-    per match: one org's lookup failing doesn't block the others.
-    """
-    from app.pipeline.fetch.lda import fetch_lobbying_spend
-
-    if not matches:
-        return
-
-    async with httpx.AsyncClient() as lda_client:
-        for m in matches:
-            try:
-                spend = await fetch_lobbying_spend(
-                    lda_client, db, m.get("lobbyistOrg", ""), lda_year,
-                )
-                m["lobbyingSpend"] = round(spend)
-                if spend > 0:
-                    m["description"] = (
-                        m.get("description", "")
-                        + f" Registered federal lobbying (LDA {lda_year}): ${spend:,.0f}."
-                    )
-            except Exception:
-                logger.exception(
-                    "LDA enrichment failed for %s (non-fatal)", m.get("lobbyistOrg", "?"),
-                )
 
 
 async def run_house_pipeline() -> dict:
@@ -242,11 +213,7 @@ async def run_house_pipeline() -> dict:
                     summary_text = summaries[0].get("text", "")
 
                 titles = await fetch_bill_titles(client, db, b["congress"], b["type"], b["number"])
-                official_title = ""
-                for t in (titles or []):
-                    if t.get("titleTypeCode") in (6, "6"):
-                        official_title = t.get("title", "")
-                        break
+                official_title = extract_official_title(titles or [])
 
                 bills_for_classification.append({
                     "billId": bill_key,
@@ -568,14 +535,7 @@ async def run_house_pipeline() -> dict:
                         financials = await fetch_candidate_financials(client, db, cand_id)
                         committees = await fetch_candidate_committees(client, db, cand_id)
 
-                        # See senate_pipeline.py's equivalent block for why
-                        # this window must match the receipt-totals window
-                        # (2026-07 audit finding).
-                        recent_cycles = []
-                        for c in select_recent_elections(financials):
-                            ey = financials_election_year(c)
-                            if ey:
-                                recent_cycles.extend([int(ey), int(ey) - 2])
+                        recent_cycles = compute_recent_election_cycles(financials)
 
                         raw_receipts = []
                         raw_pac_receipts = []
@@ -645,7 +605,7 @@ async def run_house_pipeline() -> dict:
                         all_votes,
                         rep["funding"].get("industryBreakdown", []),
                     )
-                    await _enrich_lobbying_matches_with_lda(
+                    await enrich_lobbying_matches_with_lda(
                         lobbying_matches, db, datetime.utcnow().year - 1,
                     )
                     rep["lobbyingMatches"] = lobbying_matches
@@ -772,20 +732,13 @@ async def run_house_pipeline() -> dict:
 
 def _record_rep_snapshots(db: Session) -> None:
     """Snapshot today's scores for all representatives."""
-    from app.config_definitions import SCORE_WEIGHTS
+    from app.pipeline.analyze.score_calculator import ALGORITHM_VERSION, compute_overall_score
 
     today = datetime.utcnow().date().isoformat()
     reps = db.query(Representative).all()
     count = 0
     for r in reps:
-        overall = round(
-            r.score_funding_independence * SCORE_WEIGHTS["fundingIndependence"]
-            + r.score_promise_persistence * SCORE_WEIGHTS["promisePersistence"]
-            + r.score_independent_voting * SCORE_WEIGHTS["independentVoting"]
-            + r.score_funding_diversity * SCORE_WEIGHTS["fundingDiversity"]
-            + r.score_legislative_effectiveness * SCORE_WEIGHTS["legislativeEffectiveness"],
-            2,
-        )
+        overall = compute_overall_score(r)
         existing = (
             db.query(ScoreSnapshot)
             .filter(
@@ -803,7 +756,6 @@ def _record_rep_snapshots(db: Session) -> None:
             existing.score_4 = r.score_funding_diversity
             existing.score_5 = r.score_legislative_effectiveness
         else:
-            from app.pipeline.analyze.score_calculator import ALGORITHM_VERSION
             db.add(ScoreSnapshot(
                 entity_type="representative",
                 entity_id=r.id,
