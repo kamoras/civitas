@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import {
   adminAuth,
@@ -1227,6 +1227,61 @@ function RunHistory({ runs }: { runs: PipelineRunInfo[] }) {
   );
 }
 
+/**
+ * One "PIPELINE  STATUS · detail" row plus its stuck-run clear button.
+ * Shared by the House and Stock Trades rows (which both track a
+ * possibly-stuck DB run separate from the in-memory running flag); Senate
+ * has no stuck-run concept and renders its own row inline.
+ */
+function PipelineStatusRow({
+  label,
+  isRunning,
+  run,
+  isStuck,
+  statusClassName,
+  detail,
+  onClear,
+  clearing,
+}: {
+  label: string;
+  isRunning: boolean;
+  run: { status: string } | null | undefined;
+  isStuck: boolean;
+  statusClassName: string;
+  detail?: ReactNode;
+  onClear?: () => Promise<void>;
+  clearing?: boolean;
+}) {
+  return (
+    <>
+      <div className="flex justify-between items-center">
+        <span className="text-matrix-green/60">{label}</span>
+        <span className={isRunning ? "text-neon-cyan animate-pulse" : "text-matrix-green/60"}>
+          {isRunning ? "RUNNING" : run ? (
+            <span>
+              <span className={statusClassName}>{isStuck ? "STUCK" : run.status.toUpperCase()}</span>
+              {detail}
+            </span>
+          ) : "IDLE"}
+        </span>
+      </div>
+      {isStuck && onClear && (
+        <div className="flex justify-end">
+          <button
+            disabled={clearing}
+            onClick={onClear}
+            className="text-[9px] font-pixel text-yellow-400/70 hover:text-yellow-400
+                       border border-yellow-400/30 hover:border-yellow-400/60
+                       px-2 py-0.5 rounded transition-colors disabled:opacity-40"
+          >
+            {clearing ? "CLEARING..." : "[CLEAR STUCK RUN]"}
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+
 function LastRunSteps({ steps }: { steps?: PipelineStepInfo[] | null }) {
   const [expanded, setExpanded] = useState(false);
   if (!steps || steps.length === 0) return null;
@@ -1757,48 +1812,34 @@ function AdminDashboardView({
                 {(() => {
                   const run = pipelineStatus?.houseLastRun;
                   const isStuck = run?.status === "running" && !pipelineStatus?.houseIsRunning;
+                  const statusClassName =
+                    run?.status === "completed" ? "text-matrix-green" :
+                    run?.status === "partial" ? "text-yellow-400" :
+                    run?.status === "failed" ? "text-neon-pink" :
+                    isStuck ? "text-yellow-400" : "text-matrix-green/50";
                   return (
-                    <>
-                      <div className="flex justify-between items-center">
-                        <span className="text-matrix-green/60">HOUSE</span>
-                        <span className={pipelineStatus?.houseIsRunning ? "text-neon-cyan animate-pulse" : "text-matrix-green/60"}>
-                          {pipelineStatus?.houseIsRunning ? "RUNNING" : run ? (
-                            <span>
-                              <span className={
-                                run.status === "completed" ? "text-matrix-green" :
-                                run.status === "partial" ? "text-yellow-400" :
-                                run.status === "failed" ? "text-neon-pink" :
-                                isStuck ? "text-yellow-400" : "text-matrix-green/50"
-                              }>
-                                {isStuck ? "STUCK" : run.status.toUpperCase()}
-                              </span>
-                              {run.repsTotal > 0 && <span className="text-matrix-green/60"> · {run.repsProcessed}/{run.repsTotal}</span>}
-                              {(run.repsFailed ?? 0) > 0 && <span className="text-neon-pink"> · {run.repsFailed}F</span>}
-                            </span>
-                          ) : "IDLE"}
-                        </span>
-                      </div>
-                      {isStuck && (
-                        <div className="flex justify-end">
-                          <button
-                            disabled={clearingHouse}
-                            onClick={async () => {
-                              setClearingHouse(true);
-                              try {
-                                await clearStuckHousePipeline(token);
-                                await pollStatus();
-                              } catch {}
-                              setClearingHouse(false);
-                            }}
-                            className="text-[9px] font-pixel text-yellow-400/70 hover:text-yellow-400
-                                       border border-yellow-400/30 hover:border-yellow-400/60
-                                       px-2 py-0.5 rounded transition-colors disabled:opacity-40"
-                          >
-                            {clearingHouse ? "CLEARING..." : "[CLEAR STUCK RUN]"}
-                          </button>
-                        </div>
+                    <PipelineStatusRow
+                      label="HOUSE"
+                      isRunning={!!pipelineStatus?.houseIsRunning}
+                      run={run}
+                      isStuck={isStuck}
+                      statusClassName={statusClassName}
+                      detail={run && (
+                        <>
+                          {run.repsTotal > 0 && <span className="text-matrix-green/60"> · {run.repsProcessed}/{run.repsTotal}</span>}
+                          {(run.repsFailed ?? 0) > 0 && <span className="text-neon-pink"> · {run.repsFailed}F</span>}
+                        </>
                       )}
-                    </>
+                      clearing={clearingHouse}
+                      onClear={async () => {
+                        setClearingHouse(true);
+                        try {
+                          await clearStuckHousePipeline(token);
+                          await pollStatus();
+                        } catch {}
+                        setClearingHouse(false);
+                      }}
+                    />
                   );
                 })()}
 
@@ -1806,46 +1847,28 @@ function AdminDashboardView({
                 {(() => {
                   const run = pipelineStatus?.stockTradesLastRun;
                   const isStuck = run?.status === "running" && !pipelineStatus?.stockTradesIsRunning;
+                  const statusClassName =
+                    run?.status === "completed" ? "text-matrix-green" :
+                    run?.status === "failed" ? "text-neon-pink" :
+                    isStuck ? "text-yellow-400" : "text-matrix-green/50";
                   return (
-                    <>
-                      <div className="flex justify-between items-center">
-                        <span className="text-matrix-green/60">STOCK TRADES</span>
-                        <span className={pipelineStatus?.stockTradesIsRunning ? "text-neon-cyan animate-pulse" : "text-matrix-green/60"}>
-                          {pipelineStatus?.stockTradesIsRunning ? "RUNNING" : run ? (
-                            <span>
-                              <span className={
-                                run.status === "completed" ? "text-matrix-green" :
-                                run.status === "failed" ? "text-neon-pink" :
-                                isStuck ? "text-yellow-400" : "text-matrix-green/50"
-                              }>
-                                {isStuck ? "STUCK" : run.status.toUpperCase()}
-                              </span>
-                              <span className="text-matrix-green/60"> · {run.houseTradesIngested}H/{run.senateTradesIngested}S</span>
-                            </span>
-                          ) : "IDLE"}
-                        </span>
-                      </div>
-                      {isStuck && (
-                        <div className="flex justify-end">
-                          <button
-                            disabled={clearingStockTrades}
-                            onClick={async () => {
-                              setClearingStockTrades(true);
-                              try {
-                                await clearStuckStockTradesPipeline(token);
-                                await pollStatus();
-                              } catch {}
-                              setClearingStockTrades(false);
-                            }}
-                            className="text-[9px] font-pixel text-yellow-400/70 hover:text-yellow-400
-                                       border border-yellow-400/30 hover:border-yellow-400/60
-                                       px-2 py-0.5 rounded transition-colors disabled:opacity-40"
-                          >
-                            {clearingStockTrades ? "CLEARING..." : "[CLEAR STUCK RUN]"}
-                          </button>
-                        </div>
-                      )}
-                    </>
+                    <PipelineStatusRow
+                      label="STOCK TRADES"
+                      isRunning={!!pipelineStatus?.stockTradesIsRunning}
+                      run={run}
+                      isStuck={isStuck}
+                      statusClassName={statusClassName}
+                      detail={run && <span className="text-matrix-green/60"> · {run.houseTradesIngested}H/{run.senateTradesIngested}S</span>}
+                      clearing={clearingStockTrades}
+                      onClear={async () => {
+                        setClearingStockTrades(true);
+                        try {
+                          await clearStuckStockTradesPipeline(token);
+                          await pollStatus();
+                        } catch {}
+                        setClearingStockTrades(false);
+                      }}
+                    />
                   );
                 })()}
 
