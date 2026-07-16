@@ -7,6 +7,7 @@ import { fetchMyReps, fetchActionIssues } from "@/lib/api";
 import { STATES } from "@/data/states";
 import { PARTY_COLORS, PARTY_BORDER, PARTY_BG } from "@/lib/partyStyles";
 import { getScoreBgColor } from "@/lib/corruption";
+import { useCopyFeedback } from "@/hooks/useCopyFeedback";
 import type { ActionIssue, MyRepRep, MyRepSenator, MyRepsResponse } from "@/types/action";
 
 function ContactScript({
@@ -21,19 +22,13 @@ function ContactScript({
   contactFormUrl?: string | null;
 }) {
   const [open, setOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copied, copy] = useCopyFeedback(2000);
   const script = `My name is [YOUR NAME] and I am a constituent from ${stateName}. I am calling to express my concern about [ISSUE]. I urge ${name} to [TAKE ACTION]. Please leave a record of this call. Thank you.`;
 
   if (!phone && !contactFormUrl) return null;
 
-  async function copyScript() {
-    try {
-      await navigator.clipboard.writeText(script);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // clipboard not available
-    }
+  function copyScript() {
+    copy(script);
   }
 
   return (

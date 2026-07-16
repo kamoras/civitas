@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef, type KeyboardEvent } from "react";
+import { useState, type KeyboardEvent } from "react";
 import type { ActionIssue } from "@/types/action";
+import { useCopyFeedback } from "@/hooks/useCopyFeedback";
 
 interface ShareButtonsProps {
   issue: ActionIssue;
@@ -29,17 +30,12 @@ export default function ShareButtons({ issue, className = "" }: ShareButtonsProp
   const shareText = buildShareText(issue.title, shareUrl);
   const encodedText = encodeURIComponent(shareText);
 
-  const [copied, setCopied] = useState(false);
   const [mastodonInstance, setMastodonInstance] = useState("mastodon.social");
   const [showMastodonInput, setShowMastodonInput] = useState(false);
-  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [copied, copy] = useCopyFeedback(1500);
 
   function handleCopy() {
-    navigator.clipboard.writeText(shareUrl).then(() => {
-      setCopied(true);
-      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
-      copyTimeoutRef.current = setTimeout(() => setCopied(false), 1500);
-    });
+    copy(shareUrl);
   }
 
   function handleMastodonShare() {
