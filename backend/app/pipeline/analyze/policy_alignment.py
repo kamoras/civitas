@@ -22,6 +22,8 @@ import re
 
 import numpy as np
 
+from app.models import PromiseAlignment
+
 logger = logging.getLogger(__name__)
 
 _embedding_cache: dict[str, np.ndarray] = {}
@@ -498,7 +500,7 @@ def compute_promise_vote_alignment(
     named-bill-match path exactly as before this change.
     """
     empty = {
-        "alignment": "unclear",
+        "alignment": PromiseAlignment.UNCLEAR,
         "relatedVotes": [],
         "relatedBills": [],
         "confidence": 0.0,
@@ -728,7 +730,7 @@ def compute_promise_vote_alignment(
 
     if not related_votes and not related_bills:
         return {
-            "alignment": "unclear",
+            "alignment": PromiseAlignment.UNCLEAR,
             "relatedVotes": [],
             "relatedBills": [],
             "confidence": 0.0,
@@ -741,19 +743,19 @@ def compute_promise_vote_alignment(
             # Legislation introduced on the topic but no directional vote
             # evidence and nothing advanced: acted on the promise without
             # a measurable outcome.
-            alignment = "partial"
+            alignment = PromiseAlignment.PARTIAL
             confidence = 0.4
         else:
-            alignment = "unclear"
+            alignment = PromiseAlignment.UNCLEAR
             confidence = 0.3
     elif kept_signals > broken_signals * 1.3:
-        alignment = "kept"
+        alignment = PromiseAlignment.KEPT
         confidence = min(kept_signals / total_signal, 1.0)
     elif broken_signals > kept_signals * 1.3:
-        alignment = "broken"
+        alignment = PromiseAlignment.BROKEN
         confidence = min(broken_signals / total_signal, 1.0)
     else:
-        alignment = "partial"
+        alignment = PromiseAlignment.PARTIAL
         confidence = 0.5
 
     return {

@@ -34,6 +34,7 @@ from app.models import (
     LobbyingMatch,
     PipelineRun,
     PipelineStatus,
+    PromiseAlignment,
     ScoreSnapshot,
     Senator,
     SponsoredBill,
@@ -343,7 +344,7 @@ def upsert_senator(db: Session, data: dict) -> None:
                 senator_id=senator_id,
                 promise_text=promise_data.get("promiseText") or "",
                 category=promise_data.get("category") or "other",
-                alignment=promise_data.get("alignment") or "unclear",
+                alignment=promise_data.get("alignment") or PromiseAlignment.UNCLEAR,
                 related_votes=json.dumps(
                     promise_data.get("relatedVotes") or []
                 ),

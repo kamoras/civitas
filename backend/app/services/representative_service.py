@@ -6,6 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import (
+    PromiseAlignment,
     RepCampaignPromise,
     RepDonor,
     RepIndustryDonation,
@@ -402,7 +403,7 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
             representative_id=rid,
             promise_text=cp.get("promiseText") or "",
             category=cp.get("category") or "other",
-            alignment=cp.get("alignment") or "unclear",
+            alignment=cp.get("alignment") or PromiseAlignment.UNCLEAR,
             related_votes=json.dumps(cp.get("relatedVotes") or []),
             related_bills=json.dumps(cp.get("relatedBills") or []),
             analysis=cp.get("analysis") or "",

@@ -16,6 +16,8 @@ Operates on the pipeline's dict shape:
 import re
 from collections import Counter
 
+from app.models import PromiseAlignment
+
 _FILLER_RE = re.compile(
     r"has received funding from|(?:^|[,.])\s*a political PAC"
     r"|opposes the removal of the United States Army"
@@ -71,7 +73,7 @@ def clean_promises(promises: list[dict]) -> list[dict]:
     for p in promises or []:
         promise_text = p.get("promiseText") or ""
         analysis = p.get("analysis") or ""
-        alignment = p.get("alignment") or "unclear"
+        alignment = p.get("alignment") or PromiseAlignment.UNCLEAR
         related = list(p.get("relatedVotes") or [])
         related_sp = list(p.get("relatedBills") or [])
 
@@ -99,21 +101,21 @@ def clean_promises(promises: list[dict]) -> list[dict]:
         kept = len(_KEPT_RE.findall(analysis))
         broken = len(_BROKEN_RE.findall(analysis))
         if kept > 0 and broken > 0:
-            alignment = "unclear"
-        elif alignment == "broken" and kept > 0 and broken == 0:
-            alignment = "kept"
-        elif alignment == "kept" and broken > 0 and kept == 0:
-            alignment = "broken"
+            alignment = PromiseAlignment.UNCLEAR
+        elif alignment == PromiseAlignment.BROKEN and kept > 0 and broken == 0:
+            alignment = PromiseAlignment.KEPT
+        elif alignment == PromiseAlignment.KEPT and broken > 0 and kept == 0:
+            alignment = PromiseAlignment.BROKEN
 
         # Downgrade bold claims that lack specific evidence
         if (
-            alignment in ("kept", "broken")
+            alignment in (PromiseAlignment.KEPT, PromiseAlignment.BROKEN)
             and analysis
             and not _BILL_ID_RE.search(analysis)
             and not related
             and not related_sp
         ):
-            alignment = "unclear"
+            alignment = PromiseAlignment.UNCLEAR
             analysis = ""
 
         result.append({
@@ -135,7 +137,7 @@ def clean_promises(promises: list[dict]) -> list[dict]:
         if overused:
             for p in result:
                 if tuple(sorted(p["relatedVotes"])) in overused:
-                    p["alignment"] = "unclear"
+                    p["alignment"] = PromiseAlignment.UNCLEAR
                     p["relatedVotes"] = []
                     p["analysis"] = ""
 

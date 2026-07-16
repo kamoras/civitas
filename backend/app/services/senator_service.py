@@ -4,7 +4,7 @@ import re
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import CampaignPromise, Donor, IndustryDonation, KeyVote, LobbyingMatch, Senator, StockTrade
+from app.models import CampaignPromise, Donor, IndustryDonation, KeyVote, LobbyingMatch, PromiseAlignment, Senator, StockTrade
 
 # Promise quality rules are shared with the pipeline (which now cleans
 # promises before scoring/persisting); the read path keeps applying them
@@ -137,7 +137,7 @@ def _filter_promises(campaign_promises: list) -> list[CampaignPromiseSchema]:
         {
             "promiseText": cp.promise_text or "",
             "category": cp.category,
-            "alignment": cp.alignment or "unclear",
+            "alignment": cp.alignment or PromiseAlignment.UNCLEAR,
             "relatedVotes": json.loads(cp.related_votes) if cp.related_votes else [],
             "relatedBills": json.loads(cp.related_bills) if cp.related_bills else [],
             "analysis": cp.analysis or "",
@@ -555,7 +555,7 @@ def upsert_senator(db: Session, senator_data: dict) -> Senator:
             senator_id=sid,
             promise_text=cp.get("promiseText") or "",
             category=cp.get("category") or "other",
-            alignment=cp.get("alignment") or "unclear",
+            alignment=cp.get("alignment") or PromiseAlignment.UNCLEAR,
             related_votes=json.dumps(cp.get("relatedVotes") or []),
             related_bills=json.dumps(cp.get("relatedBills") or []),
             analysis=cp.get("analysis") or "",

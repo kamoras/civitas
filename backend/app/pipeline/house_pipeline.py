@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
-from app.models import HousePipelineRun, PipelineStatus, Representative, ScoreSnapshot
+from app.models import HousePipelineRun, PipelineStatus, PromiseAlignment, Representative, ScoreSnapshot
 from app.services.representative_service import upsert_representative
 
 from app.pipeline.fetch.congress import (
@@ -588,7 +588,7 @@ async def run_house_pipeline() -> dict:
                     promise_total += len(rep["campaignPromises"])
                     promise_evaluable += sum(
                         1 for p in rep["campaignPromises"]
-                        if p["alignment"] in ("kept", "partial", "broken")
+                        if p["alignment"] in (PromiseAlignment.KEPT, PromiseAlignment.PARTIAL, PromiseAlignment.BROKEN)
                     )
                     if rep["campaignPromises"]:
                         reps_with_promises += 1
