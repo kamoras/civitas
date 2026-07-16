@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from app.models import ActionIssue, NationalMonitor
+from app.models import ActionIssue, ExploreDocument, NationalMonitor
 from app.pipeline.fetch.news_feeds import NewsArticle
 from app.pipeline.analyze.action_center import (
     _deduplicate_top_clusters,
@@ -17,6 +17,7 @@ from app.pipeline.analyze.action_center import (
     _story_word_target,
     _full_story_should_invalidate,
     _check_summary_roles,
+    _find_related_explore_docs,
     _fix_impossible_senate_vote_counts,
 )
 
@@ -462,3 +463,78 @@ class TestFixImpossibleSenateVoteCounts:
     def test_no_vote_tally_returns_unchanged(self):
         text = "The Senate is expected to take up the bill next week."
         assert _fix_impossible_senate_vote_counts(text) == text
+
+
+class TestFindRelatedExploreDocsGenericTitleFilter:
+    """Confirmed live 2026-07: 'LEGISLATIVE SESSION' — a boilerplate title
+    shared by hundreds of Senate floor-speech records covering completely
+    different bills, whose real content ('Mr. President, I move to
+    proceed to Calendar No. X') carries no topic-specific signal — got
+    linked to both a Ukraine-aid story and an unrelated budget-resolution
+    story on the same day, because the title-only re-ranking this
+    function uses can't discriminate a title that doesn't actually
+    describe its own content."""
+
+    def _seed_docs(self, db_session, generic_count: int = 6):
+        db_session.add(ExploreDocument(
+            id=1, doc_type="Final Rule", source="Federal Register",
+            title="Bank Secrecy Act and Stablecoin Issuer Standards",
+            summary="", body="", date="2026-01-01",
+        ))
+        for i in range(2, 2 + generic_count):
+            db_session.add(ExploreDocument(
+                id=i, doc_type="Senate Floor Speech", source="Congressional Record",
+                title="LEGISLATIVE SESSION", summary="", body="", date="2026-01-01",
+            ))
+        db_session.commit()
+
+    @patch("app.pipeline.analyze.action_center._embed_texts")
+    @patch("app.pipeline.analyze.action_center.search_explore_documents")
+    def test_boilerplate_title_excluded_even_with_higher_raw_similarity(
+        self, mock_search, mock_embed, db_session,
+    ):
+        self._seed_docs(db_session, generic_count=6)
+        mock_search.return_value = [
+            {"id": 1, "title": "Bank Secrecy Act and Stablecoin Issuer Standards", "distance": 0.5},
+            {"id": 2, "title": "LEGISLATIVE SESSION", "distance": 0.5},
+        ]
+        # Embeddings crafted so the generic doc (id=2) scores a HIGHER raw
+        # cosine similarity than the genuinely relevant doc (id=1) — proving
+        # the genericness filter, not just similarity ranking, is what
+        # excludes it.
+        mock_embed.return_value = np.array([
+            [1.0, 0.0],    # issue title embedding
+            [0.90, 0.10],  # doc 1 (relevant, real signal)
+            [0.99, 0.01],  # doc 2 (generic title, spuriously higher similarity)
+        ])
+
+        result = _find_related_explore_docs(
+            "Crypto stablecoin legislation", "summary", ["FINANCIAL"], db_session,
+        )
+
+        ids = [d["id"] for d in result]
+        assert 1 in ids
+        assert 2 not in ids
+
+    @patch("app.pipeline.analyze.action_center._embed_texts")
+    @patch("app.pipeline.analyze.action_center.search_explore_documents")
+    def test_title_below_repeat_threshold_is_not_filtered(
+        self, mock_search, mock_embed, db_session,
+    ):
+        # Same shape, but the "generic" title only appears twice — below
+        # GENERIC_TITLE_REPEAT_THRESHOLD (5) — so it's a real match, not
+        # boilerplate, and should be kept.
+        self._seed_docs(db_session, generic_count=2)
+        mock_search.return_value = [
+            {"id": 2, "title": "LEGISLATIVE SESSION", "distance": 0.5},
+        ]
+        mock_embed.return_value = np.array([
+            [1.0, 0.0],
+            [0.95, 0.05],
+        ])
+
+        result = _find_related_explore_docs(
+            "Some issue title", "summary", [], db_session,
+        )
+
+        assert [d["id"] for d in result] == [2]

@@ -24,6 +24,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 import numpy as np
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -1289,6 +1290,27 @@ def _find_related_explore_docs(
         ).filter(ExploreDocument.id.in_(all_candidate_ids)).all()
     }
 
+    # Boilerplate-titled documents (e.g. "LEGISLATIVE SESSION", used by
+    # hundreds of Senate floor-speech records covering completely
+    # different bills) match almost anything above min_sim, since the
+    # title-only re-ranking this function deliberately uses (see docstring)
+    # can't discriminate documents whose title carries no topic-specific
+    # signal — confirmed live 2026-07: "LEGISLATIVE SESSION" (real title,
+    # real content "Mr. President, I move to proceed to Calendar No. X")
+    # linked to both a Ukraine aid story and a budget-resolution story on
+    # the same day. Measure title genericness directly (how many
+    # ExploreDocument rows share this exact title) rather than hardcoding
+    # a list of known-generic titles — a title repeated 5+ times is
+    # structurally uninformative regardless of what it says.
+    GENERIC_TITLE_REPEAT_THRESHOLD = 5
+    candidate_titles = {d.title for d in docs_by_id.values()}
+    title_counts = dict(
+        db.query(ExploreDocument.title, func.count(ExploreDocument.id))
+        .filter(ExploreDocument.title.in_(candidate_titles))
+        .group_by(ExploreDocument.title)
+        .all()
+    ) if candidate_titles else {}
+
     seen_titles: set[str] = set()
     unique: list[dict] = []
     for r, sim in scored:
@@ -1300,6 +1322,12 @@ def _find_related_explore_docs(
             continue
         d = docs_by_id.get(r["id"])
         if not d:
+            continue
+        if title_counts.get(d.title, 1) >= GENERIC_TITLE_REPEAT_THRESHOLD:
+            logger.debug(
+                "Explore doc rejected (boilerplate title used by %d docs): '%s'",
+                title_counts[d.title], d.title[:60],
+            )
             continue
         key = d.title.strip().lower()
         if key in seen_titles:
