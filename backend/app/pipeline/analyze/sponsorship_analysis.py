@@ -229,6 +229,13 @@ def describe_senator_position(
     "progressive Democratic leader" or "conservative Republican follower"
     (Tauberer 2012).
     """
+    # ideology is already rescaled to [0, 1] with 0 = most-left, 1 = most-
+    # right (see compute_ideology_scores), so these are terciles of that
+    # scale, not raw SVD output. D/R buckets use a wider 30/70 split (the
+    # middle 40% reads as "moderate" for a party member) than Independents'
+    # 35/65 split, since Independents have no "centrist" party label to fall
+    # back to and a narrower middle band better matches GovTrack's original
+    # three-way split for unaffiliated members (Tauberer 2012).
     if party == "D":
         ideo_label = (
             "progressive" if ideology < 0.30
@@ -251,6 +258,11 @@ def describe_senator_position(
         )
         party_label = "Independent"
 
+    # leadership is the rescaled PageRank score (see compute_leadership_scores),
+    # already log-spread across [0, 1] to counter its power-law distribution
+    # (most senators cluster low, a few attract disproportionate cosponsor
+    # weight) — top/bottom quartile on that spread scale is a meaningfully
+    # large gap in raw influence, not just a quartile of a linear scale.
     if leadership > 0.75:
         role = "leader"
     elif leadership < 0.25:
