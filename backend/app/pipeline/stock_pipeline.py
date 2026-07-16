@@ -25,6 +25,7 @@ from app.models import (
     StockTrade, RepStockTrade, StockTradesPipelineRun,
 )
 from app.pipeline.fetch.house_ptr import fetch_and_parse_ptr as fetch_house_ptr, fetch_ptr_filing_index
+from app.pipeline.fetch.ptr_common import TradeRow
 from app.pipeline.fetch.sec_tickers import resolve_tickers
 from app.pipeline.fetch.senate_ptr import (
     accept_terms as senate_accept_terms,
@@ -122,9 +123,9 @@ def _compute_days_to_disclose(transaction_date: str, disclosure_date: str) -> in
         return 0
 
 
-async def _classify_rows_industry(db: Session, client: httpx.AsyncClient, rows: list[dict]) -> None:
+async def _classify_rows_industry(db: Session, client: httpx.AsyncClient, rows: list[TradeRow]) -> None:
     """Mutate rows in place, setting `industry` from ticker -> company -> embedding."""
-    tickers = [r["ticker"] for r in rows if r.get("ticker")]
+    tickers = [r.ticker for r in rows if r.ticker]
     if not tickers:
         return
     ticker_to_company = await resolve_tickers(client, db, tickers)
@@ -133,12 +134,11 @@ async def _classify_rows_industry(db: Session, client: httpx.AsyncClient, rows: 
         return
     industries, _unknowns = classify_batch_with_learning(company_names, db)
     for row in rows:
-        ticker = row.get("ticker")
-        if not ticker:
+        if not row.ticker:
             continue
-        company = ticker_to_company.get(ticker.upper())
+        company = ticker_to_company.get(row.ticker.upper())
         if company and company in industries:
-            row["industry"] = industries[company]
+            row.industry = industries[company]
 
 
 async def _ingest_house(db: Session, client: httpx.AsyncClient) -> int:
@@ -159,22 +159,22 @@ async def _ingest_house(db: Session, client: httpx.AsyncClient) -> int:
                 continue
             await _classify_rows_industry(db, client, rows)
             for row in rows:
-                days = _compute_days_to_disclose(row["transaction_date"], row["disclosure_date"])
+                days = _compute_days_to_disclose(row.transaction_date, row.disclosure_date)
                 db.add(RepStockTrade(
                     representative_id=rep.id,
-                    ticker=row.get("ticker"),
-                    asset_name=row["asset_name"],
-                    owner=row["owner"],
-                    transaction_type=row["transaction_type"],
-                    transaction_date=row["transaction_date"],
-                    disclosure_date=row["disclosure_date"],
+                    ticker=row.ticker,
+                    asset_name=row.asset_name,
+                    owner=row.owner,
+                    transaction_type=row.transaction_type,
+                    transaction_date=row.transaction_date,
+                    disclosure_date=row.disclosure_date,
                     days_to_disclose=days,
-                    amount_low=row["amount_low"],
-                    amount_high=row["amount_high"],
-                    industry=row.get("industry", "UNCLASSIFIED"),
-                    source_url=row["source_url"],
-                    filing_id=row["filing_id"],
-                    parse_confidence=row["parse_confidence"],
+                    amount_low=row.amount_low,
+                    amount_high=row.amount_high,
+                    industry=row.industry or "UNCLASSIFIED",
+                    source_url=row.source_url,
+                    filing_id=row.filing_id,
+                    parse_confidence=row.parse_confidence,
                 ))
                 inserted += 1
             existing_rep_filing_ids.add(filing["doc_id"])
@@ -210,22 +210,22 @@ async def _ingest_senate(db: Session, client: httpx.AsyncClient) -> int:
             continue
         await _classify_rows_industry(db, client, rows)
         for row in rows:
-            days = _compute_days_to_disclose(row["transaction_date"], row["disclosure_date"])
+            days = _compute_days_to_disclose(row.transaction_date, row.disclosure_date)
             db.add(StockTrade(
                 senator_id=senator.id,
-                ticker=row.get("ticker"),
-                asset_name=row["asset_name"],
-                owner=row["owner"],
-                transaction_type=row["transaction_type"],
-                transaction_date=row["transaction_date"],
-                disclosure_date=row["disclosure_date"],
+                ticker=row.ticker,
+                asset_name=row.asset_name,
+                owner=row.owner,
+                transaction_type=row.transaction_type,
+                transaction_date=row.transaction_date,
+                disclosure_date=row.disclosure_date,
                 days_to_disclose=days,
-                amount_low=row["amount_low"],
-                amount_high=row["amount_high"],
-                industry=row.get("industry", "UNCLASSIFIED"),
-                source_url=row["source_url"],
-                filing_id=row["filing_id"],
-                parse_confidence=row["parse_confidence"],
+                amount_low=row.amount_low,
+                amount_high=row.amount_high,
+                industry=row.industry or "UNCLASSIFIED",
+                source_url=row.source_url,
+                filing_id=row.filing_id,
+                parse_confidence=row.parse_confidence,
             ))
             inserted += 1
         existing_filing_ids.add(filing_id)

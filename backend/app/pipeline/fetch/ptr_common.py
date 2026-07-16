@@ -8,9 +8,39 @@ only the delivery mechanism (PDF vs. HTML) differs.
 
 import logging
 import re
+from dataclasses import dataclass
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class TradeRow:
+    """One parsed PTR transaction line.
+
+    Built here with the fields available from the raw filing table
+    (ticker..amount_high); parse_confidence/source_url/filing_id are
+    filled in by the house_ptr.py/senate_ptr.py caller once it knows
+    which filing/confidence produced the row, and industry is filled in
+    later still, by stock_pipeline.py's ticker->company->embedding
+    classification pass. Previously a plain dict shared across all of
+    these stages — a typo'd key on any one access (construction, the
+    two callers' tagging, or stock_pipeline.py's DB-row construction)
+    surfaced as a silent KeyError deep in an ingest loop rather than at
+    the point of the mistake.
+    """
+    ticker: str | None
+    asset_name: str
+    owner: str
+    transaction_type: str
+    transaction_date: str
+    disclosure_date: str
+    amount_low: float
+    amount_high: float
+    parse_confidence: str = "text"
+    source_url: str = ""
+    filing_id: str = ""
+    industry: str | None = None
 
 # PTR owner codes -> our owner vocabulary (StockTrade.owner / RepStockTrade.owner).
 OWNER_CODES = {"SP": "spouse", "DC": "dependent", "JT": "joint"}
@@ -59,7 +89,7 @@ def parse_amount_range(text: str) -> tuple[float, float] | None:
         return None
 
 
-def parse_table_rows(table: list[list[str | None]]) -> list[dict]:
+def parse_table_rows(table: list[list[str | None]]) -> list[TradeRow]:
     """Parse a header + data-rows table (from pdfplumber or an HTML table)
     into transaction dicts. Locates columns by header text rather than
     fixed position, since column order isn't perfectly consistent across
@@ -88,7 +118,7 @@ def parse_table_rows(table: list[list[str | None]]) -> list[dict]:
         # block, etc.) — not a parse failure, just not what we're after.
         return []
 
-    rows: list[dict] = []
+    rows: list[TradeRow] = []
     for raw_row in table[1:]:
         if raw_row is None or len(raw_row) <= max(col_asset, col_type, col_date, col_amount):
             continue
@@ -111,20 +141,20 @@ def parse_table_rows(table: list[list[str | None]]) -> list[dict]:
         notify_date = normalize_date(notify_cell) or txn_date
 
         ticker_match = TICKER_RE.search(asset_cell)
-        rows.append({
-            "ticker": ticker_match.group(1) if ticker_match else None,
-            "asset_name": asset_cell,
-            "owner": OWNER_CODES.get(owner_cell, "self"),
-            "transaction_type": txn_type,
-            "transaction_date": txn_date,
-            "disclosure_date": notify_date,
-            "amount_low": amount_range[0],
-            "amount_high": amount_range[1],
-        })
+        rows.append(TradeRow(
+            ticker=ticker_match.group(1) if ticker_match else None,
+            asset_name=asset_cell,
+            owner=OWNER_CODES.get(owner_cell, "self"),
+            transaction_type=txn_type,
+            transaction_date=txn_date,
+            disclosure_date=notify_date,
+            amount_low=amount_range[0],
+            amount_high=amount_range[1],
+        ))
     return rows
 
 
-def ocr_extract_rows(pdf: object) -> list[dict]:
+def ocr_extract_rows(pdf: object) -> list[TradeRow]:
     """Best-effort OCR fallback for scanned (paper) PTR filings.
 
     Only reached when a PDF has no extractable text layer at all. OCR'd
@@ -138,7 +168,7 @@ def ocr_extract_rows(pdf: object) -> list[dict]:
         logger.warning("pytesseract not available — cannot OCR scanned PTR")
         return []
 
-    rows: list[dict] = []
+    rows: list[TradeRow] = []
     for page in pdf.pages:
         try:
             img = page.to_image(resolution=200).original
@@ -161,20 +191,20 @@ def ocr_extract_rows(pdf: object) -> list[dict]:
             if txn_date is None:
                 continue
             disclosure_date = normalize_date(dates[1]) if len(dates) > 1 else txn_date
-            rows.append({
-                "ticker": ticker_match.group(1),
-                "asset_name": line.strip(),
-                "owner": "self",
-                "transaction_type": txn_type,
-                "transaction_date": txn_date,
-                "disclosure_date": disclosure_date or txn_date,
-                "amount_low": amount_range[0],
-                "amount_high": amount_range[1],
-            })
+            rows.append(TradeRow(
+                ticker=ticker_match.group(1),
+                asset_name=line.strip(),
+                owner="self",
+                transaction_type=txn_type,
+                transaction_date=txn_date,
+                disclosure_date=disclosure_date or txn_date,
+                amount_low=amount_range[0],
+                amount_high=amount_range[1],
+            ))
     return rows
 
 
-def parse_pdf_bytes(pdf_bytes: bytes) -> tuple[list[dict], str]:
+def parse_pdf_bytes(pdf_bytes: bytes) -> tuple[list[TradeRow], str]:
     """Parse a PTR PDF's bytes into (rows, confidence).
 
     Tries the text layer first (tables via pdfplumber); falls back to OCR
@@ -184,7 +214,7 @@ def parse_pdf_bytes(pdf_bytes: bytes) -> tuple[list[dict], str]:
 
     import pdfplumber
 
-    rows: list[dict] = []
+    rows: list[TradeRow] = []
     confidence = "text"
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         has_text = any((page.extract_text() or "").strip() for page in pdf.pages)

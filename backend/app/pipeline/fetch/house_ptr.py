@@ -17,6 +17,7 @@ import asyncio
 import io
 import logging
 import zipfile
+from dataclasses import asdict
 
 import httpx
 from defusedxml import ElementTree
@@ -24,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
-from app.pipeline.fetch.ptr_common import normalize_date, parse_pdf_bytes
+from app.pipeline.fetch.ptr_common import TradeRow, normalize_date, parse_pdf_bytes
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -122,7 +123,7 @@ async def fetch_ptr_filing_index(
 
 async def fetch_and_parse_ptr(
     client: httpx.AsyncClient, db: Session, filing: dict,
-) -> list[dict]:
+) -> list[TradeRow]:
     """Download and parse one PTR PDF into transaction rows.
 
     Returns rows tagged with parse_confidence ("text" or "ocr"). Returns an
@@ -132,7 +133,7 @@ async def fetch_and_parse_ptr(
     cache_key = f"ptr-parsed-{filing['doc_id']}"
     cached = api_cache_get(db, "house_ptr", cache_key, max_age_hours=24 * 30)
     if cached is not None:
-        return cached
+        return [TradeRow(**row) for row in cached]
 
     pdf_bytes = await _fetch_bytes_with_retry(client, filing["pdf_url"])
     if pdf_bytes is None:
@@ -145,9 +146,11 @@ async def fetch_and_parse_ptr(
         return []
 
     for row in rows:
-        row["parse_confidence"] = confidence
-        row["source_url"] = filing["pdf_url"]
-        row["filing_id"] = filing["doc_id"]
+        row.parse_confidence = confidence
+        row.source_url = filing["pdf_url"]
+        row.filing_id = filing["doc_id"]
 
-    api_cache_set(db, "house_ptr", cache_key, rows)
+    # The API cache stores plain JSON, not dataclasses — convert at this
+    # boundary and reconstruct on the cache-hit path above.
+    api_cache_set(db, "house_ptr", cache_key, [asdict(row) for row in rows])
     return rows
