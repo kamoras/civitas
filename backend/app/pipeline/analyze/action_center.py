@@ -1260,9 +1260,14 @@ _EXPLORE_DOC_MAX_DISTANCE = 0.85
 # the same "measure the real property, don't guess" principle as
 # GENERIC_TITLE_REPEAT_THRESHOLD above, just for a structural pattern
 # repeat-counting can't catch since each notice is uniquely titled.
+# "proposed collection...comment request" and "solicitation of
+# nominations" (PRA/FACA phrasing variants) added after live
+# re-verification post-deploy caught them still leaking through on real
+# production titles the first pass didn't sample.
 _ADMINISTRATIVE_NOTICE_TITLE_RE = re.compile(
-    r"information collection|submission for omb review|"
-    r"notice of (public )?meeting|open meeting of|stakeholder consultation meeting",
+    r"information collection|submission for omb review|proposed collection.*comment request|"
+    r"notice of (public )?meeting|open meeting of|stakeholder consultation meeting|"
+    r"solicitation of nominations",
     re.IGNORECASE,
 )
 
