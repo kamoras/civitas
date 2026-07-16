@@ -21,11 +21,63 @@ from app.database import SessionLocal
 
 logger = logging.getLogger(__name__)
 
-_total_calls = 0
-_cache_hits = 0
-_cache_misses = 0
 _max_retries = 3
-_prompt_stats: dict[str, dict[str, int]] = {}  # {prompt_version: {hits, misses}}
+
+
+class LLMCallStats:
+    """Tracks call_llm()'s cache hit/miss counters, overall and per prompt
+    version — was 4 separate module-level globals mutated via `global`
+    statements, the same shape as the already-fixed PipelineRunTracker.
+    """
+
+    def __init__(self) -> None:
+        self.total_calls = 0
+        self.cache_hits = 0
+        self.cache_misses = 0
+        self.per_prompt: dict[str, dict[str, int]] = {}
+
+    def _bucket(self, prompt_version: str) -> dict[str, int]:
+        return self.per_prompt.setdefault(prompt_version, {"hits": 0, "misses": 0})
+
+    def record_call(self) -> None:
+        self.total_calls += 1
+
+    def record_hit(self, prompt_version: str) -> None:
+        self.cache_hits += 1
+        self._bucket(prompt_version)["hits"] += 1
+
+    def record_miss(self, prompt_version: str) -> None:
+        self.cache_misses += 1
+        self._bucket(prompt_version)["misses"] += 1
+
+    def snapshot(self) -> dict:
+        total = self.cache_hits + self.cache_misses
+        hit_rate = round(self.cache_hits / total, 3) if total > 0 else None
+        per_prompt = {
+            v: {
+                **s,
+                "hit_rate": round(s["hits"] / (s["hits"] + s["misses"]), 3)
+                if (s["hits"] + s["misses"]) > 0 else None,
+            }
+            for v, s in self.per_prompt.items()
+        }
+        return {
+            "total_calls": self.total_calls,
+            "cache_hits": self.cache_hits,
+            "cache_misses": self.cache_misses,
+            "cache_hit_rate": hit_rate,
+            "per_prompt": per_prompt,
+            "estimated_cost": "free (local LLM)",
+        }
+
+    def reset(self) -> None:
+        self.total_calls = 0
+        self.cache_hits = 0
+        self.cache_misses = 0
+        self.per_prompt = {}
+
+
+_stats = LLMCallStats()
 
 
 def _make_input_hash(prompt_version: str, input_data: Any, model: str = "") -> str:
@@ -191,12 +243,8 @@ def call_llm(
     posts) since the check never reflected what was actually being
     verified.
     """
-    global _total_calls, _cache_hits, _cache_misses, _prompt_stats
-
     use_model = model or settings.OLLAMA_MODEL
     use_backend = settings.LLM_BACKEND
-
-    pstats = _prompt_stats.setdefault(prompt_version, {"hits": 0, "misses": 0})
 
     use_cache = cache_key is not None and db_session is not None
     input_hash = _make_input_hash(prompt_version, cache_key, use_model) if use_cache else None
@@ -204,13 +252,11 @@ def call_llm(
         try:
             cached = _cache_get_with_own_session(prompt_version, input_hash)
             if cached is not None:
-                _cache_hits += 1
-                pstats["hits"] += 1
+                _stats.record_hit(prompt_version)
                 return cached
         except Exception:
             logger.debug("LLM cache lookup failed", exc_info=True)
-        _cache_misses += 1
-        pstats["misses"] += 1
+        _stats.record_miss(prompt_version)
 
     estimated_prompt_tokens = (len(system_prompt) + len(user_prompt)) // 3
     required = estimated_prompt_tokens + max_tokens
@@ -235,7 +281,7 @@ def call_llm(
                     system_prompt, user_prompt, use_model, max_tokens, num_ctx, http_timeout,
                 )
 
-            _total_calls += 1
+            _stats.record_call()
 
             parsed = extract_json(text)
             if parsed is None:
@@ -282,24 +328,7 @@ def call_llm(
 
 
 def get_llm_stats() -> dict:
-    total = _cache_hits + _cache_misses
-    hit_rate = round(_cache_hits / total, 3) if total > 0 else None
-    per_prompt = {
-        v: {
-            **s,
-            "hit_rate": round(s["hits"] / (s["hits"] + s["misses"]), 3)
-            if (s["hits"] + s["misses"]) > 0 else None,
-        }
-        for v, s in _prompt_stats.items()
-    }
-    return {
-        "total_calls": _total_calls,
-        "cache_hits": _cache_hits,
-        "cache_misses": _cache_misses,
-        "cache_hit_rate": hit_rate,
-        "per_prompt": per_prompt,
-        "estimated_cost": "free (local LLM)",
-    }
+    return _stats.snapshot()
 
 
 def reset_client() -> None:
@@ -307,8 +336,4 @@ def reset_client() -> None:
 
 
 def reset_stats() -> None:
-    global _total_calls, _cache_hits, _cache_misses, _prompt_stats
-    _total_calls = 0
-    _cache_hits = 0
-    _cache_misses = 0
-    _prompt_stats = {}
+    _stats.reset()
