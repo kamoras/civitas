@@ -141,14 +141,14 @@ def check_pipeline_overrun() -> None:
     House pipelines.
     """
     from app.database import SessionLocal
-    from app.models import HousePipelineRun, PipelineRun
+    from app.models import HousePipelineRun, PipelineRun, PipelineStatus
 
     budget = timedelta(hours=settings.PIPELINE_OVERRUN_ALERT_HOURS)
     db = SessionLocal()
     try:
         checks = [
-            ("Senate", db.query(PipelineRun).filter(PipelineRun.status == "running").first()),
-            ("House", db.query(HousePipelineRun).filter(HousePipelineRun.status == "running").first()),
+            ("Senate", db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).first()),
+            ("House", db.query(HousePipelineRun).filter(HousePipelineRun.status == PipelineStatus.RUNNING).first()),
         ]
     finally:
         db.close()
