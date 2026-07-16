@@ -268,6 +268,8 @@ config_definitions.SCORE_WEIGHTS's docstring for the exact numbers).
 
 import logging
 
+from app.models import PromiseAlignment
+
 logger = logging.getLogger(__name__)
 
 # Bump when scoring formulas or their data inputs change in a way that
@@ -459,7 +461,7 @@ def calculate_confidence(senator: dict) -> dict[str, str]:
     )
     n_evaluable = sum(
         1 for p in promises
-        if isinstance(p, dict) and p.get("alignment") in ("kept", "partial", "broken")
+        if isinstance(p, dict) and p.get("alignment") in (PromiseAlignment.KEPT, PromiseAlignment.PARTIAL, PromiseAlignment.BROKEN)
     )
 
     # independentVoting/legislativeEffectiveness thresholds are halved from
@@ -620,13 +622,13 @@ def _calc_promise_persistence(
     if campaign_promises:
         scoreable = [
             p for p in campaign_promises
-            if p.get("alignment") in ("kept", "broken", "partial")
+            if p.get("alignment") in (PromiseAlignment.KEPT, PromiseAlignment.BROKEN, PromiseAlignment.PARTIAL)
         ]
         n_scoreable = len(scoreable)
         if scoreable:
             raw_score = sum(
-                1.0 if p["alignment"] == "kept"
-                else 0.5 if p["alignment"] == "partial"
+                1.0 if p["alignment"] == PromiseAlignment.KEPT
+                else 0.5 if p["alignment"] == PromiseAlignment.PARTIAL
                 else 0.0
                 for p in scoreable
             )

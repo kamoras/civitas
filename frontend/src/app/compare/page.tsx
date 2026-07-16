@@ -18,6 +18,7 @@ import type { Senator } from "@/types/senator";
 import { calculateOverallScore, getScoreColor } from "@/lib/corruption";
 import { formatCurrency } from "@/lib/formatting";
 import { useScoreWeights } from "@/hooks/useConfig";
+import { PARTY_COLORS } from "@/lib/partyStyles";
 
 type Chamber = "senate" | "house";
 
@@ -37,11 +38,6 @@ const SCORE_LABELS: Record<ScoreKey, string> = {
   legislativeEffectiveness: "LEGIS EFFECT",
 };
 
-const PARTY_COLORS: Record<string, string> = {
-  D: "text-dem-blue",
-  R: "text-rep-red",
-  I: "text-ind-purple",
-};
 
 function ScoreBar({ value, colorClass }: { value: number; colorClass: string }) {
   const filled = Math.round(value / 5);

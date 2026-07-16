@@ -97,10 +97,10 @@ def _hourly_action_refresh() -> None:
                     )
                     return
             from app.database import SessionLocal
-            from app.models import PipelineRun
+            from app.models import PipelineRun, PipelineStatus
             db = SessionLocal()
             try:
-                running = db.query(PipelineRun).filter(PipelineRun.status == "running").first()
+                running = db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).first()
             finally:
                 db.close()
             if running:

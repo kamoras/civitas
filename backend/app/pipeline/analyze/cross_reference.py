@@ -21,6 +21,7 @@ import re
 from typing import Any
 
 from app.config_definitions import PLATFORM_CATEGORIES
+from app.models import PromiseAlignment
 from app.pipeline.analyze.ollama_client import call_llm, unwrap_list
 from app.pipeline.analyze.policy_alignment import (
     compute_promise_vote_alignment,
@@ -283,7 +284,7 @@ async def analyze_senator_batch(
         # promises so a stated commitment is never double-counted.
         n_evaluable = sum(
             1 for p in final_promises
-            if p.get("alignment") in ("kept", "partial", "broken")
+            if p.get("alignment") in (PromiseAlignment.KEPT, PromiseAlignment.PARTIAL, PromiseAlignment.BROKEN)
         )
         if n_evaluable < 4 and sponsored_bills:
             derived = positions_from_sponsored_bills(
