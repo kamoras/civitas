@@ -17,6 +17,7 @@ from app.models import (
     Representative,
 )
 from app.pipeline.analyze.score_calculator import compute_overall_score
+from app.schemas import PaginatedRepresentativesSchema, RepresentativeSchema
 from app.services.pagination import paginate_bounds
 from app.services.score_trends import compute_score_trend_map
 from app.services.senator_service import (
@@ -51,8 +52,12 @@ def _build_areas(raw_str: str | None) -> list[dict]:
     ]
 
 
-def build_rep_response(rep: Representative, _db: Session = None) -> dict:
-    """Assemble a full response dict from Representative ORM model."""
+def build_rep_response(rep: Representative, _db: Session = None) -> RepresentativeSchema:
+    """Assemble a full RepresentativeSchema from Representative ORM model.
+
+    Mirrors senator_service.build_senator_response — same sub-schemas,
+    same dict->model construction pattern.
+    """
     donors = sorted(rep.donors, key=lambda d: d.rank)
     industry_donations = sorted(rep.industry_donations, key=lambda d: d.total, reverse=True)
     key_votes = rep.key_votes
@@ -71,17 +76,17 @@ def build_rep_response(rep: Representative, _db: Session = None) -> dict:
 
     initials = _compute_initials(rep.name) or rep.initials
 
-    return {
-        "id": rep.id,
-        "name": rep.name,
-        "state": rep.state,
-        "district": rep.district,
-        "party": rep.party,
-        "yearsInOffice": rep.years_in_office,
-        "initials": initials,
-        "leadershipTitle": rep.leadership_title,
-        "committees": json.loads(rep.committees or "[]"),
-        "representationScore": {
+    return RepresentativeSchema(
+        id=rep.id,
+        name=rep.name,
+        state=rep.state,
+        district=rep.district,
+        party=rep.party,
+        years_in_office=rep.years_in_office,
+        initials=initials,
+        leadership_title=rep.leadership_title,
+        committees=json.loads(rep.committees or "[]"),
+        representation_score={
             "fundingIndependence": rep.score_funding_independence,
             "promisePersistence": rep.score_promise_persistence,
             "independentVoting": rep.score_independent_voting,
@@ -89,7 +94,7 @@ def build_rep_response(rep: Representative, _db: Session = None) -> dict:
             "legislativeEffectiveness": rep.score_legislative_effectiveness,
             "confidence": json.loads(rep.score_confidence or "{}"),
         },
-        "funding": {
+        funding={
             "totalRaised": rep.total_raised,
             "totalFromPACs": rep.total_from_pacs,
             "smallDonorPercentage": rep.small_donor_percentage,
@@ -116,7 +121,7 @@ def build_rep_response(rep: Representative, _db: Session = None) -> dict:
                 for ind in industry_donations
             ],
         },
-        "votingRecord": {
+        voting_record={
             "totalVotes": total_votes,
             "votedWithPartyCount": voted_with,
             "votedAgainstPartyCount": voted_against,
@@ -125,7 +130,7 @@ def build_rep_response(rep: Representative, _db: Session = None) -> dict:
             "recentVoteCount": len(recent_votes_db),
             "keyVoteCount": len(key_votes_db),
         },
-        "lobbyingMatches": [
+        lobbying_matches=[
             {
                 "lobbyistOrg": lm.lobbyist_org,
                 "industry": lm.industry,
@@ -137,7 +142,7 @@ def build_rep_response(rep: Representative, _db: Session = None) -> dict:
             }
             for lm in lobbying_matches
         ],
-        "campaignPromises": [
+        campaign_promises=[
             {
                 "promiseText": cp.promise_text,
                 "category": cp.category,
@@ -149,9 +154,9 @@ def build_rep_response(rep: Representative, _db: Session = None) -> dict:
             }
             for cp in campaign_promises
         ],
-        "platformSummary": _clean_platform_summary(rep.platform_summary),
-        "partisanDepth": json.loads(rep.partisan_depth) if rep.partisan_depth else None,
-        "sponsoredBills": [
+        platform_summary=_clean_platform_summary(rep.platform_summary),
+        partisan_depth=json.loads(rep.partisan_depth) if rep.partisan_depth else None,
+        sponsored_bills=[
             {
                 "billId": sb.bill_id,
                 "title": sb.title,
@@ -167,15 +172,15 @@ def build_rep_response(rep: Representative, _db: Session = None) -> dict:
             }
             for sb in sorted(rep.sponsored_bills, key=lambda x: x.introduced_date or "", reverse=True)
         ],
-        "leadershipScore": rep.leadership_score,
-        "bipartisanshipScore": rep.bipartisanship_score,
-        "ideologyScore": rep.ideology_score,
-        "sponsorshipDescription": rep.sponsorship_description or "",
-        "websiteUrl": getattr(rep, "website_url", "") or "",
-        "contactFormUrl": getattr(rep, "contact_form_url", "") or "",
-        "officePhone": getattr(rep, "office_phone", "") or "",
-        "officeAddress": getattr(rep, "office_address", "") or "",
-    }
+        leadership_score=rep.leadership_score,
+        bipartisanship_score=rep.bipartisanship_score,
+        ideology_score=rep.ideology_score,
+        sponsorship_description=rep.sponsorship_description or "",
+        website_url=getattr(rep, "website_url", "") or "",
+        contact_form_url=getattr(rep, "contact_form_url", "") or "",
+        office_phone=getattr(rep, "office_phone", "") or "",
+        office_address=getattr(rep, "office_address", "") or "",
+    )
 
 
 def get_representatives_by_state(
@@ -183,7 +188,7 @@ def get_representatives_by_state(
     state: str,
     page: int = 1,
     per_page: int = 10,
-) -> dict:
+) -> PaginatedRepresentativesSchema:
     base_q = (
         db.query(Representative)
         .options(*_rep_eager_options())
@@ -195,16 +200,16 @@ def get_representatives_by_state(
 
     reps = base_q.offset((page - 1) * per_page).limit(per_page).all()
 
-    return {
-        "entries": [build_rep_response(r, db) for r in reps],
-        "total": total,
-        "page": page,
-        "perPage": per_page,
-        "totalPages": total_pages,
-    }
+    return PaginatedRepresentativesSchema(
+        entries=[build_rep_response(r, db) for r in reps],
+        total=total,
+        page=page,
+        per_page=per_page,
+        total_pages=total_pages,
+    )
 
 
-def get_representative_by_id(db: Session, rep_id: str) -> dict | None:
+def get_representative_by_id(db: Session, rep_id: str) -> RepresentativeSchema | None:
     rep = (
         db.query(Representative)
         .options(*_rep_eager_options())
