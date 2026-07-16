@@ -42,6 +42,24 @@ def _run_hourly_refresh(refresh_state: dict, house_running: bool = False, stock_
     return mock_refresh
 
 
+class TestIsStale:
+    def test_none_age_is_never_stale(self):
+        from app.scheduler import _is_stale
+        assert _is_stale(None, timedelta(hours=1)) is False
+
+    def test_age_under_threshold_is_not_stale(self):
+        from app.scheduler import _is_stale
+        assert _is_stale(timedelta(hours=1), timedelta(hours=2)) is False
+
+    def test_age_over_threshold_is_stale(self):
+        from app.scheduler import _is_stale
+        assert _is_stale(timedelta(hours=3), timedelta(hours=2)) is True
+
+    def test_age_exactly_at_threshold_is_not_stale(self):
+        from app.scheduler import _is_stale
+        assert _is_stale(timedelta(hours=2), timedelta(hours=2)) is False
+
+
 class TestActionRefreshOverlapGuard:
     def test_skips_when_a_recent_refresh_is_still_running(self):
         state = {"is_running": True, "started_at": datetime.utcnow() - timedelta(minutes=10)}
