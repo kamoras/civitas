@@ -183,11 +183,13 @@ never write "X surpasses X" or compare a thing to itself. (3) If an article \
 says something was dropped, dismissed, or ended, the fact must reflect that \
 outcome — do not write that it is ongoing.
 - "bills": An array of any specific bills or acts mentioned in the articles. \
-For each bill, provide an object with "name" (the common name or acronym, e.g. \
-"Kids Online Safety Act" or "KOSA") and "id": ALWAYS null. Never invent or \
-guess a bill number — leave "id" null even if you think you know it. \
-The bill number will be looked up separately. Only include bills actually named \
-in the articles. If NO bills are mentioned, return an empty array [].
+For each bill, provide an object with "name" (the bill's common name or \
+acronym EXACTLY AS WRITTEN in the articles above — never a bill name from \
+these instructions or from your own knowledge) and "id": ALWAYS null. Never \
+invent or guess a bill number — leave "id" null even if you think you know \
+it. The bill number will be looked up separately. Only include bills \
+actually named in the articles. This will usually be empty — if NO bill or \
+act is named in the articles, return an empty array [].
 Articles:
 {articles}
 
@@ -1350,9 +1352,25 @@ def _resolve_bills(raw_bills: list, article_texts: list[str]) -> list[dict]:
     # Collect LLM-extracted bills — always search by name, never trust LLM IDs.
     # LLMs frequently hallucinate bill numbers (e.g. "S.2026" when the year is 2026).
     # Regex extraction from article text above is the only source of trusted IDs.
+    #
+    # Also require the extracted NAME itself to appear verbatim in the source
+    # articles before trusting it — confirmed live 2026-07: a smaller LLM
+    # (post model-swap) anchored on this prompt's own example bill name and
+    # repeated it across unrelated articles (World Cup coverage, a AG
+    # confirmation hearing) that never mentioned any bill at all. Article
+    # text is the only source of truth for what was actually named, same
+    # principle as the ID-regex extraction above.
+    combined_text_lower = combined_text.lower()
     for b in raw_bills:
         if isinstance(b, dict) and b.get("name"):
-            name_refs.append({"name": b["name"], "id": None})
+            name = b["name"].strip()
+            if name and name.lower() in combined_text_lower:
+                name_refs.append({"name": name, "id": None})
+            elif name:
+                logger.warning(
+                    "Dropping LLM-extracted bill %r — not found verbatim in "
+                    "source articles (likely hallucinated)", name,
+                )
 
     bill_refs = id_refs + name_refs
 
@@ -1809,6 +1827,9 @@ accurate article is far better than a longer one that repeats itself or invents 
 - Do not speculate beyond what the sources support.
 - Do not name, quote, or attribute a statement or role to any person not \
 named in the key facts above.
+- Do NOT open with a generic hedge like "Recent coverage indicates," "Recent \
+reports say/suggest," "Recent developments show," or any similar throat-clearing \
+preamble. Start the first sentence with the concrete news itself — who did what.
 
 STRUCTURE (3 natural paragraphs):
 1. What is happening and why it matters right now
@@ -2026,6 +2047,32 @@ def _slugify(text: str) -> str:
     return slug[:200]
 
 
+# LFM2.5-1.2B-Instruct (production model as of 2026-07) frequently outputs a
+# positive verdict (matches/should_merge = true) whose own "reason" text plainly
+# says the two items are unrelated — confirmed live 2026-07 via direct sandbox
+# testing against the real model with real production prompts/data (e.g. reason:
+# "distinct from the U.S.-Iran conflict monitor's focus..." paired with
+# matches: true). Reordering the JSON schema (reason before verdict) and adding
+# few-shot examples were both tried and did NOT fix it — few-shot made it worse
+# via verbatim reasoning-text copying from the wrong example. This regex catches
+# the model contradicting its own stated reasoning and overrides the verdict to
+# False, the same "never trust the LLM's structured output over the evidence it
+# itself produced" principle as the bill-name verification guard in
+# _resolve_bills above.
+_CONTRADICTION_RE = re.compile(
+    r'distinct from|different from|not related|unrelated to|no connection'
+    r'|does not (?:directly )?(?:involve|relate|connect)|not directly (?:involve|related)'
+    r'|no direct (?:involvement|connection|relation)|separate from|not the same'
+    r'|superficial overlap|does not share',
+    re.IGNORECASE,
+)
+
+
+def _reason_contradicts_positive_verdict(reason: str) -> bool:
+    """True if an LLM's own explanation text undercuts the positive verdict it just gave."""
+    return bool(reason) and bool(_CONTRADICTION_RE.search(reason))
+
+
 def _should_merge_monitors_llm(
     a: NationalMonitor,
     b: NationalMonitor,
@@ -2050,10 +2097,17 @@ def _should_merge_monitors_llm(
 
     if isinstance(result, str):
         result = extract_json(result)
-    
+
     if isinstance(result, dict) and result.get("should_merge"):
+        reason = result.get("reason", "")
+        if _reason_contradicts_positive_verdict(reason):
+            logger.warning(
+                "LLM merge verdict contradicts its own reasoning, overriding to False: "
+                "'%s' + '%s' — %s", a.title, b.title, reason,
+            )
+            return False
         logger.info("LLM approved merge: '%s' + '%s' because: %s",
-                    a.title, b.title, result.get("reason"))
+                    a.title, b.title, reason)
         return True
     return False
 
@@ -2087,9 +2141,16 @@ def _should_match_monitor_llm(
     if not isinstance(result, dict):
         return False
     matched = bool(result.get("matches", False))
+    reason = result.get("reason", "")
+    if matched and _reason_contradicts_positive_verdict(reason):
+        logger.warning(
+            "LLM match verdict contradicts its own reasoning, overriding to False: "
+            "'%s' → '%s' — %s", issue_title[:50], monitor.title, reason,
+        )
+        return False
     logger.debug(
         "LLM monitor match '%s' → '%s': %s — %s",
-        issue_title[:50], monitor.title, matched, result.get("reason", ""),
+        issue_title[:50], monitor.title, matched, reason,
     )
     return matched
 
