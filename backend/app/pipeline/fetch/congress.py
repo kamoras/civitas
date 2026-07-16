@@ -9,13 +9,12 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
+from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 
 CONGRESS_API_BASE = "https://api.congress.gov/v3"
-MAX_RETRIES = 3
-RETRY_BACKOFF_S = 2.0
 
 _rate_limiter = RateLimiter(settings.CONGRESS_RPS)
 
@@ -118,45 +117,14 @@ async def fetch_significant_bills(
     return bills
 
 
-async def _fetch_with_retry(
-    client: httpx.AsyncClient, url: str, retries: int = MAX_RETRIES
-) -> dict | None:
+async def _fetch_with_retry(client: httpx.AsyncClient, url: str) -> dict | None:
     """Fetch a Congress.gov API URL with rate limiting, retries, and API key injection."""
-    await _rate_limiter.acquire()
     separator = "&" if "?" in url else "?"
     full_url = f"{url}{separator}api_key={settings.DATA_GOV_API_KEY}&format=json"
-
-    for attempt in range(1, retries + 1):
-        try:
-            logger.debug("Congress API: %s (attempt %d)", url, attempt)
-            resp = await client.get(full_url, timeout=30.0)
-
-            if resp.status_code == 429:
-                wait = RETRY_BACKOFF_S * attempt
-                logger.warning("Rate limited, waiting %.1fs...", wait)
-                import asyncio
-                await asyncio.sleep(wait)
-                continue
-
-            if resp.status_code >= 400:
-                raise httpx.HTTPStatusError(
-                    f"HTTP {resp.status_code}: {resp.reason_phrase}",
-                    request=resp.request,
-                    response=resp,
-                )
-
-            return resp.json()
-        except Exception as e:
-            if attempt == retries:
-                logger.error(
-                    "Congress API failed after %d attempts: %s — %s",
-                    retries, url, str(e),
-                )
-                return None
-            import asyncio
-            await asyncio.sleep(RETRY_BACKOFF_S * attempt)
-
-    return None
+    resp = await fetch_with_retry(
+        client, _rate_limiter, "GET", full_url, log_label="Congress API",
+    )
+    return resp.json() if resp is not None else None
 
 
 async def fetch_senators(

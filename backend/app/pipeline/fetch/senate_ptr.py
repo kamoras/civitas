@@ -24,7 +24,6 @@ actually presenting/accepting the Ethics in Government Act use restriction
 below does that as a real POST, not a bypass.
 """
 
-import asyncio
 import logging
 import re
 from dataclasses import asdict
@@ -35,6 +34,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
+from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.fetch.ptr_common import TradeRow, normalize_date, parse_pdf_bytes, parse_table_rows
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -44,8 +44,6 @@ EFD_BASE = "https://efdsearch.senate.gov"
 HOME_URL = f"{EFD_BASE}/search/home/"
 SEARCH_URL = f"{EFD_BASE}/search/"
 SEARCH_DATA_URL = f"{EFD_BASE}/search/report/data/"
-MAX_RETRIES = 3
-RETRY_BACKOFF_S = 2.0
 
 # efdsearch's DataTables endpoint filters by a numeric report_type code.
 # Periodic Transaction Report has historically been type 11 in this system
@@ -58,32 +56,13 @@ _rate_limiter = RateLimiter(settings.SENATE_PTR_RPS)
 
 
 async def _request_with_retry(
-    client: httpx.AsyncClient, method: str, url: str, retries: int = MAX_RETRIES, **kwargs,
+    client: httpx.AsyncClient, method: str, url: str, **kwargs,
 ) -> httpx.Response | None:
-    await _rate_limiter.acquire()
-    for attempt in range(1, retries + 1):
-        try:
-            logger.debug("Senate eFD %s: %s (attempt %d)", method, url, attempt)
-            resp = await client.request(method, url, timeout=60.0, **kwargs)
-            if resp.status_code == 429:
-                wait = RETRY_BACKOFF_S * attempt * 2
-                logger.warning("Senate eFD rate limited, waiting %.1fs...", wait)
-                await asyncio.sleep(wait)
-                continue
-            if resp.status_code >= 400:
-                if 400 <= resp.status_code < 500:
-                    logger.error("Senate eFD client error (no retry): %s — HTTP %d", url, resp.status_code)
-                    return None
-                raise httpx.HTTPStatusError(
-                    f"HTTP {resp.status_code}", request=resp.request, response=resp,
-                )
-            return resp
-        except Exception as e:
-            if attempt == retries:
-                logger.error("Senate eFD request failed after %d attempts: %s — %s", retries, url, e)
-                return None
-            await asyncio.sleep(RETRY_BACKOFF_S * attempt)
-    return None
+    return await fetch_with_retry(
+        client, _rate_limiter, method, url,
+        rate_limit_backoff_multiplier=2.0, retry_on_4xx=False,
+        timeout=60.0, log_label="Senate eFD", **kwargs,
+    )
 
 
 def _extract_csrf_token(html_text: str) -> str | None:
