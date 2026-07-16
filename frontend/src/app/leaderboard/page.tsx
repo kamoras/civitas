@@ -12,6 +12,7 @@ import BackToTop from "@/components/BackToTop";
 import { fetchLeaderboard, fetchRepLeaderboard, fetchPresidentLeaderboard, fetchJusticeLeaderboard } from "@/lib/api";
 import { calculateOverallScore, calculatePresidentScore, calculateJusticeScore, getScoreColor, getScoreBgColor } from "@/lib/corruption";
 import { PARTY_BADGE } from "@/lib/partyStyles";
+import { formatCurrency } from "@/lib/formatting";
 import { useScoreWeights } from "@/hooks/useConfig";
 import type { LeaderboardEntry, ScoreTrend } from "@/types/senator";
 import type { PresidentLeaderboardEntry } from "@/types/president";
@@ -19,13 +20,6 @@ import type { JusticeLeaderboardEntry } from "@/types/justice";
 
 type PartyFilter = "ALL" | "D" | "R" | "I";
 type SortKey = "score" | "pac_dollars" | "pac_pct";
-
-function formatDollars(n: number | undefined | null): string {
-  const v = n ?? 0;
-  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
-  if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K`;
-  return `$${v.toFixed(0)}`;
-}
 
 function rankColor(rank: number): string {
   if (rank === 1) return "text-matrix-green neon-green";
@@ -735,7 +729,7 @@ function LeaderboardContent() {
                           <TrendIndicator trend={entry.trend} />
                         </td>
                         <td className="px-3 py-3 text-right tabular-nums text-white/70">
-                          {formatDollars(entry.totalFromPacs)}
+                          {formatCurrency(entry.totalFromPacs ?? 0)}
                         </td>
                         <td className="px-3 py-3 text-right tabular-nums">
                           <span
@@ -795,7 +789,7 @@ function LeaderboardContent() {
                       <div className="flex items-center gap-3 mt-0.5">
                         <ScoreBar score={score} />
                         <TrendIndicator trend={entry.trend} />
-                        <span className="text-xs text-white/40">{formatDollars(entry.totalFromPacs)} PAC ({pacPct}%)</span>
+                        <span className="text-xs text-white/40">{formatCurrency(entry.totalFromPacs ?? 0)} PAC ({pacPct}%)</span>
                       </div>
                     </div>
                   </Link>
