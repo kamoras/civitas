@@ -7,6 +7,7 @@ both chambers rather than each route carrying its own copy.
 """
 
 from app.config_definitions import SCORE_WEIGHTS
+from app.models import PromiseAlignment
 
 
 def build_highlights(entity: dict) -> list[str]:
@@ -79,8 +80,8 @@ def build_highlights(entity: dict) -> list[str]:
 
     # --- Promise fulfillment ---
     promises = entity.get("campaignPromises") or []
-    kept = sum(1 for p in promises if p["alignment"] == "kept")
-    broken = sum(1 for p in promises if p["alignment"] == "broken")
+    kept = sum(1 for p in promises if p["alignment"] == PromiseAlignment.KEPT)
+    broken = sum(1 for p in promises if p["alignment"] == PromiseAlignment.BROKEN)
     if len(promises) > 0:
         if kept > 0 and broken == 0:
             hints.append((6, (

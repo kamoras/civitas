@@ -1,9 +1,27 @@
 from datetime import datetime
+from enum import StrEnum
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+
+class PromiseAlignment(StrEnum):
+    """Campaign-promise-vs-record verdict, shared by CampaignPromise/
+    RepCampaignPromise — was independently redefined as bare string
+    literals across promise_quality.py, policy_alignment.py,
+    cross_reference.py, senate_pipeline.py, score_calculator.py,
+    senator_service.py, representative_service.py, and highlights.py.
+
+    A StrEnum: members compare and serialize identically to plain
+    strings, so this is a drop-in replacement for the existing
+    `Mapped[str]` columns with zero schema migration.
+    """
+    KEPT = "kept"
+    BROKEN = "broken"
+    PARTIAL = "partial"
+    UNCLEAR = "unclear"
 
 
 class Senator(Base):
@@ -151,7 +169,7 @@ class CampaignPromise(Base):
     senator_id: Mapped[str] = mapped_column(String, ForeignKey("senators.id", ondelete="CASCADE"), nullable=False, index=True)
     promise_text: Mapped[str] = mapped_column(Text, nullable=False)
     category: Mapped[str] = mapped_column(String, nullable=False)  # e.g. "healthcare", "economy", "defense"
-    alignment: Mapped[str] = mapped_column(String, default="unclear")  # "kept", "broken", "partial", "unclear"
+    alignment: Mapped[str] = mapped_column(String, default=PromiseAlignment.UNCLEAR)
     related_votes: Mapped[str] = mapped_column(Text, default="[]")  # JSON array of vote bill IDs
     related_bills: Mapped[str] = mapped_column(Text, default="[]")  # JSON array of sponsored bill IDs
     analysis: Mapped[str] = mapped_column(Text, default="")  # factual reasoning citing evidence
@@ -344,7 +362,7 @@ class RepCampaignPromise(Base):
     representative_id: Mapped[str] = mapped_column(String, ForeignKey("representatives.id", ondelete="CASCADE"), nullable=False, index=True)
     promise_text: Mapped[str] = mapped_column(Text, nullable=False)
     category: Mapped[str] = mapped_column(String, nullable=False)
-    alignment: Mapped[str] = mapped_column(String, default="unclear")
+    alignment: Mapped[str] = mapped_column(String, default=PromiseAlignment.UNCLEAR)
     related_votes: Mapped[str] = mapped_column(Text, default="[]")
     related_bills: Mapped[str] = mapped_column(Text, default="[]")
     analysis: Mapped[str] = mapped_column(Text, default="")
