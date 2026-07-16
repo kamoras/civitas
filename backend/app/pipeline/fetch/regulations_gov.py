@@ -13,6 +13,7 @@ import re
 import httpx
 
 from app.config import settings
+from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +157,7 @@ async def submit_comment(
                     "Content-Type": "application/vnd.api+json",
                     "X-Api-Key": api_key,
                 },
-                timeout=30.0,
+                timeout=DEFAULT_FETCH_TIMEOUT_S,
             )
 
             if resp.status_code == 201:

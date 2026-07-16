@@ -11,6 +11,8 @@ import logging
 
 import httpx
 
+from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
+
 logger = logging.getLogger(__name__)
 
 BLS_BASE = "https://api.bls.gov/publicAPI/v2/timeseries/data/"
@@ -66,7 +68,7 @@ async def fetch_employment_data(
         resp = await client.post(
             BLS_BASE,
             json=payload,
-            timeout=30.0,
+            timeout=DEFAULT_FETCH_TIMEOUT_S,
         )
         resp.raise_for_status()
         data = resp.json()

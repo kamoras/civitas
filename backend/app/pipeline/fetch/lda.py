@@ -23,6 +23,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.pipeline.cache import api_cache_get, api_cache_set
+from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -81,7 +82,7 @@ async def fetch_lobbying_spend(
                 "filing_year": year,
                 "page_size": 25,
             },
-            timeout=30.0,
+            timeout=DEFAULT_FETCH_TIMEOUT_S,
         )
         if resp.status_code == 429:
             logger.warning("LDA rate limited for %s — skipping (uncached)", org_key)
