@@ -17,6 +17,13 @@ from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
 from app.api.rate_limit import client_ip
+from app.api.response_helpers import (
+    CACHE_TTL_CONFIG_S,
+    CACHE_TTL_DETAIL_S,
+    CACHE_TTL_LIST_S,
+    CACHE_TTL_REFERENCE_S,
+    CACHE_TTL_SEARCH_S,
+)
 from app.config_definitions import SCORE_WEIGHTS
 from app.database import get_db
 from app.models import ExploreDocument, ScoreSnapshot
@@ -86,7 +93,7 @@ def _rl_headers(request: Request) -> dict:
     }
 
 
-def _pub_json(data, request: Request, max_age: int = 300) -> JSONResponse:
+def _pub_json(data, request: Request, max_age: int = CACHE_TTL_LIST_S) -> JSONResponse:
     return JSONResponse(
         content=data,
         headers={
@@ -175,7 +182,7 @@ def list_states(
         }
         for code in all_codes
     ]
-    return _pub_json(result, request, max_age=600)
+    return _pub_json(result, request, max_age=CACHE_TTL_REFERENCE_S)
 
 
 # ---------------------------------------------------------------------------
@@ -223,7 +230,7 @@ def list_senators(
             "totalPages": total_pages,
         },
         request,
-        max_age=300,
+        max_age=CACHE_TTL_LIST_S,
     )
 
 
@@ -260,7 +267,7 @@ def get_senator_history(
             ],
         },
         request,
-        max_age=3600,
+        max_age=CACHE_TTL_CONFIG_S,
     )
 
 
@@ -280,7 +287,7 @@ def get_senator(
 
     data = result.model_dump(by_alias=True)
     data["overallScore"] = _overall(data.get("representationScore", {}))
-    return _pub_json(data, request, max_age=120)
+    return _pub_json(data, request, max_age=CACHE_TTL_DETAIL_S)
 
 
 # ---------------------------------------------------------------------------
@@ -314,7 +321,7 @@ def list_representatives(
     for entry in data["entries"]:
         entry["overallScore"] = _overall(entry.get("representationScore", {}))
 
-    return _pub_json(data, request, max_age=300)
+    return _pub_json(data, request, max_age=CACHE_TTL_LIST_S)
 
 
 @router.get("/representatives/{rep_id}/history")
@@ -350,7 +357,7 @@ def get_representative_history(
             ],
         },
         request,
-        max_age=3600,
+        max_age=CACHE_TTL_CONFIG_S,
     )
 
 
@@ -369,7 +376,7 @@ def get_representative(
         raise HTTPException(status_code=404, detail="Representative not found")
 
     result["overallScore"] = _overall(result.get("representationScore", {}))
-    return _pub_json(result, request, max_age=120)
+    return _pub_json(result, request, max_age=CACHE_TTL_DETAIL_S)
 
 
 # ---------------------------------------------------------------------------
@@ -428,4 +435,4 @@ async def search(
         }
         results = [r for r in results if r.get("id") in matching_ids]
 
-    return _pub_json({"query": q, "results": results[:limit], "count": len(results[:limit])}, request, max_age=60)
+    return _pub_json({"query": q, "results": results[:limit], "count": len(results[:limit])}, request, max_age=CACHE_TTL_SEARCH_S)

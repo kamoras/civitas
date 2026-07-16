@@ -9,7 +9,12 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal, get_db
-from app.api.response_helpers import cached_json as _cached_json
+from app.api.response_helpers import (
+    CACHE_TTL_CONFIG_S,
+    CACHE_TTL_DETAIL_S,
+    CACHE_TTL_LIST_S,
+    cached_json as _cached_json,
+)
 from app.services.justice_service import (
     get_all_justices,
     get_justice,
@@ -26,7 +31,7 @@ router = APIRouter(prefix="/justices")
 def leaderboard(db: Session = Depends(get_db)):
     """All active justices ranked by weighted impartiality score."""
     data = get_justice_leaderboard(db)
-    return _cached_json([e.model_dump(by_alias=True) for e in data], max_age=300)
+    return _cached_json([e.model_dump(by_alias=True) for e in data], max_age=CACHE_TTL_LIST_S)
 
 
 @router.get("/weights")
@@ -37,7 +42,7 @@ def weights():
         "independence": {"weight": 0.30, "label": "Independence", "description": "How often they break from their appointing-party's expected voting bloc in split decisions."},
         "bipartisanAgreement": {"weight": 0.15, "label": "Bipartisan Agreement", "description": "Fraction of cases decided unanimously or near-unanimously (broad consensus)."},
         "judicialRestraint": {"weight": 0.20, "label": "Judicial Restraint", "description": "Balanced dissent patterns — neither rubber-stamping everything nor constant ideological dissent."},
-    }, max_age=3600)
+    }, max_age=CACHE_TTL_CONFIG_S)
 
 
 @router.post("/pipeline/trigger")
@@ -74,7 +79,7 @@ def detail(justice_id: str, db: Session = Depends(get_db)):
     result = get_justice(db, justice_id)
     if not result:
         raise HTTPException(status_code=404, detail="Justice not found")
-    return _cached_json(result.model_dump(by_alias=True), max_age=120)
+    return _cached_json(result.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)
 
 
 @router.get("/{justice_id}/score-breakdown")
@@ -85,11 +90,11 @@ def score_breakdown(justice_id: str, db: Session = Depends(get_db)):
     breakdown = get_justice_score_breakdown(db, justice_id)
     if breakdown is None:
         raise HTTPException(status_code=404, detail="Justice not found")
-    return _cached_json(breakdown, max_age=120)
+    return _cached_json(breakdown, max_age=CACHE_TTL_DETAIL_S)
 
 
 @router.get("")
 def list_all(db: Session = Depends(get_db)):
     """All active justices."""
     data = get_all_justices(db)
-    return _cached_json([j.model_dump(by_alias=True) for j in data], max_age=300)
+    return _cached_json([j.model_dump(by_alias=True) for j in data], max_age=CACHE_TTL_LIST_S)
