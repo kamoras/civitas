@@ -311,7 +311,7 @@ def list_representatives(
     """
     if state:
         from app.services.representative_service import get_representatives_by_state
-        data = get_representatives_by_state(db, state, page=page, per_page=per_page)
+        data = get_representatives_by_state(db, state, page=page, per_page=per_page).model_dump(by_alias=True)
         if party:
             data["entries"] = [e for e in data["entries"] if e.get("party") == party.upper()]
     else:
@@ -371,10 +371,11 @@ def get_representative(
     """Full representative profile: funding, voting record, campaign promises, sponsored bills."""
     from app.services.representative_service import get_representative_by_id
 
-    result = get_representative_by_id(db, rep_id)
-    if result is None:
+    rep = get_representative_by_id(db, rep_id)
+    if rep is None:
         raise HTTPException(status_code=404, detail="Representative not found")
 
+    result = rep.model_dump(by_alias=True)
     result["overallScore"] = _overall(result.get("representationScore", {}))
     return _pub_json(result, request, max_age=CACHE_TTL_DETAIL_S)
 
