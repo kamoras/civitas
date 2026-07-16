@@ -23,7 +23,7 @@ async def run_justice_pipeline(db: Session) -> dict:
     logger.info("=== Justice pipeline starting ===")
 
     async with httpx.AsyncClient(
-        headers={"User-Agent": "ModernPunk/1.0 (civic-transparency-tool) httpx/0.27"},
+        headers={"User-Agent": "Civitas/1.0 (civic-transparency-tool) httpx/0.27"},
         follow_redirects=True,
     ) as client:
         justices = await fetch_current_justices(client)

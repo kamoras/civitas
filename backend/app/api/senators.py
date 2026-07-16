@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from app.api.highlights import build_highlights
 from app.api.response_helpers import cached_json as _cached_json, score_history_json
 from app.database import get_db
 
@@ -64,123 +65,8 @@ async def get_highlights(senator_id: str, db: Session = Depends(get_db)) -> JSON
     if senator is None:
         raise HTTPException(status_code=404, detail="Senator not found")
 
-    highlights = _build_highlights(senator)
+    highlights = build_highlights(senator.model_dump(by_alias=True))
     return _cached_json({"highlights": highlights[:5]}, max_age=120)
-
-
-def _build_highlights(senator) -> list[str]:
-    """Generate factual, data-driven insights from senator records."""
-    funding = senator.funding
-    score = senator.representation_score
-    hints: list[tuple[int, str]] = []  # (priority, text)
-
-    total = funding.total_raised
-    small_pct = funding.small_donor_percentage or 0
-    pac_total = funding.total_from_pacs or 0
-    pac_pct_raw = pac_total / total * 100 if total > 0 else 0.0
-    pac_pct_str = "<1" if 0 < pac_pct_raw < 1 else f"{pac_pct_raw:.0f}"
-
-    # --- Funding highlights ---
-    if small_pct >= 50:
-        hints.append((10, (
-            f"Grassroots funded: {small_pct:.0f}% of {senator.name}'s "
-            f"${total / 1e6:.1f}M raised comes from small donors (under $200), "
-            f"suggesting broad constituent support."
-        )))
-    elif small_pct < 15 and total > 0:
-        small_str = "<1" if 0 < small_pct < 1 else f"{small_pct:.0f}"
-        hints.append((10, (
-            f"Only {small_str}% of {senator.name}'s "
-            f"${total / 1e6:.1f}M came from small donors — "
-            f"the vast majority flows from large donors and organizations."
-        )))
-
-    if pac_pct_raw > 40:
-        hints.append((9, (
-            f"PAC-heavy: {pac_pct_str}% of funding (${pac_total:,.0f}) "
-            f"comes from political action committees."
-        )))
-    elif pac_pct_raw < 5 and total > 500_000:
-        hints.append((9, (
-            f"Virtually PAC-free: Only ${pac_total:,.0f} "
-            f"({pac_pct_str}%) came from PACs — an unusually low amount."
-        )))
-
-    # Top industry donor
-    industry_donors = [
-        d for d in funding.top_donors
-        if d.type not in ("CandidateAffiliated",) and d.industry not in (
-            "POLITICAL", "SMALL_DONORS", "LARGE_INDIVIDUAL", "OTHER"
-        )
-    ]
-    if industry_donors:
-        top = industry_donors[0]
-        hints.append((5, (
-            f"Largest industry donor: {top.name} "
-            f"(${top.total:,.0f}, {top.industry.replace('_', ' ').title()})."
-        )))
-
-    # --- Voting highlights ---
-    # (Donor-alignment voting highlights removed: VotingRecord no longer has
-    # scoreable_votes, donor_aligned_votes, or donor_opposed_votes.)
-
-    # --- Lobbying matches ---
-    matches = senator.lobbying_matches or []
-    aligned_matches = sum(1 for m in matches if m.senator_vote_aligned)
-    if len(matches) > 3 and aligned_matches > 2:
-        hints.append((7, (
-            f"Found {len(matches)} donor-vote connections where a major donor's "
-            f"industry overlaps with legislation — {aligned_matches} votes went "
-            f"the donor's way."
-        )))
-    elif len(matches) == 0:
-        hints.append((3, (
-            "No direct donor-vote industry connections detected in tracked legislation."
-        )))
-
-    # --- Promise fulfillment ---
-    promises = senator.campaign_promises or []
-    kept = sum(1 for p in promises if p.alignment == "kept")
-    broken = sum(1 for p in promises if p.alignment == "broken")
-    if len(promises) > 0:
-        if kept > 0 and broken == 0:
-            hints.append((6, (
-                f"Platform follow-through: {kept} of {len(promises)} tracked "
-                f"campaign promises rated as kept, with none broken."
-            )))
-        elif broken > kept and len(promises) >= 3:
-            hints.append((6, (
-                f"Promise gap: {broken} campaign promises rated as broken "
-                f"versus only {kept} kept out of {len(promises)} tracked."
-            )))
-
-    # --- Overall score ---
-    from app.config_definitions import SCORE_WEIGHTS
-    _field_map = {
-        "fundingIndependence": "funding_independence",
-        "promisePersistence": "promise_persistence",
-        "independentVoting": "independent_voting",
-        "fundingDiversity": "funding_diversity",
-        "legislativeEffectiveness": "legislative_effectiveness",
-    }
-    total_score = round(
-        sum(getattr(score, _field_map[key]) * weight for key, weight in SCORE_WEIGHTS.items())
-    )
-    if total_score >= 80:
-        hints.append((2, (
-            f"Overall representation score: {total_score}/100 — "
-            f"strong marks across funding transparency, voting independence, "
-            f"and promise fulfillment."
-        )))
-    elif total_score <= 40:
-        hints.append((2, (
-            f"Overall representation score: {total_score}/100 — "
-            f"significant concerns across funding sources, voting patterns, "
-            f"or promise fulfillment."
-        )))
-
-    hints.sort(key=lambda x: x[0], reverse=True)
-    return [text for _, text in hints]
 
 
 @router.get("/senators/{senator_id}/history")

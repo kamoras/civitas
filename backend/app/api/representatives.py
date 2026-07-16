@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from app.api.highlights import build_highlights
 from app.api.response_helpers import cached_json as _cached_json, score_history_json
 from app.database import get_db
 from app.services.representative_service import (
@@ -37,6 +38,17 @@ def list_rep_leaderboard(
 def get_rep_history(rep_id: str, db: Session = Depends(get_db)) -> JSONResponse:
     """Return historical score snapshots for a representative."""
     return score_history_json(db, "representative", rep_id)
+
+
+@router.get("/representatives/{rep_id}/highlights")
+def get_rep_highlights(rep_id: str, db: Session = Depends(get_db)) -> JSONResponse:
+    """Return data-driven highlights for a representative — no LLM, pure data."""
+    rep = get_representative_by_id(db, rep_id)
+    if rep is None:
+        raise HTTPException(status_code=404, detail="Representative not found")
+
+    highlights = build_highlights(rep)
+    return _cached_json({"highlights": highlights[:5]}, max_age=120)
 
 
 @router.get("/representatives/{rep_id}/votes")

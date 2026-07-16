@@ -970,7 +970,7 @@ async def fetch_senator_platform_text(
                 url,
                 timeout=15.0,
                 follow_redirects=True,
-                headers={"User-Agent": "Mozilla/5.0 (compatible; ModernPunk/1.0)"},
+                headers={"User-Agent": "Mozilla/5.0 (compatible; Civitas/1.0)"},
             )
             if resp.status_code != 200:
                 continue
