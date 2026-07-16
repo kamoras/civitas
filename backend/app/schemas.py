@@ -22,7 +22,11 @@ class CamelModel(BaseModel):
 class DonorSchema(CamelModel):
     name: str
     total: float
-    type: Literal["PAC", "Individual", "SuperPAC", "Org/Employees", "Party/Ideological", "CandidateAffiliated", "Self-Funded"]
+    # "SKIP" = donor_classifier_ai.py's low-confidence sentinel (see
+    # normalize_finance.py) — a real, first-class classification outcome
+    # filtered out of certain aggregates elsewhere (policy_alignment.py,
+    # cross_reference.py), not an error state, so it's a valid wire value.
+    type: Literal["PAC", "Individual", "SuperPAC", "Org/Employees", "Party/Ideological", "CandidateAffiliated", "Self-Funded", "SKIP"]
     industry: str = "OTHER"
     pac_sponsor: str | None = None
     pac_industry: str | None = None
