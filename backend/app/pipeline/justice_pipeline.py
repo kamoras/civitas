@@ -2,7 +2,6 @@
 
 import json
 import logging
-from collections import defaultdict
 
 import httpx
 from sqlalchemy.orm import Session
@@ -10,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.pipeline.analyze.justice_analyzer import analyze_justice_votes
 from app.pipeline.analyze.ollama_client import call_llm
 from app.pipeline.fetch.justice_votes import fetch_case_votes, fetch_current_justices
-from app.services.justice_service import upsert_justice
+from app.services.justice_service import group_votes_by_case_and_justice, upsert_justice
 
 logger = logging.getLogger(__name__)
 
@@ -33,11 +32,7 @@ async def run_justice_pipeline(db: Session) -> dict:
 
         all_votes = await fetch_case_votes(client)
 
-    case_votes: dict[str, list[dict]] = defaultdict(list)
-    justice_votes: dict[str, list[dict]] = defaultdict(list)
-    for v in all_votes:
-        case_votes[v["case_id"]].append(v)
-        justice_votes[v["justice_id"]].append(v)
+    case_votes, justice_votes = group_votes_by_case_and_justice(all_votes)
 
     # Comparison blocs are derived from appointing party (data), never
     # hand-coded membership sets — see the note in justice_analyzer.

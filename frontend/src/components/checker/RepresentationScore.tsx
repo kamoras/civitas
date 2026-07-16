@@ -4,6 +4,7 @@ import { Senator, VotingRecord, SponsoredBill } from "@/types/senator";
 import { calculateOverallScore, getScoreLabel, getScoreColor, getScoreBgColor } from "@/lib/corruption";
 import { useScoreWeights } from "@/hooks/useConfig";
 import MetricTooltip from "./MetricTooltip";
+import ScoreBreakdownPanel from "@/components/shared/ScoreBreakdownPanel";
 import { SCORE_TERMS } from "@/lib/scoreTerms";
 import type { ScoreKey } from "@/lib/scoreTerms";
 
@@ -14,6 +15,8 @@ interface RepresentationScoreProps {
   sponsoredBills?: SponsoredBill[];
   rank?: number;
   totalInChamber?: number;
+  entityId?: string;
+  chamber?: "senate" | "house";
 }
 
 // Letter-grade cutoffs are deliberately round numbers (80/60/40/20), one
@@ -47,11 +50,17 @@ function ScoreBar({
   label,
   blurb,
   basis,
+  entityType,
+  entityId,
+  dimensionKey,
 }: {
   value: number;
   label: string;
   blurb: string;
   basis?: string;
+  entityType?: "senator" | "representative";
+  entityId?: string;
+  dimensionKey?: ScoreKey;
 }) {
   const filled = Math.round(value / 5);
   const empty = 20 - filled;
@@ -66,6 +75,14 @@ function ScoreBar({
           <span className="text-matrix-green/70">{label}</span>
           <div className="text-[10px] text-neon-cyan/50 leading-tight">{blurb}</div>
           {basis && <div className="text-[10px] text-matrix-green/40 italic leading-tight">{basis}</div>}
+          {entityType && entityId && dimensionKey && (
+            <ScoreBreakdownPanel
+              entityType={entityType}
+              entityId={entityId}
+              dimensionKey={dimensionKey}
+              label={label}
+            />
+          )}
         </div>
         <span
           className="font-mono text-xs tracking-tight hidden sm:inline"
@@ -98,7 +115,8 @@ function ScoreBar({
   );
 }
 
-export default function RepresentationScore({ breakdown, votingRecord, funding, sponsoredBills, rank, totalInChamber }: RepresentationScoreProps) {
+export default function RepresentationScore({ breakdown, votingRecord, funding, sponsoredBills, rank, totalInChamber, entityId, chamber }: RepresentationScoreProps) {
+  const entityType = chamber === "house" ? "representative" : "senator";
   const weights = useScoreWeights();
   const overall = calculateOverallScore(breakdown, weights);
   const label = getScoreLabel(overall);
@@ -193,6 +211,9 @@ export default function RepresentationScore({ breakdown, votingRecord, funding, 
               label={t.label}
               blurb={METRIC_BLURBS[key]}
               basis={scoreBasis[key]}
+              entityType={entityId ? entityType : undefined}
+              entityId={entityId}
+              dimensionKey={key}
             />
           );
         })}

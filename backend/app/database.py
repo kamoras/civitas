@@ -100,6 +100,13 @@ def _migrate_columns() -> None:
         ("representatives", "committees", "TEXT DEFAULT '[]'"),
         ("sponsored_bills", "stage", "TEXT DEFAULT ''"),
         ("rep_sponsored_bills", "stage", "TEXT DEFAULT ''"),
+        ("presidents", "gdp_growth_adjusted", "REAL"),
+        ("presidents", "rulemaking_count", "INTEGER"),
+        ("presidents", "rulemaking_finalized_pct", "REAL"),
+        ("senators", "outside_spending_for", "REAL"),
+        ("representatives", "outside_spending_for", "REAL"),
+        ("lobbying_matches", "is_consensus_vote", "BOOLEAN"),
+        ("rep_lobbying_matches", "is_consensus_vote", "BOOLEAN"),
     ]
 
     drops: list[tuple[str, str]] = [

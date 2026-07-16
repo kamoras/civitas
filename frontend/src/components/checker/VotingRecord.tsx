@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { KeyVote, PaginatedVotes, VoteCounts, VotingRecord as VotingRecordType } from "@/types/senator";
 import { voteSourceUrl } from "@/lib/sources";
 import { fetchSenatorVotes, fetchRepVotes } from "@/lib/api";
-import CollapsibleSection from "./CollapsibleSection";
+import CollapsibleSection from "../shared/CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
 import { PARTY_BADGE } from "@/lib/partyStyles";
 

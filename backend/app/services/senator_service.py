@@ -365,6 +365,88 @@ def get_senator_by_id(db: Session, senator_id: str) -> SenatorSchema | None:
     return build_senator_response(senator, db)
 
 
+def get_senator_score_breakdown(db: Session, senator_id: str) -> dict | None:
+    """Recompute a senator's full score-derivation breakdown on-demand.
+
+    Builds the same dict shape score_calculator.calculate_scores() consumes
+    during the pipeline (funding, votingRecord with full per-vote keyVotes/
+    recentVotes, lobbyingMatches, sponsoredBills) directly from the ORM
+    relationships — NOT from build_senator_response()'s SenatorSchema, which
+    only exposes vote *counts* (totalVotes, votedWithPartyCount, ...), not
+    the per-vote votedWithParty/partyAlignmentWeight fields the scoring
+    formulas actually read.
+    """
+    from app.pipeline.analyze.score_calculator import explain_scores
+
+    senator = (
+        db.query(Senator)
+        .options(*_senator_eager_options())
+        .filter(Senator.id == senator_id)
+        .first()
+    )
+    if senator is None:
+        return None
+
+    def _vote_dict(v: KeyVote) -> dict:
+        return {
+            "votedWithParty": v.voted_with_party,
+            "partyAlignmentWeight": v.party_alignment_weight,
+        }
+
+    voting_record = {
+        "effectiveParty": None,  # not persisted — see score_calculator.py note; only matters for Independents
+        "keyVotes": [_vote_dict(v) for v in senator.key_votes if v.vote_category == "key"],
+        "recentVotes": [_vote_dict(v) for v in senator.key_votes if v.vote_category == "recent"],
+    }
+
+    funding = {
+        "totalRaised": senator.total_raised,
+        "totalFromPACs": senator.total_from_pacs,
+        "smallDonorPercentage": senator.small_donor_percentage,
+        "outsideSpendingFor": senator.outside_spending_for,
+        "topDonors": [
+            {"name": d.name, "total": d.total, "type": d.type}
+            for d in senator.donors
+        ],
+        "industryBreakdown": [
+            {"industry": ind.industry, "total": ind.total}
+            for ind in senator.industry_donations
+        ],
+    }
+
+    lobbying_matches = [
+        {
+            "donationToSenator": lm.donation_to_senator,
+            "isConsensusVote": lm.is_consensus_vote,
+        }
+        for lm in senator.lobbying_matches
+    ]
+
+    sponsored_bills = [
+        {
+            "billType": sb.bill_type,
+            "congress": sb.congress,
+            "isLaw": sb.is_law,
+            "latestAction": sb.latest_action,
+        }
+        for sb in senator.sponsored_bills
+    ]
+
+    entity = {
+        "funding": funding,
+        "votingRecord": voting_record,
+        "lobbyingMatches": lobbying_matches,
+        "sponsoredBills": sponsored_bills,
+        "state": senator.state,
+        "party": senator.party,
+        "district": None,
+        "bipartisanshipScore": senator.bipartisanship_score,
+        "leadershipScore": senator.leadership_score,
+        "yearsInOffice": senator.years_in_office,
+    }
+    return explain_scores(entity)
+
+
 def get_states_with_counts(db: Session) -> list[StateCountSchema]:
     """Return a list of states that have senators, with counts."""
     rows = (

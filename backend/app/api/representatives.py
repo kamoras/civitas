@@ -11,6 +11,7 @@ from app.services.representative_service import (
     get_rep_stock_trades,
     get_rep_votes,
     get_representative_by_id,
+    get_representative_score_breakdown,
     get_representatives_by_state,
 )
 
@@ -38,6 +39,16 @@ def list_rep_leaderboard(
 def get_rep_history(rep_id: str, db: Session = Depends(get_db)) -> JSONResponse:
     """Return historical score snapshots for a representative."""
     return score_history_json(db, "representative", rep_id)
+
+
+@router.get("/representatives/{rep_id}/score-breakdown")
+def get_rep_score_breakdown_route(rep_id: str, db: Session = Depends(get_db)) -> JSONResponse:
+    """Return the full component-level derivation behind each of a
+    representative's scored dimensions — the "show the math" panel's data source."""
+    breakdown = get_representative_score_breakdown(db, rep_id)
+    if breakdown is None:
+        raise HTTPException(status_code=404, detail="Representative not found")
+    return _cached_json(breakdown, max_age=120)
 
 
 @router.get("/representatives/{rep_id}/highlights")

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { PaginatedStockTrades, StockTrade } from "@/types/senator";
 import { fetchRepStockTrades, fetchSenatorStockTrades } from "@/lib/api";
-import CollapsibleSection from "./CollapsibleSection";
+import CollapsibleSection from "../shared/CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
 
 const TRADES_PER_PAGE = 15;

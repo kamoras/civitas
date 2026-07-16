@@ -120,6 +120,10 @@ async def run_president_pipeline(db: Session) -> dict:
             # Year-1-excluded GDP average (Blinder & Watson 2016)
             "gdp_growth_adjusted": gdp_adj_data.get(pid),
         }
+        # Persisted (not just kept in this local dict) so the on-demand
+        # score-breakdown endpoint can recompute calc_effectiveness's exact
+        # inputs later without a live re-fetch from FRED.
+        president.gdp_growth_adjusted = live["gdp_growth_adjusted"]
 
         # Overlay live Federal Register EO count
         if pid in eo_data:
@@ -131,10 +135,13 @@ async def run_president_pipeline(db: Session) -> dict:
             live["jobs_created_millions"] = jobs_data[pid]
             president.jobs_created_millions = jobs_data[pid]
 
-        # Overlay live rulemaking data
+        # Overlay live rulemaking data — persisted for the same on-demand
+        # breakdown-recompute reason as gdp_growth_adjusted above.
         if pid in rulemaking_data:
             live["rulemaking_count"] = rulemaking_data[pid]["rulemaking_count"]
             live["rulemaking_finalized_pct"] = rulemaking_data[pid]["rulemaking_finalized_pct"]
+            president.rulemaking_count = rulemaking_data[pid]["rulemaking_count"]
+            president.rulemaking_finalized_pct = rulemaking_data[pid]["rulemaking_finalized_pct"]
 
         seed_scores = {
             "score_independence": president.score_independence,
@@ -196,6 +203,7 @@ async def run_president_pipeline(db: Session) -> dict:
             president.jobs_created_millions = jobs
         if gdp_full is not None and president.gdp_growth_avg is None:
             president.gdp_growth_avg = gdp_full
+        president.gdp_growth_adjusted = gdp_adj
         president.updated_at = datetime.utcnow()
         econ_updated += 1
         logger.info("  %s: effectiveness=%d (gdp_adj=%.1f%% jobs=%.1fM)",

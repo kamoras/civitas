@@ -9,6 +9,7 @@ from app.database import get_db
 from app.services.senator_service import (
     get_leaderboard,
     get_senator_by_id,
+    get_senator_score_breakdown,
     get_senator_stock_trades,
     get_senator_votes,
     get_senators_by_state,
@@ -73,6 +74,16 @@ async def get_highlights(senator_id: str, db: Session = Depends(get_db)) -> JSON
 def get_senator_history(senator_id: str, db: Session = Depends(get_db)) -> JSONResponse:
     """Return historical score snapshots for a senator."""
     return score_history_json(db, "senator", senator_id)
+
+
+@router.get("/senators/{senator_id}/score-breakdown")
+def get_senator_score_breakdown_route(senator_id: str, db: Session = Depends(get_db)) -> JSONResponse:
+    """Return the full component-level derivation behind each of a senator's
+    scored dimensions — the "show the math" panel's data source."""
+    breakdown = get_senator_score_breakdown(db, senator_id)
+    if breakdown is None:
+        raise HTTPException(status_code=404, detail="Senator not found")
+    return _cached_json(breakdown, max_age=120)
 
 
 @router.get("/senators/{senator_id}/votes")

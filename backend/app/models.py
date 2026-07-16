@@ -102,6 +102,12 @@ class Senator(Base):
     total_raised: Mapped[float] = mapped_column(Float, default=0.0)
     total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)
     small_donor_percentage: Mapped[float] = mapped_column(Float, default=0.0)
+    # Super PAC independent expenditures supporting the candidate (FEC
+    # Schedule E). Persisted so the on-demand score-breakdown endpoint can
+    # reproduce _funding_independence_core's exact PAC-ratio math — this
+    # was previously only held in the pipeline's local `funding` dict and
+    # discarded once folded into score_funding_independence.
+    outside_spending_for: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     voting_summary: Mapped[str] = mapped_column(Text, default="")
     platform_summary: Mapped[str] = mapped_column(Text, default="")
@@ -192,6 +198,11 @@ class LobbyingMatch(Base):
     donation_to_senator: Mapped[float] = mapped_column(Float, default=0.0)
     bills_influenced: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
     senator_vote_aligned: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=None)
+    # Whether the matched donor-related votes were consensus (near-unanimous)
+    # votes. Persisted for the same on-demand breakdown-recompute reason as
+    # Senator.outside_spending_for above — previously only lived in
+    # policy_alignment.py's transient match dict.
+    is_consensus_vote: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     description: Mapped[str] = mapped_column(Text, default="")
 
     senator: Mapped["Senator"] = relationship(back_populates="lobbying_matches")
@@ -291,6 +302,12 @@ class Representative(Base):
     total_raised: Mapped[float] = mapped_column(Float, default=0.0)
     total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)
     small_donor_percentage: Mapped[float] = mapped_column(Float, default=0.0)
+    # Super PAC independent expenditures supporting the candidate (FEC
+    # Schedule E). Persisted so the on-demand score-breakdown endpoint can
+    # reproduce _funding_independence_core's exact PAC-ratio math — this
+    # was previously only held in the pipeline's local `funding` dict and
+    # discarded once folded into score_funding_independence.
+    outside_spending_for: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     voting_summary: Mapped[str] = mapped_column(Text, default="")
     platform_summary: Mapped[str] = mapped_column(Text, default="")
@@ -385,6 +402,7 @@ class RepLobbyingMatch(Base):
     donation_to_representative: Mapped[float] = mapped_column(Float, default=0.0)
     bills_influenced: Mapped[str] = mapped_column(Text, default="[]")
     representative_vote_aligned: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=None)
+    is_consensus_vote: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     description: Mapped[str] = mapped_column(Text, default="")
 
     representative: Mapped["Representative"] = relationship(back_populates="lobbying_matches")
@@ -474,6 +492,14 @@ class President(Base):
     eo_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     eo_court_success_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     cabinet_turnover_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Persisted so the on-demand score-breakdown endpoint can recompute
+    # calc_effectiveness/calc_agency_alignment's exact inputs without a
+    # live re-fetch from FRED/Federal Register — these were previously
+    # only held in president_pipeline.py's local `live` dict and discarded
+    # once folded into score_effectiveness/score_agency_alignment.
+    gdp_growth_adjusted: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rulemaking_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    rulemaking_finalized_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     summary: Mapped[str] = mapped_column(Text, default="")
     key_achievements: Mapped[str] = mapped_column(Text, default="[]")  # JSON array

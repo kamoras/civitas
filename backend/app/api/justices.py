@@ -14,6 +14,7 @@ from app.services.justice_service import (
     get_all_justices,
     get_justice,
     get_justice_leaderboard,
+    get_justice_score_breakdown,
 )
 
 logger = logging.getLogger(__name__)
@@ -74,6 +75,17 @@ def detail(justice_id: str, db: Session = Depends(get_db)):
     if not result:
         raise HTTPException(status_code=404, detail="Justice not found")
     return _cached_json(result.model_dump(by_alias=True), max_age=120)
+
+
+@router.get("/{justice_id}/score-breakdown")
+def score_breakdown(justice_id: str, db: Session = Depends(get_db)):
+    """Full component-level derivation behind each of a justice's scored
+    dimensions — the "show the math" panel's data source. Recomputed
+    on-demand from stored JusticeVote rows, not re-fetched from Oyez."""
+    breakdown = get_justice_score_breakdown(db, justice_id)
+    if breakdown is None:
+        raise HTTPException(status_code=404, detail="Justice not found")
+    return _cached_json(breakdown, max_age=120)
 
 
 @router.get("")

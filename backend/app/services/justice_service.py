@@ -2,11 +2,13 @@
 
 import json
 import logging
+from collections import defaultdict
 from typing import Sequence
 
 from sqlalchemy.orm import Session
 
 from app.models import Justice, JusticeVote
+from app.pipeline.analyze.justice_analyzer import analyze_justice_votes
 from app.schemas import (
     JusticeLeaderboardEntry,
     JusticeSchema,
@@ -111,6 +113,66 @@ def get_justice_leaderboard(db: Session) -> list[JusticeLeaderboardEntry]:
         ))
     entries.sort(key=lambda e: _weighted_total(e.score), reverse=True)
     return entries
+
+
+def group_votes_by_case_and_justice(
+    votes: list[dict],
+) -> tuple[dict[str, list[dict]], dict[str, list[dict]]]:
+    """Group a flat vote list into (case_id -> votes, justice_id -> votes).
+
+    Shared by justice_pipeline.py (grouping a fresh Oyez fetch) and
+    get_justice_score_breakdown below (grouping stored JusticeVote rows) —
+    one implementation of the grouping, two different vote sources.
+    """
+    case_votes: dict[str, list[dict]] = defaultdict(list)
+    justice_votes: dict[str, list[dict]] = defaultdict(list)
+    for v in votes:
+        case_votes[v["case_id"]].append(v)
+        justice_votes[v["justice_id"]].append(v)
+    return dict(case_votes), dict(justice_votes)
+
+
+def get_justice_score_breakdown(db: Session, justice_id: str) -> dict | None:
+    """Recompute a justice's full score breakdown on-demand from stored
+    vote data (JusticeVote rows) — no re-fetch from Oyez needed, since
+    every case a justice voted on, and who else voted which way, is
+    already persisted. Reconstructs the same votes/all_case_votes/
+    party_map inputs justice_pipeline.py assembles from a fresh fetch.
+    """
+    justice = db.query(Justice).filter(Justice.id == justice_id).first()
+    if not justice:
+        return None
+
+    all_vote_rows = db.query(JusticeVote).all()
+    votes = [
+        {
+            "justice_id": v.justice_id,
+            "case_id": v.case_id,
+            "vote": v.vote,
+            "opinion_type": v.opinion_type,
+            "is_unanimous": v.is_unanimous,
+            "is_close": v.is_close,
+            "majority_votes": v.majority_votes,
+            "minority_votes": v.minority_votes,
+        }
+        for v in all_vote_rows
+    ]
+    case_votes, justice_votes = group_votes_by_case_and_justice(votes)
+
+    # party_map covers only the current bench, matching justice_pipeline.py's
+    # semantics — a case's all_case_votes can include a since-retired
+    # justice's historical vote, but they're not compared against as a
+    # "bloc" member (see justice_analyzer's all_active filter).
+    active_justices = db.query(Justice).filter(Justice.is_active.is_(True)).all()
+    party_map = {j.id: j.appointing_party or "" for j in active_justices}
+
+    return analyze_justice_votes(
+        justice_id=justice_id,
+        appointing_party=justice.appointing_party or "",
+        votes=justice_votes.get(justice_id, []),
+        all_case_votes=case_votes,
+        party_map=party_map,
+    )
 
 
 def upsert_justice(db: Session, data: dict, votes: list[dict]) -> None:

@@ -15,6 +15,7 @@ from app.services.president_service import (
     get_all_presidents,
     get_president,
     get_president_leaderboard,
+    get_president_score_breakdown,
 )
 
 logger = logging.getLogger(__name__)
@@ -70,6 +71,20 @@ def detail(president_id: str, db: Session = Depends(get_db)):
     if not result:
         raise HTTPException(status_code=404, detail="President not found")
     return _cached_json(result.model_dump(by_alias=True), max_age=120)
+
+
+@router.get("/{president_id}/score-breakdown")
+def score_breakdown(president_id: str, db: Session = Depends(get_db)):
+    """Full component-level derivation behind each of a president's scored
+    dimensions — the "show the math" panel's data source. Independence/
+    Follow-Through/Public Mandate are always pure editorial estimates
+    ({"seedOnly": true}); Competence/Effectiveness/Agency Alignment are a
+    live formula only for presidents with fetched data (see
+    president_pipeline.DYNAMIC_PRESIDENTS/ECONOMICS_ONLY_PRESIDENTS)."""
+    breakdown = get_president_score_breakdown(db, president_id)
+    if breakdown is None:
+        raise HTTPException(status_code=404, detail="President not found")
+    return _cached_json(breakdown, max_age=120)
 
 
 @router.get("")

@@ -5,6 +5,11 @@ import type { ActionIssuesResponse, MyRepsResponse } from "@/types/action";
 import type { PoliticianCard } from "@/types/politicians";
 import type { PaginatedBills } from "@/types/bill";
 import { DEFAULT_PRESIDENT_WEIGHTS, DEFAULT_WEIGHTS } from "@/lib/corruption";
+import type {
+  JusticeScoreBreakdown,
+  PresidentScoreBreakdown,
+  RepresentationScoreBreakdown,
+} from "@/types/scoreBreakdown";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -100,6 +105,29 @@ export async function fetchRepresentative(repId: string): Promise<Senator> {
   const res = await fetch(`${API_BASE}/representatives/${repId}`);
   if (!res.ok) throw new Error(`Representative not found: ${res.status}`);
   return res.json();
+}
+
+// Score-breakdown ("show the math") panel data — lazy-fetched on first
+// expand, cached via cachedFetch so re-toggling a panel doesn't refetch.
+// 5-minute TTL: this is deterministic derived data that only changes once
+// a day at most (the nightly pipeline run).
+
+export async function fetchSenatorScoreBreakdown(senatorId: string): Promise<RepresentationScoreBreakdown> {
+  return cachedFetch(`${API_BASE}/senators/${senatorId}/score-breakdown`, 300_000);
+}
+
+export async function fetchRepScoreBreakdown(repId: string): Promise<RepresentationScoreBreakdown> {
+  return cachedFetch(`${API_BASE}/representatives/${repId}/score-breakdown`, 300_000);
+}
+
+export async function fetchPresidentScoreBreakdown(id: string): Promise<PresidentScoreBreakdown> {
+  const raw = await cachedFetch(`${API_BASE}/presidents/${id}/score-breakdown`, 300_000);
+  return camelizeKeys(raw) as PresidentScoreBreakdown;
+}
+
+export async function fetchJusticeScoreBreakdown(id: string): Promise<JusticeScoreBreakdown> {
+  const raw = await cachedFetch(`${API_BASE}/justices/${id}/score-breakdown`, 300_000);
+  return camelizeKeys(raw) as JusticeScoreBreakdown;
 }
 
 export interface PaginatedLeaderboard {

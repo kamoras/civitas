@@ -11,7 +11,7 @@ import StockTrades from "./StockTrades";
 import PlatformTracker from "./PlatformTracker";
 import DataHighlights from "./DataHighlights";
 import SponsoredBills from "./SponsoredBills";
-import CollapsibleSection from "./CollapsibleSection";
+import CollapsibleSection from "../shared/CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import ScoreTrendSection from "./ScoreTrendSection";
@@ -267,6 +267,8 @@ export default function SenatorCard({ senator, chamber = "senate" }: SenatorCard
           votingRecord={senator.votingRecord}
           funding={senator.funding}
           sponsoredBills={senator.sponsoredBills}
+          entityId={senator.id}
+          chamber={chamber}
         />
         <p className="font-mono text-[10px] text-matrix-green/40 -mt-2">
           Reflects the {currentCongressLabel()} only — see{" "}
