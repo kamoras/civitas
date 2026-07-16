@@ -17,6 +17,16 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.0",
+    date: "2026-07-15",
+    title: "Promise Persistence removed as a scored dimension",
+    changes: [
+      "This is the fourth attempt at fixing Promise Persistence (v5, v5.1/v5.3, v5.4, v5.10) without resolving the underlying gap. A live measurement across all 100 senators found 0 reached even \"medium\" confidence per the platform's own thresholds (3+ evaluable promises) — mean 0.3 evaluable promises per senator, 76% with zero. Real campaign promises are generic platform language (\"Expand Medicare coverage\"), and semantic matching against specific vote/bill text structurally can't bridge that gap: genuinely-related votes for real promises typically score below the match threshold, not above it.",
+      "Promise Persistence's 25% weight is redistributed proportionally across the remaining four dimensions: Funding Independence 15%→20%, Constituent Alignment 25%→33%, Funding Diversity 10%→13%, Legislative Effectiveness 25%→34%.",
+      "Campaign-promise extraction and kept/broken/partial tracking are unchanged and still shown on every member's profile — this is purely a scoring-weight change, not a data-collection change. The underlying promise data remains real and worth reading; it's just no longer folded into the weighted 0-100 composite score.",
+    ],
+  },
+  {
     version: "v5.12",
     date: "2026-07-13",
     title: "Legislative Effectiveness no longer penalizes freshman senators for lack of time",

@@ -18,7 +18,6 @@ class TestScoreWeights:
         because of this pair, despite above-median scores elsewhere)."""
         correlated_pair = SCORE_WEIGHTS["fundingIndependence"] + SCORE_WEIGHTS["fundingDiversity"]
         other_dimensions = [
-            SCORE_WEIGHTS["promisePersistence"],
             SCORE_WEIGHTS["independentVoting"],
             SCORE_WEIGHTS["legislativeEffectiveness"],
         ]

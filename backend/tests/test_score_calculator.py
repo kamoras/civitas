@@ -1,6 +1,7 @@
 """Tests for the five representation sub-score calculations."""
 
 
+from app.models import Senator
 from app.pipeline.analyze.score_calculator import (
     _advancement_baseline,
     _calc_constituent_alignment,
@@ -10,6 +11,7 @@ from app.pipeline.analyze.score_calculator import (
     _calc_promise_persistence,
     calculate_scores,
     clamp,
+    compute_overall_score,
 )
 
 
@@ -1034,3 +1036,33 @@ class TestCoalitionBreadth:
         assert _calc_constituent_alignment(**base) == _calc_constituent_alignment(
             **base, bipartisanship=None
         )
+
+
+class TestComputeOverallScoreOnPartialColumnRows:
+    """compute_overall_score is called against two different SQLAlchemy
+    shapes in production: full ORM objects (e.g. senate_pipeline.py's
+    ScoreSnapshot recorder) and Row objects from a partial-column
+    db.query(Senator.col1, Senator.col2, ...) select (e.g. app/api/action.py
+    and action_center.py's _find_related_senators, both consolidated onto
+    this function in the promisePersistence-removal pass). No prior test
+    covered the Row-object shape specifically."""
+
+    def test_matches_on_a_partial_column_query_row(self, db_session):
+        db_session.add(Senator(
+            id="S001", name="Test", state="CA", party="D",
+            score_funding_independence=60, score_promise_persistence=999,
+            score_independent_voting=70, score_funding_diversity=65,
+            score_legislative_effectiveness=82,
+        ))
+        db_session.commit()
+
+        row = db_session.query(
+            Senator.id, Senator.name, Senator.state, Senator.party,
+            Senator.score_funding_independence, Senator.score_promise_persistence,
+            Senator.score_independent_voting, Senator.score_funding_diversity,
+            Senator.score_legislative_effectiveness,
+        ).first()
+
+        full = db_session.query(Senator).filter(Senator.id == "S001").first()
+
+        assert compute_overall_score(row) == compute_overall_score(full)

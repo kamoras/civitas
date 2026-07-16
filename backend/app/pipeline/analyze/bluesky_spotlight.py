@@ -19,6 +19,7 @@ from app.models import BskySenatorSpotlight, Senator, WeekSummary
 from app.pipeline.analyze.bluesky_utils import build_link_card
 from app.pipeline.analyze.grounding import ungrounded_numbers
 from app.pipeline.analyze.ollama_client import call_llm
+from app.pipeline.analyze.score_calculator import compute_overall_score
 
 logger = logging.getLogger(__name__)
 
@@ -28,22 +29,11 @@ SITE = "https://civitas-research.org"
 _SYSTEM_PROMPT = (
     "You are a nonpartisan civic journalist writing brief, factual posts for "
     "the Civitas transparency platform. Civitas scores U.S. senators on "
-    "funding independence, promise persistence, independent voting, funding "
-    "diversity, and legislative effectiveness. Your posts are data-driven, "
+    "funding independence, independent voting, funding diversity, and "
+    "legislative effectiveness. Your posts are data-driven, "
     "neutral, and written to help citizens understand how their representatives "
     "are performing."
 )
-
-
-def _overall_score(s: Senator) -> float:
-    from app.config_definitions import SCORE_WEIGHTS
-    return (
-        (s.score_funding_independence or 0) * SCORE_WEIGHTS["fundingIndependence"]
-        + (s.score_promise_persistence or 0) * SCORE_WEIGHTS["promisePersistence"]
-        + (s.score_independent_voting or 0) * SCORE_WEIGHTS["independentVoting"]
-        + (s.score_funding_diversity or 0) * SCORE_WEIGHTS["fundingDiversity"]
-        + (s.score_legislative_effectiveness or 0) * SCORE_WEIGHTS["legislativeEffectiveness"]
-    )
 
 
 def _pick_senator(db: Session) -> tuple["Senator | None", int, int]:
@@ -72,7 +62,7 @@ def _pick_senator(db: Session) -> tuple["Senator | None", int, int]:
         return None, 0, 0
 
     # All senators ranked best → worst (for absolute rank lookup)
-    all_ranked = sorted(senators, key=_overall_score, reverse=True)
+    all_ranked = sorted(senators, key=compute_overall_score, reverse=True)
     total = len(all_ranked)
 
     unspotlighted = [s for s in all_ranked if s.id not in spotlighted_ids]
@@ -126,7 +116,6 @@ def _generate_spotlight_post(senator: "Senator", rank: int, total: int) -> str |
     """Ask the LLM to write a score highlight post for this senator."""
     scores = {
         "Funding independence": round(senator.score_funding_independence or 0, 1),
-        "Promise persistence": round(senator.score_promise_persistence or 0, 1),
         "Independent voting": round(senator.score_independent_voting or 0, 1),
         "Funding diversity": round(senator.score_funding_diversity or 0, 1),
         "Legislative effectiveness": round(senator.score_legislative_effectiveness or 0, 1),
@@ -134,7 +123,7 @@ def _generate_spotlight_post(senator: "Senator", rank: int, total: int) -> str |
     # The posted overall must be the same weighted composite the site shows
     # (SCORE_WEIGHTS) — a plain mean of the five dimensions published a
     # different number than the leaderboard for every senator.
-    overall = round(_overall_score(senator), 1)
+    overall = round(compute_overall_score(senator), 1)
     score_lines = "\n".join(f"- {k}: {v}/100" for k, v in scores.items())
 
     # Rank is stated plainly — never characterized as an achievement or a

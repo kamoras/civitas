@@ -246,6 +246,24 @@ Changes from v3 → v4 (score audit 2026-06):
   move regardless of a sponsor's effectiveness) and 3 (volume —
   accumulates over congresses served), which this pass did not touch;
   flagged as a candidate follow-up, not solved here.
+
+Changes from v5 → v6.0 (2026-07): Promise Persistence removed as a scored
+dimension entirely, not just recalibrated again. v5.10 found the real
+average was ~0.5 evaluable promises/senator; a follow-up measurement found
+it had gotten worse, not better — 0 of 100 senators reach even "medium"
+confidence per calculate_confidence()'s own thresholds (mean 0.3 evaluable
+promises, 76% with zero), collapsing the dimension to near-pure prior for
+effectively the entire Senate. This is the fourth attempt at this dimension
+(v5, v5.1/v5.3, v5.10) without resolving the underlying gap: real campaign
+promises are generic platform language ("Expand Medicare coverage"), and
+embedding-based matching against specific vote/bill text structurally
+can't bridge that register — see policy_alignment.compute_promise_vote_
+alignment's docstring. _calc_promise_persistence keeps running and
+score_promise_persistence keeps being stored (still real, still displayed
+as raw promise kept/broken/partial data on profile pages) — it's just
+excluded from SCORE_WEIGHTS and the weighted overall score. Its 25%
+weight redistributed proportionally across the other four (see
+config_definitions.SCORE_WEIGHTS's docstring for the exact numbers).
 """
 
 import logging
@@ -256,24 +274,43 @@ logger = logging.getLogger(__name__)
 # shifts scores. Recorded on every ScoreSnapshot so trend charts can
 # annotate methodology changes; keep frontend/src/lib/scoreVersions.ts
 # in sync (it holds the human-readable changelog).
-ALGORITHM_VERSION = "v5.12"
+#
+# v5.12 -> v6.0 (2026-07): removed promisePersistence as a scored dimension
+# (see config_definitions.SCORE_WEIGHTS's docstring for the empirical
+# finding) and reweighted the remaining four. Major-version bump, matching
+# this file's own precedent for dimension-composition changes (v2 -> v3
+# folded Accessibility into Promise Persistence; this removes Promise
+# Persistence itself).
+ALGORITHM_VERSION = "v6.0"
+
+# weight-key -> Senator/Representative score_* attribute name. Both models
+# use identical score_* column names, so one map covers both entity types.
+_SCORE_FIELD_MAP: dict[str, str] = {
+    "fundingIndependence": "score_funding_independence",
+    "promisePersistence": "score_promise_persistence",
+    "independentVoting": "score_independent_voting",
+    "fundingDiversity": "score_funding_diversity",
+    "legislativeEffectiveness": "score_legislative_effectiveness",
+}
 
 
 def compute_overall_score(entity) -> float:
     """Weighted overall score from a scored Senator/Representative row.
 
     Shared by senate_pipeline.py's and house_pipeline.py's daily
-    ScoreSnapshot recorders — both weight the same five score_* columns by
-    the same config_definitions.SCORE_WEIGHTS, previously copy-pasted.
+    ScoreSnapshot recorders — both weight the same score_* columns by the
+    same config_definitions.SCORE_WEIGHTS, previously copy-pasted. Sums
+    dynamically over SCORE_WEIGHTS.items() rather than naming each
+    dimension, so a weight-table change (e.g. removing a dimension) can't
+    silently desync this formula from the config again — that gap was
+    exactly what made the promisePersistence removal above require an
+    audit of 7 independently hardcoded copies instead of touching one file.
     """
     from app.config_definitions import SCORE_WEIGHTS
 
-    overall = (
-        entity.score_funding_independence * SCORE_WEIGHTS["fundingIndependence"]
-        + entity.score_promise_persistence * SCORE_WEIGHTS["promisePersistence"]
-        + entity.score_independent_voting * SCORE_WEIGHTS["independentVoting"]
-        + entity.score_funding_diversity * SCORE_WEIGHTS["fundingDiversity"]
-        + entity.score_legislative_effectiveness * SCORE_WEIGHTS["legislativeEffectiveness"]
+    overall = sum(
+        getattr(entity, _SCORE_FIELD_MAP[key], 0) * weight
+        for key, weight in SCORE_WEIGHTS.items()
     )
     return round(overall, 2)
 

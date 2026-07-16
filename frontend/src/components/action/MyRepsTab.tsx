@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { TECHNICAL_TERMS } from "@/lib/plainLanguage";
+import { SCORE_TERMS } from "@/lib/scoreTerms";
 import { fetchMyReps, fetchActionIssues } from "@/lib/api";
 import { STATES } from "@/data/states";
 import type { ActionIssue, MyRepRep, MyRepSenator, MyRepsResponse } from "@/types/action";
@@ -169,11 +169,10 @@ function SenatorCard({ senator }: { senator: MyRepSenator }) {
       </div>
 
       <div className="space-y-1.5 mb-4">
-        <ScoreBar label={TECHNICAL_TERMS["fundingIndependence"].shortLabel} value={s.fundingIndependence} />
-        <ScoreBar label={TECHNICAL_TERMS["promisePersistence"].shortLabel} value={s.promisePersistence} />
-        <ScoreBar label={TECHNICAL_TERMS["independentVoting"].shortLabel} value={s.independentVoting} />
-        <ScoreBar label={TECHNICAL_TERMS["fundingDiversity"].shortLabel} value={s.fundingDiversity} />
-        <ScoreBar label={TECHNICAL_TERMS["legislativeEffectiveness"].shortLabel} value={s.legislativeEffectiveness} />
+        <ScoreBar label={SCORE_TERMS["fundingIndependence"].shortLabel} value={s.fundingIndependence} />
+        <ScoreBar label={SCORE_TERMS["independentVoting"].shortLabel} value={s.independentVoting} />
+        <ScoreBar label={SCORE_TERMS["fundingDiversity"].shortLabel} value={s.fundingDiversity} />
+        <ScoreBar label={SCORE_TERMS["legislativeEffectiveness"].shortLabel} value={s.legislativeEffectiveness} />
       </div>
 
       {senator.connectedIssues.length > 0 && (
@@ -252,11 +251,10 @@ function RepCard({ rep }: { rep: MyRepRep }) {
       </div>
 
       <div className="space-y-1.5 mb-4">
-        <ScoreBar label={TECHNICAL_TERMS["fundingIndependence"].shortLabel} value={s.fundingIndependence} />
-        <ScoreBar label={TECHNICAL_TERMS["promisePersistence"].shortLabel} value={s.promisePersistence} />
-        <ScoreBar label={TECHNICAL_TERMS["independentVoting"].shortLabel} value={s.independentVoting} />
-        <ScoreBar label={TECHNICAL_TERMS["fundingDiversity"].shortLabel} value={s.fundingDiversity} />
-        <ScoreBar label={TECHNICAL_TERMS["legislativeEffectiveness"].shortLabel} value={s.legislativeEffectiveness} />
+        <ScoreBar label={SCORE_TERMS["fundingIndependence"].shortLabel} value={s.fundingIndependence} />
+        <ScoreBar label={SCORE_TERMS["independentVoting"].shortLabel} value={s.independentVoting} />
+        <ScoreBar label={SCORE_TERMS["fundingDiversity"].shortLabel} value={s.fundingDiversity} />
+        <ScoreBar label={SCORE_TERMS["legislativeEffectiveness"].shortLabel} value={s.legislativeEffectiveness} />
       </div>
 
       {rep.connectedIssues.length > 0 && (

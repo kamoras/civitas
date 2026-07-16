@@ -18,16 +18,29 @@ Backend modules import from here instead of defining their own copies.
 # last Senate-wide, driven almost entirely by this pair, despite
 # above-median scores on the other three dimensions). Rebalanced so the
 # correlated pair's combined weight (25%) matches what one genuinely
-# distinct dimension gets, split proportionally to the prior 25:15 ratio;
-# the freed 15% distributed evenly across the three dimensions that
-# empirically ARE distinct (pairwise |r| < 0.31 among promisePersistence,
-# independentVoting, legislativeEffectiveness against everything else).
+# distinct dimension gets, split proportionally to the prior 25:15 ratio.
+#
+# promisePersistence removed entirely (2026-07, ALGORITHM_VERSION v6.0):
+# a live measurement across all 100 senators found 0 of 100 reached even
+# "medium" confidence per calculate_confidence()'s own thresholds (mean
+# 0.3 evaluable promises, 76% with zero) — real campaign promises are
+# generic platform language that embedding-based matching against specific
+# vote/bill text structurally can't bridge (see
+# policy_alignment.compute_promise_vote_alignment's docstring, which
+# documents three prior fix attempts that didn't resolve it, and
+# ground_truth.py's MIN_STDEV comment documenting the same collapse). The
+# underlying promise extraction/alignment pipeline and its "kept/broken/
+# partial" display keep running unchanged — only the scoring weight is
+# gone. Its 25% redistributed proportionally (each remaining weight ×4/3)
+# across the three dimensions confirmed empirically distinct in the audit
+# above (pairwise |r| < 0.31): independentVoting and legislativeEffectiveness
+# absorb the largest shares, fundingIndependence a smaller share consistent
+# with its correlated-pair status.
 SCORE_WEIGHTS: dict[str, float] = {
-    "fundingIndependence": 0.15,
-    "promisePersistence": 0.25,
-    "independentVoting": 0.25,
-    "fundingDiversity": 0.10,
-    "legislativeEffectiveness": 0.25,
+    "fundingIndependence": 0.20,
+    "independentVoting": 0.33,
+    "fundingDiversity": 0.13,
+    "legislativeEffectiveness": 0.34,
 }
 
 PRESIDENT_SCORE_WEIGHTS: dict[str, float] = {

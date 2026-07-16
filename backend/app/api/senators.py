@@ -156,12 +156,15 @@ def _build_highlights(senator) -> list[str]:
 
     # --- Overall score ---
     from app.config_definitions import SCORE_WEIGHTS
+    _field_map = {
+        "fundingIndependence": "funding_independence",
+        "promisePersistence": "promise_persistence",
+        "independentVoting": "independent_voting",
+        "fundingDiversity": "funding_diversity",
+        "legislativeEffectiveness": "legislative_effectiveness",
+    }
     total_score = round(
-        score.funding_independence * SCORE_WEIGHTS["fundingIndependence"]
-        + score.promise_persistence * SCORE_WEIGHTS["promisePersistence"]
-        + score.independent_voting * SCORE_WEIGHTS["independentVoting"]
-        + score.funding_diversity * SCORE_WEIGHTS["fundingDiversity"]
-        + score.legislative_effectiveness * SCORE_WEIGHTS["legislativeEffectiveness"]
+        sum(getattr(score, _field_map[key]) * weight for key, weight in SCORE_WEIGHTS.items())
     )
     if total_score >= 80:
         hints.append((2, (
