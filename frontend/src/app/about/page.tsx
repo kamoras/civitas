@@ -221,7 +221,7 @@ export default function AboutPage() {
               </div>
 
               <div>
-                <Label>Funding Diversity (10%)</Label>
+                <Label>Funding Diversity (13%)</Label>
                 <P>
                   Evaluates how broad and distributed a senator&apos;s funding base is —
                   distinct from Funding Independence&apos;s focus on PAC dependency and
@@ -247,7 +247,7 @@ export default function AboutPage() {
               </div>
 
               <div>
-                <Label>Legislative Effectiveness (25%)</Label>
+                <Label>Legislative Effectiveness (34%)</Label>
                 <P>
                   Measures whether a member is producing tangible legislative outcomes,
                   following Volden &amp; Wiseman (2014)
