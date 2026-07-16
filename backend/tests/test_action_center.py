@@ -642,6 +642,32 @@ class TestAdministrativeNoticeTitleFilter:
 
     @patch("app.pipeline.analyze.action_center._embed_texts")
     @patch("app.pipeline.analyze.action_center.search_explore_documents")
+    def test_proposed_collection_comment_request_variant_rejected(
+        self, mock_search, mock_embed, db_session,
+    ):
+        title = "Proposed Collection; 60-day Comment Request; Generic Clearance for NIH"
+        self._seed_doc(db_session, 1, title)
+        mock_search.return_value = [{"id": 1, "title": title, "distance": 0.70}]
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.95, 0.05]])
+
+        result = _find_related_explore_docs("Some unrelated issue", "summary", [], db_session)
+        assert result == []
+
+    @patch("app.pipeline.analyze.action_center._embed_texts")
+    @patch("app.pipeline.analyze.action_center.search_explore_documents")
+    def test_solicitation_of_nominations_variant_rejected(
+        self, mock_search, mock_embed, db_session,
+    ):
+        title = "Solicitation of Nominations for Membership on the Ocean Exploration Advisory Board"
+        self._seed_doc(db_session, 1, title)
+        mock_search.return_value = [{"id": 1, "title": title, "distance": 0.70}]
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.95, 0.05]])
+
+        result = _find_related_explore_docs("Some unrelated issue", "summary", [], db_session)
+        assert result == []
+
+    @patch("app.pipeline.analyze.action_center._embed_texts")
+    @patch("app.pipeline.analyze.action_center.search_explore_documents")
     def test_notice_without_administrative_template_phrasing_is_kept(
         self, mock_search, mock_embed, db_session,
     ):
