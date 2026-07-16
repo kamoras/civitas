@@ -32,6 +32,7 @@ from app.models import (
     ActionIssue,
     ExploreDocument,
     Justice,
+    MonitorStatus,
     MonitorUpdate,
     NationalMonitor,
     President,
@@ -2366,7 +2367,7 @@ def _update_national_monitors(today: str, db: Session) -> None:
                     article_title=issue.title,
                 ))
                 monitor.last_article_date = today
-                monitor.status = "active"
+                monitor.status = MonitorStatus.ACTIVE
                 matched_issues.add(i)
                 logger.info("Monitor updated: '%s' <- '%s'",
                             monitor.title, issue.title[:60])
@@ -2455,7 +2456,7 @@ def _update_national_monitors(today: str, db: Session) -> None:
                 title=metadata["title"],
                 description=metadata["description"],
                 category=metadata["category"],
-                status="active",
+                status=MonitorStatus.ACTIVE,
                 policy_areas=json.dumps([metadata["category"].upper()]),
                 last_article_date=today,
             )
@@ -2548,7 +2549,7 @@ def _cleanup_monitor_lifecycle(today: str, db: Session) -> None:
         datetime.strptime(today, "%Y-%m-%d") - timedelta(days=_MONITOR_CLOSE_DAYS)
     ).strftime("%Y-%m-%d")
 
-    all_monitors = db.query(NationalMonitor).filter(NationalMonitor.status != "closed").all()
+    all_monitors = db.query(NationalMonitor).filter(NationalMonitor.status != MonitorStatus.CLOSED).all()
     
     for m in all_monitors:
         # Use created_at if last_article_date is missing (e.g. newly created)
@@ -2564,16 +2565,16 @@ def _cleanup_monitor_lifecycle(today: str, db: Session) -> None:
                             m.title, update_count)
                 db.delete(m)
             else:
-                m.status = "closed"
+                m.status = MonitorStatus.CLOSED
                 logger.info("Closing monitor due to inactivity: '%s'", m.title)
-        
+
         # 2. Mark active monitors as "watching" if inactive for >7 days
-        elif m.status == "active" and last_date < dormant_cutoff:
-            m.status = "watching"
+        elif m.status == MonitorStatus.ACTIVE and last_date < dormant_cutoff:
+            m.status = MonitorStatus.WATCHING
             logger.info("Monitor set to watching: '%s'", m.title)
-        
+
         # 3. Periodically re-categorize active monitors to keep taxonomy accurate
-        elif m.status == "active":
+        elif m.status == MonitorStatus.ACTIVE:
             # Probability-based or simple toggle to avoid too many LLM calls
             # For now, let's just do it if it's currently 'general' or 'defense' (the most common mis-labels)
             if m.category in ("general", "defense", "guns", "trade"):

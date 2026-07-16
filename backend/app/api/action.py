@@ -17,7 +17,7 @@ from app.api.rate_limit import WriteRateLimit, client_ip
 from app.database import get_db
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.models import (
-    ActionIssue, ExploreDocument,
+    ActionIssue, ExploreDocument, MonitorStatus,
     NationalMonitor, TimelineEntry, Representative, Senator,
     WeekSummary, MonthSummary, YearSummary,
 )
@@ -833,7 +833,7 @@ async def list_monitors(response: Response, db: Session = Depends(get_db)):
     monitors = (
         db.query(NationalMonitor)
         .options(selectinload(NationalMonitor.updates))
-        .filter(NationalMonitor.status.in_(["active", "watching"]))
+        .filter(NationalMonitor.status.in_([MonitorStatus.ACTIVE, MonitorStatus.WATCHING]))
         .order_by(NationalMonitor.updated_at.desc())
         .all()
     )

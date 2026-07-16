@@ -45,6 +45,20 @@ class PromiseAlignment(StrEnum):
     UNCLEAR = "unclear"
 
 
+class MonitorStatus(StrEnum):
+    """Lifecycle status of a NationalMonitor, compared/assigned as bare
+    strings across action_center.py and api/action.py — same typo-risk
+    pattern as PipelineStatus/PromiseAlignment above.
+
+    A StrEnum: members compare and serialize identically to plain
+    strings, so this is a drop-in replacement for the existing
+    `Mapped[str]` column with zero schema migration.
+    """
+    ACTIVE = "active"
+    WATCHING = "watching"  # inactive >7 days, still tracked
+    CLOSED = "closed"  # inactive >30 days, archived
+
+
 class Senator(Base):
     __tablename__ = "senators"
 
@@ -692,7 +706,7 @@ class NationalMonitor(Base):
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="")
     category: Mapped[str] = mapped_column(String(50), default="general")
-    status: Mapped[str] = mapped_column(String(20), default="active", index=True)
+    status: Mapped[str] = mapped_column(String(20), default=MonitorStatus.ACTIVE, index=True)
     policy_areas: Mapped[str] = mapped_column(Text, default="[]")
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
