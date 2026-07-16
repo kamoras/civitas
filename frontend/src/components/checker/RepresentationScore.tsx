@@ -1,7 +1,7 @@
 "use client";
 
 import { Senator, VotingRecord, SponsoredBill } from "@/types/senator";
-import { calculateOverallScore, getScoreLabel, getScoreColor } from "@/lib/corruption";
+import { calculateOverallScore, getScoreLabel, getScoreColor, getScoreBgColor } from "@/lib/corruption";
 import { useScoreWeights } from "@/hooks/useConfig";
 import MetricTooltip from "./MetricTooltip";
 import { SCORE_TERMS } from "@/lib/scoreTerms";
@@ -16,6 +16,10 @@ interface RepresentationScoreProps {
   totalInChamber?: number;
 }
 
+// Letter-grade cutoffs are deliberately round numbers (80/60/40/20), one
+// point below getScoreColor's tier boundaries (81/61/41/21) — a score of
+// exactly 80 reads as a clean "A" even though it's one point under the
+// "EXCELLENT" color tier. Not a bug; don't "fix" one to match the other.
 function getScoreGrade(score: number): string {
   if (score >= 80) return "A";
   if (score >= 60) return "B";
@@ -53,8 +57,7 @@ function ScoreBar({
   const empty = 20 - filled;
   const bar = "█".repeat(filled) + "░".repeat(empty);
 
-  const colorClass =
-    value >= 70 ? "text-matrix-green" : value >= 40 ? "text-yellow-500" : "text-red-500";
+  const colorClass = getScoreColor(value);
 
   return (
     <div className="flex flex-col gap-0.5">
@@ -84,9 +87,7 @@ function ScoreBar({
             aria-labelledby={`score-label-${label.replace(/\s+/g, "-").toLowerCase()}`}
           >
             <span
-              className={`block h-full ${
-                value >= 70 ? "bg-matrix-green" : value >= 40 ? "bg-yellow-500" : "bg-red-500"
-              }`}
+              className={`block h-full ${getScoreBgColor(value)}`}
               style={{ width: `${value}%` }}
             />
           </span>

@@ -97,3 +97,19 @@ export function getScoreColor(score: number): string {
   if (score >= 21) return "text-orange-500";
   return "text-red-500";
 }
+
+// bg-* counterpart of getScoreColor, for progress-bar fills — same
+// thresholds/colors so a score renders identically whether it's shown as
+// text or a bar, on any page. Several per-metric bars (senator/president/
+// justice detail pages, the leaderboard) previously reimplemented this
+// with drifting cutoffs (70/40, 70/50/35, 75/55/35/15...) and drifting
+// colors (bg-cyan-400 instead of the site's actual neon-cyan), so the
+// same score could render a different tier depending on which page you
+// were on.
+export function getScoreBgColor(score: number): string {
+  if (score >= 81) return "bg-matrix-green";
+  if (score >= 61) return "bg-neon-cyan";
+  if (score >= 41) return "bg-yellow-500";
+  if (score >= 21) return "bg-orange-500";
+  return "bg-red-500";
+}

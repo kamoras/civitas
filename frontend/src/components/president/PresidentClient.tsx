@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import { fetchPresident, fetchPresidentLeaderboard } from "@/lib/api";
-import { calculatePresidentScore, getScoreColor, getScoreLabel } from "@/lib/corruption";
+import { calculatePresidentScore, getScoreColor, getScoreBgColor, getScoreLabel } from "@/lib/corruption";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 
 const PARTY_META: Record<string, { label: string; color: string; bg: string; border: string }> = {
@@ -30,16 +30,7 @@ const METRIC_LABELS: { key: keyof President["score"]; label: string; desc: strin
 ];
 
 function MetricBar({ label, value, desc, isEstimate }: { label: string; value: number; desc: string; isEstimate?: boolean }) {
-  const color =
-    value >= 81
-      ? "bg-matrix-green"
-      : value >= 61
-        ? "bg-cyan-400"
-        : value >= 41
-          ? "bg-yellow-500"
-          : value >= 21
-            ? "bg-orange-500"
-            : "bg-red-500";
+  const color = getScoreBgColor(value);
 
   return (
     <div className="group">

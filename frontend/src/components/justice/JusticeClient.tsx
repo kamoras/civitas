@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import { fetchJustice, fetchJusticeLeaderboard } from "@/lib/api";
-import { calculateJusticeScore, getJusticeLabel, getScoreColor } from "@/lib/corruption";
+import { calculateJusticeScore, getJusticeLabel, getScoreColor, getScoreBgColor } from "@/lib/corruption";
 import type { Justice, JusticeLeaderboardEntry, JusticeScore } from "@/types/justice";
 
 const PARTY_BADGE: Record<string, { label: string; color: string; bg: string; border: string }> = {
@@ -40,16 +40,7 @@ const METRIC_LABELS: { key: keyof JusticeScore; label: string; desc: string }[] 
 ];
 
 function MetricBar({ label, value, desc }: { label: string; value: number; desc: string }) {
-  const color =
-    value >= 75
-      ? "bg-matrix-green"
-      : value >= 55
-        ? "bg-cyan-400"
-        : value >= 35
-          ? "bg-yellow-500"
-          : value >= 15
-            ? "bg-orange-500"
-            : "bg-red-500";
+  const color = getScoreBgColor(value);
 
   return (
     <div className="group">
@@ -95,8 +86,8 @@ function AgreementRow({ name, pct }: { name: string; pct: number }) {
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
 
-  const color = pct >= 70 ? "text-matrix-green" : pct >= 45 ? "text-neon-cyan" : "text-orange-400";
-  const barColor = pct >= 70 ? "bg-matrix-green" : pct >= 45 ? "bg-cyan-400" : "bg-orange-500";
+  const color = getScoreColor(pct);
+  const barColor = getScoreBgColor(pct);
 
   return (
     <div className="flex items-center gap-3">
