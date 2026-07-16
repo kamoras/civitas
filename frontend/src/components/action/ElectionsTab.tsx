@@ -9,6 +9,7 @@ import {
 } from "react-simple-maps";
 import { fetchElectionInfo } from "@/lib/api";
 import type { ElectionInfo, ElectionState, ElectionSenator } from "@/lib/api";
+import { PARTY_COLORS, PARTY_BORDER } from "@/lib/partyStyles";
 
 const GEO_URL = "https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json";
 
@@ -24,18 +25,6 @@ const FIPS_TO_STATE: Record<string, string> = {
   "45": "SC", "46": "SD", "47": "TN", "48": "TX", "49": "UT",
   "50": "VT", "51": "VA", "53": "WA", "54": "WV", "55": "WI",
   "56": "WY",
-};
-
-const PARTY_COLORS: Record<string, string> = {
-  D: "text-dem-blue",
-  R: "text-rep-red",
-  I: "text-ind-purple",
-};
-
-const PARTY_BORDER: Record<string, string> = {
-  D: "border-dem-blue/30",
-  R: "border-rep-red/30",
-  I: "border-ind-purple/30",
 };
 
 function formatCountdown(days: number): { value: string; unit: string }[] {

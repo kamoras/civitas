@@ -10,6 +10,7 @@ import Footer from "@/components/layout/Footer";
 import { fetchActionIssues, fetchOpenComments, OpenCommentItem } from "@/lib/api";
 import { useUserState } from "@/hooks/useUserState";
 import { safeHref, formatUtcDate } from "@/lib/formatting";
+import { PARTY_COLORS, PARTY_BORDER } from "@/lib/partyStyles";
 import StancePulse from "@/components/action/StancePulse";
 import { LogActionButton } from "@/components/action/CivicTracker";
 import ShareButtons from "@/components/action/ShareButtons";
@@ -63,18 +64,6 @@ const MyRepsTab = dynamic(() => import("@/components/action/MyRepsTab"), {
     </div>
   ),
 });
-
-const PARTY_COLORS: Record<string, string> = {
-  D: "text-dem-blue",
-  R: "text-rep-red",
-  I: "text-ind-purple",
-};
-
-const PARTY_BORDER: Record<string, string> = {
-  D: "border-dem-blue/30",
-  R: "border-rep-red/30",
-  I: "border-ind-purple/30",
-};
 
 type Tab = "issues" | "my-reps" | "monitors" | "timeline" | "elections" | "world";
 
