@@ -256,45 +256,6 @@ class SenatorSchema(CamelModel):
     office_address: str = ""
 
 
-class RepresentativeSchema(CamelModel):
-    """Mirrors SenatorSchema field-for-field (House and Senate detail
-    responses share nearly the same shape — see the identical sub-schemas
-    reused below), plus the House-specific `district`."""
-    id: str
-    name: str
-    state: str
-    district: int
-    party: Literal["D", "R", "I"]
-    years_in_office: int
-    initials: str
-    leadership_title: str | None = None
-    committees: list[CommitteeSchema] = []
-    representation_score: RepresentationScoreSchema
-    funding: FundingSchema
-    voting_record: VotingRecordSchema
-    lobbying_matches: list[LobbyingMatchSchema]
-    campaign_promises: list[CampaignPromiseSchema] = []
-    platform_summary: str = ""
-    partisan_depth: PartisanDepthSchema | None = None
-    sponsored_bills: list[SponsoredBillSchema] = []
-    leadership_score: float | None = None
-    bipartisanship_score: float | None = None
-    ideology_score: float | None = None
-    sponsorship_description: str = ""
-    website_url: str = ""
-    contact_form_url: str = ""
-    office_phone: str = ""
-    office_address: str = ""
-
-
-class PaginatedRepresentativesSchema(CamelModel):
-    entries: list[RepresentativeSchema]
-    total: int
-    page: int
-    per_page: int
-    total_pages: int
-
-
 class ScoreTrendSchema(CamelModel):
     direction: Literal["up", "down", "stable", "new"] = "new"
     change: float = 0.0

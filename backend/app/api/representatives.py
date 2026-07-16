@@ -63,7 +63,7 @@ def get_rep_highlights(rep_id: str, db: Session = Depends(get_db)) -> JSONRespon
     if rep is None:
         raise HTTPException(status_code=404, detail="Representative not found")
 
-    highlights = build_highlights(rep.model_dump(by_alias=True))
+    highlights = build_highlights(rep)
     return _cached_json({"highlights": highlights[:5]}, max_age=CACHE_TTL_DETAIL_S)
 
 
@@ -101,7 +101,7 @@ def get_representative(rep_id: str, db: Session = Depends(get_db)) -> JSONRespon
     result = get_representative_by_id(db, rep_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Representative not found")
-    return _cached_json(result.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)
+    return _cached_json(result, max_age=CACHE_TTL_DETAIL_S)
 
 
 @router.get("/representatives")
@@ -112,4 +112,4 @@ def list_representatives(
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     data = get_representatives_by_state(db, state, page=page, per_page=per_page)
-    return _cached_json(data.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)
+    return _cached_json(data, max_age=CACHE_TTL_DETAIL_S)

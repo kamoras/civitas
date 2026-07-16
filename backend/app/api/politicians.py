@@ -348,8 +348,7 @@ def _build_scorecard(branch: str, pid: str, db: Session) -> dict | None:
             return s.model_dump(by_alias=True) if s else None
         if branch == "house":
             from app.services.representative_service import get_representative_by_id
-            r = get_representative_by_id(db, pid)
-            return r.model_dump(by_alias=True) if r else None
+            return get_representative_by_id(db, pid)
         if branch == "president":
             from app.services.president_service import get_president
             p = get_president(db, pid)

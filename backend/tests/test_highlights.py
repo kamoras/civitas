@@ -5,8 +5,8 @@ build_highlights takes a senator/representative detail response dict
 prioritized insights about funding, voting, lobbying, and promises. These
 run without any LLM or database access. Shared by both chambers — see
 app/api/highlights.py's module docstring for why one function covers both
-(both routes pass entity.model_dump(by_alias=True) — Senate's SenatorSchema
-and House's RepresentativeSchema serialize to the same wire shape).
+(the Senate route passes senator.model_dump(by_alias=True); the House
+route already gets a dict of the same shape from get_representative_by_id).
 """
 
 
@@ -261,8 +261,9 @@ class TestHighlightPriority:
 class TestRepresentativeHighlights:
     """GET /representatives/{id}/highlights didn't exist before — House
     profile pages always 404'd against the Senate-only route. This proves
-    build_highlights works on a RepresentativeSchema.model_dump()-shaped
-    dict, not just on SenatorSchema.model_dump(by_alias=True)."""
+    build_highlights works directly on a representative_service.
+    build_rep_response()-shaped dict (raw dict, not a Pydantic schema),
+    not just on senator.model_dump(by_alias=True)."""
 
     def _make_rep(self, **overrides) -> dict:
         rep = {
