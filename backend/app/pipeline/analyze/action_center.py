@@ -1223,7 +1223,48 @@ def _classify_issue_policy_areas(title: str, summary: str) -> list[str]:
     return []
 
 
-_EXPLORE_DOC_MAX_DISTANCE = 1.10
+# Calibrated 2026-07 against live production data: sampled ~15 real
+# Action Center issues, computed both ChromaDB L2 distance (gate 1, full
+# document text) and title-only cosine similarity (gate 2, see below)
+# against their retrieved candidates, and hand-labeled each as a genuine
+# topical match or not. At the prior 1.10/0.40, essentially every issue
+# was returning 2-3 unrelated documents (confirmed live: a World Cup
+# soccer story matched to Chinese steel anti-dumping notices; an Attorney
+# General story matched to an unrelated advisory-committee meeting
+# notice) — neither gate was tight enough to reject a topic with no real
+# government-document counterpart in the corpus (most non-legislative
+# news: sports, foreign elections, market moves, celebrity legal news).
+# The observed score bands: genuinely unrelated topics cluster at
+# distance > 0.87; the best real match found in the sample (a data-center
+# buildout story matched to the actual data-center-permitting executive
+# order) sat at 0.80. Tightened to 0.85 rather than exactly at that
+# boundary, since a single sample isn't enough to trust to the second
+# decimal — this is a real improvement, not a perfect fix (see
+# _ADMINISTRATIVE_NOTICE_TITLE_RE below for the one false-positive
+# pattern tight enough to survive this threshold).
+_EXPLORE_DOC_MAX_DISTANCE = 0.85
+
+# Paperwork Reduction Act information-collection notices and Federal
+# Advisory Committee Act meeting notices use fixed, legally-templated
+# title phrasing (5 CFR 1320 / 41 CFR 102-3) and are — by the nature of
+# what they announce (a routine data-collection renewal, an upcoming
+# committee meeting) — never substantively about any particular news
+# story, regardless of how their titles happen to embed. This is the one
+# false-positive pattern that survives _EXPLORE_DOC_MAX_DISTANCE/min_sim
+# tightening above: confirmed live, a "Notice of Public Meeting of the
+# Montana Advisory Committee" and an "Agency Information Collection
+# Activities" notice both scored well inside the "genuine match" distance
+# and similarity bands for unrelated issues. Matching the fixed template
+# phrasing (not a list of specific bad titles — every notice using this
+# legally-mandated language is generic, not just the ones seen so far) is
+# the same "measure the real property, don't guess" principle as
+# GENERIC_TITLE_REPEAT_THRESHOLD above, just for a structural pattern
+# repeat-counting can't catch since each notice is uniquely titled.
+_ADMINISTRATIVE_NOTICE_TITLE_RE = re.compile(
+    r"information collection|submission for omb review|"
+    r"notice of (public )?meeting|open meeting of|stakeholder consultation meeting",
+    re.IGNORECASE,
+)
 
 
 def _find_related_explore_docs(
@@ -1273,7 +1314,11 @@ def _find_related_explore_docs(
     except Exception:
         sims = np.zeros(len(passed))
 
-    min_sim = 0.40
+    # See _EXPLORE_DOC_MAX_DISTANCE's comment for how this was calibrated —
+    # raised from 0.40 (which real scores never approached; genuinely
+    # unrelated titles routinely scored 0.74-0.84) to sit just below the
+    # best real match found in the sample (0.783).
+    min_sim = 0.75
 
     scored = sorted(
         zip(passed, sims),
@@ -1327,6 +1372,12 @@ def _find_related_explore_docs(
             logger.debug(
                 "Explore doc rejected (boilerplate title used by %d docs): '%s'",
                 title_counts[d.title], d.title[:60],
+            )
+            continue
+        if _ADMINISTRATIVE_NOTICE_TITLE_RE.search(d.title):
+            logger.debug(
+                "Explore doc rejected (administrative notice template): '%s'",
+                d.title[:60],
             )
             continue
         key = d.title.strip().lower()
