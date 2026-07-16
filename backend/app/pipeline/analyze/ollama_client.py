@@ -41,7 +41,9 @@ def _strip_thinking_tokens(text: str) -> str:
     If not removed, the greedy JSON-extraction regex matches from the
     first { inside the think block to the last } in the output, producing
     an unparseable span. A no-op safeguard for non-reasoning models (the
-    current default, Qwen2.5, doesn't emit these).
+    current default, LFM2.5-1.2B-Instruct, doesn't emit these — unlike its
+    sibling LFM2.5-1.2B-Thinking, deliberately not used here; see the
+    2026-07 model evaluation for why).
     """
     return re.sub(r"<think>[\s\S]*?</think>", "", text, flags=re.IGNORECASE).strip()
 

@@ -82,7 +82,7 @@ external API calls to cloud AI services.
 │  /api/admin         /api/public/v1  (open, rate-limited)    /health          │
 │                                              ┌────────────────────────┐      │
 │  APScheduler ──▶ nightly pipeline            │  llama.cpp server      │      │
-│  APScheduler ──▶ hourly action refresh  ────▶│  Qwen2.5 1.5B          │      │
+│  APScheduler ──▶ hourly action refresh  ────▶│  LFM2.5-1.2B-Instruct  │      │
 │                                              │  port 8070 (ARM-native)│      │
 └──────────────────────────┬───────────────────└────────────────────────┘──────┘
                            │ JSON
@@ -279,7 +279,7 @@ LLM calls per full run: ~100–400 (one narrative per senator/rep, plus daily ac
 3. **Reproducibility.** Model weights are pinned. An analysis run today produces identical output to one run six months ago on the same input. Cloud-hosted models update without notice.
 4. **Latency independence.** No rate limits, no network jitter, no API quota.
 
-The choice of Qwen2.5 1.5B over larger alternatives (7B+) is deliberate. The inference tasks here are structured extraction — completing a constrained template (list key facts, classify stance, extract promise text) — not open-ended generation. Empirically, a 1.5B-class model produces acceptable quality on these tasks at ~3s/call on ARM, vs. 25–45s for a 7B model. The quality ceiling is determined by the structure of the prompt, not model size.
+The choice of LFM2.5-1.2B-Instruct over larger alternatives (7B+) is deliberate. The inference tasks here are structured extraction — completing a constrained template (list key facts, classify stance, extract promise text) — not open-ended generation. Empirically, a ~1B-class model produces acceptable quality on these tasks in a few seconds per call on ARM, vs. 25–45s for a 7B model. The quality ceiling is determined by the structure of the prompt, not model size.
 
 ---
 
@@ -293,7 +293,7 @@ Classification decisions — what industry a donor belongs to, which direction a
 | 2 | Sentence-transformer embeddings (cosine similarity) | Fast | Bill policy areas, industry, party alignment, donor types, stance direction, procedural detection, skip entity detection, employer filtering, memo transfer detection |
 | 2b | SVD / PageRank on cosponsorship matrix | Fast | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
 | 3 | k-Nearest Neighbor in embedding space | Fast | Remaining unclassified donors (~5%), bill classification from reference corpus |
-| 4 | LLM (Qwen2.5 1.5B via llama.cpp) | Slow | Narrative synthesis, promise analysis, PAC identification |
+| 4 | LLM (LFM2.5-1.2B-Instruct via llama.cpp) | Slow | Narrative synthesis, promise analysis, PAC identification |
 
 Key embedding-based classification features:
 - **Semantic prototypes** define each category via natural-language descriptions, not keyword lists. The embedding model matches entities to the nearest prototype by cosine similarity.
@@ -627,7 +627,7 @@ cmake --build . --config Release -j4
 ```bash
 # Ollama runs as a Docker container alongside the app
 # Set LLM_BACKEND=ollama in .env
-docker exec mp-ollama ollama pull qwen2.5:1.5b
+docker exec mp-ollama ollama pull LiquidAI/lfm2.5-1.2b-instruct
 ```
 
 The data pipeline runs automatically on the cron schedule in `.env`
@@ -804,7 +804,7 @@ See `.env.example` for all options. Key variables:
 | `ADMIN_TOKEN` | Yes | Bearer token for admin panel and pipeline triggers |
 | `LLM_BACKEND` | No | `llama-server` (default) or `ollama` |
 | `LLAMA_SERVER_URL` | No | llama.cpp server URL (default: `http://host.docker.internal:8070`) |
-| `OLLAMA_MODEL` | No | Model name for cache keys and Ollama (default: `qwen2.5:1.5b`) |
+| `OLLAMA_MODEL` | No | Model name for cache keys and Ollama (default: `LiquidAI/lfm2.5-1.2b-instruct`) |
 | `DATABASE_URL` | No | SQLite path (default: `sqlite:///data/civitas.db`) |
 | `PIPELINE_CRON_SCHEDULE` | No | Cron schedule for nightly pipeline (default: `0 3 * * *`) |
 | `PIPELINE_CACHE_TTL_HOURS` | No | API response cache TTL (default: `72`) |
