@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { AppConfig, fetchConfig, IndustryInfo } from "@/lib/api";
+import { DEFAULT_WEIGHTS } from "@/lib/corruption";
 
 const ConfigContext = createContext<AppConfig | null>(null);
 
@@ -37,14 +38,7 @@ export function usePolicyLabel(area: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-// Matches backend/app/config_definitions.py's SCORE_WEIGHTS — fallback
-// used only before /api/config's live weights load.
 export function useScoreWeights(): Record<string, number> {
   const config = useConfig();
-  return config?.scoreWeights ?? {
-    fundingIndependence: 0.20,
-    independentVoting: 0.33,
-    fundingDiversity: 0.13,
-    legislativeEffectiveness: 0.34,
-  };
+  return config?.scoreWeights ?? DEFAULT_WEIGHTS;
 }
