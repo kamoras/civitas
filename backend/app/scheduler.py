@@ -19,6 +19,14 @@ logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
 
 
+def _is_stale(age: timedelta | None, threshold: timedelta) -> bool:
+    """True when an in-progress run is older than `threshold` — old enough
+    that it's more likely hung/crashed than genuinely still active, so the
+    caller proceeds instead of waiting on it indefinitely. Shared by every
+    running-process guard in `_hourly_action_refresh` below."""
+    return age is not None and age > threshold
+
+
 def _nightly_pipeline() -> None:
     """Run the unified pipeline (senators, explore docs, SCOTUS justices).
 
@@ -78,7 +86,7 @@ def _hourly_action_refresh() -> None:
             if state.get("is_running"):
                 started = state.get("started_at")
                 age = datetime.utcnow() - started if started else None
-                if age is not None and age > timedelta(hours=4):
+                if _is_stale(age, timedelta(hours=4)):
                     # Same reasoning as the stale-PipelineRun checks below: a
                     # refresh this old (normal is minutes, worst case with a
                     # degraded LLM is ~1-2h) is wedged, not just slow. This
@@ -105,7 +113,7 @@ def _hourly_action_refresh() -> None:
                 db.close()
             if running:
                 age = datetime.utcnow() - running.started_at
-                if age > timedelta(hours=8):
+                if _is_stale(age, timedelta(hours=8)):
                     # Pipeline run has been "running" for >8h — it almost certainly
                     # crashed without updating its status. Proceed rather than blocking
                     # the action center indefinitely.
@@ -123,7 +131,7 @@ def _hourly_action_refresh() -> None:
                     return
             if is_house_pipeline_running():
                 house_age = house_pipeline_age()
-                if house_age is not None and house_age > timedelta(hours=8):
+                if _is_stale(house_age, timedelta(hours=8)):
                     # Same reasoning as the stale PipelineRun check above: a
                     # House run this old is wedged (normal runs are 1-2h), and
                     # on 2026-07-04 one hung in Phase 1 for 17h, silently
@@ -151,7 +159,7 @@ def _hourly_action_refresh() -> None:
                 # PDF/OCR parsing over a bounded PTR filing set, not a
                 # 431-member scoring pass — a confirmed live run took ~90min
                 # (2026-07-15), so 2h already gives 20x headroom over that.
-                if stock_age is not None and stock_age > timedelta(hours=2):
+                if _is_stale(stock_age, timedelta(hours=2)):
                     from app.ops_alerts import send_ops_alert
                     logger.warning(
                         "Stock trades pipeline has been running for %s — "
