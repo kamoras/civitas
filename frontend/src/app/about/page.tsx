@@ -126,32 +126,12 @@ export default function AboutPage() {
               overall Representation Score. Higher is better.
             </P>
             <P>
-              <em className="text-matrix-green/80">On the weights below:</em> a 2026-07
-              audit found Funding Independence and Funding Diversity correlate at r=0.72
-              across the live Senate population — both driven by the same underlying
-              funding-profile signal, not two independent dimensions. At the prior
-              25%/15% weights that pair carried 40% combined, double any other single
-              dimension, and could silently override strong performance elsewhere (the
-              audit&apos;s reference case: the sitting Senate Majority Leader ranked
-              2nd-from-last Senate-wide almost entirely because of this pair, despite
-              above-median scores on the other three). Rebalanced so the pair&apos;s
-              combined weight matches one genuinely distinct dimension&apos;s weight, with
-              the difference redistributed to the dimensions that are empirically
-              uncorrelated with each other and with this pair.
-            </P>
-            <P>
-              <em className="text-matrix-green/80">Promise Persistence was removed
-              (2026-07)</em> as a scored dimension. A live measurement across all 100
-              senators found 0 reached even &quot;medium&quot; confidence on evaluable
-              promises (mean 0.3 evaluable per senator, 76% with zero) — real campaign
-              promises are generic platform language that semantic matching against
-              specific votes and bills structurally can&apos;t bridge. This was the fourth
-              attempt at fixing this dimension without resolving the underlying gap; see
-              the <a href="/changelog" className="underline underline-offset-2 hover:text-matrix-green/70">scoring changelog</a> for
-              the full history. Campaign-promise tracking (kept/broken/partial) is still
-              collected and shown on each member&apos;s profile — it&apos;s just no longer folded
-              into the weighted score. The freed 25% is redistributed proportionally
-              across the remaining four dimensions.
+              Campaign-promise tracking (kept/broken/partial) is still collected and
+              shown on each member&apos;s profile, but is not folded into the weighted
+              score below. For the audit history behind the current weights and
+              dimensions — including why Promise Persistence was removed and why
+              Funding Independence and Funding Diversity carry the weights they do —
+              see the <a href="/changelog" className="underline underline-offset-2 hover:text-matrix-green/70">scoring changelog</a>.
             </P>
 
             <div className="space-y-4 mt-4">
@@ -365,12 +345,11 @@ export default function AboutPage() {
                   Network centrality structurally takes years to build — a freshman
                   senator&apos;s raw score is near-zero not because they lead poorly but
                   because they haven&apos;t had time to accumulate cosponsorship connections
-                  yet (a 2026-07 audit found freshmen averaging Legislative Effectiveness
-                  29.5 vs. veterans&apos; 54.1, driven mostly by this). Both the score
-                  component and the displayed number shrink the raw value toward neutral
-                  50 for senators with under 6 years in office, confidence-scaled to a
-                  full term, so a brand-new senator reads as &quot;not enough track record
-                  yet&quot; rather than &quot;bad at leadership.&quot;
+                  yet. Both the score component and the displayed number shrink the raw
+                  value toward neutral 50 for senators with under 6 years in office,
+                  confidence-scaled to a full term, so a brand-new senator reads as
+                  &quot;not enough track record yet&quot; rather than &quot;bad at
+                  leadership.&quot;
                 </P>
               </div>
 
@@ -1074,7 +1053,7 @@ export default function AboutPage() {
                 <ul className="space-y-2 mt-2 text-sm text-matrix-green/60">
                   <li className="flex items-start gap-2">
                     <span className="text-neon-yellow shrink-0">-</span>
-                    <span>A 1.5B parameter model is less capable than larger models. It occasionally produces imprecise promise analysis. We mitigate this with caching, post-processing heuristics, and deterministic overrides where the model output can be verified against structured data.</span>
+                    <span>A 1.2B parameter model is less capable than larger models. It occasionally produces imprecise promise analysis. We mitigate this with caching, post-processing heuristics, and deterministic overrides where the model output can be verified against structured data.</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-neon-yellow shrink-0">-</span>
