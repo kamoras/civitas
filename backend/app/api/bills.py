@@ -6,14 +6,14 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.api.response_helpers import cached_json
+from app.api.response_helpers import CACHE_TTL_DETAIL_S, cached_json
 from app.database import get_db
 from app.services.bill_service import get_bills_in_flight
 
 router = APIRouter()
 
 
-def _cached_json(data, max_age: int = 120) -> JSONResponse:
+def _cached_json(data, max_age: int = CACHE_TTL_DETAIL_S) -> JSONResponse:
     return cached_json(data, max_age=max_age)
 
 
@@ -37,4 +37,4 @@ def list_bills_in_flight(
     data = get_bills_in_flight(
         db, stage=stage, chamber=chamber, party=party, q=q, sort=sort, page=page, per_page=per_page,
     )
-    return _cached_json(data.model_dump(by_alias=True), max_age=120)
+    return _cached_json(data.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)
