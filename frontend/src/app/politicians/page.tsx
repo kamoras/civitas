@@ -9,6 +9,7 @@ import MatrixRain from "@/components/effects/MatrixRain";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import { fetchPoliticianDirectory } from "@/lib/api";
+import { getScoreBgColor } from "@/lib/corruption";
 import type { PoliticianCard } from "@/types/politicians";
 
 type BranchFilter = "all" | "senate" | "house" | "president" | "scotus";
@@ -35,11 +36,7 @@ function partyLabel(party: string) {
 }
 
 function ScoreBar({ score }: { score: number }) {
-  const color =
-    score >= 70 ? "bg-matrix-green" :
-    score >= 50 ? "bg-cyan-400" :
-    score >= 35 ? "bg-yellow-500" :
-    "bg-red-500";
+  const color = getScoreBgColor(score);
   return (
     <div className="flex items-center gap-2 min-w-0">
       <div className="flex-1 h-1 bg-matrix-green/10 rounded-full overflow-hidden">

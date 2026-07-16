@@ -275,10 +275,8 @@ function ComparisonTable({
           const lv = left.representationScore[key];
           const rv = right.representationScore[key];
           const w = winner(lv, rv);
-          const lColor =
-            lv >= 70 ? "text-matrix-green" : lv >= 40 ? "text-yellow-500" : "text-red-500";
-          const rColor =
-            rv >= 70 ? "text-matrix-green" : rv >= 40 ? "text-yellow-500" : "text-red-500";
+          const lColor = getScoreColor(lv);
+          const rColor = getScoreColor(rv);
 
           return (
             <div key={key} className="grid grid-cols-3 items-center px-3 py-2">
