@@ -538,3 +538,118 @@ class TestFindRelatedExploreDocsGenericTitleFilter:
         )
 
         assert [d["id"] for d in result] == [2]
+
+
+class TestExploreDocThresholds:
+    """Confirmed live 2026-07: at the prior distance/similarity thresholds
+    (1.10 / 0.40), nearly every Action Center issue linked 2-3 unrelated
+    explore docs — e.g. a World Cup soccer story matched to Chinese steel
+    anti-dumping notices at distance 0.87 and title-similarity 0.74, both
+    comfortably inside the old bounds. Tightened based on real production
+    score distributions (see _EXPLORE_DOC_MAX_DISTANCE's comment)."""
+
+    def _seed_doc(self, db_session, doc_id: int, title: str):
+        db_session.add(ExploreDocument(
+            id=doc_id, doc_type="Notice", source="Federal Register",
+            title=title, summary="", body="", date="2026-01-01",
+        ))
+        db_session.commit()
+
+    @patch("app.pipeline.analyze.action_center._embed_texts")
+    @patch("app.pipeline.analyze.action_center.search_explore_documents")
+    def test_distance_at_old_threshold_now_rejected(self, mock_search, mock_embed, db_session):
+        self._seed_doc(db_session, 1, "Certain Steel Products From China: Preliminary Results")
+        mock_search.return_value = [
+            {"id": 1, "title": "Certain Steel Products From China: Preliminary Results", "distance": 0.95},
+        ]
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.95, 0.05]])
+
+        result = _find_related_explore_docs("Sports story", "summary", [], db_session)
+        assert result == []
+
+    @patch("app.pipeline.analyze.action_center._embed_texts")
+    @patch("app.pipeline.analyze.action_center.search_explore_documents")
+    def test_similarity_at_old_threshold_now_rejected(self, mock_search, mock_embed, db_session):
+        self._seed_doc(db_session, 1, "Certain Steel Products From China: Preliminary Results")
+        mock_search.return_value = [
+            {"id": 1, "title": "Certain Steel Products From China: Preliminary Results", "distance": 0.5},
+        ]
+        # cos_sim ~= 0.60 — well above the old 0.40 floor, well below the
+        # new 0.75 one.
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.60, 0.80]])
+
+        result = _find_related_explore_docs("Sports story", "summary", [], db_session)
+        assert result == []
+
+    @patch("app.pipeline.analyze.action_center._embed_texts")
+    @patch("app.pipeline.analyze.action_center.search_explore_documents")
+    def test_genuine_close_match_survives_tightened_thresholds(self, mock_search, mock_embed, db_session):
+        self._seed_doc(db_session, 1, "EO 14318: Accelerating Federal Permitting of Data Center Infrastructure")
+        mock_search.return_value = [
+            {"id": 1, "title": "EO 14318: Accelerating Federal Permitting of Data Center Infrastructure", "distance": 0.80},
+        ]
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.80, 0.20]])
+
+        result = _find_related_explore_docs("China data center buildout", "summary", [], db_session)
+        assert [d["id"] for d in result] == [1]
+
+
+class TestAdministrativeNoticeTitleFilter:
+    """Confirmed live 2026-07: Paperwork Reduction Act information-collection
+    notices and FACA advisory-committee meeting notices — legally-templated
+    titles that are never substantively about any particular news story —
+    scored well inside the "genuine match" distance/similarity bands for
+    completely unrelated issues (e.g. an Attorney General story matched to
+    a "Notice of Public Meeting of the Montana Advisory Committee"). Unlike
+    LEGISLATIVE SESSION, each of these notices is uniquely titled, so
+    GENERIC_TITLE_REPEAT_THRESHOLD's repeat-count check can't catch them —
+    this matches the fixed legal template phrasing instead."""
+
+    def _seed_doc(self, db_session, doc_id: int, title: str):
+        db_session.add(ExploreDocument(
+            id=doc_id, doc_type="Notice", source="Federal Register",
+            title=title, summary="", body="", date="2026-01-01",
+        ))
+        db_session.commit()
+
+    @patch("app.pipeline.analyze.action_center._embed_texts")
+    @patch("app.pipeline.analyze.action_center.search_explore_documents")
+    def test_information_collection_notice_rejected_despite_high_similarity(
+        self, mock_search, mock_embed, db_session,
+    ):
+        self._seed_doc(db_session, 1, "Agency Information Collection Activities; Proposed eCollection")
+        mock_search.return_value = [
+            {"id": 1, "title": "Agency Information Collection Activities; Proposed eCollection", "distance": 0.70},
+        ]
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.95, 0.05]])
+
+        result = _find_related_explore_docs("Some unrelated issue", "summary", [], db_session)
+        assert result == []
+
+    @patch("app.pipeline.analyze.action_center._embed_texts")
+    @patch("app.pipeline.analyze.action_center.search_explore_documents")
+    def test_advisory_committee_meeting_notice_rejected_despite_high_similarity(
+        self, mock_search, mock_embed, db_session,
+    ):
+        self._seed_doc(db_session, 1, "Notice of Public Meeting of the Montana Advisory Committee")
+        mock_search.return_value = [
+            {"id": 1, "title": "Notice of Public Meeting of the Montana Advisory Committee", "distance": 0.70},
+        ]
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.95, 0.05]])
+
+        result = _find_related_explore_docs("Attorney General independence", "summary", [], db_session)
+        assert result == []
+
+    @patch("app.pipeline.analyze.action_center._embed_texts")
+    @patch("app.pipeline.analyze.action_center.search_explore_documents")
+    def test_notice_without_administrative_template_phrasing_is_kept(
+        self, mock_search, mock_embed, db_session,
+    ):
+        self._seed_doc(db_session, 1, "Notice of OFAC Sanctions Actions")
+        mock_search.return_value = [
+            {"id": 1, "title": "Notice of OFAC Sanctions Actions", "distance": 0.70},
+        ]
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.95, 0.05]])
+
+        result = _find_related_explore_docs("Sanctions on foreign officials", "summary", [], db_session)
+        assert [d["id"] for d in result] == [1]
