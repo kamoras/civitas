@@ -6,6 +6,7 @@ import { SCORE_TERMS } from "@/lib/scoreTerms";
 import { fetchMyReps, fetchActionIssues } from "@/lib/api";
 import { STATES } from "@/data/states";
 import { PARTY_COLORS, PARTY_BORDER, PARTY_BG } from "@/lib/partyStyles";
+import { getScoreBgColor } from "@/lib/corruption";
 import type { ActionIssue, MyRepRep, MyRepSenator, MyRepsResponse } from "@/types/action";
 
 function ContactScript({
@@ -96,8 +97,7 @@ function ContactScript({
 }
 
 function ScoreBar({ label, value }: { label: string; value: number }) {
-  const color =
-    value >= 70 ? "bg-green-400/60" : value >= 40 ? "bg-amber-400/60" : "bg-red-400/60";
+  const color = getScoreBgColor(value);
 
   return (
     <div className="flex items-center gap-2">

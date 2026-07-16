@@ -10,7 +10,7 @@ import BranchSelector, { type Branch } from "@/components/BranchSelector";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import { fetchLeaderboard, fetchRepLeaderboard, fetchPresidentLeaderboard, fetchJusticeLeaderboard } from "@/lib/api";
-import { calculateOverallScore, calculatePresidentScore, calculateJusticeScore, getScoreColor } from "@/lib/corruption";
+import { calculateOverallScore, calculatePresidentScore, calculateJusticeScore, getScoreColor, getScoreBgColor } from "@/lib/corruption";
 import { useScoreWeights } from "@/hooks/useConfig";
 import type { LeaderboardEntry, ScoreTrend } from "@/types/senator";
 import type { PresidentLeaderboardEntry } from "@/types/president";
@@ -47,16 +47,7 @@ function rankColor(rank: number): string {
 }
 
 function ScoreBar({ score }: { score: number }) {
-  const color =
-    score >= 81
-      ? "bg-matrix-green"
-      : score >= 61
-        ? "bg-cyan-400"
-        : score >= 41
-          ? "bg-yellow-500"
-          : score >= 21
-            ? "bg-orange-500"
-            : "bg-red-500";
+  const color = getScoreBgColor(score);
 
   return (
     <div className="flex items-center gap-2">
