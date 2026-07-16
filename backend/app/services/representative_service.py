@@ -21,6 +21,7 @@ from app.services.pagination import paginate_bounds
 from app.services.score_trends import compute_score_trend_map
 from app.services.senator_service import (
     STATE_NAMES,
+    _USELESS_SPONSOR,
     _clean_pac_sponsor,
     _clean_platform_summary,
     _compute_initials,
@@ -99,7 +100,7 @@ def build_rep_response(rep: Representative, _db: Session = None) -> dict:
                     "type": _fixup_donor_type(d.name, d.type, rep.name),
                     "industry": d.industry or "OTHER",
                     "pacSponsor": _clean_pac_sponsor(d.pac_sponsor, d.name),
-                    "pacIndustry": d.pac_industry if d.pac_industry and d.pac_industry.lower().strip() not in {"", "n/a", "none", "unclear", "unknown"} else None,
+                    "pacIndustry": d.pac_industry if d.pac_industry and d.pac_industry.lower().strip() not in _USELESS_SPONSOR else None,
                     "pacAnalysis": d.pac_analysis,
                 }
                 for d in donors
