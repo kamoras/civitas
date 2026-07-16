@@ -72,13 +72,13 @@ def _invalidate_orphaned_pipelines() -> None:
     """
     from datetime import datetime
     from app.database import SessionLocal
-    from app.models import PipelineRun
+    from app.models import PipelineRun, PipelineStatus
 
     db = SessionLocal()
     try:
-        orphaned = db.query(PipelineRun).filter(PipelineRun.status == "running").all()
+        orphaned = db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).all()
         for run in orphaned:
-            run.status = "stale"
+            run.status = PipelineStatus.STALE
             run.completed_at = datetime.utcnow()
             run.error_message = "Marked stale: app restarted while pipeline was running"
             logging.getLogger("app.main").warning(

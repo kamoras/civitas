@@ -7,6 +7,27 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 
+class PipelineStatus(StrEnum):
+    """Lifecycle status shared by PipelineRun/HousePipelineRun/
+    StockTradesPipelineRun — was independently redefined as bare string
+    literals ("running"/"completed"/"failed") across 10+ files, so a typo
+    in any one comparison site would silently produce a job that's never
+    detected as stuck/failed. Not the same vocabulary as senate_pipeline.py's
+    ProgressTracker per-step status (pending/active/done/skipped) — that
+    tracks phases *within* one run, this tracks the run itself.
+
+    A StrEnum, not a SQLAlchemy Enum column type: members compare and
+    serialize identically to plain strings, so this is a drop-in
+    replacement for the existing `Mapped[str]` columns with zero schema
+    migration and zero behavior change for already-stored rows.
+    """
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    PARTIAL = "partial"  # House-only: some reps succeeded, some failed
+    STALE = "stale"  # Senate-only: a "running" row exceeded the timeout with no update
+
+
 class PromiseAlignment(StrEnum):
     """Campaign-promise-vs-record verdict, shared by CampaignPromise/
     RepCampaignPromise — was independently redefined as bare string
@@ -722,7 +743,7 @@ class PipelineRun(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     started_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    status: Mapped[str] = mapped_column(String, default="running")
+    status: Mapped[str] = mapped_column(String, default=PipelineStatus.RUNNING)
     current_phase: Mapped[str | None] = mapped_column(String, nullable=True)
     senators_processed: Mapped[int] = mapped_column(Integer, default=0)
     senators_total: Mapped[int] = mapped_column(Integer, default=0)
@@ -746,7 +767,7 @@ class HousePipelineRun(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     started_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    status: Mapped[str] = mapped_column(String, default="running")
+    status: Mapped[str] = mapped_column(String, default=PipelineStatus.RUNNING)
     reps_processed: Mapped[int] = mapped_column(Integer, default=0)
     reps_total: Mapped[int] = mapped_column(Integer, default=0)
     reps_failed: Mapped[int] = mapped_column(Integer, default=0)
@@ -762,7 +783,7 @@ class StockTradesPipelineRun(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     started_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    status: Mapped[str] = mapped_column(String, default="running")
+    status: Mapped[str] = mapped_column(String, default=PipelineStatus.RUNNING)
     house_trades_ingested: Mapped[int] = mapped_column(Integer, default=0)
     senate_trades_ingested: Mapped[int] = mapped_column(Integer, default=0)
     elapsed_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)

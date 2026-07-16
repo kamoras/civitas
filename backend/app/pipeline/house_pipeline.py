@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
-from app.models import HousePipelineRun, PromiseAlignment, Representative, ScoreSnapshot
+from app.models import HousePipelineRun, PipelineStatus, PromiseAlignment, Representative, ScoreSnapshot
 from app.services.representative_service import upsert_representative
 
 from app.pipeline.fetch.congress import (
@@ -91,7 +91,7 @@ async def run_house_pipeline() -> dict:
     start_time = time.time()
 
     # Record run start so failures are visible in the admin dashboard.
-    house_run = HousePipelineRun(started_at=datetime.utcnow(), status="running")
+    house_run = HousePipelineRun(started_at=datetime.utcnow(), status=PipelineStatus.RUNNING)
     db.add(house_run)
     db.commit()
 
@@ -107,7 +107,7 @@ async def run_house_pipeline() -> dict:
             if not raw_members:
                 logger.warning("No House members found — aborting")
                 elapsed = round(time.time() - start_time, 1)
-                house_run.status = "failed"
+                house_run.status = PipelineStatus.FAILED
                 house_run.completed_at = datetime.utcnow()
                 house_run.error_message = "No House members returned from Congress API"
                 house_run.elapsed_seconds = elapsed
@@ -695,7 +695,11 @@ async def run_house_pipeline() -> dict:
             logger.info("Representatives: %d success, %d failed", success_count, fail_count)
             logger.info("Time: %.1fs", elapsed)
 
-            status = "completed" if fail_count == 0 else ("partial" if success_count > 0 else "failed")
+            status = (
+                PipelineStatus.COMPLETED if fail_count == 0
+                else PipelineStatus.PARTIAL if success_count > 0
+                else PipelineStatus.FAILED
+            )
             house_run.status = status
             house_run.completed_at = datetime.utcnow()
             house_run.reps_processed = success_count
@@ -716,14 +720,14 @@ async def run_house_pipeline() -> dict:
     except Exception as e:
         logger.exception("House pipeline failed: %s", e)
         try:
-            house_run.status = "failed"
+            house_run.status = PipelineStatus.FAILED
             house_run.completed_at = datetime.utcnow()
             house_run.elapsed_seconds = round(time.time() - start_time, 1)
             house_run.error_message = str(e)[:500]
             db.commit()
         except Exception:
             logger.exception("Failed to record house pipeline failure")
-        return {"status": "failed", "error": str(e)[:500]}
+        return {"status": PipelineStatus.FAILED, "error": str(e)[:500]}
     finally:
         _house_pipeline_running = False
         _house_pipeline_started_at = None

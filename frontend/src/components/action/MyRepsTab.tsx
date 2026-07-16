@@ -5,6 +5,7 @@ import Link from "next/link";
 import { SCORE_TERMS } from "@/lib/scoreTerms";
 import { fetchMyReps, fetchActionIssues } from "@/lib/api";
 import { STATES } from "@/data/states";
+import { PARTY_COLORS, PARTY_BORDER, PARTY_BG } from "@/lib/partyStyles";
 import type { ActionIssue, MyRepRep, MyRepSenator, MyRepsResponse } from "@/types/action";
 
 function ContactScript({
@@ -93,24 +94,6 @@ function ContactScript({
     </div>
   );
 }
-
-const PARTY_COLORS: Record<string, string> = {
-  D: "text-dem-blue",
-  R: "text-rep-red",
-  I: "text-ind-purple",
-};
-
-const PARTY_BORDER: Record<string, string> = {
-  D: "border-dem-blue/30",
-  R: "border-rep-red/30",
-  I: "border-ind-purple/30",
-};
-
-const PARTY_BG: Record<string, string> = {
-  D: "bg-dem-blue/5",
-  R: "bg-rep-red/5",
-  I: "bg-ind-purple/5",
-};
 
 function ScoreBar({ label, value }: { label: string; value: number }) {
   const color =

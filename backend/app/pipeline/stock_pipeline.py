@@ -21,8 +21,8 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models import (
-    PipelineRun, HousePipelineRun, Representative, Senator, StockTrade,
-    RepStockTrade, StockTradesPipelineRun,
+    PipelineRun, HousePipelineRun, PipelineStatus, Representative, Senator,
+    StockTrade, RepStockTrade, StockTradesPipelineRun,
 )
 from app.pipeline.fetch.house_ptr import fetch_and_parse_ptr as fetch_house_ptr, fetch_ptr_filing_index
 from app.pipeline.fetch.sec_tickers import resolve_tickers
@@ -66,9 +66,9 @@ def _other_pipeline_running(db: Session) -> bool:
     rather than introducing a third lock table — see scheduler.py's
     _hourly_action_refresh for the same pattern.
     """
-    if db.query(PipelineRun).filter(PipelineRun.status == "running").first():
+    if db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).first():
         return True
-    if db.query(HousePipelineRun).filter(HousePipelineRun.status == "running").first():
+    if db.query(HousePipelineRun).filter(HousePipelineRun.status == PipelineStatus.RUNNING).first():
         return True
     return False
 
@@ -251,7 +251,7 @@ async def run_stock_trades_pipeline() -> dict:
         _stock_pipeline_started_at = time.time()
         start_time = time.time()
 
-        run = StockTradesPipelineRun(started_at=datetime.utcnow(), status="running")
+        run = StockTradesPipelineRun(started_at=datetime.utcnow(), status=PipelineStatus.RUNNING)
         db.add(run)
         db.commit()
 
@@ -273,7 +273,7 @@ async def run_stock_trades_pipeline() -> dict:
         elapsed = round(time.time() - start_time, 1)
         logger.info("Stock trades pipeline: %d House rows, %d Senate rows", house_count, senate_count)
 
-        run.status = "failed" if len(error_parts) == 2 else "completed"
+        run.status = PipelineStatus.FAILED if len(error_parts) == 2 else PipelineStatus.COMPLETED
         run.completed_at = datetime.utcnow()
         run.house_trades_ingested = house_count
         run.senate_trades_ingested = senate_count

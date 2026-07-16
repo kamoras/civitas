@@ -17,17 +17,12 @@ import TerminalTitlebar from "@/components/TerminalTitlebar";
 import ScoreTrendSection from "./ScoreTrendSection";
 import NotablePartyBreaks from "./NotablePartyBreaks";
 import Link from "next/link";
+import { PARTY_COLORS, PARTY_BORDER, PARTY_LABELS } from "@/lib/partyStyles";
 
 interface SenatorCardProps {
   senator: Senator;
   chamber?: "senate" | "house";
 }
-
-const PARTY_COLORS = {
-  D: "text-dem-blue",
-  R: "text-rep-red",
-  I: "text-ind-purple",
-};
 
 // Mirrors the tenure-confidence shrinkage in
 // backend/.../score_calculator.py's _calc_legislative_effectiveness:
@@ -42,17 +37,6 @@ function displayedLeaderScore(rawScore: number, yearsInOffice: number): number {
   return Math.round(rawScore * 100 * confidence + 50 * (1 - confidence));
 }
 
-const PARTY_BORDER = {
-  D: "border-dem-blue/30",
-  R: "border-rep-red/30",
-  I: "border-ind-purple/30",
-};
-
-const PARTY_LABELS = {
-  D: "DEMOCRAT",
-  R: "REPUBLICAN",
-  I: "INDEPENDENT",
-};
 
 function DonorsSummary({ senator }: { senator: Senator }) {
   const top = senator.funding.topDonors[0];

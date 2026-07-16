@@ -5,12 +5,7 @@ import Link from "next/link";
 import { fetchActionIssues, fetchMonitors } from "@/lib/api";
 import type { NationalMonitor } from "@/lib/api";
 import type { ActionIssue } from "@/types/action";
-
-const PARTY_COLORS: Record<string, string> = {
-  D: "text-dem-blue",
-  R: "text-rep-red",
-  I: "text-ind-purple",
-};
+import { PARTY_COLORS } from "@/lib/partyStyles";
 
 export default function ActionPreview() {
   const [issues, setIssues] = useState<ActionIssue[]>([]);

@@ -31,6 +31,7 @@ from app.models import (
     NationalMonitor,
     PageView,
     PipelineRun,
+    PipelineStatus,
     President,
     RepCampaignPromise,
     RepDonor,
@@ -70,7 +71,7 @@ def _live_elapsed(run) -> float | None:
     A "running" row's stored elapsed_seconds is stale (only written on
     completion), so while it's in flight we compute it against now instead.
     """
-    if run.status == "running" and run.started_at:
+    if run.status == PipelineStatus.RUNNING and run.started_at:
         return round((datetime.utcnow() - run.started_at).total_seconds(), 1)
     return run.elapsed_seconds
 
@@ -101,13 +102,13 @@ def _clear_stuck_runs(db: Session, model, is_running: bool, pipeline_label: str)
             status_code=409, detail=f"{pipeline_label} pipeline is actively running — stop it first"
         )
 
-    stuck = db.query(model).filter(model.status == "running").all()
+    stuck = db.query(model).filter(model.status == PipelineStatus.RUNNING).all()
     if not stuck:
         return {"cleared": 0, "message": "No stuck runs found"}
 
     now = datetime.utcnow()
     for run in stuck:
-        run.status = "failed"
+        run.status = PipelineStatus.FAILED
         run.error_message = "Cleared by admin (container restart)"
         run.completed_at = now
         if run.started_at:
@@ -498,12 +499,12 @@ async def admin_dashboard(db: Session = Depends(get_db)):
     total_runs = db.query(func.count(PipelineRun.id)).scalar() or 0
     successful_runs = (
         db.query(func.count(PipelineRun.id))
-        .filter(PipelineRun.status == "completed")
+        .filter(PipelineRun.status == PipelineStatus.COMPLETED)
         .scalar() or 0
     )
     failed_runs = (
         db.query(func.count(PipelineRun.id))
-        .filter(PipelineRun.status == "failed")
+        .filter(PipelineRun.status == PipelineStatus.FAILED)
         .scalar() or 0
     )
 

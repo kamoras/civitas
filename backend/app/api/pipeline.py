@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models import PipelineRun
+from app.models import PipelineRun, PipelineStatus
 from app.pipeline.senate_pipeline import run_senate_pipeline
 from app.schemas import PipelineRunSchema, PipelineStatusSchema
 
@@ -27,7 +27,7 @@ def _is_pipeline_running(db: Session) -> bool:
     cutoff = datetime.utcnow() - timedelta(hours=12)
     return (
         db.query(PipelineRun)
-        .filter(PipelineRun.status == "running", PipelineRun.started_at > cutoff)
+        .filter(PipelineRun.status == PipelineStatus.RUNNING, PipelineRun.started_at > cutoff)
         .first()
         is not None
     )
