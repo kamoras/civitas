@@ -38,6 +38,7 @@ from app.models import (
     Representative,
     Senator,
 )
+from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.pipeline.fetch.news_feeds import NewsArticle, fetch_news_articles
 from app.pipeline.fetch.trending import TrendingTopic, fetch_trending_topics
 from app.pipeline.vector_store import (
@@ -982,6 +983,7 @@ def _find_related_senators(
         Senator.id, Senator.name, Senator.state, Senator.party,
         Senator.score_funding_independence, Senator.score_promise_persistence,
         Senator.score_independent_voting, Senator.score_funding_diversity,
+        Senator.score_legislative_effectiveness,
         Senator.leadership_score, Senator.contact_form_url, Senator.website_url,
     ).all()
 
@@ -1002,17 +1004,10 @@ def _find_related_senators(
     matched: dict[str, dict] = {}
 
     def _make_entry(s, chamber: str = "senate", match_reason: str | None = None) -> dict:
-        from app.config_definitions import SCORE_WEIGHTS
-        overall = (
-            s.score_funding_independence * SCORE_WEIGHTS["fundingIndependence"]
-            + s.score_promise_persistence * SCORE_WEIGHTS["promisePersistence"]
-            + s.score_independent_voting * SCORE_WEIGHTS["independentVoting"]
-            + s.score_funding_diversity * SCORE_WEIGHTS["fundingDiversity"]
-            + getattr(s, "score_legislative_effectiveness", 0) * SCORE_WEIGHTS["legislativeEffectiveness"]
-        )
+        overall = compute_overall_score(s)
         return {
             "id": s.id, "name": s.name, "state": s.state,
-            "party": s.party, "overall_score": round(overall, 1),
+            "party": s.party, "overall_score": overall,
             "leadership_score": round(s.leadership_score * 100) if s.leadership_score else None,
             "chamber": chamber,
             "match_reason": match_reason,

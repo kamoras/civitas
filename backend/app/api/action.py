@@ -15,6 +15,7 @@ from datetime import date
 from app.api.admin import require_admin
 from app.api.rate_limit import WriteRateLimit, client_ip
 from app.database import get_db
+from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.models import (
     ActionIssue, ExploreDocument,
     NationalMonitor, TimelineEntry, Representative, Senator,
@@ -608,10 +609,7 @@ async def get_my_reps(
 
     result_senators = []
     for s in senators:
-        overall = round(
-            (s.score_funding_independence + s.score_promise_persistence +
-             s.score_independent_voting + s.score_funding_diversity) / 4, 1
-        )
+        overall = compute_overall_score(s)
         result_senators.append({
             "id": s.id,
             "name": s.name,
@@ -637,10 +635,7 @@ async def get_my_reps(
 
     result_reps = []
     for r in representatives:
-        overall = round(
-            (r.score_funding_independence + r.score_promise_persistence +
-             r.score_independent_voting + r.score_funding_diversity) / 4, 1
-        )
+        overall = compute_overall_score(r)
         result_reps.append({
             "id": r.id,
             "name": r.name,
@@ -735,15 +730,7 @@ async def get_election_info(response: Response, db: Session = Depends(get_db)):
 
     by_state: dict[str, list[dict]] = {}
     for s in senators:
-        from app.config_definitions import SCORE_WEIGHTS as _SW
-        overall = round(
-            s.score_funding_independence * _SW["fundingIndependence"]
-            + s.score_promise_persistence * _SW["promisePersistence"]
-            + s.score_independent_voting * _SW["independentVoting"]
-            + s.score_funding_diversity * _SW["fundingDiversity"]
-            + s.score_legislative_effectiveness * _SW["legislativeEffectiveness"],
-            1,
-        )
+        overall = compute_overall_score(s)
         entry = {
             "id": s.id, "name": s.name, "state": s.state, "party": s.party,
             "overallScore": overall,

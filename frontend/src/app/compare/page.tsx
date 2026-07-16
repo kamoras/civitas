@@ -23,7 +23,6 @@ type Chamber = "senate" | "house";
 
 const SCORE_KEYS = [
   "fundingIndependence",
-  "promisePersistence",
   "independentVoting",
   "fundingDiversity",
   "legislativeEffectiveness",
@@ -33,7 +32,6 @@ type ScoreKey = (typeof SCORE_KEYS)[number];
 
 const SCORE_LABELS: Record<ScoreKey, string> = {
   fundingIndependence: "FUNDING INDEP",
-  promisePersistence: "PROMISE PERSIST",
   independentVoting: "ALIGNMENT",
   fundingDiversity: "FUNDING DIVERS",
   legislativeEffectiveness: "LEGIS EFFECT",

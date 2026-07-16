@@ -3,7 +3,7 @@ import { formatCurrency } from "@/lib/formatting";
 import { safeHref } from "@/lib/formatting";
 import { fecCommitteeSearchUrl, currentCongressLabel } from "@/lib/sources";
 import { getScoreColor } from "@/lib/corruption";
-import CorruptionScore from "./CorruptionScore";
+import RepresentationScore from "./RepresentationScore";
 import IndustryBreakdown from "./IndustryBreakdown";
 import VotingRecord from "./VotingRecord";
 import LobbyingMatches from "./LobbyingMatches";
@@ -278,9 +278,8 @@ export default function SenatorCard({ senator, chamber = "senate" }: SenatorCard
         </div>
 
         {/* ── Representation Score ── always visible */}
-        <CorruptionScore
+        <RepresentationScore
           breakdown={senator.representationScore}
-          promises={senator.campaignPromises}
           votingRecord={senator.votingRecord}
           funding={senator.funding}
           sponsoredBills={senator.sponsoredBills}

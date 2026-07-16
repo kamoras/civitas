@@ -48,21 +48,23 @@ class TestCheckScoreDistribution:
         failures = check_score_distribution(db_session)
         assert failures == []
 
-    def test_collapsed_promise_persistence_flagged(self, db_session):
-        # All PP scores compressed into a narrow band (the v5.1 shrinkage-
-        # prior failure mode) while every other dimension stays healthy.
+    def test_collapsed_dimension_flagged(self, db_session):
+        # All FI scores compressed into a narrow band (the same shrinkage-
+        # prior failure mode that once hit Promise Persistence — now removed
+        # as a scored dimension, see ground_truth.py's MIN_STDEV docstring)
+        # while every other dimension stays healthy.
         for i in range(15):
             _add_senator(
                 db_session, f"s{i}",
-                pp=52 + (i % 3),  # 52-54, stdev ~1
-                fi=20 + i * 4, iv=20 + i * 4, fd=20 + i * 4, le=20 + i * 4,
+                fi=52 + (i % 3),  # 52-54, stdev ~1
+                pp=20 + i * 4, iv=20 + i * 4, fd=20 + i * 4, le=20 + i * 4,
             )
         db_session.commit()
 
         failures = check_score_distribution(db_session)
         dims_flagged = {f["dimension"] for f in failures}
-        assert "PP" in dims_flagged
-        assert "FI" not in dims_flagged
+        assert "FI" in dims_flagged
+        assert "IV" not in dims_flagged
 
     def test_too_few_senators_skipped(self, db_session):
         # Below the n=10 minimum — not enough data to judge population spread.
@@ -98,14 +100,14 @@ class TestCheckScoreDistributionHouse:
         for i in range(15):
             _add_representative(
                 db_session, f"r{i}",
-                pp=52 + (i % 3),  # collapsed, stdev ~1
-                fi=20 + i * 4, iv=20 + i * 4, fd=20 + i * 4, le=20 + i * 4,
+                fi=52 + (i % 3),  # collapsed, stdev ~1
+                pp=20 + i * 4, iv=20 + i * 4, fd=20 + i * 4, le=20 + i * 4,
             )
         db_session.commit()
 
         failures = check_score_distribution(db_session, model=Representative)
         dims_flagged = {f["dimension"] for f in failures}
-        assert "PP" in dims_flagged
+        assert "FI" in dims_flagged
         assert all("representatives" in f["senator"] for f in failures)
 
     def test_house_and_senate_rows_dont_cross_contaminate(self, db_session):

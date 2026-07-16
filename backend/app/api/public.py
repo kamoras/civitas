@@ -114,13 +114,7 @@ def preflight(path: str) -> Response:
 # ---------------------------------------------------------------------------
 
 def _overall(scores: dict) -> int:
-    return round(
-        scores.get("fundingIndependence", 0) * SCORE_WEIGHTS["fundingIndependence"]
-        + scores.get("promisePersistence", 0) * SCORE_WEIGHTS["promisePersistence"]
-        + scores.get("independentVoting", 0) * SCORE_WEIGHTS["independentVoting"]
-        + scores.get("fundingDiversity", 0) * SCORE_WEIGHTS["fundingDiversity"]
-        + scores.get("legislativeEffectiveness", 0) * SCORE_WEIGHTS["legislativeEffectiveness"]
-    )
+    return round(sum(scores.get(key, 0) * weight for key, weight in SCORE_WEIGHTS.items()))
 
 
 # ---------------------------------------------------------------------------
