@@ -32,6 +32,7 @@ from app.pipeline.fetch.senate_ptr import (
     fetch_and_parse_ptr as fetch_senate_ptr,
     search_ptr_filings,
 )
+from app.pipeline.run_tracker import PipelineRunTracker
 from app.pipeline.transform.industry_classifier import classify_batch_with_learning
 
 logger = logging.getLogger(__name__)
@@ -41,23 +42,20 @@ logger = logging.getLogger(__name__)
 # most recent disclosure_date already stored, so this only matters once.
 COLD_START_LOOKBACK_DAYS = 120
 
-# In-memory flag mirroring house_pipeline.py's pattern — lets the admin
+# In-memory tracker mirroring house_pipeline.py's pattern — lets the admin
 # dashboard detect a "stuck" run (DB row still says "running" but this
-# flag is False after a restart) rather than only the DB row, which a
-# crashed/killed process can never update to "failed" itself.
-_stock_pipeline_running: bool = False
-_stock_pipeline_started_at: float | None = None
+# tracker says not-running after a restart) rather than only the DB row,
+# which a crashed/killed process can never update to "failed" itself.
+_tracker = PipelineRunTracker()
 
 
 def is_stock_pipeline_running() -> bool:
-    return _stock_pipeline_running
+    return _tracker.is_running
 
 
 def stock_pipeline_age() -> "timedelta | None":
     """Wall-clock age of the in-process stock-trades run, or None when idle."""
-    if not _stock_pipeline_running or _stock_pipeline_started_at is None:
-        return None
-    return timedelta(seconds=time.time() - _stock_pipeline_started_at)
+    return _tracker.age
 
 
 def _other_pipeline_running(db: Session) -> bool:
@@ -239,16 +237,13 @@ async def run_stock_trades_pipeline() -> dict:
     Best-effort per chamber: a failure fetching/parsing one chamber's
     filings does not prevent the other from being ingested.
     """
-    global _stock_pipeline_running, _stock_pipeline_started_at
-
     db: Session = SessionLocal()
     try:
         if _other_pipeline_running(db):
             logger.info("Stock trades pipeline skipped — a member pipeline is currently running")
             return {"status": "skipped", "reason": "member_pipeline_running"}
 
-        _stock_pipeline_running = True
-        _stock_pipeline_started_at = time.time()
+        _tracker.start()
         start_time = time.time()
 
         run = StockTradesPipelineRun(started_at=datetime.utcnow(), status=PipelineStatus.RUNNING)
@@ -286,6 +281,5 @@ async def run_stock_trades_pipeline() -> dict:
             "elapsed_seconds": elapsed,
         }
     finally:
-        _stock_pipeline_running = False
-        _stock_pipeline_started_at = None
+        _tracker.stop()
         db.close()
