@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import SessionLocal
 from app.models import HousePipelineRun, Representative, ScoreSnapshot
+from app.pipeline.run_tracker import PipelineRunTracker
 from app.services.representative_service import upsert_representative
 
 from app.pipeline.fetch.congress import (
@@ -60,14 +61,15 @@ from app.pipeline.transform.normalize_votes import (
 
 logger = logging.getLogger(__name__)
 
-# Module-level flag so the hourly action-center refresh can skip while the
-# house pipeline is running (prevents concurrent SQLite write conflicts).
-_house_pipeline_running: bool = False
-_house_pipeline_started_at: float | None = None
+# Module-level tracker so the hourly action-center refresh can skip while
+# the house pipeline is running (prevents concurrent SQLite write
+# conflicts). See PipelineRunTracker's docstring for why this exists
+# alongside HousePipelineRun's DB-persisted status.
+_tracker = PipelineRunTracker()
 
 
 def is_house_pipeline_running() -> bool:
-    return _house_pipeline_running
+    return _tracker.is_running
 
 
 def house_pipeline_age() -> "timedelta | None":
@@ -77,16 +79,12 @@ def house_pipeline_age() -> "timedelta | None":
     run wedged silently in Phase 1 held the running flag for 17h and the
     action center skipped every hourly refresh behind it.
     """
-    if not _house_pipeline_running or _house_pipeline_started_at is None:
-        return None
-    return timedelta(seconds=time.time() - _house_pipeline_started_at)
+    return _tracker.age
 
 
 async def run_house_pipeline() -> dict:
     """Run the full House representative pipeline."""
-    global _house_pipeline_running, _house_pipeline_started_at
-    _house_pipeline_running = True
-    _house_pipeline_started_at = time.time()
+    _tracker.start()
     db = SessionLocal()
     start_time = time.time()
 
@@ -725,8 +723,7 @@ async def run_house_pipeline() -> dict:
             logger.exception("Failed to record house pipeline failure")
         return {"status": "failed", "error": str(e)[:500]}
     finally:
-        _house_pipeline_running = False
-        _house_pipeline_started_at = None
+        _tracker.stop()
         db.close()
 
 
