@@ -13,7 +13,6 @@ rationale (House/Senate Stock Watcher, the two previously-proposed
 shortcuts, are both dead as of 2026-07).
 """
 
-import asyncio
 import io
 import logging
 import zipfile
@@ -25,46 +24,25 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
+from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.fetch.ptr_common import TradeRow, normalize_date, parse_pdf_bytes
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 
 CLERK_BASE = "https://disclosures-clerk.house.gov/public_disc"
-MAX_RETRIES = 3
-RETRY_BACKOFF_S = 2.0
 
 _rate_limiter = RateLimiter(settings.HOUSE_PTR_RPS)
 
 
-async def _fetch_bytes_with_retry(
-    client: httpx.AsyncClient, url: str, retries: int = MAX_RETRIES,
-) -> bytes | None:
+async def _fetch_bytes_with_retry(client: httpx.AsyncClient, url: str) -> bytes | None:
     """Fetch raw bytes (ZIP/PDF) with rate limiting and retries."""
-    await _rate_limiter.acquire()
-    for attempt in range(1, retries + 1):
-        try:
-            logger.debug("House Clerk fetch: %s (attempt %d)", url, attempt)
-            resp = await client.get(url, timeout=60.0)
-            if resp.status_code == 429:
-                wait = RETRY_BACKOFF_S * attempt * 2
-                logger.warning("House Clerk rate limited, waiting %.1fs...", wait)
-                await asyncio.sleep(wait)
-                continue
-            if resp.status_code >= 400:
-                if 400 <= resp.status_code < 500:
-                    logger.error("House Clerk client error (no retry): %s — HTTP %d", url, resp.status_code)
-                    return None
-                raise httpx.HTTPStatusError(
-                    f"HTTP {resp.status_code}", request=resp.request, response=resp,
-                )
-            return resp.content
-        except Exception as e:
-            if attempt == retries:
-                logger.error("House Clerk fetch failed after %d attempts: %s — %s", retries, url, e)
-                return None
-            await asyncio.sleep(RETRY_BACKOFF_S * attempt)
-    return None
+    resp = await fetch_with_retry(
+        client, _rate_limiter, "GET", url,
+        rate_limit_backoff_multiplier=2.0, retry_on_4xx=False,
+        timeout=60.0, log_label="House Clerk",
+    )
+    return resp.content if resp is not None else None
 
 
 async def fetch_ptr_filing_index(

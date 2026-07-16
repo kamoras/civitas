@@ -17,7 +17,6 @@ Data flow:
 All intermediate results are cached via the pipeline cache layer.
 """
 
-import asyncio
 import logging
 import re
 from datetime import datetime, timedelta
@@ -27,13 +26,12 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
+from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 
 GOVINFO_API_BASE = "https://api.govinfo.gov"
-MAX_RETRIES = 3
-RETRY_BACKOFF_S = 2.0
 
 _rate_limiter = RateLimiter(settings.GOVINFO_RPS)
 
@@ -41,39 +39,15 @@ _rate_limiter = RateLimiter(settings.GOVINFO_RPS)
 # ── Internal HTTP helpers ────────────────────────────────────────
 
 
-async def _fetch_json(
-    client: httpx.AsyncClient, url: str, retries: int = MAX_RETRIES
-) -> dict | None:
+async def _fetch_json(client: httpx.AsyncClient, url: str) -> dict | None:
     """Fetch a GovInfo JSON endpoint with rate limiting and retries."""
-    await _rate_limiter.acquire()
     separator = "&" if "?" in url else "?"
     full_url = f"{url}{separator}api_key={settings.DATA_GOV_API_KEY}"
-
-    for attempt in range(1, retries + 1):
-        try:
-            resp = await client.get(full_url, timeout=30.0)
-
-            if resp.status_code == 429:
-                wait = RETRY_BACKOFF_S * attempt
-                logger.warning("GovInfo CREC rate limited, waiting %.1fs...", wait)
-                await asyncio.sleep(wait)
-                continue
-
-            if resp.status_code == 404:
-                return None
-
-            if resp.status_code >= 400:
-                logger.debug("GovInfo CREC %d for %s", resp.status_code, url)
-                return None
-
-            return resp.json()
-        except Exception as e:
-            if attempt == retries:
-                logger.error("GovInfo CREC request failed: %s — %s", url, e)
-                return None
-            await asyncio.sleep(RETRY_BACKOFF_S * attempt)
-
-    return None
+    resp = await fetch_with_retry(
+        client, _rate_limiter, "GET", full_url,
+        retry_on_4xx=False, log_label="GovInfo CREC",
+    )
+    return resp.json() if resp is not None else None
 
 
 async def _fetch_htm(client: httpx.AsyncClient, url: str) -> str:
