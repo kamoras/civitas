@@ -264,6 +264,22 @@ as raw promise kept/broken/partial data on profile pages) — it's just
 excluded from SCORE_WEIGHTS and the weighted overall score. Its 25%
 weight redistributed proportionally across the other four (see
 config_definitions.SCORE_WEIGHTS's docstring for the exact numbers).
+
+Changes from v6.0 → v6.1 (2026-07): Funding Diversity's industry-
+concentration signal had a flat step-function fallback (65 if
+small_frac > 0.3 else 50) for senators with too little classified-
+industry money to compute a meaningful HHI. A population audit found
+this silently capped the dimension's maximum at 69 for the entire
+Senate — Bernie Sanders (63% small-donor money, the most grassroots-
+funded senator in the dataset) scored exactly 69, because his 0.28%
+classified-industry share triggered the flat 65 regardless of how
+overwhelmingly diversified his actual funding was. The flat fallback
+treated "just over the threshold" and "essentially all small-dollar"
+identically. Replaced with a fallback that scales continuously with
+small_frac (50 + small_frac*50 — still 50 at small_frac=0, still 65 at
+exactly the old 0.3 threshold, so continuous with prior behavior there,
+but now able to reach 100 for a hypothetical fully-small-dollar
+campaign instead of capping at 65).
 """
 
 import logging
@@ -283,7 +299,7 @@ logger = logging.getLogger(__name__)
 # this file's own precedent for dimension-composition changes (v2 -> v3
 # folded Accessibility into Promise Persistence; this removes Promise
 # Persistence itself).
-ALGORITHM_VERSION = "v6.0"
+ALGORITHM_VERSION = "v6.1"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -1102,12 +1118,28 @@ def _calc_funding_diversity(funding: dict) -> int:
     total_known = sum(ind.get("total", 0) for ind in industries) if industries else 0
     total_known_pct = total_known / total_raised * 100
 
+    # Fallback/blend target for when classified industry money is too
+    # thin a slice to measure HHI on. Previously a flat step (65 if
+    # small_frac > 0.3 else 50) regardless of how far past 0.3 small_frac
+    # actually was — so a senator overwhelmingly funded by small donors
+    # (Bernie Sanders: 63% small-donor, 0.28% classified-industry money)
+    # got exactly the same 65 as one just barely over the threshold.
+    # That silently capped Funding Diversity's population-wide maximum at
+    # 69 (2026-07 audit: 0/100 senators break 69, the ceiling this flat
+    # 65 mechanically imposes), even though near-total small-dollar
+    # reliance IS itself close to maximal diversification — it's spread
+    # across an unbounded number of individual donors, not a handful of
+    # institutional ones. Scaling continuously with small_frac instead
+    # (still 50 at small_frac=0, still 65 at exactly 0.3 — the old
+    # threshold's value, so this is continuous with the prior behavior
+    # at that point, not a discontinuous jump) lets that reward grow all
+    # the way to 100 for a hypothetical fully-small-dollar campaign.
+    grassroots_neutral = 50 + small_frac * 50
+
     if total_known_pct < 5:
         # Very little classified industry money — HHI is meaningless
-        # noise on a tiny slice. Default to neutral, with a boost
-        # when grassroots funding is high (the money IS diverse,
-        # just not industry-classifiable).
-        concentration_score = 65 if small_frac > 0.3 else 50
+        # noise on a tiny slice. Default to the grassroots-scaled neutral.
+        concentration_score = grassroots_neutral
     else:
         hhi = sum(
             (ind.get("total", 0) / total_known) ** 2
@@ -1120,10 +1152,9 @@ def _calc_funding_diversity(funding: dict) -> int:
         # its concentration matters less. Blend toward neutral based
         # on how much of total funding is industry-classified.
         industry_relevance = min(total_known_pct / 40, 1.0)
-        neutral = 65 if small_frac > 0.3 else 50
         concentration_score = (
             raw_concentration * industry_relevance
-            + neutral * (1 - industry_relevance)
+            + grassroots_neutral * (1 - industry_relevance)
         )
 
     return clamp(breadth_score * 0.5 + concentration_score * 0.5)
