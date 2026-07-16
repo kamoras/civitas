@@ -17,7 +17,7 @@ locally on a single self-hosted device with zero cloud AI calls.
 
 - **Frontend**: Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS — port 3000/3001
 - **Backend**: FastAPI (Python 3.13), SQLAlchemy ORM, SQLite — port 8000/8001
-- **LLM**: Qwen2.5 1.5B via llama.cpp (native ARM, port 8070) or Ollama (Docker, port 11434)
+- **LLM**: LFM2.5-1.2B-Instruct via llama.cpp (native ARM, port 8070) or Ollama (Docker, port 11434)
 - **Embeddings**: sentence-transformers (Snowflake Arctic-XS), runs in-process
 - **Vector Store**: ChromaDB for semantic search document store
 - **Deployment**: Docker Compose, blue/green zero-downtime via `deploy.sh`, nginx reverse proxy with caching
@@ -152,7 +152,7 @@ the residual.
 | 2 | Sentence-transformer cosine similarity | Industry, donor type, bill policy, party alignment, stance direction, procedural detection, skip entity detection, employer filtering, memo transfer detection, category normalization |
 | 2b | SVD / PageRank on cosponsorship matrix | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
 | 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills |
-| 4 | LLM (Qwen2.5 1.5B) | Narrative synthesis, promise analysis, summaries, action center issue summarization |
+| 4 | LLM (LFM2.5-1.2B-Instruct) | Narrative synthesis, promise analysis, summaries, action center issue summarization |
 
 When FEC metadata is ambiguous (e.g., entity_type "COM" could be a corporate
 employee PAC or a purely political PAC), the system defers to tier 2

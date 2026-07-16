@@ -886,7 +886,7 @@ export default function AboutPage() {
               <div>
                 <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">LLM (NARRATIVE SYNTHESIS)</h3>
                 <P>
-                  <Label>Qwen2.5 1.5B</Label> via llama.cpp
+                  <Label>LFM2.5-1.2B-Instruct</Label> via llama.cpp
                   <Cite id="16">Gerganov 2023</Cite> handles tasks requiring natural
                   language understanding and multi-step reasoning:
                 </P>
@@ -951,11 +951,11 @@ export default function AboutPage() {
               <div>
                 <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">MODEL AND ARCHITECTURE</h3>
                 <P>
-                  The inference model is <Label>Qwen2.5 1.5B</Label>, a compact open-weight
-                  language model running natively via llama.cpp
+                  The inference model is <Label>LFM2.5-1.2B-Instruct</Label>, a compact
+                  open-weight language model running natively via llama.cpp
                   <Cite id="16">Gerganov 2023</Cite> compiled with ARM-specific optimizations
-                  (cortex-a76, dot-product, fp16). This provides ~3x faster inference compared
-                  to containerized runtimes, generating ~8 tokens/second on the Raspberry Pi 5 CPU.
+                  (cortex-a76, dot-product, fp16). This provides faster inference compared
+                  to containerized runtimes, generating ~14 tokens/second on the Raspberry Pi 5 CPU.
                   Results are cached in a local database so each unique analysis is computed at most once.
                 </P>
                 <P>
@@ -1058,7 +1058,7 @@ export default function AboutPage() {
               <div>
                 <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">OPEN-WEIGHT MODEL</h3>
                 <P>
-                  We deliberately chose Qwen2.5, an open-weight model, over proprietary
+                  We deliberately chose LFM2.5, an open-weight model, over proprietary
                   alternatives like GPT-4 or Claude. This means: no per-token API costs that
                   could make the project financially unsustainable, no dependency on a third-party
                   company&apos;s continued service, full auditability of the model&apos;s behavior,
@@ -1108,7 +1108,7 @@ export default function AboutPage() {
               <Row label="Backend" value="Python 3.13, FastAPI, SQLAlchemy, SQLite" />
               <Row label="Frontend" value="Next.js 16, React 19, TypeScript, Tailwind CSS" />
               <Row label="Embedding Model" value="Snowflake Arctic-XS (22M params, Snowflake/HuggingFace)" />
-              <Row label="LLM Runtime" value="llama.cpp (native ARM build), Qwen2.5 1.5B" />
+              <Row label="LLM Runtime" value="llama.cpp (native ARM build), LFM2.5-1.2B-Instruct" />
               <Row label="Vector Database" value="ChromaDB (persistent, local)" />
               <Row label="Containers" value="Docker Compose (blue/green zero-downtime deploy via nginx)" />
               <Row label="Pipeline Schedule" value="Nightly at 3:00 AM via APScheduler" />
@@ -1137,7 +1137,7 @@ export default function AboutPage() {
             </P>
             <div className="space-y-2 mt-4">
               <Row label="SERVER" value="Raspberry Pi 5 — a $80 single-board computer" />
-              <Row label="LOCAL LLM" value="Qwen2.5 1.5B via Ollama/llama.cpp · runs entirely on-device, zero API cost" />
+              <Row label="LOCAL LLM" value="LFM2.5-1.2B-Instruct via Ollama/llama.cpp · runs entirely on-device, zero API cost" />
               <Row label="DATABASE" value="SQLite · no cloud database, no managed service" />
               <Row label="DEPLOYMENT" value="Blue-green via Docker Compose on a single machine" />
               <Row label="EXTERNAL APIs" value="Congress.gov, FEC.gov, Federal Register — all free and open" />

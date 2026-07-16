@@ -105,11 +105,11 @@ def promise_extraction_prompt(platform_text: str, senator_name: str) -> dict:
 
     Deliberately its own single-purpose call rather than one field in a
     larger prompt that also generates a voting summary, PAC analysis, and
-    key-vote reasoning in the same response — small local models (Qwen2.5
-    1.5B here) do measurably better on one focused extraction task than on
-    a bundled multi-field JSON response, and promise extraction is the one
-    field downstream fulfillment scoring depends on entirely, so it's worth
-    the extra call.
+    key-vote reasoning in the same response — small local models
+    (LFM2.5-1.2B-Instruct here) do measurably better on one focused
+    extraction task than on a bundled multi-field JSON response, and
+    promise extraction is the one field downstream fulfillment scoring
+    depends on entirely, so it's worth the extra call.
 
     No fixed count requested: the old "extract 4-8 commitments" instruction
     pressured the model to pad thin platform text with vague restatements
