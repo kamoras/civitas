@@ -18,6 +18,7 @@ import type { Senator } from "@/types/senator";
 import { calculateOverallScore, getScoreColor } from "@/lib/corruption";
 import { formatCurrency } from "@/lib/formatting";
 import { useScoreWeights } from "@/hooks/useConfig";
+import { useUserState } from "@/hooks/useUserState";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 
 type Chamber = "senate" | "house";
@@ -360,24 +361,20 @@ function ComparePageInner() {
   const [leftChamber, setLeftChamber] = useState<Chamber>("senate");
   const [rightChamber, setRightChamber] = useState<Chamber>("senate");
   const [hydrating, setHydrating] = useState(false);
-  const [savedState, setSavedState] = useState<string | null>(null);
+  const [savedState] = useUserState();
   const [savedStateName, setSavedStateName] = useState<string | null>(null);
   const [quickLoading, setQuickLoading] = useState(false);
 
-  // Read saved user state from localStorage (SSR-safe)
+  // Resolve the saved state code (from useUserState, SSR-safe) to a display name.
   useEffect(() => {
-    const stored = localStorage.getItem("civitas_user_state");
-    if (stored) {
-      setSavedState(stored);
-      // Resolve state name for display
-      fetchStates()
-        .then((states) => {
-          const match = states.find((s) => s.code === stored);
-          if (match) setSavedStateName(match.name);
-        })
-        .catch(() => {});
-    }
-  }, []);
+    if (!savedState) return;
+    fetchStates()
+      .then((states) => {
+        const match = states.find((s) => s.code === savedState);
+        if (match) setSavedStateName(match.name);
+      })
+      .catch(() => {});
+  }, [savedState]);
 
   // Hydrate from URL params on mount (only when sides are not already set)
   useEffect(() => {
