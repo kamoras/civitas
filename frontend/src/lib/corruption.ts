@@ -8,14 +8,14 @@ import type { JusticeScore } from "@/types/justice";
 // entirely (2026-07, ALGORITHM_VERSION v6.0) — see that file's docstring
 // for the empirical finding (0 of 100 senators reached even "medium"
 // promise-evaluation confidence).
-const DEFAULT_WEIGHTS: Record<string, number> = {
+export const DEFAULT_WEIGHTS: Record<string, number> = {
   fundingIndependence: 0.20,
   independentVoting: 0.33,
   fundingDiversity: 0.13,
   legislativeEffectiveness: 0.34,
 };
 
-const DEFAULT_PRESIDENT_WEIGHTS: Record<string, number> = {
+export const DEFAULT_PRESIDENT_WEIGHTS: Record<string, number> = {
   independence: 0.15,
   followThrough: 0.20,
   publicMandate: 0.15,

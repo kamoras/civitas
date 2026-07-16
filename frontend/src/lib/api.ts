@@ -4,6 +4,7 @@ import type { Justice, JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssuesResponse, MyRepsResponse } from "@/types/action";
 import type { PoliticianCard } from "@/types/politicians";
 import type { PaginatedBills } from "@/types/bill";
+import { DEFAULT_PRESIDENT_WEIGHTS, DEFAULT_WEIGHTS } from "@/lib/corruption";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -238,22 +239,10 @@ export interface AppConfig {
 }
 
 const DEFAULT_CONFIG: AppConfig = {
-  // Matches backend/app/config_definitions.py's SCORE_WEIGHTS — fallback
-  // used only if /api/config fails to load.
-  scoreWeights: {
-    fundingIndependence: 0.20,
-    independentVoting: 0.33,
-    fundingDiversity: 0.13,
-    legislativeEffectiveness: 0.34,
-  },
-  presidentScoreWeights: {
-    independence: 0.15,
-    followThrough: 0.20,
-    publicMandate: 0.15,
-    effectiveness: 0.20,
-    competence: 0.15,
-    agencyAlignment: 0.15,
-  },
+  // Shared with lib/corruption.ts's weightedScore fallback — see that
+  // file's comment for why these must stay in sync with the backend.
+  scoreWeights: DEFAULT_WEIGHTS,
+  presidentScoreWeights: DEFAULT_PRESIDENT_WEIGHTS,
   industries: {},
   platformCategories: {},
   policyAreas: [],
