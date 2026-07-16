@@ -1972,6 +1972,10 @@ _MONITOR_ISSUE_SIM = 0.70        # issue vs monitor-description (headline vs lon
 _MONITOR_ISSUE_TITLE_SIM = 0.62
 _MONITOR_ISSUE_SIM_HIGH = 0.80   # above this: skip LLM gate, auto-match
 _MONITOR_MERGE_SIM = 0.42
+# Above this, two monitors are similar enough to merge outright without the
+# LLM verification step below _MONITOR_MERGE_SIM uses — was a bare 0.55
+# duplicated at both monitor-merge call sites with no name or rationale.
+_MONITOR_AUTO_MERGE_SIM = 0.55
 # Headline-to-headline floor is ~0.74; use 0.83 to distinguish same-topic from
 # any-two-news-headlines so Step 3 doesn't create monitors for unrelated topics.
 _MONITOR_HISTORY_SIM = 0.83
@@ -2175,6 +2179,55 @@ def _merge_monitors(keep: NationalMonitor, absorb: NationalMonitor,
     db.delete(absorb)
 
 
+def _merge_similar_monitors(monitors: list[NationalMonitor], model, db: Session) -> bool:
+    """Pairwise-compare a monitor list and merge any that are similar
+    enough. Above _MONITOR_AUTO_MERGE_SIM, monitors merge outright;
+    between that and _MONITOR_MERGE_SIM, an LLM call verifies first.
+    Returns True if anything merged, so the caller knows to db.flush().
+
+    _update_national_monitors calls this twice — once for monitors that
+    existed before today's new ones are created, once again afterward to
+    catch newly-created near-duplicates — previously as two copy-pasted
+    loops.
+    """
+    if len(monitors) < 2:
+        return False
+
+    mon_embs = model.encode(
+        [f"{m.title} {m.description}" for m in monitors],
+        normalize_embeddings=True,
+    )
+    mon_title_embs = model.encode(
+        [m.title for m in monitors],
+        normalize_embeddings=True,
+    )
+    merged_ids: set[int] = set()
+    for a_idx in range(len(monitors)):
+        if monitors[a_idx].id in merged_ids:
+            continue
+        for b_idx in range(a_idx + 1, len(monitors)):
+            if monitors[b_idx].id in merged_ids:
+                continue
+            full_sim = float((mon_embs[a_idx] @ mon_embs[b_idx].T).item())
+            title_sim = float((mon_title_embs[a_idx] @ mon_title_embs[b_idx].T).item())
+
+            should_merge = False
+            if full_sim >= _MONITOR_AUTO_MERGE_SIM or title_sim >= _MONITOR_AUTO_MERGE_SIM:
+                should_merge = True
+            elif full_sim >= _MONITOR_MERGE_SIM or title_sim >= _MONITOR_MERGE_SIM:
+                should_merge = _should_merge_monitors_llm(monitors[a_idx], monitors[b_idx], db)
+
+            if should_merge:
+                keep = monitors[a_idx]
+                absorb = monitors[b_idx]
+                if len(keep.updates or []) < len(absorb.updates or []):
+                    keep, absorb = absorb, keep
+                _merge_monitors(keep, absorb, db)
+                merged_ids.add(absorb.id)
+
+    return bool(merged_ids)
+
+
 def _generate_monitor_metadata(
     issue: ActionIssue,
     past_issues: list[ActionIssue],
@@ -2264,46 +2317,9 @@ def _update_national_monitors(today: str, db: Session) -> None:
 
     # Step 1: Merge any existing monitors that are too similar to each other.
     _set_refresh_state(stage_detail="1/4 dedup")
-    if len(existing_monitors) >= 2:
-        mon_embs = model.encode(
-            [f"{m.title} {m.description}" for m in existing_monitors],
-            normalize_embeddings=True,
-        )
-        mon_title_embs = model.encode(
-            [m.title for m in existing_monitors],
-            normalize_embeddings=True,
-        )
-        merged_ids: set[int] = set()
-        for a_idx in range(len(existing_monitors)):
-            if existing_monitors[a_idx].id in merged_ids:
-                continue
-            for b_idx in range(a_idx + 1, len(existing_monitors)):
-                if existing_monitors[b_idx].id in merged_ids:
-                    continue
-                full_sim = float((mon_embs[a_idx] @ mon_embs[b_idx].T).item())
-                title_sim = float((mon_title_embs[a_idx] @ mon_title_embs[b_idx].T).item())
-                
-                # Use a tiered merge logic
-                should_merge = False
-                if full_sim >= 0.55 or title_sim >= 0.55:
-                    should_merge = True
-                elif full_sim >= _MONITOR_MERGE_SIM or title_sim >= _MONITOR_MERGE_SIM:
-                    # Moderate similarity - use LLM to verify
-                    should_merge = _should_merge_monitors_llm(
-                        existing_monitors[a_idx], existing_monitors[b_idx], db
-                    )
-
-                if should_merge:
-                    keep = existing_monitors[a_idx]
-                    absorb = existing_monitors[b_idx]
-                    if len(keep.updates or []) < len(absorb.updates or []):
-                        keep, absorb = absorb, keep
-                    _merge_monitors(keep, absorb, db)
-                    merged_ids.add(absorb.id)
-
-        if merged_ids:
-            db.flush()
-            existing_monitors = db.query(NationalMonitor).all()
+    if _merge_similar_monitors(existing_monitors, model, db):
+        db.flush()
+        existing_monitors = db.query(NationalMonitor).all()
 
     # Step 2: Match today's issues to existing monitors and add updates
     _set_refresh_state(stage_detail="2/4 matching")
@@ -2496,42 +2512,8 @@ def _update_national_monitors(today: str, db: Session) -> None:
 
     # Step 3b: Re-merge after creating new monitors.
     all_monitors = db.query(NationalMonitor).all()
-    if len(all_monitors) >= 2:
-        mon_embs2 = model.encode(
-            [f"{m.title} {m.description}" for m in all_monitors],
-            normalize_embeddings=True,
-        )
-        mon_title_embs2 = model.encode(
-            [m.title for m in all_monitors],
-            normalize_embeddings=True,
-        )
-        merged_ids2: set[int] = set()
-        for a_idx in range(len(all_monitors)):
-            if all_monitors[a_idx].id in merged_ids2:
-                continue
-            for b_idx in range(a_idx + 1, len(all_monitors)):
-                if all_monitors[b_idx].id in merged_ids2:
-                    continue
-                full_sim = float((mon_embs2[a_idx] @ mon_embs2[b_idx].T).item())
-                title_sim = float((mon_title_embs2[a_idx] @ mon_title_embs2[b_idx].T).item())
-                
-                should_merge = False
-                if full_sim >= 0.55 or title_sim >= 0.55:
-                    should_merge = True
-                elif full_sim >= _MONITOR_MERGE_SIM or title_sim >= _MONITOR_MERGE_SIM:
-                    should_merge = _should_merge_monitors_llm(
-                        all_monitors[a_idx], all_monitors[b_idx], db
-                    )
-
-                if should_merge:
-                    keep = all_monitors[a_idx]
-                    absorb = all_monitors[b_idx]
-                    if len(keep.updates or []) < len(absorb.updates or []):
-                        keep, absorb = absorb, keep
-                    _merge_monitors(keep, absorb, db)
-                    merged_ids2.add(absorb.id)
-        if merged_ids2:
-            db.flush()
+    if _merge_similar_monitors(all_monitors, model, db):
+        db.flush()
 
     # Step 4: Lifecycle management — watching, closing, and cleaning up
     _set_refresh_state(stage_detail="4/4 lifecycle")
