@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import MatrixRain from "@/components/effects/MatrixRain";
@@ -20,6 +20,25 @@ import type { JusticeLeaderboardEntry } from "@/types/justice";
 
 type PartyFilter = "ALL" | "D" | "R" | "I";
 type SortKey = "score" | "pac_dollars" | "pac_pct";
+
+// Row-navigation onClick/onKeyDown pair, identical across the president,
+// justice, and senate/house tables below (previously copy-pasted 3x,
+// each using window.location.href — a full page reload instead of a
+// client-side transition). A plain function, not a hook: it's called
+// once per row inside .map(), which a hook can't be (Rules of Hooks).
+// The router itself still comes from useRouter() called once at the top
+// of each table component.
+function rowNavProps(router: ReturnType<typeof useRouter>, href: string) {
+  return {
+    onClick: () => router.push(href),
+    onKeyDown: (e: KeyboardEvent) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        router.push(href);
+      }
+    },
+  };
+}
 
 function rankColor(rank: number): string {
   if (rank === 1) return "text-matrix-green neon-green";
@@ -132,6 +151,7 @@ function PresidentLeaderboard({
   loading: boolean;
   error: string | null;
 }) {
+  const router = useRouter();
   if (loading) {
     return (
       <div className="terminal-window p-8 text-center" role="status" aria-live="polite">
@@ -178,8 +198,7 @@ function PresidentLeaderboard({
                     }`}
                     tabIndex={0}
                     aria-label={`View profile for ${entry.name}, rank ${rank}`}
-                    onClick={() => (window.location.href = `/politicians/${entry.id}`)}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); window.location.href = `/politicians/${entry.id}`; } }}
+                    {...rowNavProps(router, `/politicians/${entry.id}`)}
                   >
                     <td className="px-4 py-3">
                       <span className={`font-bold text-lg ${rankColor(rank)}`}>#{rank}</span>
@@ -304,6 +323,7 @@ function JusticeLeaderboard({
   loading: boolean;
   error: string | null;
 }) {
+  const router = useRouter();
   if (loading) {
     return (
       <div className="terminal-window p-8 text-center" role="status" aria-live="polite">
@@ -351,8 +371,7 @@ function JusticeLeaderboard({
                     }`}
                     tabIndex={0}
                     aria-label={`View profile for ${entry.name}, rank ${rank}`}
-                    onClick={() => (window.location.href = `/politicians/${entry.id}`)}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); window.location.href = `/politicians/${entry.id}`; } }}
+                    {...rowNavProps(router, `/politicians/${entry.id}`)}
                   >
                     <td className="px-4 py-3">
                       <span className={`font-bold text-lg ${rankColor(rank)}`}>#{rank}</span>
@@ -461,6 +480,7 @@ function JusticeLeaderboard({
 }
 
 function LeaderboardContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const initialBranch = (searchParams.get("branch") as Branch) || "senate";
   const [branch, setBranchState] = useState<Branch>(initialBranch);
@@ -700,8 +720,7 @@ function LeaderboardContent() {
                         }`}
                         tabIndex={0}
                         aria-label={`View profile for ${entry.name}, ${entry.state}, rank ${rank}, score ${score}`}
-                        onClick={() => { window.location.href = `/politicians/${entry.id}`; }}
-                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); window.location.href = `/politicians/${entry.id}`; } }}
+                        {...rowNavProps(router, `/politicians/${entry.id}`)}
                       >
                         <td className="px-4 py-3">
                           <span className={`font-bold text-lg ${rankColor(rank)}`}>
