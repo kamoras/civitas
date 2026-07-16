@@ -40,3 +40,18 @@ export const PARTY_LABELS: Record<string, string> = {
   R: "REPUBLICAN",
   I: "INDEPENDENT",
 };
+
+// Combined text+border+bg badge/pill className, keyed by party code (plus
+// "bipartisan" for bill-sponsorship badges — a different concept than an
+// individual member's party, but the same visual treatment as I). Copy-
+// pasted verbatim (VotingRecord.tsx, SponsoredBills.tsx) or reimplemented
+// with a drifting bg/border opacity (BillRow.tsx used bg-*/10 already
+// matching this; leaderboard/page.tsx used bg-*/20 + border-*/40, an
+// undocumented, more-saturated variant of the same badge) before this
+// extraction.
+export const PARTY_BADGE: Record<string, { label: string; className: string }> = {
+  D: { label: "D", className: `${PARTY_COLORS.D} ${PARTY_BORDER.D} bg-dem-blue/10` },
+  R: { label: "R", className: `${PARTY_COLORS.R} ${PARTY_BORDER.R} bg-rep-red/10` },
+  I: { label: "I", className: `${PARTY_COLORS.I} ${PARTY_BORDER.I} bg-ind-purple/10` },
+  bipartisan: { label: "BP", className: `${PARTY_COLORS.I} ${PARTY_BORDER.I} bg-ind-purple/10` },
+};
