@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.config_definitions import BillStage
 from app.models import ActionIssue, Representative, RepSponsoredBill, Senator, SponsoredBill
 from app.schemas import BillInFlightSchema, PaginatedBillsSchema
 
@@ -106,7 +107,7 @@ def _collect_bills(db: Session) -> list[_Row]:
                 introduced_date=sp.introduced_date,
                 latest_action=sp.latest_action,
                 latest_action_date=sp.latest_action_date,
-                stage=sp.stage or "INTRODUCED",
+                stage=sp.stage or BillStage.INTRODUCED,
                 policy_area=sp.policy_area,
                 congress=sp.congress,
                 bill_type=sp.bill_type,
@@ -138,7 +139,7 @@ def _collect_bills(db: Session) -> list[_Row]:
                 introduced_date=sp.introduced_date,
                 latest_action=sp.latest_action,
                 latest_action_date=sp.latest_action_date,
-                stage=sp.stage or "INTRODUCED",
+                stage=sp.stage or BillStage.INTRODUCED,
                 policy_area=sp.policy_area,
                 congress=sp.congress,
                 bill_type=sp.bill_type,

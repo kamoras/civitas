@@ -5,6 +5,8 @@ hardcode industry codes, category labels, score weights, or policy areas.
 Backend modules import from here instead of defining their own copies.
 """
 
+from enum import StrEnum
+
 
 # Weight rationale (2026-07 composite-validity audit): fundingIndependence
 # and fundingDiversity correlate at r=0.72 across the live Senate population
@@ -127,3 +129,8 @@ BILL_STAGES: dict[str, dict] = {
     "ENACTED":          {"name": "Enacted",            "color": "#00ff41", "order": 6},
     "VETOED":           {"name": "Vetoed",             "color": "#ef4444", "order": 7},
 }
+
+# Derived from BILL_STAGES's keys rather than listed separately, so a code
+# (bill_stage.py, bill_service.py) can compare/assign `BillStage.ENACTED`
+# instead of a bare string, with zero risk of the two lists drifting apart.
+BillStage = StrEnum("BillStage", {stage: stage for stage in BILL_STAGES})

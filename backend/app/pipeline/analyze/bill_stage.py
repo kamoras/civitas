@@ -32,45 +32,47 @@ type + text check, and failing that, to _FALLBACK_STAGE — never a
 confident wrong answer.
 """
 
-_FALLBACK_STAGE = "INTRODUCED"
+from app.config_definitions import BillStage
+
+_FALLBACK_STAGE = BillStage.INTRODUCED
 
 # Empirically observed (type, actionCode) -> stage, keyed by actionCode
 # alone (actionCode is unique across types in practice). See module
 # docstring for how this was derived.
-_ACTION_CODE_STAGE: dict[str, str] = {
+_ACTION_CODE_STAGE: dict[str, BillStage] = {
     # Introduction
-    "1000": "INTRODUCED",       # Introduced in House
-    "10000": "INTRODUCED",      # Introduced in Senate
-    "Intro-H": "INTRODUCED",    # Introduced in House (House-system code)
-    "B00100": "INTRODUCED",     # Sponsor introductory remarks on measure
+    "1000": BillStage.INTRODUCED,       # Introduced in House
+    "10000": BillStage.INTRODUCED,      # Introduced in Senate
+    "Intro-H": BillStage.INTRODUCED,    # Introduced in House (House-system code)
+    "B00100": BillStage.INTRODUCED,     # Sponsor introductory remarks on measure
     # Committee
-    "H11100": "IN_COMMITTEE",   # Referred to committee
-    "H11000": "IN_COMMITTEE",   # Referred to subcommittee
-    "H12410": "IN_COMMITTEE",   # Placed on the Union Calendar
-    "H19000": "IN_COMMITTEE",   # Ordered to be reported (by yeas/nays)
-    "H21000": "IN_COMMITTEE",   # Subcommittee hearings held
-    "H15001": "IN_COMMITTEE",   # Committee consideration / mark-up held
+    "H11100": BillStage.IN_COMMITTEE,   # Referred to committee
+    "H11000": BillStage.IN_COMMITTEE,   # Referred to subcommittee
+    "H12410": BillStage.IN_COMMITTEE,   # Placed on the Union Calendar
+    "H19000": BillStage.IN_COMMITTEE,   # Ordered to be reported (by yeas/nays)
+    "H21000": BillStage.IN_COMMITTEE,   # Subcommittee hearings held
+    "H15001": BillStage.IN_COMMITTEE,   # Committee consideration / mark-up held
     # Passed the originating chamber
-    "17000": "PASSED_CHAMBER",  # Passed/agreed to in Senate
-    "8000": "PASSED_CHAMBER",   # Passed/agreed to in House
-    "H1B000": "PASSED_CHAMBER", # Considered passed under a self-executing rule
-    "H37300": "PASSED_CHAMBER", # Motion to suspend rules and pass, agreed to
-    "H38310": "PASSED_CHAMBER", # Motion to reconsider laid on the table (post-passage)
-    "H38800": "PASSED_CHAMBER", # Title amended, agreed to (post-passage)
+    "17000": BillStage.PASSED_CHAMBER,  # Passed/agreed to in Senate
+    "8000": BillStage.PASSED_CHAMBER,   # Passed/agreed to in House
+    "H1B000": BillStage.PASSED_CHAMBER, # Considered passed under a self-executing rule
+    "H37300": BillStage.PASSED_CHAMBER, # Motion to suspend rules and pass, agreed to
+    "H38310": BillStage.PASSED_CHAMBER, # Motion to reconsider laid on the table (post-passage)
+    "H38800": BillStage.PASSED_CHAMBER, # Title amended, agreed to (post-passage)
     # Sitting in the other chamber, not yet referred there
-    "H14000": "IN_OTHER_CHAMBER",  # Received in the House
-    "H15000": "IN_OTHER_CHAMBER",  # Held at the desk
+    "H14000": BillStage.IN_OTHER_CHAMBER,  # Received in the House
+    "H15000": BillStage.IN_OTHER_CHAMBER,  # Held at the desk
     # To the President
-    "E20000": "TO_PRESIDENT",   # Presented to President (House-recorded)
-    "28000": "TO_PRESIDENT",    # Presented to President (LOC-recorded)
+    "E20000": BillStage.TO_PRESIDENT,   # Presented to President (House-recorded)
+    "28000": BillStage.TO_PRESIDENT,    # Presented to President (LOC-recorded)
     # Enacted
-    "36000": "ENACTED",         # Became Public Law / Signed by President
-    "E30000": "ENACTED",        # Signed by President
-    "E40000": "ENACTED",        # Became Public Law
+    "36000": BillStage.ENACTED,         # Became Public Law / Signed by President
+    "E30000": BillStage.ENACTED,        # Signed by President
+    "E40000": BillStage.ENACTED,        # Became Public Law
 }
 
 
-def _stage_from_type_and_text(action_type: str | None, text: str) -> str | None:
+def _stage_from_type_and_text(action_type: str | None, text: str) -> BillStage | None:
     """Fallback for actions whose actionCode is missing or unmapped.
 
     Congress.gov's `type` is coarser than actionCode (e.g. "Floor" covers
@@ -81,25 +83,25 @@ def _stage_from_type_and_text(action_type: str | None, text: str) -> str | None:
     """
     text_lower = text.lower()
     if action_type == "BecameLaw":
-        return "ENACTED"
+        return BillStage.ENACTED
     if action_type == "President":
         if "veto" in text_lower:
-            return "VETOED"
+            return BillStage.VETOED
         if "public law" in text_lower or "signed" in text_lower:
-            return "ENACTED"
-        return "TO_PRESIDENT"
+            return BillStage.ENACTED
+        return BillStage.TO_PRESIDENT
     if action_type == "IntroReferral":
         # Senate often combines receipt/introduction and committee
         # referral into one action with no actionCode, e.g. "Read twice
         # and referred to the Committee on ..." or "Received in the
         # Senate and Read twice and referred to the Committee on ...".
-        return "IN_COMMITTEE" if "referred" in text_lower else "INTRODUCED"
+        return BillStage.IN_COMMITTEE if "referred" in text_lower else BillStage.INTRODUCED
     if action_type in ("Committee", "Calendars"):
-        return "IN_COMMITTEE"
+        return BillStage.IN_COMMITTEE
     return None
 
 
-def classify_bill_stage_from_actions(actions: list[dict], is_law: bool = False) -> str:
+def classify_bill_stage_from_actions(actions: list[dict], is_law: bool = False) -> BillStage:
     """Classify a bill's current stage from its Congress.gov action history.
 
     `actions` is the raw list from GET .../actions (newest first).
@@ -107,7 +109,7 @@ def classify_bill_stage_from_actions(actions: list[dict], is_law: bool = False) 
     and short-circuits to ENACTED regardless of the action list.
     """
     if is_law:
-        return "ENACTED"
+        return BillStage.ENACTED
 
     if not actions:
         return _FALLBACK_STAGE
