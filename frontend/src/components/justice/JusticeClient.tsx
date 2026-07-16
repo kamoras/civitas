@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import { fetchJustice, fetchJusticeLeaderboard } from "@/lib/api";
 import { calculateJusticeScore, getJusticeLabel, getScoreColor, getScoreBgColor } from "@/lib/corruption";
+import ScoreBreakdownPanel from "@/components/shared/ScoreBreakdownPanel";
 import type { Justice, JusticeLeaderboardEntry, JusticeScore } from "@/types/justice";
 
 const PARTY_BADGE: Record<string, { label: string; color: string; bg: string; border: string }> = {
@@ -39,7 +40,7 @@ const METRIC_LABELS: { key: keyof JusticeScore; label: string; desc: string }[] 
   },
 ];
 
-function MetricBar({ label, value, desc }: { label: string; value: number; desc: string }) {
+function MetricBar({ label, value, desc, entityId, dimensionKey }: { label: string; value: number; desc: string; entityId?: string; dimensionKey?: string }) {
   const color = getScoreBgColor(value);
 
   return (
@@ -64,6 +65,9 @@ function MetricBar({ label, value, desc }: { label: string; value: number; desc:
       <p className="text-[10px] text-matrix-green/50 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
         {desc}
       </p>
+      {entityId && dimensionKey && (
+        <ScoreBreakdownPanel entityType="justice" entityId={entityId} dimensionKey={dimensionKey} label={label} />
+      )}
     </div>
   );
 }
@@ -186,7 +190,7 @@ export function JusticeCard({ justice }: { justice: Justice }) {
           <h3 className="text-xs text-matrix-green/50 tracking-widest mb-4">JURISPRUDENTIAL CONSISTENCY</h3>
           <div className="space-y-3">
             {METRIC_LABELS.map(({ key, label, desc }) => (
-              <MetricBar key={key} label={label} value={justice.score[key]} desc={desc} />
+              <MetricBar key={key} label={label} value={justice.score[key]} desc={desc} entityId={justice.id} dimensionKey={key} />
             ))}
           </div>
         </div>

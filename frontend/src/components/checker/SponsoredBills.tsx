@@ -4,7 +4,7 @@ import { useState } from "react";
 import { SponsoredBill } from "@/types/senator";
 import { billUrl } from "@/lib/sources";
 import { safeHref } from "@/lib/formatting";
-import CollapsibleSection from "./CollapsibleSection";
+import CollapsibleSection from "../shared/CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
 import { PARTY_BADGE } from "@/lib/partyStyles";
 

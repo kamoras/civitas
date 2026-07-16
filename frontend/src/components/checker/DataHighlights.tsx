@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Senator } from "@/types/senator";
 import { generateCommentary } from "@/data/commentary";
 import { fetchRepHighlights, fetchSenatorHighlights } from "@/lib/api";
-import CollapsibleSection from "./CollapsibleSection";
+import CollapsibleSection from "../shared/CollapsibleSection";
 
 interface DataHighlightsProps {
   senator: Senator;

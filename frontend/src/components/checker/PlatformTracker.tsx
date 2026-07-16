@@ -2,7 +2,7 @@ import { CampaignPromise, PartisanDepth } from "@/types/senator";
 import { useCategoryLabel, usePolicyLabel } from "@/hooks/useConfig";
 import { voteSourceUrl } from "@/lib/sources";
 import { safeHref } from "@/lib/formatting";
-import CollapsibleSection from "./CollapsibleSection";
+import CollapsibleSection from "../shared/CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
 
 interface PlatformTrackerProps {

@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import { fetchPresident, fetchPresidentLeaderboard } from "@/lib/api";
 import { calculatePresidentScore, getScoreColor, getScoreBgColor, getScoreLabel } from "@/lib/corruption";
+import ScoreBreakdownPanel from "@/components/shared/ScoreBreakdownPanel";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 
 const PARTY_META: Record<string, { label: string; color: string; bg: string; border: string }> = {
@@ -29,7 +30,7 @@ const METRIC_LABELS: { key: keyof President["score"]; label: string; desc: strin
   { key: "agencyAlignment", label: "AGENCY ALIGNMENT", desc: "How effectively federal agencies execute the president's agenda through rulemaking" },
 ];
 
-function MetricBar({ label, value, desc, isEstimate }: { label: string; value: number; desc: string; isEstimate?: boolean }) {
+function MetricBar({ label, value, desc, isEstimate, entityId, dimensionKey }: { label: string; value: number; desc: string; isEstimate?: boolean; entityId?: string; dimensionKey?: string }) {
   const color = getScoreBgColor(value);
 
   return (
@@ -64,6 +65,9 @@ function MetricBar({ label, value, desc, isEstimate }: { label: string; value: n
       <p className="text-[10px] text-matrix-green/50 mt-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
         {desc}
       </p>
+      {entityId && dimensionKey && (
+        <ScoreBreakdownPanel entityType="president" entityId={entityId} dimensionKey={dimensionKey} label={label} />
+      )}
     </div>
   );
 }
@@ -181,6 +185,8 @@ export function PresidentCard({ president }: { president: President }) {
                 value={president.score[key]}
                 desc={desc}
                 isEstimate={alwaysEstimate || (key === "competence" && !president.competenceHasLiveData)}
+                entityId={president.id}
+                dimensionKey={key}
               />
             ))}
           </div>
