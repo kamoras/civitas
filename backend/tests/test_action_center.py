@@ -17,6 +17,7 @@ from app.pipeline.analyze.action_center import (
     _story_word_target,
     _full_story_should_invalidate,
     _check_summary_roles,
+    _fix_impossible_senate_vote_counts,
 )
 
 
@@ -427,3 +428,37 @@ class TestCheckSummaryRoles:
         accurate, reason = _check_summary_roles("Some summary.", "source text", mock_db)
 
         assert accurate is True
+
+
+class TestFixImpossibleSenateVoteCounts:
+    """The Senate has 100 members, so any reported vote tally >100 total
+    is physically impossible for the Senate — it can only be a House
+    roll call. Confirmed live 2026-07: a generated fact read 'The bill
+    passed the Senate with a vote of 226-195' for a story where the bill
+    passed the House 226-195 and was later taken up in the Senate."""
+
+    def test_corrects_impossible_senate_vote_to_house(self):
+        text = "The bill passed the Senate with a vote of 226-195."
+        assert _fix_impossible_senate_vote_counts(text) == "The bill passed the House with a vote of 226-195."
+
+    def test_corrects_across_word_variants_of_tally(self):
+        text = "The proposal gained traction in the Senate, where it passed with a vote of 226 to 195."
+        result = _fix_impossible_senate_vote_counts(text)
+        assert "House" in result
+        assert "passed with a vote of 226 to 195" in result
+
+    def test_leaves_plausible_senate_vote_unchanged(self):
+        # 51 + 49 = 100, exactly at the Senate's ceiling — plausible.
+        text = "The bill passed the Senate with a vote of 51-49."
+        assert _fix_impossible_senate_vote_counts(text) == text
+
+    def test_leaves_already_correct_house_mention_unchanged(self):
+        text = "The bill passed the House 226-195 and now moves to the Senate for consideration."
+        assert _fix_impossible_senate_vote_counts(text) == text
+
+    def test_empty_string_returns_unchanged(self):
+        assert _fix_impossible_senate_vote_counts("") == ""
+
+    def test_no_vote_tally_returns_unchanged(self):
+        text = "The Senate is expected to take up the bill next week."
+        assert _fix_impossible_senate_vote_counts(text) == text

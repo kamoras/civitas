@@ -1879,7 +1879,7 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
             logger.warning("Full story generation returned no result for issue %s", issue.id)
             return None
 
-        story = result["story"].strip()
+        story = _fix_impossible_senate_vote_counts(result["story"].strip())
         if len(story) < 200:
             logger.warning("Full story too short (%d chars) for issue %s", len(story), issue.id)
             return None
@@ -2660,6 +2660,63 @@ def _validate_geographic_consistency(title: str, source_titles: list[str]) -> st
     return fixed if len(fixed) >= 10 else title
 
 
+# The Senate has 100 members, so any reported vote tally whose yeas+nays
+# exceeds 100 is physically impossible for the Senate — it can only be a
+# House roll call (435 members). Confirmed live 2026-07: a generated fact
+# read "The bill passed the Senate with a vote of 226-195" for a story
+# where the bill passed the House 226-195 and was later taken up in the
+# Senate — the model correctly extracted a real number from the source
+# article but attached the wrong chamber label from elsewhere in the
+# same article. Unlike most hallucination guards in this file, this one
+# doesn't just drop the offending content: because only two chambers
+# exist and only the Senate has this hard 100-member ceiling, "count
+# exceeds 100 and is currently labeled Senate" has exactly one possible
+# correction, deterministically.
+SENATE_MAX_MEMBERS = 100
+_VOTE_TALLY_RE = re.compile(r'\b(\d{1,3})\s*(?:-|to|–|—)\s*(\d{1,3})\b')
+_SENATE_WORD_RE = re.compile(r'\bSenate\b')
+_HOUSE_WORD_RE = re.compile(r'\bHouse\b')
+_CHAMBER_LOOKBACK_CHARS = 80
+
+
+def _fix_impossible_senate_vote_counts(text: str) -> str:
+    """Correct 'Senate' to 'House' when the nearest vote tally before it
+    exceeds the Senate's 100-member ceiling. See module-level comment
+    above _VOTE_TALLY_RE for the real case this was found from."""
+    if not text:
+        return text
+
+    replacements: list[tuple[int, int]] = []  # (start, end) spans to become "House"
+    for m in _VOTE_TALLY_RE.finditer(text):
+        total = int(m.group(1)) + int(m.group(2))
+        if total <= SENATE_MAX_MEMBERS:
+            continue  # plausible for either chamber — not this function's problem
+
+        window_start = max(0, m.start() - _CHAMBER_LOOKBACK_CHARS)
+        window = text[window_start:m.start()]
+        senate_hits = list(_SENATE_WORD_RE.finditer(window))
+        house_hits = list(_HOUSE_WORD_RE.finditer(window))
+        if not senate_hits or house_hits:
+            # No nearby "Senate" to fix, or "House" already mentioned
+            # closer/at all in the window — ambiguous, leave untouched
+            # rather than guess.
+            continue
+        nearest = senate_hits[-1]
+        replacements.append((window_start + nearest.start(), window_start + nearest.end()))
+
+    if not replacements:
+        return text
+
+    logger.warning(
+        "Correcting %d impossible Senate vote-count mention(s) (>100 total) to House: %s",
+        len(replacements), text[:120],
+    )
+    fixed = text
+    for start, end in sorted(replacements, reverse=True):
+        fixed = fixed[:start] + "House" + fixed[end:]
+    return fixed
+
+
 _ROLE_CHECK_SYSTEM = (
     "You are a rigorous fact-checker. You check ONE thing: whether a summary "
     "correctly attributes actions and outcomes to the right people — who did "
@@ -2878,13 +2935,14 @@ def _run_refresh(db: Session) -> int:
             continue
 
         title = llm_result.get("title", cluster[0].title)
-        summary = llm_result.get("summary", "")
+        summary = _fix_impossible_senate_vote_counts(llm_result.get("summary", ""))
         facts = _validate_facts(
             llm_result.get("facts", []),
             source_text=" ".join(
                 f"{a.title} {a.summary}" for a in filtered_cluster
             ),
         )
+        facts = [_fix_impossible_senate_vote_counts(f) for f in facts]
 
         title = _validate_geographic_consistency(title, [a.title for a in filtered_cluster])
 
