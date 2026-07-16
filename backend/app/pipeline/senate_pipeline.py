@@ -236,6 +236,7 @@ def upsert_senator(db: Session, data: dict) -> None:
         "total_raised": funding.get("totalRaised") or 0,
         "total_from_pacs": funding.get("totalFromPACs") or 0,
         "small_donor_percentage": funding.get("smallDonorPercentage") or 0,
+        "outside_spending_for": funding.get("outsideSpendingFor"),
         "voting_summary": (data.get("votingRecord") or {}).get("votingSummary") or "",
         "platform_summary": data.get("platformSummary") or "",
         "website_url": data.get("officialWebsiteUrl") or "",
@@ -330,6 +331,7 @@ def upsert_senator(db: Session, data: dict) -> None:
                     match_data.get("billsInfluenced") or []
                 ),
                 senator_vote_aligned=match_data.get("senatorVoteAligned"),
+                is_consensus_vote=match_data.get("isConsensusVote"),
                 description=match_data.get("description") or "",
             )
         )

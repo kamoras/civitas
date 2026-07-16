@@ -442,6 +442,45 @@ def calculate_scores(
     }
 
 
+def explain_scores(senator: dict) -> dict:
+    """Full derivation for each currently-scored dimension — mirrors
+    calculate_scores() but returns the component-level breakdown each
+    _x_core() function already computes, instead of just the final int.
+
+    On-demand only (called from a dedicated API endpoint when a user
+    expands a score's "show the math" panel); never called from the
+    nightly pipeline. Promise Persistence is omitted — it was removed as
+    a scored dimension in v6.0 and has no score bar to attach a
+    breakdown to.
+
+    Shared by both senators and representatives, same as calculate_scores
+    above — both entity types assemble the same dict shape.
+    """
+    voting_record = senator.get("votingRecord", {})
+    funding = senator.get("funding", {})
+    lobbying_matches = senator.get("lobbyingMatches", [])
+
+    return {
+        "fundingIndependence": _funding_independence_core(funding),
+        "independentVoting": _constituent_alignment_core(
+            voting_record,
+            lobbying_matches,
+            funding,
+            senator.get("state", ""),
+            senator.get("party", "I"),
+            bipartisanship=senator.get("bipartisanshipScore"),
+            district=senator.get("district"),
+        ),
+        "fundingDiversity": _funding_diversity_core(funding),
+        "legislativeEffectiveness": _legislative_effectiveness_core(
+            senator.get("sponsoredBills", []),
+            senator.get("leadershipScore"),
+            party=voting_record.get("effectiveParty") or senator.get("party", "I"),
+            years_in_office=senator.get("yearsInOffice"),
+        ),
+    }
+
+
 def calculate_confidence(senator: dict) -> dict[str, str]:
     """Data-sufficiency confidence per dimension: "high" | "medium" | "low".
 
@@ -541,9 +580,17 @@ def _calc_funding_independence(funding: dict) -> int:
     Public Choice 124(1–2), 135–156) confirms the linear PAC-dependency
     relationship in the relevant range.
     """
+    return _funding_independence_core(funding)["score"]
+
+
+def _funding_independence_core(funding: dict) -> dict:
+    """Same math as _calc_funding_independence, returning every intermediate
+    value alongside the final score. Single implementation — _calc_funding_
+    independence and the on-demand explain_scores() breakdown both call this;
+    neither reimplements the formula separately."""
     total_raised = funding.get("totalRaised", 0)
     if not total_raised or total_raised == 0:
-        return 50
+        return {"score": 50, "components": [], "note": "No funding data — neutral default."}
 
     # Component 1: PAC dependency incl. outside spending (50% weight)
     pac_total = funding.get("totalFromPACs", 0)
@@ -590,13 +637,47 @@ def _calc_funding_independence(funding: dict) -> int:
         concentration = sum(d.get("total", 0) for d in external[:10]) / pool
         # Linear map: 0.20 → 100, 1.00 → 0 (median 0.60 → 50)
         concentration_score = max(0.0, min(1.0, (1.0 - concentration) / 0.8)) * 100
+        concentration_detail = (
+            f"top 10 of {len(external)} external donors = {concentration:.0%} "
+            f"of the ${pool:,.0f} itemized external donor pool"
+        )
     else:
         # Too few itemized external donors to measure concentration.
         concentration_score = 50.0
+        concentration_detail = (
+            f"only {len(external)} itemized external donors (${pool:,.0f} pool) "
+            "— too few to measure concentration, neutral 50"
+        )
 
-    return clamp(
-        pac_score * 0.50 + small_score * 0.25 + concentration_score * 0.25
-    )
+    score = clamp(pac_score * 0.50 + small_score * 0.25 + concentration_score * 0.25)
+    return {
+        "score": score,
+        "components": [
+            {
+                "label": "PAC dependency",
+                "weight": 0.50,
+                "score": round(pac_score, 1),
+                "detail": (
+                    f"{pac_ratio:.0%} of ${total_raised:,.0f} raised came from PACs"
+                    + (" (incl. outside spending)" if outside_for > 0 else "")
+                    + f" → raw {ratio_score:.1f}, scaled ×{volume_factor:.2f} for "
+                    f"${pac_total:,.0f} in absolute PAC dollars"
+                ),
+            },
+            {
+                "label": "Small-donor share",
+                "weight": 0.25,
+                "score": round(small_score, 1),
+                "detail": f"{small_pct:.0f}% of funding from small (<$200) donors",
+            },
+            {
+                "label": "Top-donor concentration",
+                "weight": 0.25,
+                "score": round(concentration_score, 1),
+                "detail": concentration_detail,
+            },
+        ],
+    }
 
 
 ADVOCACY_WEIGHT = 0.15
@@ -851,6 +932,23 @@ def _calc_constituent_alignment(
     and gave bigger fundraisers more exemptions. Seat-relative
     expectations now carry the constituent-representation adjustment.
     """
+    return _constituent_alignment_core(
+        voting_record, lobbying_matches, funding, state, party, bipartisanship, district,
+    )["score"]
+
+
+def _constituent_alignment_core(
+    voting_record: dict,
+    lobbying_matches: list[dict],
+    funding: dict,
+    state: str = "",
+    party: str = "I",
+    bipartisanship: float | None = None,
+    district: int | None = None,
+) -> dict:
+    """Same math as _calc_constituent_alignment, returning every intermediate
+    value alongside the final score. Single implementation, same reuse
+    contract as _funding_independence_core above."""
     effective_party = voting_record.get("effectiveParty", party)
     alignment = _signed_state_alignment(
         state, party, effective_party=effective_party, district=district,
@@ -930,6 +1028,7 @@ def _calc_constituent_alignment(
             deficit = expected - against_pct
             party_score = 50.0 - 25.0 * min(deficit / 0.10, 1.0)
     else:
+        against_pct = None
         party_score = 50
 
     # Donor independence via donor-vote connection matches
@@ -970,10 +1069,14 @@ def _calc_constituent_alignment(
 
         penalty = min(donation_ratio * 4, 0.20) + 0.08 * non_consensus_share
         donor_score = base_donor * (1 - penalty)
-        donor_weight = 0.25
+        donor_detail = (
+            f"baseline {base_donor:.0f} (${total_raised:,.0f} raised) reduced "
+            f"{penalty:.0%} by {len(lobbying_matches)} donor-vote match(es)"
+        )
     else:
         donor_score = base_donor
-        donor_weight = 0.25
+        donor_detail = f"baseline {base_donor:.0f} (${total_raised:,.0f} raised), no donor-vote matches"
+    donor_weight = 0.25
 
     # Coalition breadth (v5): cross-party cosponsorship rate normalized to
     # the chamber cohort (Lugar Center Bipartisan Index method; Harbridge
@@ -993,11 +1096,39 @@ def _calc_constituent_alignment(
         breadth_score = 0.0
 
     party_weight = 1.0 - donor_weight - breadth_weight
-    return clamp(
+    score = clamp(
         party_score * party_weight
         + donor_score * donor_weight
         + breadth_score * breadth_weight
     )
+
+    components = [
+        {
+            "label": "Seat-relative vote alignment",
+            "weight": round(party_weight, 2),
+            "score": round(party_score, 1),
+            "detail": (
+                f"expected break rate {expected:.1%} for this seat (state lean "
+                f"signal {alignment:+.2f}), actual {against_pct:.1%}"
+                if against_pct is not None
+                else "fewer than 3 party-labeled votes available — neutral 50"
+            ),
+        },
+        {
+            "label": "Donor independence",
+            "weight": donor_weight,
+            "score": round(donor_score, 1),
+            "detail": donor_detail,
+        },
+    ]
+    if breadth_weight > 0:
+        components.append({
+            "label": "Coalition breadth",
+            "weight": breadth_weight,
+            "score": round(breadth_score, 1),
+            "detail": f"cross-party cosponsorship rate {bipartisanship:.0%}, chamber-median-normalized",
+        })
+    return {"score": score, "components": components}
 
 
 def _calc_funding_diversity(funding: dict) -> int:
@@ -1065,12 +1196,19 @@ def _calc_funding_diversity(funding: dict) -> int:
     large-individual money, which at least represents a real (if failed)
     classification attempt.
     """
+    return _funding_diversity_core(funding)["score"]
+
+
+def _funding_diversity_core(funding: dict) -> dict:
+    """Same math as _calc_funding_diversity, returning every intermediate
+    value alongside the final score. Single implementation, same reuse
+    contract as _funding_independence_core above."""
     industry_breakdown = funding.get("industryBreakdown", [])
     small_donor_pct = funding.get("smallDonorPercentage", 0)
     total_raised = funding.get("totalRaised", 0)
 
     if not industry_breakdown or not total_raised:
-        return 50
+        return {"score": 50, "components": [], "note": "No funding data — neutral default."}
 
     # Signal 1: source breadth
     # Small donors = broadest possible base (many independent contributors).
@@ -1140,6 +1278,11 @@ def _calc_funding_diversity(funding: dict) -> int:
         # Very little classified industry money — HHI is meaningless
         # noise on a tiny slice. Default to the grassroots-scaled neutral.
         concentration_score = grassroots_neutral
+        concentration_detail = (
+            f"only {total_known_pct:.1f}% of funding is industry-classified — "
+            f"too little to measure HHI, defaults to grassroots-scaled neutral "
+            f"({small_frac:.0%} small-donor share → {grassroots_neutral:.0f})"
+        )
     else:
         hhi = sum(
             (ind.get("total", 0) / total_known) ** 2
@@ -1156,8 +1299,35 @@ def _calc_funding_diversity(funding: dict) -> int:
             raw_concentration * industry_relevance
             + grassroots_neutral * (1 - industry_relevance)
         )
+        concentration_detail = (
+            f"HHI={hhi:.3f} across {len(industries)} industries → raw "
+            f"{raw_concentration:.1f}, blended {industry_relevance:.0%} with "
+            f"grassroots-scaled neutral {grassroots_neutral:.0f} "
+            f"({total_known_pct:.0f}% of funding industry-classified)"
+        )
 
-    return clamp(breadth_score * 0.5 + concentration_score * 0.5)
+    score = clamp(breadth_score * 0.5 + concentration_score * 0.5)
+    return {
+        "score": score,
+        "components": [
+            {
+                "label": "Source breadth",
+                "weight": 0.5,
+                "score": round(breadth_score, 1),
+                "detail": (
+                    f"{small_frac:.0%} small-donor + {classified_frac:.0%} "
+                    f"classified-industry + {unclassified_frac:.0%} unclassified "
+                    f"(neutral) + {other_frac:.0%} opaque"
+                ),
+            },
+            {
+                "label": "Industry concentration",
+                "weight": 0.5,
+                "score": round(concentration_score, 1),
+                "detail": concentration_detail,
+            },
+        ],
+    }
 
 
 # Chamber majority party by congress (public record; applied symmetrically).
@@ -1254,6 +1424,20 @@ def _calc_legislative_effectiveness(
     All components apply Bayesian shrinkage toward 50 when data is
     sparse, preventing extreme scores from thin evidence.
     """
+    return _legislative_effectiveness_core(
+        sponsored_bills, leadership_score, party, years_in_office,
+    )["score"]
+
+
+def _legislative_effectiveness_core(
+    sponsored_bills: list[dict],
+    leadership_score: float | None = None,
+    party: str | None = None,
+    years_in_office: float | None = None,
+) -> dict:
+    """Same math as _calc_legislative_effectiveness, returning every
+    intermediate value alongside the final score. Single implementation,
+    same reuse contract as _funding_independence_core above."""
     if not sponsored_bills:
         # No bill data at all — neutral 50 per the design principle that
         # missing data never scores as good or bad. When cosponsorship
@@ -1262,8 +1446,18 @@ def _calc_legislative_effectiveness(
         # coherently above (not below) the fully-unknown case.
         if leadership_score and leadership_score > 0:
             lp = min(leadership_score, 1.0) * 100
-            return clamp(50 * 0.40 + lp * 0.30 + 50 * 0.30)
-        return 50
+            return {
+                "score": clamp(50 * 0.40 + lp * 0.30 + 50 * 0.30),
+                "components": [
+                    {"label": "Bill advancement rate", "weight": 0.40, "score": 50.0,
+                     "detail": "no sponsored bills on record — neutral 50"},
+                    {"label": "Legislative leadership", "weight": 0.30, "score": round(lp, 1),
+                     "detail": "cosponsorship-network PageRank"},
+                    {"label": "Sponsorship volume", "weight": 0.30, "score": 50.0,
+                     "detail": "no sponsored bills on record — neutral 50"},
+                ],
+            }
+        return {"score": 50, "components": [], "note": "No sponsored-bill or leadership data — neutral default."}
 
     n_bills = len(sponsored_bills)
 
@@ -1302,9 +1496,14 @@ def _calc_legislative_effectiveness(
         # Shrink toward 50 with few bills
         advancement_conf = min(n_sub / 10, 1.0)
         advancement_score = advancement_raw * advancement_conf + 50 * (1 - advancement_conf)
+        advancement_detail = (
+            f"{became_law + advanced} of {n_sub} substantive bills advanced "
+            f"({success_rate:.1%}) vs. a {expected:.1%} status-fair baseline"
+        )
     else:
         # Only resolutions sponsored — no substantive signal.
         advancement_score = 50.0
+        advancement_detail = "only ceremonial resolutions sponsored — no substantive signal, neutral 50"
 
     # Component 2: leadership score from cosponsorship PageRank
     #
@@ -1331,6 +1530,10 @@ def _calc_legislative_effectiveness(
 
     leadership_conf = min((years_in_office or 0) / 6.0, 1.0)
     leadership_pct = leadership_raw * leadership_conf + 50 * (1 - leadership_conf)
+    leadership_detail = (
+        f"PageRank percentile {leadership_raw:.0f}, tenure-confidence-scaled "
+        f"{leadership_conf:.0%} ({years_in_office or 0:.1f} of 6 years)"
+    )
 
     # Component 3: sponsorship volume per congress served
     #
@@ -1369,6 +1572,11 @@ def _calc_legislative_effectiveness(
         congresses = {b.get("congress") for b in substantive if b.get("congress")}
         per_congress = n_sub / max(len(congresses), 1)
         volume_raw = min(per_congress / VOLUME_CEILING, 1.0) * 100
+        volume_detail = (
+            f"{n_sub} substantive bills over {max(len(congresses), 1)} congress(es) = "
+            f"{per_congress:.1f}/congress, ceiling {VOLUME_CEILING:.0f} "
+            f"({'House' if is_house_member else 'Senate'})"
+        )
     else:
         # No substantive bills — same "missing signal defaults to neutral,
         # never a punitive 0" treatment Component 1 already gives this
@@ -1377,9 +1585,21 @@ def _calc_legislative_effectiveness(
         # member who sponsors nothing at all; scoring them worse than pure
         # inactivity would be backwards.
         volume_raw = 50.0
+        volume_detail = "only ceremonial resolutions sponsored — no substantive signal, neutral 50"
 
-    return clamp(
+    score = clamp(
         advancement_score * 0.40
         + leadership_pct * 0.30
         + volume_raw * 0.30
     )
+    return {
+        "score": score,
+        "components": [
+            {"label": "Bill advancement rate", "weight": 0.40,
+             "score": round(advancement_score, 1), "detail": advancement_detail},
+            {"label": "Legislative leadership", "weight": 0.30,
+             "score": round(leadership_pct, 1), "detail": leadership_detail},
+            {"label": "Sponsorship volume", "weight": 0.30,
+             "score": round(volume_raw, 1), "detail": volume_detail},
+        ],
+    }

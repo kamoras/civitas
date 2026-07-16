@@ -215,6 +215,85 @@ def get_representative_by_id(db: Session, rep_id: str) -> dict | None:
     return build_rep_response(rep, db)
 
 
+def get_representative_score_breakdown(db: Session, rep_id: str) -> dict | None:
+    """Recompute a representative's full score-derivation breakdown on-demand.
+
+    Mirrors get_senator_score_breakdown in senator_service.py — see that
+    function's docstring for why this reads directly from ORM relationships
+    rather than build_rep_response()'s display-oriented dict (which only
+    has vote counts, not per-vote votedWithParty/partyAlignmentWeight).
+    """
+    from app.pipeline.analyze.score_calculator import explain_scores
+
+    rep = (
+        db.query(Representative)
+        .options(*_rep_eager_options())
+        .filter(Representative.id == rep_id)
+        .first()
+    )
+    if rep is None:
+        return None
+
+    def _vote_dict(v: RepKeyVote) -> dict:
+        return {
+            "votedWithParty": v.voted_with_party,
+            "partyAlignmentWeight": v.party_alignment_weight,
+        }
+
+    voting_record = {
+        "effectiveParty": None,
+        "keyVotes": [_vote_dict(v) for v in rep.key_votes if v.vote_category == "key"],
+        "recentVotes": [_vote_dict(v) for v in rep.key_votes if v.vote_category == "recent"],
+    }
+
+    funding = {
+        "totalRaised": rep.total_raised,
+        "totalFromPACs": rep.total_from_pacs,
+        "smallDonorPercentage": rep.small_donor_percentage,
+        "outsideSpendingFor": rep.outside_spending_for,
+        "topDonors": [
+            {"name": d.name, "total": d.total, "type": d.type}
+            for d in rep.donors
+        ],
+        "industryBreakdown": [
+            {"industry": ind.industry, "total": ind.total}
+            for ind in rep.industry_donations
+        ],
+    }
+
+    lobbying_matches = [
+        {
+            "donationToSenator": lm.donation_to_representative,
+            "isConsensusVote": lm.is_consensus_vote,
+        }
+        for lm in rep.lobbying_matches
+    ]
+
+    sponsored_bills = [
+        {
+            "billType": sb.bill_type,
+            "congress": sb.congress,
+            "isLaw": sb.is_law,
+            "latestAction": sb.latest_action,
+        }
+        for sb in rep.sponsored_bills
+    ]
+
+    entity = {
+        "funding": funding,
+        "votingRecord": voting_record,
+        "lobbyingMatches": lobbying_matches,
+        "sponsoredBills": sponsored_bills,
+        "state": rep.state,
+        "party": rep.party,
+        "district": rep.district,
+        "bipartisanshipScore": rep.bipartisanship_score,
+        "leadershipScore": rep.leadership_score,
+        "yearsInOffice": rep.years_in_office,
+    }
+    return explain_scores(entity)
+
+
 def get_rep_states_with_counts(db: Session) -> list[dict]:
     rows = (
         db.query(Representative.state, func.count(Representative.id).label("cnt"))
@@ -328,6 +407,7 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
     existing.total_raised = funding.get("totalRaised", 0)
     existing.total_from_pacs = funding.get("totalFromPACs", 0)
     existing.small_donor_percentage = funding.get("smallDonorPercentage", 0)
+    existing.outside_spending_for = funding.get("outsideSpendingFor")
     voting_record = rep_data.get("votingRecord", {})
     existing.voting_summary = voting_record.get("votingSummary", "")
     existing.platform_summary = rep_data.get("platformSummary", "")
@@ -395,6 +475,7 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
             donation_to_representative=lm.get("donationToSenator") or lm.get("donationToRepresentative") or 0,
             bills_influenced=json.dumps(lm.get("billsInfluenced") or []),
             representative_vote_aligned=lm.get("senatorVoteAligned") or lm.get("representativeVoteAligned"),
+            is_consensus_vote=lm.get("isConsensusVote"),
             description=lm.get("description") or "",
         ))
 

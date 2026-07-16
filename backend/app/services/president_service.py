@@ -653,6 +653,87 @@ def get_president(db: Session, president_id: str) -> PresidentSchema | None:
     return _build_response(p)
 
 
+def get_president_score_breakdown(db: Session, president_id: str) -> dict | None:
+    """Recompute a president's full score-derivation breakdown on-demand.
+
+    Competence/Effectiveness/Agency Alignment use the _core variants of
+    president_scorer.py's calc_* functions with whatever live-data columns
+    are currently stored (gdp_growth_adjusted, rulemaking_count,
+    rulemaking_finalized_pct — persisted by president_pipeline.py
+    specifically so this recompute is possible; previously only kept in a
+    local dict and discarded).
+
+    Gated on DYNAMIC_PRESIDENTS/ECONOMICS_ONLY_PRESIDENTS membership, the
+    same as president_pipeline.py itself — some presidents have seed-data
+    values in eo_count/gdp_growth_avg/etc. that were never actually fed
+    through a live formula (that pipeline never touches their Competence/
+    Effectiveness/Agency Alignment), so gating on stored-value presence
+    alone would fabricate a "live" breakdown that was never really
+    computed for them.
+
+    Independence/Follow-Through/Public Mandate have no calc function at
+    all — always pure editorial seed values (see president_scorer.py
+    module docstring) — represented as {"seedOnly": True} for the frontend
+    to render as "editorial estimate," not a formula breakdown.
+    """
+    from app.pipeline.analyze.president_scorer import (
+        _agency_alignment_core,
+        _competence_core,
+        _effectiveness_core,
+    )
+    from app.pipeline.president_pipeline import (
+        DYNAMIC_PRESIDENTS,
+        ECONOMICS_ONLY_PRESIDENTS,
+        _term_years,
+    )
+
+    p = db.query(President).filter(President.id == president_id).first()
+    if not p:
+        return None
+
+    term_years = _term_years(p.term_start, p.term_end)
+    is_dynamic = p.id in DYNAMIC_PRESIDENTS
+    is_econ = is_dynamic or p.id in ECONOMICS_ONLY_PRESIDENTS
+
+    def _seed_only(score: float) -> dict:
+        return {"score": score, "seedOnly": True}
+
+    return {
+        "independence": _seed_only(p.score_independence),
+        "followThrough": _seed_only(p.score_follow_through),
+        "publicMandate": _seed_only(p.score_public_mandate),
+        "competence": (
+            _competence_core(
+                eo_count=p.eo_count,
+                eo_court_success_pct=p.eo_court_success_pct,
+                cabinet_turnover_pct=p.cabinet_turnover_pct,
+                term_years=term_years,
+                seed_score=p.score_competence,
+            )
+            if is_dynamic else _seed_only(p.score_competence)
+        ),
+        "effectiveness": (
+            _effectiveness_core(
+                jobs_created_millions=p.jobs_created_millions,
+                gdp_growth_avg=p.gdp_growth_avg,
+                term_years=term_years,
+                seed_score=p.score_effectiveness,
+                gdp_growth_adjusted=p.gdp_growth_adjusted,
+            )
+            if is_econ else _seed_only(p.score_effectiveness)
+        ),
+        "agencyAlignment": (
+            _agency_alignment_core(
+                rulemaking_count=p.rulemaking_count,
+                rulemaking_finalized_pct=p.rulemaking_finalized_pct,
+                term_years=term_years,
+                seed_score=p.score_agency_alignment,
+            )
+            if is_dynamic else _seed_only(p.score_agency_alignment)
+        ),
+    }
+
+
 def get_all_presidents(db: Session) -> list[PresidentSchema]:
     presidents = db.query(President).order_by(President.number.desc()).all()
     return [_build_response(p) for p in presidents]

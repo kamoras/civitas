@@ -209,6 +209,9 @@ def analyze_justice_votes(
         differential = max(0.0, own_rate - opp_rate)
         consistency = max(0.0, min(100.0, (1.0 - differential) * 100))
     else:
+        own_rate = None
+        opp_rate = None
+        differential = None
         consistency = 50.0
 
     # --- Score: Independence ---
@@ -317,6 +320,53 @@ def analyze_justice_votes(
         "close_case_majority_pct": round(close_majority / len(close_votes) * 100, 1) if close_votes else 0.0,
         "cross_bloc_pct": round(cross_bloc_pct, 1),
         "agreement_matrix": agreement_matrix,
+        # Breakdown math — the intermediate values behind each score above,
+        # surfaced for the on-demand "show the math" score-breakdown panel.
+        # Not used by any scoring path; purely explanatory.
+        "breakdown": {
+            "consistency": {
+                "own_bloc_agreement_rate": round(own_rate, 3) if own_rate is not None else None,
+                "opposing_bloc_agreement_rate": round(opp_rate, 3) if opp_rate is not None else None,
+                "differential": round(differential, 3) if differential is not None else None,
+                "detail": (
+                    f"agrees with own bloc {own_rate:.1%} of (Fisher-weighted) cases vs. "
+                    f"opposing bloc {opp_rate:.1%} — differential {differential:.1%}"
+                    if own_rate is not None
+                    else "no expected bloc or no weighted cases available — neutral 50"
+                ),
+            },
+            "independence": {
+                "cross_bloc_count": cross_bloc_count,
+                "split_decisions": split_decisions,
+                "detail": (
+                    f"voted cross-bloc in {cross_bloc_count} of {split_decisions} split decisions "
+                    f"({cross_bloc_pct:.1f}%, scaled ×2 so a 50% cross-bloc rate = 100)"
+                    if split_decisions > 0
+                    else "no split decisions with an opposing bloc seated — neutral 50"
+                ),
+            },
+            "bipartisan_agreement": {
+                "total_agree": bipartisan_total_agree,
+                "total_cases": bipartisan_total_cases,
+                "detail": (
+                    f"agreed with opposing-bloc justices in {bipartisan_total_agree} of "
+                    f"{bipartisan_total_cases} case-pairings (case-weighted, all cases incl. unanimous)"
+                    if bipartisan_total_cases > 0
+                    else "no opposing-bloc case pairings available — neutral 50"
+                ),
+            },
+            "judicial_restraint": {
+                "dissent_rate": round(dissent_rate, 3),
+                "dissent_score": round(dissent_score, 1),
+                "authored_dissent_rate": round(authored_dissent_rate, 3),
+                "authored_penalty": round(authored_penalty, 1),
+                "detail": (
+                    f"dissent rate {dissent_rate:.1%} → curve score {dissent_score:.1f}, "
+                    f"authored-dissent rate {authored_dissent_rate:.1%} → "
+                    f"penalty -{authored_penalty:.1f}"
+                ),
+            },
+        },
     }
 
 
@@ -336,4 +386,10 @@ def _empty_result() -> dict:
         "close_case_majority_pct": 0.0,
         "cross_bloc_pct": 0.0,
         "agreement_matrix": {},
+        "breakdown": {
+            "consistency": {"detail": "no vote data available — neutral 50"},
+            "independence": {"detail": "no vote data available — neutral 50"},
+            "bipartisan_agreement": {"detail": "no vote data available — neutral 50"},
+            "judicial_restraint": {"detail": "no vote data available — neutral 50"},
+        },
     }
