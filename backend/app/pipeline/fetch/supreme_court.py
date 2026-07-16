@@ -18,6 +18,8 @@ from datetime import UTC, datetime
 
 import httpx
 
+from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
+
 logger = logging.getLogger(__name__)
 
 OYEZ_BASE = "https://api.oyez.org"
@@ -72,7 +74,7 @@ async def fetch_scotus_cases(
             resp = await client.get(
                 f"{OYEZ_BASE}/cases",
                 params={"per_page": per_page, "filter": f"term:{term}"},
-                timeout=30.0,
+                timeout=DEFAULT_FETCH_TIMEOUT_S,
             )
             if resp.status_code != 200:
                 logger.warning(

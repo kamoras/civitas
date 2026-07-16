@@ -14,6 +14,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.pipeline.cache import api_cache_get, api_cache_set
+from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ async def _fetch_ticker_map(client: httpx.AsyncClient, db: Session) -> dict[str,
         return cached
 
     try:
-        resp = await client.get(TICKERS_URL, headers=_HEADERS, timeout=30.0)
+        resp = await client.get(TICKERS_URL, headers=_HEADERS, timeout=DEFAULT_FETCH_TIMEOUT_S)
         resp.raise_for_status()
         raw = resp.json()
     except Exception as e:

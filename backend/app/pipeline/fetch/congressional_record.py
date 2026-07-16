@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
-from app.pipeline.fetch.http_utils import fetch_with_retry
+from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S, fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -56,7 +56,7 @@ async def _fetch_htm(client: httpx.AsyncClient, url: str) -> str:
     separator = "&" if "?" in url else "?"
     full_url = f"{url}{separator}api_key={settings.DATA_GOV_API_KEY}"
     try:
-        resp = await client.get(full_url, timeout=30.0)
+        resp = await client.get(full_url, timeout=DEFAULT_FETCH_TIMEOUT_S)
         if resp.status_code == 200:
             return resp.text
     except Exception as e:

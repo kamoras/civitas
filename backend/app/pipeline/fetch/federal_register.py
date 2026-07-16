@@ -8,6 +8,8 @@ import logging
 
 import httpx
 
+from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
+
 logger = logging.getLogger(__name__)
 
 FR_BASE = "https://www.federalregister.gov/api/v1"
@@ -59,7 +61,7 @@ async def fetch_eo_count(
         resp = await client.get(
             f"{FR_BASE}/documents.json",
             params=params,
-            timeout=30.0,
+            timeout=DEFAULT_FETCH_TIMEOUT_S,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -127,7 +129,7 @@ async def fetch_rulemaking_stats(
             resp = await client.get(
                 f"{FR_BASE}/documents.json",
                 params=params,
-                timeout=30.0,
+                timeout=DEFAULT_FETCH_TIMEOUT_S,
             )
             resp.raise_for_status()
             counts[doc_type] = resp.json().get("count", 0)

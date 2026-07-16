@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_RETRIES = 3
 DEFAULT_RETRY_BACKOFF_S = 2.0
+DEFAULT_FETCH_TIMEOUT_S = 30.0
 
 
 async def fetch_with_retry(
@@ -46,7 +47,7 @@ async def fetch_with_retry(
     backoff_s: float = DEFAULT_RETRY_BACKOFF_S,
     rate_limit_backoff_multiplier: float = 1.0,
     retry_on_4xx: bool = True,
-    timeout: float = 30.0,
+    timeout: float = DEFAULT_FETCH_TIMEOUT_S,
     log_label: str = "",
     **request_kwargs,
 ) -> httpx.Response | None:

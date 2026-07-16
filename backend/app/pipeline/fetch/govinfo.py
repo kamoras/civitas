@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
+from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ async def _fetch_with_retry(
     for attempt in range(1, retries + 1):
         try:
             logger.debug("GovInfo API: %s (attempt %d)", url, attempt)
-            resp = await client.get(full_url, timeout=30.0)
+            resp = await client.get(full_url, timeout=DEFAULT_FETCH_TIMEOUT_S)
 
             if resp.status_code == 429:
                 wait = RETRY_BACKOFF_S * attempt
@@ -133,7 +134,7 @@ async def fetch_bill_text(
     )
 
     try:
-        resp = await client.get(htm_url, timeout=30.0)
+        resp = await client.get(htm_url, timeout=DEFAULT_FETCH_TIMEOUT_S)
         if resp.status_code == 200:
             text = resp.text
             # Strip HTML tags for a rough plain text version

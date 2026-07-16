@@ -15,6 +15,8 @@ from datetime import UTC, datetime
 
 import httpx
 
+from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
+
 logger = logging.getLogger(__name__)
 
 OYEZ_BASE = "https://api.oyez.org"
@@ -96,7 +98,7 @@ def _unix_to_date(ts: int | float | None) -> str:
 
 async def fetch_current_justices(client: httpx.AsyncClient) -> list[dict]:
     """Fetch the list of current (active) Supreme Court justices from Oyez."""
-    resp = await client.get(f"{OYEZ_BASE}/justices", timeout=30.0)
+    resp = await client.get(f"{OYEZ_BASE}/justices", timeout=DEFAULT_FETCH_TIMEOUT_S)
     if resp.status_code != 200:
         logger.warning("Oyez justices endpoint returned %d", resp.status_code)
         return []
@@ -171,7 +173,7 @@ async def fetch_case_votes(
             resp = await client.get(
                 f"{OYEZ_BASE}/cases",
                 params={"per_page": per_page, "filter": f"term:{term}"},
-                timeout=30.0,
+                timeout=DEFAULT_FETCH_TIMEOUT_S,
             )
             if resp.status_code != 200:
                 continue
@@ -191,7 +193,7 @@ async def fetch_case_votes(
     for i, ref in enumerate(case_refs):
         try:
             detail_url = ref["href"] or f"{OYEZ_BASE}/cases/{ref['term']}/{ref['docket']}"
-            resp = await client.get(detail_url, timeout=30.0)
+            resp = await client.get(detail_url, timeout=DEFAULT_FETCH_TIMEOUT_S)
             if resp.status_code != 200:
                 continue
 

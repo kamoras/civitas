@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
-from app.pipeline.fetch.http_utils import fetch_with_retry
+from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S, fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -443,7 +443,7 @@ async def fetch_roll_call_vote(
 
     try:
         logger.debug("Senate.gov vote: %s", url)
-        resp = await client.get(url, timeout=30.0)
+        resp = await client.get(url, timeout=DEFAULT_FETCH_TIMEOUT_S)
         if resp.status_code != 200:
             logger.warning(
                 "Senate roll call not found: %d-%d-%d (%d)",
@@ -634,7 +634,7 @@ async def fetch_house_roll_call_vote(
 
     try:
         logger.debug("House Clerk vote: %s", url)
-        resp = await client.get(url, timeout=30.0)
+        resp = await client.get(url, timeout=DEFAULT_FETCH_TIMEOUT_S)
         if resp.status_code != 200:
             logger.warning(
                 "House roll call not found: %d-%d (%d)",

@@ -17,6 +17,8 @@ import re
 import httpx
 from lxml import html as lxml_html
 
+from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
+
 logger = logging.getLogger(__name__)
 
 _COLLAPSE_WS = re.compile(r"[ \t]+")
@@ -79,7 +81,7 @@ async def _fetch_body_text(client: httpx.AsyncClient, url: str) -> str:
         if parsed.hostname not in _ALLOWED_HOSTS or parsed.scheme != "https":
             logger.debug("Rejected non-FR URL: %s", url[:100])
             return ""
-        resp = await client.get(url, timeout=30.0)
+        resp = await client.get(url, timeout=DEFAULT_FETCH_TIMEOUT_S)
         if resp.status_code != 200:
             return ""
         tree = lxml_html.fromstring(resp.text)
@@ -124,7 +126,7 @@ async def fetch_fr_rulemaking(
                 resp = await client.get(
                     f"{FR_BASE}/documents.json",
                     params=params,
-                    timeout=30.0,
+                    timeout=DEFAULT_FETCH_TIMEOUT_S,
                 )
                 if resp.status_code != 200:
                     logger.warning(
