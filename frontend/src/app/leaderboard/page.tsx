@@ -11,6 +11,7 @@ import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import { fetchLeaderboard, fetchRepLeaderboard, fetchPresidentLeaderboard, fetchJusticeLeaderboard } from "@/lib/api";
 import { calculateOverallScore, calculatePresidentScore, calculateJusticeScore, getScoreColor, getScoreBgColor } from "@/lib/corruption";
+import { PARTY_BADGE } from "@/lib/partyStyles";
 import { useScoreWeights } from "@/hooks/useConfig";
 import type { LeaderboardEntry, ScoreTrend } from "@/types/senator";
 import type { PresidentLeaderboardEntry } from "@/types/president";
@@ -24,18 +25,6 @@ function formatDollars(n: number | undefined | null): string {
   if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
   if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K`;
   return `$${v.toFixed(0)}`;
-}
-
-function partyColor(party: string): string {
-  if (party === "D") return "text-dem-blue";
-  if (party === "R") return "text-rep-red";
-  return "text-ind-purple";
-}
-
-function partyBg(party: string): string {
-  if (party === "D") return "bg-dem-blue/20 border-dem-blue/40";
-  if (party === "R") return "bg-rep-red/20 border-rep-red/40";
-  return "bg-ind-purple/20 border-ind-purple/40";
 }
 
 function rankColor(rank: number): string {
@@ -732,7 +721,7 @@ function LeaderboardContent() {
                         </td>
                         <td className="px-3 py-3 text-center">
                           <span
-                            className={`text-xs px-2 py-0.5 border rounded-sm ${partyBg(entry.party)} ${partyColor(entry.party)}`}
+                            className={`text-xs px-2 py-0.5 border rounded-sm ${(PARTY_BADGE[entry.party] ?? PARTY_BADGE.I).className}`}
                           >
                             {branch === "house" && entry.district != null
                               ? `${entry.state}-${entry.district}`
@@ -796,7 +785,7 @@ function LeaderboardContent() {
                       <div className="flex items-center gap-2">
                         <span className="text-white text-sm truncate">{entry.name}</span>
                         <span
-                          className={`text-xs px-1 border shrink-0 ${partyBg(entry.party)} ${partyColor(entry.party)}`}
+                          className={`text-xs px-1 border shrink-0 ${(PARTY_BADGE[entry.party] ?? PARTY_BADGE.I).className}`}
                         >
                           {branch === "house" && entry.district != null
                             ? `${entry.state}-${entry.district}`

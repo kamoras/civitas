@@ -6,16 +6,11 @@ import { billUrl } from "@/lib/sources";
 import { safeHref } from "@/lib/formatting";
 import CollapsibleSection from "./CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
+import { PARTY_BADGE } from "@/lib/partyStyles";
 
 interface SponsoredBillsProps {
   bills: SponsoredBill[];
 }
-
-const PARTY_BADGE: Record<string, { label: string; className: string }> = {
-  R: { label: "R", className: "text-rep-red border-rep-red/30 bg-rep-red/10" },
-  D: { label: "D", className: "text-dem-blue border-dem-blue/30 bg-dem-blue/10" },
-  bipartisan: { label: "BP", className: "text-ind-purple border-ind-purple/30 bg-ind-purple/10" },
-};
 
 const INITIAL_VISIBLE = 8;
 

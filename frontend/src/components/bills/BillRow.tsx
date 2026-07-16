@@ -4,12 +4,7 @@ import Link from "next/link";
 import { BillInFlight } from "@/types/bill";
 import { billUrl } from "@/lib/sources";
 import { useConfig } from "@/hooks/useConfig";
-
-const PARTY_BADGE: Record<string, { label: string; className: string }> = {
-  D: { label: "D", className: "text-dem-blue border-dem-blue/30 bg-dem-blue/10" },
-  R: { label: "R", className: "text-rep-red border-rep-red/30 bg-rep-red/10" },
-  I: { label: "I", className: "text-ind-purple border-ind-purple/30 bg-ind-purple/10" },
-};
+import { PARTY_BADGE } from "@/lib/partyStyles";
 
 function timeAgo(dateStr: string): string {
   if (!dateStr) return "";
