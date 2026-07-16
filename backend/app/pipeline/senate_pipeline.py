@@ -33,6 +33,7 @@ from app.models import (
     KeyVote,
     LobbyingMatch,
     PipelineRun,
+    PipelineStatus,
     ScoreSnapshot,
     Senator,
     SponsoredBill,
@@ -437,13 +438,13 @@ def _acquire_pipeline_lock(db: Session) -> PipelineRun | None:
     """
     running = (
         db.query(PipelineRun)
-        .filter(PipelineRun.status == "running")
+        .filter(PipelineRun.status == PipelineStatus.RUNNING)
         .first()
     )
     if running:
         age = (datetime.utcnow() - running.started_at).total_seconds()
         if age > STALE_PIPELINE_TIMEOUT_S:
-            running.status = "stale"
+            running.status = PipelineStatus.STALE
             running.completed_at = datetime.utcnow()
             running.error_message = "Marked stale: exceeded 12-hour timeout"
             db.commit()
@@ -451,7 +452,7 @@ def _acquire_pipeline_lock(db: Session) -> PipelineRun | None:
         else:
             return None
 
-    pipeline_run = PipelineRun(started_at=datetime.utcnow(), status="running")
+    pipeline_run = PipelineRun(started_at=datetime.utcnow(), status=PipelineStatus.RUNNING)
     db.add(pipeline_run)
     db.commit()
     return pipeline_run
@@ -1127,12 +1128,12 @@ async def run_senate_pipeline(
                         "president_scorecards", "finalize"):
                 progress.skip(sk, detail="fetch-only mode")
             elapsed = time.time() - start_time
-            pipeline_run.status = "completed"
+            pipeline_run.status = PipelineStatus.COMPLETED
             pipeline_run.completed_at = datetime.utcnow()
             pipeline_run.elapsed_seconds = elapsed
             db.commit()
             return {
-                "status": "completed",
+                "status": PipelineStatus.COMPLETED,
                 "fetch_only": True,
                 "senators_fetched": len(senators),
                 "bills_fetched": len(bills_data),
@@ -1993,7 +1994,7 @@ async def run_senate_pipeline(
         llm_stats = get_llm_stats()
         elapsed = time.time() - start_time
 
-        pipeline_run.status = "completed"
+        pipeline_run.status = PipelineStatus.COMPLETED
         pipeline_run.completed_at = datetime.utcnow()
         pipeline_run.senators_processed = success_count
         pipeline_run.senators_failed = fail_count
@@ -2018,7 +2019,7 @@ async def run_senate_pipeline(
         logger.info("Time: %.1fs", elapsed)
 
         return {
-            "status": "completed",
+            "status": PipelineStatus.COMPLETED,
             "senators_processed": success_count,
             "senators_failed": fail_count,
             "bills_classified": len(classified_bills),
@@ -2032,7 +2033,7 @@ async def run_senate_pipeline(
         logger.exception("Pipeline failed: %s", e)
         try:
             db.rollback()
-            pipeline_run.status = "failed"
+            pipeline_run.status = PipelineStatus.FAILED
             pipeline_run.completed_at = datetime.utcnow()
             pipeline_run.error_message = str(e)[:500]
             pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
