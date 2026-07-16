@@ -9,6 +9,7 @@ from app.pipeline.analyze.score_calculator import (
     _calc_funding_independence,
     _calc_legislative_effectiveness,
     _calc_promise_persistence,
+    _funding_independence_core,
     calculate_scores,
     clamp,
     compute_overall_score,
@@ -162,6 +163,81 @@ class TestFundingIndependence:
         score_high = _calc_funding_independence(funding_high_pac)
         assert score_low > score_high
         assert score_low - score_high >= 10
+
+    def test_pac_utilization_signal_maxed_out_scores_lower(self):
+        """PACs uniformly maxing out their legal per-election cap should
+        score worse than PACs giving only a token amount, holding the
+        overall PAC ratio and dollar total identical — the whole point of
+        replacing the old absolute-dollar penalty."""
+        base = {
+            "totalRaised": 1_000_000,
+            "totalFromPACs": 100_000,
+            "smallDonorPercentage": 20,
+        }
+        maxed_out = {
+            **base,
+            "topDonors": [
+                {"total": 5_000, "committeeType": "Q"} for _ in range(20)
+            ],
+        }
+        token_amounts = {
+            **base,
+            "topDonors": [
+                {"total": 500, "committeeType": "Q"} for _ in range(200)
+            ],
+        }
+        score_maxed = _calc_funding_independence(maxed_out)
+        score_token = _calc_funding_independence(token_amounts)
+        assert score_token > score_maxed
+
+    def test_pac_utilization_respects_committee_type_cap(self):
+        """A nonmulticandidate PAC (lower cap) giving the same dollar amount
+        as a multicandidate PAC should register as MORE utilized (closer to
+        its smaller cap), and therefore score worse."""
+        base = {"totalRaised": 1_000_000, "totalFromPACs": 100_000, "smallDonorPercentage": 20}
+        multicandidate = {**base, "topDonors": [{"total": 3_500, "committeeType": "Q"}]}
+        nonmulticandidate = {**base, "topDonors": [{"total": 3_500, "committeeType": "N"}]}
+        score_multi = _calc_funding_independence(multicandidate)
+        score_non = _calc_funding_independence(nonmulticandidate)
+        assert score_non < score_multi
+
+    def test_pac_utilization_excludes_non_pac_committee_types(self):
+        """A large joint-fundraising-committee transfer (committee_type
+        e.g. "Y" for party, or any code that isn't "Q"/"N") is not a PAC
+        subject to the $5,000/$3,500 caps — it must not be swept into the
+        nonqualified bucket, where a $110K JFC transfer would misleadingly
+        register as "maxed out." With only a non-PAC committee type
+        present, this should behave identically to having no PAC data at
+        all (the dollar-based fallback)."""
+        funding_with_jfc_only = {
+            "totalRaised": 5_000_000,
+            "totalFromPACs": 2_000_000,
+            "topDonors": [{"total": 110_000, "committeeType": "Y"}],
+        }
+        funding_with_no_committee_data = {
+            "totalRaised": 5_000_000,
+            "totalFromPACs": 2_000_000,
+            "topDonors": [{"total": 50_000} for _ in range(10)],  # sums differently but both hit the fallback
+        }
+        jfc_breakdown = _funding_independence_core(funding_with_jfc_only)
+        no_data_breakdown = _funding_independence_core(funding_with_no_committee_data)
+        # Both fall back to the identical dollar-based volume_factor
+        # (driven only by totalFromPACs, which is the same in both cases).
+        assert "no PAC committee-type data" in jfc_breakdown["components"][0]["detail"]
+        assert "no PAC committee-type data" in no_data_breakdown["components"][0]["detail"]
+
+    def test_pac_utilization_falls_back_without_committee_type_data(self):
+        """No contributing PAC has a resolved committee type — degrades to
+        the original dollar-based penalty rather than skipping the
+        correction (same score as before this feature existed)."""
+        funding = {
+            "totalRaised": 5_000_000,
+            "totalFromPACs": 2_000_000,
+            "topDonors": [{"total": 50_000} for _ in range(10)],  # no committeeType key
+        }
+        breakdown = _funding_independence_core(funding)
+        detail = breakdown["components"][0]["detail"]
+        assert "no PAC committee-type data" in detail
 
 
 class TestConstituentAlignment:

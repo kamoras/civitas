@@ -62,6 +62,7 @@ from app.pipeline.fetch.fec import (
     fetch_candidate_committees,
     fetch_candidate_financials,
     fetch_committee_receipts,
+    fetch_committee_type,
     fetch_outside_spending,
     fetch_pac_receipts,
     find_candidate,
@@ -276,6 +277,7 @@ def upsert_senator(db: Session, data: dict) -> None:
                 pac_sponsor=donor_data.get("pacSponsor"),
                 pac_industry=donor_data.get("pacIndustry"),
                 pac_analysis=donor_data.get("pacAnalysis"),
+                committee_type=donor_data.get("committeeType"),
             )
         )
 
@@ -1076,6 +1078,22 @@ async def run_senate_pipeline(
             )
             progress.complete("fetch_fec", detail=f"{len(fec_data)}/{len(senators)} matched")
 
+            # 1e-2. Resolve PAC committee types (multicandidate vs not) once per
+            # unique contributing PAC across the whole run — feeds the
+            # PAC-utilization signal in _funding_independence_core. A single
+            # global pass here (rather than a per-senator lookup) means a PAC
+            # that gives to 30 different senators is looked up exactly once,
+            # not 30 times, on top of fetch_committee_type's own long-TTL cache.
+            pac_committee_ids: set[str] = set()
+            for fec in fec_data.values():
+                for r in fec.get("pacReceipts") or []:
+                    if r.get("entity_type") == "COM" and r.get("contributor_id"):
+                        pac_committee_ids.add(r["contributor_id"])
+            logger.info("Resolving committee type for %d unique contributing PACs...", len(pac_committee_ids))
+            committee_type_map: dict[str, str | None] = {}
+            for cid in pac_committee_ids:
+                committee_type_map[cid] = await fetch_committee_type(client, db, cid)
+
             # 1f. Fetch platform text for each senator from their official website
             logger.info("Fetching senator platform text from official websites...")
             progress.begin("fetch_platforms", total=len(senators))
@@ -1325,6 +1343,7 @@ async def run_senate_pipeline(
                         ai_classifications=ai_classifications,
                         db_session=db,
                         outside_spending=fec.get("outsideSpending"),
+                        committee_type_map=committee_type_map,
                     )
                 else:
                     funding = senator.get("funding", {})

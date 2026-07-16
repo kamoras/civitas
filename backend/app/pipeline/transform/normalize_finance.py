@@ -62,6 +62,7 @@ def normalize_finance(
     ai_classifications: dict[str, dict] | None = None,
     db_session=None,
     outside_spending: dict | None = None,
+    committee_type_map: dict[str, str | None] | None = None,
 ) -> dict:
     """Normalize FEC financial data into the Senator funding shape.
 
@@ -74,6 +75,9 @@ def normalize_finance(
         ai_classifications: Optional AI classifications for donors (type + industry).
         outside_spending: Optional outside spending dict with totalFor and count from
             fetch_outside_spending (super PAC independent expenditures supporting the candidate).
+        committee_type_map: Optional contributor_id -> FEC committee_type code,
+            pre-resolved by the caller (see fec.fetch_committee_type). Passed
+            through to build_top_donors for the PAC-utilization signal.
 
     Returns:
         Normalized funding object matching Senator.funding type.
@@ -120,6 +124,7 @@ def normalize_finance(
         candidate_name,
         ai_classifications=ai_classifications,
         db_session=db_session,
+        committee_type_map=committee_type_map,
     )
 
     # Build industry breakdown: individuals get explicit buckets, PACs get industry-classified
@@ -170,15 +175,23 @@ def build_top_donors(
     candidate_name: str,
     ai_classifications: dict[str, dict] | None = None,
     db_session=None,
+    committee_type_map: dict[str, str | None] | None = None,
 ) -> list[dict]:
     """Build top donors list prioritizing PAC/corporate money.
 
     Donor type and industry come from the AI classifier (embedding-based).
     When no AI classification exists, falls back to the embedding-based
     industry classifier and semantic donor-type classifier.
+
+    committee_type_map: contributor_id -> FEC committee_type code ("Q"=
+    Qualified/multicandidate, "N"=Nonqualified), pre-resolved by the caller
+    (see fec.fetch_committee_type) for each PAC that appears in
+    pac_receipts. Feeds the PAC-utilization signal in
+    score_calculator._funding_independence_core.
     """
     donor_map: dict[str, dict] = {}
     ai_classifications = ai_classifications or {}
+    committee_type_map = committee_type_map or {}
 
     # Pre-compute embedding-based skip sets for employers and memo texts.
     # This replaces hardcoded SKIP_EMPLOYERS and keyword-based memo filtering
@@ -252,6 +265,15 @@ def build_top_donors(
             "name": name, "total": 0, "type": donor_type, "industry": industry,
         })
         existing["total"] += r.get("contribution_receipt_amount", 0) or 0
+        # entity_type == "COM" means this row's contributor is itself a
+        # committee (a real PAC, not an individual/org) — only trust the
+        # committee-type lookup for those, matching the same entity_type
+        # gate used to decide which contributor_ids get looked up upstream
+        # (see senate_pipeline.py / house_pipeline.py).
+        if r.get("entity_type") == "COM" and r.get("contributor_id"):
+            ctype = committee_type_map.get(r["contributor_id"])
+            if ctype is not None:
+                existing["committeeType"] = ctype
         donor_map[name_upper] = existing
 
     # 2. Individual contributions grouped by employer
@@ -314,6 +336,7 @@ def build_top_donors(
             "total": round(d["total"]),
             "type": d["type"],
             "industry": d.get("industry", "OTHER"),
+            "committeeType": d.get("committeeType"),
         }
         for d in sorted_donors
         if d["total"] > 0 and len(d["name"].strip()) >= 3

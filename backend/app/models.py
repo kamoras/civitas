@@ -148,6 +148,12 @@ class Donor(Base):
     pac_sponsor: Mapped[str | None] = mapped_column(String, nullable=True)
     pac_industry: Mapped[str | None] = mapped_column(String, nullable=True)
     pac_analysis: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # FEC committee_type code ("Q"=Qualified/multicandidate, "N"=Nonqualified,
+    # etc.) for the donor's own committee, when this donor is a PAC — used to
+    # compute its per-election contribution cap for the PAC-utilization
+    # signal in score_calculator._funding_independence_core. None for
+    # non-PAC donors or when the lookup couldn't resolve a committee ID.
+    committee_type: Mapped[str | None] = mapped_column(String, nullable=True)
 
     senator: Mapped["Senator"] = relationship(back_populates="donors")
 
@@ -352,6 +358,12 @@ class RepDonor(Base):
     pac_sponsor: Mapped[str | None] = mapped_column(String, nullable=True)
     pac_industry: Mapped[str | None] = mapped_column(String, nullable=True)
     pac_analysis: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # FEC committee_type code ("Q"=Qualified/multicandidate, "N"=Nonqualified,
+    # etc.) for the donor's own committee, when this donor is a PAC — used to
+    # compute its per-election contribution cap for the PAC-utilization
+    # signal in score_calculator._funding_independence_core. None for
+    # non-PAC donors or when the lookup couldn't resolve a committee ID.
+    committee_type: Mapped[str | None] = mapped_column(String, nullable=True)
 
     representative: Mapped["Representative"] = relationship(back_populates="donors")
 

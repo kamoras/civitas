@@ -46,6 +46,7 @@ from app.pipeline.fetch.fec import (
     fetch_candidate_committees,
     fetch_candidate_financials,
     fetch_committee_receipts,
+    fetch_committee_type,
     fetch_outside_spending,
     fetch_pac_receipts,
     find_candidate,
@@ -555,9 +556,28 @@ async def run_house_pipeline() -> dict:
                             outside.get("totalFor", 0),
                         )
 
+                        # Resolve PAC committee types (multicandidate vs not) for
+                        # the PAC-utilization signal in
+                        # score_calculator._funding_independence_core.
+                        # fetch_committee_type's own long-TTL cache (see
+                        # fec.py) already makes repeat lookups across
+                        # representatives for the same popular PAC cheap —
+                        # no separate global pre-pass needed the way
+                        # senate_pipeline.py's single fetch-then-normalize
+                        # phase structure allows.
+                        pac_committee_ids = {
+                            r["contributor_id"] for r in raw_pac_receipts
+                            if r.get("entity_type") == "COM" and r.get("contributor_id")
+                        }
+                        committee_type_map = {
+                            cid: await fetch_committee_type(client, db, cid)
+                            for cid in pac_committee_ids
+                        }
+
                         finance_data = normalize_finance(
                             fec_candidate, financials, raw_receipts, raw_pac_receipts,
                             aggregated, db_session=db, outside_spending=outside,
+                            committee_type_map=committee_type_map,
                         )
                         rep["funding"] = finance_data
                     else:

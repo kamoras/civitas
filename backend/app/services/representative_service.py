@@ -102,6 +102,7 @@ def build_rep_response(rep: Representative, _db: Session = None) -> dict:
                     "pacSponsor": _clean_pac_sponsor(d.pac_sponsor, d.name),
                     "pacIndustry": d.pac_industry if d.pac_industry and d.pac_industry.lower().strip() not in _USELESS_SPONSOR else None,
                     "pacAnalysis": d.pac_analysis,
+                    "committeeType": d.committee_type,
                 }
                 for d in donors
             ],
@@ -252,7 +253,7 @@ def get_representative_score_breakdown(db: Session, rep_id: str) -> dict | None:
         "smallDonorPercentage": rep.small_donor_percentage,
         "outsideSpendingFor": rep.outside_spending_for,
         "topDonors": [
-            {"name": d.name, "total": d.total, "type": d.type}
+            {"name": d.name, "total": d.total, "type": d.type, "committeeType": d.committee_type}
             for d in rep.donors
         ],
         "industryBreakdown": [
@@ -430,6 +431,7 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
             pac_sponsor=d.get("pacSponsor"),
             pac_industry=d.get("pacIndustry"),
             pac_analysis=d.get("pacAnalysis"),
+            committee_type=d.get("committeeType"),
         ))
 
     db.query(RepIndustryDonation).filter(RepIndustryDonation.representative_id == rid).delete()

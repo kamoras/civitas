@@ -384,6 +384,38 @@ async def fetch_pac_receipts(
     return results
 
 
+# TTL for cached committee-type lookups. A PAC's multicandidate status
+# (committee_type "Q" vs "N") is effectively permanent — it's a qualification
+# earned once (6+ months registered, 50+ contributors, contributed to 5+
+# candidates) and essentially never reverts. Cached far longer than the
+# default PIPELINE_CACHE_TTL_HOURS (72h) since this is looked up once per
+# unique contributing PAC across ALL senators/reps, not per-candidate, and
+# re-fetching it every pipeline run would be pure waste.
+COMMITTEE_TYPE_CACHE_TTL_HOURS = 24 * 90
+
+
+async def fetch_committee_type(
+    client: httpx.AsyncClient, db: Session, committee_id: str,
+) -> str | None:
+    """A PAC's FEC committee_type code, for computing its per-election
+    contribution cap (see score_calculator._funding_independence_core):
+    "Q" = PAC-Qualified (multicandidate, $5,000/election cap), "N" =
+    PAC-Nonqualified (capped at the same per-election limit as an
+    individual). Returns None if the committee isn't found or has no
+    committee_type on record.
+    """
+    cache_key = f"committee-type-v1-{committee_id}"
+    cached = api_cache_get(db, "fec", cache_key, max_age_hours=COMMITTEE_TYPE_CACHE_TTL_HOURS)
+    if cached is not None:
+        return cached.get("committee_type")
+
+    data = await _fetch_with_retry(client, f"{FEC_API_BASE}/committee/{committee_id}/")
+    results = (data or {}).get("results", [])
+    committee_type = results[0].get("committee_type") if results else None
+    api_cache_set(db, "fec", cache_key, {"committee_type": committee_type})
+    return committee_type
+
+
 async def fetch_aggregated_contributors(
     client: httpx.AsyncClient, db: Session, committee_id: str,
     cycles: list[int] | None = None,
