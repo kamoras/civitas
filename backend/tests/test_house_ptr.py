@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.pipeline.fetch.house_ptr import fetch_and_parse_ptr, fetch_ptr_filing_index
+from app.pipeline.fetch.ptr_common import TradeRow
 
 _SAMPLE_XML = b"""<?xml version="1.0"?>
 <Members>
@@ -84,11 +85,11 @@ async def test_fetch_ptr_filing_index_fetch_failure_returns_empty(db_session):
 async def test_fetch_and_parse_ptr_tags_rows(db_session):
     filing = {"doc_id": "20026590", "pdf_url": "https://example.com/20026590.pdf"}
     parsed_rows = [
-        {
-            "ticker": "AAPL", "asset_name": "Apple Inc. (AAPL)", "owner": "self",
-            "transaction_type": "purchase", "transaction_date": "2026-01-02",
-            "disclosure_date": "2026-02-01", "amount_low": 1001.0, "amount_high": 15000.0,
-        }
+        TradeRow(
+            ticker="AAPL", asset_name="Apple Inc. (AAPL)", owner="self",
+            transaction_type="purchase", transaction_date="2026-01-02",
+            disclosure_date="2026-02-01", amount_low=1001.0, amount_high=15000.0,
+        )
     ]
     with patch(
         "app.pipeline.fetch.house_ptr._fetch_bytes_with_retry", new_callable=AsyncMock
@@ -100,9 +101,9 @@ async def test_fetch_and_parse_ptr_tags_rows(db_session):
         rows = await fetch_and_parse_ptr(None, db_session, filing)
 
     assert len(rows) == 1
-    assert rows[0]["parse_confidence"] == "text"
-    assert rows[0]["source_url"] == "https://example.com/20026590.pdf"
-    assert rows[0]["filing_id"] == "20026590"
+    assert rows[0].parse_confidence == "text"
+    assert rows[0].source_url == "https://example.com/20026590.pdf"
+    assert rows[0].filing_id == "20026590"
 
 
 @pytest.mark.asyncio

@@ -27,6 +27,7 @@ below does that as a real POST, not a bypass.
 import asyncio
 import logging
 import re
+from dataclasses import asdict
 
 import httpx
 from lxml import html as lxml_html
@@ -34,7 +35,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
-from app.pipeline.fetch.ptr_common import normalize_date, parse_pdf_bytes, parse_table_rows
+from app.pipeline.fetch.ptr_common import TradeRow, normalize_date, parse_pdf_bytes, parse_table_rows
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -184,7 +185,7 @@ def _html_table_to_rows(table_el) -> list[list[str | None]]:
 
 async def fetch_and_parse_ptr(
     client: httpx.AsyncClient, db: Session, filing: dict,
-) -> list[dict]:
+) -> list[TradeRow]:
     """Fetch one PTR report page and parse its transactions.
 
     Electronic filings render as an HTML transactions table (parsed
@@ -197,13 +198,13 @@ async def fetch_and_parse_ptr(
     cache_key = f"ptr-parsed-{filing_id}"
     cached = api_cache_get(db, "senate_ptr", cache_key, max_age_hours=24 * 30)
     if cached is not None:
-        return cached
+        return [TradeRow(**row) for row in cached]
 
     resp = await _request_with_retry(client, "GET", filing["report_url"])
     if resp is None:
         return []
 
-    rows: list[dict] = []
+    rows: list[TradeRow] = []
     confidence = "text"
     if filing.get("is_paper"):
         pdf_link = re.search(r'href="([^"]+\.pdf)"', resp.text, re.I)
@@ -224,9 +225,11 @@ async def fetch_and_parse_ptr(
             logger.error("Failed to parse Senate PTR HTML %s: %s", filing["report_url"], e)
 
     for row in rows:
-        row["parse_confidence"] = confidence
-        row["source_url"] = filing["report_url"]
-        row["filing_id"] = filing_id
+        row.parse_confidence = confidence
+        row.source_url = filing["report_url"]
+        row.filing_id = filing_id
 
-    api_cache_set(db, "senate_ptr", cache_key, rows)
+    # The API cache stores plain JSON, not dataclasses — convert at this
+    # boundary and reconstruct on the cache-hit path above.
+    api_cache_set(db, "senate_ptr", cache_key, [asdict(row) for row in rows])
     return rows

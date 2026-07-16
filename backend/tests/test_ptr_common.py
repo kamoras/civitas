@@ -3,6 +3,7 @@ no network, no DB, deterministic.
 """
 
 from app.pipeline.fetch.ptr_common import (
+    TradeRow,
     classify_transaction_type,
     normalize_date,
     parse_amount_range,
@@ -50,18 +51,18 @@ def test_parse_table_rows_happy_path():
     )
     rows = parse_table_rows(table)
     assert len(rows) == 2
-    assert rows[0] == {
-        "ticker": "AAPL",
-        "asset_name": "Apple Inc. (AAPL)",
-        "owner": "spouse",
-        "transaction_type": "purchase",
-        "transaction_date": "2026-01-02",
-        "disclosure_date": "2026-02-01",
-        "amount_low": 1001.0,
-        "amount_high": 15000.0,
-    }
-    assert rows[1]["owner"] == "self"
-    assert rows[1]["transaction_type"] == "sale_full"
+    assert rows[0] == TradeRow(
+        ticker="AAPL",
+        asset_name="Apple Inc. (AAPL)",
+        owner="spouse",
+        transaction_type="purchase",
+        transaction_date="2026-01-02",
+        disclosure_date="2026-02-01",
+        amount_low=1001.0,
+        amount_high=15000.0,
+    )
+    assert rows[1].owner == "self"
+    assert rows[1].transaction_type == "sale_full"
 
 
 def test_parse_table_rows_skips_unparseable_rows_without_fabricating():
@@ -72,7 +73,7 @@ def test_parse_table_rows_skips_unparseable_rows_without_fabricating():
     )
     rows = parse_table_rows(table)
     assert len(rows) == 1
-    assert rows[0]["ticker"] == "AAPL"
+    assert rows[0].ticker == "AAPL"
 
 
 def test_parse_table_rows_missing_header_returns_empty():
@@ -92,4 +93,4 @@ def test_parse_table_rows_no_ticker_in_asset_name():
     )
     rows = parse_table_rows(table)
     assert len(rows) == 1
-    assert rows[0]["ticker"] is None
+    assert rows[0].ticker is None
