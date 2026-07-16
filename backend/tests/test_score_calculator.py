@@ -533,6 +533,27 @@ class TestFundingDiversity:
         # all despite ~6.75% of funding genuinely being industry-spread.
         assert score - blind_score >= 5
 
+    def test_overwhelming_small_dollar_not_capped_at_flat_neutral(self):
+        """A senator whose funding is almost entirely small-dollar (real
+        example: Bernie Sanders, 63% small-donor / 0.28% classified-
+        industry money) previously scored exactly 69 — the population-wide
+        maximum for this dimension — because the concentration signal's
+        fallback was a flat 65 for ANY small_frac > 0.3, whether just over
+        the threshold or, as here, close to total reliance. Two profiles
+        that differ sharply in how grassroots-dominated they are must not
+        collapse to the same score."""
+        just_over_threshold = _calc_funding_diversity({
+            "totalRaised": 1_000_000,
+            "smallDonorPercentage": 31,
+            "industryBreakdown": [{"industry": "OTHER", "total": 10_000, "percentage": 1}],
+        })
+        overwhelmingly_small_dollar = _calc_funding_diversity({
+            "totalRaised": 1_000_000,
+            "smallDonorPercentage": 90,
+            "industryBreakdown": [{"industry": "OTHER", "total": 10_000, "percentage": 1}],
+        })
+        assert overwhelmingly_small_dollar > just_over_threshold + 15
+
 
 class TestPromisePersistence:
     """Higher score = more kept promises + floor advocacy boost."""

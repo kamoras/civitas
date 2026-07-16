@@ -17,6 +17,16 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.1",
+    date: "2026-07-16",
+    title: "Funding Diversity's small-donor ceiling raised for overwhelmingly grassroots-funded members",
+    changes: [
+      "A population-wide check found no senator scored above 69 on Funding Diversity — the single most grassroots-funded senator by small-donor share scored exactly 69, the same as anyone just barely over an internal 30% threshold. The industry-concentration half of this score falls back to a flat neutral value when a member has too little classified-industry money to measure meaningfully; that fallback used to be a flat number regardless of whether a member was just over the threshold or almost entirely small-dollar funded.",
+      "The fallback now scales with how dominant small-donor funding actually is, instead of a one-size-fits-all value — a member relying almost entirely on small donors is treated as close to maximally diversified (since that money is spread across an effectively unbounded number of individual contributors), rather than capped at the same score as someone only modestly grassroots-funded.",
+      "This only raises scores for members whose funding leans heavily small-dollar; it does not change how concentrated industry-sourced money is scored.",
+    ],
+  },
+  {
     version: "v6.0",
     date: "2026-07-15",
     title: "Promise Persistence removed as a scored dimension",
