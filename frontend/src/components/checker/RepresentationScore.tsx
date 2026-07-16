@@ -1,15 +1,14 @@
 "use client";
 
-import { Senator, CampaignPromise, VotingRecord, SponsoredBill } from "@/types/senator";
+import { Senator, VotingRecord, SponsoredBill } from "@/types/senator";
 import { calculateOverallScore, getScoreLabel, getScoreColor } from "@/lib/corruption";
 import { useScoreWeights } from "@/hooks/useConfig";
 import MetricTooltip from "./MetricTooltip";
-import { TECHNICAL_TERMS } from "@/lib/plainLanguage";
-import type { ScoreKey } from "@/lib/plainLanguage";
+import { SCORE_TERMS } from "@/lib/scoreTerms";
+import type { ScoreKey } from "@/lib/scoreTerms";
 
 interface RepresentationScoreProps {
   breakdown: Senator["representationScore"];
-  promises?: CampaignPromise[];
   votingRecord?: VotingRecord;
   funding?: Senator["funding"];
   sponsoredBills?: SponsoredBill[];
@@ -27,7 +26,6 @@ function getScoreGrade(score: number): string {
 
 const SCORE_KEYS: ScoreKey[] = [
   "fundingIndependence",
-  "promisePersistence",
   "independentVoting",
   "fundingDiversity",
   "legislativeEffectiveness",
@@ -35,7 +33,6 @@ const SCORE_KEYS: ScoreKey[] = [
 
 const METRIC_BLURBS: Record<ScoreKey, string> = {
   fundingIndependence: "How little of their campaign comes from PACs",
-  promisePersistence: "Do their votes match their campaign promises?",
   independentVoting: "Does their voting match what their state elected them to do?",
   fundingDiversity: "How many different industries fund them",
   legislativeEffectiveness: "How well they advance bills they sponsor",
@@ -100,21 +97,12 @@ function ScoreBar({
   );
 }
 
-export default function CorruptionScore({ breakdown, promises, votingRecord, funding, sponsoredBills, rank, totalInChamber }: RepresentationScoreProps) {
+export default function RepresentationScore({ breakdown, votingRecord, funding, sponsoredBills, rank, totalInChamber }: RepresentationScoreProps) {
   const weights = useScoreWeights();
   const overall = calculateOverallScore(breakdown, weights);
   const label = getScoreLabel(overall);
   const colorClass = getScoreColor(overall);
   const grade = getScoreGrade(overall);
-
-  const evaluable = (promises ?? []).filter(p => p.alignment !== "unclear").length;
-  const totalPromises = (promises ?? []).length;
-  const promiseBasis: string | undefined =
-    totalPromises === 0
-      ? "no platform data · defaults to 50"
-      : evaluable === 0
-        ? `${totalPromises} promise${totalPromises !== 1 ? "s" : ""}, none evaluable · defaults to 50`
-        : `${evaluable} of ${totalPromises} had enough evidence to score`;
 
   const votingBasis: string | undefined =
     !votingRecord || votingRecord.totalVotes === 0
@@ -162,7 +150,6 @@ export default function CorruptionScore({ breakdown, promises, votingRecord, fun
         : `${nBills} bills sponsored`;
 
   const scoreBasis: Partial<Record<ScoreKey, string | undefined>> = {
-    promisePersistence: promiseBasis,
     independentVoting: votingBasis,
     fundingIndependence: fundingIndependenceBasis,
     fundingDiversity: fundingDiversityBasis,
@@ -178,7 +165,7 @@ export default function CorruptionScore({ breakdown, promises, votingRecord, fun
         </div>
         <div className="pb-2">
           <div className="text-xs text-matrix-green/40">
-            <MetricTooltip text="Weighted average of 5 sub-scores measuring how well this senator represents constituents. Based on funding sources, promise follow-through, voting independence, funding diversity, and legislative effectiveness. 100 = ideal representation, 0 = none. Scores near 50 mean limited data.">
+            <MetricTooltip text="Weighted average of 4 sub-scores measuring how well this senator represents constituents. Based on funding independence, voting alignment with their constituents, funding diversity, and legislative effectiveness. 100 = ideal representation, 0 = none. Scores near 50 mean limited data.">
               REPRESENTATION SCORECARD
             </MetricTooltip>
           </div>
@@ -197,7 +184,7 @@ export default function CorruptionScore({ breakdown, promises, votingRecord, fun
 
       <div className="space-y-3 mt-4">
         {SCORE_KEYS.map((key) => {
-          const t = TECHNICAL_TERMS[key];
+          const t = SCORE_TERMS[key];
           return (
             <ScoreBar
               key={key}

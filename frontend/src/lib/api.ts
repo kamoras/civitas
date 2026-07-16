@@ -230,12 +230,13 @@ export interface AppConfig {
 }
 
 const DEFAULT_CONFIG: AppConfig = {
+  // Matches backend/app/config_definitions.py's SCORE_WEIGHTS — fallback
+  // used only if /api/config fails to load.
   scoreWeights: {
-    fundingIndependence: 0.15,
-    promisePersistence: 0.25,
-    independentVoting: 0.25,
-    fundingDiversity: 0.10,
-    legislativeEffectiveness: 0.25,
+    fundingIndependence: 0.20,
+    independentVoting: 0.33,
+    fundingDiversity: 0.13,
+    legislativeEffectiveness: 0.34,
   },
   presidentScoreWeights: {
     independence: 0.15,

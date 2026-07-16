@@ -122,7 +122,7 @@ export default function AboutPage() {
           {/* ── Senate Metrics ── */}
           <Section title="SENATE SCORECARD METRICS">
             <P>
-              Each senator receives five sub-scores on a 0-100 scale, weighted into an
+              Each senator receives four sub-scores on a 0-100 scale, weighted into an
               overall Representation Score. Higher is better.
             </P>
             <P>
@@ -136,13 +136,27 @@ export default function AboutPage() {
               2nd-from-last Senate-wide almost entirely because of this pair, despite
               above-median scores on the other three). Rebalanced so the pair&apos;s
               combined weight matches one genuinely distinct dimension&apos;s weight, with
-              the difference redistributed to the three dimensions that are empirically
+              the difference redistributed to the dimensions that are empirically
               uncorrelated with each other and with this pair.
+            </P>
+            <P>
+              <em className="text-matrix-green/80">Promise Persistence was removed
+              (2026-07)</em> as a scored dimension. A live measurement across all 100
+              senators found 0 reached even &quot;medium&quot; confidence on evaluable
+              promises (mean 0.3 evaluable per senator, 76% with zero) — real campaign
+              promises are generic platform language that semantic matching against
+              specific votes and bills structurally can&apos;t bridge. This was the fourth
+              attempt at fixing this dimension without resolving the underlying gap; see
+              the <a href="/changelog" className="underline underline-offset-2 hover:text-matrix-green/70">scoring changelog</a> for
+              the full history. Campaign-promise tracking (kept/broken/partial) is still
+              collected and shown on each member&apos;s profile — it&apos;s just no longer folded
+              into the weighted score. The freed 25% is redistributed proportionally
+              across the remaining four dimensions.
             </P>
 
             <div className="space-y-4 mt-4">
               <div>
-                <Label>Funding Independence (15%)</Label>
+                <Label>Funding Independence (20%)</Label>
                 <P>
                   Measures three dimensions: (1) PAC dependency — a blend of the share of
                   funding from PACs and the absolute PAC dollars received, so that very
@@ -163,37 +177,7 @@ export default function AboutPage() {
               </div>
 
               <div>
-                <Label>Promise Persistence (25%)</Label>
-                <P>
-                  Tracks whether a member&apos;s voting record aligns with their stated commitments.
-                  For senators, commitments are extracted from official senate.gov campaign
-                  platforms. For House representatives, commitments are derived from the bills
-                  they sponsor, since campaign platform text is scarce for House members. Votes are
-                  cross-referenced against these commitments using semantic search to find relevant
-                  legislation.
-                  <Cite id="2">Naurin 2011</Cite>
-                </P>
-                <P>
-                  A confidence penalty is applied when few commitments are evaluable: if only
-                  1 of 10 could be checked against votes, the score blends toward
-                  50 (neutral) rather than being inflated by a single data point. This
-                  implements Bayesian shrinkage toward the prior.
-                  <Cite id="19">Efron &amp; Morris 1975</Cite>
-                </P>
-                <P>
-                  This metric also incorporates floor advocacy analysis — whether
-                  a member actively speaks on the floor about their committed issues,
-                  parsed from Congressional Record proceedings. This captures effort that
-                  voting records miss: in a gridlocked legislature, a member may not get bills
-                  to a vote but can still demonstrate persistence through floor speeches.
-                  The floor advocacy component is weighted at 15% of the promise score,
-                  following research on legislative speech as a signal of commitment.
-                  <Cite id="3">Martin 2011</Cite>
-                </P>
-              </div>
-
-              <div>
-                <Label>Constituent Alignment (25%)</Label>
+                <Label>Constituent Alignment (33%)</Label>
                 <P>
                   Measures how a member&apos;s voting compares to what their state elected them
                   to do — not raw defection from party. Each member&apos;s contested-vote break
@@ -329,8 +313,8 @@ export default function AboutPage() {
           {/* ── House Representatives ── */}
           <Section title="HOUSE REPRESENTATIVE SCORECARDS">
             <P>
-              All 435 House representatives are scored using the same five-metric
-              framework as the Senate: Funding Independence, Promise Persistence,
+              All 435 House representatives are scored using the same four-metric
+              framework as the Senate: Funding Independence,
               Constituent Alignment, Funding Diversity, and Legislative Effectiveness. The data sources (FEC,
               Congress.gov, GovInfo) and classification techniques are identical,
               ensuring consistent, comparable scores across both chambers.
@@ -918,7 +902,7 @@ export default function AboutPage() {
               <div>
                 <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">WHAT AI DOES NOT DO</h3>
                 <div className="space-y-2">
-                  <Row label="Score calculation" value="All five sub-scores use deterministic formulas with no LLM input. The math is fully auditable." />
+                  <Row label="Score calculation" value="All four sub-scores use deterministic formulas with no LLM input. The math is fully auditable." />
                   <Row label="Bill classification" value="Policy areas, party alignment, and stance are all embedding-based — no LLM in the loop." />
                   <Row label="Donor classification" value="FEC metadata + embeddings + kNN handle all donor and industry classification." />
                   <Row label="Data fabrication" value="The LLM only analyzes data already fetched from official APIs. It does not generate or invent facts." />
