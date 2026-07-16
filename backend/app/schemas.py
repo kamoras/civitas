@@ -27,6 +27,10 @@ class DonorSchema(CamelModel):
     pac_sponsor: str | None = None
     pac_industry: str | None = None
     pac_analysis: str | None = None
+    # FEC committee_type code ("Q"=Qualified/multicandidate, "N"=Nonqualified)
+    # for this donor's own committee, when known — see
+    # score_calculator._funding_independence_core's PAC-utilization signal.
+    committee_type: str | None = None
 
 
 class IndustryDonationSchema(CamelModel):

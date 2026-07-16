@@ -543,18 +543,29 @@ def _calc_funding_independence(funding: dict) -> int:
     Three components, calibrated so the median senator scores ≈50 on each
     (empirical distributions from the 2026-06 audit of FEC cycle totals):
 
-      1. PAC dependency (50%): PAC *share*, scaled by a penalty-only
-         absolute-*dollar* factor.  Share: fraction of funding from PACs
-         (FEC cycle totals, Schedule A) plus half-weighted outside
-         spending (Schedule E independent expenditures supporting the
-         candidate); median true PAC ratio is ≈28% (audit; consistent
-         with Barber 2016, Table 2 ≈25–30%), so the ×2.0 multiplier puts
-         the median near 50.  Dollar factor: ×1.0 at $0 down to ×0.5 at
-         $4M+ (audit median $2.0M → ×0.75).  This corrects the mechanical
-         scale bias of share alone (PAC checks are capped, individual
-         money is not, so mega-campaigns dilute PAC money to
-         invisibility) without letting modest absolute dollars rescue a
-         fully PAC-funded small campaign.
+      1. PAC dependency (50%): PAC *share*, scaled by how close the
+         contributing PACs actually are to their legal per-election
+         maximum.  Share: fraction of funding from PACs (FEC cycle
+         totals, Schedule A) plus half-weighted outside spending
+         (Schedule E independent expenditures supporting the candidate);
+         median true PAC ratio is ≈28% (audit; consistent with Barber
+         2016, Table 2 ≈25–30%), so the ×2.0 multiplier puts the median
+         near 50.  Utilization factor (2026-07): PAC checks are capped
+         by law while individual money isn't, so share alone has a
+         mechanical scale bias — a $100M campaign dilutes millions of
+         PAC dollars to a near-invisible share (2026-07 audit measured FI
+         vs log(total raised) at r=+0.68). Rather than penalize by
+         absolute PAC dollars raised (a blunt proxy for the same
+         concern), this measures the real thing directly: for each
+         contributing PAC with a resolved committee type, how much of
+         its legal per-election cap ($5,000 for a Qualified/multicandidate
+         PAC, $3,500 for a Nonqualified one — FEC 2025-2026 limits) did it
+         actually use. Dollar-weighted across all such PACs, since a PAC
+         maxing out signals a deeper commitment than ten PACs each
+         giving a token amount. Falls back to the old dollar-based
+         penalty when no contributing PAC has a resolved committee type
+         (e.g. all lookups failed) — missing data degrades gracefully
+         rather than silently skipping the correction.
 
       2. Small-donor share (25%): unitemized (<$200) contributions as a
          share of total receipts — the broadest-possible funding base and
@@ -606,17 +617,62 @@ def _funding_independence_core(funding: dict) -> dict:
 
     ratio_score = max(0.0, (1.0 - pac_ratio * 2.0)) * 100
 
-    # Scale the share-based score by an absolute-dollar factor. Share
-    # alone has a mechanical scale bias: PAC checks are capped (~$10K per
-    # PAC per cycle) while individual money scales without bound, so a
-    # $100M campaign dilutes millions of PAC dollars to a near-zero share
-    # and scores as "independent" — the 2026-07 audit measured FI vs
-    # log(total raised) at r=+0.68. The factor is penalty-only (it can
-    # halve the share score but never raise it, so a small fully-PAC-
-    # funded campaign still scores ~0). Calibrated to the audit
-    # distribution of two-election-window PAC receipts: $0 → no penalty,
-    # median $2.0M → ×0.75, $4M+ (p90 $4.4M) → ×0.5.
-    volume_factor = 0.5 + 0.5 * max(0.0, 1.0 - pac_total / 4_000_000)
+    # Scale the share-based score by how close contributing PACs are to
+    # their legal per-election maximum — see the docstring above for why
+    # this replaced a cruder absolute-dollar penalty. Caps are FEC
+    # 2025-2026 cycle limits (fec.gov/help-candidates-and-committees/
+    # candidate-taking-receipts/contribution-limits/): $5,000/election for
+    # a Qualified (multicandidate) PAC, $3,500/election for a Nonqualified
+    # one (the latter tracks the individual limit and is inflation-
+    # adjusted each cycle — recalibrate at the next cycle boundary).
+    MULTICANDIDATE_PAC_CAP = 5_000
+    NONMULTICANDIDATE_PAC_CAP = 3_500
+
+    # "Q"/"N" are the only two FEC committee_type codes that are actually
+    # PACs subject to these per-election caps. A contributing "COM" entity
+    # can just as easily be a party committee, a joint fundraising
+    # committee, or a hybrid/Carey committee (codes like "Y", "V", "W") —
+    # real committee types observed live against production data for
+    # this exact use case — none of which are bound by the PAC limits, and
+    # some of which legitimately transfer far more than $5,000 as a
+    # pass-through of many underlying individual contributions. Anything
+    # outside "Q"/"N" is excluded from the utilization pool entirely
+    # rather than forced into the nonqualified bucket, where a large JFC
+    # transfer would misleadingly register as a maxed-out PAC.
+    pac_donors = [
+        d for d in funding.get("topDonors", [])
+        if d.get("committeeType") in ("Q", "N")
+    ]
+    if pac_donors:
+        total_cap = 0.0
+        total_utilized = 0.0
+        for d in pac_donors:
+            cap = MULTICANDIDATE_PAC_CAP if d["committeeType"] == "Q" else NONMULTICANDIDATE_PAC_CAP
+            total_cap += cap
+            total_utilized += min(d.get("total", 0), cap)
+        pac_utilization = total_utilized / total_cap if total_cap > 0 else 0.0
+        # 1.0 at zero utilization (PACs giving token amounts, no penalty)
+        # down to 0.5 at full utilization (PACs uniformly maxing out) —
+        # same [0.5, 1.0] output range as the dollar-based factor this
+        # replaced, so the component's overall scale doesn't jump for the
+        # population when this ships.
+        volume_factor = 1.0 - 0.5 * pac_utilization
+        volume_detail_suffix = (
+            f"{len(pac_donors)} PAC(s) with known committee type averaging "
+            f"{pac_utilization:.0%} of their per-election cap"
+        )
+    else:
+        # No contributing donor resolves to an actual PAC ("Q"/"N") —
+        # every committee-type lookup failed, none were FEC entity_type
+        # "COM" rows, or all resolved to a non-PAC committee type (party
+        # committee, JFC, hybrid/Carey committee) — degrade to the
+        # original dollar-based penalty rather than silently skipping the
+        # correction. Calibrated to the 2026-06
+        # audit distribution of two-election-window PAC receipts: $0 → no
+        # penalty, median $2.0M → ×0.75, $4M+ (p90 $4.4M) → ×0.5.
+        volume_factor = 0.5 + 0.5 * max(0.0, 1.0 - pac_total / 4_000_000)
+        volume_detail_suffix = f"no PAC committee-type data — fallback scaling for ${pac_total:,.0f} in absolute PAC dollars"
+
     pac_score = ratio_score * volume_factor
 
     # Component 2: small-donor share (25% weight)
@@ -660,8 +716,8 @@ def _funding_independence_core(funding: dict) -> dict:
                 "detail": (
                     f"{pac_ratio:.0%} of ${total_raised:,.0f} raised came from PACs"
                     + (" (incl. outside spending)" if outside_for > 0 else "")
-                    + f" → raw {ratio_score:.1f}, scaled ×{volume_factor:.2f} for "
-                    f"${pac_total:,.0f} in absolute PAC dollars"
+                    + f" → raw {ratio_score:.1f}, scaled ×{volume_factor:.2f} "
+                    f"({volume_detail_suffix})"
                 ),
             },
             {

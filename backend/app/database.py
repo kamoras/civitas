@@ -107,6 +107,8 @@ def _migrate_columns() -> None:
         ("representatives", "outside_spending_for", "REAL"),
         ("lobbying_matches", "is_consensus_vote", "BOOLEAN"),
         ("rep_lobbying_matches", "is_consensus_vote", "BOOLEAN"),
+        ("donors", "committee_type", "TEXT"),
+        ("rep_donors", "committee_type", "TEXT"),
     ]
 
     drops: list[tuple[str, str]] = [

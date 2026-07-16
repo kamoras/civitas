@@ -292,6 +292,7 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
                         else d.pac_industry
                     ),
                     pac_analysis="" if (d.pac_analysis and _FILLER_RE.search(d.pac_analysis)) else d.pac_analysis,
+                    committee_type=d.committee_type,
                 )
                 for d in donors
             ],
@@ -405,7 +406,7 @@ def get_senator_score_breakdown(db: Session, senator_id: str) -> dict | None:
         "smallDonorPercentage": senator.small_donor_percentage,
         "outsideSpendingFor": senator.outside_spending_for,
         "topDonors": [
-            {"name": d.name, "total": d.total, "type": d.type}
+            {"name": d.name, "total": d.total, "type": d.type, "committeeType": d.committee_type}
             for d in senator.donors
         ],
         "industryBreakdown": [
