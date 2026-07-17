@@ -51,6 +51,15 @@ export default function Footer() {
           >
             BLUESKY
           </a>
+          <a
+            href="https://github.com/kamoras/civitas"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Civitas source code on GitHub (opens in new tab)"
+            className="text-neon-cyan/50 hover:text-neon-cyan transition-colors font-mono text-xs tracking-widest uppercase"
+          >
+            GITHUB
+          </a>
         </nav>
 
         {/* Disclaimer */}
