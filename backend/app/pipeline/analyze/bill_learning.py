@@ -63,68 +63,89 @@ logger = logging.getLogger(__name__)
 ENTITY_BILL_POLICY = "bill_policy"
 ENTITY_MOTION_TYPE = "motion_type"
 
-_reference_embs: np.ndarray | None = None
-_reference_labels: list[str] = []
-_reference_bill_ids: set[str] = set()
+class _ReferenceCorpusCache:
+    """In-memory cache of the ChromaDB reference corpus (embeddings +
+    labels, parallel arrays), loaded once per pipeline run and cleared
+    between runs. embeddings/labels are always loaded and cleared
+    together, never independently — a class makes that invariant
+    explicit instead of implicit across two separate `global` statements.
+
+    Previously also tracked a `_reference_bill_ids` set, populated on
+    every load but never read anywhere in the codebase — dropped as dead
+    code rather than carried into the class.
+    """
+
+    def __init__(self) -> None:
+        self.embeddings: np.ndarray | None = None
+        self.labels: list[str] = []
+
+    @property
+    def is_loaded(self) -> bool:
+        return self.embeddings is not None
+
+    def clear(self) -> None:
+        self.embeddings = None
+        self.labels = []
+
+    def load(self) -> tuple[np.ndarray | None, list[str]]:
+        """Load the reference corpus from ChromaDB (previously classified
+        bills) if not already cached.
+
+        Returns (embedding_matrix, label_list) or (None, []) if empty.
+        The "bills" collection is populated by embed_bills() at the end of
+        each pipeline run, so it grows over time.
+        """
+        if self.is_loaded:
+            return self.embeddings, self.labels
+
+        try:
+            from app.pipeline.vector_store import get_chroma_client
+            client = get_chroma_client()
+            collection = client.get_collection(name="bills")
+
+            result = collection.get(
+                include=["embeddings", "metadatas"],
+                limit=5000,
+            )
+            if not result or not result["ids"]:
+                return None, []
+
+            embs = np.array(result["embeddings"])
+            labels = [
+                (m.get("policyArea") or "PROCEDURAL")
+                for m in result["metadatas"]
+            ]
+
+            norms = np.linalg.norm(embs, axis=1, keepdims=True)
+            norms[norms == 0] = 1.0
+            embs = embs / norms
+
+            self.embeddings = embs
+            self.labels = labels
+
+            label_dist = Counter(labels)
+            logger.info(
+                "Loaded %d reference bills from ChromaDB: %s",
+                len(labels),
+                ", ".join(f"{k}={v}" for k, v in label_dist.most_common(8)),
+            )
+            return embs, labels
+
+        except Exception as e:
+            logger.debug("No reference corpus available yet: %s", e)
+            return None, []
+
+
+_reference_corpus = _ReferenceCorpusCache()
 
 
 def clear_reference_cache() -> None:
     """Clear in-memory reference corpus cache between pipeline runs."""
-    global _reference_embs, _reference_labels, _reference_bill_ids
-    _reference_embs = None
-    _reference_labels = []
-    _reference_bill_ids = set()
+    _reference_corpus.clear()
 
 
 def _load_reference_corpus() -> tuple[np.ndarray | None, list[str]]:
-    """Load the reference corpus from ChromaDB (previously classified bills).
-
-    Returns (embedding_matrix, label_list) or (None, []) if empty.
-    The "bills" collection is populated by embed_bills() at the end of
-    each pipeline run, so it grows over time.
-    """
-    global _reference_embs, _reference_labels, _reference_bill_ids
-    if _reference_embs is not None:
-        return _reference_embs, _reference_labels
-
-    try:
-        from app.pipeline.vector_store import get_chroma_client
-        client = get_chroma_client()
-        collection = client.get_collection(name="bills")
-
-        result = collection.get(
-            include=["embeddings", "metadatas"],
-            limit=5000,
-        )
-        if not result or not result["ids"]:
-            return None, []
-
-        embs = np.array(result["embeddings"])
-        labels = [
-            (m.get("policyArea") or "PROCEDURAL")
-            for m in result["metadatas"]
-        ]
-        bill_ids = set(result["ids"])
-
-        norms = np.linalg.norm(embs, axis=1, keepdims=True)
-        norms[norms == 0] = 1.0
-        embs = embs / norms
-
-        _reference_embs = embs
-        _reference_labels = labels
-        _reference_bill_ids = bill_ids
-
-        label_dist = Counter(labels)
-        logger.info(
-            "Loaded %d reference bills from ChromaDB: %s",
-            len(labels),
-            ", ".join(f"{k}={v}" for k, v in label_dist.most_common(8)),
-        )
-        return embs, labels
-
-    except Exception as e:
-        logger.debug("No reference corpus available yet: %s", e)
-        return None, []
+    return _reference_corpus.load()
 
 
 def classify_bill_by_reference(
@@ -432,5 +453,5 @@ def get_health_metrics(db: Session) -> dict:
         "policy_area_distribution": dict(area_dist.most_common()),
         "source_distribution": dict(source_dist.most_common()),
         "avg_confidence": round(avg_confidence, 3),
-        "reference_corpus_size": len(_reference_labels) if _reference_labels else 0,
+        "reference_corpus_size": len(_reference_corpus.labels),
     }
