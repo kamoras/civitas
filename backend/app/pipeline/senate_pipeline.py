@@ -774,6 +774,17 @@ async def run_senate_pipeline(
 
                     official_title = extract_official_title(titles)
                     crs_policy_area = (bill.get("policyArea") or {}).get("name", "")
+                    # actions[0] is the most recent (Congress.gov returns
+                    # newest-first) — same "becameLaw"/"Public Law" check
+                    # used for sponsored bills below, so a significant
+                    # bill's cosponsorship-edge weight (sponsorship_analysis.
+                    # _cosponsorship_edge_weight) reflects the same notion
+                    # of "advanced" everywhere in the pipeline.
+                    latest_action_text = (actions or [{}])[0].get("text", "") if actions else ""
+                    is_law = (
+                        "becamelaw" in latest_action_text.lower()
+                        or "public law" in latest_action_text.lower()
+                    )
 
                     bills_data.append(
                         {
@@ -791,6 +802,8 @@ async def run_senate_pipeline(
                             "actions": actions or [],
                             "sponsorParty": sponsor_party,
                             "sponsorBioguide": sponsor_bioguide,
+                            "isLaw": is_law,
+                            "latestAction": latest_action_text,
                         }
                     )
                 progress.update("fetch_bill_details", done=bill_idx + 1)
@@ -1487,6 +1500,8 @@ async def run_senate_pipeline(
                     "congress": sp["congress"],
                     "sponsorBioguide": bio_id,
                     "sponsorParty": party,
+                    "isLaw": sp.get("isLaw", False),
+                    "latestAction": sp.get("latestAction", ""),
                 })
 
         if sponsored_bills_for_cosponsor:

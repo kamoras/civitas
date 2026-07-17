@@ -5,9 +5,11 @@ Unobservables in the U.S. Congress").  Both analyses operate on a
 senator-senator cosponsorship matrix derived from congressional bill data.
 
 Matrix construction:
-    P[sponsor_row][cosponsor_row] += 1 for each cosponsorship event.
-    Diagonal starts as identity (each senator "sponsors" their own bills).
-    Cell values are square-rooted to flatten outliers (Tauberer 2012).
+    P[sponsor_row][cosponsor_row] += edge_weight for each cosponsorship
+    event (1.0 unless a weight_fn is supplied — see
+    _cosponsorship_edge_weight below). Diagonal starts as identity (each
+    senator "sponsors" their own bills). Cell values are square-rooted to
+    flatten outliers (Tauberer 2012).
 
 Leadership (PageRank, Brin & Page 1998):
     Columns are normalized to form a Markov transition matrix.  The
@@ -15,12 +17,22 @@ Leadership (PageRank, Brin & Page 1998):
     leadership score: senators whose bills attract cosponsors from other
     influential senators rank higher.
 
+    Cosponsorship-network centrality alone can't tell a substantive bill
+    from a message bill introduced purely for the cosponsor list — a
+    senator who signs onto ten resolutions with zero chance of passing
+    accrues the same network weight as one who cosponsors ten bills that
+    actually became law (external critique, 2026-07; see
+    ENACTED_EDGE_WEIGHT/ADVANCED_EDGE_WEIGHT/STALLED_EDGE_WEIGHT below for how this is addressed).
+
 Ideology (SVD/PCA, Poole & Rosenthal 1985):
     The second right-singular vector of the cosponsorship matrix captures
     the dominant ideological dimension.  This is oriented so that
     Republicans have positive values (right) and Democrats have negative
     values (left).  The score is blind to party labels; ideology emerges
-    purely from behavioral patterns.
+    purely from behavioral patterns. Unlike Leadership, this intentionally
+    does NOT weight edges by bill outcome — a symbolic resolution that
+    never advances is often exactly where partisan alignment shows up most
+    clearly, so down-weighting it would remove signal rather than noise.
 """
 
 import logging
@@ -28,13 +40,47 @@ import math
 
 import numpy as np
 
+from app.pipeline.analyze.score_calculator import _ADVANCEMENT_ACTION_KEYWORDS
+
 logger = logging.getLogger(__name__)
+
+# Cosponsorship-edge weights by bill outcome, replacing the prior flat 1.0
+# per cosponsorship. Calibrated 2026-07 against the live Senate/House
+# cosponsorship-enrichment corpus (see PR description for the population
+# breakdown): most recently-sponsored bills never advance within the
+# 2-year window this data is sampled from, so a stalled bill still needs a
+# real (non-zero) weight to avoid collapsing the matrix into near-total
+# sparsity — it remains genuine evidence of a cosponsorship relationship,
+# just weaker evidence of productive collaboration than a bill that
+# cleared a real procedural hurdle. Same [floor, 1.0] shape as every other
+# calibrated scale in this codebase (e.g. score_calculator.py's
+# volume_factor): stalled is not zeroed out, just discounted.
+ENACTED_EDGE_WEIGHT = 1.0
+ADVANCED_EDGE_WEIGHT = 0.6
+STALLED_EDGE_WEIGHT = 0.3
+
+
+def _cosponsorship_edge_weight(bill: dict) -> float:
+    """How much a single cosponsorship of `bill` should count toward
+    Legislative Leadership's PageRank — see the weight tiers'
+    calibration note. Bills with no isLaw/latestAction data at all (an
+    older enrichment path that doesn't fetch outcome data) default to the
+    original flat weight rather than being penalized for a data gap."""
+    if bill.get("isLaw"):
+        return ENACTED_EDGE_WEIGHT
+    action = bill.get("latestAction")
+    if action is None:
+        return ENACTED_EDGE_WEIGHT
+    if any(kw in action.lower() for kw in _ADVANCEMENT_ACTION_KEYWORDS):
+        return ADVANCED_EDGE_WEIGHT
+    return STALLED_EDGE_WEIGHT
 
 
 def _build_cosponsorship_matrix(
     bills_data: list[dict],
     cosponsors_map: dict[str, list[dict]],
     senator_bioguide_ids: set[str],
+    weight_fn=None,
 ) -> tuple[dict[str, int], int, np.ndarray]:
     """Build the senator-senator cosponsorship matrix.
 
@@ -45,6 +91,11 @@ def _build_cosponsorship_matrix(
             "bioguideId").
         senator_bioguide_ids: Set of bioguide IDs for senators in the
             current cohort.
+        weight_fn: optional bill dict -> float, applied per cosponsorship
+            edge (defaults to a flat 1.0 for every edge). Leadership/
+            PageRank passes _cosponsorship_edge_weight; Ideology/SVD
+            intentionally leaves this at the default — see module
+            docstring for why.
 
     Returns:
         (id_to_row, n_senators, P) where id_to_row maps bioguideId to
@@ -61,13 +112,14 @@ def _build_cosponsorship_matrix(
     for bio_id in senator_bioguide_ids:
         row(bio_id)
 
-    cells: list[tuple[int, int]] = []
+    cells: list[tuple[int, int, float]] = []
     for bill in bills_data:
         sponsor_bio = bill.get("sponsorBioguide")
         if not sponsor_bio or sponsor_bio not in senator_bioguide_ids:
             continue
         sponsor_idx = row(sponsor_bio)
         bill_id = bill.get("billId", "")
+        weight = weight_fn(bill) if weight_fn else 1.0
         for cosponsor in cosponsors_map.get(bill_id, []):
             cosponsor_bio = cosponsor.get("bioguideId", "")
             if not cosponsor_bio or cosponsor_bio not in senator_bioguide_ids:
@@ -75,12 +127,12 @@ def _build_cosponsorship_matrix(
             if cosponsor_bio == sponsor_bio:
                 continue
             cosponsor_idx = row(cosponsor_bio)
-            cells.append((sponsor_idx, cosponsor_idx))
+            cells.append((sponsor_idx, cosponsor_idx, weight))
 
     n = len(id_to_row)
     P = np.identity(n, dtype=float)
-    for sponsor_idx, cosponsor_idx in cells:
-        P[sponsor_idx, cosponsor_idx] += 1.0
+    for sponsor_idx, cosponsor_idx, weight in cells:
+        P[sponsor_idx, cosponsor_idx] += weight
 
     for i in range(n):
         for j in range(n):
@@ -137,6 +189,7 @@ def compute_leadership_scores(
 
     id_to_row, n, P = _build_cosponsorship_matrix(
         bills_data, cosponsors_map, senator_bioguide_ids,
+        weight_fn=_cosponsorship_edge_weight,
     )
     if n < 5:
         return {}

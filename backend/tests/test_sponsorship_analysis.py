@@ -1,9 +1,15 @@
 """Tests for sponsorship_analysis.py — PageRank leadership + SVD ideology."""
 
+import math
+
 import pytest
 
 from app.pipeline.analyze.sponsorship_analysis import (
+    ADVANCED_EDGE_WEIGHT,
+    ENACTED_EDGE_WEIGHT,
+    STALLED_EDGE_WEIGHT,
     _build_cosponsorship_matrix,
+    _cosponsorship_edge_weight,
     _rescale,
     compute_ideology_scores,
     compute_leadership_scores,
@@ -30,6 +36,32 @@ def _make_bills_and_cosponsors(
             {"bioguideId": c} for c in cosponsors
         ]
     return bills_data, cosponsors_map
+
+
+# ---------- cosponsorship-edge weighting ----------
+
+class TestCosponsorshipEdgeWeight:
+    """A cosponsorship of a bill that never advances shouldn't count as much
+    toward PageRank leadership as one that becomes law — otherwise
+    signing onto message bills with zero chance of passing is
+    indistinguishable from real legislative collaboration."""
+
+    @pytest.mark.parametrize(
+        "is_law, latest_action, expected",
+        [
+            pytest.param(True, "Became Public Law No: 119-1.", ENACTED_EDGE_WEIGHT, id="enacted"),
+            pytest.param(False, "Passed/agreed to in Senate.", ADVANCED_EDGE_WEIGHT, id="passed_chamber"),
+            pytest.param(False, "Ordered to be reported by voice vote.", ADVANCED_EDGE_WEIGHT, id="ordered_reported"),
+            pytest.param(False, "Referred to the Committee on Finance.", STALLED_EDGE_WEIGHT, id="stalled_in_committee"),
+            pytest.param(False, "", STALLED_EDGE_WEIGHT, id="empty_action_treated_as_stalled"),
+            # No outcome data at all (older enrichment path) — don't
+            # penalize a data gap, fall back to the pre-fix flat weight.
+            pytest.param(False, None, ENACTED_EDGE_WEIGHT, id="missing_data_defaults_to_original_flat_weight"),
+        ],
+    )
+    def test_edge_weight(self, is_law, latest_action, expected):
+        bill = {"isLaw": is_law, "latestAction": latest_action}
+        assert _cosponsorship_edge_weight(bill) == expected
 
 
 # ---------- matrix construction ----------
@@ -74,6 +106,33 @@ class TestBuildCosponsorshipMatrix:
         )
         row_a = id_to_row["A001"]
         assert P[row_a, row_a] == pytest.approx(1.0)
+
+    def test_weight_fn_scales_edge_by_bill_outcome(self):
+        """Same shape as test_simple_two_senators, but with a bill that
+        never advanced — the cosponsorship still counts, just less."""
+        bills, cosponsors = _make_bills_and_cosponsors({"A001": ["B002"]})
+        bills[0]["isLaw"] = False
+        bills[0]["latestAction"] = "Referred to the Committee on Finance."
+        id_to_row, n, P = _build_cosponsorship_matrix(
+            bills, cosponsors, {"A001", "B002"},
+            weight_fn=_cosponsorship_edge_weight,
+        )
+        sponsor_row = id_to_row["A001"]
+        cosponsor_row = id_to_row["B002"]
+        assert P[sponsor_row, cosponsor_row] == pytest.approx(math.sqrt(STALLED_EDGE_WEIGHT))
+
+    def test_no_weight_fn_preserves_original_flat_weight(self):
+        """Default behavior (no weight_fn) is unchanged — used by Ideology's
+        SVD, which intentionally doesn't discount stalled bills."""
+        bills, cosponsors = _make_bills_and_cosponsors({"A001": ["B002"]})
+        bills[0]["isLaw"] = False
+        bills[0]["latestAction"] = "Referred to the Committee on Finance."
+        id_to_row, n, P = _build_cosponsorship_matrix(
+            bills, cosponsors, {"A001", "B002"},
+        )
+        sponsor_row = id_to_row["A001"]
+        cosponsor_row = id_to_row["B002"]
+        assert P[sponsor_row, cosponsor_row] == pytest.approx(1.0)
 
 
 # ---------- rescale ----------
@@ -124,6 +183,37 @@ class TestLeadership:
         bills, cosponsors = _make_bills_and_cosponsors(sponsor_map)
         result = compute_leadership_scores(bills, cosponsors, senators)
         assert set(result.keys()) == senators
+
+    def test_advancing_bills_outrank_message_bills_at_equal_cosponsor_count(self):
+        """The critique this fix addresses: without outcome-weighting, a
+        senator who cosponsors ten bills with zero chance of passing
+        accrues the same PageRank weight as one whose bills actually
+        became law. Two sponsors here attract the identical set of
+        cosponsors — the only difference is bill outcome — so any score
+        gap is attributable to the weighting, not network size."""
+        cosponsor_pool = [f"C{i:03d}" for i in range(8)]
+        senators = {"LAWMAKER", "MESSENGER", *cosponsor_pool}
+
+        bills_data = []
+        cosponsors_map = {}
+        for i in range(3):
+            bill_id = f"S.LAW{i}"
+            bills_data.append({
+                "billId": bill_id, "sponsorBioguide": "LAWMAKER",
+                "sponsorParty": "D", "isLaw": True, "latestAction": "Became Public Law.",
+            })
+            cosponsors_map[bill_id] = [{"bioguideId": c} for c in cosponsor_pool]
+
+            stalled_id = f"S.MSG{i}"
+            bills_data.append({
+                "billId": stalled_id, "sponsorBioguide": "MESSENGER",
+                "sponsorParty": "D", "isLaw": False,
+                "latestAction": "Referred to the Committee on Finance.",
+            })
+            cosponsors_map[stalled_id] = [{"bioguideId": c} for c in cosponsor_pool]
+
+        result = compute_leadership_scores(bills_data, cosponsors_map, senators)
+        assert result["LAWMAKER"] > result["MESSENGER"]
 
 
 # ---------- ideology (SVD) ----------

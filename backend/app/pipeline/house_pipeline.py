@@ -375,6 +375,8 @@ async def run_house_pipeline() -> dict:
                             "congress": sp_data.get("congress", settings.CURRENT_CONGRESS),
                             "sponsorBioguide": bio_id,
                             "sponsorParty": party,
+                            "isLaw": sp_data.get("isLaw", False),
+                            "latestAction": sp_data.get("latestAction", ""),
                         })
 
                 all_bills_for_analysis.extend(sponsored_for_cosponsor)

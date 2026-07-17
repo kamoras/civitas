@@ -17,6 +17,16 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.2",
+    date: "2026-07-16",
+    title: "Legislative Leadership no longer treats every cosponsorship equally",
+    changes: [
+      "External review, 2026-07: cosponsorship-network centrality alone can't distinguish a substantive bill from a message bill introduced purely for the cosponsor list — a senator who signs onto ten resolutions with zero chance of passing accrued the same PageRank weight as one who cosponsors ten bills that actually became law.",
+      "Each cosponsorship is now weighted by what happened to the underlying bill: full weight if it became law, 60% weight if it passed a chamber or was ordered reported out of committee, 30% weight if it never advanced. A stalled bill still counts — it's real evidence of a working relationship, just weaker evidence of productive collaboration than one that cleared a real procedural hurdle. Calibrated against the live cosponsorship corpus, where the large majority of any two-year sample of sponsored bills (roughly 90-95%) never advances at all, so a zero weight for stalled bills would have collapsed the network into near-total sparsity.",
+      "This affects only Legislative Leadership (and, through it, 30% of Legislative Effectiveness). Ideology deliberately keeps the original flat weighting — a symbolic resolution that never advances is often exactly where partisan alignment shows up most clearly, so discounting it there would remove signal rather than noise.",
+    ],
+  },
+  {
     version: "v6.1",
     date: "2026-07-16",
     title: "Funding Diversity's small-donor ceiling raised for overwhelmingly grassroots-funded members",
