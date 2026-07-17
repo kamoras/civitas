@@ -164,6 +164,57 @@ def ungrounded_titled_names(generated: str, source: str) -> list[str]:
     return sorted(set(missing))
 
 
+_HEDGE_PHRASE_RE = re.compile(
+    r"\b(?:recent\s+)?(?:reports?|coverage|sources?|officials?|developments?)\s+"
+    r"(?:say|says|said|suggest(?:s|ed)?|indicate(?:s|d)?|show(?:s|ed)?|reveal(?:s|ed)?)\b"
+    r"|\baccording to (?:reports?|coverage|sources?)\b",
+    re.IGNORECASE,
+)
+
+
+def hedge_language(generated: str) -> list[str]:
+    """Attribution-hedge phrases ("recent reports say," "coverage indicates,"
+    "sources suggest," "according to reports") that talk about the news
+    instead of reporting it directly.
+
+    The generation prompt already instructs the model to report events
+    directly rather than through this kind of middle-man phrasing, but a
+    locally-run model doesn't reliably follow that instruction (observed
+    2026-07 on a newer local model). Unlike the other checks in this module,
+    this doesn't compare against source material — it only looks at how the
+    generated text itself is phrased.
+    """
+    return sorted({m.group(0) for m in _HEDGE_PHRASE_RE.finditer(generated or "")})
+
+
+_EDITORIALIZING_RE = re.compile(
+    r"\b(?:is|was|are|were)\s+(?:warranted|justified)\b"
+    r"|\b(?:rightly|understandably)\b"
+    r"|\bhelps?\s+(?:advance|move|push)\s+(?:the\s+)?(?:legislation|bill|agenda)\b"
+    r"|\bmakes sense given\b",
+    re.IGNORECASE,
+)
+
+
+def editorializing_language(generated: str) -> list[str]:
+    """Phrases that pass judgment on whether an action was legitimate,
+    justified, or well-motivated, rather than only reporting what happened.
+
+    Civitas doesn't take a position on whether an actor's stated rationale
+    for an action holds up. This isn't a factual error the other checks
+    would catch (no fabricated number or name) but a violation of the
+    "report, don't opine" instruction that — like the hedge-phrase pattern
+    above — prompting alone hasn't reliably prevented on a newer local
+    model (observed 2026-07: a full story framed a senator's speech as
+    "warranted" by referencing the speaker's own disputed claims, and
+    editorialized about how the speech "helps move legislation"). This is
+    deliberately narrow, matching this module's high-precision philosophy —
+    it catches clear-cut legitimizing language, not every possible way a
+    model could editorialize.
+    """
+    return sorted({m.group(0) for m in _EDITORIALIZING_RE.finditer(generated or "")})
+
+
 def grounding_violations(generated: str, source: str) -> list[str]:
     """Human-readable list of grounding failures, empty when clean."""
     problems = []

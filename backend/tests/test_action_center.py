@@ -19,6 +19,7 @@ from app.pipeline.analyze.action_center import (
     _check_summary_roles,
     _find_related_explore_docs,
     _fix_impossible_senate_vote_counts,
+    _largest_coherent_subgroup,
 )
 
 
@@ -40,6 +41,43 @@ def _make_issue(date: str, title: str, sources: list[str]) -> ActionIssue:
         source_names=json.dumps(sources),
         source_urls=json.dumps([f"https://example.com/{s.lower()}" for s in sources]),
     )
+
+
+def _block_sim_matrix(group_sizes: list[int], within: float = 0.9, across: float = 0.1) -> np.ndarray:
+    """A similarity matrix made of dense within-group blocks and a sparse
+    cross-group fill — synthetic stand-in for one coherent topic (within)
+    vs. an unrelated one (across), without needing real embeddings."""
+    n = sum(group_sizes)
+    m = np.full((n, n), across)
+    start = 0
+    for size in group_sizes:
+        m[start:start + size, start:start + size] = within
+        start += size
+    np.fill_diagonal(m, 1.0)
+    return m
+
+
+class TestLargestCoherentSubgroup:
+    def test_single_coherent_group_is_not_split(self):
+        matrix = _block_sim_matrix([4])
+        assert _largest_coherent_subgroup(matrix, 0.4) == [0, 1, 2, 3]
+
+    def test_genuine_bimodal_split_keeps_larger_group(self):
+        # 3 articles about one topic, 2 about an unrelated one — the "Iran
+        # war" / "ICE tension" scenario this function exists to catch.
+        matrix = _block_sim_matrix([3, 2])
+        assert _largest_coherent_subgroup(matrix, 0.4) == [0, 1, 2]
+
+    def test_lone_outlier_is_not_treated_as_a_second_topic(self):
+        # One stray article (size 1) is below _CLUSTER_SPLIT_MIN_SUBGROUP_SIZE
+        # — SOURCE_SIM_FLOOR's own centroid-distance filter handles this case.
+        matrix = _block_sim_matrix([4, 1])
+        assert _largest_coherent_subgroup(matrix, 0.4) == [0, 1, 2, 3, 4]
+
+    def test_small_minority_group_is_not_treated_as_a_second_topic(self):
+        # 2 of 10 articles (20%) is below _CLUSTER_SPLIT_MIN_SUBGROUP_SHARE.
+        matrix = _block_sim_matrix([8, 2])
+        assert _largest_coherent_subgroup(matrix, 0.4) == list(range(10))
 
 
 class TestDeduplicateTopClusters:
