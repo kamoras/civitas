@@ -183,7 +183,7 @@ export default function EnvironmentalPage() {
             <div className="space-y-0 mt-2">
               <Row label="Idle draw" value="~3.0 W" note="headless, no active inference" />
               <Row label="Web serving" value="~4–5 W" />
-              <Row label="Nightly pipeline (LLM)" value="~8–11 W" note="runs ~6–8h each night" />
+              <Row label="Nightly pipeline (LLM)" value="~8–11 W" note="runs ~3h each night" />
               <Row label="Stated average" value="~7 W" highlight />
               <Row label="Annual consumption" value="~61 kWh" highlight note="7W × 24h × 365 days" />
             </div>

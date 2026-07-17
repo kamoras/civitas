@@ -348,6 +348,20 @@ export interface StockTradesRunInfo {
   errorMessage: string | null;
 }
 
+export interface SupplementaryRunInfo {
+  id: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  status: string;
+  currentPhase: string | null;
+  exploreDocsIngested: number;
+  justicesScored: number;
+  justicesSkipped: boolean;
+  presidentsUpdated: number;
+  elapsedSeconds: number | null;
+  errorMessage: string | null;
+}
+
 export interface PipelineStatus {
   lastRun: PipelineRunInfo | null;
   nextScheduled: string | null;
@@ -676,9 +690,11 @@ export interface AdminPipelineStatus {
   isRunning: boolean;
   houseIsRunning?: boolean;
   stockTradesIsRunning?: boolean;
+  supplementaryIsRunning?: boolean;
   lastRun?: PipelineRunInfo;
   houseLastRun?: HouseRunInfo;
   stockTradesLastRun?: StockTradesRunInfo;
+  supplementaryLastRun?: SupplementaryRunInfo;
   actionRefresh?: ActionRefreshState;
 }
 
@@ -692,6 +708,15 @@ export async function fetchAdminPipelineStatus(token: string): Promise<AdminPipe
 
 export async function clearStuckHousePipeline(token: string): Promise<{ cleared: number; message: string }> {
   const res = await fetch(`${API_BASE}/admin/pipeline/clear-stuck-house`, {
+    method: "POST",
+    headers: adminHeaders(token),
+  });
+  if (!res.ok) throw new Error(`Clear failed: ${res.status}`);
+  return res.json();
+}
+
+export async function clearStuckSupplementaryPipeline(token: string): Promise<{ cleared: number; message: string }> {
+  const res = await fetch(`${API_BASE}/admin/pipeline/clear-stuck-supplementary`, {
     method: "POST",
     headers: adminHeaders(token),
   });

@@ -828,6 +828,32 @@ class HousePipelineRun(Base):
     ground_truth_failures: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class SupplementaryPipelineRun(Base):
+    """Tracks explore-document ingestion + SCOTUS justice scoring +
+    president scoring as one combined run.
+
+    Extracted from PipelineRun (2026-07): these three had no data
+    dependency on Senate's own fetch/analyze work — they were only
+    sequenced as extra phases inside run_senate_pipeline() because that
+    was the pipeline that already existed. Genuinely independent
+    domains get their own tracking row, mirroring HousePipelineRun,
+    instead of piggybacking on Senate's.
+    """
+    __tablename__ = "supplementary_pipeline_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    started_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    status: Mapped[str] = mapped_column(String, default=PipelineStatus.RUNNING)
+    current_phase: Mapped[str | None] = mapped_column(String, nullable=True)
+    explore_docs_ingested: Mapped[int] = mapped_column(Integer, default=0)
+    justices_scored: Mapped[int] = mapped_column(Integer, default=0)
+    justices_skipped: Mapped[bool] = mapped_column(Boolean, default=False)
+    presidents_updated: Mapped[int] = mapped_column(Integer, default=0)
+    elapsed_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class StockTradesPipelineRun(Base):
     """Tracks each STOCK Act PTR ingestion run — mirrors HousePipelineRun."""
     __tablename__ = "stock_trades_pipeline_runs"

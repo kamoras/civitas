@@ -14,6 +14,7 @@ import {
   setPoliticianVacancy,
   clearStuckHousePipeline,
   clearStuckStockTradesPipeline,
+  clearStuckSupplementaryPipeline,
   type AdminDashboard,
   type AdminPipelineStatus,
   type ActionRefreshState,
@@ -164,7 +165,7 @@ function LoginScreen({
   );
 }
 
-const PHASE_ORDER = ["fetch", "transform", "analyze", "explore", "justices", "presidents", "finalize"] as const;
+const PHASE_ORDER = ["fetch", "transform", "analyze", "finalize"] as const;
 
 function ElapsedTimer({ startedAt }: { startedAt: string | null | undefined }) {
   const [elapsed, setElapsed] = useState("");
@@ -1594,6 +1595,7 @@ function AdminDashboardView({
   } | null>(null);
   const [clearingHouse, setClearingHouse] = useState(false);
   const [clearingStockTrades, setClearingStockTrades] = useState(false);
+  const [clearingSupplementary, setClearingSupplementary] = useState(false);
 
   const wasRunningRef = useRef(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1872,33 +1874,39 @@ function AdminDashboardView({
                   );
                 })()}
 
-                {/* SCOTUS justices */}
+                {/* Supplementary pipeline: explore docs + SCOTUS + presidents.
+                    Independent of Senate (see supplementary_pipeline.py) —
+                    was previously nested inside Senate's own progress steps
+                    despite having no data dependency on it. */}
                 {(() => {
-                  const step = pipelineStatus?.lastRun?.progressSteps?.find(s => s.key === "justice_scorecards");
-                  if (!step) return null;
+                  const run = pipelineStatus?.supplementaryLastRun;
+                  const isStuck = run?.status === "running" && !pipelineStatus?.supplementaryIsRunning;
+                  const statusClassName =
+                    run?.status === "completed" ? "text-matrix-green" :
+                    run?.status === "failed" ? "text-neon-pink" :
+                    isStuck ? "text-yellow-400" : "text-matrix-green/50";
                   return (
-                    <div className="flex justify-between">
-                      <span className="text-matrix-green/60">SCOTUS</span>
-                      <span className="text-matrix-green/80">
-                        {step.detail ?? "—"}
-                        <span className="text-matrix-green/40"> · {formatTime(step.completedAt)}</span>
-                      </span>
-                    </div>
-                  );
-                })()}
-
-                {/* Presidents */}
-                {(() => {
-                  const step = pipelineStatus?.lastRun?.progressSteps?.find(s => s.key === "president_scorecards");
-                  if (!step) return null;
-                  return (
-                    <div className="flex justify-between">
-                      <span className="text-matrix-green/60">PRESIDENTS</span>
-                      <span className="text-matrix-green/80">
-                        {step.detail ?? "—"}
-                        <span className="text-matrix-green/40"> · {formatTime(step.completedAt)}</span>
-                      </span>
-                    </div>
+                    <PipelineStatusRow
+                      label="SUPPLEMENTARY"
+                      isRunning={!!pipelineStatus?.supplementaryIsRunning}
+                      run={run}
+                      isStuck={isStuck}
+                      statusClassName={statusClassName}
+                      detail={run && (
+                        <span className="text-matrix-green/60">
+                          {" "}· {run.exploreDocsIngested} docs · {run.justicesSkipped ? "SCOTUS skipped" : `${run.justicesScored} justices`} · {run.presidentsUpdated} pres
+                        </span>
+                      )}
+                      clearing={clearingSupplementary}
+                      onClear={async () => {
+                        setClearingSupplementary(true);
+                        try {
+                          await clearStuckSupplementaryPipeline(token);
+                          await pollStatus();
+                        } catch {}
+                        setClearingSupplementary(false);
+                      }}
+                    />
                   );
                 })()}
 
