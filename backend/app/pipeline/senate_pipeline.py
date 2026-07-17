@@ -1606,285 +1606,291 @@ async def run_senate_pipeline(
         producer.start()
 
         progress.begin("analyze_senators", total=len(senator_prepared))
-        for senator_idx in range(len(senator_prepared)):
-            prefetch_item = prefetch_q.get()
-            if prefetch_item is None:
-                break
-            _pfx_idx, analysis_input, precomputed = prefetch_item
+        # A fresh client — the Phase 1 client (opened at the top of this
+        # function) is already closed by this point, and every sponsored
+        # bill's fetch_bill_actions() call below needs a live one (observed
+        # 2026-07: closed-client failures on every single call here, burning
+        # ~6s of retry backoff each across up to ~12,600 sponsored bills).
+        async with httpx.AsyncClient() as client:
+            for senator_idx in range(len(senator_prepared)):
+                prefetch_item = prefetch_q.get()
+                if prefetch_item is None:
+                    break
+                _pfx_idx, analysis_input, precomputed = prefetch_item
 
-            prepared = senator_prepared[senator_idx]
-            senator = prepared["senator"]
-            funding = prepared["funding"]
-            voting_record = prepared["votingRecord"]
+                prepared = senator_prepared[senator_idx]
+                senator = prepared["senator"]
+                funding = prepared["funding"]
+                voting_record = prepared["votingRecord"]
 
-            logger.info(
-                "  [%d/%d] %s%s",
-                senator_idx + 1,
-                len(senator_prepared),
-                senator["name"],
-                " (prefetched)" if precomputed else "",
-            )
-            progress.update("analyze_senators", done=senator_idx, detail=senator["name"])
-
-            try:
-                if not analysis_input:
-                    analysis_input = _build_analysis_input(prepared, platform_texts)
-
-                analysis_results = await analyze_senator_batch(
-                    [analysis_input],
-                    db_session=db,
-                    precomputed=precomputed,
+                logger.info(
+                    "  [%d/%d] %s%s",
+                    senator_idx + 1,
+                    len(senator_prepared),
+                    senator["name"],
+                    " (prefetched)" if precomputed else "",
                 )
-                analysis = analysis_results[0] if analysis_results else {}
-                # Clean promises BEFORE scoring and persistence so the
-                # Promise Persistence score is computed from exactly the
-                # promises users will see (the read path applies the same
-                # rules only as a legacy safety net).
-                from app.pipeline.analyze.promise_quality import clean_promises
-                platform_data = {
-                    "campaignPromises": clean_promises(
-                        analysis.get("campaignPromises", [])
-                    ),
-                    "platformSummary": analysis.get("platformSummary", ""),
-                }
-                all_key_votes = analysis.get("keyVotes") or voting_record["keyVotes"]
-                key_vote_ids = set(analysis.get("keyVoteIds", []))
-                reasoning_map = analysis.get("reasoning", {})
+                progress.update("analyze_senators", done=senator_idx, detail=senator["name"])
 
-                final_key_votes = []
-                final_recent_votes = []
+                try:
+                    if not analysis_input:
+                        analysis_input = _build_analysis_input(prepared, platform_texts)
 
-                for v in all_key_votes:
-                    if v["billId"] in key_vote_ids:
-                        v["voteCategory"] = "key"
-                        v["keyVoteReasoning"] = reasoning_map.get(v["billId"])
-                        final_key_votes.append(v)
-                    else:
-                        v["voteCategory"] = "recent"
-                        final_recent_votes.append(v)
-
-                if not final_key_votes and all_key_votes:
-                    for v in all_key_votes[:min(5, len(all_key_votes))]:
-                        v["voteCategory"] = "key"
-                        final_key_votes.append(v)
-                    final_recent_votes = [
-                        v for v in final_recent_votes
-                        if v["billId"] not in {kv["billId"] for kv in final_key_votes}
-                    ]
-
-                voting_record["keyVotes"] = final_key_votes
-                # Preserve the actual recent roll call votes (from
-                # normalize_recent_votes) alongside the key bill leftovers.
-                # Without this, analyze_partisan_depth only sees the few
-                # key bill votes and misses the bulk of the voting record.
-                actual_recent = voting_record.get("recentVotes") or []
-                leftover_ids = {v["billId"] for v in final_recent_votes}
-                merged_recent = final_recent_votes + [
-                    v for v in actual_recent if v["billId"] not in leftover_ids
-                ]
-                voting_record["recentVotes"] = merged_recent
-                voting_record["votingSummary"] = analysis.get("votingSummary", "")
-
-                lobbying_matches = analysis.get("lobbyingMatches", [])
-
-                # Enrich matches with real registered lobbying activity
-                # (LDA filings). lobbyingSpend was a hardcoded 0 for every
-                # match before 2026-07; now it reflects actual disclosed
-                # federal lobbying by the matched organization. Cached per
-                # org+year, so only the first pipeline run pays the fetch.
-                await enrich_lobbying_matches_with_lda(
-                    lobbying_matches, db, datetime.utcnow().year - 1,
-                )
-
-                # Match Congressional Record floor remarks to this senator
-                senator_last_name = senator.get("lastNameForVoteMatch", "")
-                if not senator_last_name:
-                    fp = senator["name"].split()
-                    senator_last_name = fp[-1] if fp else ""
-                senator_last_name_upper = senator_last_name.upper()
-                senator_floor_remarks = all_floor_remarks.get(
-                    senator_last_name_upper, []
-                )
-                floor_advocacy = analyze_floor_advocacy(
-                    senator_floor_remarks,
-                    platform_data.get("campaignPromises", []),
-                )
-                if senator_floor_remarks:
-                    logger.info(
-                        "    floor remarks: %d (%d categories advocated)",
-                        floor_advocacy["totalRemarks"],
-                        len(floor_advocacy["advocatedCategories"]),
+                    analysis_results = await analyze_senator_batch(
+                        [analysis_input],
+                        db_session=db,
+                        precomputed=precomputed,
                     )
+                    analysis = analysis_results[0] if analysis_results else {}
+                    # Clean promises BEFORE scoring and persistence so the
+                    # Promise Persistence score is computed from exactly the
+                    # promises users will see (the read path applies the same
+                    # rules only as a legacy safety net).
+                    from app.pipeline.analyze.promise_quality import clean_promises
+                    platform_data = {
+                        "campaignPromises": clean_promises(
+                            analysis.get("campaignPromises", [])
+                        ),
+                        "platformSummary": analysis.get("platformSummary", ""),
+                    }
+                    all_key_votes = analysis.get("keyVotes") or voting_record["keyVotes"]
+                    key_vote_ids = set(analysis.get("keyVoteIds", []))
+                    reasoning_map = analysis.get("reasoning", {})
 
-                bio_id_for_score = senator.get("bioguideId", "")
-                temp_senator = {
-                    **senator,
-                    "funding": funding,
-                    "votingRecord": voting_record,
-                    "lobbyingMatches": lobbying_matches,
-                    "campaignPromises": platform_data.get("campaignPromises", []),
-                    "leadershipScore": leadership_scores.get(bio_id_for_score),
-                    "bipartisanshipScore": bipartisanship_scores.get(bio_id_for_score),
-                    "sponsoredBills": prepared.get("sponsoredBills", []),
-                }
-                corruption_score = calculate_scores(
-                    temp_senator,
-                    floor_advocacy=floor_advocacy,
-                )
-                corruption_score["confidence"] = calculate_confidence(temp_senator)
+                    final_key_votes = []
+                    final_recent_votes = []
 
-                # Enrich donors with PAC details from combined analysis
-                pac_detail_map = {
-                    d["name"].upper().strip(): d
-                    for d in analysis.get("pacDetails", [])
-                }
-                if pac_detail_map:
-                    enriched_donors = []
-                    for d in funding.get("topDonors", []):
-                        key = d["name"].upper().strip()
-                        if key in pac_detail_map:
-                            enriched_donors.append({**d, **pac_detail_map[key]})
+                    for v in all_key_votes:
+                        if v["billId"] in key_vote_ids:
+                            v["voteCategory"] = "key"
+                            v["keyVoteReasoning"] = reasoning_map.get(v["billId"])
+                            final_key_votes.append(v)
                         else:
-                            enriched_donors.append(d)
-                    funding["topDonors"] = enriched_donors
+                            v["voteCategory"] = "recent"
+                            final_recent_votes.append(v)
 
-                result = build_senator(
-                    senator,
-                    funding,
-                    voting_record,
-                    lobbying_matches,
-                    corruption_score,
-                )
+                    if not final_key_votes and all_key_votes:
+                        for v in all_key_votes[:min(5, len(all_key_votes))]:
+                            v["voteCategory"] = "key"
+                            final_key_votes.append(v)
+                        final_recent_votes = [
+                            v for v in final_recent_votes
+                            if v["billId"] not in {kv["billId"] for kv in final_key_votes}
+                        ]
 
-                result["campaignPromises"] = platform_data.get("campaignPromises", [])
-                result["platformSummary"] = platform_data.get("platformSummary", "")
+                    voting_record["keyVotes"] = final_key_votes
+                    # Preserve the actual recent roll call votes (from
+                    # normalize_recent_votes) alongside the key bill leftovers.
+                    # Without this, analyze_partisan_depth only sees the few
+                    # key bill votes and misses the bulk of the voting record.
+                    actual_recent = voting_record.get("recentVotes") or []
+                    leftover_ids = {v["billId"] for v in final_recent_votes}
+                    merged_recent = final_recent_votes + [
+                        v for v in actual_recent if v["billId"] not in leftover_ids
+                    ]
+                    voting_record["recentVotes"] = merged_recent
+                    voting_record["votingSummary"] = analysis.get("votingSummary", "")
 
-                from app.pipeline.analyze.party_platform import analyze_partisan_depth
-                senator_ideology = ideology_scores.get(senator.get("bioguideId", ""))
-                partisan_profile = analyze_partisan_depth(
-                    platform_data.get("campaignPromises", []),
-                    senator.get("party", ""),
-                    voting_record=voting_record,
-                    ideology_score=senator_ideology,
-                )
-                result["partisanDepth"] = partisan_profile
-                if partisan_profile.get("totalPositions", 0) > 0:
-                    logger.info(
-                        "    partisan depth: %s (%s, %d positions, %d cross-party)",
-                        partisan_profile["depth"],
-                        partisan_profile["overallParty"],
-                        partisan_profile["totalPositions"],
-                        partisan_profile["crossPartyCount"],
+                    lobbying_matches = analysis.get("lobbyingMatches", [])
+
+                    # Enrich matches with real registered lobbying activity
+                    # (LDA filings). lobbyingSpend was a hardcoded 0 for every
+                    # match before 2026-07; now it reflects actual disclosed
+                    # federal lobbying by the matched organization. Cached per
+                    # org+year, so only the first pipeline run pays the fetch.
+                    await enrich_lobbying_matches_with_lda(
+                        lobbying_matches, db, datetime.utcnow().year - 1,
                     )
 
-                # Classify policy areas for this senator's sponsored bills.
-                # Builds the richest possible text for the embedding model:
-                # official title (from pre-fetched titles), CRS policy area,
-                # and the short display title.
-                from app.pipeline.analyze.bill_analyzer import classify_policy_areas_multi
-                from app.pipeline.analyze.bill_stage import classify_bill_stage_from_actions
-                from app.pipeline.analyze.party_platform import classify_party_alignment_multi
-                raw_sponsored = prepared.get("sponsoredBills", [])
-                classified_sponsored: list[dict] = []
-                for sp in raw_sponsored:
-                    title = sp.get("title", "")
-                    api_policy = sp.get("policyArea", "")
-                    bill_id = sp.get("billId", "")
-                    bill_number_str = "".join(ch for ch in bill_id.split(".")[-1] if ch.isdigit())
-                    bill_actions: list[dict] = []
-                    if sp.get("billType") and bill_number_str and sp.get("congress"):
-                        bill_actions = await fetch_bill_actions(
-                            client, db, sp["congress"], sp["billType"].lower(), int(bill_number_str),
+                    # Match Congressional Record floor remarks to this senator
+                    senator_last_name = senator.get("lastNameForVoteMatch", "")
+                    if not senator_last_name:
+                        fp = senator["name"].split()
+                        senator_last_name = fp[-1] if fp else ""
+                    senator_last_name_upper = senator_last_name.upper()
+                    senator_floor_remarks = all_floor_remarks.get(
+                        senator_last_name_upper, []
+                    )
+                    floor_advocacy = analyze_floor_advocacy(
+                        senator_floor_remarks,
+                        platform_data.get("campaignPromises", []),
+                    )
+                    if senator_floor_remarks:
+                        logger.info(
+                            "    floor remarks: %d (%d categories advocated)",
+                            floor_advocacy["totalRemarks"],
+                            len(floor_advocacy["advocatedCategories"]),
                         )
-                    sp["stage"] = classify_bill_stage_from_actions(
-                        bill_actions, sp.get("isLaw", False),
+
+                    bio_id_for_score = senator.get("bioguideId", "")
+                    temp_senator = {
+                        **senator,
+                        "funding": funding,
+                        "votingRecord": voting_record,
+                        "lobbyingMatches": lobbying_matches,
+                        "campaignPromises": platform_data.get("campaignPromises", []),
+                        "leadershipScore": leadership_scores.get(bio_id_for_score),
+                        "bipartisanshipScore": bipartisanship_scores.get(bio_id_for_score),
+                        "sponsoredBills": prepared.get("sponsoredBills", []),
+                    }
+                    corruption_score = calculate_scores(
+                        temp_senator,
+                        floor_advocacy=floor_advocacy,
                     )
-                    if api_policy:
-                        sp["policyArea"] = api_policy.upper().replace(" ", "_")
-                    parts = [title]
-                    official = official_titles_map.get(bill_id, "")
-                    if official and official.lower() != title.lower():
-                        parts.append(official)
-                    if api_policy:
-                        parts.append(api_policy)
-                    classify_text = " ".join(parts)
-                    if classify_text and len(classify_text) > 10:
-                        areas = classify_policy_areas_multi(classify_text, db_session=db)
-                        if areas:
-                            alignment = classify_party_alignment_multi(
-                                classify_text, areas, "pro",
+                    corruption_score["confidence"] = calculate_confidence(temp_senator)
+
+                    # Enrich donors with PAC details from combined analysis
+                    pac_detail_map = {
+                        d["name"].upper().strip(): d
+                        for d in analysis.get("pacDetails", [])
+                    }
+                    if pac_detail_map:
+                        enriched_donors = []
+                        for d in funding.get("topDonors", []):
+                            key = d["name"].upper().strip()
+                            if key in pac_detail_map:
+                                enriched_donors.append({**d, **pac_detail_map[key]})
+                            else:
+                                enriched_donors.append(d)
+                        funding["topDonors"] = enriched_donors
+
+                    result = build_senator(
+                        senator,
+                        funding,
+                        voting_record,
+                        lobbying_matches,
+                        corruption_score,
+                    )
+
+                    result["campaignPromises"] = platform_data.get("campaignPromises", [])
+                    result["platformSummary"] = platform_data.get("platformSummary", "")
+
+                    from app.pipeline.analyze.party_platform import analyze_partisan_depth
+                    senator_ideology = ideology_scores.get(senator.get("bioguideId", ""))
+                    partisan_profile = analyze_partisan_depth(
+                        platform_data.get("campaignPromises", []),
+                        senator.get("party", ""),
+                        voting_record=voting_record,
+                        ideology_score=senator_ideology,
+                    )
+                    result["partisanDepth"] = partisan_profile
+                    if partisan_profile.get("totalPositions", 0) > 0:
+                        logger.info(
+                            "    partisan depth: %s (%s, %d positions, %d cross-party)",
+                            partisan_profile["depth"],
+                            partisan_profile["overallParty"],
+                            partisan_profile["totalPositions"],
+                            partisan_profile["crossPartyCount"],
+                        )
+
+                    # Classify policy areas for this senator's sponsored bills.
+                    # Builds the richest possible text for the embedding model:
+                    # official title (from pre-fetched titles), CRS policy area,
+                    # and the short display title.
+                    from app.pipeline.analyze.bill_analyzer import classify_policy_areas_multi
+                    from app.pipeline.analyze.bill_stage import classify_bill_stage_from_actions
+                    from app.pipeline.analyze.party_platform import classify_party_alignment_multi
+                    raw_sponsored = prepared.get("sponsoredBills", [])
+                    classified_sponsored: list[dict] = []
+                    for sp in raw_sponsored:
+                        title = sp.get("title", "")
+                        api_policy = sp.get("policyArea", "")
+                        bill_id = sp.get("billId", "")
+                        bill_number_str = "".join(ch for ch in bill_id.split(".")[-1] if ch.isdigit())
+                        bill_actions: list[dict] = []
+                        if sp.get("billType") and bill_number_str and sp.get("congress"):
+                            bill_actions = await fetch_bill_actions(
+                                client, db, sp["congress"], sp["billType"].lower(), int(bill_number_str),
                             )
-                            sp["policyAreas"] = [
-                                {
-                                    "area": a["area"],
-                                    "confidence": a["confidence"],
-                                    "party": {
-                                        pa["area"]: pa["party"]
-                                        for pa in alignment.get("areas", [])
-                                    }.get(a["area"], "bipartisan"),
-                                }
-                                for a in areas
-                            ]
-                            sp["partyLeaning"] = alignment.get("overall", "bipartisan")
-                            if not sp["policyArea"] and areas:
-                                sp["policyArea"] = areas[0]["area"]
-                    classified_sponsored.append(sp)
-                result["sponsoredBills"] = classified_sponsored
-                if classified_sponsored:
-                    logger.info(
-                        "    sponsored bills: %d (%d became law)",
-                        len(classified_sponsored),
-                        sum(1 for s in classified_sponsored if s.get("isLaw")),
-                    )
+                        sp["stage"] = classify_bill_stage_from_actions(
+                            bill_actions, sp.get("isLaw", False),
+                        )
+                        if api_policy:
+                            sp["policyArea"] = api_policy.upper().replace(" ", "_")
+                        parts = [title]
+                        official = official_titles_map.get(bill_id, "")
+                        if official and official.lower() != title.lower():
+                            parts.append(official)
+                        if api_policy:
+                            parts.append(api_policy)
+                        classify_text = " ".join(parts)
+                        if classify_text and len(classify_text) > 10:
+                            areas = classify_policy_areas_multi(classify_text, db_session=db)
+                            if areas:
+                                alignment = classify_party_alignment_multi(
+                                    classify_text, areas, "pro",
+                                )
+                                sp["policyAreas"] = [
+                                    {
+                                        "area": a["area"],
+                                        "confidence": a["confidence"],
+                                        "party": {
+                                            pa["area"]: pa["party"]
+                                            for pa in alignment.get("areas", [])
+                                        }.get(a["area"], "bipartisan"),
+                                    }
+                                    for a in areas
+                                ]
+                                sp["partyLeaning"] = alignment.get("overall", "bipartisan")
+                                if not sp["policyArea"] and areas:
+                                    sp["policyArea"] = areas[0]["area"]
+                        classified_sponsored.append(sp)
+                    result["sponsoredBills"] = classified_sponsored
+                    if classified_sponsored:
+                        logger.info(
+                            "    sponsored bills: %d (%d became law)",
+                            len(classified_sponsored),
+                            sum(1 for s in classified_sponsored if s.get("isLaw")),
+                        )
 
-                bio_id = senator.get("bioguideId", "")
-                l_score = leadership_scores.get(bio_id)
-                i_score = ideology_scores.get(bio_id)
-                result["leadershipScore"] = round(l_score, 4) if l_score is not None else None
-                b_score = bipartisanship_scores.get(bio_id)
-                result["bipartisanshipScore"] = round(b_score, 4) if b_score is not None else None
-                result["ideologyScore"] = round(i_score, 4) if i_score is not None else None
-                if l_score is not None and i_score is not None:
-                    result["sponsorshipDescription"] = describe_senator_position(
-                        i_score, l_score, senator.get("party", ""),
-                    )
-                    logger.info(
-                        "    sponsorship: leadership=%.2f ideology=%.2f (%s)",
-                        l_score, i_score, result["sponsorshipDescription"],
-                    )
-                else:
-                    result["sponsorshipDescription"] = None
+                    bio_id = senator.get("bioguideId", "")
+                    l_score = leadership_scores.get(bio_id)
+                    i_score = ideology_scores.get(bio_id)
+                    result["leadershipScore"] = round(l_score, 4) if l_score is not None else None
+                    b_score = bipartisanship_scores.get(bio_id)
+                    result["bipartisanshipScore"] = round(b_score, 4) if b_score is not None else None
+                    result["ideologyScore"] = round(i_score, 4) if i_score is not None else None
+                    if l_score is not None and i_score is not None:
+                        result["sponsorshipDescription"] = describe_senator_position(
+                            i_score, l_score, senator.get("party", ""),
+                        )
+                        logger.info(
+                            "    sponsorship: leadership=%.2f ideology=%.2f (%s)",
+                            l_score, i_score, result["sponsorshipDescription"],
+                        )
+                    else:
+                        result["sponsorshipDescription"] = None
 
-                results.append(result)
-                success_count += 1
+                    results.append(result)
+                    success_count += 1
 
-                upsert_senator(db, result)
-                pipeline_run.senators_processed = success_count
-                incremental_stats = get_llm_stats()
-                pipeline_run.llm_calls = incremental_stats["total_calls"]
-                pipeline_run.cache_hits = incremental_stats["cache_hits"]
-                pipeline_run.cache_misses = incremental_stats["cache_misses"]
-                pipeline_run.bills_classified = len(classified_bills)
-                pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
-                db.commit()
+                    upsert_senator(db, result)
+                    pipeline_run.senators_processed = success_count
+                    incremental_stats = get_llm_stats()
+                    pipeline_run.llm_calls = incremental_stats["total_calls"]
+                    pipeline_run.cache_hits = incremental_stats["cache_hits"]
+                    pipeline_run.cache_misses = incremental_stats["cache_misses"]
+                    pipeline_run.bills_classified = len(classified_bills)
+                    pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
+                    db.commit()
 
-                from app.config_definitions import SCORE_WEIGHTS
-                weighted_score = round(sum(
-                    corruption_score.get(k, 0) * w
-                    for k, w in SCORE_WEIGHTS.items()
-                ))
-                logger.info("    score %d/100", weighted_score)
-                progress.update("analyze_senators", done=senator_idx + 1)
-            except Exception:
-                logger.exception("  Failed for %s", senator["name"])
-                db.rollback()
-                fail_count += 1
-                results.append(senator)
-                pipeline_run.senators_failed = fail_count
-                pipeline_run.senators_processed = success_count
-                pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
-                db.commit()
-                progress.update("analyze_senators", done=senator_idx + 1)
+                    from app.config_definitions import SCORE_WEIGHTS
+                    weighted_score = round(sum(
+                        corruption_score.get(k, 0) * w
+                        for k, w in SCORE_WEIGHTS.items()
+                    ))
+                    logger.info("    score %d/100", weighted_score)
+                    progress.update("analyze_senators", done=senator_idx + 1)
+                except Exception:
+                    logger.exception("  Failed for %s", senator["name"])
+                    db.rollback()
+                    fail_count += 1
+                    results.append(senator)
+                    pipeline_run.senators_failed = fail_count
+                    pipeline_run.senators_processed = success_count
+                    pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
+                    db.commit()
+                    progress.update("analyze_senators", done=senator_idx + 1)
 
         producer.join(timeout=5)
 
