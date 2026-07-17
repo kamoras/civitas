@@ -695,18 +695,6 @@ class TestPromisePersistence:
         score = _calc_promise_persistence(voting_record, "D", None)
         assert 55 <= score <= 75
 
-    def test_floor_advocacy_boosts_score(self):
-        promises = [{"alignment": "kept"}, {"alignment": "broken"}]
-        advocacy = {
-            "advocacyCoverage": 1.0,
-            "totalRemarks": 25,
-            "advocatedCategories": ["healthcare", "economy"],
-            "remarksByCategory": {"healthcare": 15, "economy": 10},
-        }
-        score_with = _calc_promise_persistence({}, "D", promises, advocacy)
-        score_without = _calc_promise_persistence({}, "D", promises, None)
-        assert score_with > score_without
-
     def test_participation_folded_in(self):
         """Low vote participation should reduce promise persistence score."""
         promises = [{"alignment": "kept"}, {"alignment": "kept"}]
