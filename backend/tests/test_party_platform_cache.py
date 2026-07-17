@@ -10,7 +10,11 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from app.pipeline.analyze.party_platform import _PlatformEmbeddingCache
+from app.pipeline.analyze.party_platform import (
+    _PlatformEmbeddingCache,
+    _normalized_mean,
+    _populate_party_embeddings,
+)
 
 
 def _fake_model():
@@ -21,6 +25,40 @@ def _fake_model():
 
     model.encode.side_effect = encode
     return model
+
+
+class TestPopulatePartyEmbeddings:
+    def test_area_without_data_uses_pure_seed(self):
+        seeds = {"TAXES": np.array([1.0, 0.0])}
+        embeddings: dict[str, np.ndarray] = {}
+        blended = _populate_party_embeddings({"TAXES"}, seeds, {}, embeddings)
+        assert blended == 0
+        assert np.array_equal(embeddings["TAXES"], seeds["TAXES"])
+
+    def test_area_with_data_blends_and_counts(self):
+        seeds = {"TAXES": np.array([1.0, 0.0])}
+        data = {"TAXES": (np.array([0.0, 1.0]), 5)}
+        embeddings: dict[str, np.ndarray] = {}
+        blended = _populate_party_embeddings({"TAXES"}, seeds, data, embeddings)
+        assert blended == 1
+        assert "TAXES" in embeddings
+        assert np.linalg.norm(embeddings["TAXES"]) == pytest.approx(1.0)
+
+    def test_area_not_in_seeds_is_skipped(self):
+        embeddings: dict[str, np.ndarray] = {}
+        blended = _populate_party_embeddings({"UNKNOWN_AREA"}, {}, {}, embeddings)
+        assert blended == 0
+        assert embeddings == {}
+
+
+class TestNormalizedMean:
+    def test_single_embedding_is_unit_normalized(self):
+        result = _normalized_mean({"TAXES": np.array([3.0, 4.0])})
+        assert np.linalg.norm(result) == pytest.approx(1.0)
+
+    def test_averages_multiple_embeddings(self):
+        result = _normalized_mean({"A": np.array([1.0, 0.0]), "B": np.array([0.0, 1.0])})
+        assert result == pytest.approx([1 / np.sqrt(2), 1 / np.sqrt(2)])
 
 
 class TestPlatformEmbeddingCache:

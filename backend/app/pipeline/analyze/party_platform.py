@@ -381,6 +381,38 @@ def _bayesian_blend(
     return blended
 
 
+def _populate_party_embeddings(
+    areas: set[str],
+    seeds: dict[str, np.ndarray],
+    data: dict[str, tuple[np.ndarray, int]],
+    embeddings: dict[str, np.ndarray],
+) -> int:
+    """Populate `embeddings` in place from seeds, Bayesian-blended with
+    data centroids where available. Returns the count of areas blended
+    with data (vs. pure seed). Shared by the R and D passes in
+    _PlatformEmbeddingCache.initialize(), which are otherwise identical
+    except for which party's seeds/data/embeddings dict they operate on.
+    """
+    blended_count = 0
+    for area in areas:
+        if area not in seeds:
+            continue
+        if area in data:
+            data_emb, n = data[area]
+            embeddings[area] = _bayesian_blend(seeds[area], data_emb, n)
+            blended_count += 1
+        else:
+            embeddings[area] = seeds[area]
+    return blended_count
+
+
+def _normalized_mean(embeddings: dict[str, np.ndarray]) -> np.ndarray:
+    """Unit-normalized centroid of all embeddings in the dict."""
+    stacked = np.stack(list(embeddings.values()))
+    mean = stacked.mean(axis=0)
+    return mean / np.linalg.norm(mean)
+
+
 class _PlatformEmbeddingCache:
     """In-memory cache of blended R/D party-platform centroid embeddings.
 
@@ -428,33 +460,11 @@ class _PlatformEmbeddingCache:
                 logger.warning("Failed to build data-driven centroids, using seeds only", exc_info=True)
 
         all_areas = set(R_PLATFORM_POSITIONS) | set(D_PLATFORM_POSITIONS)
-        r_blended_count = 0
-        d_blended_count = 0
+        r_blended_count = _populate_party_embeddings(all_areas, r_seeds, r_data, self.r_embeddings)
+        d_blended_count = _populate_party_embeddings(all_areas, d_seeds, d_data, self.d_embeddings)
 
-        for area in all_areas:
-            if area in r_seeds:
-                if area in r_data:
-                    data_emb, n = r_data[area]
-                    self.r_embeddings[area] = _bayesian_blend(r_seeds[area], data_emb, n)
-                    r_blended_count += 1
-                else:
-                    self.r_embeddings[area] = r_seeds[area]
-
-            if area in d_seeds:
-                if area in d_data:
-                    data_emb, n = d_data[area]
-                    self.d_embeddings[area] = _bayesian_blend(d_seeds[area], data_emb, n)
-                    d_blended_count += 1
-                else:
-                    self.d_embeddings[area] = d_seeds[area]
-
-        r_all = np.stack(list(self.r_embeddings.values()))
-        self.r_aggregate = r_all.mean(axis=0)
-        self.r_aggregate = self.r_aggregate / np.linalg.norm(self.r_aggregate)
-
-        d_all = np.stack(list(self.d_embeddings.values()))
-        self.d_aggregate = d_all.mean(axis=0)
-        self.d_aggregate = self.d_aggregate / np.linalg.norm(self.d_aggregate)
+        self.r_aggregate = _normalized_mean(self.r_embeddings)
+        self.d_aggregate = _normalized_mean(self.d_embeddings)
 
         logger.info(
             "Platform embeddings: %d R (%d data-blended), %d D (%d data-blended)",
