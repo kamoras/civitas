@@ -265,24 +265,10 @@ D_PLATFORM_POSITIONS: dict[str, str] = {
     ),
 }
 
-_r_embeddings: dict[str, np.ndarray] = {}
-_d_embeddings: dict[str, np.ndarray] = {}
-_r_aggregate: np.ndarray | None = None
-_d_aggregate: np.ndarray | None = None
-
 # Bayesian prior weight: the seed descriptions count as this many
 # "virtual bills."  As real bill data accumulates, the data centroid
 # dominates.  A value of 3 means ~4 real bills halve the seed influence.
 _PRIOR_WEIGHT = 3.0
-
-
-def clear_platform_cache() -> None:
-    """Clear cached party platform embeddings between pipeline runs."""
-    global _r_aggregate, _d_aggregate
-    _r_embeddings.clear()
-    _d_embeddings.clear()
-    _r_aggregate = None
-    _d_aggregate = None
 
 
 def _build_seed_embeddings() -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
@@ -395,6 +381,101 @@ def _bayesian_blend(
     return blended
 
 
+class _PlatformEmbeddingCache:
+    """In-memory cache of blended R/D party-platform centroid embeddings.
+
+    Built once per pipeline run and cleared between runs. The two
+    parties' embedding dicts and aggregate vectors are always populated
+    together in initialize() and cleared together in clear() — a class
+    makes that invariant explicit instead of implicit across two
+    separate `global` statements.
+    """
+
+    def __init__(self) -> None:
+        self.r_embeddings: dict[str, np.ndarray] = {}
+        self.d_embeddings: dict[str, np.ndarray] = {}
+        self.r_aggregate: np.ndarray | None = None
+        self.d_aggregate: np.ndarray | None = None
+
+    @property
+    def is_loaded(self) -> bool:
+        return bool(self.r_embeddings and self.d_embeddings)
+
+    def clear(self) -> None:
+        self.r_embeddings.clear()
+        self.d_embeddings.clear()
+        self.r_aggregate = None
+        self.d_aggregate = None
+
+    def initialize(self, db: Session | None = None) -> None:
+        """Build blended party platform centroids from seeds + bill data.
+
+        If a db session is provided, bill data from previous pipeline
+        runs is used to update the seed priors (Bayesian self-training).
+        Without a session, pure seed descriptions are used (cold-start).
+        """
+        if self.is_loaded:
+            return
+
+        r_seeds, d_seeds = _build_seed_embeddings()
+
+        r_data: dict[str, tuple[np.ndarray, int]] = {}
+        d_data: dict[str, tuple[np.ndarray, int]] = {}
+        if db is not None:
+            try:
+                r_data, d_data = _build_data_centroids(db)
+            except Exception:
+                logger.warning("Failed to build data-driven centroids, using seeds only", exc_info=True)
+
+        all_areas = set(R_PLATFORM_POSITIONS) | set(D_PLATFORM_POSITIONS)
+        r_blended_count = 0
+        d_blended_count = 0
+
+        for area in all_areas:
+            if area in r_seeds:
+                if area in r_data:
+                    data_emb, n = r_data[area]
+                    self.r_embeddings[area] = _bayesian_blend(r_seeds[area], data_emb, n)
+                    r_blended_count += 1
+                else:
+                    self.r_embeddings[area] = r_seeds[area]
+
+            if area in d_seeds:
+                if area in d_data:
+                    data_emb, n = d_data[area]
+                    self.d_embeddings[area] = _bayesian_blend(d_seeds[area], data_emb, n)
+                    d_blended_count += 1
+                else:
+                    self.d_embeddings[area] = d_seeds[area]
+
+        r_all = np.stack(list(self.r_embeddings.values()))
+        self.r_aggregate = r_all.mean(axis=0)
+        self.r_aggregate = self.r_aggregate / np.linalg.norm(self.r_aggregate)
+
+        d_all = np.stack(list(self.d_embeddings.values()))
+        self.d_aggregate = d_all.mean(axis=0)
+        self.d_aggregate = self.d_aggregate / np.linalg.norm(self.d_aggregate)
+
+        logger.info(
+            "Platform embeddings: %d R (%d data-blended), %d D (%d data-blended)",
+            len(self.r_embeddings), r_blended_count,
+            len(self.d_embeddings), d_blended_count,
+        )
+
+    def ensure(self) -> None:
+        """Cold-start fallback: initialize with seeds only if not already loaded."""
+        if not self.is_loaded:
+            self.initialize(db=None)
+
+
+_platform_cache = _PlatformEmbeddingCache()
+
+
+def clear_platform_cache() -> None:
+    """Clear cached party platform embeddings between pipeline runs."""
+    _platform_cache.clear()
+
+
 def initialize_platform_embeddings(db: Session | None = None) -> None:
     """Build blended party platform centroids from seeds + bill data.
 
@@ -405,55 +486,7 @@ def initialize_platform_embeddings(db: Session | None = None) -> None:
     is used to update the seed priors (Bayesian self-training).  Without
     a session, pure seed descriptions are used (cold-start).
     """
-    global _r_aggregate, _d_aggregate
-
-    if _r_embeddings and _d_embeddings:
-        return
-
-    r_seeds, d_seeds = _build_seed_embeddings()
-
-    r_data: dict[str, tuple[np.ndarray, int]] = {}
-    d_data: dict[str, tuple[np.ndarray, int]] = {}
-    if db is not None:
-        try:
-            r_data, d_data = _build_data_centroids(db)
-        except Exception:
-            logger.warning("Failed to build data-driven centroids, using seeds only", exc_info=True)
-
-    all_areas = set(R_PLATFORM_POSITIONS) | set(D_PLATFORM_POSITIONS)
-    r_blended_count = 0
-    d_blended_count = 0
-
-    for area in all_areas:
-        if area in r_seeds:
-            if area in r_data:
-                data_emb, n = r_data[area]
-                _r_embeddings[area] = _bayesian_blend(r_seeds[area], data_emb, n)
-                r_blended_count += 1
-            else:
-                _r_embeddings[area] = r_seeds[area]
-
-        if area in d_seeds:
-            if area in d_data:
-                data_emb, n = d_data[area]
-                _d_embeddings[area] = _bayesian_blend(d_seeds[area], data_emb, n)
-                d_blended_count += 1
-            else:
-                _d_embeddings[area] = d_seeds[area]
-
-    r_all = np.stack(list(_r_embeddings.values()))
-    _r_aggregate = r_all.mean(axis=0)
-    _r_aggregate = _r_aggregate / np.linalg.norm(_r_aggregate)
-
-    d_all = np.stack(list(_d_embeddings.values()))
-    _d_aggregate = d_all.mean(axis=0)
-    _d_aggregate = _d_aggregate / np.linalg.norm(_d_aggregate)
-
-    logger.info(
-        "Platform embeddings: %d R (%d data-blended), %d D (%d data-blended)",
-        len(_r_embeddings), r_blended_count,
-        len(_d_embeddings), d_blended_count,
-    )
+    _platform_cache.initialize(db)
 
 
 def _ensure_platform_embeddings() -> None:
@@ -463,9 +496,7 @@ def _ensure_platform_embeddings() -> None:
     to get data-blended centroids.  This function is the fallback when
     that hasn't happened (e.g., called from tests or ad-hoc scripts).
     """
-    if _r_embeddings and _d_embeddings:
-        return
-    initialize_platform_embeddings(db=None)
+    _platform_cache.ensure()
 
 
 def _stance_conditioned_query(bill_text: str, stance_direction: str) -> str:
@@ -538,15 +569,15 @@ def classify_party_alignment(
     r_score = 0.0
     d_score = 0.0
 
-    r_policy_emb = _r_embeddings.get(policy_area)
-    d_policy_emb = _d_embeddings.get(policy_area)
+    r_policy_emb = _platform_cache.r_embeddings.get(policy_area)
+    d_policy_emb = _platform_cache.d_embeddings.get(policy_area)
 
     if r_policy_emb is not None and d_policy_emb is not None:
         r_score = float(np.dot(query_emb, r_policy_emb))
         d_score = float(np.dot(query_emb, d_policy_emb))
     else:
-        r_score = float(np.dot(query_emb, _r_aggregate))
-        d_score = float(np.dot(query_emb, _d_aggregate))
+        r_score = float(np.dot(query_emb, _platform_cache.r_aggregate))
+        d_score = float(np.dot(query_emb, _platform_cache.d_aggregate))
 
     margin = abs(r_score - d_score)
 
@@ -611,15 +642,15 @@ def classify_party_alignment_multi(
         if area == "PROCEDURAL":
             continue
 
-        r_policy_emb = _r_embeddings.get(area)
-        d_policy_emb = _d_embeddings.get(area)
+        r_policy_emb = _platform_cache.r_embeddings.get(area)
+        d_policy_emb = _platform_cache.d_embeddings.get(area)
 
         if r_policy_emb is not None and d_policy_emb is not None:
             r_score = float(np.dot(query_emb, r_policy_emb))
             d_score = float(np.dot(query_emb, d_policy_emb))
         else:
-            r_score = float(np.dot(query_emb, _r_aggregate))
-            d_score = float(np.dot(query_emb, _d_aggregate))
+            r_score = float(np.dot(query_emb, _platform_cache.r_aggregate))
+            d_score = float(np.dot(query_emb, _platform_cache.d_aggregate))
 
         margin = abs(r_score - d_score)
 
@@ -1010,15 +1041,15 @@ def _alignments_from_promises(promises: list[dict]) -> list[dict]:
         if norm > 0:
             query_emb = query_emb / norm
 
-        r_emb = _r_embeddings.get(policy_area)
-        d_emb = _d_embeddings.get(policy_area)
+        r_emb = _platform_cache.r_embeddings.get(policy_area)
+        d_emb = _platform_cache.d_embeddings.get(policy_area)
 
         if r_emb is not None and d_emb is not None:
             r_score = float(np.dot(query_emb, r_emb))
             d_score = float(np.dot(query_emb, d_emb))
         else:
-            r_score = float(np.dot(query_emb, _r_aggregate))
-            d_score = float(np.dot(query_emb, _d_aggregate))
+            r_score = float(np.dot(query_emb, _platform_cache.r_aggregate))
+            d_score = float(np.dot(query_emb, _platform_cache.d_aggregate))
 
         margin = r_score - d_score
         if abs(margin) < 0.03:
