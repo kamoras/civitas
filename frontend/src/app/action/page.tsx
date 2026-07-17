@@ -827,17 +827,14 @@ function isValidTab(s: string | null): s is Tab {
   return s !== null && VALID_TABS.has(s);
 }
 
-function OpenCommentsBanner({ onCount }: { onCount?: (n: number) => void }) {
+function OpenCommentsBanner() {
   const [items, setItems] = useState<OpenCommentItem[]>([]);
 
   useEffect(() => {
     fetchOpenComments()
-      .then((data) => {
-        setItems(data);
-        onCount?.(data.length);
-      })
+      .then(setItems)
       .catch(() => {});
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   if (items.length === 0) return null;
 
@@ -907,7 +904,6 @@ function ActionPageInner() {
   );
   const [userState, setUserState] = useUserState();
   const [sharedIssues, setSharedIssues] = useState<ActionIssue[]>([]);
-  const [openCommentCount, setOpenCommentCount] = useState(0);
 
   useEffect(() => {
     fetchActionIssues()
@@ -965,7 +961,7 @@ function ActionPageInner() {
           </div>
 
           {/* Open comment periods banner */}
-          <OpenCommentsBanner onCount={setOpenCommentCount} />
+          <OpenCommentsBanner />
 
           {/* Tab bar */}
           <div
@@ -1006,11 +1002,6 @@ function ActionPageInner() {
                 }`}
               >
                 {tab.label}
-                {tab.id === "issues" && openCommentCount > 0 && (
-                  <span className="ml-1.5 text-[9px] text-emerald-400/80 border border-emerald-500/40 px-1 py-0.5 rounded bg-emerald-500/10">
-                    {openCommentCount} OPEN
-                  </span>
-                )}
               </button>
             ))}
           </div>
