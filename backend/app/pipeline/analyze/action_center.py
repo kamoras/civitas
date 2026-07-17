@@ -158,7 +158,12 @@ You are a nonpartisan civic information analyst. You present facts without \
 opinion and help citizens engage with their government regardless of their \
 political position. Never advocate for or against any policy. Present all \
 sides neutrally. Each issue you analyze is a SEPARATE topic — never mix \
-information from one issue into another."""
+information from one issue into another. Report directly, in your own \
+words — never attribute what happened to "reports," "coverage," or \
+"sources" (write what happened, not that something was reported). Never \
+state or imply that an action was warranted, justified, or reasonable, and \
+never repeat an actor's stated rationale for an action as though it were \
+established fact."""
 
 _ISSUE_PROMPT_TEMPLATE = """\
 Below are recent news articles about the same U.S. policy issue. \
@@ -171,7 +176,11 @@ Name the actual countries or entities involved. Do NOT add "U.S." or \
 "America" to the title unless the United States is a direct actor in \
 these specific articles.
 - "summary": A factual 2-4 sentence summary of what is happening and why \
-it matters. No opinion. Be precise about WHO did WHAT to WHOM — double-check \
+it matters. No opinion — do not state or imply that an action was \
+warranted, justified, or reasonable, even if a source article frames it \
+that way; report what was done and said, not whether it was right. Report \
+directly — never write "reports say," "coverage indicates," or similar. \
+Be precise about WHO did WHAT to WHOM — double-check \
 the direction of every action and legal outcome before writing it. In legal \
 or disputed matters, do not confuse the accuser/plaintiff/victim with the \
 accused/defendant, and never state that someone was "found guilty" or \
@@ -183,7 +192,10 @@ CRITICAL fact rules: (1) Every fact must be directly stated in the articles — 
 never infer or extrapolate. (2) Comparisons must name TWO DISTINCT entities — \
 never write "X surpasses X" or compare a thing to itself. (3) If an article \
 says something was dropped, dismissed, or ended, the fact must reflect that \
-outcome — do not write that it is ongoing.
+outcome — do not write that it is ongoing. (4) Extract only concrete, \
+checkable actions and events — never extract an article's opinion, spin, or \
+argument about whether an action was warranted or justified, even when the \
+article states it as fact.
 - "bills": An array of any specific bills or acts mentioned in the articles. \
 For each bill, provide an object with "name" (the bill's common name or \
 acronym EXACTLY AS WRITTEN in the articles above — never a bill name from \
@@ -378,6 +390,41 @@ def _agglomerative_cluster(
             clusters.append([i])
 
     return [c for c in clusters if c]
+
+
+# A second sub-cluster must have at least this many articles, and be at
+# least this share of the cluster, to count as a genuine second topic
+# rather than a couple of stray outliers already handled by SOURCE_SIM_FLOOR.
+_CLUSTER_SPLIT_MIN_SUBGROUP_SIZE = 2
+_CLUSTER_SPLIT_MIN_SUBGROUP_SHARE = 0.25
+
+
+def _largest_coherent_subgroup(sim_matrix: np.ndarray, threshold: float) -> list[int]:
+    """Indices of the largest sub-cluster in ``sim_matrix``, or all indices
+    if it doesn't meaningfully split.
+
+    _cluster_articles' pass-2 centroid merge only guards against one
+    cluster swallowing most of the day's articles (its size cap) — it
+    doesn't stop two roughly-balanced unrelated topics from landing in one
+    small cluster, and SOURCE_SIM_FLOOR's centroid-distance filter can't
+    catch that either: a centroid sitting between two topics of similar
+    size scores both of them "above floor" toward their own shared
+    midpoint (observed 2026-07: an issue titled "political risks from war
+    in Iran; ICE escalates tension" merged two unrelated policy areas).
+    Re-clustering just this cluster's own similarity matrix at the same
+    threshold pass 1 uses to decide "same specific issue" catches a real
+    topic split that distance-from-centroid alone misses. This can only
+    ever keep one topic — the larger one is kept and the rest dropped
+    rather than inventing a combined title for two different issues.
+    """
+    n = sim_matrix.shape[0]
+    subgroups = _agglomerative_cluster(sim_matrix, threshold)
+    if len(subgroups) <= 1:
+        return list(range(n))
+    sizes = sorted((len(g) for g in subgroups), reverse=True)
+    if sizes[1] >= _CLUSTER_SPLIT_MIN_SUBGROUP_SIZE and sizes[1] / n >= _CLUSTER_SPLIT_MIN_SUBGROUP_SHARE:
+        return sorted(max(subgroups, key=len))
+    return list(range(n))
 
 
 def _cluster_articles(
@@ -1915,6 +1962,15 @@ named in the key facts above.
 - Do NOT open with a generic hedge like "Recent coverage indicates," "Recent \
 reports say/suggest," "Recent developments show," or any similar throat-clearing \
 preamble. Start the first sentence with the concrete news itself — who did what.
+- Do NOT use hedging attribution phrases ANYWHERE in the piece — "sources say," \
+"reports indicate," "coverage shows," "officials suggest," and similar. State \
+facts directly as facts, not as something reports/coverage/sources are saying.
+- Do NOT evaluate, justify, or defend any action, speech, or policy. Never write \
+that something "is warranted" or "is justified," and never present an actor's \
+stated rationale for their own action as established fact. Do not speculate \
+about the political or legislative purpose or effect of an action (e.g., how a \
+speech "helps move legislation"). Report only what was said or done — not \
+whether it was right, smart, necessary, or effective.
 
 STRUCTURE (3 natural paragraphs):
 1. What is happening and why it matters right now
@@ -1939,7 +1995,11 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
         "articles for Civitas — a non-partisan platform that aggregates U.S. government "
         "data. Your goal is to give citizens a complete picture of what is happening in "
         "Washington and why it matters to them. Write clearly for a general audience "
-        "without being condescending."
+        "without being condescending. Report events directly and in your own voice — "
+        "never as something 'reports say' or 'coverage indicates.' Never evaluate "
+        "whether an action was warranted, justified, or well-reasoned, and never adopt "
+        "an actor's stated rationale as fact — describe what was said and done, not "
+        "whether it was right or what it accomplishes."
     )
     # Everything the model is shown — the grounding universe for statistics.
     source_material = f"{issue.title}\n{issue.summary or ''}\n{facts_text}"
@@ -1980,6 +2040,8 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
         # this generator had no check for fabricated names at all until
         # then, unlike the Bluesky poster which already ran this check.)
         from app.pipeline.analyze.grounding import (
+            editorializing_language,
+            hedge_language,
             repeated_sentences,
             ungrounded_statistics,
             ungrounded_titled_names,
@@ -1987,7 +2049,9 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
         novel = ungrounded_statistics(story, source_material)
         names = ungrounded_titled_names(story, source_material)
         dupes = repeated_sentences(story)
-        if not novel and not names and not dupes:
+        hedges = hedge_language(story)
+        editorial = editorializing_language(story)
+        if not novel and not names and not dupes and not hedges and not editorial:
             logger.info(
                 "Generated full story for issue %s (%d chars): %s",
                 issue.id, len(story), issue.title[:60],
@@ -2020,12 +2084,30 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
                 "Full story repeated itself for issue %s (attempt %d): %s",
                 issue.id, attempt + 1, "; ".join(dupes),
             )
+        if hedges:
+            problems.append(
+                f"hedging attribution phrases ({', '.join(hedges)})"
+            )
+            logger.warning(
+                "Full story used hedging attribution for issue %s (attempt %d): %s",
+                issue.id, attempt + 1, ", ".join(hedges),
+            )
+        if editorial:
+            problems.append(
+                f"language evaluating whether an action was justified ({', '.join(editorial)})"
+            )
+            logger.warning(
+                "Full story editorialized for issue %s (attempt %d): %s",
+                issue.id, attempt + 1, ", ".join(editorial),
+            )
         retry_note = (
             "\n\nYour previous attempt was rejected because it contained "
             f"{' and '.join(problems)}. Stop writing once the facts are "
             "covered instead of repeating yourself, use only numbers "
-            "that appear in the material above, and do not name or quote "
-            "anyone who isn't named in the material above."
+            "that appear in the material above, do not name or quote "
+            "anyone who isn't named in the material above, report events "
+            "directly instead of through phrases like 'reports say,' and "
+            "do not evaluate whether any action was warranted or justified."
         )
 
     return None
@@ -2962,6 +3044,22 @@ def _run_refresh(db: Session) -> int:
         centered = raw_embs - mean_emb
         norms = np.linalg.norm(centered, axis=1, keepdims=True)
         centered_normed = centered / np.where(norms < 1e-9, 1.0, norms)
+
+        # Split off a second genuine topic before the centroid-distance filter
+        # below, which can't detect a roughly-balanced two-topic cluster (see
+        # _largest_coherent_subgroup). Re-clustering drops article count, so
+        # everything after this point only ever sees the retained subgroup.
+        keep_idx = _largest_coherent_subgroup(centered_normed @ centered_normed.T, CLUSTER_TITLE_THRESHOLD)
+        if len(keep_idx) < len(cluster):
+            logger.warning(
+                "Rank %d cluster split — dropping %d article(s) covering a "
+                "second, unrelated topic: %s",
+                rank, len(cluster) - len(keep_idx),
+                [cluster[i].title[:60] for i in range(len(cluster)) if i not in keep_idx],
+            )
+            cluster = [cluster[i] for i in keep_idx]
+            centered_normed = centered_normed[keep_idx]
+
         c_centroid = centered_normed.mean(axis=0)
         c_norm = float(np.linalg.norm(c_centroid))
         c_centroid = c_centroid / c_norm if c_norm > 0 else c_centroid

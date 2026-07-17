@@ -3,7 +3,9 @@
 import pytest
 
 from app.pipeline.analyze.grounding import (
+    editorializing_language,
     grounding_violations,
+    hedge_language,
     repeated_sentences,
     ungrounded_numbers,
     ungrounded_statistics,
@@ -119,6 +121,43 @@ class TestRepeatedSentences:
             "The agreement includes specific targets for both countries."
         )
         assert repeated_sentences(text) == ["the agreement includes specific targets for both countries"]
+
+
+class TestHedgeLanguage:
+    @pytest.mark.parametrize(
+        "text, expected_count",
+        [
+            pytest.param("Recent reports say the Senate will vote Thursday.", 1, id="recent_reports_say"),
+            pytest.param("Recent reports suggest a delay.", 1, id="recent_reports_suggest"),
+            pytest.param("Coverage indicates broad support.", 1, id="coverage_indicates"),
+            pytest.param("Sources say the deal is close.", 1, id="sources_say"),
+            pytest.param("According to reports, the bill stalled.", 1, id="according_to_reports"),
+            pytest.param("The Senate voted 68-32 to pass the bill.", 0, id="direct_reporting_is_clean"),
+        ],
+    )
+    def test_hedge_language(self, text, expected_count):
+        assert len(hedge_language(text)) == expected_count
+
+    def test_case_insensitive(self):
+        assert hedge_language("RECENT REPORTS SAY the bill passed.") != []
+
+
+class TestEditorializingLanguage:
+    @pytest.mark.parametrize(
+        "text, expected_count",
+        [
+            pytest.param("The speech is warranted given the senator's concerns.", 1, id="is_warranted"),
+            pytest.param("The vote was justified by prior debate.", 1, id="was_justified"),
+            pytest.param("This helps advance the legislation.", 1, id="helps_advance_legislation"),
+            pytest.param("This helps move the bill forward.", 1, id="helps_move_bill"),
+            pytest.param(
+                "The Senate passed the bill 68-32 after weeks of debate.", 0,
+                id="plain_reporting_is_clean",
+            ),
+        ],
+    )
+    def test_editorializing_language(self, text, expected_count):
+        assert len(editorializing_language(text)) == expected_count
 
 
 class TestGroundingViolations:
