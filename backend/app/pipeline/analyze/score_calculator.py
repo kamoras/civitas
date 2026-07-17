@@ -414,10 +414,7 @@ def _district_pvi() -> dict[str, int]:
     return _district_pvi_cache
 
 
-def calculate_scores(
-    senator: dict,
-    floor_advocacy: dict | None = None,
-) -> dict:
+def calculate_scores(senator: dict) -> dict:
     """
     Calculate the five representation sub-scores from real data.
 
@@ -434,7 +431,6 @@ def calculate_scores(
             voting_record,
             senator.get("party", "I"),
             senator.get("campaignPromises", []),
-            floor_advocacy,
         ),
         # Key kept as "independentVoting" for storage/API compatibility;
         # since v4.2 this dimension is Constituent Alignment (see
@@ -752,7 +748,6 @@ def _funding_independence_core(funding: dict) -> dict:
     }
 
 
-ADVOCACY_WEIGHT = 0.15
 PARTICIPATION_WEIGHT = 0.10
 
 
@@ -760,22 +755,25 @@ def _calc_promise_persistence(
     voting_record: dict,
     party: str,
     campaign_promises: list[dict] | None = None,
-    floor_advocacy: dict | None = None,
 ) -> int:
     """
-    Promise Persistence Score (0-100, higher = better).
+    Promise Persistence Score (0-100, higher = better). Unweighted in
+    SCORE_WEIGHTS since v6.0 (see that dict's docstring) and, since
+    campaign-promise tracking was removed entirely (2026-07 — see
+    policy_alignment.py's module docstring), campaign_promises is
+    always empty, so this always falls through to the neutral-prior
+    branch below. Still computed and stored (score_promise_persistence)
+    for now rather than deleted outright, matching how the scored-
+    dimension removal was handled.
 
-    Three components:
+    Two components:
 
-    1. **Vote alignment** (75%): ratio of kept/partial promises to total.
+    1. **Vote alignment** (90%): ratio of kept/partial promises to total.
        Applies a confidence penalty when most promises are "unclear" —
        if only 1/10 was evaluable, the score trends toward 50 (neutral)
        instead of being inflated by the single kept promise.
 
-    2. **Floor advocacy** (15%): whether the senator raises promised
-       issues on the Senate floor (Congressional Record).
-
-    3. **Vote participation** (10%): senators who don't show up can't
+    2. **Vote participation** (10%): senators who don't show up can't
        keep promises.  Folded in from the old standalone Accessibility
        metric.
 
@@ -784,6 +782,14 @@ def _calc_promise_persistence(
       partial = 0.5 point
       broken  = 0.0 point
       unclear = excluded from score but penalizes confidence
+
+    A former third component, floor advocacy (whether the senator raises
+    promised issues in Congressional Record floor remarks), was removed
+    entirely (2026-07): with campaign_promises always empty, its
+    "advocacyCoverage" input was permanently 0, so the whole
+    floor-remarks fetch (Congressional Record, ~60 days back) and its
+    advocacy-classification pass ran every night to feed a boost that
+    could never do anything — see floor_speech_analyzer.py's removal.
     """
     # ── Base score from vote alignment ──
     base_score: float | None = None
@@ -893,26 +899,8 @@ def _calc_promise_persistence(
 
     participation_score = min(participation / 0.90, 1.0) * 100
 
-    # ── Floor advocacy boost ──
-    advocacy_score: float | None = None
-    if floor_advocacy and isinstance(floor_advocacy, dict):
-        total_remarks = floor_advocacy.get("totalRemarks", 0)
-        if total_remarks > 0:
-            coverage = floor_advocacy.get("advocacyCoverage", 0)
-            volume_factor = min(total_remarks / 20, 1.0)
-            advocacy_score = (coverage * 0.7 + volume_factor * 0.3) * 100
-
     # ── Blend ──
-    if advocacy_score is not None:
-        vote_weight = 1 - ADVOCACY_WEIGHT - PARTICIPATION_WEIGHT
-        final = (
-            base_score * vote_weight
-            + advocacy_score * ADVOCACY_WEIGHT
-            + participation_score * PARTICIPATION_WEIGHT
-        )
-    else:
-        # No advocacy data → split weight between vote alignment and participation
-        final = base_score * (1 - PARTICIPATION_WEIGHT) + participation_score * PARTICIPATION_WEIGHT
+    final = base_score * (1 - PARTICIPATION_WEIGHT) + participation_score * PARTICIPATION_WEIGHT
 
     return clamp(final)
 

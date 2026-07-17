@@ -15,8 +15,6 @@ Uses SQLAlchemy sessions for persistence and PipelineRun records to track progre
 
 import json
 import logging
-import queue
-import threading
 import time
 from datetime import datetime
 
@@ -67,7 +65,6 @@ from app.pipeline.fetch.fec import (
     find_candidate,
 )
 from app.pipeline.fetch.govinfo import fetch_bill_text
-from app.pipeline.fetch.congressional_record import fetch_floor_remarks
 from app.pipeline.fetch.lda import enrich_lobbying_matches_with_lda
 # Transform modules
 from app.pipeline.transform.normalize_finance import normalize_finance
@@ -95,7 +92,6 @@ from app.pipeline.analyze.cross_reference import analyze_senator_batch, precompu
 from app.pipeline.analyze.donor_classifier_ai import classify_donors_hybrid
 from app.pipeline.analyze.ollama_client import get_llm_stats, reset_client, reset_stats
 from app.pipeline.analyze.policy_alignment import clear_alignment_cache
-from app.pipeline.analyze.floor_speech_analyzer import analyze_floor_advocacy
 from app.pipeline.analyze.score_calculator import calculate_confidence, calculate_scores
 
 # Assemble modules
@@ -117,7 +113,6 @@ PIPELINE_STEPS = [
     ("fetch_official_titles", "fetch",    "Fetch official bill titles"),
     ("fetch_fec",            "fetch",     "Fetch FEC financial data"),
     ("fetch_platforms",      "fetch",     "Fetch platform text"),
-    ("fetch_floor_remarks",  "fetch",     "Fetch floor remarks"),
     ("classify_bills",       "analyze",   "Classify bills"),
     ("classify_recent",      "analyze",   "Classify recent votes"),
     ("embed_bills",          "analyze",   "Embed bills in vector DB"),
@@ -561,39 +556,6 @@ def _build_analysis_input(prepared: dict, platform_texts: dict) -> dict:
         "platformText": platform_texts.get(senator["id"], ""),
         "sponsoredBills": prepared.get("sponsoredBills", []),
     }
-
-
-def _embedding_producer(
-    senator_prepared: list[dict],
-    platform_texts: dict[str, str],
-    prefetch_queue: "queue.Queue[tuple[int, dict, dict | None] | None]",
-) -> None:
-    """Librarian thread: pre-computes embedding analyses ahead of LLM calls.
-
-    Runs the sentence-transformer model to analyze lobbying matches, key
-    votes, and promise alignments for each senator. Results are placed in
-    the prefetch queue for the main thread (Analyst) to consume.
-
-    The queue's maxsize=3 bounds memory to ~3 senators' worth of
-    precomputed data (~2MB). The Librarian stays ~2-3 senators ahead
-    of the Analyst, so the LLM never waits for embedding results.
-
-    Thread safety: sentence-transformers releases the GIL during torch
-    ops, so the Librarian's CPU work overlaps with the main thread's
-    I/O wait on the llama-server HTTP response.
-    """
-    for idx, prepared in enumerate(senator_prepared):
-        try:
-            analysis_input = _build_analysis_input(prepared, platform_texts)
-            precomputed = precompute_senator_analysis(analysis_input)
-            prefetch_queue.put((idx, analysis_input, precomputed))
-        except Exception as e:
-            logger.warning(
-                "Prefetch failed for %s: %s — will compute inline",
-                prepared["senator"]["name"], e,
-            )
-            prefetch_queue.put((idx, None, None))
-    prefetch_queue.put(None)
 
 
 async def run_senate_pipeline(
@@ -1125,31 +1087,6 @@ async def run_senate_pipeline(
             )
             progress.complete("fetch_platforms", detail=f"{fetched_platforms}/{len(senators)} found")
 
-            # 1g. Fetch Congressional Record floor remarks
-            logger.info("Fetching Congressional Record floor proceedings...")
-            progress.begin("fetch_floor_remarks")
-            try:
-                all_floor_remarks = await fetch_floor_remarks(
-                    client, db, days_back=60, max_granules_per_day=8,
-                )
-                logger.info(
-                    "Floor remarks: %d speakers, %d total remarks",
-                    len(all_floor_remarks),
-                    sum(len(v) for v in all_floor_remarks.values()),
-                )
-                total_remarks = sum(len(v) for v in all_floor_remarks.values())
-                progress.complete(
-                    "fetch_floor_remarks",
-                    detail=f"{len(all_floor_remarks)} speakers, {total_remarks} remarks",
-                )
-            except Exception as e:
-                logger.warning(
-                    "Congressional Record fetch failed: %s — continuing without floor data",
-                    e,
-                )
-                all_floor_remarks = {}
-                progress.complete("fetch_floor_remarks", detail="failed — skipped")
-
         if fetch_only:
             logger.info("=== FETCH COMPLETE (fetch-only mode) ===")
             for sk in ("classify_bills", "classify_recent", "embed_bills",
@@ -1585,21 +1522,6 @@ async def run_senate_pipeline(
             len(senator_prepared),
         )
 
-        # Start the "Librarian" prefetch thread: pre-computes embedding
-        # analyses (lobbying matches, key votes, promise alignment) in a
-        # background thread while the "Analyst" (main thread) waits for
-        # the LLM HTTP response. On a Pi 5, this overlaps ~2-4s of
-        # embedding work per senator with the ~15-30s LLM call, saving
-        # 200-400s across 100 senators.
-        prefetch_q: queue.Queue[tuple[int, dict, dict | None] | None] = queue.Queue(maxsize=3)
-        producer = threading.Thread(
-            target=_embedding_producer,
-            args=(senator_prepared, platform_texts, prefetch_q),
-            name="embedding-prefetch",
-            daemon=True,
-        )
-        producer.start()
-
         progress.begin("analyze_senators", total=len(senator_prepared))
         # A fresh client — the Phase 1 client (opened at the top of this
         # function) is already closed by this point, and every sponsored
@@ -1608,28 +1530,22 @@ async def run_senate_pipeline(
         # ~6s of retry backoff each across up to ~12,600 sponsored bills).
         async with httpx.AsyncClient() as client:
             for senator_idx in range(len(senator_prepared)):
-                prefetch_item = prefetch_q.get()
-                if prefetch_item is None:
-                    break
-                _pfx_idx, analysis_input, precomputed = prefetch_item
-
                 prepared = senator_prepared[senator_idx]
                 senator = prepared["senator"]
                 funding = prepared["funding"]
                 voting_record = prepared["votingRecord"]
 
                 logger.info(
-                    "  [%d/%d] %s%s",
+                    "  [%d/%d] %s",
                     senator_idx + 1,
                     len(senator_prepared),
                     senator["name"],
-                    " (prefetched)" if precomputed else "",
                 )
                 progress.update("analyze_senators", done=senator_idx, detail=senator["name"])
 
                 try:
-                    if not analysis_input:
-                        analysis_input = _build_analysis_input(prepared, platform_texts)
+                    analysis_input = _build_analysis_input(prepared, platform_texts)
+                    precomputed = precompute_senator_analysis(analysis_input)
 
                     analysis_results = await analyze_senator_batch(
                         [analysis_input],
@@ -1697,26 +1613,6 @@ async def run_senate_pipeline(
                         lobbying_matches, db, datetime.utcnow().year - 1,
                     )
 
-                    # Match Congressional Record floor remarks to this senator
-                    senator_last_name = senator.get("lastNameForVoteMatch", "")
-                    if not senator_last_name:
-                        fp = senator["name"].split()
-                        senator_last_name = fp[-1] if fp else ""
-                    senator_last_name_upper = senator_last_name.upper()
-                    senator_floor_remarks = all_floor_remarks.get(
-                        senator_last_name_upper, []
-                    )
-                    floor_advocacy = analyze_floor_advocacy(
-                        senator_floor_remarks,
-                        platform_data.get("campaignPromises", []),
-                    )
-                    if senator_floor_remarks:
-                        logger.info(
-                            "    floor remarks: %d (%d categories advocated)",
-                            floor_advocacy["totalRemarks"],
-                            len(floor_advocacy["advocatedCategories"]),
-                        )
-
                     bio_id_for_score = senator.get("bioguideId", "")
                     temp_senator = {
                         **senator,
@@ -1728,10 +1624,7 @@ async def run_senate_pipeline(
                         "bipartisanshipScore": bipartisanship_scores.get(bio_id_for_score),
                         "sponsoredBills": prepared.get("sponsoredBills", []),
                     }
-                    corruption_score = calculate_scores(
-                        temp_senator,
-                        floor_advocacy=floor_advocacy,
-                    )
+                    corruption_score = calculate_scores(temp_senator)
                     corruption_score["confidence"] = calculate_confidence(temp_senator)
 
                     # Enrich donors with PAC details from combined analysis
@@ -1886,8 +1779,6 @@ async def run_senate_pipeline(
                     pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
                     db.commit()
                     progress.update("analyze_senators", done=senator_idx + 1)
-
-        producer.join(timeout=5)
 
         progress.complete(
             "analyze_senators",

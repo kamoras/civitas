@@ -91,10 +91,17 @@ def select_key_votes(
 
 
 def precompute_senator_analysis(item: dict) -> dict:
-    """Pre-compute all embedding-based analysis for a senator: lobbying
-    detection and key vote selection, both zero-LLM. Called from a
-    background thread ahead of analyze_senator_batch — see
-    senate_pipeline.py's producer/consumer prefetch queue.
+    """Compute a senator's embedding-based analysis (lobbying detection,
+    key vote selection) ahead of analyze_senator_batch, which accepts
+    the result via its `precomputed` param to skip redoing the work.
+
+    Used to live in a separate background thread overlapping this
+    embedding work with the narrative LLM call analyze_senator_batch
+    used to make — removed entirely (2026-07, see
+    analyze_senator_batch's docstring), so there's nothing left to
+    overlap with. Kept as a separate function anyway since the split
+    still expresses a real distinction (deterministic classification
+    vs. the batch wrapper), just called synchronously now.
     """
     donors = item.get("donors", [])
     all_votes = item.get("allVotes", [])
