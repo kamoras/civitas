@@ -19,6 +19,11 @@ CACHE_TTL_LIST_S = 300           # leaderboards and other paginated/aggregate li
 CACHE_TTL_REFERENCE_S = 600      # rarely-changing reference lists (e.g. states index)
 CACHE_TTL_CONFIG_S = 3600        # config/weights — changes only on a deploy
 
+# Party-filter query param validation, shared across every router that
+# exposes a ?party= filter — previously each repeated the same regex
+# literal independently.
+PARTY_QUERY_PATTERN = r"^[DRI]$"
+
 
 def cached_json(data, max_age: int = CACHE_TTL_LIST_S) -> JSONResponse:
     """Wrap data in a JSONResponse with Cache-Control headers."""

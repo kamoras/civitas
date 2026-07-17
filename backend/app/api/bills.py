@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.api.response_helpers import CACHE_TTL_DETAIL_S, cached_json
+from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json
 from app.database import get_db
 from app.services.bill_service import get_bills_in_flight
 
@@ -21,7 +21,7 @@ def _cached_json(data, max_age: int = CACHE_TTL_DETAIL_S) -> JSONResponse:
 def list_bills_in_flight(
     stage: str | None = Query(None, max_length=32),
     chamber: str | None = Query(None, pattern="^(senate|house)$"),
-    party: str | None = Query(None, pattern="^[DRI]$"),
+    party: str | None = Query(None, pattern=PARTY_QUERY_PATTERN),
     q: str | None = Query(None, max_length=100),
     sort: str = Query("recent", pattern="^(recent|hot|stale)$"),
     page: int = Query(1, ge=1),

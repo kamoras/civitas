@@ -2,6 +2,7 @@
 
 import logging
 import re
+from collections.abc import Callable
 
 import httpx
 from lxml import etree
@@ -17,6 +18,55 @@ logger = logging.getLogger(__name__)
 CONGRESS_API_BASE = "https://api.congress.gov/v3"
 
 _rate_limiter = RateLimiter(settings.CONGRESS_RPS)
+
+# Roll-call-number probe search, shared by the Senate and House "recent
+# roll calls" fetchers below: scattered candidates get a longer timeout
+# (fewer, further-apart requests) than the sequential one-by-one search
+# that follows once a valid upper bound is found.
+_ROLL_CALL_PROBE_TIMEOUT_S = 15.0
+_ROLL_CALL_NARROW_SEARCH_TIMEOUT_S = 10.0
+_ROLL_CALL_NARROW_SEARCH_WINDOW = 50
+
+
+async def _find_highest_roll_call(
+    client: httpx.AsyncClient,
+    url_for_roll: Callable[[int], str],
+    probe_candidates: list[int],
+) -> int:
+    """Binary-ish search for the highest valid roll-call number on a
+    legislative chamber's site: probe a scattered list of candidates to
+    find any valid upper bound, then walk forward one at a time from
+    there to find the true highest. `url_for_roll` builds the
+    chamber-specific URL for a given roll number.
+    """
+    highest_valid = 0
+    for probe in probe_candidates:
+        await _rate_limiter.acquire()
+        try:
+            resp = await client.get(url_for_roll(probe), timeout=_ROLL_CALL_PROBE_TIMEOUT_S)
+            if resp.status_code == 200:
+                highest_valid = max(highest_valid, probe)
+                break  # Found a valid upper bound
+        except Exception:
+            continue
+
+    if highest_valid == 0:
+        return 0
+
+    check = highest_valid + 1
+    while check <= highest_valid + _ROLL_CALL_NARROW_SEARCH_WINDOW:
+        await _rate_limiter.acquire()
+        try:
+            resp = await client.get(url_for_roll(check), timeout=_ROLL_CALL_NARROW_SEARCH_TIMEOUT_S)
+            if resp.status_code == 200:
+                highest_valid = check
+                check += 1
+            else:
+                break
+        except Exception:
+            break
+
+    return highest_valid
 
 
 def congress_first_year(congress: int) -> int:
@@ -552,50 +602,21 @@ async def fetch_recent_roll_calls(
         congress, session_number,
     )
 
-    # Binary-ish search: start high (500), find the highest valid roll call
-
-    highest_valid = 0
-
-    # Probe at various points to find the range
-    for probe in [500, 300, 200, 150, 100, 75, 50, 25, 10]:
-        padded = str(probe).zfill(5)
-        url = (
+    def _senate_roll_url(roll: int) -> str:
+        padded = str(roll).zfill(5)
+        return (
             f"https://www.senate.gov/legislative/LIS/roll_call_votes/"
             f"vote{congress}{session_number}/"
             f"vote_{congress}_{session_number}_{padded}.xml"
         )
-        await _rate_limiter.acquire()
-        try:
-            resp = await client.get(url, timeout=15.0)
-            if resp.status_code == 200:
-                highest_valid = max(highest_valid, probe)
-                break  # Found a valid upper bound
-        except Exception:
-            continue
+
+    highest_valid = await _find_highest_roll_call(
+        client, _senate_roll_url, [500, 300, 200, 150, 100, 75, 50, 25, 10],
+    )
 
     if highest_valid == 0:
         logger.warning("No recent roll calls found for congress %d session %d", congress, session_number)
         return []
-
-    # Now search upward from the probe hit to find the actual highest
-    check = highest_valid + 1
-    while check <= highest_valid + 50:
-        padded = str(check).zfill(5)
-        url = (
-            f"https://www.senate.gov/legislative/LIS/roll_call_votes/"
-            f"vote{congress}{session_number}/"
-            f"vote_{congress}_{session_number}_{padded}.xml"
-        )
-        await _rate_limiter.acquire()
-        try:
-            resp = await client.get(url, timeout=10.0)
-            if resp.status_code == 200:
-                highest_valid = check
-                check += 1
-            else:
-                break
-        except Exception:
-            break
 
     logger.info("Highest roll call found: %d", highest_valid)
 
@@ -733,37 +754,16 @@ async def fetch_recent_house_roll_calls(
 
     logger.info("Discovering recent House roll calls (year=%d)...", year)
 
+    def _house_roll_url(roll: int) -> str:
+        return f"https://clerk.house.gov/evs/{year}/roll{roll}.xml"
 
-    highest_valid = 0
-
-    for probe in [700, 500, 400, 300, 200, 100, 50, 25, 10]:
-        url = f"https://clerk.house.gov/evs/{year}/roll{probe}.xml"
-        await _rate_limiter.acquire()
-        try:
-            resp = await client.get(url, timeout=15.0)
-            if resp.status_code == 200:
-                highest_valid = max(highest_valid, probe)
-                break
-        except Exception:
-            continue
+    highest_valid = await _find_highest_roll_call(
+        client, _house_roll_url, [700, 500, 400, 300, 200, 100, 50, 25, 10],
+    )
 
     if highest_valid == 0:
         logger.warning("No recent House roll calls found for year %d", year)
         return []
-
-    check = highest_valid + 1
-    while check <= highest_valid + 50:
-        url = f"https://clerk.house.gov/evs/{year}/roll{check}.xml"
-        await _rate_limiter.acquire()
-        try:
-            resp = await client.get(url, timeout=10.0)
-            if resp.status_code == 200:
-                highest_valid = check
-                check += 1
-            else:
-                break
-        except Exception:
-            break
 
     logger.info("Highest House roll call found: %d", highest_valid)
 
