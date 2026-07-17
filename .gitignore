@@ -69,6 +69,9 @@ venv/
 # host-specific ops scripts (not part of the shipped project)
 /backup.sh
 
+# pull-based deploy log (check-and-deploy.sh)
+/deploy-poll.log
+
 # defense-in-depth: never commit these even if something creates them
 *.key
 *.sqlite
