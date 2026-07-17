@@ -299,7 +299,14 @@ logger = logging.getLogger(__name__)
 # this file's own precedent for dimension-composition changes (v2 -> v3
 # folded Accessibility into Promise Persistence; this removes Promise
 # Persistence itself).
-ALGORITHM_VERSION = "v6.1"
+#
+# v6.1 -> v6.2 (2026-07): Legislative Leadership's PageRank now weights
+# cosponsorship edges by whether the underlying bill advanced (see
+# sponsorship_analysis.ENACTED_EDGE_WEIGHT/ADVANCED_EDGE_WEIGHT/
+# STALLED_EDGE_WEIGHT) instead of a flat weight per cosponsorship,
+# addressing an external review's finding that message-bill cosponsorship
+# was indistinguishable from real legislative collaboration.
+ALGORITHM_VERSION = "v6.2"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -343,6 +350,15 @@ NON_INDUSTRY_CODES = {"OTHER", "SMALL_DONORS", "LARGE_INDIVIDUAL", "POLITICAL", 
 # advancement and volume) and, via cross_reference.py, promise derivation
 # from a member's own sponsored bills.
 SUBSTANTIVE_BILL_TYPES = {"s", "hr", "sjres", "hjres"}
+
+# A bill's latestAction text is free-form Congress.gov prose, not a
+# controlled vocabulary — these substrings are the ones that reliably
+# appear across "passed the chamber," "agreed to" (resolutions/unanimous
+# consent), and "ordered to be reported" (cleared committee) language.
+# Shared with sponsorship_analysis.py's cosponsorship-edge weighting, so
+# "did this bill advance" means the same thing in both Legislative
+# Effectiveness and Legislative Leadership.
+_ADVANCEMENT_ACTION_KEYWORDS = ("passed", "agreed to", "ordered to be reported")
 
 # Cook Partisan Voting Index approximation (2024 cycle, based on
 # 2020 presidential results).  Source: Cook Political Report.
@@ -1530,9 +1546,7 @@ def _legislative_effectiveness_core(
             became_law += 1
         else:
             action = (bill.get("latestAction") or "").lower()
-            if any(kw in action for kw in [
-                "passed", "agreed to", "ordered to be reported",
-            ]):
+            if any(kw in action for kw in _ADVANCEMENT_ACTION_KEYWORDS):
                 advanced += 1
 
     n_sub = len(substantive)

@@ -351,6 +351,17 @@ export default function AboutPage() {
                   &quot;not enough track record yet&quot; rather than &quot;bad at
                   leadership.&quot;
                 </P>
+                <P>
+                  Raw cosponsorship-network centrality can&apos;t on its own tell a
+                  substantive bill from a message bill introduced with no real chance of
+                  passing — a senator who signs onto ten symbolic resolutions accrued the
+                  same network weight as one who cosponsors ten bills that actually became
+                  law. Since v6.2, each cosponsorship is weighted by what happened to the
+                  underlying bill: full weight if it became law, reduced weight if it
+                  passed a chamber or cleared committee, and further reduced (not zeroed —
+                  a stalled bill is still real evidence of a working relationship) if it
+                  never advanced.
+                </P>
               </div>
 
               <div>
