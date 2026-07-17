@@ -288,6 +288,26 @@ export default function AboutPage() {
               similarity. They indicate where money and votes intersect; they do not
               establish influence.
             </P>
+            <P>
+              <em className="text-matrix-green/80">Concentrated industry funding is scored
+              as capture risk even when it plausibly reflects a state&apos;s real economic
+              base.</em> A senator whose donations concentrate in, say, the auto industry in
+              Michigan or agriculture in Kansas scores the same on Funding Diversity&apos;s
+              industry-concentration component as one captured by an unrelated
+              out-of-state interest — this platform does not check whether a donor
+              industry is also a major local employer. That is a deliberate choice, not an
+              oversight: we considered and rejected a &quot;this industry matters to the
+              state&quot; exemption for the same reason the v4.2 donor-industry voting
+              exemption was removed (see the
+              <a href="/changelog" className="underline underline-offset-2 hover:text-matrix-green/70"> scoring changelog</a>)
+              — local economic dominance plausibly gives an industry <em>more</em> leverage
+              over a senator, not less, so exempting it would weaken the signal exactly
+              where large-scale capture is most consequential. No public dataset can
+              separate &quot;this funding reflects genuine local interest&quot; from
+              &quot;this funding is capture that happens to correlate with local economic
+              weight&quot; — concentration is scored as risk, full stop, following the same
+              industrial-organization logic (Rhoades 1993) the HHI metric is built on.
+            </P>
           </Section>
 
           {/* ── House Representatives ── */}
