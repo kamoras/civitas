@@ -167,25 +167,21 @@ class TestIdeology:
 # ---------- describe position ----------
 
 class TestDescribePosition:
-    def test_progressive_leader(self):
-        desc = describe_senator_position(0.1, 0.9, "D")
-        assert "progressive" in desc
-        assert "leader" in desc
-
-    def test_conservative_follower(self):
-        desc = describe_senator_position(0.9, 0.1, "R")
-        assert "conservative" in desc
-        assert "follower" in desc
-
-    def test_moderate_no_role(self):
-        desc = describe_senator_position(0.5, 0.5, "D")
-        assert "moderate" in desc
-        assert "leader" not in desc
-        assert "follower" not in desc
-
-    def test_independent(self):
-        desc = describe_senator_position(0.2, 0.5, "I")
-        assert "Independent" in desc
+    @pytest.mark.parametrize(
+        "ideology, leadership, party, expected_in, expected_not_in",
+        [
+            pytest.param(0.1, 0.9, "D", ["progressive", "leader"], [], id="progressive_leader"),
+            pytest.param(0.9, 0.1, "R", ["conservative", "follower"], [], id="conservative_follower"),
+            pytest.param(0.5, 0.5, "D", ["moderate"], ["leader", "follower"], id="moderate_no_role"),
+            pytest.param(0.2, 0.5, "I", ["Independent"], [], id="independent"),
+        ],
+    )
+    def test_describe_position(self, ideology, leadership, party, expected_in, expected_not_in):
+        desc = describe_senator_position(ideology, leadership, party)
+        for substr in expected_in:
+            assert substr in desc
+        for substr in expected_not_in:
+            assert substr not in desc
 
 
 # ── Bipartisanship (v5) ──────────────────────────────────────────

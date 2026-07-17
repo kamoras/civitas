@@ -1,5 +1,7 @@
 """Tests for deterministic grounding checks on LLM-generated text."""
 
+import pytest
+
 from app.pipeline.analyze.grounding import (
     grounding_violations,
     repeated_sentences,
@@ -16,27 +18,21 @@ SOURCE = (
 
 
 class TestUngroundedNumbers:
-    def test_grounded_numbers_pass(self):
-        assert ungrounded_numbers("The 68-32 vote covers 120,000 vouchers", SOURCE) == []
-
-    def test_fabricated_statistic_flagged(self):
-        assert ungrounded_numbers("The bill allocates $4.7 billion", SOURCE) == ["4.7"]
-
-    def test_thousands_separator_normalized(self):
-        assert ungrounded_numbers("120000 vouchers", SOURCE) == []
-
-    def test_currency_and_units_reduce_to_digits(self):
-        assert ungrounded_numbers("a $1.2T package", SOURCE) == []
-
-    def test_leading_zero_dates_match(self):
-        # source has 2026-07-09; "July 9" and "month 7" are the same numbers
-        assert ungrounded_numbers("On July 9, 2026", SOURCE) == []
-
-    def test_decimal_keeps_leading_zero(self):
-        assert ungrounded_numbers("a 0.5 percent cut", SOURCE) == ["0.5"]
-
-    def test_no_numbers_is_clean(self):
-        assert ungrounded_numbers("Senators debated the measure.", SOURCE) == []
+    @pytest.mark.parametrize(
+        "text, expected",
+        [
+            pytest.param("The 68-32 vote covers 120,000 vouchers", [], id="grounded_numbers_pass"),
+            pytest.param("The bill allocates $4.7 billion", ["4.7"], id="fabricated_statistic_flagged"),
+            pytest.param("120000 vouchers", [], id="thousands_separator_normalized"),
+            pytest.param("a $1.2T package", [], id="currency_and_units_reduce_to_digits"),
+            # source has 2026-07-09; "July 9" and "month 7" are the same numbers
+            pytest.param("On July 9, 2026", [], id="leading_zero_dates_match"),
+            pytest.param("a 0.5 percent cut", ["0.5"], id="decimal_keeps_leading_zero"),
+            pytest.param("Senators debated the measure.", [], id="no_numbers_is_clean"),
+        ],
+    )
+    def test_ungrounded_numbers(self, text, expected):
+        assert ungrounded_numbers(text, SOURCE) == expected
 
 
 class TestUngroundedTitledNames:
@@ -76,35 +72,27 @@ class TestUngroundedTitledNames:
 
 
 class TestUngroundedStatistics:
-    def test_fabricated_money_flagged(self):
-        assert ungrounded_statistics("costs $4.7 billion", SOURCE) == ["4.7"]
-
-    def test_fabricated_percent_flagged(self):
-        assert ungrounded_statistics("supported by 87% of voters", SOURCE) == ["87"]
-
-    def test_contextual_plain_numbers_ignored(self):
-        # "three of the 12 members" — 12 is not statistic-shaped, so long-form
-        # prose isn't rejected over phrasing differences.
-        assert ungrounded_statistics("three of the 12 members agreed", SOURCE) == []
-
-    def test_grounded_statistic_passes(self):
-        assert ungrounded_statistics("the $1.2 trillion package", SOURCE) == []
-
-    def test_fabricated_year_flagged(self):
-        # A bare year is a statistic even with no $/%/magnitude word nearby —
-        # it's exactly what a model invents when padding thin source facts.
-        assert ungrounded_statistics("the ban was lifted in 2023", SOURCE) == ["2023"]
-
-    def test_grounded_year_passes(self):
-        assert ungrounded_statistics("the 2026 session", SOURCE) == []
-
-    def test_four_digit_non_year_not_flagged_as_year_but_may_be_fabricated(self):
-        # 1500 falls outside the plausible calendar-year range and has no
-        # magnitude context, so it's treated as an ordinary contextual number.
-        assert ungrounded_statistics("about 1500 attendees", SOURCE) == []
-
-    def test_fabricated_magnitude_word_flagged(self):
-        assert ungrounded_statistics("a rise of 1.5 degrees", SOURCE) == ["1.5"]
+    @pytest.mark.parametrize(
+        "text, expected",
+        [
+            pytest.param("costs $4.7 billion", ["4.7"], id="fabricated_money_flagged"),
+            pytest.param("supported by 87% of voters", ["87"], id="fabricated_percent_flagged"),
+            # "three of the 12 members" — 12 is not statistic-shaped, so long-form
+            # prose isn't rejected over phrasing differences.
+            pytest.param("three of the 12 members agreed", [], id="contextual_plain_numbers_ignored"),
+            pytest.param("the $1.2 trillion package", [], id="grounded_statistic_passes"),
+            # A bare year is a statistic even with no $/%/magnitude word nearby —
+            # it's exactly what a model invents when padding thin source facts.
+            pytest.param("the ban was lifted in 2023", ["2023"], id="fabricated_year_flagged"),
+            pytest.param("the 2026 session", [], id="grounded_year_passes"),
+            # 1500 falls outside the plausible calendar-year range and has no
+            # magnitude context, so it's treated as an ordinary contextual number.
+            pytest.param("about 1500 attendees", [], id="four_digit_non_year_not_flagged_as_year_but_may_be_fabricated"),
+            pytest.param("a rise of 1.5 degrees", ["1.5"], id="fabricated_magnitude_word_flagged"),
+        ],
+    )
+    def test_ungrounded_statistics(self, text, expected):
+        assert ungrounded_statistics(text, SOURCE) == expected
 
 
 class TestRepeatedSentences:

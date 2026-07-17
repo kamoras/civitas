@@ -1,5 +1,6 @@
 """Tests for vote normalization and party alignment logic."""
 
+import pytest
 
 from app.pipeline.transform.normalize_votes import (
     _determine_party_alignment,
@@ -15,36 +16,24 @@ from app.pipeline.transform.normalize_votes import (
 class TestPartyAlignment:
     """Party alignment determination logic."""
 
-    def test_republican_yea_on_republican_bill(self):
-        assert _determine_party_alignment("R", "Yea", "R") is True
-
-    def test_republican_nay_on_republican_bill(self):
-        assert _determine_party_alignment("R", "Nay", "R") is False
-
-    def test_republican_yea_on_democratic_bill(self):
-        assert _determine_party_alignment("R", "Yea", "D") is False
-
-    def test_republican_nay_on_democratic_bill(self):
-        assert _determine_party_alignment("R", "Nay", "D") is True
-
-    def test_democrat_yea_on_democratic_bill(self):
-        assert _determine_party_alignment("D", "Yea", "D") is True
-
-    def test_democrat_nay_on_democratic_bill(self):
-        assert _determine_party_alignment("D", "Nay", "D") is False
-
-    def test_independent_always_none(self):
-        assert _determine_party_alignment("I", "Yea", "R") is None
-        assert _determine_party_alignment("I", "Nay", "D") is None
-
-    def test_not_voting_always_none(self):
-        assert _determine_party_alignment("R", "Not Voting", "R") is None
-
-    def test_bipartisan_always_none(self):
-        assert _determine_party_alignment("R", "Yea", "bipartisan") is None
-
-    def test_no_party_leaning_is_none(self):
-        assert _determine_party_alignment("D", "Yea", None) is None
+    @pytest.mark.parametrize(
+        "party, vote, bill_leaning, expected",
+        [
+            pytest.param("R", "Yea", "R", True, id="republican_yea_on_republican_bill"),
+            pytest.param("R", "Nay", "R", False, id="republican_nay_on_republican_bill"),
+            pytest.param("R", "Yea", "D", False, id="republican_yea_on_democratic_bill"),
+            pytest.param("R", "Nay", "D", True, id="republican_nay_on_democratic_bill"),
+            pytest.param("D", "Yea", "D", True, id="democrat_yea_on_democratic_bill"),
+            pytest.param("D", "Nay", "D", False, id="democrat_nay_on_democratic_bill"),
+            pytest.param("I", "Yea", "R", None, id="independent_always_none_yea"),
+            pytest.param("I", "Nay", "D", None, id="independent_always_none_nay"),
+            pytest.param("R", "Not Voting", "R", None, id="not_voting_always_none"),
+            pytest.param("R", "Yea", "bipartisan", None, id="bipartisan_always_none"),
+            pytest.param("D", "Yea", None, None, id="no_party_leaning_is_none"),
+        ],
+    )
+    def test_party_alignment(self, party, vote, bill_leaning, expected):
+        assert _determine_party_alignment(party, vote, bill_leaning) is expected
 
 
 class TestComputePartySplit:
@@ -257,32 +246,22 @@ class TestInferCaucusFromVotes:
 class TestInferCaucusFromCosponsorship:
     """Cosponsorship-based caucus inference."""
 
-    def test_strongly_democratic_cosponsorship(self):
-        profile = {"d_cosponsored": 20, "r_cosponsored": 3}
+    @pytest.mark.parametrize(
+        "d_cosponsored, r_cosponsored, expected_party",
+        [
+            pytest.param(20, 3, "D", id="strongly_democratic_cosponsorship"),
+            pytest.param(2, 15, "R", id="strongly_republican_cosponsorship"),
+            pytest.param(1, 1, None, id="insufficient_data"),
+            pytest.param(0, 0, None, id="empty_profile"),
+            pytest.param(10, 10, None, id="equal_cosponsorship"),
+        ],
+    )
+    def test_infer_caucus(self, d_cosponsored, r_cosponsored, expected_party):
+        profile = {"d_cosponsored": d_cosponsored, "r_cosponsored": r_cosponsored}
         party, d, r = _infer_caucus_from_cosponsorship(profile)
-        assert party == "D"
-        assert d == 20
-        assert r == 3
-
-    def test_strongly_republican_cosponsorship(self):
-        profile = {"d_cosponsored": 2, "r_cosponsored": 15}
-        party, d, r = _infer_caucus_from_cosponsorship(profile)
-        assert party == "R"
-
-    def test_insufficient_data(self):
-        profile = {"d_cosponsored": 1, "r_cosponsored": 1}
-        party, _, _ = _infer_caucus_from_cosponsorship(profile)
-        assert party is None
-
-    def test_empty_profile(self):
-        profile = {"d_cosponsored": 0, "r_cosponsored": 0}
-        party, _, _ = _infer_caucus_from_cosponsorship(profile)
-        assert party is None
-
-    def test_equal_cosponsorship(self):
-        profile = {"d_cosponsored": 10, "r_cosponsored": 10}
-        party, _, _ = _infer_caucus_from_cosponsorship(profile)
-        assert party is None
+        assert party == expected_party
+        assert d == d_cosponsored
+        assert r == r_cosponsored
 
 
 class TestInferCaucusPartyCombined:

@@ -137,30 +137,20 @@ class TestReferenceCorpusOverrideGate:
 class TestValidation:
     """Post-classification validation and sanitization."""
 
-    def test_missing_policy_area_defaults_to_procedural(self):
-        bills = [{"billId": "1", "policyArea": None, "stance": "reform", "stanceVote": "Yea", "partyLeaning": "D"}]
+    @pytest.mark.parametrize(
+        "policy_area, stance, field, expected",
+        [
+            pytest.param(None, "reform", "policyArea", "PROCEDURAL", id="missing_policy_area_defaults_to_procedural"),
+            pytest.param("healthcare", "reform", "policyArea", "HEALTHCARE", id="policy_area_uppercased"),
+            pytest.param("DEFENSE", "PRO", "stance", "pro", id="stance_lowercased_and_validated"),
+            pytest.param("DEFENSE", "PRO-MILITARY", "stance", "neutral", id="invalid_stance_normalized_to_neutral"),
+            pytest.param("DEFENSE", None, "stance", "neutral", id="missing_stance_defaults_to_neutral"),
+        ],
+    )
+    def test_field_normalization(self, policy_area, stance, field, expected):
+        bills = [{"billId": "1", "policyArea": policy_area, "stance": stance, "stanceVote": "Yea", "partyLeaning": "D"}]
         _validate_classifications(bills)
-        assert bills[0]["policyArea"] == "PROCEDURAL"
-
-    def test_policy_area_uppercased(self):
-        bills = [{"billId": "1", "policyArea": "healthcare", "stance": "reform", "stanceVote": "Yea", "partyLeaning": "D"}]
-        _validate_classifications(bills)
-        assert bills[0]["policyArea"] == "HEALTHCARE"
-
-    def test_stance_lowercased_and_validated(self):
-        bills = [{"billId": "1", "policyArea": "DEFENSE", "stance": "PRO", "stanceVote": "Yea", "partyLeaning": "R"}]
-        _validate_classifications(bills)
-        assert bills[0]["stance"] == "pro"
-
-    def test_invalid_stance_normalized_to_neutral(self):
-        bills = [{"billId": "1", "policyArea": "DEFENSE", "stance": "PRO-MILITARY", "stanceVote": "Yea", "partyLeaning": "R"}]
-        _validate_classifications(bills)
-        assert bills[0]["stance"] == "neutral"
-
-    def test_missing_stance_defaults_to_neutral(self):
-        bills = [{"billId": "1", "policyArea": "DEFENSE", "stance": None, "stanceVote": "Yea", "partyLeaning": "R"}]
-        _validate_classifications(bills)
-        assert bills[0]["stance"] == "neutral"
+        assert bills[0][field] == expected
 
     def test_valid_stance_votes_preserved(self):
         bills = [
