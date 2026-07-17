@@ -172,10 +172,12 @@ export default function AboutPage() {
                   to state opinion is unobservable. Hyper-loyalty in a
                   swing or opposed seat drifts below neutral. This is the delegate model of
                   representation with partisan lean standing in for issue-level constituent
-                  opinion — a measurable, disclosed simplification. Note on composition:
-                  confirmation votes on nominations make up a large share of recent Senate
-                  roll calls and count at full weight — they are genuine, whipped
-                  party-line tests.
+                  opinion — a measurable, disclosed simplification (see
+                  <a href="#known-limitations" className="underline underline-offset-2 hover:text-matrix-green/70"> Known Limitations</a>
+                  {" "}below for why a genuinely issue-specific alternative isn&apos;t used). Note
+                  on composition: confirmation votes on nominations make up a large share of
+                  recent Senate roll calls and count at full weight — they are genuine,
+                  whipped party-line tests.
                 </P>
                 <P>
                   Before v4.2 this dimension was called Independent Voting and rewarded raw
@@ -256,7 +258,7 @@ export default function AboutPage() {
           </Section>
 
           {/* ── Known Limitations ── */}
-          <Section title="KNOWN LIMITATIONS &amp; DISCLOSURES">
+          <Section title="KNOWN LIMITATIONS &amp; DISCLOSURES" id="known-limitations">
             <P>
               <em className="text-matrix-green/80">Scores correlate with funding style,
               and funding style correlates with party.</em> In current data, Democratic
@@ -307,6 +309,23 @@ export default function AboutPage() {
               &quot;this funding is capture that happens to correlate with local economic
               weight&quot; — concentration is scored as risk, full stop, following the same
               industrial-organization logic (Rhoades 1993) the HHI metric is built on.
+            </P>
+            <P>
+              <em className="text-matrix-green/80">Presidential-vote PVI doesn&apos;t capture
+              issue-specific constituent opinion.</em> A senator&apos;s expected break rate
+              (see Constituent Alignment above) is calibrated to how their state votes for
+              president, not to opinion on the specific issue a given vote concerns — a
+              state&apos;s presidential lean says little about, say, local opinion on public
+              land use in Utah or water rights in Arizona. We looked for a real, freely
+              available substitute: the best candidate found (Tausanovitch &amp; Warshaw&apos;s
+              survey-based ideology estimates by district/state) still only produces a single
+              composite left-right score, the same kind of proxy PVI already is — not
+              per-issue opinion — and its public data is already several years stale. Actual
+              issue-level constituent opinion at this scale would require building
+              multilevel-regression-and-poststratification (MRP) modeling in-house over raw
+              survey microdata: a statistics pipeline, not a lookup, and a genuine black box
+              relative to every other formula on this page. We chose not to build one rather
+              than trade this platform&apos;s auditability for a partial, hard-to-explain fix.
             </P>
           </Section>
 
