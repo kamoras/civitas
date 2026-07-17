@@ -3,11 +3,9 @@
 Covers the embedding-based (non-LLM) components:
   - Key vote selection scoring
   - Lobbying match detection via donor↔vote embedding similarity
-  - Platform topic extraction
 """
 
 from app.pipeline.analyze.cross_reference import (
-    _extract_platform_topics,
     select_key_votes,
     detect_lobbying_matches,
 )
@@ -44,56 +42,6 @@ class TestIndustryPolicySimilarity:
     def test_unknown_industry_returns_zero(self):
         score = industry_policy_similarity("NONEXISTENT", "HEALTHCARE")
         assert score == 0.0
-
-
-# ── Platform topic extraction ────────────────────────────────────
-
-
-class TestExtractPlatformTopics:
-
-    def test_splits_multiline(self):
-        text = (
-            "Fight climate change through clean energy investment\n"
-            "Lower prescription drug costs for American seniors\n"
-            "Comprehensive immigration reform and border security"
-        )
-        topics = _extract_platform_topics(text)
-        assert len(topics) >= 2
-
-    def test_strips_bullet_markers(self):
-        text = "• Fight climate change and invest in green energy\n- Lower drug costs for seniors and families"
-        topics = _extract_platform_topics(text)
-        for t in topics:
-            assert not t.startswith("•")
-            assert not t.startswith("-")
-
-    def test_max_topics_capped(self):
-        text = "\n".join(f"Topic number {i} about something important in our country" for i in range(20))
-        topics = _extract_platform_topics(text, max_topics=4)
-        assert len(topics) <= 4
-
-    def test_empty_input(self):
-        assert _extract_platform_topics("") == []
-
-    def test_single_blob(self):
-        text = "A single long paragraph about climate change and energy policy with no line breaks at all"
-        topics = _extract_platform_topics(text)
-        assert len(topics) >= 1
-
-    def test_short_lines_skipped(self):
-        text = "Short\nAlso short\nThis is a meaningful line about healthcare reform and policy changes"
-        topics = _extract_platform_topics(text)
-        assert len(topics) == 1
-
-    def test_nav_junk_rejected(self):
-        text = (
-            "Senator Murphy Facebook Senator Murphy Instagram\n"
-            "Website Search Open Website Search\n"
-            "Comprehensive healthcare reform and prescription drug pricing"
-        )
-        topics = _extract_platform_topics(text)
-        assert len(topics) == 1
-        assert "healthcare" in topics[0].lower()
 
 
 # ── Key vote selection ───────────────────────────────────────────
