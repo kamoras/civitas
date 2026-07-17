@@ -270,6 +270,12 @@ D_PLATFORM_POSITIONS: dict[str, str] = {
 # dominates.  A value of 3 means ~4 real bills halve the seed influence.
 _PRIOR_WEIGHT = 3.0
 
+# Below this R/D score margin, a bill is classified "bipartisan" rather
+# than assigned to either party — empirically calibrated (see
+# classify_party_alignment's docstring) against bills with known
+# single-party sponsorship in the 117th-119th Congresses.
+_BIPARTISAN_MARGIN_THRESHOLD = 0.06
+
 
 def _build_seed_embeddings() -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
     """Embed the hand-authored seed platform descriptions.
@@ -591,7 +597,7 @@ def classify_party_alignment(
 
     margin = abs(r_score - d_score)
 
-    if margin < 0.06:
+    if margin < _BIPARTISAN_MARGIN_THRESHOLD:
         return "bipartisan"
 
     return "R" if r_score > d_score else "D"
@@ -664,7 +670,7 @@ def classify_party_alignment_multi(
 
         margin = abs(r_score - d_score)
 
-        if margin < 0.06:
+        if margin < _BIPARTISAN_MARGIN_THRESHOLD:
             party = "bipartisan"
         else:
             party = "R" if r_score > d_score else "D"
