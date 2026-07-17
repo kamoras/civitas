@@ -79,8 +79,13 @@ def _visitor_hash(ip: str, user_agent: str, date: str) -> str:
 
 
 _KNOWN_STATIC_PATHS = {
-    "/", "/about", "/accessibility", "/action", "/changelog", "/compare",
-    "/environmental", "/explore", "/leaderboard", "/politicians", "/scorecard",
+    "/", "/about", "/accessibility", "/action", "/bills", "/changelog",
+    "/compare", "/environmental", "/explore", "/feedback", "/leaderboard",
+    "/politicians",
+    # /scorecard has no page anymore (renamed) but old Bluesky posts still
+    # link to it — kept here so that 404 traffic stays visibly labeled
+    # "/scorecard" instead of draining into the unlabeled "/other" bucket.
+    "/scorecard",
 }
 _DYNAMIC_PREFIXES = ("/politicians/", "/issue/", "/explore/")
 
