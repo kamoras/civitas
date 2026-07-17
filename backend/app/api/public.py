@@ -23,6 +23,7 @@ from app.api.response_helpers import (
     CACHE_TTL_LIST_S,
     CACHE_TTL_REFERENCE_S,
     CACHE_TTL_SEARCH_S,
+    PARTY_QUERY_PATTERN,
 )
 from app.config_definitions import SCORE_WEIGHTS
 from app.database import get_db
@@ -195,7 +196,7 @@ def list_senators(
     request: Request,
     page: int = Query(1, ge=1, description="Page number (1-based)"),
     per_page: int = Query(50, ge=1, le=100, description="Results per page"),
-    party: str | None = Query(None, pattern="^[DRI]$", description="Party filter: D, R, or I"),
+    party: str | None = Query(None, pattern=PARTY_QUERY_PATTERN, description="Party filter: D, R, or I"),
     state: str | None = Query(None, min_length=2, max_length=2, description="Two-letter state code"),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
@@ -300,7 +301,7 @@ def list_representatives(
     request: Request,
     page: int = Query(1, ge=1, description="Page number (1-based)"),
     per_page: int = Query(50, ge=1, le=100, description="Results per page"),
-    party: str | None = Query(None, pattern="^[DRI]$", description="Party filter: D, R, or I"),
+    party: str | None = Query(None, pattern=PARTY_QUERY_PATTERN, description="Party filter: D, R, or I"),
     state: str | None = Query(None, min_length=2, max_length=2, description="Two-letter state code"),
     db: Session = Depends(get_db),
 ) -> JSONResponse:

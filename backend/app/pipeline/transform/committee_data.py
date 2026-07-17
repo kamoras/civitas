@@ -21,19 +21,28 @@ _committee_membership_cache: dict[str, list[dict]] | None = None
 _leadership_roles_cache: dict[str, str] | None = None
 
 
+def _load_json_cache(filename: str, json_key: str, missing_data_context: str) -> dict:
+    """Read `json_key` out of app/data/`filename`, or an empty dict (logged)
+    if the file hasn't been generated yet. Shared by both loaders below —
+    same file-missing-is-normal-until-the-fetch-script-runs handling."""
+    path = _DATA_DIR / filename
+    try:
+        return json.loads(path.read_text())[json_key]
+    except Exception:
+        logger.warning(
+            "%s unavailable — %s until scripts/fetch_committee_data.py is run",
+            filename, missing_data_context,
+        )
+        return {}
+
+
 def load_committee_membership() -> dict[str, list[dict]]:
     """bioguide_id -> [{committeeName, chamber, title}, ...]."""
     global _committee_membership_cache
     if _committee_membership_cache is None:
-        path = _DATA_DIR / "committee_membership.json"
-        try:
-            _committee_membership_cache = json.loads(path.read_text())["membership"]
-        except Exception:
-            logger.warning(
-                "committee_membership.json unavailable — committees will be "
-                "empty until scripts/fetch_committee_data.py is run",
-            )
-            _committee_membership_cache = {}
+        _committee_membership_cache = _load_json_cache(
+            "committee_membership.json", "membership", "committees will be empty",
+        )
     return _committee_membership_cache
 
 
@@ -45,15 +54,9 @@ def load_leadership_roles() -> dict[str, str]:
     """
     global _leadership_roles_cache
     if _leadership_roles_cache is None:
-        path = _DATA_DIR / "leadership_roles.json"
-        try:
-            _leadership_roles_cache = json.loads(path.read_text())["roles"]
-        except Exception:
-            logger.warning(
-                "leadership_roles.json unavailable — leadership titles will "
-                "be empty until scripts/fetch_committee_data.py is run",
-            )
-            _leadership_roles_cache = {}
+        _leadership_roles_cache = _load_json_cache(
+            "leadership_roles.json", "roles", "leadership titles will be empty",
+        )
     return _leadership_roles_cache
 
 

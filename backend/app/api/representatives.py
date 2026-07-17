@@ -6,6 +6,7 @@ from app.api.highlights import build_highlights
 from app.api.response_helpers import (
     CACHE_TTL_DETAIL_S,
     CACHE_TTL_LIST_S,
+    PARTY_QUERY_PATTERN,
     cached_json as _cached_json,
     score_history_json,
 )
@@ -33,7 +34,7 @@ def list_rep_states(db: Session = Depends(get_db)) -> JSONResponse:
 def list_rep_leaderboard(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=100),
-    party: str | None = Query(None, pattern="^[DRI]$"),
+    party: str | None = Query(None, pattern=PARTY_QUERY_PATTERN),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     data = get_rep_leaderboard(db, page=page, per_page=per_page, party=party)

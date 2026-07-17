@@ -22,7 +22,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
-from app.api.response_helpers import CACHE_TTL_DETAIL_S, cached_json
+from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json
 from app.config_definitions import PRESIDENT_SCORE_WEIGHTS
 from app.database import get_db
 from app.models import ActionIssue, ExploreDocument, Justice, President, Representative, Senator
@@ -137,7 +137,7 @@ def _build_active_issue_map(db: Session) -> dict[str, list[int]]:
 def list_politicians(
     branch: str | None = Query(None, pattern="^(senate|house|president|scotus)$"),
     state: str | None = Query(None, min_length=2, max_length=2),
-    party: str | None = Query(None, pattern="^[DRI]$"),
+    party: str | None = Query(None, pattern=PARTY_QUERY_PATTERN),
     q: str | None = Query(None, max_length=100),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
