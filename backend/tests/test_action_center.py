@@ -438,31 +438,40 @@ class TestFixImpossibleSenateVoteCounts:
     passed the Senate with a vote of 226-195' for a story where the bill
     passed the House 226-195 and was later taken up in the Senate."""
 
-    def test_corrects_impossible_senate_vote_to_house(self):
-        text = "The bill passed the Senate with a vote of 226-195."
-        assert _fix_impossible_senate_vote_counts(text) == "The bill passed the House with a vote of 226-195."
-
-    def test_corrects_across_word_variants_of_tally(self):
-        text = "The proposal gained traction in the Senate, where it passed with a vote of 226 to 195."
-        result = _fix_impossible_senate_vote_counts(text)
-        assert "House" in result
-        assert "passed with a vote of 226 to 195" in result
-
-    def test_leaves_plausible_senate_vote_unchanged(self):
-        # 51 + 49 = 100, exactly at the Senate's ceiling — plausible.
-        text = "The bill passed the Senate with a vote of 51-49."
-        assert _fix_impossible_senate_vote_counts(text) == text
-
-    def test_leaves_already_correct_house_mention_unchanged(self):
-        text = "The bill passed the House 226-195 and now moves to the Senate for consideration."
-        assert _fix_impossible_senate_vote_counts(text) == text
-
-    def test_empty_string_returns_unchanged(self):
-        assert _fix_impossible_senate_vote_counts("") == ""
-
-    def test_no_vote_tally_returns_unchanged(self):
-        text = "The Senate is expected to take up the bill next week."
-        assert _fix_impossible_senate_vote_counts(text) == text
+    @pytest.mark.parametrize(
+        "text, expected",
+        [
+            pytest.param(
+                "The bill passed the Senate with a vote of 226-195.",
+                "The bill passed the House with a vote of 226-195.",
+                id="corrects_impossible_senate_vote_to_house",
+            ),
+            pytest.param(
+                "The proposal gained traction in the Senate, where it passed with a vote of 226 to 195.",
+                "The proposal gained traction in the House, where it passed with a vote of 226 to 195.",
+                id="corrects_across_word_variants_of_tally",
+            ),
+            # 51 + 49 = 100, exactly at the Senate's ceiling — plausible.
+            pytest.param(
+                "The bill passed the Senate with a vote of 51-49.",
+                "The bill passed the Senate with a vote of 51-49.",
+                id="leaves_plausible_senate_vote_unchanged",
+            ),
+            pytest.param(
+                "The bill passed the House 226-195 and now moves to the Senate for consideration.",
+                "The bill passed the House 226-195 and now moves to the Senate for consideration.",
+                id="leaves_already_correct_house_mention_unchanged",
+            ),
+            pytest.param("", "", id="empty_string_returns_unchanged"),
+            pytest.param(
+                "The Senate is expected to take up the bill next week.",
+                "The Senate is expected to take up the bill next week.",
+                id="no_vote_tally_returns_unchanged",
+            ),
+        ],
+    )
+    def test_fix_impossible_senate_vote_counts(self, text, expected):
+        assert _fix_impossible_senate_vote_counts(text) == expected
 
 
 class TestFindRelatedExploreDocsGenericTitleFilter:
@@ -612,58 +621,41 @@ class TestAdministrativeNoticeTitleFilter:
         ))
         db_session.commit()
 
+    @pytest.mark.parametrize(
+        "issue_title, doc_title",
+        [
+            pytest.param(
+                "Some unrelated issue",
+                "Agency Information Collection Activities; Proposed eCollection",
+                id="information_collection_notice_rejected_despite_high_similarity",
+            ),
+            pytest.param(
+                "Attorney General independence",
+                "Notice of Public Meeting of the Montana Advisory Committee",
+                id="advisory_committee_meeting_notice_rejected_despite_high_similarity",
+            ),
+            pytest.param(
+                "Some unrelated issue",
+                "Proposed Collection; 60-day Comment Request; Generic Clearance for NIH",
+                id="proposed_collection_comment_request_variant_rejected",
+            ),
+            pytest.param(
+                "Some unrelated issue",
+                "Solicitation of Nominations for Membership on the Ocean Exploration Advisory Board",
+                id="solicitation_of_nominations_variant_rejected",
+            ),
+        ],
+    )
     @patch("app.pipeline.analyze.action_center._embed_texts")
     @patch("app.pipeline.analyze.action_center.search_explore_documents")
-    def test_information_collection_notice_rejected_despite_high_similarity(
-        self, mock_search, mock_embed, db_session,
+    def test_administrative_notice_rejected_despite_high_similarity(
+        self, mock_search, mock_embed, issue_title, doc_title, db_session,
     ):
-        self._seed_doc(db_session, 1, "Agency Information Collection Activities; Proposed eCollection")
-        mock_search.return_value = [
-            {"id": 1, "title": "Agency Information Collection Activities; Proposed eCollection", "distance": 0.70},
-        ]
+        self._seed_doc(db_session, 1, doc_title)
+        mock_search.return_value = [{"id": 1, "title": doc_title, "distance": 0.70}]
         mock_embed.return_value = np.array([[1.0, 0.0], [0.95, 0.05]])
 
-        result = _find_related_explore_docs("Some unrelated issue", "summary", [], db_session)
-        assert result == []
-
-    @patch("app.pipeline.analyze.action_center._embed_texts")
-    @patch("app.pipeline.analyze.action_center.search_explore_documents")
-    def test_advisory_committee_meeting_notice_rejected_despite_high_similarity(
-        self, mock_search, mock_embed, db_session,
-    ):
-        self._seed_doc(db_session, 1, "Notice of Public Meeting of the Montana Advisory Committee")
-        mock_search.return_value = [
-            {"id": 1, "title": "Notice of Public Meeting of the Montana Advisory Committee", "distance": 0.70},
-        ]
-        mock_embed.return_value = np.array([[1.0, 0.0], [0.95, 0.05]])
-
-        result = _find_related_explore_docs("Attorney General independence", "summary", [], db_session)
-        assert result == []
-
-    @patch("app.pipeline.analyze.action_center._embed_texts")
-    @patch("app.pipeline.analyze.action_center.search_explore_documents")
-    def test_proposed_collection_comment_request_variant_rejected(
-        self, mock_search, mock_embed, db_session,
-    ):
-        title = "Proposed Collection; 60-day Comment Request; Generic Clearance for NIH"
-        self._seed_doc(db_session, 1, title)
-        mock_search.return_value = [{"id": 1, "title": title, "distance": 0.70}]
-        mock_embed.return_value = np.array([[1.0, 0.0], [0.95, 0.05]])
-
-        result = _find_related_explore_docs("Some unrelated issue", "summary", [], db_session)
-        assert result == []
-
-    @patch("app.pipeline.analyze.action_center._embed_texts")
-    @patch("app.pipeline.analyze.action_center.search_explore_documents")
-    def test_solicitation_of_nominations_variant_rejected(
-        self, mock_search, mock_embed, db_session,
-    ):
-        title = "Solicitation of Nominations for Membership on the Ocean Exploration Advisory Board"
-        self._seed_doc(db_session, 1, title)
-        mock_search.return_value = [{"id": 1, "title": title, "distance": 0.70}]
-        mock_embed.return_value = np.array([[1.0, 0.0], [0.95, 0.05]])
-
-        result = _find_related_explore_docs("Some unrelated issue", "summary", [], db_session)
+        result = _find_related_explore_docs(issue_title, "summary", [], db_session)
         assert result == []
 
     @patch("app.pipeline.analyze.action_center._embed_texts")

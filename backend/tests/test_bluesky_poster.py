@@ -5,6 +5,8 @@ _validate_facts which are pure functions with no external dependencies.
 """
 
 
+import pytest
+
 from app.pipeline.analyze.bluesky_poster import _sanitize
 from app.pipeline.analyze.action_center import _validate_facts
 
@@ -76,18 +78,26 @@ class TestValidateFacts:
 
     # --- Self-referential comparison detection ---
 
-    def test_drops_meta_surpasses_meta(self):
-        facts = ["Meta's market value overtakes that of Meta Platforms, Tesla, and Micron."]
-        assert _validate_facts(facts) == []
-
-    def test_drops_micron_surpasses_micron(self):
-        facts = ["Micron's market value has surpassed Meta Platforms, Tesla, and Micron."]
-        assert _validate_facts(facts) == []
-
-    def test_drops_apple_beats_apple(self):
-        facts = ["Apple's revenue exceeds Apple's previous record by 10%."]
-        # "Apple" root "apple" appears on both sides
-        assert _validate_facts(facts) == []
+    @pytest.mark.parametrize(
+        "fact",
+        [
+            pytest.param(
+                "Meta's market value overtakes that of Meta Platforms, Tesla, and Micron.",
+                id="drops_meta_surpasses_meta",
+            ),
+            pytest.param(
+                "Micron's market value has surpassed Meta Platforms, Tesla, and Micron.",
+                id="drops_micron_surpasses_micron",
+            ),
+            # "Apple" root "apple" appears on both sides
+            pytest.param(
+                "Apple's revenue exceeds Apple's previous record by 10%.",
+                id="drops_apple_beats_apple",
+            ),
+        ],
+    )
+    def test_self_referential_comparison_dropped(self, fact):
+        assert _validate_facts([fact]) == []
 
     def test_keeps_apple_surpasses_microsoft(self):
         facts = ["Apple surpassed Microsoft in market cap for the first time since 2021."]
