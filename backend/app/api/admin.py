@@ -611,7 +611,8 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
     from app.api.pipeline import _is_pipeline_running
     from app.pipeline.house_pipeline import is_house_pipeline_running
     from app.pipeline.stock_pipeline import is_stock_pipeline_running
-    from app.models import HousePipelineRun, StockTradesPipelineRun
+    from app.pipeline.supplementary_pipeline import is_supplementary_pipeline_running
+    from app.models import HousePipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun
     is_running = _is_pipeline_running(db)
 
     last_run = (
@@ -629,12 +630,33 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
         .order_by(StockTradesPipelineRun.started_at.desc())
         .first()
     )
+    last_supplementary_run = (
+        db.query(SupplementaryPipelineRun)
+        .order_by(SupplementaryPipelineRun.started_at.desc())
+        .first()
+    )
 
     result: dict = {
         "isRunning": is_running,
         "houseIsRunning": is_house_pipeline_running(),
         "stockTradesIsRunning": is_stock_pipeline_running(),
+        "supplementaryIsRunning": is_supplementary_pipeline_running(),
     }
+
+    if last_supplementary_run:
+        result["supplementaryLastRun"] = {
+            "id": last_supplementary_run.id,
+            "startedAt": last_supplementary_run.started_at.isoformat() if last_supplementary_run.started_at else None,
+            "completedAt": last_supplementary_run.completed_at.isoformat() if last_supplementary_run.completed_at else None,
+            "status": last_supplementary_run.status,
+            "currentPhase": last_supplementary_run.current_phase,
+            "exploreDocsIngested": last_supplementary_run.explore_docs_ingested,
+            "justicesScored": last_supplementary_run.justices_scored,
+            "justicesSkipped": last_supplementary_run.justices_skipped,
+            "presidentsUpdated": last_supplementary_run.presidents_updated,
+            "elapsedSeconds": _live_elapsed(last_supplementary_run),
+            "errorMessage": last_supplementary_run.error_message,
+        }
 
     if last_stock_run:
         result["stockTradesLastRun"] = {
@@ -713,8 +735,8 @@ async def admin_pipeline_history(
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    """Return recent pipeline run history (Senate + House + stock trades interleaved by date)."""
-    from app.models import HousePipelineRun, StockTradesPipelineRun
+    """Return recent pipeline run history (Senate + supplementary + House + stock trades interleaved by date)."""
+    from app.models import HousePipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun
     senate_runs = (
         db.query(PipelineRun)
         .order_by(PipelineRun.started_at.desc())
@@ -730,6 +752,12 @@ async def admin_pipeline_history(
     stock_runs = (
         db.query(StockTradesPipelineRun)
         .order_by(StockTradesPipelineRun.started_at.desc())
+        .limit(limit)
+        .all()
+    )
+    supplementary_runs = (
+        db.query(SupplementaryPipelineRun)
+        .order_by(SupplementaryPipelineRun.started_at.desc())
         .limit(limit)
         .all()
     )
@@ -762,9 +790,19 @@ async def admin_pipeline_history(
         })
         for r in stock_runs
     ]
+    supplementary_entries = [
+        _history_entry(r, "supplementary", {
+            "currentPhase": r.current_phase,
+            "exploreDocsIngested": r.explore_docs_ingested,
+            "justicesScored": r.justices_scored,
+            "justicesSkipped": r.justices_skipped,
+            "presidentsUpdated": r.presidents_updated,
+        })
+        for r in supplementary_runs
+    ]
 
     combined = sorted(
-        senate_entries + house_entries + stock_entries,
+        senate_entries + house_entries + stock_entries + supplementary_entries,
         key=lambda x: x["startedAt"] or "",
         reverse=True,
     )
@@ -786,13 +824,16 @@ async def admin_trigger_pipeline(
 
     def _run_in_thread():
         from app.pipeline.house_pipeline import run_house_pipeline
+        from app.pipeline.supplementary_pipeline import run_supplementary_pipeline
         loop = asyncio.new_event_loop()
         try:
             result = loop.run_until_complete(
                 run_senate_pipeline(senator_filter=senator, fetch_only=fetch_only)
             )
             if senator is None and not fetch_only and result.get("status") not in ("skipped", "failed"):
-                logger.info("Senate pipeline done — starting House pipeline")
+                logger.info("Senate pipeline done — starting supplementary pipeline")
+                loop.run_until_complete(run_supplementary_pipeline())
+                logger.info("Supplementary pipeline done — starting House pipeline")
                 loop.run_until_complete(run_house_pipeline())
         except BaseException:
             logger.exception("Admin-triggered pipeline run failed")
@@ -896,6 +937,37 @@ async def admin_clear_stuck_stock_trades(db: Session = Depends(get_db)):
     from app.pipeline.stock_pipeline import is_stock_pipeline_running
 
     return _clear_stuck_runs(db, StockTradesPipelineRun, is_stock_pipeline_running(), "Stock trades")
+
+
+@router.post("/pipeline/trigger-supplementary", dependencies=[Depends(require_admin)])
+async def admin_trigger_supplementary_pipeline(db: Session = Depends(get_db)):
+    """Trigger a supplementary (explore docs/SCOTUS/presidents) pipeline run."""
+    from app.pipeline.supplementary_pipeline import run_supplementary_pipeline
+
+    def _run_in_thread():
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(run_supplementary_pipeline())
+        except BaseException:
+            logger.exception("Supplementary pipeline run failed")
+        finally:
+            loop.close()
+
+    threading.Thread(target=_run_in_thread, daemon=True, name="supplementary-pipeline-run").start()
+    return {"message": "Supplementary pipeline triggered"}
+
+
+@router.post("/pipeline/clear-stuck-supplementary", dependencies=[Depends(require_admin)])
+async def admin_clear_stuck_supplementary(db: Session = Depends(get_db)):
+    """Mark any stuck (status=running) supplementary pipeline run as failed.
+
+    Use when the in-memory flag says idle but the DB record still shows
+    running (e.g. after a container restart mid-run).
+    """
+    from app.models import SupplementaryPipelineRun
+    from app.pipeline.supplementary_pipeline import is_supplementary_pipeline_running
+
+    return _clear_stuck_runs(db, SupplementaryPipelineRun, is_supplementary_pipeline_running(), "Supplementary")
 
 
 @router.post("/data/reset", dependencies=[Depends(require_admin)])

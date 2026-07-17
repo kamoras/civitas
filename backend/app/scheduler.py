@@ -9,6 +9,9 @@ from apscheduler.triggers.cron import CronTrigger
 from app.config import settings
 from app.pipeline.senate_pipeline import run_senate_pipeline
 from app.pipeline.house_pipeline import run_house_pipeline, is_house_pipeline_running, house_pipeline_age
+from app.pipeline.supplementary_pipeline import (
+    run_supplementary_pipeline, is_supplementary_pipeline_running, supplementary_pipeline_age,
+)
 from app.pipeline.stock_pipeline import (
     run_stock_trades_pipeline, is_stock_pipeline_running, stock_pipeline_age,
 )
@@ -28,7 +31,9 @@ def _is_stale(age: timedelta | None, threshold: timedelta) -> bool:
 
 
 def _nightly_pipeline() -> None:
-    """Run the unified pipeline (senators, explore docs, SCOTUS justices).
+    """Run the nightly sequence: Senate, then explore docs/SCOTUS/
+    presidents, then House, then stock trades — four independent
+    pipelines run one after another, not one combined pipeline.
 
     Runs in a background thread with its own event loop so the main
     uvicorn loop stays responsive during long-running pipeline phases.
@@ -51,7 +56,10 @@ def _nightly_pipeline() -> None:
                     dedupe_key=f"skipped-{datetime.utcnow():%Y-%m-%d}",
                 )
             else:
-                logger.info("Senate pipeline done — starting House pipeline")
+                logger.info("Senate pipeline done — starting supplementary pipeline")
+                supp_result = loop.run_until_complete(run_supplementary_pipeline())
+                logger.info("Supplementary pipeline: %s", supp_result)
+                logger.info("Supplementary pipeline done — starting House pipeline")
                 loop.run_until_complete(run_house_pipeline())
                 logger.info("House pipeline done — starting stock trades pipeline")
                 stock_result = loop.run_until_complete(run_stock_trades_pipeline())
@@ -152,6 +160,29 @@ def _hourly_action_refresh() -> None:
                     )
                 else:
                     logger.info("Action center refresh skipped — house pipeline is running")
+                    return
+            if is_supplementary_pipeline_running():
+                supp_age = supplementary_pipeline_age()
+                # 8h, not stock's 2h: on its weekly SCOTUS-refresh day this
+                # pipeline includes the uncached per-case Oyez crawl, which
+                # took 5h+ in run 69 — a tight threshold would misfire as
+                # "hung" on a run that's just legitimately slow that day.
+                if _is_stale(supp_age, timedelta(hours=8)):
+                    from app.ops_alerts import send_ops_alert
+                    logger.warning(
+                        "Supplementary pipeline has been running for %s — "
+                        "treating as hung and proceeding with action center refresh",
+                        supp_age,
+                    )
+                    send_ops_alert(
+                        "Supplementary pipeline overrun",
+                        f"The supplementary (explore/SCOTUS/presidents) pipeline "
+                        f"has been running for {supp_age} and is likely hung. "
+                        "The action center is no longer waiting for it.",
+                        dedupe_key=f"supplementary-overrun-{datetime.utcnow():%Y-%m-%d}",
+                    )
+                else:
+                    logger.info("Action center refresh skipped — supplementary pipeline is running")
                     return
             if is_stock_pipeline_running():
                 stock_age = stock_pipeline_age()

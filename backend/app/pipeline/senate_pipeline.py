@@ -29,7 +29,6 @@ from app.models import (
     CampaignPromise,
     Donor,
     IndustryDonation,
-    Justice,
     KeyVote,
     LobbyingMatch,
     PipelineRun,
@@ -125,10 +124,7 @@ PIPELINE_STEPS = [
     ("classify_donors",      "analyze",   "Classify donors"),
     ("prepare_senators",     "analyze",   "Prepare senator data"),
     ("sponsorship_analysis", "analyze",   "Sponsorship leadership & ideology (SVD/PageRank)"),
-    ("analyze_senators",     "analyze",   "Analyze senators (LLM)"),
-    ("explore_documents",    "explore",   "Ingest explore documents"),
-    ("justice_scorecards",   "justices",  "Score SCOTUS justices"),
-    ("president_scorecards", "presidents", "Score presidents"),
+    ("analyze_senators",     "analyze",   "Analyze senators"),
     ("finalize",             "finalize",  "Finalize & save"),
 ]
 
@@ -1158,8 +1154,7 @@ async def run_senate_pipeline(
             logger.info("=== FETCH COMPLETE (fetch-only mode) ===")
             for sk in ("classify_bills", "classify_recent", "embed_bills",
                         "classify_donors", "prepare_senators", "analyze_senators",
-                        "explore_documents", "justice_scorecards",
-                        "president_scorecards", "finalize"):
+                        "finalize"):
                 progress.skip(sk, detail="fetch-only mode")
             elapsed = time.time() - start_time
             pipeline_run.status = PipelineStatus.COMPLETED
@@ -1900,81 +1895,7 @@ async def run_senate_pipeline(
         )
 
         # ========================================
-        # PHASE 4: EXPLORE DOCUMENTS
-        # ========================================
-        pipeline_run.current_phase = "explore"
-        pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
-        db.commit()
-        logger.info("--- Phase 4: EXPLORE DOCUMENTS ---")
-        progress.begin("explore_documents")
-        explore_result: dict = {}
-        try:
-            from app.pipeline.explore_pipeline import run_explore_pipeline
-            explore_result = await run_explore_pipeline(days_back=60)
-            total_docs = sum(v for v in explore_result.values() if isinstance(v, int))
-            logger.info("Explore pipeline ingested %d documents", total_docs)
-            progress.complete("explore_documents", detail=f"{total_docs} ingested")
-        except Exception as e:
-            logger.exception("Explore pipeline failed: %s — continuing", e)
-            progress.complete("explore_documents", detail="failed")
-
-        # ========================================
-        # PHASE 5: SCOTUS JUSTICES
-        # ========================================
-        pipeline_run.current_phase = "justices"
-        pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
-        db.commit()
-        logger.info("--- Phase 5: SCOTUS JUSTICES ---")
-        # SCOTUS data changes a few times per term, but the Oyez fetch is
-        # uncached per-case crawling (5h+ in run 69). Refresh weekly
-        # (Sunday UTC), or whenever the justices table is empty.
-        justices_missing = db.query(Justice.id).first() is None
-        run_justices = justices_missing or datetime.utcnow().weekday() == 6
-        justice_result: dict = {}
-        if not run_justices:
-            logger.info("Justice refresh skipped (weekly cadence; next on Sunday UTC)")
-            progress.skip("justice_scorecards", detail="weekly cadence")
-        else:
-            progress.begin("justice_scorecards")
-            try:
-                from app.pipeline.justice_pipeline import run_justice_pipeline
-                justice_db = SessionLocal()
-                try:
-                    justice_result = await run_justice_pipeline(justice_db)
-                finally:
-                    justice_db.close()
-                justices_count = justice_result.get("justices", 0)
-                logger.info("Justice pipeline scored %d justices", justices_count)
-                progress.complete("justice_scorecards", detail=f"{justices_count} scored")
-            except Exception as e:
-                logger.exception("Justice pipeline failed: %s — continuing", e)
-                progress.complete("justice_scorecards", detail="failed")
-
-        # ========================================
-        # PHASE 6: PRESIDENTS
-        # ========================================
-        pipeline_run.current_phase = "presidents"
-        pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
-        db.commit()
-        logger.info("--- Phase 6: PRESIDENTS ---")
-        progress.begin("president_scorecards")
-        president_result: dict = {}
-        try:
-            from app.pipeline.president_pipeline import run_president_pipeline
-            president_db = SessionLocal()
-            try:
-                president_result = await run_president_pipeline(president_db)
-            finally:
-                president_db.close()
-            presidents_updated = president_result.get("updated", 0)
-            logger.info("President pipeline updated %d presidents", presidents_updated)
-            progress.complete("president_scorecards", detail=f"{presidents_updated} updated")
-        except Exception as e:
-            logger.exception("President pipeline failed: %s — continuing", e)
-            progress.complete("president_scorecards", detail="failed")
-
-        # ========================================
-        # PHASE 7: FINALIZE
+        # PHASE 4: FINALIZE
         # ========================================
         pipeline_run.current_phase = "finalize"
         pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
@@ -2066,8 +1987,6 @@ async def run_senate_pipeline(
             "senators_processed": success_count,
             "senators_failed": fail_count,
             "bills_classified": len(classified_bills),
-            "explore": explore_result,
-            "justices": justice_result,
             "llm_stats": llm_stats,
             "elapsed_seconds": round(elapsed, 1),
         }

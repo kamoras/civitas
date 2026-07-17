@@ -23,7 +23,10 @@ class _SyncThread:
         self._target()
 
 
-def _run_hourly_refresh(refresh_state: dict, house_running: bool = False, stock_running: bool = False, stock_age=None):
+def _run_hourly_refresh(
+    refresh_state: dict, house_running: bool = False, stock_running: bool = False, stock_age=None,
+    supplementary_running: bool = False, supplementary_age=None,
+):
     from app import scheduler
 
     with patch("app.scheduler.threading.Thread", _SyncThread), \
@@ -36,7 +39,9 @@ def _run_hourly_refresh(refresh_state: dict, house_running: bool = False, stock_
 
         with patch("app.scheduler.is_house_pipeline_running", return_value=house_running), \
              patch("app.scheduler.is_stock_pipeline_running", return_value=stock_running), \
-             patch("app.scheduler.stock_pipeline_age", return_value=stock_age):
+             patch("app.scheduler.stock_pipeline_age", return_value=stock_age), \
+             patch("app.scheduler.is_supplementary_pipeline_running", return_value=supplementary_running), \
+             patch("app.scheduler.supplementary_pipeline_age", return_value=supplementary_age):
             scheduler._hourly_action_refresh()
 
     return mock_refresh
@@ -107,4 +112,34 @@ class TestStockTradesOverlapGuard:
     def test_proceeds_when_stock_pipeline_is_not_running(self):
         state = {"is_running": False, "started_at": None}
         mock_refresh = _run_hourly_refresh(state, stock_running=False)
+        mock_refresh.assert_called_once()
+
+
+class TestSupplementaryOverlapGuard:
+    """Explore docs/SCOTUS/presidents now run as their own pipeline
+    (extracted from Senate's run_senate_pipeline — see
+    supplementary_pipeline.py) between Senate and House in the nightly
+    sequence, so the hourly refresh needs its own guard the same way
+    House and stock trades already have one."""
+
+    def test_skips_when_supplementary_pipeline_is_running_and_recent(self):
+        state = {"is_running": False, "started_at": None}
+        mock_refresh = _run_hourly_refresh(
+            state, supplementary_running=True, supplementary_age=timedelta(hours=1),
+        )
+        mock_refresh.assert_not_called()
+
+    def test_proceeds_when_supplementary_pipeline_running_flag_is_stale_beyond_8_hours(self):
+        # 8h, not stock's 2h: a weekly SCOTUS refresh includes the uncached
+        # per-case Oyez crawl, which took 5h+ in run 69 — a legitimately
+        # slow run must not be misdiagnosed as hung.
+        state = {"is_running": False, "started_at": None}
+        mock_refresh = _run_hourly_refresh(
+            state, supplementary_running=True, supplementary_age=timedelta(hours=9),
+        )
+        mock_refresh.assert_called_once()
+
+    def test_proceeds_when_supplementary_pipeline_is_not_running(self):
+        state = {"is_running": False, "started_at": None}
+        mock_refresh = _run_hourly_refresh(state, supplementary_running=False)
         mock_refresh.assert_called_once()
