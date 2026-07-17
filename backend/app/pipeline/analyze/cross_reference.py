@@ -5,7 +5,6 @@ Architecture:
   - CLASSIFICATION (embedding-based, deterministic):
     - Lobbying match detection via donor↔vote embedding similarity
     - Key vote selection via donor↔policy embedding similarity
-    - Promise alignment via promise↔vote embedding similarity
   - LLM (1 call per senator, ONLY for narrative):
     - Human-readable voting summary
     - Key vote reasoning (explain pre-computed classifications)
@@ -14,21 +13,20 @@ Architecture:
 
 The LLM receives already-classified data and generates presentation text.
 It does NOT make classification decisions.
+
+Campaign-promise tracking was removed entirely (2026-07) — see
+policy_alignment.py's module docstring for why.
 """
 
 import logging
 import re
 from typing import Any
 
-from app.config_definitions import PLATFORM_CATEGORIES
-from app.models import PromiseAlignment
 from app.pipeline.analyze.ollama_client import call_llm, unwrap_list
 from app.pipeline.analyze.policy_alignment import (
-    compute_promise_vote_alignment,
     detect_donor_vote_connections,
     get_related_policies,
 )
-from app.pipeline.analyze.score_calculator import SUBSTANTIVE_BILL_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -151,8 +149,8 @@ def precompute_senator_analysis(item: dict) -> dict:
     """Pre-compute all embedding-based analysis for a senator.
 
     Implements the "Librarian" half of the producer-consumer pipeline:
-    runs lobbying detection, key vote selection, and promise alignment
-    using only the embedding model (zero LLM calls). This can run in a
+    runs lobbying detection and key vote selection using only the
+    embedding model (zero LLM calls). This can run in a
     background thread while the LLM processes the previous senator,
     eliminating idle time between LLM calls.
 
@@ -163,7 +161,6 @@ def precompute_senator_analysis(item: dict) -> dict:
     donors = item.get("donors", [])
     all_votes = item.get("allVotes", [])
     platform_text = item.get("platformText", "")
-    sponsored_bills = item.get("sponsoredBills", [])
     industry_breakdown = item.get("industryBreakdown", [])
 
     has_data = len(donors) > 0 or len(all_votes) > 0
@@ -173,9 +170,6 @@ def precompute_senator_analysis(item: dict) -> dict:
         if has_data else []
     )
     key_vote_ids = select_key_votes(all_votes, donors) if has_data else []
-    computed_promises = _compute_promise_alignments(
-        platform_text, all_votes, sponsored_bills=sponsored_bills,
-    )
 
     platform_topics: list[str] = []
     if platform_text and not _ERROR_PAGE_SIGS.search(platform_text):
@@ -184,7 +178,6 @@ def precompute_senator_analysis(item: dict) -> dict:
     return {
         "lobbyingMatches": lobbying_matches,
         "keyVoteIds": key_vote_ids,
-        "computedPromises": computed_promises,
         "platformTopics": platform_topics,
     }
 
@@ -194,7 +187,7 @@ async def analyze_senator_batch(
     db_session: Any | None = None,
     precomputed: dict | None = None,
 ) -> list[dict]:
-    """Analyze senators: embedding classification + LLM narrative + promise extraction.
+    """Analyze senators: embedding classification + LLM narrative.
 
     When precomputed data is provided (from precompute_senator_analysis),
     skips the embedding work and goes straight to the LLM narrative call.
@@ -203,16 +196,15 @@ async def analyze_senator_batch(
     Classification (deterministic, embedding-based):
       - Lobbying matches via donor↔vote similarity
       - Key vote selection via donor↔policy similarity
-      - Promise alignment via promise↔vote similarity
 
     LLM:
       - Voting summary, key vote reasoning, PAC narrative, platform summary
-      - Campaign promise extraction from platform text (comprehension task)
 
-    After the LLM returns, extracted promises are aligned against the
-    voting record AND sponsored bills using embeddings (deterministic).
-    If the LLM produced promises, those are primary. The Librarian's
-    heuristic extraction from platform text serves as a fallback.
+    campaignPromises is always []: promise extraction/alignment (both the
+    LLM-extraction and deterministic sponsored-bill-derived paths) was
+    removed entirely (2026-07) after a live audit found it routinely
+    produced wrong or nonsensical verdicts regardless of extraction
+    method — see policy_alignment.py's module docstring.
     """
     results: list[dict] = []
 
@@ -222,7 +214,6 @@ async def analyze_senator_batch(
         key_votes = item.get("keyVotes", [])
         all_votes = item.get("allVotes", [])
         platform_text = item.get("platformText", "")
-        sponsored_bills = item.get("sponsoredBills", [])
         industry_breakdown = item.get("industryBreakdown", [])
 
         has_data = len(donors) > 0 or len(key_votes) > 0
@@ -230,7 +221,6 @@ async def analyze_senator_batch(
         if precomputed:
             lobbying_matches = precomputed["lobbyingMatches"]
             key_vote_ids = precomputed["keyVoteIds"]
-            fallback_promises = precomputed["computedPromises"]
             platform_topics = precomputed.get("platformTopics", [])
         else:
             lobbying_matches = (
@@ -238,9 +228,6 @@ async def analyze_senator_batch(
                 if has_data else []
             )
             key_vote_ids = select_key_votes(all_votes, donors) if has_data else []
-            fallback_promises = _compute_promise_alignments(
-                platform_text, all_votes, sponsored_bills=sponsored_bills,
-            )
             platform_topics = []
 
         if has_data:
@@ -250,59 +237,11 @@ async def analyze_senator_batch(
                 all_votes=all_votes,
                 key_vote_ids=key_vote_ids,
                 platform_text=platform_text,
-                computed_promises=fallback_promises,
                 db_session=db_session,
                 platform_topics=platform_topics,
             )
         else:
             llm_result = {}
-
-        # LLM-extracted promises are primary (higher quality, actual
-        # campaign commitments from platform text). Heuristic extraction
-        # from the Librarian is a fallback when the LLM doesn't produce any.
-        # Its own dedicated call (not gated on has_data — extraction only
-        # needs platform text, not vote/donor data) — see
-        # _extract_campaign_promises for why this is separate from
-        # _narrative_analysis's bundled prompt.
-        llm_extracted = _extract_campaign_promises(
-            platform_text, senator["name"], db_session=db_session,
-        )
-        if llm_extracted:
-            final_promises = _align_llm_promises(
-                llm_extracted, all_votes,
-                sponsored_bills=sponsored_bills,
-            )
-        else:
-            final_promises = fallback_promises
-
-        # Sparse platform data leaves senate Promise Persistence shrunk
-        # hard toward the neutral prior (~2 evaluable promises vs the
-        # House's ~8 after v4.3, a disclosed cross-chamber offset).
-        # Augment thin promise sets with positions derived from the
-        # senator's own sponsored legislation — the same deterministic
-        # path the House uses — deduplicated against the platform
-        # promises so a stated commitment is never double-counted.
-        n_evaluable = sum(
-            1 for p in final_promises
-            if p.get("alignment") in (PromiseAlignment.KEPT, PromiseAlignment.PARTIAL, PromiseAlignment.BROKEN)
-        )
-        if n_evaluable < 4 and sponsored_bills:
-            derived = positions_from_sponsored_bills(
-                sponsored_bills, all_votes,
-                max_positions=8 - min(len(final_promises), 8),
-            )
-            if derived:
-                from app.pipeline.analyze.policy_alignment import _embed
-                import numpy as np
-                existing_embs = [
-                    _embed(p["promiseText"][:200]) for p in final_promises
-                ] if final_promises else []
-                for d in derived:
-                    if existing_embs:
-                        sims = np.array(existing_embs) @ _embed(d["promiseText"][:200])
-                        if float(sims.max()) > 0.70:
-                            continue
-                    final_promises.append(d)
 
         results.append({
             "senatorId": senator["id"],
@@ -313,289 +252,15 @@ async def analyze_senator_batch(
             "votingSummary": llm_result.get("votingSummary", ""),
             "pacDetails": llm_result.get("pacDetails", []),
             "platformSummary": llm_result.get("platformSummary", ""),
-            "campaignPromises": final_promises,
+            "campaignPromises": [],
         })
 
     return results
 
 
-def _positions_from_platform_text(
-    platform_text: str,
-    all_votes: list[dict],
-    sponsored_bills: list[dict] | None = None,
-    max_positions: int = 8,
-) -> list[dict]:
-    """Extract campaign promises from scraped platform text (heuristic fallback).
-
-    Used when the LLM does not return extracted promises. Splits platform
-    text into topic lines and evaluates each against the voting record
-    and sponsored legislation.
-    """
-    if not platform_text:
-        return []
-
-    if _ERROR_PAGE_SIGS.search(platform_text):
-        return []
-
-    if _SCRAPE_ARTIFACT_SIGS.search(platform_text[:500]):
-        platform_text = _SCRAPE_ARTIFACT_SIGS.sub("", platform_text).strip()
-        if len(platform_text) < 200:
-            return []
-
-    topics = _extract_platform_topics(platform_text, max_topics=max_positions + 4)
-    if not topics:
-        return []
-
-    valid_categories = set(PLATFORM_CATEGORIES.keys())
-    from app.pipeline.analyze.party_platform import classify_party_alignment
-    from app.pipeline.analyze.policy_alignment import _embed
-
-    import numpy as np
-    DEDUP_THRESHOLD = 0.70
-    selected_topics: list[str] = []
-    selected_embs: list[np.ndarray] = []
-    for t in topics:
-        t_emb = _embed(t[:200])
-        if selected_embs:
-            sims = np.array(selected_embs) @ t_emb
-            if float(sims.max()) > DEDUP_THRESHOLD:
-                continue
-        selected_topics.append(t)
-        selected_embs.append(t_emb)
-        if len(selected_topics) >= max_positions:
-            break
-
-    promises = []
-    for topic in selected_topics:
-        category = _classify_promise_category(topic, valid_categories)
-        result = compute_promise_vote_alignment(
-            topic, all_votes, sponsored_bills=sponsored_bills,
-            promise_category=category,
-        )
-        party_align = classify_party_alignment(
-            topic[:300], category.upper(), "pro",
-        )
-        promises.append({
-            "promiseText": topic[:250],
-            "category": category,
-            "alignment": result["alignment"],
-            "relatedVotes": result["relatedVotes"],
-            "relatedBills": result.get("relatedBills", []),
-            "analysis": result["reasoning"],
-            "confidence": result["confidence"],
-            "partyAlignment": party_align,
-        })
-
-    return promises
-
-
-def positions_from_sponsored_bills(
-    sponsored_bills: list[dict],
-    all_votes: list[dict],
-    max_positions: int = 8,
-) -> list[dict]:
-    """Derive legislative positions from a member's own sponsored bills.
-
-    House members have no scraped platform text (the Senate promise
-    source), so the bills a member chooses to introduce serve as the
-    statement of their positions. Each distinct topic is evaluated
-    against the member's floor votes ONLY — the sponsored bills
-    themselves are excluded from the evidence, because a position
-    derived from a bill would trivially match that same bill and
-    circularly credit introduction as fulfillment (the same failure
-    mode the effort-only sponsorship rule in
-    compute_promise_vote_alignment guards against).
-
-    Deterministic by design: embeddings only, no LLM — the House
-    pipeline must process 431 members on the same hardware budget the
-    Senate pipeline spends on 100.
-
-    Substantive bills only (same SUBSTANTIVE_BILL_TYPES filter as
-    Legislative Effectiveness) — a simple/concurrent resolution
-    ("recognizing National Mushroom Day", designating an awareness day,
-    honoring a sorority's anniversary) is not a position a member is
-    staking their credibility on, and is unmatchable against real votes
-    by construction (agreed to without debate). Left unfiltered, these
-    inflated the "unclear" count and collapsed Promise Persistence's
-    population spread (2026-07 finding: several "promises" in production
-    were literally ceremonial resolution titles, not stated positions).
-    """
-    if not sponsored_bills:
-        return []
-
-    substantive_bills = [
-        b for b in sponsored_bills
-        if (b.get("billType") or "").lower() in SUBSTANTIVE_BILL_TYPES
-    ]
-
-    titles = [
-        t for t in (
-            (b.get("title") or "").strip() for b in substantive_bills
-        )
-        if len(t) >= 20
-    ]
-    if not titles:
-        return []
-
-    from app.pipeline.analyze.party_platform import classify_party_alignment
-    from app.pipeline.analyze.policy_alignment import _embed
-
-    import numpy as np
-    # Bill titles share a legislative register that inflates baseline
-    # cosine similarity: across real sponsored-bill titles the
-    # different-topic mode runs ~0.75 median / ~0.82 p90, while true
-    # duplicates and reintroductions cluster at >=0.92 (measured on
-    # 5,456 same-member title pairs, 2026-07). 0.88 sits in the gap;
-    # the platform-text path keeps 0.70 because prose topics lack this
-    # shared-register inflation.
-    DEDUP_THRESHOLD = 0.88
-    selected_topics: list[str] = []
-    selected_embs: list[np.ndarray] = []
-    for t in titles[: max_positions * 4]:
-        t_emb = _embed(t[:200])
-        if selected_embs:
-            sims = np.array(selected_embs) @ t_emb
-            if float(sims.max()) > DEDUP_THRESHOLD:
-                continue
-        selected_topics.append(t)
-        selected_embs.append(t_emb)
-        if len(selected_topics) >= max_positions:
-            break
-
-    valid_categories = set(PLATFORM_CATEGORIES.keys())
-    promises = []
-    for topic in selected_topics:
-        category = _classify_promise_category(topic, valid_categories)
-        result = compute_promise_vote_alignment(
-            topic, all_votes, sponsored_bills=None, use_llm=False,
-            promise_category=category,
-        )
-        party_align = classify_party_alignment(
-            topic[:300], category.upper(), "pro",
-        )
-        promises.append({
-            "promiseText": topic[:250],
-            "category": category,
-            "alignment": result["alignment"],
-            "relatedVotes": result["relatedVotes"],
-            "relatedBills": result.get("relatedBills", []),
-            "analysis": result["reasoning"],
-            "confidence": result["confidence"],
-            "partyAlignment": party_align,
-        })
-
-    return promises
-
-
-def _align_llm_promises(
-    extracted_promises: list[str],
-    all_votes: list[dict],
-    sponsored_bills: list[dict] | None = None,
-    existing_positions: list[dict] | None = None,
-    max_positions: int = 8,
-) -> list[dict]:
-    """Align LLM-extracted campaign promises against votes and legislation.
-
-    The LLM extracts specific policy commitments from platform text
-    (a comprehension/extraction task). This function then evaluates
-    each promise against the senator's voting record AND sponsored
-    bills using deterministic embedding-based alignment.
-
-    Deduplicates against existing positions to avoid double-counting
-    the same policy topic.
-    """
-    if not extracted_promises:
-        return []
-    if not all_votes and not sponsored_bills:
-        return []
-
-    from app.pipeline.analyze.policy_alignment import _embed, _embed_batch
-    from app.pipeline.analyze.party_platform import classify_party_alignment
-
-    valid_categories = set(PLATFORM_CATEGORIES.keys())
-
-    existing_texts = [p["promiseText"] for p in (existing_positions or [])]
-    existing_embs = _embed_batch(existing_texts) if existing_texts else None
-
-    DEDUP_THRESHOLD = 0.65
-
-    positions = []
-    for promise_text in extracted_promises[:max_positions + 4]:
-        if len(promise_text.strip()) < 12:
-            continue
-
-        p_emb = _embed(promise_text[:300])
-        if existing_embs is not None and existing_embs.size > 0:
-            sims = existing_embs @ p_emb
-            if float(sims.max()) > DEDUP_THRESHOLD:
-                continue
-
-        category = _classify_promise_category(promise_text, valid_categories)
-        result = compute_promise_vote_alignment(
-            promise_text, all_votes, sponsored_bills=sponsored_bills,
-            promise_category=category,
-        )
-        party_align = classify_party_alignment(
-            promise_text[:300], category.upper(), "pro",
-        )
-
-        positions.append({
-            "promiseText": promise_text[:250],
-            "category": category,
-            "alignment": result["alignment"],
-            "relatedVotes": result["relatedVotes"],
-            "relatedBills": result.get("relatedBills", []),
-            "analysis": result["reasoning"],
-            "confidence": result["confidence"],
-            "partyAlignment": party_align,
-        })
-
-        if len(positions) >= max_positions:
-            break
-
-    return positions
-
-
-def _compute_promise_alignments(
-    platform_text: str,
-    all_votes: list[dict],
-    sponsored_bills: list[dict] | None = None,
-) -> list[dict]:
-    """Extract promises from platform text and evaluate against actions.
-
-    Promises come from the senator's stated platform — what they said
-    they would do. Evaluation checks whether their voting record and
-    sponsored legislation align with those commitments.
-
-    This is the heuristic fallback used by the Librarian thread. The
-    primary path uses LLM-extracted promises (in the Analyst thread).
-    """
-    return _positions_from_platform_text(
-        platform_text, all_votes, sponsored_bills=sponsored_bills,
-    )
-
-
-def _classify_promise_category(text: str, valid_categories: set[str]) -> str:
-    """Classify a promise into a platform category using embedding similarity."""
-    from app.pipeline.analyze.policy_alignment import _embed, _embed_batch
-
-    text_emb = _embed(text[:200])
-    cat_texts = list(valid_categories)
-    cat_embs = _embed_batch(cat_texts)
-    if cat_embs.size == 0:
-        return "other"
-
-    import numpy as np
-    sims = cat_embs @ text_emb
-    best_idx = int(np.argmax(sims))
-    if float(sims[best_idx]) > 0.25:
-        return cat_texts[best_idx]
-    return "other"
 
 
 # ── Single LLM call: all narrative analysis ──────────────────────
-
-_CATEGORIES_STR = "|".join(PLATFORM_CATEGORIES.keys())
 
 
 async def _narrative_analysis(
@@ -604,7 +269,6 @@ async def _narrative_analysis(
     all_votes: list[dict],
     key_vote_ids: list[str],
     platform_text: str,
-    computed_promises: list[dict] | None = None,
     db_session: Any | None = None,
     platform_topics: list[str] | None = None,
 ) -> dict:
@@ -749,51 +413,7 @@ async def _narrative_analysis(
         "votingSummary": str(result.get("votingSummary", ""))[:500],
         "pacDetails": pac_details,
         "platformSummary": str(result.get("platformSummary", ""))[:500],
-        "campaignPromises": [],
     }
-
-
-def _extract_campaign_promises(
-    platform_text: str, senator_name: str, db_session: Any | None = None,
-) -> list[str]:
-    """Extract concrete campaign promises from platform text — its own
-    single-purpose LLM call rather than one field in _narrative_analysis's
-    bundled multi-field prompt (see promise_extraction_prompt). Promise
-    extraction is the one field the entire fulfillment-scoring pipeline
-    downstream depends on, and a 2026-07 audit found the bundled version
-    frequently padded thin platform text with vague topic restatements
-    ("Healthcare" reworded as a pseudo-promise) to hit its old fixed
-    "extract 4-8" instruction — this asks for as many or as few as the
-    text genuinely supports, with explicit permission to return none.
-    """
-    if not platform_text or _ERROR_PAGE_SIGS.search(platform_text):
-        return []
-
-    from app.pipeline.analyze.prompts import promise_extraction_prompt
-
-    prompt = promise_extraction_prompt(platform_text, senator_name)
-    result = call_llm(
-        prompt_version=prompt["promptVersion"],
-        system_prompt=prompt["systemPrompt"],
-        user_prompt=prompt["userPrompt"],
-        cache_key={"senatorName": senator_name, "platformLen": len(platform_text)},
-        db_session=db_session,
-        max_tokens=600,
-        num_ctx=4096,
-    )
-    if not isinstance(result, dict):
-        return []
-
-    raw_promises = result.get("promises")
-    if not isinstance(raw_promises, list):
-        return []
-
-    extracted: list[str] = []
-    for p in raw_promises:
-        text = str(p).strip() if p else ""
-        if text and len(text) > 10 and not text.startswith("<"):
-            extracted.append(text[:250])
-    return extracted
 
 
 _FILLER_ANALYSIS = re.compile(

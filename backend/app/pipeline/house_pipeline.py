@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
-from app.models import HousePipelineRun, PipelineStatus, PromiseAlignment, Representative, ScoreSnapshot
+from app.models import HousePipelineRun, PipelineStatus, Representative, ScoreSnapshot
 from app.pipeline.run_tracker import PipelineRunTracker
 from app.services.representative_service import upsert_representative
 
@@ -419,23 +419,17 @@ async def run_house_pipeline() -> dict:
             logger.info("--- House Phase 5: FEC DATA + SCORING ---")
 
             from app.pipeline.transform.normalize_finance import normalize_finance
-            from app.pipeline.analyze.cross_reference import (
-                detect_lobbying_matches, positions_from_sponsored_bills,
-            )
+            from app.pipeline.analyze.cross_reference import detect_lobbying_matches
             from app.pipeline.analyze.policy_alignment import clear_alignment_cache
             from app.pipeline.analyze.score_calculator import calculate_confidence, calculate_scores
 
             # Clear embeddings cached by a prior run (senate or house) so
             # memory stays bounded; within this run the cache is shared
-            # across all reps — the same floor votes back every member's
-            # promise evaluation, so each unique text is encoded once.
+            # across all reps.
             clear_alignment_cache()
 
             success_count = 0
             fail_count = 0
-            promise_total = 0
-            promise_evaluable = 0
-            reps_with_promises = 0
 
             for idx, rep in enumerate(reps):
                 try:
@@ -596,22 +590,11 @@ async def run_house_pipeline() -> dict:
                     if "sponsoredBills" not in rep:
                         rep["sponsoredBills"] = []
 
-                    # Derive positions from sponsored legislation and
-                    # evaluate them against the floor-vote record, so
-                    # Promise Persistence scores from real data instead
-                    # of collapsing to the neutral prior.
                     vr = rep.get("votingRecord") or {}
                     all_votes = (vr.get("keyVotes") or []) + (vr.get("recentVotes") or [])
-                    rep["campaignPromises"] = positions_from_sponsored_bills(
-                        rep["sponsoredBills"], all_votes,
-                    )
-                    promise_total += len(rep["campaignPromises"])
-                    promise_evaluable += sum(
-                        1 for p in rep["campaignPromises"]
-                        if p["alignment"] in (PromiseAlignment.KEPT, PromiseAlignment.PARTIAL, PromiseAlignment.BROKEN)
-                    )
-                    if rep["campaignPromises"]:
-                        reps_with_promises += 1
+                    # Campaign-promise tracking was removed entirely (2026-07)
+                    # — see policy_alignment.py's module docstring.
+                    rep["campaignPromises"] = []
 
                     # Detect donor-industry-vs-vote connections (embeddings
                     # only, zero LLM — see cross_reference.detect_lobbying_matches).
@@ -657,13 +640,6 @@ async def run_house_pipeline() -> dict:
                 except Exception as e:
                     logger.error("Failed to process rep %s: %s", rep.get("name", "?"), e)
                     fail_count += 1
-
-            # Promise-derivation health: if these collapse to zero the PP
-            # dimension has silently reverted to the neutral prior.
-            logger.info(
-                "House promises: %d reps with positions, %d total, %d evaluable",
-                reps_with_promises, promise_total, promise_evaluable,
-            )
 
             # ── PHASE 6: SNAPSHOTS ──
             logger.info("--- House Phase 6: SNAPSHOTS ---")

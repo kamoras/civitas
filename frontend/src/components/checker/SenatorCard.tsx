@@ -107,7 +107,6 @@ export default function SenatorCard({ senator, chamber = "senate" }: SenatorCard
   const pacPercent =
     pacPercentRaw > 0 && pacPercentRaw < 1 ? "<1" : Math.round(pacPercentRaw).toString();
 
-  const hasPromises = (senator.campaignPromises || []).length > 0;
   const hasPartisan = senator.partisanDepth && senator.partisanDepth.totalPositions > 0;
   const hasLobbyingMatches = senator.lobbyingMatches && senator.lobbyingMatches.length > 0;
 
@@ -379,9 +378,8 @@ export default function SenatorCard({ senator, chamber = "senate" }: SenatorCard
           <SponsoredBills bills={senator.sponsoredBills} />
         )}
 
-        {(hasPromises || hasPartisan) && (
+        {(hasPartisan || senator.platformSummary) && (
           <PlatformTracker
-            promises={senator.campaignPromises || []}
             platformSummary={senator.platformSummary || ""}
             partisanDepth={senator.partisanDepth}
             senatorParty={senator.party}

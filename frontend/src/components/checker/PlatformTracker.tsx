@@ -1,53 +1,13 @@
-import { CampaignPromise, PartisanDepth } from "@/types/senator";
-import { useCategoryLabel, usePolicyLabel } from "@/hooks/useConfig";
-import { voteSourceUrl } from "@/lib/sources";
-import { safeHref } from "@/lib/formatting";
+import { PartisanDepth } from "@/types/senator";
+import { usePolicyLabel } from "@/hooks/useConfig";
 import CollapsibleSection from "../shared/CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
 
 interface PlatformTrackerProps {
-  promises: CampaignPromise[];
   platformSummary: string;
   partisanDepth: PartisanDepth | null;
   senatorParty: "D" | "R" | "I";
 }
-
-const ALIGNMENT_STYLES = {
-  kept: {
-    label: "KEPT",
-    text: "text-matrix-green",
-    border: "border-matrix-green/30",
-    bg: "bg-matrix-green/10",
-    icon: "[✓]",
-  },
-  broken: {
-    label: "BROKEN",
-    text: "text-neon-pink",
-    border: "border-neon-pink/40",
-    bg: "bg-neon-pink/10",
-    icon: "[✗]",
-  },
-  partial: {
-    label: "PARTIAL",
-    text: "text-yellow-500",
-    border: "border-yellow-500/30",
-    bg: "bg-yellow-500/10",
-    icon: "[~]",
-  },
-  unclear: {
-    label: "UNCLEAR",
-    text: "text-matrix-green/40",
-    border: "border-matrix-green/15",
-    bg: "bg-matrix-green/5",
-    icon: "[?]",
-  },
-};
-
-const PARTY_ALIGNMENT_STYLES = {
-  R: { text: "text-red-400", bg: "bg-red-500/15", border: "border-red-500/30", label: "R" },
-  D: { text: "text-blue-400", bg: "bg-blue-500/15", border: "border-blue-500/30", label: "D" },
-  bipartisan: { text: "text-purple-400", bg: "bg-purple-500/15", border: "border-purple-500/30", label: "BP" },
-};
 
 const DEPTH_STYLES = {
   deep: { text: "text-neon-pink", label: "DEEPLY PARTISAN" },
@@ -56,28 +16,9 @@ const DEPTH_STYLES = {
   "cross-cutting": { text: "text-neon-cyan", label: "CROSS-CUTTING" },
 };
 
-function CategoryBadge({ category }: { category: string }) {
-  const label = useCategoryLabel(category);
-  return (
-    <span className="text-[10px] px-1.5 py-0.5 border border-matrix-green/15 text-matrix-green/40">
-      {label}
-    </span>
-  );
-}
-
 function PolicyLabel({ area }: { area: string }) {
   const label = usePolicyLabel(area);
   return <>{label}</>;
-}
-
-function PartyAlignmentBadge({ alignment }: { alignment: "R" | "D" | "bipartisan" | null }) {
-  if (!alignment) return null;
-  const style = PARTY_ALIGNMENT_STYLES[alignment];
-  return (
-    <span className={`text-[10px] px-1 py-0.5 border font-pixel ${style.text} ${style.border} ${style.bg}`}>
-      {style.label}
-    </span>
-  );
 }
 
 function PartisanDepthPanel({ depth, senatorParty }: { depth: PartisanDepth; senatorParty: string }) {
@@ -189,127 +130,27 @@ function PartisanDepthPanel({ depth, senatorParty }: { depth: PartisanDepth; sen
   );
 }
 
-export default function PlatformTracker({ promises, platformSummary, partisanDepth, senatorParty }: PlatformTrackerProps) {
-  if (promises.length === 0 && !partisanDepth) return null;
-
-  const kept = promises.filter((p) => p.alignment === "kept").length;
-  const broken = promises.filter((p) => p.alignment === "broken").length;
-  const partial = promises.filter((p) => p.alignment === "partial").length;
-  const unclear = promises.filter((p) => p.alignment === "unclear").length;
-
-  const sortOrder = { broken: 0, partial: 1, kept: 2, unclear: 3 };
-  const sorted = [...promises].sort(
-    (a, b) => sortOrder[a.alignment] - sortOrder[b.alignment],
-  );
+export default function PlatformTracker({ platformSummary, partisanDepth, senatorParty }: PlatformTrackerProps) {
+  const hasPartisan = partisanDepth && partisanDepth.totalPositions > 0;
+  if (!hasPartisan && !platformSummary) return null;
 
   const summaryParts: string[] = [];
-  if (partisanDepth && partisanDepth.totalPositions > 0) {
+  if (hasPartisan) {
     summaryParts.push(partisanDepth.depth.toUpperCase());
-  }
-  if (promises.length > 0) {
-    summaryParts.push(`${kept} kept · ${broken} broken · ${partial} partial`);
   }
 
   return (
     <CollapsibleSection
       title="POSITIONS vs. VOTES"
       summary={summaryParts.join(" — ")}
-      source="Derived from roll-call votes &amp; sponsored legislation"
+      source="Derived from roll-call votes"
     >
-      {partisanDepth && partisanDepth.totalPositions > 0 && (
+      {hasPartisan && (
         <PartisanDepthPanel depth={partisanDepth} senatorParty={senatorParty} />
       )}
-      {promises.length > 0 && (
-        <div className="space-y-3">
-          <div className="grid grid-cols-4 gap-2 mb-3 text-center">
-            <div className="terminal-window p-2 min-w-0">
-              <div className="text-lg font-pixel text-matrix-green">{kept}</div>
-              <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Policy positions where their voting record shows consistent support. Matched by comparing sponsored legislation against roll-call votes.">KEPT</MetricTooltip></div>
-            </div>
-            <div className="terminal-window p-2 min-w-0">
-              <div className="text-lg font-pixel text-neon-pink">{broken}</div>
-              <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Policy positions where their votes contradict their own sponsored legislation — they introduced a bill but voted against similar measures.">BROKEN</MetricTooltip></div>
-            </div>
-            <div className="terminal-window p-2 min-w-0">
-              <div className="text-lg font-pixel text-yellow-500">{partial}</div>
-              <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Policy positions with mixed voting signals — some votes support it, others don't. May indicate the issue hasn't come to a direct vote yet.">PARTIAL</MetricTooltip></div>
-            </div>
-            <div className="terminal-window p-2 min-w-0">
-              <div className="text-lg font-pixel text-matrix-green/30">{unclear}</div>
-              <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Positions where there weren't enough directly related votes to determine alignment. These are excluded from the Promise Persistence score — they don't count as kept or broken.">UNCLEAR</MetricTooltip></div>
-            </div>
-          </div>
-          {unclear > 0 && (kept + broken + partial) === 0 && (
-            <div className="text-[10px] text-matrix-green/30 italic mb-3">
-              All {unclear} promise{unclear !== 1 ? "s" : ""} lacked enough related votes to evaluate — Promise Persistence score defaults to 50 (neutral) for this senator.
-            </div>
-          )}
-          {unclear > 0 && (kept + broken + partial) > 0 && (
-            <div className="text-[10px] text-matrix-green/30 italic mb-3">
-              {unclear} position{unclear !== 1 ? "s" : ""} marked unclear had no directly related votes and {unclear !== 1 ? "are" : "is"} excluded from the score.
-            </div>
-          )}
-          {platformSummary && (
-            <div className="terminal-window p-3">
-              <p className="text-sm text-matrix-green/80 leading-relaxed">{platformSummary}</p>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            {sorted.map((promise, i) => {
-              const style = ALIGNMENT_STYLES[promise.alignment];
-              return (
-                <div key={i} className={`terminal-window border-l-2 ${style.border}`}>
-                  <div className="p-3 space-y-2">
-                    <div className="flex items-start gap-2">
-                      <span className={`font-pixel text-xs ${style.text} shrink-0`}>
-                        {style.icon}
-                      </span>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span
-                            className={`text-[10px] px-1.5 py-0.5 border font-pixel ${style.text} ${style.border} ${style.bg}`}
-                          >
-                            {style.label}
-                          </span>
-                          <CategoryBadge category={promise.category} />
-                          <PartyAlignmentBadge alignment={promise.partyAlignment} />
-                        </div>
-                        <p className="text-sm text-matrix-green/90 mt-1">{promise.promiseText}</p>
-                        {promise.analysis && (
-                          <div className="mt-2 border-l-2 border-matrix-green/20 pl-2">
-                            <span className="text-[10px] text-matrix-green/40 font-pixel">EVIDENCE: </span>
-                            <span className="text-xs text-matrix-green/70">{promise.analysis}</span>
-                          </div>
-                        )}
-                        {promise.relatedVotes && promise.relatedVotes.length > 0 && (
-                          <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[10px] text-matrix-green/30">RELATED VOTES:</span>
-                            {promise.relatedVotes.map((v, j) => {
-                              const url = voteSourceUrl(v);
-                              return url ? (
-                                <a
-                                  key={j}
-                                  href={safeHref(url) || "#"}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-[10px] text-neon-cyan/50 hover:text-neon-cyan underline underline-offset-2 transition-colors"
-                                >
-                                  {v}
-                                </a>
-                              ) : (
-                                <span key={j} className="text-[10px] text-matrix-green/40">{v}</span>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+      {platformSummary && (
+        <div className="terminal-window p-3">
+          <p className="text-sm text-matrix-green/80 leading-relaxed">{platformSummary}</p>
         </div>
       )}
     </CollapsibleSection>
