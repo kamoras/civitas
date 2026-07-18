@@ -5,6 +5,7 @@ import pytest
 from app.pipeline.analyze.grounding import (
     editorializing_language,
     grounding_violations,
+    hedge_and_editorializing_violations,
     hedge_language,
     repeated_sentences,
     ungrounded_numbers,
@@ -171,3 +172,26 @@ class TestGroundingViolations:
         assert len(problems) == 2
         assert any("9.9" in p for p in problems)
         assert any("Alvarez" in p for p in problems)
+
+
+class TestHedgeAndEditorializingViolations:
+    def test_clean_text_no_violations(self):
+        assert hedge_and_editorializing_violations("The Senate voted 68-32.") == []
+
+    def test_reports_both_kinds(self):
+        problems = hedge_and_editorializing_violations(
+            "Sources say the move was warranted."
+        )
+        assert len(problems) == 2
+        assert any("Sources say" in p for p in problems)
+        assert any("was warranted" in p for p in problems)
+
+    def test_hedge_only(self):
+        problems = hedge_and_editorializing_violations("Coverage indicates a delay.")
+        assert len(problems) == 1
+        assert "Coverage indicates" in problems[0]
+
+    def test_editorializing_only(self):
+        problems = hedge_and_editorializing_violations("The vote was justified.")
+        assert len(problems) == 1
+        assert "was justified" in problems[0]

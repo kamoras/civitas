@@ -18,8 +18,7 @@ from app.config import settings
 from app.models import BskySenatorSpotlight, Senator, WeekSummary
 from app.pipeline.analyze.bluesky_utils import build_link_card
 from app.pipeline.analyze.grounding import (
-    editorializing_language,
-    hedge_language,
+    hedge_and_editorializing_violations,
     ungrounded_numbers,
 )
 from app.pipeline.analyze.ollama_client import call_llm
@@ -213,14 +212,7 @@ Return JSON: {{"post": "<your post text>"}}"""
 
         # Same mechanical backstop as the issue poster and full-story
         # generator — prompt-only instructions aren't reliably followed.
-        hedges = hedge_language(text)
-        if hedges:
-            problems.append(f"hedging attribution phrases ({', '.join(hedges)})")
-        editorial = editorializing_language(text)
-        if editorial:
-            problems.append(
-                f"language evaluating whether a score is warranted or justified ({', '.join(editorial)})"
-            )
+        problems += hedge_and_editorializing_violations(text)
 
         if not problems:
             return text
@@ -388,21 +380,14 @@ Return JSON: {{"post": "<your post text>"}}"""
         # from the week summary (or the date label) we supplied. Hedging
         # attribution and editorializing get the same mechanical backstop
         # as the issue poster and full-story generator.
-        novel = ungrounded_numbers(text, user_prompt)
-        hedges = hedge_language(text)
-        editorial = editorializing_language(text)
-        if not novel and not hedges and not editorial:
-            return text
-
         reasons = []
+        novel = ungrounded_numbers(text, user_prompt)
         if novel:
             reasons.append(f"numbers not present in the summary ({', '.join(novel)})")
-        if hedges:
-            reasons.append(f"hedging attribution phrases ({', '.join(hedges)})")
-        if editorial:
-            reasons.append(
-                f"language evaluating whether an action was justified ({', '.join(editorial)})"
-            )
+        reasons += hedge_and_editorializing_violations(text)
+        if not reasons:
+            return text
+
         logger.warning(
             "Weekly post failed grounding (attempt %d): %s | post: %s",
             attempt + 1, "; ".join(reasons), text[:160],

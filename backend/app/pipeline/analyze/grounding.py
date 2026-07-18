@@ -225,3 +225,27 @@ def grounding_violations(generated: str, source: str) -> list[str]:
     if names:
         problems.append(f"officials not in source: {', '.join(names)}")
     return problems
+
+
+def hedge_and_editorializing_violations(generated: str) -> list[str]:
+    """Human-readable list of hedge-phrase and editorializing findings, empty
+    when clean.
+
+    Every LLM generation path that publishes text (Bluesky posts, action-
+    center issue summaries/facts, full stories) needs both checks, and
+    duplicating the "if hedges: ... if editorial: ..." formatting at each
+    call site was itself how one path — the Bluesky poster — went
+    unchecked for months after the checks were added elsewhere (2026-07).
+    Centralizing the formatting here means a future third check only needs
+    to be added in one place.
+    """
+    problems = []
+    hedges = hedge_language(generated)
+    if hedges:
+        problems.append(f"hedging attribution phrases ({', '.join(hedges)})")
+    editorial = editorializing_language(generated)
+    if editorial:
+        problems.append(
+            f"language evaluating whether an action was justified ({', '.join(editorial)})"
+        )
+    return problems

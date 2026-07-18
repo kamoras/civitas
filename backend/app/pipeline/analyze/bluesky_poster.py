@@ -26,9 +26,8 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.pipeline.analyze.bluesky_utils import build_link_card
 from app.pipeline.analyze.grounding import (
-    editorializing_language,
     grounding_violations,
-    hedge_language,
+    hedge_and_editorializing_violations,
 )
 from app.pipeline.analyze.ollama_client import call_llm
 
@@ -151,19 +150,10 @@ Return JSON: {{"post": "<your post text>"}}"""
         # hedging attribution ("sources show") and editorializing ("was
         # warranted") are prompt-only rules the local model doesn't reliably
         # follow, same as _generate_full_story in action_center.py.
-        problems = grounding_violations(post, source_material)
-        hedges = hedge_language(post)
-        editorial = editorializing_language(post)
-        if not problems and not hedges and not editorial:
+        reasons = grounding_violations(post, source_material) + hedge_and_editorializing_violations(post)
+        if not reasons:
             return post
 
-        reasons = list(problems)
-        if hedges:
-            reasons.append(f"hedging attribution phrases ({', '.join(hedges)})")
-        if editorial:
-            reasons.append(
-                f"language evaluating whether an action was justified ({', '.join(editorial)})"
-            )
         logger.warning(
             "Bluesky post failed grounding for issue %s (attempt %d): %s | post: %s",
             issue.id, attempt + 1, "; ".join(reasons), post[:160],
