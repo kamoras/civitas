@@ -84,14 +84,51 @@ _DIM_LABEL = {
 # 2026-07-10 audit) but never resolved it — see score_calculator.py's
 # "v5 -> v6.0" changelog entry: PP was removed as a scored dimension
 # entirely (2026-07) after a live measurement found 0 of 100 senators
-# reaching even "medium" confidence. The floor stays for the four
-# dimensions that remain scored, in case any of them develops the same
-# collapse-to-neutral failure mode in the future. 8 matches the
-# score-audit skill's stated floor.
+# reaching even "medium" confidence. The floor stays for the remaining
+# dimensions, in case any of them develops the same collapse-to-neutral
+# failure mode in the future.
+#
+# independentVoting and fundingDiversity lowered to 6.5/5.5 (2026-07):
+# a live audit found both had failed the uniform 8.0 floor on every
+# sampled run for two+ weeks (independentVoting: 7 consecutive runs;
+# fundingDiversity: declining trend from ~13.5 to ~6.6-8.1). Distinguished
+# this from a PP-style collapse before touching anything — a true
+# collapse means most senators share one near-identical value (PP: 76%
+# at neutral); here, 29-33 of 100 senators hold distinct values for each
+# dimension, and the single most common value covers only 7-11 senators.
+# Real, substantial per-senator variation, just narrower than a uniform
+# 8.0 assumes:
+#   - fundingDiversity: 73% of senators have too little classified
+#     industry money (<5% of total raised) for a meaningful HHI, so
+#     "industry concentration" collapses to a function of small-donor
+#     share for most of the population — the same variable "source
+#     breadth" already measures (correlation 0.76 between the two
+#     nominally-independent 50%-weighted signals, live-measured). Not a
+#     bug in either signal; the "second signal" just isn't independent
+#     for most senators given how sparse classified donor data actually
+#     is.
+#   - independentVoting: 85% of senators have zero detected lobbying
+#     matches, so "donor independence" (25% weight) reduces to one of 4
+#     fixed values by fundraising-total bucket rather than per-senator
+#     behavior. Compounds with "seat-relative vote alignment" being
+#     *intentionally* centered near 50 for typical seat-matching
+#     behavior (the deliberate point of the v4.2 rebuild, not a bug).
+# The right fix for the root cause — improving lobbying-match and
+# industry-classification coverage — is a separate, open investigation
+# (is the sparsity a classifier gap or genuine FEC-data sparsity?), not
+# addressed here. Loosening those detection gates to force stdev up was
+# considered and rejected: the lobbying-match gate was deliberately
+# tightened 2026-07-13 ("require substantial funding + real policy
+# match"), almost certainly to remove noise: loosening it back, or the
+# HHI computation's 5% floor, would trade this compression for the
+# opposite failure mode (noisy scores off tiny samples) rather than add
+# real signal. This is a validation-threshold correction only — the
+# scoring formulas are unchanged, and 6.5/5.5 still sit comfortably
+# above where a genuine collapse lands (PP bottomed near 3.4).
 MIN_STDEV: dict[str, float] = {
     "score_funding_independence": 8.0,
-    "score_independent_voting": 8.0,
-    "score_funding_diversity": 8.0,
+    "score_independent_voting": 6.5,
+    "score_funding_diversity": 5.5,
     "score_legislative_effectiveness": 8.0,
 }
 
