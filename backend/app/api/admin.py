@@ -76,6 +76,16 @@ def _live_elapsed(run) -> float | None:
     return run.elapsed_seconds
 
 
+def _parse_progress_steps(run) -> list | None:
+    """Decode a run's progress_detail JSON column, or None if absent/invalid."""
+    if not getattr(run, "progress_detail", None):
+        return None
+    try:
+        return json.loads(run.progress_detail)
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
 def _history_entry(run, pipeline_type: str, extra: dict) -> dict:
     """Shared fields for a pipeline_history row; `extra` adds the type-specific ones."""
     return {
@@ -656,6 +666,7 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
             "presidentsUpdated": last_supplementary_run.presidents_updated,
             "elapsedSeconds": _live_elapsed(last_supplementary_run),
             "errorMessage": last_supplementary_run.error_message,
+            "progressSteps": _parse_progress_steps(last_supplementary_run),
         }
 
     if last_stock_run:
@@ -668,6 +679,7 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
             "senateTradesIngested": last_stock_run.senate_trades_ingested,
             "elapsedSeconds": _live_elapsed(last_stock_run),
             "errorMessage": last_stock_run.error_message,
+            "progressSteps": _parse_progress_steps(last_stock_run),
         }
 
     if last_house_run:
@@ -684,16 +696,10 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
             "groundTruthFailures": json.loads(last_house_run.ground_truth_failures)
             if getattr(last_house_run, "ground_truth_failures", None)
             else [],
+            "progressSteps": _parse_progress_steps(last_house_run),
         }
 
     if last_run:
-        progress_steps = None
-        if last_run.progress_detail:
-            try:
-                progress_steps = json.loads(last_run.progress_detail)
-            except (json.JSONDecodeError, TypeError):
-                pass
-
         result["lastRun"] = {
             "id": last_run.id,
             "startedAt": last_run.started_at.isoformat() if last_run.started_at else None,
@@ -709,7 +715,7 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
             "cacheMisses": last_run.cache_misses,
             "elapsedSeconds": _live_elapsed(last_run),
             "errorMessage": last_run.error_message,
-            "progressSteps": progress_steps,
+            "progressSteps": _parse_progress_steps(last_run),
         }
 
     from app.pipeline.analyze.action_center import get_action_refresh_state
@@ -772,6 +778,7 @@ async def admin_pipeline_history(
             "llmCalls": r.llm_calls,
             "cacheHits": r.cache_hits,
             "cacheMisses": r.cache_misses,
+            "progressSteps": _parse_progress_steps(r),
         })
         for r in senate_runs
     ]
@@ -780,6 +787,7 @@ async def admin_pipeline_history(
             "repsProcessed": r.reps_processed,
             "repsTotal": r.reps_total,
             "repsFailed": r.reps_failed,
+            "progressSteps": _parse_progress_steps(r),
         })
         for r in house_runs
     ]
@@ -787,6 +795,7 @@ async def admin_pipeline_history(
         _history_entry(r, "stock_trades", {
             "houseTradesIngested": r.house_trades_ingested,
             "senateTradesIngested": r.senate_trades_ingested,
+            "progressSteps": _parse_progress_steps(r),
         })
         for r in stock_runs
     ]
@@ -797,6 +806,7 @@ async def admin_pipeline_history(
             "justicesScored": r.justices_scored,
             "justicesSkipped": r.justices_skipped,
             "presidentsUpdated": r.presidents_updated,
+            "progressSteps": _parse_progress_steps(r),
         })
         for r in supplementary_runs
     ]

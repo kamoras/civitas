@@ -1163,6 +1163,8 @@ function RunHistory({ runs }: { runs: PipelineRunInfo[] }) {
           {runs.map((r) => {
             const isHouse = r.pipelineType === "house";
             const isStockTrades = r.pipelineType === "stock_trades";
+            const isSupplementary = r.pipelineType === "supplementary";
+            const isSenate = !isHouse && !isStockTrades && !isSupplementary;
             const statusColor = r.status === "completed"
               ? "text-matrix-green"
               : r.status === "partial"
@@ -1178,8 +1180,8 @@ function RunHistory({ runs }: { runs: PipelineRunInfo[] }) {
                 className="border-b border-matrix-green/10 hover:bg-matrix-green/5"
               >
                 <td className="py-1.5 pr-3">
-                  <span className={isHouse || isStockTrades ? "text-neon-cyan/70" : "text-matrix-green/50"}>
-                    {isStockTrades ? "STOCK" : isHouse ? "HOUSE" : "SENATE"}
+                  <span className={isSenate ? "text-matrix-green/50" : "text-neon-cyan/70"}>
+                    {isStockTrades ? "STOCK" : isHouse ? "HOUSE" : isSupplementary ? "SUPP" : "SENATE"}
                   </span>
                 </td>
                 <td className="py-1.5 pr-3 text-matrix-green/70">{formatTime(r.startedAt)}</td>
@@ -1202,6 +1204,8 @@ function RunHistory({ runs }: { runs: PipelineRunInfo[] }) {
                         <span className="text-neon-pink ml-1">({r.repsFailed}F)</span>
                       )}
                     </>
+                  ) : isSupplementary ? (
+                    <>{r.presidentsUpdated ?? 0}P/{r.justicesSkipped ? "—" : (r.justicesScored ?? 0)}J</>
                   ) : (
                     <>
                       {r.senatorsProcessed}/{r.senatorsTotal}
@@ -1212,10 +1216,10 @@ function RunHistory({ runs }: { runs: PipelineRunInfo[] }) {
                   )}
                 </td>
                 <td className="py-1.5 pr-3 text-right text-matrix-green/60">
-                  {isHouse || isStockTrades ? "—" : r.llmCalls}
+                  {isSenate ? r.llmCalls : "—"}
                 </td>
                 <td className="py-1.5 text-right text-matrix-green/60">
-                  {!isHouse && !isStockTrades && r.cacheHits + r.cacheMisses > 0
+                  {isSenate && r.cacheHits + r.cacheMisses > 0
                     ? `${Math.round((r.cacheHits / (r.cacheHits + r.cacheMisses)) * 100)}%`
                     : "—"}
                 </td>
@@ -1820,28 +1824,31 @@ function AdminDashboardView({
                     run?.status === "failed" ? "text-neon-pink" :
                     isStuck ? "text-yellow-400" : "text-matrix-green/50";
                   return (
-                    <PipelineStatusRow
-                      label="HOUSE"
-                      isRunning={!!pipelineStatus?.houseIsRunning}
-                      run={run}
-                      isStuck={isStuck}
-                      statusClassName={statusClassName}
-                      detail={run && (
-                        <>
-                          {run.repsTotal > 0 && <span className="text-matrix-green/60"> · {run.repsProcessed}/{run.repsTotal}</span>}
-                          {(run.repsFailed ?? 0) > 0 && <span className="text-neon-pink"> · {run.repsFailed}F</span>}
-                        </>
-                      )}
-                      clearing={clearingHouse}
-                      onClear={async () => {
-                        setClearingHouse(true);
-                        try {
-                          await clearStuckHousePipeline(token);
-                          await pollStatus();
-                        } catch {}
-                        setClearingHouse(false);
-                      }}
-                    />
+                    <>
+                      <PipelineStatusRow
+                        label="HOUSE"
+                        isRunning={!!pipelineStatus?.houseIsRunning}
+                        run={run}
+                        isStuck={isStuck}
+                        statusClassName={statusClassName}
+                        detail={run && (
+                          <>
+                            {run.repsTotal > 0 && <span className="text-matrix-green/60"> · {run.repsProcessed}/{run.repsTotal}</span>}
+                            {(run.repsFailed ?? 0) > 0 && <span className="text-neon-pink"> · {run.repsFailed}F</span>}
+                          </>
+                        )}
+                        clearing={clearingHouse}
+                        onClear={async () => {
+                          setClearingHouse(true);
+                          try {
+                            await clearStuckHousePipeline(token);
+                            await pollStatus();
+                          } catch {}
+                          setClearingHouse(false);
+                        }}
+                      />
+                      <LastRunSteps steps={run?.progressSteps} />
+                    </>
                   );
                 })()}
 
@@ -1854,23 +1861,26 @@ function AdminDashboardView({
                     run?.status === "failed" ? "text-neon-pink" :
                     isStuck ? "text-yellow-400" : "text-matrix-green/50";
                   return (
-                    <PipelineStatusRow
-                      label="STOCK TRADES"
-                      isRunning={!!pipelineStatus?.stockTradesIsRunning}
-                      run={run}
-                      isStuck={isStuck}
-                      statusClassName={statusClassName}
-                      detail={run && <span className="text-matrix-green/60"> · {run.houseTradesIngested}H/{run.senateTradesIngested}S</span>}
-                      clearing={clearingStockTrades}
-                      onClear={async () => {
-                        setClearingStockTrades(true);
-                        try {
-                          await clearStuckStockTradesPipeline(token);
-                          await pollStatus();
-                        } catch {}
-                        setClearingStockTrades(false);
-                      }}
-                    />
+                    <>
+                      <PipelineStatusRow
+                        label="STOCK TRADES"
+                        isRunning={!!pipelineStatus?.stockTradesIsRunning}
+                        run={run}
+                        isStuck={isStuck}
+                        statusClassName={statusClassName}
+                        detail={run && <span className="text-matrix-green/60"> · {run.houseTradesIngested}H/{run.senateTradesIngested}S</span>}
+                        clearing={clearingStockTrades}
+                        onClear={async () => {
+                          setClearingStockTrades(true);
+                          try {
+                            await clearStuckStockTradesPipeline(token);
+                            await pollStatus();
+                          } catch {}
+                          setClearingStockTrades(false);
+                        }}
+                      />
+                      <LastRunSteps steps={run?.progressSteps} />
+                    </>
                   );
                 })()}
 
@@ -1886,27 +1896,30 @@ function AdminDashboardView({
                     run?.status === "failed" ? "text-neon-pink" :
                     isStuck ? "text-yellow-400" : "text-matrix-green/50";
                   return (
-                    <PipelineStatusRow
-                      label="SUPPLEMENTARY"
-                      isRunning={!!pipelineStatus?.supplementaryIsRunning}
-                      run={run}
-                      isStuck={isStuck}
-                      statusClassName={statusClassName}
-                      detail={run && (
-                        <span className="text-matrix-green/60">
-                          {" "}· {run.exploreDocsIngested} docs · {run.justicesSkipped ? "SCOTUS skipped" : `${run.justicesScored} justices`} · {run.presidentsUpdated} pres
-                        </span>
-                      )}
-                      clearing={clearingSupplementary}
-                      onClear={async () => {
-                        setClearingSupplementary(true);
-                        try {
-                          await clearStuckSupplementaryPipeline(token);
-                          await pollStatus();
-                        } catch {}
-                        setClearingSupplementary(false);
-                      }}
-                    />
+                    <>
+                      <PipelineStatusRow
+                        label="SUPPLEMENTARY"
+                        isRunning={!!pipelineStatus?.supplementaryIsRunning}
+                        run={run}
+                        isStuck={isStuck}
+                        statusClassName={statusClassName}
+                        detail={run && (
+                          <span className="text-matrix-green/60">
+                            {" "}· {run.exploreDocsIngested} docs · {run.justicesSkipped ? "SCOTUS skipped" : `${run.justicesScored} justices`} · {run.presidentsUpdated} pres
+                          </span>
+                        )}
+                        clearing={clearingSupplementary}
+                        onClear={async () => {
+                          setClearingSupplementary(true);
+                          try {
+                            await clearStuckSupplementaryPipeline(token);
+                            await pollStatus();
+                          } catch {}
+                          setClearingSupplementary(false);
+                        }}
+                      />
+                      <LastRunSteps steps={run?.progressSteps} />
+                    </>
                   );
                 })()}
 

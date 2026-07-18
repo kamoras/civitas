@@ -32,10 +32,16 @@ from app.pipeline.fetch.senate_ptr import (
     fetch_and_parse_ptr as fetch_senate_ptr,
     search_ptr_filings,
 )
+from app.pipeline.progress_tracker import ProgressTracker
 from app.pipeline.run_tracker import PipelineRunTracker
 from app.pipeline.transform.industry_classifier import classify_batch_with_learning
 
 logger = logging.getLogger(__name__)
+
+STOCK_PIPELINE_STEPS = [
+    ("house_ptr",  "fetch", "Ingest House PTR filings"),
+    ("senate_ptr", "fetch", "Ingest Senate PTR filings"),
+]
 
 # How far back to search on a cold start (no existing trades in the DB).
 # Once trades exist, each chamber's search/index window starts from the
@@ -249,21 +255,28 @@ async def run_stock_trades_pipeline() -> dict:
         run = StockTradesPipelineRun(started_at=datetime.utcnow(), status=PipelineStatus.RUNNING)
         db.add(run)
         db.commit()
+        progress = ProgressTracker(run, STOCK_PIPELINE_STEPS, db, start_time)
 
         house_count = 0
         senate_count = 0
         error_parts: list[str] = []
         async with httpx.AsyncClient() as client:
+            progress.begin("house_ptr")
             try:
                 house_count = await _ingest_house(db, client)
+                progress.complete("house_ptr", detail=f"{house_count} rows")
             except Exception:
                 logger.exception("House PTR ingestion failed")
                 error_parts.append("House: failed — see server logs")
+                progress.fail("house_ptr")
+            progress.begin("senate_ptr")
             try:
                 senate_count = await _ingest_senate(db, client)
+                progress.complete("senate_ptr", detail=f"{senate_count} rows")
             except Exception:
                 logger.exception("Senate PTR ingestion failed")
                 error_parts.append("Senate: failed — see server logs")
+                progress.fail("senate_ptr")
 
         elapsed = round(time.time() - start_time, 1)
         logger.info("Stock trades pipeline: %d House rows, %d Senate rows", house_count, senate_count)
