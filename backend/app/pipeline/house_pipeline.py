@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
+from app.error_utils import safe_error_summary
 from app.models import HousePipelineRun, PipelineStatus, Representative, ScoreSnapshot
 from app.pipeline.run_tracker import PipelineRunTracker
 from app.services.representative_service import upsert_representative
@@ -719,7 +720,7 @@ async def run_house_pipeline() -> dict:
             house_run.status = PipelineStatus.FAILED
             house_run.completed_at = datetime.utcnow()
             house_run.elapsed_seconds = round(time.time() - start_time, 1)
-            house_run.error_message = str(e)[:500]
+            house_run.error_message = safe_error_summary(e)
             db.commit()
         except Exception:
             logger.exception("Failed to record house pipeline failure")

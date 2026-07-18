@@ -18,7 +18,12 @@ async function fetchIssue(id: string) {
 }
 
 export async function GET(req: NextRequest) {
-  const id = req.nextUrl.searchParams.get("issue");
+  const rawId = req.nextUrl.searchParams.get("issue");
+  // The backend route takes an int path param and would reject anything
+  // else anyway, but validating here (rather than passing the query value
+  // straight into the outgoing fetch URL) keeps this handler from ever
+  // building a request URL out of unvalidated user input.
+  const id = rawId && /^\d+$/.test(rawId) ? rawId : null;
   const issue = id ? await fetchIssue(id) : null;
 
   const title = issue?.title ?? "Civitas Action Center";

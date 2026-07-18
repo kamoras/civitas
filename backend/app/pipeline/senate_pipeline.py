@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
+from app.error_utils import safe_error_summary
 from app.models import (
     CampaignPromise,
     Donor,
@@ -1888,7 +1889,7 @@ async def run_senate_pipeline(
             db.rollback()
             pipeline_run.status = PipelineStatus.FAILED
             pipeline_run.completed_at = datetime.utcnow()
-            pipeline_run.error_message = str(e)[:500]
+            pipeline_run.error_message = safe_error_summary(e)
             pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
             db.commit()
         except Exception:

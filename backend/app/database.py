@@ -5,6 +5,7 @@ from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import settings
+from app.error_utils import safe_error_summary
 
 logger = logging.getLogger(__name__)
 
@@ -259,7 +260,7 @@ def reset_all_data() -> dict:
         summary["chromadb_collections"] = 2
     except Exception as exc:
         logger.warning("ChromaDB reset failed: %s", exc)
-        summary["chromadb_error"] = str(exc)
+        summary["chromadb_error"] = safe_error_summary(exc)
 
     from app.services.president_service import seed_presidents
     db = SessionLocal()

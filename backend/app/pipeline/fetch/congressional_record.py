@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
-from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S, fetch_with_retry
+from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S, fetch_with_retry, redact_url
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -60,7 +60,10 @@ async def _fetch_htm(client: httpx.AsyncClient, url: str) -> str:
         if resp.status_code == 200:
             return resp.text
     except Exception as e:
-        logger.debug("GovInfo HTM fetch failed: %s", e)
+        # This request bypasses fetch_with_retry (no retry needed for a raw
+        # HTML fetch), so the api_key redaction it does isn't applied here —
+        # the exception message can embed full_url, so redact directly.
+        logger.debug("GovInfo HTM fetch failed: %s", redact_url(str(e)))
     return ""
 
 

@@ -8,6 +8,7 @@ import logging
 
 import httpx
 
+from app.error_utils import safe_error_summary
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
 
 logger = logging.getLogger(__name__)
@@ -66,12 +67,19 @@ async def fetch_eo_count(
         resp.raise_for_status()
         data = resp.json()
 
-        count = data.get("count", 0)
+        # The API response body is untrusted external input — validate its
+        # shape before it flows anywhere (logging, the returned dict) rather
+        # than trusting count/results to be well-formed.
+        raw_count = data.get("count", 0)
+        count = raw_count if isinstance(raw_count, int) else 0
         results = data.get("results", [])
+        if not isinstance(results, list):
+            results = []
 
         recent_titles = [
-            r.get("title", "Untitled")[:120]
+            str(r.get("title", "Untitled"))[:120]
             for r in results[:5]
+            if isinstance(r, dict)
         ]
 
         logger.info(
@@ -84,7 +92,10 @@ async def fetch_eo_count(
         }
 
     except Exception as e:
-        logger.warning("Federal Register fetch failed for %s: %s", president_id, e)
+        logger.warning(
+            "Federal Register fetch failed for %s: %s",
+            president_id, safe_error_summary(e),
+        )
         return None
 
 
@@ -132,11 +143,12 @@ async def fetch_rulemaking_stats(
                 timeout=DEFAULT_FETCH_TIMEOUT_S,
             )
             resp.raise_for_status()
-            counts[doc_type] = resp.json().get("count", 0)
+            raw_count = resp.json().get("count", 0)
+            counts[doc_type] = raw_count if isinstance(raw_count, int) else 0
         except Exception as e:
             logger.warning(
                 "FR rulemaking fetch failed for %s (%s): %s",
-                president_id, doc_type, e,
+                president_id, doc_type, safe_error_summary(e),
             )
             return None
 

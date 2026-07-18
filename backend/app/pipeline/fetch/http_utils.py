@@ -28,6 +28,7 @@ import logging
 
 import httpx
 
+from app.error_utils import redact_sensitive_params
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,15 @@ logger = logging.getLogger(__name__)
 DEFAULT_MAX_RETRIES = 3
 DEFAULT_RETRY_BACKOFF_S = 2.0
 DEFAULT_FETCH_TIMEOUT_S = 30.0
+
+# Two callers (congress.py, congressional_record.py) build their URL with an
+# API key embedded directly in the query string, per this module's own
+# docstring ("URL construction ... stay in each caller"). That means the raw
+# key was being written to application logs on every request/retry/failure
+# (CodeQL py/clear-text-logging-sensitive-data, 2026-07). Redacting once,
+# here, covers those two callers and any future one that does the same
+# thing, instead of relying on every caller to remember not to log its URL.
+redact_url = redact_sensitive_params
 
 
 async def fetch_with_retry(
@@ -58,10 +68,11 @@ async def fetch_with_retry(
     .json() / .content / .text as needed for their source.
     """
     await rate_limiter.acquire()
-    label = log_label or url
+    safe_url = redact_url(url)
+    label = log_label or safe_url
     for attempt in range(1, retries + 1):
         try:
-            logger.debug("%s: %s (attempt %d)", label, url, attempt)
+            logger.debug("%s: %s (attempt %d)", label, safe_url, attempt)
             resp = await client.request(method, url, timeout=timeout, **request_kwargs)
 
             if resp.status_code == 429:
@@ -72,7 +83,7 @@ async def fetch_with_retry(
 
             if resp.status_code >= 400:
                 if not retry_on_4xx and 400 <= resp.status_code < 500:
-                    logger.error("%s client error (no retry): %s — HTTP %d", label, url, resp.status_code)
+                    logger.error("%s client error (no retry): %s — HTTP %d", label, safe_url, resp.status_code)
                     return None
                 raise httpx.HTTPStatusError(
                     f"HTTP {resp.status_code}", request=resp.request, response=resp,
@@ -81,7 +92,12 @@ async def fetch_with_retry(
             return resp
         except Exception as e:
             if attempt == retries:
-                logger.error("%s failed after %d attempts: %s — %s", label, retries, url, e)
+                # The exception's own message can embed the request URL
+                # (e.g. httpx.ConnectError/ReadTimeout do) — redact it too.
+                logger.error(
+                    "%s failed after %d attempts: %s — %s",
+                    label, retries, safe_url, redact_url(str(e)),
+                )
                 return None
             await asyncio.sleep(backoff_s * attempt)
 
