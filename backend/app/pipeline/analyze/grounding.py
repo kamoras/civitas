@@ -203,7 +203,10 @@ _EDITORIALIZING_RE = re.compile(
     r"\b(?:is|was|are|were)\s+(?:warranted|justified)\b"
     r"|\b(?:rightly|understandably)\b"
     r"|\bhelps?\s+(?:advance|move|push)\s+(?:the\s+)?(?:legislation|bill|agenda)\b"
-    r"|\bmakes sense given\b",
+    r"|\bmakes sense given\b"
+    r"|\breflects?\s+(?:a\s+|an\s+|broader\s+)?efforts?\s+to\b"
+    r"|\bin an effort to\b"
+    r"|\b(?:aims?|seeks?)\s+to\s+(?:shape|manage|control)\s+(?:public\s+)?perception\b",
     re.IGNORECASE,
 )
 
@@ -223,6 +226,14 @@ def editorializing_language(generated: str) -> list[str]:
     deliberately narrow, matching this module's high-precision philosophy —
     it catches clear-cut legitimizing language, not every possible way a
     model could editorialize.
+
+    The "reflects efforts to" / "in an effort to" / "aims to shape
+    perception" patterns were added 2026-07 after a live full story wrote
+    that an administration's actions "reflect broader efforts to manage
+    public perception around election integrity" — a different flavor of
+    editorializing than the original set: not judging whether an action was
+    warranted, but asserting the *strategic motive behind* an action as
+    established fact rather than reporting only what was said or done.
     """
     return sorted({m.group(0) for m in _EDITORIALIZING_RE.finditer(generated or "")})
 
