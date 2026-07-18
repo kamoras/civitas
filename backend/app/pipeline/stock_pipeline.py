@@ -20,7 +20,6 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
-from app.error_utils import safe_error_summary
 from app.models import (
     PipelineRun, HousePipelineRun, PipelineStatus, Representative, Senator,
     StockTrade, RepStockTrade, StockTradesPipelineRun,
@@ -259,12 +258,12 @@ async def run_stock_trades_pipeline() -> dict:
                 house_count = await _ingest_house(db, client)
             except Exception as e:
                 logger.exception("House PTR ingestion failed")
-                error_parts.append(f"House: {safe_error_summary(e)}")
+                error_parts.append(f"House: {type(e).__name__}")
             try:
                 senate_count = await _ingest_senate(db, client)
             except Exception as e:
                 logger.exception("Senate PTR ingestion failed")
-                error_parts.append(f"Senate: {safe_error_summary(e)}")
+                error_parts.append(f"Senate: {type(e).__name__}")
 
         elapsed = round(time.time() - start_time, 1)
         logger.info("Stock trades pipeline: %d House rows, %d Senate rows", house_count, senate_count)
