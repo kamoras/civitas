@@ -17,7 +17,11 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models import BskySenatorSpotlight, Senator, WeekSummary
 from app.pipeline.analyze.bluesky_utils import build_link_card
-from app.pipeline.analyze.grounding import ungrounded_numbers
+from app.pipeline.analyze.grounding import (
+    editorializing_language,
+    hedge_language,
+    ungrounded_numbers,
+)
 from app.pipeline.analyze.ollama_client import call_llm
 from app.pipeline.analyze.score_calculator import compute_overall_score
 
@@ -161,6 +165,8 @@ RULES:
 5. Write 1-2 complete sentences ending with proper punctuation.
 6. No hashtags, no exclamation points, no editorializing.
 7. Do not add any information not provided above.
+8. Report directly — never write "sources show," "reports indicate," or similar.
+   State the scores as facts, not as something reports/coverage/sources are saying.
 
 Return JSON: {{"post": "<your post text>"}}"""
 
@@ -204,6 +210,17 @@ Return JSON: {{"post": "<your post text>"}}"""
         hit = next((w for w in _EMPHASIS_WORDS if w in lower), None)
         if hit:
             problems.append(f'evaluative language ("{hit}") — posts must stay neutral')
+
+        # Same mechanical backstop as the issue poster and full-story
+        # generator — prompt-only instructions aren't reliably followed.
+        hedges = hedge_language(text)
+        if hedges:
+            problems.append(f"hedging attribution phrases ({', '.join(hedges)})")
+        editorial = editorializing_language(text)
+        if editorial:
+            problems.append(
+                f"language evaluating whether a score is warranted or justified ({', '.join(editorial)})"
+            )
 
         if not problems:
             return text
@@ -334,6 +351,10 @@ RULES:
 4. No hashtags, no exclamation points, no editorializing.
 5. Factual and neutral — report what happened.
 6. Do not start with "This week" or "Last week".
+7. Report directly — never write "sources show," "reports indicate," or similar.
+   State events as facts, not as something reports/coverage/sources are saying.
+8. Do not evaluate whether an action was warranted or justified, and do not
+   speculate about its political purpose or effect.
 
 Return JSON: {{"post": "<your post text>"}}"""
 
@@ -364,18 +385,34 @@ Return JSON: {{"post": "<your post text>"}}"""
             return None
 
         # Same public-post guard as the spotlight: every number must come
-        # from the week summary (or the date label) we supplied.
+        # from the week summary (or the date label) we supplied. Hedging
+        # attribution and editorializing get the same mechanical backstop
+        # as the issue poster and full-story generator.
         novel = ungrounded_numbers(text, user_prompt)
-        if not novel:
+        hedges = hedge_language(text)
+        editorial = editorializing_language(text)
+        if not novel and not hedges and not editorial:
             return text
+
+        reasons = []
+        if novel:
+            reasons.append(f"numbers not present in the summary ({', '.join(novel)})")
+        if hedges:
+            reasons.append(f"hedging attribution phrases ({', '.join(hedges)})")
+        if editorial:
+            reasons.append(
+                f"language evaluating whether an action was justified ({', '.join(editorial)})"
+            )
         logger.warning(
-            "Weekly post failed number grounding (attempt %d): %s | post: %s",
-            attempt + 1, ", ".join(novel), text[:160],
+            "Weekly post failed grounding (attempt %d): %s | post: %s",
+            attempt + 1, "; ".join(reasons), text[:160],
         )
         retry_note = (
             "\n\nYour previous attempt was rejected because it contained "
-            f"numbers not present in the summary ({', '.join(novel)}). "
-            "Use only figures from the week-in-review summary above."
+            f"{'; '.join(reasons)}. Use only figures from the week-in-review "
+            "summary above, report events directly instead of through "
+            "phrases like 'sources show' or 'reports indicate,' and do not "
+            "evaluate whether any action was warranted or justified."
         )
 
     return None
