@@ -92,6 +92,61 @@ class TestCheckScoreDistribution:
         assert failures == []
 
 
+class TestDimensionSpecificFloors:
+    """independentVoting (6.5) and fundingDiversity (5.5) got lower floors
+    than fundingIndependence/legislativeEffectiveness (8.0 each) after a
+    2026-07 audit found both structurally can't reach 8.0 given real
+    lobbying-match/industry-classification data sparsity — see
+    ground_truth.py's MIN_STDEV docstring for the full evidence trail.
+    """
+
+    def test_iv_between_6_5_and_8_now_passes(self, db_session):
+        # stdev ~7.3 — would have failed the old uniform 8.0 floor, and
+        # still correctly fails for FI/LE (unchanged at 8.0) in the same
+        # population, but now passes for IV specifically.
+        iv_values = [38, 42, 45, 47, 49, 51, 53, 55, 58, 64]
+        for i, v in enumerate(iv_values):
+            _add_senator(db_session, f"s{i}", iv=v, fi=v, le=v, fd=50, pp=50)
+        db_session.commit()
+
+        failures = check_score_distribution(db_session)
+        dims_flagged = {f["dimension"] for f in failures}
+        assert "IV" not in dims_flagged
+        assert "FI" in dims_flagged
+        assert "LE" in dims_flagged
+
+    def test_fd_between_5_5_and_8_now_passes(self, db_session):
+        # stdev ~6.7 — between the new 5.5 floor and FI/LE's unchanged 8.0.
+        fd_values = [40, 44, 47, 49, 50, 51, 53, 55, 58, 65]
+        for i, v in enumerate(fd_values):
+            _add_senator(db_session, f"s{i}", fd=v, fi=v, le=v, iv=50, pp=50)
+        db_session.commit()
+
+        failures = check_score_distribution(db_session)
+        dims_flagged = {f["dimension"] for f in failures}
+        assert "FD" not in dims_flagged
+        assert "FI" in dims_flagged
+        assert "LE" in dims_flagged
+
+    def test_iv_still_flags_a_genuine_collapse_below_6_5(self, db_session):
+        for i in range(15):
+            _add_senator(db_session, f"s{i}", iv=52 + (i % 3))  # stdev ~1
+        db_session.commit()
+
+        failures = check_score_distribution(db_session)
+        dims_flagged = {f["dimension"] for f in failures}
+        assert "IV" in dims_flagged
+
+    def test_fd_still_flags_a_genuine_collapse_below_5_5(self, db_session):
+        for i in range(15):
+            _add_senator(db_session, f"s{i}", fd=52 + (i % 3))  # stdev ~1
+        db_session.commit()
+
+        failures = check_score_distribution(db_session)
+        dims_flagged = {f["dimension"] for f in failures}
+        assert "FD" in dims_flagged
+
+
 class TestCheckScoreDistributionHouse:
     def test_model_param_scopes_to_representatives(self, db_session):
         # House has no named ground-truth cases; check_score_distribution
