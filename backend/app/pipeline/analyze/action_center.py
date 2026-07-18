@@ -180,6 +180,13 @@ it matters. No opinion — do not state or imply that an action was \
 warranted, justified, or reasonable, even if a source article frames it \
 that way; report what was done and said, not whether it was right. Report \
 directly — never write "reports say," "coverage indicates," or similar. \
+Use the SPECIFIC names, quotes, and numbers from the articles rather than \
+vaguer paraphrases — if an article names a person or gives a figure, use it \
+instead of a vaguer substitute like "a commentator" or "officials." Do not \
+write about "the coverage" or "the reporting" as the subject of a sentence \
+(e.g., "the coverage emphasizes personal connections") — report what \
+actually happened or was said, not a description of what the source \
+article chose to discuss. \
 Be precise about WHO did WHAT to WHOM — double-check \
 the direction of every action and legal outcome before writing it. In legal \
 or disputed matters, do not confuse the accuser/plaintiff/victim with the \
@@ -195,7 +202,10 @@ says something was dropped, dismissed, or ended, the fact must reflect that \
 outcome — do not write that it is ongoing. (4) Extract only concrete, \
 checkable actions and events — never extract an article's opinion, spin, or \
 argument about whether an action was warranted or justified, even when the \
-article states it as fact.
+article states it as fact. (5) A fact must describe something that happened \
+or was said in the world — never a description of the coverage itself \
+(e.g., "the coverage emphasizes X" or "the article focuses on Y" are NOT \
+facts; extract what X or Y actually is instead).
 - "bills": An array of any specific bills or acts mentioned in the articles. \
 For each bill, provide an object with "name" (the bill's common name or \
 acronym EXACTLY AS WRITTEN in the articles above — never a bill name from \
@@ -1971,6 +1981,22 @@ stated rationale for their own action as established fact. Do not speculate \
 about the political or legislative purpose or effect of an action (e.g., how a \
 speech "helps move legislation"). Report only what was said or done — not \
 whether it was right, smart, necessary, or effective.
+- Do NOT assert what an actor's strategic motive, purpose, or intention was \
+(e.g., "reflects an effort to manage public perception," "in an effort to \
+shape the narrative") unless that motive is explicitly stated as a claim or \
+quote in the key facts. Report the action; do not explain why you think they \
+did it.
+- Use the SPECIFIC names, quotes, and numbers given in the key facts — do not \
+paraphrase a specific fact into a vaguer, unnamed version. If a key fact names \
+a person or gives a figure, the article should use that same name or figure, \
+not a vaguer substitute like "a commentator" or "several officials."
+- Do NOT write about "the coverage," "the debate," "the discussion," or "the \
+reporting" as if it were the subject of the article — write about what people \
+and institutions actually did or said, not about how the news covered it.
+- Do NOT end with a vague, generic wrap-up sentence that restates the topic \
+without adding new information (e.g., "these developments underscore the \
+complex interplay between..."). If there is nothing more concrete to add, end \
+the article on the last concrete fact instead.
 
 STRUCTURE (3 natural paragraphs):
 1. What is happening and why it matters right now

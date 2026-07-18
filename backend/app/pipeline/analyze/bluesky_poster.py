@@ -122,6 +122,9 @@ shows," or similar. State facts as facts, not as something reports/coverage/
 sources are saying.
 8. Do not evaluate whether an action was warranted or justified, and do not \
 speculate about its political purpose or effect.
+9. Write about what actually happened or was said — not about "the coverage," \
+"the discussion," or "the reporting" itself. Use specific names and numbers \
+from the Key facts rather than vaguer substitutes.
 
 Return JSON: {{"post": "<your post text>"}}"""
 

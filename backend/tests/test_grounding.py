@@ -177,6 +177,22 @@ class TestEditorializingLanguage:
                 "The Senate passed the bill 68-32 after weeks of debate.", 0,
                 id="plain_reporting_is_clean",
             ),
+            # Real full-story text that slipped through (2026-07) — the
+            # administration's motive was asserted as fact, not reported as
+            # a claim or quote from the key facts.
+            pytest.param(
+                "The administration's actions reflect broader efforts to "
+                "manage public perception around election integrity.",
+                1, id="reflects_broader_efforts_to",
+            ),
+            pytest.param(
+                "The bill was introduced in an effort to reduce costs.",
+                1, id="in_an_effort_to",
+            ),
+            pytest.param(
+                "The campaign aims to shape public perception ahead of the vote.",
+                1, id="aims_to_shape_perception",
+            ),
         ],
     )
     def test_editorializing_language(self, text, expected_count):
