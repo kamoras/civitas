@@ -14,7 +14,6 @@ import time
 from datetime import datetime, timedelta
 
 from app.database import SessionLocal
-from app.error_utils import classify_exception
 from app.models import Justice, PipelineStatus, SupplementaryPipelineRun
 from app.pipeline.run_tracker import PipelineRunTracker
 
@@ -107,8 +106,11 @@ async def run_supplementary_pipeline() -> dict:
             "elapsed_seconds": run.elapsed_seconds,
         }
     except Exception as e:
+        # Full detail goes to the server log; the admin-facing summary is a
+        # static string with zero reference to the exception object — see
+        # database.py's reset_all_data for why.
         logger.exception("Supplementary pipeline failed: %s", e)
-        summary = classify_exception(e)
+        summary = "supplementary pipeline failed — see server logs"
         try:
             run.status = PipelineStatus.FAILED
             run.completed_at = datetime.utcnow()

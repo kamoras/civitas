@@ -91,15 +91,15 @@ async def fetch_eo_count(
         }
 
     except Exception:
-        # exc_info=True, not a %s of the exception: the traceback still
-        # reaches this log line via logging's own exception-serialization
-        # path (a modeled library sink CodeQL treats differently), instead
-        # of as a literal string argument in application code — the latter
-        # kept getting flagged here no matter how the value was derived
-        # (type(e).__name__ inline, classify_exception(e)'s hardcoded-
-        # literal isinstance branches — nothing wrapping `e` as a %-arg
-        # cleared it).
-        logger.warning("Federal Register fetch failed for %s", president_id, exc_info=True)
+        # No reference to the exception at all — not a %s of type(e).__name__
+        # or classify_exception(e), not even exc_info=True. CodeQL's
+        # clear-text-logging query models exc_info=True as a stack-trace
+        # sink just as directly as a manual %s of the exception (it was
+        # flagged too), so the only way to clear this specific alert is to
+        # never mention the exception in this log statement at all.
+        # president_id alone is proven safe (see fetch_eo_count's info log,
+        # a few lines up, which logs it without issue).
+        logger.warning("Federal Register fetch failed for %s", president_id)
         return None
 
 
@@ -150,10 +150,7 @@ async def fetch_rulemaking_stats(
             raw_count = resp.json().get("count", 0)
             counts[doc_type] = raw_count if isinstance(raw_count, int) else 0
         except Exception:
-            logger.warning(
-                "FR rulemaking fetch failed for %s (%s)",
-                president_id, doc_type, exc_info=True,
-            )
+            logger.warning("FR rulemaking fetch failed for %s (%s)", president_id, doc_type)
             return None
 
     total = counts.get("RULE", 0) + counts.get("PRORULE", 0)

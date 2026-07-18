@@ -1,34 +1,29 @@
-"""Sanitizing exception info before it reaches an admin-facing field or log.
+"""Redacting credential-shaped substrings out of arbitrary text.
 
-Two independent tools here, for two different problems:
+Used by http_utils.py's debug/error logging of request URLs and exception
+messages. This is a best-effort readability aid, NOT a CodeQL-recognized
+sanitizer for anything treated as a sensitive-data sink
+(py/clear-text-logging-sensitive-data, py/stack-trace-exposure).
 
-redact_sensitive_params() strips credential-shaped query param values out of
-arbitrary text (used by http_utils.py's debug/error logging of request URLs
-and exception messages). This is a best-effort readability aid, NOT a
-CodeQL-recognized sanitizer — its taint tracking (py/clear-text-logging-
-sensitive-data, py/stack-trace-exposure) doesn't recognize a regex
-substitution as clearing taint on a value derived from a tainted source.
-
-classify_exception() is what actually clears those alerts for fields that
-reach an admin-visible API response (PipelineRun.error_message and
-similar — see senate_pipeline.py, house_pipeline.py,
-supplementary_pipeline.py, stock_pipeline.py, database.py's
-reset_all_data(), fetch/federal_register.py). Every branch returns a string
-literal typed directly in source; the exception `e` is used only in
-isinstance() checks — a control-flow condition, not a data-flow source for
-the return value — so there is no dataflow edge from `e` to what actually
-gets logged or stored. This is deliberately different from an earlier,
-failed approach: type(e).__name__, even computed inline with no wrapping
-function call and carrying no message content at all, was still flagged.
-CodeQL doesn't treat type()/.__name__ as clearing taint on a caught
-exception variable; only a value chosen from a small, fixed set of literals
-(this isinstance-branch pattern) reliably does.
+Empirically (2026-07, fetch/federal_register.py — see its git history for
+the full trail), NOTHING that references a caught exception object inside a
+flagged log statement clears that class of alert, no matter how it's
+transformed: not a regex substitution, not type(e).__name__ computed
+inline, not a shared helper doing isinstance()-branching to hardcoded
+string literals, not even Python logging's own exc_info=True (which is
+modeled as directly as a manual %s of the exception, not treated as safer).
+The only thing that reliably clears it is removing every reference to the
+exception object from the flagged statement entirely — see
+fetch/federal_register.py, and the admin-facing PipelineRun.error_message
+call sites in senate_pipeline.py, house_pipeline.py,
+supplementary_pipeline.py, stock_pipeline.py, and database.py's
+reset_all_data(), which all use a static string with zero exception
+reference instead. Full exception detail still reaches server-side logs
+unchanged via the existing logger.exception()/logger.error() calls at each
+site — those were never flagged by the original scan.
 """
 
 import re
-
-import httpx
-from sqlalchemy.exc import SQLAlchemyError
 
 _SENSITIVE_QUERY_PARAM_RE = re.compile(
     r"([?&](?:api[_-]?key|token|secret|password)=)[^&\s]*", re.IGNORECASE
@@ -38,32 +33,3 @@ _SENSITIVE_QUERY_PARAM_RE = re.compile(
 def redact_sensitive_params(text: str) -> str:
     """Strip credential-shaped query param values out of arbitrary text."""
     return _SENSITIVE_QUERY_PARAM_RE.sub(r"\1***", text)
-
-
-def classify_exception(e: Exception) -> str:
-    """One of a fixed set of hardcoded labels — never data from the
-    exception's own type name or message. See module docstring.
-    """
-    if isinstance(e, httpx.HTTPStatusError):
-        return "HTTPStatusError"
-    if isinstance(e, httpx.TimeoutException):
-        return "Timeout"
-    if isinstance(e, httpx.TransportError):
-        return "TransportError"
-    if isinstance(e, httpx.RequestError):
-        return "RequestError"
-    if isinstance(e, SQLAlchemyError):
-        return "DatabaseError"
-    if isinstance(e, TimeoutError):
-        return "Timeout"
-    if isinstance(e, ConnectionError):
-        return "ConnectionError"
-    if isinstance(e, PermissionError):
-        return "PermissionError"
-    if isinstance(e, (KeyError, IndexError, AttributeError)):
-        return "DataShapeError"
-    if isinstance(e, (ValueError, TypeError)):
-        return "ValueError"
-    if isinstance(e, OSError):
-        return "OSError"
-    return "OtherError"

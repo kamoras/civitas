@@ -23,7 +23,6 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
-from app.error_utils import classify_exception
 from app.models import (
     CampaignPromise,
     Donor,
@@ -1889,7 +1888,7 @@ async def run_senate_pipeline(
             db.rollback()
             pipeline_run.status = PipelineStatus.FAILED
             pipeline_run.completed_at = datetime.utcnow()
-            pipeline_run.error_message = classify_exception(e)
+            pipeline_run.error_message = "Senate pipeline failed — see server logs"
             pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
             db.commit()
         except Exception:

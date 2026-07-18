@@ -20,7 +20,6 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
-from app.error_utils import classify_exception
 from app.models import (
     PipelineRun, HousePipelineRun, PipelineStatus, Representative, Senator,
     StockTrade, RepStockTrade, StockTradesPipelineRun,
@@ -257,14 +256,14 @@ async def run_stock_trades_pipeline() -> dict:
         async with httpx.AsyncClient() as client:
             try:
                 house_count = await _ingest_house(db, client)
-            except Exception as e:
+            except Exception:
                 logger.exception("House PTR ingestion failed")
-                error_parts.append(f"House: {classify_exception(e)}")
+                error_parts.append("House: failed — see server logs")
             try:
                 senate_count = await _ingest_senate(db, client)
-            except Exception as e:
+            except Exception:
                 logger.exception("Senate PTR ingestion failed")
-                error_parts.append(f"Senate: {classify_exception(e)}")
+                error_parts.append("Senate: failed — see server logs")
 
         elapsed = round(time.time() - start_time, 1)
         logger.info("Stock trades pipeline: %d House rows, %d Senate rows", house_count, senate_count)
