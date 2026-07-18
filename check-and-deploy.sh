@@ -30,6 +30,27 @@ if [[ "$LOCAL" == "$REMOTE" ]]; then
   exit 0   # nothing new
 fi
 
+# Deploying restarts the currently-running backend container, which kills
+# any pipeline run in progress (observed 2026-07: a deploy landed 11
+# minutes into a manually-triggered House pipeline run, which then failed
+# with "Cleared by admin (container restart)" — that particular case was
+# an intentional deploy-over, but an *unintended* collision with the
+# nightly scheduled run is exactly this same failure mode). Skip this
+# cycle if a pipeline is currently running; cron retries every 5 min, so
+# the commit deploys as soon as the pipeline is idle.
+cur_be_slot=$(cat .deploy-backend-slot 2>/dev/null || echo blue)
+if [[ "$cur_be_slot" == "blue" ]]; then cur_be_port=8000; else cur_be_port=8001; fi
+admin_token=$(grep '^ADMIN_TOKEN=' .env 2>/dev/null | cut -d= -f2-)
+if [[ -n "$admin_token" ]]; then
+  pipeline_status=$(curl -fsS --max-time 5 \
+    -H "Authorization: Bearer $admin_token" \
+    "http://localhost:${cur_be_port}/api/admin/pipeline/status" 2>/dev/null || echo '{}')
+  if echo "$pipeline_status" | grep -Eq '"(isRunning|houseIsRunning|stockTradesIsRunning|supplementaryIsRunning)":true'; then
+    echo "$(date -Iseconds) new commit ${REMOTE:0:8} available but a pipeline is running — deferring" >> deploy-poll.log
+    exit 0
+  fi
+fi
+
 echo "$(date -Iseconds) new commit on main: ${REMOTE:0:8} (was ${LOCAL:0:8})" >> deploy-poll.log
 git reset --hard origin/main
 
