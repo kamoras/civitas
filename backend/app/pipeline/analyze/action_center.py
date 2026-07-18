@@ -2040,8 +2040,7 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
         # this generator had no check for fabricated names at all until
         # then, unlike the Bluesky poster which already ran this check.)
         from app.pipeline.analyze.grounding import (
-            editorializing_language,
-            hedge_language,
+            hedge_and_editorializing_violations,
             repeated_sentences,
             ungrounded_statistics,
             ungrounded_titled_names,
@@ -2049,9 +2048,8 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
         novel = ungrounded_statistics(story, source_material)
         names = ungrounded_titled_names(story, source_material)
         dupes = repeated_sentences(story)
-        hedges = hedge_language(story)
-        editorial = editorializing_language(story)
-        if not novel and not names and not dupes and not hedges and not editorial:
+        hedge_editorial = hedge_and_editorializing_violations(story)
+        if not novel and not names and not dupes and not hedge_editorial:
             logger.info(
                 "Generated full story for issue %s (%d chars): %s",
                 issue.id, len(story), issue.title[:60],
@@ -2084,21 +2082,11 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
                 "Full story repeated itself for issue %s (attempt %d): %s",
                 issue.id, attempt + 1, "; ".join(dupes),
             )
-        if hedges:
-            problems.append(
-                f"hedging attribution phrases ({', '.join(hedges)})"
-            )
+        if hedge_editorial:
+            problems.extend(hedge_editorial)
             logger.warning(
-                "Full story used hedging attribution for issue %s (attempt %d): %s",
-                issue.id, attempt + 1, ", ".join(hedges),
-            )
-        if editorial:
-            problems.append(
-                f"language evaluating whether an action was justified ({', '.join(editorial)})"
-            )
-            logger.warning(
-                "Full story editorialized for issue %s (attempt %d): %s",
-                issue.id, attempt + 1, ", ".join(editorial),
+                "Full story failed hedge/editorializing check for issue %s (attempt %d): %s",
+                issue.id, attempt + 1, "; ".join(hedge_editorial),
             )
         retry_note = (
             "\n\nYour previous attempt was rejected because it contained "
@@ -3139,21 +3127,10 @@ def _run_refresh(db: Session) -> int:
         # local model doesn't reliably follow prompt-only instructions, and
         # unlike the full-story path this summary/facts generation had no
         # mechanical backstop at all until this fix.
-        from app.pipeline.analyze.grounding import (
-            editorializing_language,
-            hedge_language,
-        )
+        from app.pipeline.analyze.grounding import hedge_and_editorializing_violations
         combined_text = summary + " " + " ".join(facts)
-        hedges = hedge_language(combined_text)
-        editorial = editorializing_language(combined_text)
-        if hedges or editorial:
-            reasons = []
-            if hedges:
-                reasons.append(f"hedging attribution phrases ({', '.join(hedges)})")
-            if editorial:
-                reasons.append(
-                    f"language evaluating whether an action was justified ({', '.join(editorial)})"
-                )
+        reasons = hedge_and_editorializing_violations(combined_text)
+        if reasons:
             logger.warning(
                 "Issue text failed grounding for rank %d: %s — retrying",
                 rank, "; ".join(reasons),
@@ -3184,7 +3161,7 @@ def _run_refresh(db: Session) -> int:
                 )
                 retry_facts = [_fix_impossible_senate_vote_counts(f) for f in retry_facts]
                 retry_combined = retry_summary + " " + " ".join(retry_facts)
-                if retry_summary and not hedge_language(retry_combined) and not editorializing_language(retry_combined):
+                if retry_summary and not hedge_and_editorializing_violations(retry_combined):
                     title, summary, facts = _validate_politician_roles(title, retry_summary, retry_facts, db)
                     resolved = True
             if not resolved:
