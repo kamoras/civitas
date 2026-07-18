@@ -134,6 +134,28 @@ class TestHedgeLanguage:
             pytest.param("Sources say the deal is close.", 1, id="sources_say"),
             pytest.param("According to reports, the bill stalled.", 1, id="according_to_reports"),
             pytest.param("The Senate voted 68-32 to pass the bill.", 0, id="direct_reporting_is_clean"),
+            # Real Bluesky posts that slipped through the original narrow
+            # noun/verb lists (2026-07) — regression tests for the fix.
+            pytest.param(
+                "Recent discussions emphasize scrutiny of election fraud claims.",
+                1, id="recent_discussions_emphasize",
+            ),
+            pytest.param(
+                "Key officials stress transparency and verification remain critical.",
+                1, id="officials_stress",
+            ),
+            pytest.param(
+                "Recent reports highlight intensified military actions.",
+                1, id="recent_reports_highlight",
+            ),
+            pytest.param(
+                "Recent discussions aim to coordinate meetings for the victims.",
+                1, id="discussions_aim_to",
+            ),
+            pytest.param(
+                "Recent discussions focus on election claims and official responses.",
+                1, id="discussions_focus_on",
+            ),
         ],
     )
     def test_hedge_language(self, text, expected_count):
