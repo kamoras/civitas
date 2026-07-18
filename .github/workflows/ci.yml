@@ -6,6 +6,14 @@ on:
   pull_request:
     branches: [main]
 
+# Default GITHUB_TOKEN permissions are broader than any job here needs (none
+# push packages, comment on PRs, or write releases) — scope down to
+# read-only by default. build-and-push already declares its own narrower
+# job-level permissions (contents: read, packages: write) for the one thing
+# it actually needs, which overrides this.
+permissions:
+  contents: read
+
 jobs:
   frontend:
     name: Frontend — Lint & Build

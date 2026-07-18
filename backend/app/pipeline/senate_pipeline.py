@@ -1888,7 +1888,7 @@ async def run_senate_pipeline(
             db.rollback()
             pipeline_run.status = PipelineStatus.FAILED
             pipeline_run.completed_at = datetime.utcnow()
-            pipeline_run.error_message = str(e)[:500]
+            pipeline_run.error_message = "Senate pipeline failed — see server logs"
             pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
             db.commit()
         except Exception:

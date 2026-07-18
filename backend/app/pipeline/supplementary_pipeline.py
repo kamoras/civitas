@@ -106,16 +106,20 @@ async def run_supplementary_pipeline() -> dict:
             "elapsed_seconds": run.elapsed_seconds,
         }
     except Exception as e:
+        # Full detail goes to the server log; the admin-facing summary is a
+        # static string with zero reference to the exception object — see
+        # database.py's reset_all_data for why.
         logger.exception("Supplementary pipeline failed: %s", e)
+        summary = "supplementary pipeline failed — see server logs"
         try:
             run.status = PipelineStatus.FAILED
             run.completed_at = datetime.utcnow()
             run.elapsed_seconds = round(time.time() - start_time, 1)
-            run.error_message = str(e)[:500]
+            run.error_message = summary
             db.commit()
         except Exception:
             logger.exception("Failed to record supplementary pipeline failure")
-        return {"status": PipelineStatus.FAILED, "error": str(e)[:500]}
+        return {"status": PipelineStatus.FAILED, "error": summary}
     finally:
         _tracker.stop()
         db.close()

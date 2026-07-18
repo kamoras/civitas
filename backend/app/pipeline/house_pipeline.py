@@ -719,7 +719,7 @@ async def run_house_pipeline() -> dict:
             house_run.status = PipelineStatus.FAILED
             house_run.completed_at = datetime.utcnow()
             house_run.elapsed_seconds = round(time.time() - start_time, 1)
-            house_run.error_message = str(e)[:500]
+            house_run.error_message = "House pipeline failed — see server logs"
             db.commit()
         except Exception:
             logger.exception("Failed to record house pipeline failure")

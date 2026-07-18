@@ -258,8 +258,14 @@ def reset_all_data() -> dict:
         reset_vector_db()
         summary["chromadb_collections"] = 2
     except Exception as exc:
+        # Full detail goes to the server log (already unflagged by CodeQL —
+        # see error_utils.py's docstring); the admin-facing summary dict
+        # gets a static string with zero reference to the exception object,
+        # since even a hardcoded-literal classify_exception(exc) call kept
+        # getting flagged at this class of sink (see federal_register.py's
+        # history for the full trail of what didn't work).
         logger.warning("ChromaDB reset failed: %s", exc)
-        summary["chromadb_error"] = str(exc)
+        summary["chromadb_error"] = "reset failed — see server logs"
 
     from app.services.president_service import seed_presidents
     db = SessionLocal()

@@ -28,6 +28,7 @@ import logging
 
 import httpx
 
+from app.error_utils import redact_sensitive_params
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,20 @@ logger = logging.getLogger(__name__)
 DEFAULT_MAX_RETRIES = 3
 DEFAULT_RETRY_BACKOFF_S = 2.0
 DEFAULT_FETCH_TIMEOUT_S = 30.0
+
+# Two callers (congress.py, congressional_record.py) used to build their URL
+# with an API key embedded directly in the query string, which meant the raw
+# key got logged on every request/retry/failure (CodeQL
+# py/clear-text-logging-sensitive-data, 2026-07). Both now keep the
+# credential out of the `url` this function logs entirely, passing it via
+# `request_url` instead (see fetch_with_retry's docstring) — CodeQL's
+# taint-tracking doesn't recognize an arbitrary regex substitution as a
+# sanitizer, so removing the credential from the logged value at the source
+# is what actually clears the alert, not redacting it after the fact. This
+# stays as a defensive backstop for exception messages (which can still
+# embed a URL from underlying library internals) and any future caller that
+# reintroduces the anti-pattern.
+redact_url = redact_sensitive_params
 
 
 async def fetch_with_retry(
@@ -49,20 +64,31 @@ async def fetch_with_retry(
     retry_on_4xx: bool = True,
     timeout: float = DEFAULT_FETCH_TIMEOUT_S,
     log_label: str = "",
+    request_url: str | None = None,
     **request_kwargs,
 ) -> httpx.Response | None:
     """Rate-limited HTTP request with retry+backoff.
+
+    `url` is what gets logged on every request/retry/failure — callers
+    whose real request needs a credential in the query string (an API key)
+    pass the credential-bearing URL separately via `request_url`, so the
+    credential is never even constructed as part of the value this
+    function might log. (httpx's `params=` kwarg replaces rather than
+    merges an existing query string, so it can't be used here without
+    dropping a caller's other query params — hence this two-URL split
+    instead. See congress.py/congressional_record.py for callers.)
 
     Returns the raw Response on success (any status < 400), or None if
     retries are exhausted or a non-retried 4xx is hit. Callers extract
     .json() / .content / .text as needed for their source.
     """
     await rate_limiter.acquire()
+    actual_url = request_url or url
     label = log_label or url
     for attempt in range(1, retries + 1):
         try:
             logger.debug("%s: %s (attempt %d)", label, url, attempt)
-            resp = await client.request(method, url, timeout=timeout, **request_kwargs)
+            resp = await client.request(method, actual_url, timeout=timeout, **request_kwargs)
 
             if resp.status_code == 429:
                 wait = backoff_s * attempt * rate_limit_backoff_multiplier
@@ -81,7 +107,13 @@ async def fetch_with_retry(
             return resp
         except Exception as e:
             if attempt == retries:
-                logger.error("%s failed after %d attempts: %s — %s", label, retries, url, e)
+                # The exception's own message can embed the request URL,
+                # including request_url if one was given (e.g.
+                # httpx.ConnectError/ReadTimeout do) — redact it too.
+                logger.error(
+                    "%s failed after %d attempts: %s — %s",
+                    label, retries, url, redact_url(str(e)),
+                )
                 return None
             await asyncio.sleep(backoff_s * attempt)
 

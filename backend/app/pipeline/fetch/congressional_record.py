@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
-from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S, fetch_with_retry
+from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S, fetch_with_retry, redact_url
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -40,12 +40,17 @@ _rate_limiter = RateLimiter(settings.GOVINFO_RPS)
 
 
 async def _fetch_json(client: httpx.AsyncClient, url: str) -> dict | None:
-    """Fetch a GovInfo JSON endpoint with rate limiting and retries."""
-    separator = "&" if "?" in url else "?"
-    full_url = f"{url}{separator}api_key={settings.DATA_GOV_API_KEY}"
+    """Fetch a GovInfo JSON endpoint with rate limiting and retries.
+
+    The credential-bearing URL is built separately and passed via
+    `request_url`, so `url` — the value fetch_with_retry logs on every
+    request/retry/failure — never carries the API key (see
+    http_utils.fetch_with_retry's docstring).
+    """
+    full_url = str(httpx.URL(url).copy_merge_params({"api_key": settings.DATA_GOV_API_KEY}))
     resp = await fetch_with_retry(
-        client, _rate_limiter, "GET", full_url,
-        retry_on_4xx=False, log_label="GovInfo CREC",
+        client, _rate_limiter, "GET", url,
+        request_url=full_url, retry_on_4xx=False, log_label="GovInfo CREC",
     )
     return resp.json() if resp is not None else None
 
@@ -60,7 +65,10 @@ async def _fetch_htm(client: httpx.AsyncClient, url: str) -> str:
         if resp.status_code == 200:
             return resp.text
     except Exception as e:
-        logger.debug("GovInfo HTM fetch failed: %s", e)
+        # This request bypasses fetch_with_retry (no retry needed for a raw
+        # HTML fetch), so the api_key redaction it does isn't applied here —
+        # the exception message can embed full_url, so redact directly.
+        logger.debug("GovInfo HTM fetch failed: %s", redact_url(str(e)))
     return ""
 
 
