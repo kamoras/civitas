@@ -826,6 +826,7 @@ class HousePipelineRun(Base):
     elapsed_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     ground_truth_failures: Mapped[str | None] = mapped_column(Text, nullable=True)
+    progress_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class SupplementaryPipelineRun(Base):
@@ -852,6 +853,7 @@ class SupplementaryPipelineRun(Base):
     presidents_updated: Mapped[int] = mapped_column(Integer, default=0)
     elapsed_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    progress_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class StockTradesPipelineRun(Base):
@@ -866,6 +868,7 @@ class StockTradesPipelineRun(Base):
     senate_trades_ingested: Mapped[int] = mapped_column(Integer, default=0)
     elapsed_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    progress_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class BskySenatorSpotlight(Base):

@@ -66,6 +66,7 @@ from app.pipeline.fetch.fec import (
 )
 from app.pipeline.fetch.govinfo import fetch_bill_text
 from app.pipeline.fetch.lda import enrich_lobbying_matches_with_lda
+from app.pipeline.progress_tracker import ProgressTracker
 # Transform modules
 from app.pipeline.transform.normalize_finance import normalize_finance
 from app.pipeline.transform.normalize_members import normalize_members
@@ -130,74 +131,6 @@ RECENT_RC_SESSIONS = 2
 MIN_CONGRESS_FOR_BILL_TITLES = 116
 
 
-class ProgressTracker:
-    """Track sub-step progress within a pipeline run and persist to the DB."""
-
-    def __init__(self, pipeline_run: PipelineRun, db: Session, start_time: float):
-        self._run = pipeline_run
-        self._db = db
-        self._start_time = start_time
-        self._steps: dict[str, dict] = {}
-        for key, phase, label in PIPELINE_STEPS:
-            self._steps[key] = {
-                "key": key,
-                "phase": phase,
-                "label": label,
-                "status": "pending",
-            }
-        self._flush()
-
-    def begin(self, key: str, *, total: int | None = None) -> None:
-        step = self._steps.get(key)
-        if not step:
-            return
-        step["status"] = "active"
-        step["startedAt"] = datetime.utcnow().isoformat()
-        if total is not None:
-            step["total"] = total
-            step["done"] = 0
-        self._flush()
-
-    def update(self, key: str, *, done: int | None = None, detail: str | None = None) -> None:
-        step = self._steps.get(key)
-        if not step:
-            return
-        if done is not None:
-            step["done"] = done
-        if detail is not None:
-            step["detail"] = detail
-        self._flush()
-
-    def complete(self, key: str, *, detail: str | None = None) -> None:
-        step = self._steps.get(key)
-        if not step:
-            return
-        step["status"] = "done"
-        step["completedAt"] = datetime.utcnow().isoformat()
-        if detail is not None:
-            step["detail"] = detail
-        if "total" in step and "done" not in step:
-            step["done"] = step["total"]
-        self._flush()
-
-    def skip(self, key: str, *, detail: str | None = None) -> None:
-        step = self._steps.get(key)
-        if not step:
-            return
-        step["status"] = "skipped"
-        if detail:
-            step["detail"] = detail
-        self._flush()
-
-    def _flush(self) -> None:
-        ordered = [self._steps[k] for k, _, _ in PIPELINE_STEPS]
-        self._run.progress_detail = json.dumps(ordered)
-        self._run.elapsed_seconds = round(time.time() - self._start_time, 1)
-        try:
-            self._db.commit()
-        except Exception:
-            logger.debug("Progress commit failed, rolling back", exc_info=True)
-            self._db.rollback()
 
 
 def upsert_senator(db: Session, data: dict) -> None:
@@ -613,7 +546,7 @@ async def run_senate_pipeline(
     # prior, and real bill data from previous runs updates the posterior.
     initialize_platform_embeddings(db)
 
-    progress = ProgressTracker(pipeline_run, db, start_time)
+    progress = ProgressTracker(pipeline_run, PIPELINE_STEPS, db, start_time)
 
     try:
         logger.info("=== CIVITAS DATA PIPELINE ===")

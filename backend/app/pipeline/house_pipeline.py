@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import SessionLocal
 from app.models import HousePipelineRun, PipelineStatus, Representative, ScoreSnapshot
+from app.pipeline.progress_tracker import ProgressTracker
 from app.pipeline.run_tracker import PipelineRunTracker
 from app.services.representative_service import upsert_representative
 
@@ -62,6 +63,16 @@ from app.pipeline.transform.normalize_votes import (
 
 logger = logging.getLogger(__name__)
 
+HOUSE_PIPELINE_STEPS = [
+    ("fetch_members",       "fetch",     "Fetch House members"),
+    ("normalize",           "transform", "Normalize members"),
+    ("fetch_bills_votes",   "fetch",     "Fetch bills & votes"),
+    ("classify_bills",      "analyze",   "Classify bills & recent votes"),
+    ("sponsorship",         "analyze",   "Sponsorship leadership & ideology (SVD/PageRank)"),
+    ("fec_scoring",         "analyze",   "FEC data & scoring"),
+    ("snapshots",           "finalize",  "Snapshots & finalize"),
+]
+
 # Module-level tracker so the hourly action-center refresh can skip while
 # the house pipeline is running (prevents concurrent SQLite write
 # conflicts). See PipelineRunTracker's docstring for why this exists
@@ -93,6 +104,7 @@ async def run_house_pipeline() -> dict:
     house_run = HousePipelineRun(started_at=datetime.utcnow(), status=PipelineStatus.RUNNING)
     db.add(house_run)
     db.commit()
+    progress = ProgressTracker(house_run, HOUSE_PIPELINE_STEPS, db, start_time)
 
     try:
         logger.info("=== HOUSE PIPELINE START ===")
@@ -100,6 +112,7 @@ async def run_house_pipeline() -> dict:
         async with httpx.AsyncClient() as client:
             # ── PHASE 1: FETCH MEMBERS ──
             logger.info("--- House Phase 1: FETCH MEMBERS ---")
+            progress.begin("fetch_members")
             raw_members = await fetch_representatives(client, db)
             logger.info("Fetched %d raw House members", len(raw_members))
 
@@ -110,6 +123,7 @@ async def run_house_pipeline() -> dict:
                 house_run.completed_at = datetime.utcnow()
                 house_run.error_message = "No House members returned from Congress API"
                 house_run.elapsed_seconds = elapsed
+                progress.fail("fetch_members", detail="no members returned")
                 db.commit()
                 return {"status": "no_data", "elapsed_seconds": elapsed}
 
@@ -124,11 +138,14 @@ async def run_house_pipeline() -> dict:
                     logger.info("Member details: %d/%d", i + 1, len(raw_members))
 
             logger.info("Fetched details for %d members", len(member_details))
+            progress.complete("fetch_members", detail=f"{len(raw_members)} found, {len(member_details)} detailed")
 
             # ── PHASE 2: NORMALIZE ──
             logger.info("--- House Phase 2: NORMALIZE ---")
+            progress.begin("normalize")
             reps = normalize_house_members(raw_members, member_details)
             logger.info("Normalized %d representatives", len(reps))
+            progress.complete("normalize", detail=f"{len(reps)} representatives")
 
             # Build bioguide -> rep mapping
             bio_to_rep: dict[str, dict] = {}
@@ -139,6 +156,7 @@ async def run_house_pipeline() -> dict:
 
             # ── PHASE 3: FETCH BILLS & VOTES ──
             logger.info("--- House Phase 3: FETCH BILLS & VOTES ---")
+            progress.begin("fetch_bills_votes")
 
             bills_data = await fetch_significant_bills(client, db, max_bills=40)
             logger.info("Discovered %d significant bills", len(bills_data))
@@ -197,8 +215,14 @@ async def run_house_pipeline() -> dict:
                 bill_id = f"HouseRC-{rc['year']}-{rc['rollNumber']}"
                 recent_rc_map[bill_id] = rc
 
+            progress.complete(
+                "fetch_bills_votes",
+                detail=f"{len(bills_data)} bills, {len(house_roll_calls)} roll calls, {len(recent_rcs)} recent",
+            )
+
             # ── PHASE 4: CLASSIFY BILLS ──
             logger.info("--- House Phase 4: CLASSIFY BILLS ---")
+            progress.begin("classify_bills")
 
             from app.pipeline.analyze.bill_analyzer import classify_all_bills
 
@@ -267,8 +291,14 @@ async def run_house_pipeline() -> dict:
                         bill.get("partyLeaning", "bipartisan"), split,
                     )
 
+            progress.complete(
+                "classify_bills",
+                detail=f"{len(classified_bills)} bills, {len(classified_recent)} recent votes",
+            )
+
             # ── PHASE 4b: SPONSORSHIP ANALYSIS (PageRank + SVD) ──
             logger.info("--- House Phase 4b: SPONSORSHIP ANALYSIS ---")
+            progress.begin("sponsorship")
 
             from app.pipeline.analyze.sponsorship_analysis import (
                 compute_leadership_scores,
@@ -409,14 +439,20 @@ async def run_house_pipeline() -> dict:
                     "Sponsorship analysis: %d leadership scores, %d ideology scores",
                     len(leadership_scores), len(ideology_scores),
                 )
+                progress.complete(
+                    "sponsorship",
+                    detail=f"{len(leadership_scores)} leadership, {len(ideology_scores)} ideology",
+                )
             except Exception as phase4b_err:
                 logger.error(
                     "Phase 4b failed (%s) — continuing with empty sponsorship scores",
                     phase4b_err,
                 )
+                progress.fail("sponsorship", detail="failed — continuing with empty scores")
 
             # ── PHASE 5: FEC DATA + SCORING ──
             logger.info("--- House Phase 5: FEC DATA + SCORING ---")
+            progress.begin("fec_scoring", total=len(reps))
 
             from app.pipeline.transform.normalize_finance import normalize_finance
             from app.pipeline.analyze.cross_reference import detect_lobbying_matches
@@ -440,6 +476,7 @@ async def run_house_pipeline() -> dict:
 
                     if (idx + 1) % 25 == 0:
                         logger.info("Processing representative %d/%d: %s", idx + 1, len(reps), rep_name)
+                        progress.update("fec_scoring", done=idx + 1)
 
                     # Extract votes from key bills
                     rep_votes: dict[str, str] = {}
@@ -641,8 +678,11 @@ async def run_house_pipeline() -> dict:
                     logger.error("Failed to process rep %s: %s", rep.get("name", "?"), e)
                     fail_count += 1
 
+            progress.complete("fec_scoring", detail=f"{success_count} OK, {fail_count} failed")
+
             # ── PHASE 6: SNAPSHOTS ──
             logger.info("--- House Phase 6: SNAPSHOTS ---")
+            progress.begin("snapshots")
             _record_rep_snapshots(db)
 
             try:
@@ -685,6 +725,8 @@ async def run_house_pipeline() -> dict:
                     )
             except Exception:
                 logger.exception("House ground truth check failed (non-fatal)")
+
+            progress.complete("snapshots")
 
             elapsed = time.time() - start_time
             logger.info("=== HOUSE PIPELINE COMPLETE ===")

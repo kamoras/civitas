@@ -301,7 +301,7 @@ export interface PipelineStepInfo {
 
 export interface PipelineRunInfo {
   id: number;
-  pipelineType?: "senate" | "house" | "stock_trades";
+  pipelineType?: "senate" | "house" | "stock_trades" | "supplementary";
   startedAt: string;
   completedAt: string | null;
   status: string;
@@ -323,6 +323,11 @@ export interface PipelineRunInfo {
   // Stock-trades-only fields
   houseTradesIngested?: number;
   senateTradesIngested?: number;
+  // Supplementary-only fields
+  exploreDocsIngested?: number;
+  justicesScored?: number;
+  justicesSkipped?: boolean;
+  presidentsUpdated?: number;
 }
 
 export interface HouseRunInfo {
@@ -335,6 +340,7 @@ export interface HouseRunInfo {
   repsFailed: number;
   elapsedSeconds: number | null;
   errorMessage: string | null;
+  progressSteps?: PipelineStepInfo[] | null;
 }
 
 export interface StockTradesRunInfo {
@@ -346,6 +352,7 @@ export interface StockTradesRunInfo {
   senateTradesIngested: number;
   elapsedSeconds: number | null;
   errorMessage: string | null;
+  progressSteps?: PipelineStepInfo[] | null;
 }
 
 export interface SupplementaryRunInfo {
@@ -360,6 +367,7 @@ export interface SupplementaryRunInfo {
   presidentsUpdated: number;
   elapsedSeconds: number | null;
   errorMessage: string | null;
+  progressSteps?: PipelineStepInfo[] | null;
 }
 
 export interface PipelineStatus {
