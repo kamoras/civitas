@@ -165,8 +165,11 @@ def ungrounded_titled_names(generated: str, source: str) -> list[str]:
 
 
 _HEDGE_PHRASE_RE = re.compile(
-    r"\b(?:recent\s+)?(?:reports?|coverage|sources?|officials?|developments?)\s+"
-    r"(?:say|says|said|suggest(?:s|ed)?|indicate(?:s|d)?|show(?:s|ed)?|reveal(?:s|ed)?)\b"
+    r"\b(?:recent\s+)?(?:reports?|coverage|sources?|officials?|developments?|"
+    r"discussions?|debates?|experts?|analysts?|observers?|critics?)\s+"
+    r"(?:say|says|said|suggest(?:s|ed)?|indicate(?:s|d)?|show(?:s|ed)?|reveal(?:s|ed)?|"
+    r"highlight(?:s|ed)?|emphasiz(?:e|es|ed)|stress(?:es|ed)?|note(?:s|d)?|"
+    r"focus(?:es|ed)?\s+on|aim(?:s|ed)?\s+to)\b"
     r"|\baccording to (?:reports?|coverage|sources?)\b",
     re.IGNORECASE,
 )
@@ -174,8 +177,9 @@ _HEDGE_PHRASE_RE = re.compile(
 
 def hedge_language(generated: str) -> list[str]:
     """Attribution-hedge phrases ("recent reports say," "coverage indicates,"
-    "sources suggest," "according to reports") that talk about the news
-    instead of reporting it directly.
+    "sources suggest," "according to reports," "recent discussions highlight,"
+    "officials stress") that talk about the news instead of reporting it
+    directly.
 
     The generation prompt already instructs the model to report events
     directly rather than through this kind of middle-man phrasing, but a
@@ -183,6 +187,14 @@ def hedge_language(generated: str) -> list[str]:
     2026-07 on a newer local model). Unlike the other checks in this module,
     this doesn't compare against source material — it only looks at how the
     generated text itself is phrased.
+
+    The noun/verb lists were widened 2026-07 after live Bluesky posts kept
+    hedging with words just outside the original narrow list — "recent
+    discussions emphasize," "officials stress," "recent reports highlight" —
+    each individually distinct from the phrases the original regex covered
+    ("reports say," "coverage shows") but doing the exact same middle-man
+    framing. This is inherently a whack-a-mole list, not a closed set; treat
+    any newly observed hedge phrase the same way.
     """
     return sorted({m.group(0) for m in _HEDGE_PHRASE_RE.finditer(generated or "")})
 
