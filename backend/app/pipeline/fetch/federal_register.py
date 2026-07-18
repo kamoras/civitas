@@ -8,6 +8,7 @@ import logging
 
 import httpx
 
+from app.error_utils import classify_exception
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
 
 logger = logging.getLogger(__name__)
@@ -91,14 +92,9 @@ async def fetch_eo_count(
         }
 
     except Exception as e:
-        # type(e).__name__ computed inline, not via a helper call: CodeQL's
-        # taint tracking still flagged safe_error_summary(e) here even
-        # though the function only ever returns the type name — it
-        # conservatively taints the return value of any call that takes the
-        # exception object as an argument. See error_utils.py's docstring.
         logger.warning(
             "Federal Register fetch failed for %s: %s",
-            president_id, type(e).__name__,
+            president_id, classify_exception(e),
         )
         return None
 
@@ -152,7 +148,7 @@ async def fetch_rulemaking_stats(
         except Exception as e:
             logger.warning(
                 "FR rulemaking fetch failed for %s (%s): %s",
-                president_id, doc_type, type(e).__name__,
+                president_id, doc_type, classify_exception(e),
             )
             return None
 

@@ -14,6 +14,7 @@ import time
 from datetime import datetime, timedelta
 
 from app.database import SessionLocal
+from app.error_utils import classify_exception
 from app.models import Justice, PipelineStatus, SupplementaryPipelineRun
 from app.pipeline.run_tracker import PipelineRunTracker
 
@@ -107,7 +108,7 @@ async def run_supplementary_pipeline() -> dict:
         }
     except Exception as e:
         logger.exception("Supplementary pipeline failed: %s", e)
-        summary = type(e).__name__
+        summary = classify_exception(e)
         try:
             run.status = PipelineStatus.FAILED
             run.completed_at = datetime.utcnow()
