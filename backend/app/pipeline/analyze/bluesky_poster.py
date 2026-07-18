@@ -25,7 +25,11 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.pipeline.analyze.bluesky_utils import build_link_card
-from app.pipeline.analyze.grounding import grounding_violations
+from app.pipeline.analyze.grounding import (
+    editorializing_language,
+    grounding_violations,
+    hedge_language,
+)
 from app.pipeline.analyze.ollama_client import call_llm
 
 logger = logging.getLogger(__name__)
@@ -114,6 +118,11 @@ write it as dropped/ended/resolved. Never contradict the title.
 4. Write 1-3 complete sentences ending with proper punctuation.
 5. No hashtags, no exclamation points, no editorializing, no "breaking news".
 6. Neutral and non-partisan.
+7. Report directly — never write "sources say," "reports indicate," "coverage \
+shows," or similar. State facts as facts, not as something reports/coverage/
+sources are saying.
+8. Do not evaluate whether an action was warranted or justified, and do not \
+speculate about its political purpose or effect.
 
 Return JSON: {{"post": "<your post text>"}}"""
 
@@ -136,20 +145,35 @@ Return JSON: {{"post": "<your post text>"}}"""
             return None
         post = _sanitize(result["post"], MAX_POST_CHARS)
 
-        # Posts publish publicly under the platform's name — verify rule 1
-        # mechanically instead of trusting it. Any number or titled-official
-        # reference the source material doesn't contain is a hallucination.
+        # Posts publish publicly under the platform's name — verify rules
+        # mechanically instead of trusting them. Any number or titled-official
+        # reference the source material doesn't contain is a hallucination;
+        # hedging attribution ("sources show") and editorializing ("was
+        # warranted") are prompt-only rules the local model doesn't reliably
+        # follow, same as _generate_full_story in action_center.py.
         problems = grounding_violations(post, source_material)
-        if not problems:
+        hedges = hedge_language(post)
+        editorial = editorializing_language(post)
+        if not problems and not hedges and not editorial:
             return post
+
+        reasons = list(problems)
+        if hedges:
+            reasons.append(f"hedging attribution phrases ({', '.join(hedges)})")
+        if editorial:
+            reasons.append(
+                f"language evaluating whether an action was justified ({', '.join(editorial)})"
+            )
         logger.warning(
             "Bluesky post failed grounding for issue %s (attempt %d): %s | post: %s",
-            issue.id, attempt + 1, "; ".join(problems), post[:160],
+            issue.id, attempt + 1, "; ".join(reasons), post[:160],
         )
         retry_note = (
             "\n\nYour previous attempt was rejected because it included "
-            f"information not present in the material above ({'; '.join(problems)}). "
-            "Rewrite using only the Title, Summary, and Key facts."
+            f"{'; '.join(reasons)}. Rewrite using only the Title, Summary, and "
+            "Key facts, report events directly instead of through phrases "
+            "like 'sources show' or 'reports indicate,' and do not evaluate "
+            "whether any action was warranted or justified."
         )
 
     return None  # ungrounded twice — skip; the next refresh cycle retries

@@ -3132,6 +3132,69 @@ def _run_refresh(db: Session) -> int:
         # that don't match anyone in the database.
         title, summary, facts = _validate_politician_roles(title, summary, facts, db)
 
+        # Mechanical check for hedging attribution ("sources show," "reports
+        # indicate") and editorializing ("was warranted") — same backstop as
+        # the Bluesky poster and _generate_full_story. The prompt already
+        # forbids both (see _SYSTEM_PROMPT / _ISSUE_PROMPT_TEMPLATE) but the
+        # local model doesn't reliably follow prompt-only instructions, and
+        # unlike the full-story path this summary/facts generation had no
+        # mechanical backstop at all until this fix.
+        from app.pipeline.analyze.grounding import (
+            editorializing_language,
+            hedge_language,
+        )
+        combined_text = summary + " " + " ".join(facts)
+        hedges = hedge_language(combined_text)
+        editorial = editorializing_language(combined_text)
+        if hedges or editorial:
+            reasons = []
+            if hedges:
+                reasons.append(f"hedging attribution phrases ({', '.join(hedges)})")
+            if editorial:
+                reasons.append(
+                    f"language evaluating whether an action was justified ({', '.join(editorial)})"
+                )
+            logger.warning(
+                "Issue text failed grounding for rank %d: %s — retrying",
+                rank, "; ".join(reasons),
+            )
+            retry_result = call_llm(
+                prompt_version=ACTION_CENTER_PROMPT_VERSION,
+                system_prompt=_SYSTEM_PROMPT,
+                user_prompt=user_prompt + (
+                    f"\n\nYour previous response was rejected because it contained "
+                    f"{'; '.join(reasons)}. Report events directly instead of "
+                    "through phrases like 'reports say' or 'coverage indicates,' "
+                    "and do not evaluate whether any action was warranted or "
+                    "justified."
+                ),
+                cache_key=None,
+                db_session=db,
+                max_tokens=1024,
+                num_ctx=4096,
+            )
+            if isinstance(retry_result, str):
+                retry_result = extract_json(retry_result)
+            resolved = False
+            if isinstance(retry_result, dict):
+                retry_summary = _fix_impossible_senate_vote_counts(retry_result.get("summary", ""))
+                retry_facts = _validate_facts(
+                    retry_result.get("facts", []),
+                    source_text=" ".join(f"{a.title} {a.summary}" for a in filtered_cluster),
+                )
+                retry_facts = [_fix_impossible_senate_vote_counts(f) for f in retry_facts]
+                retry_combined = retry_summary + " " + " ".join(retry_facts)
+                if retry_summary and not hedge_language(retry_combined) and not editorializing_language(retry_combined):
+                    title, summary, facts = _validate_politician_roles(title, retry_summary, retry_facts, db)
+                    resolved = True
+            if not resolved:
+                logger.error(
+                    "Issue text still had hedging/editorializing language for "
+                    "rank %d after retry — skipping: %s",
+                    rank, "; ".join(reasons),
+                )
+                continue
+
         # Second-pass check for who-did-what-to-whom role reversal (see
         # _check_summary_roles). One retry with a corrective note; if the
         # retry still fails, skip this cluster entirely for today rather
