@@ -168,11 +168,23 @@ async def fetch_significant_bills(
 
 
 async def _fetch_with_retry(client: httpx.AsyncClient, url: str) -> dict | None:
-    """Fetch a Congress.gov API URL with rate limiting, retries, and API key injection."""
-    separator = "&" if "?" in url else "?"
-    full_url = f"{url}{separator}api_key={settings.DATA_GOV_API_KEY}&format=json"
+    """Fetch a Congress.gov API URL with rate limiting, retries, and API key injection.
+
+    The credential-bearing URL is built separately and passed via
+    `request_url`, so `url` — the value fetch_with_retry logs on every
+    request/retry/failure — never carries the API key in the first place
+    (httpx's `params=` kwarg replaces rather than merges an existing query
+    string, so it can't be used here without dropping this URL's other
+    params; see fetch_with_retry's docstring).
+    """
+    full_url = str(
+        httpx.URL(url).copy_merge_params(
+            {"api_key": settings.DATA_GOV_API_KEY, "format": "json"}
+        )
+    )
     resp = await fetch_with_retry(
-        client, _rate_limiter, "GET", full_url, log_label="Congress API",
+        client, _rate_limiter, "GET", url,
+        request_url=full_url, log_label="Congress API",
     )
     return resp.json() if resp is not None else None
 

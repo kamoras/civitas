@@ -5,12 +5,24 @@ Pipeline run failures store str(exception) in DB columns
 directly to an authenticated operator — but some exception types embed far
 more than a human-readable message: SQLAlchemy errors can include the full
 failing statement and bound parameters, and an HTTP-client exception can
-embed the request URL with any credential that was in it before
-http_utils.redact_url() had a chance to run. Route every exception that
-reaches an admin-visible field through safe_error_summary() first, so full
-detail only ever lands in server-side logs (via the logger.exception/
-logger.error call already made at each site) — never in the API response
-itself.
+embed the request URL with any credential that was in it. Route every
+exception that reaches an admin-visible field through safe_error_summary()
+first, so full detail only ever lands in server-side logs (via the
+logger.exception/logger.error call already made at each site) — never in
+the API response itself.
+
+safe_error_summary() returns only the exception's type name, nothing from
+its message. An earlier version returned the type name plus a redacted
+first line of str(e), but CodeQL's taint tracking (py/clear-text-logging-
+sensitive-data, py/stack-trace-exposure) doesn't recognize an arbitrary
+regex substitution as a sanitizer — it kept flagging the redacted value as
+if it were still the raw exception, because the value is still, structurally,
+*derived from* the exception's data. type(e).__name__ isn't derived from
+the exception's message/args at all, so it's a different source as far as
+taint tracking is concerned, and is the only thing that reliably clears the
+alert. redact_sensitive_params() stays available for the one place a raw
+URL still needs partial redaction for human readability (http_utils.py's
+debug logs, which are not treated as sensitive-data sinks the same way).
 """
 
 import re
@@ -26,13 +38,5 @@ def redact_sensitive_params(text: str) -> str:
 
 
 def safe_error_summary(e: Exception, limit: int = 200) -> str:
-    """Short, credential-free description of an exception for admin UI display.
-
-    Deliberately drops everything after the first line (where a
-    SQLAlchemy statement/parameter dump would appear) and redacts any
-    credential-shaped query param before truncating.
-    """
-    first_line = str(e).splitlines()[0] if str(e) else ""
-    redacted = redact_sensitive_params(first_line)
-    text = f"{type(e).__name__}: {redacted}" if redacted else type(e).__name__
-    return text[:limit]
+    """Exception type name only — no message content, see module docstring."""
+    return type(e).__name__[:limit]

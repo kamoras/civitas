@@ -36,26 +36,32 @@ class TestRedactSensitiveParams:
 
 
 class TestSafeErrorSummary:
-    def test_includes_exception_type_and_message(self):
-        summary = safe_error_summary(ValueError("bad input"))
-        assert summary == "ValueError: bad input"
+    """safe_error_summary returns only the exception's type name — no
+    message content at all. See error_utils.py's module docstring: CodeQL's
+    taint tracking doesn't recognize a regex-redacted message as sanitized,
+    only a value structurally independent of the exception's data does.
+    """
 
-    def test_redacts_embedded_api_key(self):
+    def test_returns_type_name_only(self):
+        assert safe_error_summary(ValueError("bad input")) == "ValueError"
+
+    def test_never_includes_embedded_api_key(self):
         e = RuntimeError("fetch failed: https://api.gov/x?api_key=SECRET123&y=1")
-        summary = safe_error_summary(e)
-        assert "SECRET123" not in summary
-        assert "***" in summary
+        assert "SECRET123" not in safe_error_summary(e)
+        assert safe_error_summary(e) == "RuntimeError"
 
-    def test_drops_lines_after_the_first(self):
+    def test_never_includes_sql_statement_text(self):
         e = ValueError("first line\nSELECT * FROM users WHERE token='abc'")
-        summary = safe_error_summary(e)
-        assert "SELECT" not in summary
-        assert summary == "ValueError: first line"
+        assert "SELECT" not in safe_error_summary(e)
 
     def test_truncates_to_limit(self):
-        e = ValueError("x" * 500)
-        summary = safe_error_summary(e, limit=50)
-        assert len(summary) == 50
+        class ReallyLongExceptionClassNameForTestingTruncationBehaviorHere(Exception):
+            pass
 
-    def test_empty_message_falls_back_to_type_name(self):
+        summary = safe_error_summary(
+            ReallyLongExceptionClassNameForTestingTruncationBehaviorHere(), limit=10
+        )
+        assert len(summary) == 10
+
+    def test_empty_message_still_returns_type_name(self):
         assert safe_error_summary(RuntimeError()) == "RuntimeError"
