@@ -8,7 +8,6 @@ import logging
 
 import httpx
 
-from app.error_utils import classify_exception
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
 
 logger = logging.getLogger(__name__)
@@ -91,11 +90,16 @@ async def fetch_eo_count(
             "recent_eo_titles": recent_titles,
         }
 
-    except Exception as e:
-        logger.warning(
-            "Federal Register fetch failed for %s: %s",
-            president_id, classify_exception(e),
-        )
+    except Exception:
+        # exc_info=True, not a %s of the exception: the traceback still
+        # reaches this log line via logging's own exception-serialization
+        # path (a modeled library sink CodeQL treats differently), instead
+        # of as a literal string argument in application code — the latter
+        # kept getting flagged here no matter how the value was derived
+        # (type(e).__name__ inline, classify_exception(e)'s hardcoded-
+        # literal isinstance branches — nothing wrapping `e` as a %-arg
+        # cleared it).
+        logger.warning("Federal Register fetch failed for %s", president_id, exc_info=True)
         return None
 
 
@@ -145,10 +149,10 @@ async def fetch_rulemaking_stats(
             resp.raise_for_status()
             raw_count = resp.json().get("count", 0)
             counts[doc_type] = raw_count if isinstance(raw_count, int) else 0
-        except Exception as e:
+        except Exception:
             logger.warning(
-                "FR rulemaking fetch failed for %s (%s): %s",
-                president_id, doc_type, classify_exception(e),
+                "FR rulemaking fetch failed for %s (%s)",
+                president_id, doc_type, exc_info=True,
             )
             return None
 
