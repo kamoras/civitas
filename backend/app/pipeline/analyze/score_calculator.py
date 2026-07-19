@@ -1940,10 +1940,30 @@ def _les_component_score(
     normalized_diff = max(-1.0, min(diff / _LES_CREDIT_SATURATION, 1.0))
     raw_score = 50.0 + 50.0 * normalized_diff
     score = raw_score * conf + 50.0 * (1 - conf)
+
+    # Stage-count breakdown (2026-07, per user request): the raw credit
+    # figure above is one opaque number that a bill-mill sponsor (many
+    # bills, all stuck at "introduced") and a genuine passage-heavy
+    # sponsor could both reach — Volden & Wiseman's real methodology
+    # credits introduction itself, not just advancement (see this file's
+    # v6.4->v6.5-era LES module comment above _LES_STAGE_ORDER). Showing
+    # the actual stage counts makes that visible instead of implied.
+    substantive_bills = [
+        b for b in sponsored_bills
+        if (b.get("billType") or "").lower() in SUBSTANTIVE_BILL_TYPES
+    ]
+    introduced_only = sum(1 for b in substantive_bills if _les_bill_stage(b) == 1)
+    advanced_short_of_law = sum(
+        1 for b in substantive_bills if 1 < _les_bill_stage(b) < _LES_MAX_STAGE
+    )
+    enacted = sum(1 for b in substantive_bills if _les_bill_stage(b) >= _LES_MAX_STAGE)
+
     detail = (
-        f"{raw_per_congress:.1f} significance-weighted stage-credit/congress "
-        f"vs. {expected_per_congress:.1f} expected for this sponsor's status "
-        f"({n_sub} substantive bills)"
+        f"{raw_per_congress:.1f} significance-weighted stage-credit/congress vs. "
+        f"{expected_per_congress:.1f} expected for this sponsor's status — "
+        f"{n_sub} substantive bills: {introduced_only} introduced only (still "
+        f"counts under Volden & Wiseman's real methodology), "
+        f"{advanced_short_of_law} advanced further, {enacted} became law"
     )
     if conf < 1.0:
         detail += f", confidence-scaled {conf:.0%} ({n_sub} of 10 bills)"
