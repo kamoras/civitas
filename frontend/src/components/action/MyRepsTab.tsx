@@ -146,10 +146,10 @@ function SenatorCard({ senator }: { senator: MyRepSenator }) {
         </div>
       </div>
 
+      {/* v6.5: fundingDiversity folded into fundingIndependence, no longer its own dimension */}
       <div className="space-y-1.5 mb-4">
         <ScoreBar label={SCORE_TERMS["fundingIndependence"].shortLabel} value={s.fundingIndependence} />
         <ScoreBar label={SCORE_TERMS["independentVoting"].shortLabel} value={s.independentVoting} />
-        <ScoreBar label={SCORE_TERMS["fundingDiversity"].shortLabel} value={s.fundingDiversity} />
         <ScoreBar label={SCORE_TERMS["legislativeEffectiveness"].shortLabel} value={s.legislativeEffectiveness} />
       </div>
 
@@ -228,10 +228,10 @@ function RepCard({ rep }: { rep: MyRepRep }) {
         </div>
       </div>
 
+      {/* v6.5: fundingDiversity folded into fundingIndependence, no longer its own dimension */}
       <div className="space-y-1.5 mb-4">
         <ScoreBar label={SCORE_TERMS["fundingIndependence"].shortLabel} value={s.fundingIndependence} />
         <ScoreBar label={SCORE_TERMS["independentVoting"].shortLabel} value={s.independentVoting} />
-        <ScoreBar label={SCORE_TERMS["fundingDiversity"].shortLabel} value={s.fundingDiversity} />
         <ScoreBar label={SCORE_TERMS["legislativeEffectiveness"].shortLabel} value={s.legislativeEffectiveness} />
       </div>
 

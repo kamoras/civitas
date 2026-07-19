@@ -22,10 +22,11 @@ import { PARTY_COLORS } from "@/lib/partyStyles";
 
 type Chamber = "senate" | "house";
 
+// v6.5: fundingDiversity folded into fundingIndependence — no longer its
+// own scored dimension (see RepresentationScore.tsx's matching comment).
 const SCORE_KEYS = [
   "fundingIndependence",
   "independentVoting",
-  "fundingDiversity",
   "legislativeEffectiveness",
 ] as const;
 
@@ -34,7 +35,6 @@ type ScoreKey = (typeof SCORE_KEYS)[number];
 const SCORE_LABELS: Record<ScoreKey, string> = {
   fundingIndependence: "FUNDING INDEP",
   independentVoting: "ALIGNMENT",
-  fundingDiversity: "FUNDING DIVERS",
   legislativeEffectiveness: "LEGIS EFFECT",
 };
 
