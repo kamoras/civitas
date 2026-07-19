@@ -15,6 +15,7 @@ from app.pipeline.analyze.promise_quality import (
     clean_promises,
 )
 from app.pipeline.analyze.score_calculator import compute_overall_score
+from app.pipeline.analyze.sponsorship_analysis import describe_senator_position
 from app.services.pagination import paginate_bounds
 from app.services.score_trends import compute_score_trend_map
 from app.schemas import (
@@ -523,6 +524,12 @@ def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
             small_donor_percentage=s.small_donor_percentage,
             top_industry=top_industry_map.get(s.id),
             trend=trend_map.get(s.id, ScoreTrendSchema()),
+            ideology_score=s.ideology_score,
+            ideology_label=(
+                describe_senator_position(s.ideology_score, s.leadership_score, s.party)
+                if s.ideology_score is not None and s.leadership_score is not None
+                else None
+            ),
         )
         for s in senators
     ]

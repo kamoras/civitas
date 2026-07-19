@@ -18,7 +18,7 @@ import type { PresidentLeaderboardEntry } from "@/types/president";
 import type { JusticeLeaderboardEntry } from "@/types/justice";
 
 type PartyFilter = "ALL" | "D" | "R" | "I";
-type SortKey = "score" | "pac_dollars" | "pac_pct";
+type SortKey = "score" | "pac_dollars" | "pac_pct" | "ideology";
 
 // Row-navigation onClick/onKeyDown pair, identical across the president,
 // justice, and senate/house tables below (previously copy-pasted 3x,
@@ -66,6 +66,33 @@ function ScoreBar({ score }: { score: number }) {
         />
       </div>
       <span className={`text-sm font-bold tabular-nums ${getScoreColor(score)}`} aria-hidden="true">{score}</span>
+    </div>
+  );
+}
+
+// Position dot on a left(blue)-to-right(red) spectrum. ideologyScore is
+// backend-computed (SVD over cosponsorship patterns, Tauberer 2012) — 0 =
+// most-left, 1 = most-right — and ideologyLabel is the backend's own
+// party-relative bucketing (describe_senator_position); neither is
+// re-derived here, matching this app's "backend owns calculations" rule.
+function IdeologyIndicator({ score, label }: { score: number | null; label: string | null }) {
+  if (score == null) {
+    return <span className="text-xs text-white/30">—</span>;
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <div
+        className="relative w-16 h-1.5 rounded-full shrink-0"
+        style={{ background: "linear-gradient(to right, #3b82f6, #a855f7, #ef4444)" }}
+        role="img"
+        aria-label={label ?? `Ideology position: ${Math.round(score * 100)} of 100, ${score >= 0.5 ? "right" : "left"}-leaning`}
+      >
+        <div
+          className="absolute top-1/2 w-2 h-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white border border-black/40"
+          style={{ left: `${score * 100}%` }}
+        />
+      </div>
+      {label && <span className="text-xs text-white/50 truncate max-w-[7rem]">{label}</span>}
     </div>
   );
 }
@@ -562,6 +589,13 @@ function LeaderboardContent() {
         const pctB = (b.totalRaised ?? 0) > 0 ? (b.totalFromPacs ?? 0) / b.totalRaised : 0;
         return pctB - pctA;
       }
+      if (sortKey === "ideology") {
+        // Most-progressive (lowest score) first; missing data sorts last
+        // regardless of direction, not as if it were maximally conservative.
+        if (a.ideologyScore == null) return b.ideologyScore == null ? 0 : 1;
+        if (b.ideologyScore == null) return -1;
+        return a.ideologyScore - b.ideologyScore;
+      }
       return (
         b.representationScore.overall - a.representationScore.overall
       );
@@ -646,6 +680,7 @@ function LeaderboardContent() {
                 ["score", "REPRESENTATION SCORE"],
                 ["pac_dollars", "PAC $"],
                 ["pac_pct", "PAC %"],
+                ["ideology", "MOST PROGRESSIVE"],
               ] as [SortKey, string][]
             ).map(([key, label]) => (
               <button
@@ -696,6 +731,7 @@ function LeaderboardContent() {
                     <th scope="col" className="px-3 py-3 text-center w-16">TREND</th>
                     <th scope="col" className="px-3 py-3 text-right w-24">PAC $</th>
                     <th scope="col" className="px-3 py-3 text-right w-20">PAC %</th>
+                    <th scope="col" className="px-3 py-3 text-left w-36">IDEOLOGY</th>
                     <th scope="col" className="px-3 py-3 text-left w-32">TOP INDUSTRY</th>
                   </tr>
                 </thead>
@@ -762,6 +798,9 @@ function LeaderboardContent() {
                           </span>
                         </td>
                         <td className="px-3 py-3">
+                          <IdeologyIndicator score={entry.ideologyScore} label={entry.ideologyLabel} />
+                        </td>
+                        <td className="px-3 py-3">
                           <span className="text-neon-cyan/60 text-xs">
                             {entry.topIndustry ?? "—"}
                           </span>
@@ -808,6 +847,11 @@ function LeaderboardContent() {
                         <TrendIndicator trend={entry.trend} />
                         <span className="text-xs text-white/40">{formatCurrency(entry.totalFromPacs ?? 0)} PAC ({pacPct}%)</span>
                       </div>
+                      {sortKey === "ideology" && (
+                        <div className="mt-1">
+                          <IdeologyIndicator score={entry.ideologyScore} label={entry.ideologyLabel} />
+                        </div>
+                      )}
                     </div>
                   </Link>
                 );
