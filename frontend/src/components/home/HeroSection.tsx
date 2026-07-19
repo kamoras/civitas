@@ -9,7 +9,7 @@ const MARQUEE_ITEMS = [
   "Action Center: today's top policy issues with national monitors tracking ongoing concerns",
   "535 members of Congress scored: 100 senators + 435 House representatives",
   "All data sourced from public federal records: FEC, Congress.gov, GovInfo, Federal Register, BLS",
-  "No accounts, no tracking, no ads -- your visit leaves no trace and no data leaves this server",
+  "No accounts, no cookies, no ads, no third-party trackers -- only anonymized, self-hosted visit counts, never shared or sold",
   "National monitors auto-detect recurring issues and build a year-in-review timeline",
   "Nightly pipeline processes campaign finance, voting records, and Congressional Record transcripts",
 ];
