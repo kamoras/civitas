@@ -328,8 +328,12 @@ components inside Funding Independence's weighted score, at internal
 weights equal to their PRIOR contribution to the overall score divided
 by the merged dimension's new weight (0.20 and 0.13 respectively,
 summing to the new 0.33) — a linear renormalization, not a fresh
-judgment call, so it changes zero senators' overall scores on the day
-it ships. score_funding_diversity keeps being computed and stored
+judgment call: the continuous math is provably identical to the pre-
+merge weighted sum. clamp() rounds to an int, though, and the merge
+moves from two independent roundings (FI, then FD) to one — so a given
+senator's overall score can shift by roughly half a point from that
+reorganization, not from any new weighting decision. score_funding_
+diversity keeps being computed and stored
 exactly as before (still real, same "kept independently visible" pattern
 as promisePersistence's v6.0 removal) — only SCORE_WEIGHTS and the
 Funding Independence breakdown change. Donor Independence's freed 25%
@@ -881,8 +885,12 @@ def _calc_funding_independence(funding: dict, state: str = "", district: int | N
     Internal weights for all five: a linear renormalization of each
     component's PRIOR contribution to the overall score under the pre-v6.5
     two-dimension split (see the score = clamp(...) line below for the
-    exact fractions) — not a fresh judgment call, so the merge changes zero
-    senators' overall scores on the day it ships.
+    exact fractions) — not a fresh judgment call: the continuous math is
+    provably identical to the pre-merge weighted sum. clamp() rounds to an
+    int though, and this merge moves from two independent roundings (FI,
+    then FD) to one, so an individual senator's overall score can shift by
+    roughly half a point from that reorganization alone, not from a new
+    weighting decision.
 
     Academic rationale
     ------------------
@@ -1055,8 +1063,11 @@ def _funding_independence_core(funding: dict, state: str = "", district: int | N
     # weight 0.20 x its own 50/25/25 split, old FD weight 0.13 x its own
     # 50/50 split, each divided by the merged dimension's new 0.33 weight.
     # 20:10:10:13:13 out of 66 (= 0.10:0.05:0.05:0.065:0.065 / 0.33). This
-    # is why folding the two dimensions together changes zero senators'
-    # overall scores on the day it ships.
+    # is why folding the two dimensions together doesn't change the
+    # underlying weighting logic — clamp()'s rounding (each dimension to
+    # an int) still applies once instead of twice, so an individual
+    # senator's overall score can shift by roughly half a point from that
+    # alone, not from any new judgment call about relative importance.
     score = clamp(
         pac_score * (20 / 66)
         + small_score * (10 / 66)

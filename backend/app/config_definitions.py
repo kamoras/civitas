@@ -25,8 +25,11 @@ from enum import StrEnum
 # are now components inside fundingIndependence's own score, at internal
 # weights equal to each component's PRIOR contribution to the overall
 # score divided by the merged weight — a linear renormalization, not a new
-# judgment call, so it changes zero senators' overall scores on the day it
-# ships (see score_calculator.py's v6.4->v6.5 changelog note for the exact
+# judgment call — the continuous math is provably identical, so the only
+# effect is where rounding happens (clamp() rounds each dimension to an
+# int; previously FI and FD rounded independently before being weighted,
+# now the merged dimension rounds once), bounded at roughly half a point
+# either way (see score_calculator.py's v6.4->v6.5 changelog note for the
 # math). score_funding_diversity keeps being computed and stored, same
 # "kept independently visible, excluded from the weighted sum" pattern as
 # promisePersistence below — it just no longer has its own SCORE_WEIGHTS
