@@ -81,14 +81,10 @@ async def fetch_eo_count(
             if isinstance(r, dict)
         ]
 
-        # Pre-formatted into one static-looking string with zero logging
-        # args — CodeQL's clear-text-logging query flags any dynamic
-        # argument passed directly to a logger call in this file (see the
-        # except block below's comment for the fuller account of why);
-        # president_id (a term slug like "obama-44") and count (an EO
-        # total) are both public data, not sensitive, so this is a
-        # confirmed false positive, not a real finding to fix.
-        logger.info("Federal Register: %s has %d executive orders" % (president_id, count))
+        logger.info(
+            "Federal Register: %s has %d executive orders",
+            president_id, count,
+        )
         return {
             "eo_count": count,
             "recent_eo_titles": recent_titles,
@@ -163,12 +159,9 @@ async def fetch_rulemaking_stats(
         (counts["RULE"] / total * 100) if total > 0 else 0.0
     )
 
-    # Same false-positive pattern as fetch_eo_count above — pre-formatted
-    # to a single static-looking string, no dynamic logging args. Public
-    # rulemaking counts, not sensitive data.
     logger.info(
-        "Federal Register rulemaking: %s — %d final, %d proposed (%.0f%% finalized)"
-        % (president_id, counts.get("RULE", 0), counts.get("PRORULE", 0), finalized_pct)
+        "Federal Register rulemaking: %s — %d final, %d proposed (%.0f%% finalized)",
+        president_id, counts.get("RULE", 0), counts.get("PRORULE", 0), finalized_pct,
     )
     return {
         "rulemaking_count": total,
