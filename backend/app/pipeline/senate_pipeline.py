@@ -475,6 +475,55 @@ def _clear_analysis_artifacts(db: Session) -> None:
     )
 
 
+def _build_donor_entries(senators: list[dict], fec_data: dict) -> list[dict]:
+    """Flatten every senator's FEC receipts into donor entries for
+    classify_donors_hybrid.
+
+    Each entry must carry `fec_receipt` when one exists — it's the only way
+    Tier 1 (classify_donor_type_from_fec) can resolve a donor from FEC's own
+    entity_type instead of falling through to the noisy semantic-embedding
+    tier, which has no reliable signal for a bare company name (e.g. "Airbnb"
+    scored a hair closer to the Party/Ideological prototype than Org/
+    Employees — a 2026-07 audit found this misclassifies most well-known
+    companies with a one-word name, not just this one).
+    """
+    entries: list[dict] = []
+    for senator in senators:
+        fec = fec_data.get(senator["id"])
+        if not fec:
+            continue
+        cand_name = (fec.get("candidate") or {}).get("name", "")
+        for r in fec.get("pacReceipts") or []:
+            name = r.get("contributor_name") or ""
+            if not name:
+                committee = r.get("committee") or {}
+                name = committee.get("name", "")
+            if name and name != "Unknown":
+                entries.append({
+                    "name": name,
+                    "amount": r.get("contribution_receipt_amount", 0) or 0,
+                    "fec_receipt": r,
+                    "candidate_name": cand_name,
+                })
+        for r in fec.get("receipts") or []:
+            employer = (r.get("contributor_employer") or "").strip()
+            if employer:
+                entries.append({
+                    "name": employer,
+                    "amount": r.get("contribution_receipt_amount", 0) or 0,
+                    "fec_receipt": r,
+                })
+        for c in fec.get("aggregated") or []:
+            name = c.get("contributor_name") or "Unknown"
+            if name and name != "Unknown":
+                entries.append({
+                    "name": name,
+                    "amount": c.get("total", 0) or 0,
+                    "candidate_name": cand_name,
+                })
+    return entries
+
+
 def _build_analysis_input(prepared: dict, platform_texts: dict) -> dict:
     """Build the analysis input dict for a senator's embedding pre-computation."""
     senator = prepared["senator"]
@@ -1153,39 +1202,7 @@ async def run_senate_pipeline(
         # 3a.3 Hybrid donor classification (FEC metadata → rules → embeddings → kNN)
         logger.info("Collecting unique donors for hybrid classification...")
         progress.begin("classify_donors")
-        all_donor_entries: list[dict] = []
-        for senator in senators:
-            fec = fec_data.get(senator["id"])
-            if not fec:
-                continue
-            cand_name = (fec.get("candidate") or {}).get("name", "")
-            for r in fec.get("pacReceipts") or []:
-                name = r.get("contributor_name") or ""
-                if not name:
-                    committee = r.get("committee") or {}
-                    name = committee.get("name", "")
-                if name and name != "Unknown":
-                    all_donor_entries.append({
-                        "name": name,
-                        "amount": r.get("contribution_receipt_amount", 0) or 0,
-                        "fec_receipt": r,
-                        "candidate_name": cand_name,
-                    })
-            for r in fec.get("receipts") or []:
-                employer = (r.get("contributor_employer") or "").strip()
-                if employer:
-                    all_donor_entries.append({
-                        "name": employer,
-                        "amount": r.get("contribution_receipt_amount", 0) or 0,
-                    })
-            for c in fec.get("aggregated") or []:
-                name = c.get("contributor_name") or "Unknown"
-                if name and name != "Unknown":
-                    all_donor_entries.append({
-                        "name": name,
-                        "amount": c.get("total", 0) or 0,
-                        "candidate_name": cand_name,
-                    })
+        all_donor_entries: list[dict] = _build_donor_entries(senators, fec_data)
 
         ai_classifications: dict[str, dict] = {}
         if all_donor_entries:
