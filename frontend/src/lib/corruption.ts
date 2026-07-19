@@ -82,11 +82,16 @@ export function getJusticeLabel(score: number): string {
   return "DEEPLY PARTISAN";
 }
 
+// Labels describe how well a member represents their constituents, not
+// general virtue — "GOOD" previously read as a moral judgment on the
+// politician rather than what the score actually measures (see the north
+// star note in score_calculator.py: scores measure representation, not
+// intrinsic goodness).
 export function getScoreLabel(score: number): string {
-  if (score >= 81) return "EXCELLENT";
-  if (score >= 61) return "GOOD";
-  if (score >= 41) return "MODERATE";
-  if (score >= 21) return "POOR";
+  if (score >= 81) return "STRONGLY REPRESENTATIVE";
+  if (score >= 61) return "REPRESENTATIVE";
+  if (score >= 41) return "MIXED REPRESENTATION";
+  if (score >= 21) return "WEAKLY REPRESENTATIVE";
   return "DEEPLY CAPTURED";
 }
 
