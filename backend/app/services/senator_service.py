@@ -392,6 +392,8 @@ def get_senator_score_breakdown(db: Session, senator_id: str) -> dict | None:
         return {
             "votedWithParty": v.voted_with_party,
             "partyAlignmentWeight": v.party_alignment_weight,
+            "partyLeaning": v.party_leaning,
+            "opposingPartyUnityPct": v.opposing_party_unity_pct,
         }
 
     voting_record = {

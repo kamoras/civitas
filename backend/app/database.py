@@ -112,6 +112,8 @@ def _migrate_columns() -> None:
         ("house_pipeline_runs", "progress_detail", "TEXT"),
         ("supplementary_pipeline_runs", "progress_detail", "TEXT"),
         ("stock_trades_pipeline_runs", "progress_detail", "TEXT"),
+        ("key_votes", "opposing_party_unity_pct", "REAL"),
+        ("rep_key_votes", "opposing_party_unity_pct", "REAL"),
     ]
 
     drops: list[tuple[str, str]] = [

@@ -271,6 +271,7 @@ def normalize_votes(
             "stance": bill.get("stance", "neutral"),
             "description": bill.get("description", ""),
             "partyLeaning": party_leaning,
+            "opposingPartyUnityPct": bill.get("opposingPartyUnityPct"),
             "votedWithParty": party_aligned,
             "voteCategory": "recent",
             "keyVoteReasoning": None,
@@ -357,6 +358,7 @@ def normalize_recent_votes(
             "stance": bill.get("stance", "neutral"),
             "description": bill.get("description", ""),
             "partyLeaning": party_leaning,
+            "opposingPartyUnityPct": bill.get("opposingPartyUnityPct"),
             "votedWithParty": party_aligned,
             "voteCategory": "recent",
             "keyVoteReasoning": None,
@@ -365,17 +367,18 @@ def normalize_recent_votes(
     return votes
 
 
-def compute_party_split(roll_call_data: dict) -> str | None:
-    """Compute party alignment from roll call member votes.
+def compute_party_vote_split(roll_call_data: dict) -> dict | None:
+    """Compute the full party split from roll call member votes: the
+    same R/D/bipartisan label compute_party_split() returns, plus the two
+    raw yea percentages it's derived from.
 
     Uses actual party vote distributions to determine if a roll call was a
     Republican bill, Democratic bill, or bipartisan vote — without relying on
     LLM classification.
 
     Returns:
-        "R" if 75%+ of Republicans voted Yea and 25%- of Democrats did,
-        "D" if 75%+ of Democrats voted Yea and 25%- of Republicans did,
-        "bipartisan" otherwise, or None if insufficient data.
+        {"label": "R"|"D"|"bipartisan", "r_yea_pct": float, "d_yea_pct": float},
+        or None if either party has fewer than 3 recorded votes.
     """
     members = roll_call_data.get("members", [])
     r_yea = r_total = d_yea = d_total = 0
@@ -398,10 +401,57 @@ def compute_party_split(roll_call_data: dict) -> str | None:
     d_yea_pct = d_yea / d_total
 
     if r_yea_pct >= 0.65 and d_yea_pct <= 0.35:
-        return "R"
-    if d_yea_pct >= 0.65 and r_yea_pct <= 0.35:
-        return "D"
-    return "bipartisan"
+        label = "R"
+    elif d_yea_pct >= 0.65 and r_yea_pct <= 0.35:
+        label = "D"
+    else:
+        label = "bipartisan"
+
+    return {"label": label, "r_yea_pct": r_yea_pct, "d_yea_pct": d_yea_pct}
+
+
+def compute_party_split(roll_call_data: dict) -> str | None:
+    """Compute party alignment from roll call member votes.
+
+    Thin wrapper over compute_party_vote_split() for callers that only
+    need the label. See that function for the underlying percentages.
+
+    Returns:
+        "R" if 65%+ of Republicans voted Yea and 35%- of Democrats did,
+        "D" if 65%+ of Democrats voted Yea and 35%- of Republicans did,
+        "bipartisan" otherwise, or None if insufficient data.
+    """
+    result = compute_party_vote_split(roll_call_data)
+    return result["label"] if result else None
+
+
+def opposing_party_unity(
+    label: str, r_yea_pct: float, d_yea_pct: float,
+) -> float | None:
+    """Cohesion of the party OPPOSITE `label`'s majority, in the direction
+    of its own majority.
+
+    By construction (the 65/35 labeling threshold in
+    compute_party_vote_split), this is always in [0.65, 1.0] whenever
+    `label` is "R" or "D" — a vote can't get a partisan label without one
+    party being at least 65% unified. 0.65 means the vote was barely
+    partisan once the labeling party's own near-unanimity is set aside;
+    1.0 means the opposing party voted in near lockstep on its own side.
+
+    Used to distinguish a crossing vote that reads as consensus-building
+    (the opposing party was barely unified) from one that reads as
+    adopting the opposition's own party line (the opposing party voted
+    in lockstep) — see _constituent_alignment_core's crossing_quality
+    discount in score_calculator.py.
+
+    Returns None for a "bipartisan"-labeled vote (there's no "opposing
+    party majority" to measure unity against).
+    """
+    if label == "R":
+        return max(d_yea_pct, 1.0 - d_yea_pct)
+    if label == "D":
+        return max(r_yea_pct, 1.0 - r_yea_pct)
+    return None
 
 
 def extract_senator_vote(
