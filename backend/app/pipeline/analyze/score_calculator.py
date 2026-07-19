@@ -1414,8 +1414,6 @@ def _constituent_alignment_core(
     return {"score": score, "components": components}
 
 
-
-
 def _calc_funding_diversity(funding: dict) -> int:
     """
     Funding Diversity Score (0-100, higher = better).

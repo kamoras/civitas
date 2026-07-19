@@ -2,6 +2,7 @@
 
 
 from app.models import Senator
+from app.pipeline.analyze import score_calculator
 from app.pipeline.analyze.score_calculator import (
     _advancement_baseline,
     _calc_constituent_alignment,
@@ -358,6 +359,28 @@ class TestConstituentAlignment:
         score_consensus = _calc_constituent_alignment(record_consensus, [], funding)
         score_lockstep = _calc_constituent_alignment(record_lockstep, [], funding)
         assert score_consensus >= score_lockstep
+
+    def test_crossing_quality_discount_mechanism_at_a_nonzero_value(self, monkeypatch):
+        """CROSSING_QUALITY_DISCOUNT ships at 0.0 (see its docstring — no
+        historical opposing_party_unity_pct data exists yet), which makes
+        the test above pass trivially (both sides land on an identical
+        score, since a 0.0 discount is a no-op regardless of unity).
+        Patch in a real discount so the actual mechanism — not just its
+        inert default — gets exercised before it's ever turned on in
+        production."""
+        monkeypatch.setattr(score_calculator, "CROSSING_QUALITY_DISCOUNT", 0.5)
+        funding = {"totalRaised": 1_000_000, "totalFromPACs": 0}
+        record_consensus = {
+            "keyVotes": self._make_votes(with_party=70, against_party=30, crossing_unity=0.65),
+            "recentVotes": [],
+        }
+        record_lockstep = {
+            "keyVotes": self._make_votes(with_party=70, against_party=30, crossing_unity=1.0),
+            "recentVotes": [],
+        }
+        score_consensus = _calc_constituent_alignment(record_consensus, [], funding)
+        score_lockstep = _calc_constituent_alignment(record_lockstep, [], funding)
+        assert score_consensus > score_lockstep
 
     def test_missing_crossing_unity_signal_unchanged_from_no_discount(self):
         """A crossing vote with no opposingPartyUnityPct at all (older
