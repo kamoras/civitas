@@ -72,10 +72,12 @@ from app.pipeline.transform.normalize_finance import normalize_finance
 from app.pipeline.transform.normalize_members import normalize_members
 from app.pipeline.transform.normalize_votes import (
     compute_party_split,
+    compute_party_vote_split,
     extract_senator_vote,
     find_senate_roll_call,
     normalize_recent_votes,
     normalize_votes,
+    opposing_party_unity,
 )
 
 # Analyze modules
@@ -238,6 +240,7 @@ def upsert_senator(db: Session, data: dict) -> None:
                 stance=vote_data.get("stance") or "neutral",
                 description=vote_data.get("description") or "",
                 party_leaning=vote_data.get("partyLeaning"),
+                opposing_party_unity_pct=vote_data.get("opposingPartyUnityPct"),
                 voted_with_party=vote_data.get("votedWithParty"),
                 vote_category=vote_data.get("voteCategory") or category,
                 key_vote_reasoning=vote_data.get("keyVoteReasoning"),
@@ -1079,10 +1082,15 @@ async def run_senate_pipeline(
         for bill in classified_bills:
             roll_call_data = roll_call_data_map.get(bill["billId"])
             if roll_call_data:
-                vote_split = compute_party_split(roll_call_data)
+                split = compute_party_vote_split(roll_call_data)
+                vote_split = split["label"] if split else None
                 bill["partyLeaning"] = refine_with_vote_data(
                     bill.get("partyLeaning", "bipartisan"), vote_split,
                 )
+                if split and bill["partyLeaning"] in ("R", "D"):
+                    bill["opposingPartyUnityPct"] = opposing_party_unity(
+                        bill["partyLeaning"], split["r_yea_pct"], split["d_yea_pct"],
+                    )
 
         # Use bill sponsor party as ground truth for the learning store.
         # Bills sponsored by R senators are examples of R-aligned legislation.
@@ -1119,11 +1127,16 @@ async def run_senate_pipeline(
             rc_id = rc.get("billId", "")
             roll_call_data = recent_rc_map.get(rc_id)
             if roll_call_data:
-                computed_split = compute_party_split(roll_call_data)
+                split = compute_party_vote_split(roll_call_data)
+                computed_split = split["label"] if split else None
                 if computed_split:
                     rc["partyLeaning"] = refine_with_vote_data(
                         rc.get("partyLeaning", "bipartisan"), computed_split,
                     )
+                    if rc["partyLeaning"] in ("R", "D"):
+                        rc["opposingPartyUnityPct"] = opposing_party_unity(
+                            rc["partyLeaning"], split["r_yea_pct"], split["d_yea_pct"],
+                        )
 
         # 3a.3 Embed classified bills in vector database for semantic search
         logger.info("Embedding bills in vector database...")
@@ -1653,6 +1666,23 @@ async def run_senate_pipeline(
                                     for a in areas
                                 ]
                                 sp["partyLeaning"] = alignment.get("overall", "bipartisan")
+                                # Most sponsored bills never reach a floor
+                                # vote, so there's usually no roll call to
+                                # refine against — but when a sponsored bill
+                                # *did* also get voted on (it's a key bill
+                                # or recent vote elsewhere in this same
+                                # pipeline run), refine with the real
+                                # roll-call split the same way those two
+                                # paths already do, instead of leaving this
+                                # entry on content-only classification (was
+                                # producing a different label for the same
+                                # bill in different parts of the scorecard).
+                                roll_call_data = roll_call_data_map.get(bill_id)
+                                if roll_call_data:
+                                    vote_split = compute_party_split(roll_call_data)
+                                    sp["partyLeaning"] = refine_with_vote_data(
+                                        sp["partyLeaning"], vote_split,
+                                    )
                                 if not sp["policyArea"] and areas:
                                     sp["policyArea"] = areas[0]["area"]
                         classified_sponsored.append(sp)

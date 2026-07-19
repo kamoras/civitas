@@ -2,6 +2,7 @@
 
 
 from app.models import Senator
+from app.pipeline.analyze import score_calculator
 from app.pipeline.analyze.score_calculator import (
     _advancement_baseline,
     _calc_constituent_alignment,
@@ -319,12 +320,15 @@ class TestConstituentAlignment:
     drifts below neutral but never to a failure-grade floor.
     """
 
-    def _make_votes(self, with_party=0, against_party=0, policy="JUSTICE"):
+    def _make_votes(self, with_party=0, against_party=0, policy="JUSTICE", crossing_unity=None):
         votes = []
         for _ in range(with_party):
             votes.append({"votedWithParty": True, "policyArea": policy, "vote": "Yea"})
         for _ in range(against_party):
-            votes.append({"votedWithParty": False, "policyArea": policy, "vote": "Yea"})
+            vote = {"votedWithParty": False, "policyArea": policy, "vote": "Yea"}
+            if crossing_unity is not None:
+                vote["opposingPartyUnityPct"] = crossing_unity
+            votes.append(vote)
         return votes
 
     def test_no_data_returns_neutral(self):
@@ -341,6 +345,67 @@ class TestConstituentAlignment:
             record, [], {"totalRaised": 1_000_000, "totalFromPACs": 0}
         )
         assert score >= 70
+
+    def test_low_unity_crossings_score_at_least_as_high_as_high_unity(self):
+        """2026-07 crossing-quality fix: at the same crossing rate, a
+        member whose crossings landed on barely-partisan votes (opposing
+        party's own majority near the 65% labeling floor — reads as
+        consensus-building) must score at least as high as a member whose
+        crossings landed on votes where the opposing party voted in near
+        lockstep (reads as adopting the opposition's own party line, not
+        building consensus)."""
+        funding = {"totalRaised": 1_000_000, "totalFromPACs": 0}
+        record_consensus = {
+            "keyVotes": self._make_votes(with_party=70, against_party=30, crossing_unity=0.65),
+            "recentVotes": [],
+        }
+        record_lockstep = {
+            "keyVotes": self._make_votes(with_party=70, against_party=30, crossing_unity=1.0),
+            "recentVotes": [],
+        }
+        score_consensus = _calc_constituent_alignment(record_consensus, [], funding)
+        score_lockstep = _calc_constituent_alignment(record_lockstep, [], funding)
+        assert score_consensus >= score_lockstep
+
+    def test_crossing_quality_discount_mechanism_at_a_nonzero_value(self, monkeypatch):
+        """CROSSING_QUALITY_DISCOUNT ships at 0.0 (see its docstring — no
+        historical opposing_party_unity_pct data exists yet), which makes
+        the test above pass trivially (both sides land on an identical
+        score, since a 0.0 discount is a no-op regardless of unity).
+        Patch in a real discount so the actual mechanism — not just its
+        inert default — gets exercised before it's ever turned on in
+        production."""
+        monkeypatch.setattr(score_calculator, "CROSSING_QUALITY_DISCOUNT", 0.5)
+        funding = {"totalRaised": 1_000_000, "totalFromPACs": 0}
+        record_consensus = {
+            "keyVotes": self._make_votes(with_party=70, against_party=30, crossing_unity=0.65),
+            "recentVotes": [],
+        }
+        record_lockstep = {
+            "keyVotes": self._make_votes(with_party=70, against_party=30, crossing_unity=1.0),
+            "recentVotes": [],
+        }
+        score_consensus = _calc_constituent_alignment(record_consensus, [], funding)
+        score_lockstep = _calc_constituent_alignment(record_lockstep, [], funding)
+        assert score_consensus > score_lockstep
+
+    def test_missing_crossing_unity_signal_unchanged_from_no_discount(self):
+        """A crossing vote with no opposingPartyUnityPct at all (older
+        data, or insufficient roll-call member data) must never be
+        penalized for the missing signal — same score as a crossing at
+        the minimum (no-discount) unity value."""
+        funding = {"totalRaised": 1_000_000, "totalFromPACs": 0}
+        record_no_signal = {
+            "keyVotes": self._make_votes(with_party=70, against_party=30),
+            "recentVotes": [],
+        }
+        record_min_unity = {
+            "keyVotes": self._make_votes(with_party=70, against_party=30, crossing_unity=0.65),
+            "recentVotes": [],
+        }
+        score_no_signal = _calc_constituent_alignment(record_no_signal, [], funding)
+        score_min_unity = _calc_constituent_alignment(record_min_unity, [], funding)
+        assert score_no_signal == score_min_unity
 
     def test_pure_party_line_voter_below_neutral_in_swing_seat(self):
         record = {

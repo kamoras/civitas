@@ -1199,6 +1199,27 @@ def _signed_state_alignment(
     return max(-1.0, min(lean / 15.0, 1.0))
 
 
+# How much surplus-crossing credit is discounted when a member's crossings
+# concentrate on votes where the OPPOSING party voted in near lockstep on
+# its own side — reading as adopting the opposition's platform position
+# rather than building bipartisan consensus.
+#
+# Intentionally 0.0 (inert) at ship time: opposing_party_unity_pct is a
+# brand new per-vote field (2026-07) with zero historical data — every
+# existing KeyVote/RepKeyVote row has it NULL until the next full pipeline
+# run recomputes votes with the new signal, so avg_crossing_unity is None
+# for every senator today regardless of this constant's value. Every other
+# calibration constant in this file was fit against real data before
+# shipping (the FI small-donor baseline, LE volume ceilings, ...) — this
+# one can't be, yet. Once a pipeline run has populated real unity data,
+# run scripts/calibrate_crossing_quality.py (grid search against
+# GROUND_TRUTH and the population stdev floor — there's no natural
+# continuous target to fit against, unlike e.g. the FI baseline's OLS
+# regression) and raise this from 0.0 to the largest value that still
+# passes every check.
+CROSSING_QUALITY_DISCOUNT = 0.0
+
+
 def _calc_constituent_alignment(
     voting_record: dict,
     lobbying_matches: list[dict],
@@ -1282,6 +1303,8 @@ def _constituent_alignment_core(
 
     voted_with = 0.0
     voted_against = 0.0
+    crossing_unity_sum = 0.0
+    crossing_unity_weight = 0.0
     for v in all_votes:
         wp = v.get("votedWithParty") if isinstance(v, dict) else None
         if wp is None:
@@ -1312,7 +1335,14 @@ def _constituent_alignment_core(
             voted_with += weight
         elif wp is False:
             voted_against += weight
+            unity = v.get("opposingPartyUnityPct") if isinstance(v, dict) else None
+            if unity is not None:
+                crossing_unity_sum += unity * weight
+                crossing_unity_weight += weight
 
+    avg_crossing_unity = (
+        crossing_unity_sum / crossing_unity_weight if crossing_unity_weight > 0 else None
+    )
     party_total = voted_with + voted_against
 
     # Expected break rate for the seat. BASE_RATE: CQ party-unity data
@@ -1340,6 +1370,24 @@ def _constituent_alignment_core(
             # surplus break rate.
             surplus = against_pct - expected
             credit = max(0.25, 1.0 - 0.75 * max(alignment, 0.0))
+            # Second, independent discount: how partisan were the actual
+            # crossings? avg_crossing_unity in [0.65, 1.0] by construction
+            # (see normalize_votes.opposing_party_unity) — 0.65 means the
+            # opposing party was barely unified (crossing reads as
+            # consensus-building), 1.0 means it voted in lockstep
+            # (crossing reads as adopting the opposition's own line, not
+            # building consensus). No signal (older data, or insufficient
+            # roll-call member data) never triggers a discount — missing
+            # data is never punitive, same principle as every other
+            # component in this file.
+            if avg_crossing_unity is not None:
+                normalized_partisanship = min(
+                    max((avg_crossing_unity - 0.65) / 0.35, 0.0), 1.0
+                )
+                crossing_quality = 1.0 - CROSSING_QUALITY_DISCOUNT * normalized_partisanship
+            else:
+                crossing_quality = 1.0
+            credit *= crossing_quality
             party_score = 50.0 + 50.0 * min(surplus / 0.25, 1.0) * credit
         else:
             # More loyal than the seat expects: drift below neutral by up
@@ -1424,17 +1472,23 @@ def _constituent_alignment_core(
         + breadth_score * breadth_weight
     )
 
+    party_alignment_detail = (
+        f"expected break rate {expected:.1%} for this seat (state lean "
+        f"signal {alignment:+.2f}), actual {against_pct:.1%}"
+        if against_pct is not None
+        else "fewer than 3 party-labeled votes available — neutral 50"
+    )
+    if against_pct is not None and avg_crossing_unity is not None:
+        party_alignment_detail += (
+            f", crossings averaged {avg_crossing_unity:.0%} opposing-party unity"
+        )
+
     components = [
         {
             "label": "Seat-relative vote alignment",
             "weight": round(party_weight, 2),
             "score": round(party_score, 1),
-            "detail": (
-                f"expected break rate {expected:.1%} for this seat (state lean "
-                f"signal {alignment:+.2f}), actual {against_pct:.1%}"
-                if against_pct is not None
-                else "fewer than 3 party-labeled votes available — neutral 50"
-            ),
+            "detail": party_alignment_detail,
         },
         {
             "label": "Donor independence",
