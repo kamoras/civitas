@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import MatrixRain from "@/components/effects/MatrixRain";
@@ -19,17 +20,23 @@ type ViewMode = "hot" | "all";
 
 const PER_PAGE = 50;
 
-export default function BillsPage() {
+function BillsPageContent() {
+  const searchParams = useSearchParams();
+  // Deep link from a scorecard's sponsored-bill list (?q=<billId>) — land
+  // in "all" mode since "hot" only shows bills with a live Action Center
+  // mention, which most individual bills don't have.
+  const initialQ = searchParams.get("q") || "";
+
   const [stageCounts, setStageCounts] = useState<Record<string, number>>({});
 
-  const [mode, setMode] = useState<ViewMode>("hot");
+  const [mode, setMode] = useState<ViewMode>(initialQ ? "all" : "hot");
   const [stage, setStage] = useState<string | null>(null);
   const [chamber, setChamber] = useState<ChamberFilter>("all");
   const [party, setParty] = useState<PartyFilter>("ALL");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialQ);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState(initialQ);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -176,6 +183,14 @@ export default function BillsPage() {
       <BackToTop />
       <Footer />
     </div>
+  );
+}
+
+export default function BillsPage() {
+  return (
+    <Suspense fallback={null}>
+      <BillsPageContent />
+    </Suspense>
   );
 }
 
