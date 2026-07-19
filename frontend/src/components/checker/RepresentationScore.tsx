@@ -22,7 +22,8 @@ interface RepresentationScoreProps {
 // Letter-grade cutoffs are deliberately round numbers (80/60/40/20), one
 // point below getScoreColor's tier boundaries (81/61/41/21) — a score of
 // exactly 80 reads as a clean "A" even though it's one point under the
-// "EXCELLENT" color tier. Not a bug; don't "fix" one to match the other.
+// top ("STRONGLY REPRESENTATIVE") color tier. Not a bug; don't "fix" one
+// to match the other.
 function getScoreGrade(score: number): string {
   if (score >= 80) return "A";
   if (score >= 60) return "B";
