@@ -332,6 +332,12 @@ class LeaderboardEntrySchema(CamelModel):
     # the party-relative bucketing (D/R use a 30/70 split, independents
     # 35/65) isn't reproducible from the number alone.
     ideology_label: str | None = None
+    # PageRank cosponsorship centrality (sponsorship_analysis.
+    # compute_leadership_scores), log-rescaled to [0, 1] to counter its
+    # power-law distribution — most members cluster low, a few attract
+    # disproportionate cosponsor weight. None when too little
+    # cosponsorship data exists to compute it.
+    leadership_score: float | None = None
 
 
 # --- Pipeline / Health schemas ---

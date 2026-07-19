@@ -18,7 +18,7 @@ import type { PresidentLeaderboardEntry } from "@/types/president";
 import type { JusticeLeaderboardEntry } from "@/types/justice";
 
 type PartyFilter = "ALL" | "D" | "R" | "I";
-type SortKey = "score" | "pac_dollars" | "pac_pct" | "ideology";
+type SortKey = "score" | "pac_dollars" | "pac_pct" | "ideology" | "leadership";
 
 // Row-navigation onClick/onKeyDown pair, identical across the president,
 // justice, and senate/house tables below (previously copy-pasted 3x,
@@ -95,6 +95,17 @@ function IdeologyIndicator({ score, label }: { score: number | null; label: stri
       {label && <span className="text-xs text-white/50 truncate max-w-[7rem]">{label}</span>}
     </div>
   );
+}
+
+// leadershipScore is backend-computed PageRank cosponsorship centrality
+// (sponsorship_analysis.compute_leadership_scores), already log-rescaled
+// to [0, 1] — reuses ScoreBar's 0-100 styling for visual consistency with
+// the REP. SCORE column.
+function LeadershipIndicator({ score }: { score: number | null }) {
+  if (score == null) {
+    return <span className="text-xs text-white/30">—</span>;
+  }
+  return <ScoreBar score={Math.round(score * 100)} />;
 }
 
 function TrendIndicator({ trend }: { trend?: ScoreTrend }) {
@@ -596,6 +607,13 @@ function LeaderboardContent() {
         if (b.ideologyScore == null) return -1;
         return a.ideologyScore - b.ideologyScore;
       }
+      if (sortKey === "leadership") {
+        // Most-leader (highest score) first; missing data sorts last
+        // regardless of direction, not as if it were maximally a follower.
+        if (a.leadershipScore == null) return b.leadershipScore == null ? 0 : 1;
+        if (b.leadershipScore == null) return -1;
+        return b.leadershipScore - a.leadershipScore;
+      }
       return (
         b.representationScore.overall - a.representationScore.overall
       );
@@ -681,6 +699,7 @@ function LeaderboardContent() {
                 ["pac_dollars", "PAC $"],
                 ["pac_pct", "PAC %"],
                 ["ideology", "MOST PROGRESSIVE"],
+                ["leadership", "MOST LEADER"],
               ] as [SortKey, string][]
             ).map(([key, label]) => (
               <button
@@ -731,8 +750,9 @@ function LeaderboardContent() {
                     <th scope="col" className="px-3 py-3 text-center w-16">TREND</th>
                     <th scope="col" className="px-3 py-3 text-right w-24">PAC $</th>
                     <th scope="col" className="px-3 py-3 text-right w-20">PAC %</th>
-                    <th scope="col" className="px-3 py-3 text-left w-36">IDEOLOGY</th>
-                    <th scope="col" className="px-3 py-3 text-left w-32">TOP INDUSTRY</th>
+                    <th scope="col" className="px-3 py-3 text-left w-36">
+                      {sortKey === "ideology" ? "IDEOLOGY" : sortKey === "leadership" ? "LEADERSHIP" : "TOP INDUSTRY"}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -798,12 +818,15 @@ function LeaderboardContent() {
                           </span>
                         </td>
                         <td className="px-3 py-3">
-                          <IdeologyIndicator score={entry.ideologyScore} label={entry.ideologyLabel} />
-                        </td>
-                        <td className="px-3 py-3">
-                          <span className="text-neon-cyan/60 text-xs">
-                            {entry.topIndustry ?? "—"}
-                          </span>
+                          {sortKey === "ideology" ? (
+                            <IdeologyIndicator score={entry.ideologyScore} label={entry.ideologyLabel} />
+                          ) : sortKey === "leadership" ? (
+                            <LeadershipIndicator score={entry.leadershipScore} />
+                          ) : (
+                            <span className="text-neon-cyan/60 text-xs">
+                              {entry.topIndustry ?? "—"}
+                            </span>
+                          )}
                         </td>
                       </tr>
                     );
@@ -850,6 +873,11 @@ function LeaderboardContent() {
                       {sortKey === "ideology" && (
                         <div className="mt-1">
                           <IdeologyIndicator score={entry.ideologyScore} label={entry.ideologyLabel} />
+                        </div>
+                      )}
+                      {sortKey === "leadership" && (
+                        <div className="mt-1">
+                          <LeadershipIndicator score={entry.leadershipScore} />
                         </div>
                       )}
                     </div>

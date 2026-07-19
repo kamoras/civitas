@@ -203,4 +203,6 @@ export interface LeaderboardEntry {
   ideologyScore: number | null;
   /** Backend-computed (party-relative bucketing) — never re-derive from ideologyScore. */
   ideologyLabel: string | null;
+  /** PageRank cosponsorship centrality, log-rescaled to [0, 1]; null if too little data. */
+  leadershipScore: number | null;
 }
