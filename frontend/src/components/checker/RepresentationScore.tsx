@@ -31,15 +31,19 @@ function getScoreGrade(score: number): string {
   return "F";
 }
 
+// v6.5: fundingDiversity folded into fundingIndependence as two of its
+// five components (source breadth, industry concentration) — no longer
+// its own scored dimension or card here. score_funding_diversity keeps
+// being computed/stored for other consumers (e.g. Bluesky spotlight
+// text), so it's deliberately NOT in this list, not an oversight.
 const SCORE_KEYS: ScoreKey[] = [
   "fundingIndependence",
   "independentVoting",
-  "fundingDiversity",
   "legislativeEffectiveness",
 ];
 
 const METRIC_BLURBS: Record<ScoreKey, string> = {
-  fundingIndependence: "How little of their campaign comes from PACs",
+  fundingIndependence: "How little of their campaign comes from PACs, and how diversified their donor base is",
   independentVoting: "Does their voting match what their state elected them to do?",
   fundingDiversity: "How many different industries fund them",
   legislativeEffectiveness: "How well they advance bills they sponsor",
@@ -147,18 +151,6 @@ export default function RepresentationScore({ breakdown, votingRecord, funding, 
     return basis;
   })();
 
-  const fundingDiversityBasis: string | undefined =
-    !funding || funding.totalRaised === 0
-      ? "no funding data · defaults to 50"
-      : (() => {
-          const industries = (funding.industryBreakdown ?? []).filter(
-            (i) => !["OTHER", "SMALL_DONORS", "LARGE_INDIVIDUAL", "POLITICAL", "UNCLASSIFIED"].includes(i.industry),
-          ).length;
-          return industries > 0
-            ? `${industries} classified industr${industries !== 1 ? "ies" : "y"} · ${Math.round(funding.smallDonorPercentage ?? 0)}% small-donor`
-            : undefined;
-        })();
-
   const nBills = sponsoredBills?.length ?? 0;
   const effectivenessBasis: string =
     nBills === 0
@@ -170,7 +162,6 @@ export default function RepresentationScore({ breakdown, votingRecord, funding, 
   const scoreBasis: Partial<Record<ScoreKey, string | undefined>> = {
     independentVoting: votingBasis,
     fundingIndependence: fundingIndependenceBasis,
-    fundingDiversity: fundingDiversityBasis,
     legislativeEffectiveness: effectivenessBasis,
   };
 
@@ -183,7 +174,7 @@ export default function RepresentationScore({ breakdown, votingRecord, funding, 
         </div>
         <div className="pb-2">
           <div className="text-xs text-matrix-green/40">
-            <MetricTooltip text="Weighted average of 4 sub-scores measuring how well this senator represents constituents. Based on funding independence, voting alignment with their constituents, funding diversity, and legislative effectiveness. 100 = ideal representation, 0 = none. Scores near 50 mean limited data.">
+            <MetricTooltip text="Weighted average of 3 sub-scores measuring how well this senator represents constituents. Based on funding independence (incl. donor-base diversity), voting alignment with their constituents, and legislative effectiveness. 100 = ideal representation, 0 = none. Scores near 50 mean limited data.">
               REPRESENTATION SCORECARD
             </MetricTooltip>
           </div>
