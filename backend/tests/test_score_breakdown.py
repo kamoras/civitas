@@ -97,13 +97,17 @@ class TestSenatorCoreConsistency:
         bills = [
             {"billType": "s", "congress": 118, "isLaw": True},
             {"billType": "s", "congress": 118, "latestAction": "passed the senate"},
-            {"billType": "sres", "congress": 118},  # ceremonial, excluded
+            {"billType": "sres", "congress": 118},  # ceremonial, weight-1 in V&W's real scheme
         ]
         breakdown = _legislative_effectiveness_core(bills, leadership_score=0.5, party="D", years_in_office=6)
         assert breakdown["score"] == _calc_legislative_effectiveness(
             bills, leadership_score=0.5, party="D", years_in_office=6,
         )
-        assert len(breakdown["components"]) == 3
+        # V&W-based (significance & advancement) + leadership — the old
+        # 3-component design (advancement/leadership/volume) was replaced
+        # 2026-07 by a single significance-weighted, cumulative-stage
+        # component that folds what used to be two components into one.
+        assert len(breakdown["components"]) == 2
 
     def test_legislative_effectiveness_core_no_bills(self):
         breakdown = _legislative_effectiveness_core([], leadership_score=None)

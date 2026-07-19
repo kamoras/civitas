@@ -10,6 +10,9 @@ from app.pipeline.analyze.score_calculator import (
     _calc_legislative_effectiveness,
     _calc_promise_persistence,
     _funding_independence_core,
+    _les_bill_stage,
+    _les_cumulative_credit,
+    _les_significance_weight,
     calculate_scores,
     clamp,
     compute_overall_score,
@@ -56,10 +59,14 @@ class TestFundingIndependence:
         assert _calc_funding_independence(funding) < 20
 
     def test_balanced_funding(self):
-        # Median-ish senator, no state given (falls back to the national-
-        # mean baseline): 30% PAC (→40), 17% small donors (~46.6, just
-        # under the ~18.5% national mean), concentration pool below the
-        # $250K floor (→ neutral 50): FI = 0.5*40 + 0.25*46.6 + 0.25*50 ≈ 44.
+        # No district given -> Senate multiplier (x3.2, 2026-07 re-audit:
+        # live Senate median PAC ratio is 15.7%, not the old ~28%
+        # assumption). 30% PAC is now well above that real median, so the
+        # PAC component scores low (~4 raw, ~3.9 after the no-committee-
+        # type utilization fallback), not near-neutral: 17% small donors
+        # (~46.6, just under the ~18.5% national mean), concentration pool
+        # below the $250K floor (-> neutral 50):
+        # FI = 0.5*3.9 + 0.25*46.6 + 0.25*50 ~= 26.
         funding = {
             "totalRaised": 1_000_000,
             "totalFromPACs": 300_000,
@@ -67,7 +74,7 @@ class TestFundingIndependence:
             "topDonors": [{"total": 20_000} for _ in range(10)],
         }
         score = _calc_funding_independence(funding)
-        assert 35 <= score <= 60
+        assert 15 <= score <= 35
 
     def test_no_funding_data(self):
         assert _calc_funding_independence({}) == 50
@@ -823,36 +830,106 @@ class TestLegislativeEffectiveness:
         assert score == 50
 
     def test_no_bills_with_leadership(self):
-        """Leadership alone should shift score above 50."""
-        score = _calc_legislative_effectiveness([], 0.8)
+        """Leadership alone should shift score above 50, at full tenure
+        confidence (leadership is itself tenure-shrunk toward neutral for
+        freshmen/unknown tenure — see test_leadership_shrunk_toward_
+        neutral_for_freshmen — so years_in_office must be passed here for
+        the leadership signal to show through at all)."""
+        score = _calc_legislative_effectiveness([], 0.8, years_in_office=6)
         assert score > 50
 
+    def test_confirmed_zero_scores_at_or_below_a_real_low_n_attempt(self):
+        """2026-07 fix: politicians were being rewarded for not trying to
+        advance bills, as opposed to trying and failing. A senator with
+        real tenure and zero sponsored bills must not outscore a senator
+        who sponsored one substantive bill that didn't advance — inaction
+        must never beat a genuine (if unsuccessful) attempt."""
+        one_bill_zero_advanced = [
+            {"title": "B1", "isLaw": False, "latestAction": "Introduced",
+             "billType": "s", "congress": 119},
+        ]
+        score_tried_and_failed = _calc_legislative_effectiveness(
+            one_bill_zero_advanced, None, years_in_office=2,
+        )
+        score_confirmed_zero = _calc_legislative_effectiveness(
+            [], None, years_in_office=2,
+        )
+        assert score_confirmed_zero <= score_tried_and_failed
+
+    def test_freshman_zero_bills_stays_neutral(self):
+        """Below the tenure floor, zero bills is indistinguishable from no
+        data yet — a freshman must still score a flat neutral 50, not be
+        penalized for not having had a real chance to sponsor bills."""
+        score = _calc_legislative_effectiveness([], None, years_in_office=0.1)
+        assert score == 50
+
+    def test_unknown_tenure_zero_bills_stays_neutral(self):
+        """No years_in_office info at all (None) must behave exactly like
+        today's default — confirmed-zero shrinkage only applies when
+        tenure is actually known and meets the floor."""
+        score = _calc_legislative_effectiveness([], None)
+        assert score == 50
+
+    def test_confirmed_zero_with_leadership_blends_correctly(self):
+        """A confirmed-zero senator with real cosponsorship leadership
+        should still get credit for that leadership — the zero-bills
+        penalty applies only to the two bill-based components."""
+        score_with_leadership = _calc_legislative_effectiveness(
+            [], 0.9, years_in_office=5,
+        )
+        score_without_leadership = _calc_legislative_effectiveness(
+            [], None, years_in_office=5,
+        )
+        assert score_with_leadership > score_without_leadership
+
+    def test_low_bill_count_volume_is_shrunk_not_raw(self):
+        """A single sponsored bill's expected-vs-actual credit gap must be
+        shrunk toward neutral 50 by the same n_sub-based confidence curve
+        every other low-n component in this file uses, not treated as
+        fully-confident data — one real attempt should never score far
+        below a member who sponsored nothing."""
+        one_bill = [
+            {"title": "B1", "isLaw": False, "latestAction": "Introduced",
+             "billType": "s", "congress": 119},
+        ]
+        score = _calc_legislative_effectiveness(one_bill, None)
+        assert score > 40
+
     def test_prolific_but_no_passage(self):
-        """Many bills introduced but none advanced — moderate score from volume only."""
+        """Many bills introduced but none advanced past stage 1 still
+        earns real (if modest) credit under the cumulative-stage sum —
+        raw volume counts for something in V&W's real methodology, unlike
+        the old percentage-based advancement rate which this replaced."""
         bills = [
             {"title": f"Bill {i}", "isLaw": False, "latestAction": "Introduced",
              "billType": "s", "congress": 119}
             for i in range(50)
         ]
         score = _calc_legislative_effectiveness(bills, None)
-        assert 20 <= score <= 45
+        assert 45 <= score <= 75
 
     def test_high_passage_rate(self):
-        """Bills that became law should boost the score significantly."""
-        bills = [
+        """Bills that became law contribute credit at every earlier stage
+        too (V&W's real cumulative design), so swapping some introduced-
+        only bills for ones that became law must raise the score at the
+        same total bill count — a relative comparison, not an absolute
+        threshold, since the absolute score also depends on the
+        population-average baseline this component is compared against."""
+        n = 13
+        all_introduced = [
+            {"title": f"Bill {i}", "isLaw": False, "latestAction": "Introduced",
+             "billType": "s", "congress": 119}
+            for i in range(n)
+        ]
+        two_became_law = [
             {"title": "Good Bill", "isLaw": True, "latestAction": "Became public law",
              "billType": "s", "congress": 119},
             {"title": "Also Good", "isLaw": True, "latestAction": "Became public law",
              "billType": "s", "congress": 119},
-            {"title": "Decent", "isLaw": False, "latestAction": "Passed Senate",
-             "billType": "s", "congress": 119},
-        ] + [
-            {"title": f"Bill {i}", "isLaw": False, "latestAction": "Introduced",
-             "billType": "s", "congress": 119}
-            for i in range(10)
-        ]
-        score = _calc_legislative_effectiveness(bills, 0.5)
-        assert score >= 55
+        ] + all_introduced[:n - 2]
+        score_plain = _calc_legislative_effectiveness(all_introduced, 0.5)
+        score_with_laws = _calc_legislative_effectiveness(two_became_law, 0.5)
+        assert score_with_laws > score_plain
 
     def test_leadership_matters(self):
         """Higher PageRank leadership should produce higher score — at full
@@ -886,40 +963,64 @@ class TestLegislativeEffectiveness:
         score_neutral_raw = _calc_legislative_effectiveness(bills, 0.5, years_in_office=6)
         assert score_missing == score_neutral_raw
 
-    def test_advancement_keywords(self):
-        """Committee/chamber milestones count as advanced; calendar placement doesn't.
+    def test_les_bill_stage_from_keywords(self):
+        """Direct unit test of the stage-inference fallback used when a
+        bill's real `stage` classification is unset (the common case
+        today — stage is a brand-new field with no historical backfill
+        yet). Committee/chamber milestones map to their real V&W stage;
+        calendar placement doesn't (Senate Rule XIV places bills on the
+        calendar without committee action, so "Placed on calendar"
+        signals nothing about advancement) — tested directly rather than
+        through the full score pipeline, which heavily dampens small
+        stage differences at low bill counts relative to the population-
+        average baseline it's compared against."""
+        s = "s"
+        assert _les_bill_stage({"latestAction": "Introduced", "billType": s}) == 1
+        assert _les_bill_stage({"latestAction": "Placed on calendar", "billType": s}) == 1
+        assert _les_bill_stage({"latestAction": "Ordered to be reported", "billType": s}) == 2
+        assert _les_bill_stage({"latestAction": "Passed Senate", "billType": s}) == 3
+        assert _les_bill_stage({"latestAction": "Agreed to", "billType": s}) == 3
+        assert _les_bill_stage({"latestAction": "Anything", "billType": s, "isLaw": True}) == 4
+        # Real `stage` classification always wins over the text fallback.
+        assert _les_bill_stage({"stage": "IN_COMMITTEE", "latestAction": "Introduced"}) == 2
+        assert _les_bill_stage({"stage": "ENACTED", "latestAction": "Introduced"}) == 4
 
-        Senate Rule XIV places bills on the calendar without committee
-        action, so "Placed on calendar" signals nothing about advancement.
-        """
-        introduced = [
-            {"title": f"B{i}", "isLaw": False, "latestAction": "Introduced",
-             "billType": "s", "congress": 119}
-            for i in range(3)
-        ]
-        reported = [
-            {"title": "B1", "isLaw": False, "latestAction": "Ordered to be reported",
-             "billType": "s", "congress": 119},
-        ] + introduced[:2]
-        calendar_only = [
-            {"title": "B1", "isLaw": False, "latestAction": "Placed on calendar",
-             "billType": "s", "congress": 119},
-        ] + introduced[:2]
+    def test_les_significance_weight(self):
+        """Commemorative resolutions weight 1x, substantive bills 5x —
+        V&W's real 2-tier split this platform implements (their 3rd tier,
+        "substantive and significant," is not implemented — see the
+        module comment above _LES_STAGE_ORDER)."""
+        assert _les_significance_weight("sres") == 1.0
+        assert _les_significance_weight("hres") == 1.0
+        assert _les_significance_weight("s") == 5.0
+        assert _les_significance_weight("hr") == 5.0
 
-        score_reported = _calc_legislative_effectiveness(reported, None)
-        score_calendar = _calc_legislative_effectiveness(calendar_only, None)
-        score_none = _calc_legislative_effectiveness(introduced, None)
-        assert score_reported > score_none
-        assert score_calendar == score_none
+    def test_les_cumulative_credit_scales_with_both_significance_and_stage(self):
+        """A bill that became law contributes MORE cumulative credit than
+        one that only reached committee, at the same significance — V&W's
+        real design credits every stage a bill passed through, not just
+        its final one, so a law is worth 4x a merely-introduced bill of
+        the same type, not the same 1x an absolute pass/fail rate would
+        give it."""
+        introduced = {"latestAction": "Introduced", "billType": "s"}
+        became_law = {"latestAction": "Introduced", "billType": "s", "isLaw": True}
+        commemorative_law = {"latestAction": "Introduced", "billType": "sres", "isLaw": True}
+        assert _les_cumulative_credit(became_law) == 4 * _les_cumulative_credit(introduced)
+        # Significance and stage both matter independently: a commemorative
+        # bill that became law still earns less than a substantive bill at
+        # the same stage — significance weight isn't overridden by outcome.
+        assert _les_cumulative_credit(commemorative_law) < _les_cumulative_credit(became_law)
 
     def test_resolutions_excluded_from_volume(self):
-        """v5.9 bug: a real Senator's 'National Mushroom Day' resolution
-        (SRES, agreed to without debate by unanimous consent) inflated
-        their Legislative Effectiveness volume component even though the
-        same resolution correctly earned zero advancement credit — the two
-        components had drifted out of sync since v4 first excluded
-        resolutions from advancement only. Sponsoring only ceremonial
-        resolutions must score identically to sponsoring nothing at all."""
+        """The original v5.9 "Mushroom Day" bug let a commemorative-only
+        record (SRES, agreed to without debate by unanimous consent)
+        inflate this score even though it required no real legislative
+        effort. Carried forward into the 2026-07 V&W-based rewrite: the
+        confidence gate is keyed on *substantive* bill count (n_sub), so
+        a commemorative-only record still routes through the same
+        confirmed-zero-or-neutral path a truly empty record does —
+        sponsoring only ceremonial resolutions must score identically to
+        sponsoring nothing at all."""
         mushroom_day = {
             "title": "A resolution recognizing and honoring National Mushroom "
                      "Day and the contributions of Chester and Berks Counties "
@@ -954,12 +1055,14 @@ class TestLegislativeEffectiveness:
         # The resolutions add volume but must not count as advancement.
         assert score_res <= score_plain + 10
 
-    def test_volume_ceiling_not_saturated_by_top_decile(self):
-        """The volume ceiling must give real headroom above today's p90 so
-        a genuine outlier still scores higher than a merely-active senator.
-        Recalibrated 2026-07 to the substantive-bills-only distribution
-        (v5.9 — resolutions no longer count toward volume): p90=92,
-        ceiling=95, measured max=139."""
+    def test_credit_increases_with_bill_count_until_saturation(self):
+        """More bills (same stage/significance) means more cumulative
+        credit, so the score should rise with bill count — but the
+        expected-vs-actual gap saturates at _LES_CREDIT_SATURATION (same
+        "never a runaway score from one outlier" shape as every other
+        saturation constant in this file), so two counts that are BOTH
+        already past saturation score identically, same as e.g.
+        Constituent Alignment's surplus credit saturating past a point."""
         def bills_at_rate(n_per_congress: int):
             return [
                 {"title": f"B{i}", "isLaw": False, "latestAction": "Introduced",
@@ -967,20 +1070,22 @@ class TestLegislativeEffectiveness:
                 for i in range(n_per_congress)
             ]
 
-        score_at_p90 = _calc_legislative_effectiveness(bills_at_rate(92), None)
-        score_at_extreme_outlier = _calc_legislative_effectiveness(bills_at_rate(139), None)
-        assert score_at_extreme_outlier > score_at_p90
+        score_low = _calc_legislative_effectiveness(bills_at_rate(15), None)
+        score_mid = _calc_legislative_effectiveness(bills_at_rate(40), None)
+        assert score_mid > score_low
 
-    def test_house_uses_own_volume_ceiling(self):
-        """A shared Senate-calibrated ceiling made the volume component
-        structurally uncreditable for the House: House per-congress rates
-        sit far below the Senate's because 435 members split similar
-        institutional bandwidth, not because they're less effective.
-        Chamber is inferred from bill-type prefix so a House member at
-        their own p90 gets meaningfully more volume credit than under the
-        Senate ceiling, without a chamber flag needing to be threaded
-        through every caller. Recalibrated 2026-07 to substantive-only
-        (v5.9): House p90=36/ceiling=40, Senate p90=92/ceiling=95."""
+    def test_house_uses_own_population_baseline(self):
+        """A shared Senate-calibrated expected baseline would make this
+        component structurally uncreditable for the House: House
+        per-congress bill totals sit far below the Senate's because 435
+        members split similar institutional bandwidth, not because
+        they're less effective (2026-07 audit: Senate population-average
+        significance-weighted credit is 285/congress vs House's 122).
+        Chamber is inferred from bill-type prefix, same pattern the old
+        volume-ceiling component used, so a House member at the same
+        RAW bill count as a senator is compared against the House's own,
+        much lower, real norm — and should score meaningfully better for
+        it, not worse."""
         def house_bills_at_rate(n_per_congress: int):
             return [
                 {"title": f"B{i}", "isLaw": False, "latestAction": "Introduced",
@@ -988,9 +1093,6 @@ class TestLegislativeEffectiveness:
                 for i in range(n_per_congress)
             ]
 
-        # 36 bills/congress is House's own measured p90 — should score
-        # meaningfully better than the same rate would under the Senate's
-        # 95 ceiling (36/95 = 38% raw vs 36/40 = 90% raw).
         house_score = _calc_legislative_effectiveness(house_bills_at_rate(36), None)
         senate_score = _calc_legislative_effectiveness(
             [{"title": f"B{i}", "isLaw": False, "latestAction": "Introduced",

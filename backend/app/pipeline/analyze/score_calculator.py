@@ -26,15 +26,28 @@ Design principles
 
 Academic rationale
 ------------------
-Funding Independence: grounded in Bonica (2014, "Mapping the Ideological
-Marketplace," AJPS 58:2) and Barber (2016, "Representing the Preferences
-of Donors, Partisans, and Voters in the U.S. Senate," POQ 80(S1)).
-Multipliers calibrated so the median senator (≈25% PAC ratio, Barber 2016
-Table 2) scores 50 on the PAC component, and moderate top-donor
-concentration (≈20% from top-10, Bonica 2014 Table 3) scores 50 on the
-concentration component.  Prior v1 multipliers (1.3×, 1.5×) compressed
-variation into the 61–94 range; recalibration creates a symmetric
-distribution around the empirical sample median.
+Funding Independence: donor-influence framing follows Bonica (2014,
+"Mapping the Ideological Marketplace," AJPS 58:2) and Barber (2016,
+"Representing the Preferences of Donors, Partisans, and Voters in the
+U.S. Senate," POQ 80(S1)) — both papers are about donor/candidate
+ideological positioning, not donor-concentration statistics by rank
+(verified by full-text search, 2026-07: neither paper contains a PAC-
+ratio or top-N-donor-concentration table). The specific calibration
+targets below are this platform's own live empirical audits, not
+numbers reproduced from either paper — see _calc_funding_independence's
+own "Academic rationale" note for the fuller account, including why the
+PAC multiplier is now chamber-specific (Senate ×3.2, House ×1.35;
+scripts/audit_pac_ratio.py) rather than one shared value. Top-donor
+concentration is calibrated so a 20%-of-pool share scores 100 and the
+platform's own empirical median (60%) scores 50 — Parmigiani (2025,
+"Campaign contributions and legislative behavior," Journal of Public
+Economics 243) reports the same top-decile-donor-share metric at a 47%
+mean in a different population/period, real independent corroboration
+that concentration in the 40-60%+ range is the normal pattern (not a
+number copied from that paper — our own audit is the calibration
+source). Prior v1 multipliers (1.3×, 1.5×) compressed variation into the
+61–94 range; recalibration creates a symmetric distribution around the
+empirical sample median.
 
 Promise Persistence: follows Naurin (2011, "Election Promises, Party
 Behaviour and Voter Perceptions," Palgrave) who showed that promise
@@ -62,12 +75,28 @@ Ansolabehere, de Figueiredo & Snyder (2003, "Why Is There So Little
 Money in U.S. Politics?" JEP 17:1) that donation-vote correlations are
 not causal evidence of influence.
 
-Funding Diversity: the inverse Herfindahl-Hirschman Index (HHI) is a
-standard concentration metric from industrial organization (Rhoades
-1993, "The Herfindahl-Hirschman Index," Fed Reserve Bulletin 79). We
-apply it to industry-level donation shares: concentrated funding from
-a single industry suggests potential regulatory capture, while broad
-funding suggests diverse constituent support.
+Funding Diversity: the inverse Herfindahl-Hirschman Index (HHI) applied
+to industry-level donation shares — concentrated funding from a single
+industry suggests potential regulatory capture, while broad funding
+suggests diverse constituent support — has real, on-topic precedent in
+the campaign-finance literature: Parmigiani (2025, "Campaign
+contributions and legislative behavior," Journal of Public Economics
+243) computes an HHI of contribution concentration per legislator per
+cycle as a robustness measure, the same statistic this component
+computes, just bucketed by donor industry rather than by individual
+donor. Rhoades (1993, "The Herfindahl-Hirschman Index," Fed Reserve
+Bulletin 79) is kept as a secondary reference for HHI's general
+mechanics — it is a banking/antitrust note with no campaign-finance
+content of its own, so it explains the statistic but not why it applies
+here; Parmigiani does. Known limitation, disclosed rather than fixed in
+this pass: Parmigiani's own discussion argues top-share measures are
+arguably better suited than HHI/Gini to the long-tailed distributions
+donor data actually has — the same reason income-inequality research
+prefers top-1%-share over Gini. Whether Funding Diversity should move
+from inverse-HHI to a top-share-based measure is a real open question,
+flagged here as a fast-follow rather than decided in this pass — it
+would move every senator's score and deserves its own dedicated
+evaluation.
 
 References
 ----------
@@ -80,6 +109,7 @@ References
 - Carson, J. et al. (2010). AJPS, 54(3), 598-616.
 - Ansolabehere, S. et al. (2003). JEP, 17(1), 105-130.
 - Rhoades, S. (1993). Fed Reserve Bulletin, 79, 188-189.
+- Parmigiani, A. (2025). Journal of Public Economics, 243, 105319.
 
 Changes from v1 → v2:
 - Funding Independence: replaced double-counted PAC ratio + small donor %
@@ -317,7 +347,41 @@ logger = logging.getLogger(__name__)
 # by PAC-money differences (flat-to-higher in small states). See
 # _state_small_donor_baseline/_small_donor_capacity_score. House
 # unaffected — districts are population-equalized by design.
-ALGORITHM_VERSION = "v6.3"
+#
+# v6.3 -> v6.4 (2026-07, academic-fidelity audit): a citation review found
+# several claims didn't hold up under full-text verification, and one
+# genuine miscalibration behind them:
+#   - FI PAC dependency: Barber (2016) and Bonica (2014) don't contain any
+#     PAC-ratio or donor-concentration calibration figure (verified by
+#     full-text search) — the ×2.0 multiplier was this platform's own
+#     empirical calibration mislabeled as paper-derived. Re-auditing it
+#     live (scripts/audit_pac_ratio.py) found the real median PAC ratio
+#     is chamber-specific and far from the old shared assumption: Senate
+#     15.7%, House 37.1%, not a shared ≈28%. Multiplier is now
+#     chamber-specific (×3.2 Senate, ×1.35 House).
+#   - FI top-donor concentration: the top-of-file docstring's "20% scores
+#     50" claim was stale and didn't match the actual formula (20%→100,
+#     60% empirical median→50) — fixed to match reality. Bonica (2014)
+#     replaced with Parmigiani (2025, J. Public Econ. 243) for this claim
+#     — a real, on-topic paper reporting the same top-decile-share metric.
+#   - FD industry concentration: added Parmigiani (2025) as the primary
+#     campaign-finance-specific HHI citation (Rhoades 1993 kept as a
+#     secondary general-mechanics reference) and disclosed a real,
+#     sourced limitation — top-share/Gini measures may be better suited
+#     than HHI to donor data's long tail.
+#   - Legislative Effectiveness: rebuilt to actually implement Volden &
+#     Wiseman (2014)'s real methodology (significance-weighted,
+#     cumulative-stage credit) instead of the three independent
+#     components (advancement rate/leadership/volume) that cited them
+#     without following their approach. Two disclosed departures: only
+#     2 of V&W's 3 significance tiers are implemented (no proxy for their
+#     hand-curated "significant legislation" tier), and normalization uses
+#     an expected-vs-actual credit comparison (reusing this file's own
+#     established pattern) instead of V&W's live per-term population-mean
+#     ratio, since this platform's data is career-cumulative, not
+#     single-term. See _les_component_score and the module comment above
+#     _LES_STAGE_ORDER for the full account.
+ALGORITHM_VERSION = "v6.4"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -714,10 +778,18 @@ def _calc_funding_independence(funding: dict, state: str = "", district: int | N
          contributing PACs actually are to their legal per-election
          maximum.  Share: fraction of funding from PACs (FEC cycle
          totals, Schedule A) plus half-weighted outside spending
-         (Schedule E independent expenditures supporting the candidate);
-         median true PAC ratio is ≈28% (audit; consistent with Barber
-         2016, Table 2 ≈25–30%), so the ×2.0 multiplier puts the median
-         near 50.  Utilization factor (2026-07): PAC checks are capped
+         (Schedule E independent expenditures supporting the candidate).
+         Chamber-specific multiplier (2026-07 re-audit, see
+         scripts/audit_pac_ratio.py): House candidates rely on PAC money
+         far more heavily than Senate candidates — live medians are 37.1%
+         (House) vs. 15.7% (Senate), a real structural difference, not
+         noise — so a single shared multiplier (previously ×2.0,
+         calibrated against a stale, Senate-skewed ≈28% assumption)
+         miscalibrated both chambers. Now ×1.35 for House, ×3.2 for
+         Senate, each putting that chamber's own median near 50 — this is
+         this platform's own empirical calibration, not a figure
+         reproduced from any paper (see the Academic rationale note below
+         for why).  Utilization factor (2026-07): PAC checks are capped
          by law while individual money isn't, so share alone has a
          mechanical scale bias — a $100M campaign dilutes millions of
          PAC dollars to a near-invisible share (2026-07 audit measured FI
@@ -758,11 +830,23 @@ def _calc_funding_independence(funding: dict, state: str = "", district: int | N
 
     Academic rationale
     ------------------
-    Barber (2016, Public Opinion Quarterly 80(S1), 225–249) anchors the
-    PAC component.  Bonica (2014, AJPS 58(2), 367–386) supports both the
-    small-donor proxy and the concentration signal.  Stratmann (2005,
-    Public Choice 124(1–2), 135–156) confirms the linear PAC-dependency
-    relationship in the relevant range.
+    Neither Barber (2016, POQ 80(S1)) nor Bonica (2014, AJPS 58(2)) contains
+    a PAC-dependency or donor-concentration calibration figure — verified by
+    full-text search (2026-07 audit): Barber (2016) studies donor/partisan/
+    voter ideological congruence, not PAC funding shares, and Bonica (2014)
+    is a CFscore ideological-scaling methodology paper, not a donor-
+    concentration-by-rank study. Both are cited elsewhere in this file for
+    what they actually establish (donor-vote alignment framing, Constituent
+    Alignment); neither one calibrates the ×2.0 PAC multiplier or the
+    concentration curve below, which are this platform's own empirical
+    audit findings, not numbers reproduced from either paper's tables. The
+    28% PAC-ratio figure should be periodically re-verified against a fresh
+    audit (see scripts/audit_pac_ratio.py) the same way the concentration
+    component's 60% median already is. Stratmann (2005, Public Choice
+    124(1–2), 135–156) is a real, on-topic academic source: it finds a
+    linear PAC-contribution-to-vote relationship, which is genuine support
+    for using a linear (not step-function or logarithmic) PAC-dependency
+    curve — that citation stays.
     """
     return _funding_independence_core(funding, state, district)["score"]
 
@@ -788,7 +872,16 @@ def _funding_independence_core(funding: dict, state: str = "", district: int | N
         effective_outside = outside_for / (total_raised + outside_for) * 0.5
         pac_ratio = min(pac_ratio + effective_outside, 1.0)
 
-    ratio_score = max(0.0, (1.0 - pac_ratio * 2.0)) * 100
+    # Chamber-specific multiplier, calibrated so each chamber's OWN median
+    # PAC ratio lands near 50 (scripts/audit_pac_ratio.py, 2026-07 live
+    # audit: Senate median 15.7%, House median 37.1% — House candidates
+    # rely on PAC money far more heavily than Senate candidates do, a real
+    # structural difference the old shared ×2.0 multiplier (calibrated
+    # against a stale/Senate-skewed 28% assumption) didn't capture for
+    # either chamber). Same district-signals-House pattern already used
+    # by the small-donor component below.
+    pac_ratio_multiplier = 1.35 if district is not None else 3.2
+    ratio_score = max(0.0, (1.0 - pac_ratio * pac_ratio_multiplier)) * 100
 
     # Scale the share-based score by how close contributing PACs are to
     # their legal per-election maximum — see the docstring above for why
@@ -1590,6 +1683,210 @@ def _advancement_baseline(bill_type: str, congress: int | None, party: str | Non
     return 0.036 if party == majority else 0.024
 
 
+# A member with zero substantive bills after a real term in office is a
+# genuine, if weak, negative data point — not the same as a freshman who
+# simply hasn't had a chance yet. Below this tenure the two are
+# indistinguishable and stay neutral; at/above it, "zero substantive
+# bills" gets the same confidence-shrinkage treatment a genuine low-n
+# attempt already gets, rather than being treated as missing data.
+# Roughly one legislative session.
+_MIN_TENURE_FOR_ZERO_SIGNAL_YEARS = 0.5
+
+# Confidence assigned to a confirmed-zero record — set just above what a
+# genuine single-bill, zero-success record gets (min(1/10, 1.0) = 0.10),
+# so a confirmed zero isn't treated as a *noisier* sample than an actual
+# attempt that also produced nothing. Without this, a flat 50 for
+# confirmed inaction always beat a genuine low-n attempt that failed
+# once that attempt's own shrinkage-toward-50 was correctly applied —
+# see the 2026-07 "inaction beats trying and failing" fix.
+_ZERO_BILLS_CONFIDENCE = 0.15
+
+
+def _zero_bill_component_score(years_in_office: float | None) -> tuple[float, str]:
+    """Shared "no substantive bills" treatment, used whether the member
+    sponsored nothing at all or only ceremonial resolutions — neither
+    carries a substantive record, so both get the same verdict."""
+    if (years_in_office or 0) >= _MIN_TENURE_FOR_ZERO_SIGNAL_YEARS:
+        score = 50.0 * (1 - _ZERO_BILLS_CONFIDENCE)
+        detail = (
+            f"0 substantive bills over {years_in_office:.1f} years in office "
+            "— confirmed inactivity, not a data gap"
+        )
+        return score, detail
+    return 50.0, "no substantive bills on record — neutral 50"
+
+
+# Legislative Effectiveness: significance-weighted, cumulative-stage
+# scoring — follows Volden & Wiseman (2014, "Legislative Effectiveness in
+# the United States Congress," Cambridge UP; methodology also documented
+# at thelawmakers.org, the Center for Effective Lawmaking). Their real
+# LES weights each sponsored bill by significance and credits that weight
+# CUMULATIVELY across every stage it reaches — a bill that becomes law
+# contributes to the introduced/committee/passed-chamber/law totals all
+# at once, not just its final stage. Two deliberate, disclosed departures
+# from their real methodology, both confirmed by a 2026-07 deep-research
+# audit of their actual published approach (not assumed from the name):
+#   - Only 2 of their 3 significance tiers are implemented: commemorative
+#     resolutions = 1x, substantive bills = 5x (the existing
+#     SUBSTANTIVE_BILL_TYPES split). Their 3rd tier ("substantive AND
+#     significant," 10x) was assigned from hand-curated expert/media
+#     "major legislation of the year" lists this platform has no access
+#     to and no reliable proxy for — not implemented, rather than
+#     approximated with an un-validated stand-in.
+#   - Their real score normalizes to the chamber-term population mean
+#     (an average member scores exactly 1.0); this platform's
+#     sponsored-bill data is career-cumulative (many congresses, not one
+#     fixed 2-year term V&W's design assumes), so credit is computed
+#     per-congress-served and compared against an EXPECTED credit
+#     (majority/minority-adjusted, reusing _advancement_baseline's real
+#     audited rates) rather than a literal population-mean ratio — this
+#     is the same "expected-vs-actual, credit the difference" pattern
+#     already used successfully elsewhere in this file (Constituent
+#     Alignment's seat-relative break rate).
+# Legislative leadership (PageRank cosponsorship centrality, Brin & Page
+# 1998) has no basis in Volden & Wiseman's work — it is kept as an
+# explicitly separate 30%-weighted component, not blended into the
+# V&W-based 70%.
+
+_LES_STAGE_ORDER: dict[str, int] = {
+    "INTRODUCED": 1,
+    "IN_COMMITTEE": 2,
+    "PASSED_CHAMBER": 3,
+    "IN_OTHER_CHAMBER": 3,  # already passed its own chamber; no separate V&W stage for this
+    "TO_PRESIDENT": 3,      # same — passed both chambers, not yet a new milestone
+    "ENACTED": 4,
+    "VETOED": 3,            # passed Congress, never became law
+}
+_LES_MAX_STAGE = 4
+
+
+def _les_bill_stage(bill: dict) -> int:
+    """This bill's cumulative-stage position (1-4), V&W-style.
+
+    Prefers the real `stage` classification (classify_bill_stage_from_
+    actions, bill_stage.py — built from Congress.gov's own structured
+    action codes) when present. Falls back to is_law / latestAction
+    keyword inference when `stage` is unset: it's a brand-new field with
+    no historical backfill yet (2026-07), and without this fallback every
+    existing sponsored bill would default to stage 1 until a pipeline run
+    repopulates it, silently collapsing this entire component to a flat
+    bill count. The fallback never invents progress beyond what a hard
+    fact (is_law) or the same advancement keywords the old formula used
+    supports — "ordered to be reported" clears committee (stage 2, per
+    bill_stage.py's own actionCode table), "passed"/"agreed to" clears
+    the chamber (stage 3)."""
+    stage = _LES_STAGE_ORDER.get(bill.get("stage"))
+    if stage is not None:
+        return stage
+    if bill.get("isLaw"):
+        return _LES_MAX_STAGE
+    action = (bill.get("latestAction") or "").lower()
+    if "passed" in action or "agreed to" in action:
+        return 3
+    if "ordered to be reported" in action:
+        return 2
+    return 1
+
+
+def _les_significance_weight(bill_type: str) -> float:
+    return 5.0 if bill_type in SUBSTANTIVE_BILL_TYPES else 1.0
+
+
+def _les_cumulative_credit(bill: dict) -> float:
+    """weight x stages-reached — V&W's real cumulative design: a bill
+    credited into stage 4 contributes 4x its significance weight total
+    (1 unit at each of stages 1-4), not just 1x at its final stage."""
+    w = _les_significance_weight((bill.get("billType") or "").lower())
+    s = _les_bill_stage(bill)
+    return w * s
+
+
+# Population-average significance-weighted cumulative-stage credit per
+# congress served, chamber-specific (V&W's real normalization sets the
+# chamber-term average to exactly 1.0; this platform's data is career-
+# cumulative rather than one fixed term, so the population average is a
+# periodically-recalibrated constant instead of a live computation —
+# same convention as every other self-calibrated constant in this file,
+# e.g. the FI small-donor state baseline). Calibrated via
+# scripts/calibrate_les_credit_scale.py against live production data,
+# using this module's own _les_cumulative_credit so the calibration and
+# the scoring formula can never silently drift apart. 2026-07 live audit
+# (101 senators, 427 reps): Senate mean=285.3/congress (median 254,
+# stdev 157), House mean=122.0/congress (median 107, stdev 77).
+_LES_POPULATION_AVG_SENATE = 285.3
+_LES_POPULATION_AVG_HOUSE = 122.0
+
+# Population-average _advancement_baseline rate, used to turn a member's
+# own majority/minority bill mix into a RATIO against the population
+# average (not an absolute add-on) — this is the majority/minority
+# benchmark adjustment, adapted from _advancement_baseline's real audited
+# rates without requiring the live per-term regression V&W's own
+# Benchmark Score uses (infrastructure this codebase doesn't have).
+# Same calibration script determines this. 2026-07 live audit: 0.0404.
+_LES_AVG_BASELINE = 0.0404
+
+# Saturation constant for the expected-vs-actual credit gap, same "never
+# zero, never a runaway score from one outlier bill" shape as every other
+# saturation constant in this file (e.g. Constituent Alignment's
+# surplus/0.25). Same calibration script: ~1.5x the mean chamber stdev of
+# real per-congress credit (2026-07 audit: Senate stdev 157, House 77 ->
+# 175.5), checked against the population stdev floor — LE has no
+# per-senator GROUND_TRUTH entries to check against (ground_truth.py).
+_LES_CREDIT_SATURATION = 175.5
+
+_LES_HOUSE_TYPES = {"hr", "hjres", "hres", "hconres"}
+
+
+def _les_component_score(
+    sponsored_bills: list[dict], party: str | None, years_in_office: float | None,
+) -> tuple[float, str]:
+    """The V&W-based 70% component: significance-weighted, cumulative-
+    stage credit per congress served, scored relative to what an average
+    sponsor of this party/status/chamber would be expected to achieve —
+    not an absolute rate. Confirmed-zero-vs-no-data-yet distinction (see
+    _zero_bill_component_score) carried forward unchanged from the
+    2026-07 "inaction beats trying and failing" fix; this is the same
+    invariant, re-homed into the new formula."""
+    n_sub = sum(
+        1 for b in sponsored_bills
+        if (b.get("billType") or "").lower() in SUBSTANTIVE_BILL_TYPES
+    )
+    if n_sub == 0:
+        return _zero_bill_component_score(years_in_office)
+
+    congresses = {b.get("congress") for b in sponsored_bills if b.get("congress")}
+    n_congresses = max(len(congresses), 1)
+    raw_per_congress = sum(_les_cumulative_credit(b) for b in sponsored_bills) / n_congresses
+
+    house_n = sum(
+        1 for b in sponsored_bills
+        if (b.get("billType") or "").lower() in _LES_HOUSE_TYPES
+    )
+    is_house_member = house_n > (len(sponsored_bills) - house_n)
+    population_avg = _LES_POPULATION_AVG_HOUSE if is_house_member else _LES_POPULATION_AVG_SENATE
+
+    member_baseline = sum(
+        _advancement_baseline((b.get("billType") or "").lower(), b.get("congress"), party)
+        for b in sponsored_bills
+    ) / len(sponsored_bills)
+    status_ratio = member_baseline / _LES_AVG_BASELINE if _LES_AVG_BASELINE else 1.0
+    expected_per_congress = population_avg * status_ratio
+
+    diff = raw_per_congress - expected_per_congress
+    conf = min(n_sub / 10, 1.0)
+    normalized_diff = max(-1.0, min(diff / _LES_CREDIT_SATURATION, 1.0))
+    raw_score = 50.0 + 50.0 * normalized_diff
+    score = raw_score * conf + 50.0 * (1 - conf)
+    detail = (
+        f"{raw_per_congress:.1f} significance-weighted stage-credit/congress "
+        f"vs. {expected_per_congress:.1f} expected for this sponsor's status "
+        f"({n_sub} substantive bills)"
+    )
+    if conf < 1.0:
+        detail += f", confidence-scaled {conf:.0%} ({n_sub} of 10 bills)"
+    return score, detail
+
+
 def _calc_legislative_effectiveness(
     sponsored_bills: list[dict],
     leadership_score: float | None = None,
@@ -1599,59 +1896,28 @@ def _calc_legislative_effectiveness(
     """
     Legislative Effectiveness Score (0-100, higher = better).
 
-    Measures whether a legislator is producing tangible legislative
-    outcomes, following Volden & Wiseman (2014, "Legislative Effectiveness
-    in the United States Congress," Cambridge UP) who showed that bill
-    sponsorship volume, advancement rate, and coalition breadth are
-    distinct, measurable dimensions of lawmaking productivity.
+    Two components:
 
-    Three components:
-
-      1. Bill advancement rate (40%): fraction of sponsored *substantive*
-         bills (S/HR/joint resolutions) that became law, passed a chamber,
-         or were ordered reported.  Simple and concurrent resolutions are
-         excluded: commemorative resolutions are routinely "agreed to" and
-         counting them (as v3 did, together with double-counting laws)
-         saturated this component — the 2026-06 audit measured a real
-         substantive advancement median of 2.5% (p90 5.3%) vs the v3
-         inflated median of 9.4%. "Placed on calendar" and "cloture" are
-         no longer credited either (Rule XIV calendar placement skips
-         committee and signals nothing about advancement). Full credit
-         stays at 5%, which now sits just above the p90 of the honest
-         rate, matching Volden & Wiseman (2014).
+      1. Bill significance & advancement (70%): Volden & Wiseman
+         (2014)-based — see the module comment above _LES_STAGE_ORDER for
+         the full methodology and the two disclosed departures from their
+         real approach (2-tier significance, expected-vs-actual credit
+         instead of population-mean-ratio normalization).
 
       2. Legislative leadership (30%): PageRank score from the
          cosponsorship network (Brin & Page 1998, computed in
-         sponsorship_analysis.py). Senators whose bills attract
-         cosponsors from influential colleagues score higher.
+         sponsorship_analysis.py) — no basis in Volden & Wiseman, kept as
+         an explicitly separate signal. Senators whose bills attract
+         cosponsors from influential colleagues score higher. Shrunk
+         toward neutral 50 for freshmen (PageRank centrality takes years
+         to build; a near-zero raw percentile in year one reflects network
+         age, not effectiveness — 2026-07 fix, see leadership_conf below).
 
-      3. Sponsorship volume (30%): bills introduced *per congress served*,
-         linear with full credit at 110/congress.  The v3 metric applied
-         log2(total career bills)/log2(100), but the bill lists span whole
-         careers (audit median: 338 bills over 7 congresses), so nearly
-         every senator maxed the component.  The ceiling needs periodic
-         recalibration as the bill corpus grows: at the 2026-06 audit,
-         per-congress rates were median ≈42 / p90 ≈69, and the ceiling
-         (80) was set just above that p90. A 2026-07 audit found the live
-         distribution had drifted well past that calibration (median 53,
-         p90 108, 22/100 senators already saturating 80/congress, one at
-         150) — the old ceiling was flagged as saturated by the same
-         "full credit stays at 5%, just above p90" logic used in
-         component 1. Reset to 110/congress, just above the current p90
-         (108), restoring the same ~10% top-decile saturation rate as
-         the original calibration instead of a stale absolute number.
-         This ceiling is Senate-only: the House ceiling is separately
-         calibrated at 35/congress (its own measured p90, itself likely
-         a slight underestimate — see house_pipeline.py's sponsored-
-         bills truncation fix, worth re-measuring after that data
-         corrects itself over the next few pipeline runs). Applying the
-         Senate figure to the House made the component structurally
-         uncreditable there: House per-congress rates run far lower
-         (435 members splitting similar institutional bandwidth vs
-         100), which reflects chamber scale, not effectiveness.
-
-    All components apply Bayesian shrinkage toward 50 when data is
-    sparse, preventing extreme scores from thin evidence.
+    Both components apply Bayesian shrinkage toward 50 when data is
+    sparse, preventing extreme scores from thin evidence — including a
+    confirmed-zero-bills record after real tenure, which is a weak but
+    real negative signal, not the same as a freshman with no data yet
+    (see _zero_bill_component_score).
     """
     return _legislative_effectiveness_core(
         sponsored_bills, leadership_score, party, years_in_office,
@@ -1667,72 +1933,9 @@ def _legislative_effectiveness_core(
     """Same math as _calc_legislative_effectiveness, returning every
     intermediate value alongside the final score. Single implementation,
     same reuse contract as _funding_independence_core above."""
-    if not sponsored_bills:
-        # No bill data at all — neutral 50 per the design principle that
-        # missing data never scores as good or bad. When cosponsorship
-        # leadership exists, blend it in with neutral advancement/volume
-        # priors so a well-networked senator without bill data sits
-        # coherently above (not below) the fully-unknown case.
-        if leadership_score and leadership_score > 0:
-            lp = min(leadership_score, 1.0) * 100
-            return {
-                "score": clamp(50 * 0.40 + lp * 0.30 + 50 * 0.30),
-                "components": [
-                    {"label": "Bill advancement rate", "weight": 0.40, "score": 50.0,
-                     "detail": "no sponsored bills on record — neutral 50"},
-                    {"label": "Legislative leadership", "weight": 0.30, "score": round(lp, 1),
-                     "detail": "cosponsorship-network PageRank"},
-                    {"label": "Sponsorship volume", "weight": 0.30, "score": 50.0,
-                     "detail": "no sponsored bills on record — neutral 50"},
-                ],
-            }
-        return {"score": 50, "components": [], "note": "No sponsored-bill or leadership data — neutral default."}
+    les_score, les_detail = _les_component_score(sponsored_bills or [], party, years_in_office)
 
-    n_bills = len(sponsored_bills)
-
-    # Component 1: advancement rate over substantive bills only
-    substantive = [
-        b for b in sponsored_bills
-        if (b.get("billType") or "").lower() in SUBSTANTIVE_BILL_TYPES
-    ]
-
-    became_law = 0
-    advanced = 0
-    for bill in substantive:
-        if bill.get("isLaw"):
-            became_law += 1
-        else:
-            action = (bill.get("latestAction") or "").lower()
-            if any(kw in action for kw in _ADVANCEMENT_ACTION_KEYWORDS):
-                advanced += 1
-
-    n_sub = len(substantive)
-    if n_sub > 0:
-        success_rate = (became_law + advanced) / n_sub
-        # Benchmark against the sponsor's majority/minority baseline per
-        # bill (careers span both statuses). Matching the baseline -> 50;
-        # full credit at 2x it — same headroom the old absolute 5%
-        # threshold gave the 2.5% cohort median, now status-fair.
-        expected = sum(
-            _advancement_baseline(
-                (b.get("billType") or "").lower(), b.get("congress"), party,
-            )
-            for b in substantive
-        ) / n_sub
-        advancement_raw = min(success_rate / (2.0 * expected), 1.0) * 100
-        # Shrink toward 50 with few bills
-        advancement_conf = min(n_sub / 10, 1.0)
-        advancement_score = advancement_raw * advancement_conf + 50 * (1 - advancement_conf)
-        advancement_detail = (
-            f"{became_law + advanced} of {n_sub} substantive bills advanced "
-            f"({success_rate:.1%}) vs. a {expected:.1%} status-fair baseline"
-        )
-    else:
-        # Only resolutions sponsored — no substantive signal.
-        advancement_score = 50.0
-        advancement_detail = "only ceremonial resolutions sponsored — no substantive signal, neutral 50"
-
-    # Component 2: leadership score from cosponsorship PageRank
+    # Component: leadership score from cosponsorship PageRank
     #
     # PageRank centrality is structurally a function of network size,
     # which takes time to build — a freshman senator's raw percentile is
@@ -1744,9 +1947,9 @@ def _legislative_effectiveness_core(
     # contradicting this project's own "seniority alone is never
     # penalized" design principle (AGENTS.md). Shrink the raw percentile
     # toward neutral 50 with the same confidence-scaling pattern already
-    # used for Component 1's advancement rate, scaled to a full 6-year
-    # Senate term (long enough to plausibly build a real network; short
-    # enough that a second-term member isn't still getting a pass).
+    # used for the V&W-based component, scaled to a full 6-year Senate
+    # term (long enough to plausibly build a real network; short enough
+    # that a second-term member isn't still getting a pass).
     if leadership_score is not None and leadership_score > 0:
         # Raw score is 0-1 from PageRank (percentile-like). Scale to 0-100.
         leadership_raw = min(leadership_score, 1.0) * 100
@@ -1762,71 +1965,16 @@ def _legislative_effectiveness_core(
         f"{leadership_conf:.0%} ({years_in_office or 0:.1f} of 6 years)"
     )
 
-    # Component 3: sponsorship volume per congress served
-    #
-    # Substantive bills only — same SUBSTANTIVE_BILL_TYPES set as Component 1.
-    # Simple/concurrent resolutions (sres/hres/sconres/hconres) are
-    # routinely ceremonial ("recognizing National Mushroom Day", agreed to
-    # by unanimous consent with zero debate) and free to sponsor in
-    # volume; counting them here let a member inflate 30% of their
-    # Legislative Effectiveness score with commemorative resolutions while
-    # Component 1 correctly excluded that same content from advancement
-    # credit (2026-07 bug report — a real Senator's mushroom-industry
-    # resolution was counted as legislative volume). Measured impact of
-    # the fix, current live data: resolutions inflated the raw per-congress
-    # p90 by ~14-16% (Senate raw p90=107 -> substantive-only p90=92; House
-    # raw p90=43 -> substantive-only p90=36). Ceilings below are
-    # recalibrated to the substantive-only distribution, just above its
-    # p90, same "full credit at top-decile" methodology as every prior
-    # recalibration of this component.
-    #
-    # Ceiling is chamber-specific: House members structurally introduce far
-    # fewer bills per congress than senators (435 members splitting similar
-    # institutional bandwidth vs 100), not because they're less effective.
-    # Chamber is inferred from bill-type prefix (hr/hjres = House, s/sjres
-    # = Senate) rather than passed explicitly, since sponsored_bills
-    # already carries it and every other caller in this file would need
-    # updating otherwise. Chamber inference itself still uses the full
-    # sponsored set (not substantive-only) since it's a classification
-    # signal, not a credit calculation, and benefits from the larger
-    # sample.
-    HOUSE_TYPES = {"hr", "hjres", "hres", "hconres"}
-    house_n = sum(1 for b in sponsored_bills if (b.get("billType") or "").lower() in HOUSE_TYPES)
-    is_house_member = house_n > (n_bills - house_n)
-    VOLUME_CEILING = 40.0 if is_house_member else 95.0
+    if not sponsored_bills and not (leadership_score and leadership_score > 0) and les_score == 50.0:
+        return {"score": 50, "components": [], "note": "No sponsored-bill or leadership data — neutral default."}
 
-    if n_sub > 0:
-        congresses = {b.get("congress") for b in substantive if b.get("congress")}
-        per_congress = n_sub / max(len(congresses), 1)
-        volume_raw = min(per_congress / VOLUME_CEILING, 1.0) * 100
-        volume_detail = (
-            f"{n_sub} substantive bills over {max(len(congresses), 1)} congress(es) = "
-            f"{per_congress:.1f}/congress, ceiling {VOLUME_CEILING:.0f} "
-            f"({'House' if is_house_member else 'Senate'})"
-        )
-    else:
-        # No substantive bills — same "missing signal defaults to neutral,
-        # never a punitive 0" treatment Component 1 already gives this
-        # exact case just above. A member who sponsors only ceremonial
-        # resolutions has zero *substantive* volume signal, the same as a
-        # member who sponsors nothing at all; scoring them worse than pure
-        # inactivity would be backwards.
-        volume_raw = 50.0
-        volume_detail = "only ceremonial resolutions sponsored — no substantive signal, neutral 50"
-
-    score = clamp(
-        advancement_score * 0.40
-        + leadership_pct * 0.30
-        + volume_raw * 0.30
-    )
+    score = clamp(les_score * 0.70 + leadership_pct * 0.30)
     return {
         "score": score,
         "components": [
-            {"label": "Bill advancement rate", "weight": 0.40,
-             "score": round(advancement_score, 1), "detail": advancement_detail},
+            {"label": "Bill significance & advancement (V&W-based)", "weight": 0.70,
+             "score": round(les_score, 1), "detail": les_detail},
             {"label": "Legislative leadership", "weight": 0.30,
              "score": round(leadership_pct, 1), "detail": leadership_detail},
-            {"label": "Sponsorship volume", "weight": 0.30,
-             "score": round(volume_raw, 1), "detail": volume_detail},
         ],
     }
