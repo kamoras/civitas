@@ -11,6 +11,7 @@ import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import { fetchLeaderboard, fetchRepLeaderboard, fetchPresidentLeaderboard, fetchJusticeLeaderboard } from "@/lib/api";
 import { getScoreColor, getScoreBgColor } from "@/lib/representation";
+import MetricTooltip from "@/components/checker/MetricTooltip";
 import { PARTY_BADGE } from "@/lib/partyStyles";
 import { formatCurrency } from "@/lib/formatting";
 import type { LeaderboardEntry, ScoreTrend } from "@/types/senator";
@@ -751,7 +752,15 @@ function LeaderboardContent() {
                     <th scope="col" className="px-3 py-3 text-right w-24">PAC $</th>
                     <th scope="col" className="px-3 py-3 text-right w-20">PAC %</th>
                     <th scope="col" className="px-3 py-3 text-left w-36">
-                      {sortKey === "ideology" ? "IDEOLOGY" : sortKey === "leadership" ? "LEADERSHIP" : "TOP INDUSTRY"}
+                      {sortKey === "ideology" ? (
+                        <MetricTooltip text="Derived from cosponsorship patterns (who a member legislates with), not roll-call votes — a separate signal from the PARTISAN metric on a member's own profile, which is primarily vote-based. The two can genuinely disagree: broad cross-party cosponsorship can coexist with strict party-line voting.">
+                          IDEOLOGY
+                        </MetricTooltip>
+                      ) : sortKey === "leadership" ? (
+                        "LEADERSHIP"
+                      ) : (
+                        "TOP INDUSTRY"
+                      )}
                     </th>
                   </tr>
                 </thead>
