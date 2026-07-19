@@ -122,37 +122,57 @@ export default function AboutPage() {
           {/* ── Senate Metrics ── */}
           <Section title="SENATE SCORECARD METRICS">
             <P>
-              Each senator receives four sub-scores on a 0-100 scale, weighted into an
+              Each senator receives three sub-scores on a 0-100 scale, weighted into an
               overall Representation Score. Higher is better.
             </P>
             <P>
               Campaign-promise tracking (kept/broken/partial) is still collected and
               shown on each member&apos;s profile, but is not folded into the weighted
               score below. For the audit history behind the current weights and
-              dimensions — including why Promise Persistence was removed and why
-              Funding Independence and Funding Diversity carry the weights they do —
-              see the <a href="/changelog" className="underline underline-offset-2 hover:text-matrix-green/70">scoring changelog</a>.
+              dimensions — including why Promise Persistence was removed, why Funding
+              Diversity was folded into Funding Independence, and why Donor Independence
+              was removed from Constituent Alignment — see the{" "}
+              <a href="/changelog" className="underline underline-offset-2 hover:text-matrix-green/70">scoring changelog</a>.
             </P>
 
             <div className="space-y-4 mt-4">
               <div>
-                <Label>Funding Independence (20%)</Label>
+                <Label>Funding Independence (33%)</Label>
                 <P>
-                  Measures three dimensions: (1) PAC dependency — a blend of the share of
-                  funding from PACs and the absolute PAC dollars received, so that very
-                  large campaigns cannot dilute significant PAC money into a tiny
-                  percentage (PAC checks are legally capped; individual money is not);
-                  (2) the share of funding from small (&lt;$200, unitemized) donors — the
-                  broadest possible funding base; and (3) relative top-donor
-                  concentration — what fraction of the itemized external donor pool comes
-                  from the top 10 donors, with the senator&apos;s own money and transfers from
-                  their own committees excluded. PAC dependency follows Stratmann (2005),
+                  Measures five dimensions: (1) PAC dependency — a blend of the share of
+                  funding from PACs and how close contributing PACs are to their legal
+                  per-election cap, chamber-specific since Senate and House candidates
+                  rely on PAC money at structurally different rates; (2) the share of
+                  funding from small (&lt;$200, unitemized) donors — the broadest possible
+                  funding base; (3) relative top-donor concentration — what fraction of
+                  the itemized external donor pool comes from the top 10 donors, with the
+                  senator&apos;s own money and transfers from their own committees excluded;
+                  (4) source breadth — small-donor money counts fully, industry-classified
+                  money counts moderately, and opaque money counts least; and (5) industry
+                  concentration — the inverse Herfindahl-Hirschman Index (HHI) of industry
+                  donations, where funding concentrated in a single industry suggests
+                  potential regulatory capture. Components (4) and (5) were folded in from
+                  a separate Funding Diversity dimension in 2026-07 after finding the two
+                  dimensions correlated at r=0.72 across the Senate — the same underlying
+                  funding-profile signal under two labels, not two genuinely distinct
+                  ones. PAC dependency follows Stratmann (2005),
                   <Cite id="5">Stratmann 2005</Cite>
                   who found that PAC contributions are more strongly correlated with
                   roll-call alignment than individual contributions. The concentration
-                  component applies the same intuition as HHI at the donor level,
-                  following Bonica (2014).
+                  components apply the same intuition as HHI at the donor level,
+                  following Bonica (2014)
                   <Cite id="1">Bonica 2014</Cite>
+                  {" "}and the industrial-organization logic Rhoades (1993)
+                  <Cite id="6">Rhoades 1993</Cite>
+                  {" "}built the HHI metric on.
+                </P>
+                <P>
+                  &quot;UNCLASSIFIED&quot; money (committee transfers, joint-fundraising
+                  splits, donations lacking employer data — a real 32% median share of
+                  total funding across the Senate) is scored neutrally rather than
+                  penalized. It is a residual we cannot attribute at all, not evidence of
+                  concentration in one source — the same &quot;missing data defaults to
+                  neutral&quot; principle applied everywhere else on this page.
                 </P>
               </div>
 
@@ -187,44 +207,26 @@ export default function AboutPage() {
                   the votes most suspect for donor influence.
                 </P>
                 <P>
-                  Since v5 the score blends three components: seat-relative vote alignment
-                  (~55%), coalition breadth (20%), and donor independence (25%) — a
-                  heuristic based on the money associated with donor-vote topical overlaps.
-                  Coalition breadth asks whether a member also legislates for the
-                  constituents who didn&apos;t vote for them: the rate at which they attract
-                  cosponsors from the other party and lend their name to the other party&apos;s
-                  bills, normalized to the chamber median (following the Lugar Center
-                  Bipartisan Index method; Harbridge 2015). We follow the methodological
-                  caution of Ansolabehere et al. (2003)
+                  The score blends seat-relative vote alignment (80%, or 100% when
+                  cosponsorship data is unavailable) with coalition breadth (20%, when
+                  available). Coalition breadth asks whether a member also legislates for
+                  the constituents who didn&apos;t vote for them: the rate at which they
+                  attract cosponsors from the other party and lend their name to the other
+                  party&apos;s bills, normalized to the chamber median (following the Lugar
+                  Center Bipartisan Index method; Harbridge 2015). Through v6.4 this
+                  dimension also included a Donor Independence component (25%, a
+                  heuristic based on the money associated with donor-vote topical
+                  overlaps) — removed in 2026-07 after finding it measured a close cousin
+                  of the Funding Independence signal (both keyed off total money raised
+                  and donor-industry concentration) while itself reducing to one of four
+                  fixed values for 85% of senators, since no data source discloses
+                  per-bill donor positions. Its freed weight now goes entirely to
+                  seat-relative vote alignment. We follow the methodological caution of
+                  Ansolabehere et al. (2003)
                   <Cite id="18">Ansolabehere et al. 2003</Cite>
-                  in interpreting donation-vote correlations: correlation does not prove causation.
+                  {" "}in interpreting donation-vote correlations generally: correlation
+                  does not prove causation.
                   <Cite id="5">Stratmann 2005</Cite>
-                </P>
-              </div>
-
-              <div>
-                <Label>Funding Diversity (13%)</Label>
-                <P>
-                  Evaluates how broad and distributed a senator&apos;s funding base is —
-                  distinct from Funding Independence&apos;s focus on PAC dependency and
-                  top-donor concentration. Blends source breadth (50%) — small-donor money
-                  counts fully, industry-classified money counts moderately, and
-                  the remaining opaque money counts least — with industry concentration
-                  (50%), the inverse Herfindahl-Hirschman Index (HHI) of industry
-                  donations. HHI is a standard concentration metric from industrial
-                  organization economics;
-                  <Cite id="6">Rhoades 1993</Cite>
-                  in this context, funding concentrated in a single industry suggests
-                  potential regulatory capture, while broad funding suggests diverse
-                  constituent support.
-                </P>
-                <P>
-                  &quot;UNCLASSIFIED&quot; money (committee transfers, joint-fundraising
-                  splits, donations lacking employer data — a real 32% median share of
-                  total funding across the Senate) is scored neutrally rather than
-                  penalized. It is a residual we cannot attribute at all, not evidence of
-                  concentration in one source — the same &quot;missing data defaults to
-                  neutral&quot; principle applied everywhere else on this page.
                 </P>
               </div>
 
@@ -232,26 +234,32 @@ export default function AboutPage() {
                 <Label>Legislative Effectiveness (34%)</Label>
                 <P>
                   Measures whether a member is producing tangible legislative outcomes,
-                  following Volden &amp; Wiseman (2014)
+                  following Volden &amp; Wiseman&apos;s (2014)
                   <Cite id="34">Volden &amp; Wiseman 2014</Cite>
-                  who showed bill sponsorship volume, advancement rate, and coalition
-                  breadth are distinct, measurable dimensions of lawmaking productivity.
-                  Three components: bill advancement rate (40%) — the fraction of
-                  sponsored substantive bills (S./H.R./joint resolutions; simple and
-                  concurrent resolutions are excluded as routinely ceremonial) that became
-                  law, passed a chamber, or were ordered reported; legislative leadership
-                  (30%) — cosponsorship-network PageRank, see below; and sponsorship
-                  volume (30%) — substantive bills introduced per congress served, which
-                  directly credits prolific sponsors rather than penalizing them.
+                  {" "}real published methodology: each sponsored bill is weighted by
+                  significance (5x for substantive bills — S./H.R./joint resolutions;
+                  1x for commemorative simple/concurrent resolutions) and credited
+                  cumulatively across every stage it reaches — introducing a bill earns
+                  real credit on its own, not just bills that go on to pass a chamber or
+                  become law. Two components: bill significance &amp; advancement (70%) —
+                  this cumulative stage-credit per congress served, compared against an
+                  expected credit for a sponsor of this chamber/majority-minority status;
+                  and legislative leadership (30%) — cosponsorship-network PageRank, see
+                  below.
                 </P>
                 <P>
-                  Advancement is benchmarked against the sponsor&apos;s majority/minority
-                  status per congress — minority sponsors advance bills at a fraction of
-                  the majority rate (Volden &amp; Wiseman 2014; our own corpus measures
-                  senate 3.6% vs 2.4%, house 6.4% vs 2.4%), so scoring everyone against one
-                  absolute threshold would silently penalize whichever party is out of
-                  power. Matching the baseline for your status scores 50; the thresholds
-                  are measured from the data, identical for both parties.
+                  Because introduction itself earns credit, a member who sponsors many
+                  substantive bills can score well even before any of them advance
+                  further — this is Volden &amp; Wiseman&apos;s real design, not a bug: their
+                  published methodology counts a bill&apos;s contribution at every stage it
+                  reaches, and most sponsored bills never advance at all (our own corpus
+                  measures Senate majority sponsors advancing bills at 3.6% vs. 2.4% for
+                  minority sponsors; House 6.4% vs. 2.4%). The expected-credit baseline
+                  accounts for that majority/minority gap, so scoring everyone against one
+                  absolute threshold doesn&apos;t silently penalize whichever party is out of
+                  power. The score explanation on each profile breaks the substantive-bill
+                  count into introduced-only / advanced-further / became-law so the
+                  volume-vs-advancement split is visible as real numbers.
                 </P>
               </div>
             </div>
@@ -294,7 +302,7 @@ export default function AboutPage() {
               <em className="text-matrix-green/80">Concentrated industry funding is scored
               as capture risk even when it plausibly reflects a state&apos;s real economic
               base.</em> A senator whose donations concentrate in, say, the auto industry in
-              Michigan or agriculture in Kansas scores the same on Funding Diversity&apos;s
+              Michigan or agriculture in Kansas scores the same on Funding Independence&apos;s
               industry-concentration component as one captured by an unrelated
               out-of-state interest — this platform does not check whether a donor
               industry is also a major local employer. That is a deliberate choice, not an
@@ -332,9 +340,9 @@ export default function AboutPage() {
           {/* ── House Representatives ── */}
           <Section title="HOUSE REPRESENTATIVE SCORECARDS">
             <P>
-              All 435 House representatives are scored using the same four-metric
+              All 435 House representatives are scored using the same three-metric
               framework as the Senate: Funding Independence,
-              Constituent Alignment, Funding Diversity, and Legislative Effectiveness. The data sources (FEC,
+              Constituent Alignment, and Legislative Effectiveness. The data sources (FEC,
               Congress.gov, GovInfo) and classification techniques are identical,
               ensuring consistent, comparable scores across both chambers.
             </P>
@@ -931,7 +939,7 @@ export default function AboutPage() {
               <div>
                 <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">WHAT AI DOES NOT DO</h3>
                 <div className="space-y-2">
-                  <Row label="Score calculation" value="All four sub-scores use deterministic formulas with no LLM input. The math is fully auditable." />
+                  <Row label="Score calculation" value="All sub-scores use deterministic formulas with no LLM input. The math is fully auditable." />
                   <Row label="Bill classification" value="Policy areas, party alignment, and stance are all embedding-based — no LLM in the loop." />
                   <Row label="Donor classification" value="FEC metadata + embeddings + kNN handle all donor and industry classification." />
                   <Row label="Data fabrication" value="The LLM only analyzes data already fetched from official APIs. It does not generate or invent facts." />

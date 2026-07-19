@@ -9,9 +9,8 @@ import type { JusticeScore } from "@/types/justice";
 // for the empirical finding (0 of 100 senators reached even "medium"
 // promise-evaluation confidence).
 export const DEFAULT_WEIGHTS: Record<string, number> = {
-  fundingIndependence: 0.20,
+  fundingIndependence: 0.33,
   independentVoting: 0.33,
-  fundingDiversity: 0.13,
   legislativeEffectiveness: 0.34,
 };
 
