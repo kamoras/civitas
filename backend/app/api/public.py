@@ -28,6 +28,7 @@ from app.api.response_helpers import (
 from app.config_definitions import SCORE_WEIGHTS
 from app.database import get_db
 from app.models import ExploreDocument, ScoreSnapshot
+from app.pipeline.analyze.score_calculator import compute_overall_score
 from fastapi import Request
 
 router = APIRouter()
@@ -122,7 +123,10 @@ def preflight(path: str) -> Response:
 # ---------------------------------------------------------------------------
 
 def _overall(scores: dict) -> int:
-    return round(sum(scores.get(key, 0) * weight for key, weight in SCORE_WEIGHTS.items()))
+    # int, not compute_overall_score's 2-decimal float — this is a stable
+    # public API response field (api/public/v1/*), so the response shape
+    # stays exactly as it was before this delegated to the shared helper.
+    return round(compute_overall_score(scores))
 
 
 # ---------------------------------------------------------------------------
