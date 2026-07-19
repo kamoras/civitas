@@ -199,4 +199,8 @@ export interface LeaderboardEntry {
   smallDonorPercentage: number;
   topIndustry: string | null;
   trend?: ScoreTrend;
+  /** 0 = most-left, 1 = most-right; null if too little cosponsorship data. */
+  ideologyScore: number | null;
+  /** Backend-computed (party-relative bucketing) — never re-derive from ideologyScore. */
+  ideologyLabel: string | null;
 }

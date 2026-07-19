@@ -322,6 +322,16 @@ class LeaderboardEntrySchema(CamelModel):
     small_donor_percentage: float
     top_industry: str | None = None
     trend: ScoreTrendSchema = ScoreTrendSchema()
+    # SVD-based, cosponsorship-derived (Tauberer 2012) — 0 = most-left,
+    # 1 = most-right, computed without party labels as input. None when
+    # too little cosponsorship data exists to compute it (see
+    # sponsorship_analysis.compute_ideology_scores).
+    ideology_score: float | None = None
+    # Backend-computed via sponsorship_analysis.describe_senator_position —
+    # frontend must never re-derive this from ideology_score itself, since
+    # the party-relative bucketing (D/R use a 30/70 split, independents
+    # 35/65) isn't reproducible from the number alone.
+    ideology_label: str | None = None
 
 
 # --- Pipeline / Health schemas ---

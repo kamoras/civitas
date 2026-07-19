@@ -17,6 +17,7 @@ from app.models import (
     Representative,
 )
 from app.pipeline.analyze.score_calculator import compute_overall_score
+from app.pipeline.analyze.sponsorship_analysis import describe_senator_position
 from app.schemas import PaginatedRepresentativesSchema, RepresentativeSchema
 from app.services.pagination import paginate_bounds
 from app.services.score_trends import compute_score_trend_map
@@ -371,6 +372,12 @@ def get_rep_leaderboard(
             "smallDonorPercentage": r.small_donor_percentage,
             "topIndustry": top_industry_map.get(r.id),
             "trend": trend_map.get(r.id, {"direction": "new", "change": 0.0, "previousScore": None}),
+            "ideologyScore": r.ideology_score,
+            "ideologyLabel": (
+                describe_senator_position(r.ideology_score, r.leadership_score, r.party)
+                if r.ideology_score is not None and r.leadership_score is not None
+                else None
+            ),
         }
         for r in page_reps
     ]
