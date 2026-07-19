@@ -613,45 +613,65 @@ def calculate_confidence(senator: dict) -> dict[str, str]:
 # dollar money than your state predicts, so surplus is credited at full
 # weight.
 #
-# WHERE these specific numbers come from — none are hand-picked; every
-# one is a directly-printed value from scripts/fetch_state_small_donor_
-# baseline.py, an ordinary-least-squares regression of live senators'
-# real smallDonorPercentage against ln(state population). Formula:
-# expected_pct = _SMALL_DONOR_BASELINE_A + _SMALL_DONOR_BASELINE_B *
-# ln(population_millions). Rerun that script (network required) to
-# reproduce or refresh these — it prints each constant's exact name
-# alongside its value. 2026-07 fit, 101 live senators:
-#   _SMALL_DONOR_BASELINE_A/B: the fitted intercept/slope themselves.
-#   _SMALL_DONOR_NATIONAL_MEAN_PCT: the sample's raw mean small-donor %
-#     (18.6) — used as the fallback baseline for a state this table can't
-#     resolve (unknown code, DC, territory), so an unresolvable state is
-#     never itself a penalty or a windfall.
-#   _SMALL_DONOR_MIN/MAX_EXPECTED_PCT: the fitted baseline's observed
-#     range across all 50 states (9.9%-28.9% this fit), padded 2 points
-#     each direction so a state at the population extreme (VT/WY on the
-#     low end, CA on the high end) doesn't sit exactly on the clamp.
-#   _SMALL_DONOR_SATURATION_PT: full surplus/deficit credit at ~1.5x the
-#     regression's residual stdev (14.1 points this fit) past the
-#     baseline — "roughly one meaningful standard deviation of real
-#     spread," the same style of justification MIN_STDEV uses in
-#     ground_truth.py.
-_SMALL_DONOR_BASELINE_A = 12.26
-_SMALL_DONOR_BASELINE_B = 4.53
-_SMALL_DONOR_NATIONAL_MEAN_PCT = 18.62
-_SMALL_DONOR_MIN_EXPECTED_PCT = 7.9
-_SMALL_DONOR_MAX_EXPECTED_PCT = 30.9
-_SMALL_DONOR_SATURATION_PT = 21.2
+# WHERE these specific numbers come from: an ordinary-least-squares
+# regression of live senators' real smallDonorPercentage against
+# ln(state population) — expected_pct = A + B*ln(population_millions).
+# These are calculated values, not hand-picked, so (per AGENTS.md
+# "Calibrated constants are generated data") they live in a generated
+# JSON file rather than as Python literals someone copy-pasted from a
+# script's printed output — see _small_donor_baseline_fit() below and
+# scripts/fetch_state_small_donor_baseline.py, which computes and writes
+# app/data/small_donor_baseline.json. Rerun that script (network
+# required) to refresh the fit against current data.
+
+
+_small_donor_baseline_fit_cache: dict[str, float] | None = None
+
+
+def _small_donor_baseline_fit() -> dict[str, float]:
+    """Load the small-donor baseline regression fit: {A, B,
+    national_mean_pct, min_expected_pct, max_expected_pct, saturation_pt}.
+
+    Ingested from app/data/small_donor_baseline.json (written by
+    scripts/fetch_state_small_donor_baseline.py); falls back to the
+    2026-07 fit (101 live senators) if the file is unavailable — missing
+    data degrades to a fixed prior rather than crashing scoring, same
+    convention as _district_pvi()/_state_population().
+    """
+    global _small_donor_baseline_fit_cache
+    if _small_donor_baseline_fit_cache is None:
+        import json
+        import pathlib
+        path = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "small_donor_baseline.json"
+        try:
+            data = json.loads(path.read_text())
+            _small_donor_baseline_fit_cache = {
+                "A": float(data["A"]),
+                "B": float(data["B"]),
+                "national_mean_pct": float(data["national_mean_pct"]),
+                "min_expected_pct": float(data["min_expected_pct"]),
+                "max_expected_pct": float(data["max_expected_pct"]),
+                "saturation_pt": float(data["saturation_pt"]),
+            }
+        except Exception:
+            logger.warning("small_donor_baseline.json unavailable — using the 2026-07 fit as a fallback")
+            _small_donor_baseline_fit_cache = {
+                "A": 12.26, "B": 4.53, "national_mean_pct": 18.62,
+                "min_expected_pct": 7.9, "max_expected_pct": 30.9, "saturation_pt": 21.2,
+            }
+    return _small_donor_baseline_fit_cache
 
 
 def _state_small_donor_baseline(state: str) -> float:
     """Expected small-donor % for a state's population. Unresolved states
     (unknown code, DC, territories) fall back to the national mean so an
     unresolvable state is never itself a penalty or a windfall."""
+    fit = _small_donor_baseline_fit()
     pop = _state_population().get(state)
     if not pop:
-        return _SMALL_DONOR_NATIONAL_MEAN_PCT
-    expected = _SMALL_DONOR_BASELINE_A + _SMALL_DONOR_BASELINE_B * math.log(pop)
-    return max(_SMALL_DONOR_MIN_EXPECTED_PCT, min(_SMALL_DONOR_MAX_EXPECTED_PCT, expected))
+        return fit["national_mean_pct"]
+    expected = fit["A"] + fit["B"] * math.log(pop)
+    return max(fit["min_expected_pct"], min(fit["max_expected_pct"], expected))
 
 
 def _small_donor_capacity_score(
@@ -670,15 +690,16 @@ def _small_donor_capacity_score(
     it's needed there too.
     """
     if district is not None:
-        return min(small_pct / 40.0, 1.0) * 100, _SMALL_DONOR_NATIONAL_MEAN_PCT
+        return min(small_pct / 40.0, 1.0) * 100, _small_donor_baseline_fit()["national_mean_pct"]
 
     expected = _state_small_donor_baseline(state)
+    saturation = _small_donor_baseline_fit()["saturation_pt"]
     if small_pct >= expected:
         surplus = small_pct - expected
-        score = 50.0 + 50.0 * min(surplus / _SMALL_DONOR_SATURATION_PT, 1.0)
+        score = 50.0 + 50.0 * min(surplus / saturation, 1.0)
     else:
         deficit = expected - small_pct
-        score = 50.0 - 50.0 * min(deficit / _SMALL_DONOR_SATURATION_PT, 1.0)
+        score = 50.0 - 50.0 * min(deficit / saturation, 1.0)
     return score, expected
 
 

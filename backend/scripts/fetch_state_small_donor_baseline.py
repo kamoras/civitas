@@ -2,9 +2,12 @@
 component (see score_calculator.py's _state_small_donor_baseline).
 
 One-off calibration tool, not part of the live pipeline — mirrors
-fetch_district_pvi.py in spirit (offline data-fitting script whose output
-gets pasted into score_calculator.py as a constant); rerun this whenever
-the regression looks stale (a multi-year drift in fundraising patterns —
+fetch_district_pvi.py in spirit: writes its fitted output to a checked-in
+JSON file (app/data/small_donor_baseline.json) that score_calculator.py's
+_small_donor_baseline_fit() reads, rather than printing values for a
+human to hand-type into source as Python literals (AGENTS.md
+"Calibrated constants are generated data"). Rerun this whenever the
+regression looks stale (a multi-year drift in fundraising patterns —
 state population itself is static enough between censuses to only need
 scripts/fetch_state_population.py rerun after 2030).
 
@@ -18,10 +21,8 @@ from what the live formula actually uses.
 
 Fits smallDonorPercentage = A + B * ln(population_millions) by ordinary
 least squares (closed-form, stdlib only — matches score_calibration.py's
-"no numpy" convention), then reports residual-based saturation constants
-for the surplus/deficit scoring curve. Each printed line below maps
-directly to a _SMALL_DONOR_* constant in score_calculator.py — paste the
-printed values in when this script's fit changes.
+"no numpy" convention), then derives residual-based saturation constants
+for the surplus/deficit scoring curve.
 
 Run from the repo (network required):
     python3 backend/scripts/fetch_state_small_donor_baseline.py
@@ -37,6 +38,7 @@ API_BASE = "https://civitas-research.org/api"
 UA = {"User-Agent": "CivitasCivicPlatform/1.0 (funding-baseline calibration; contact: mack.ryanm@gmail.com)"}
 
 STATE_POPULATION_PATH = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "state_population.json"
+OUTPUT_PATH = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "small_donor_baseline.json"
 
 
 def _fetch_json(url: str):
@@ -86,16 +88,13 @@ def main() -> None:
     ys = [pct for _, pct in pairs]
 
     a, b = fit_ols(xs, ys)
-    print(f"\nFit: expected_pct = {a:.2f} + {b:.2f} * ln(population_millions)")
-    print(f"  -> score_calculator.py: _SMALL_DONOR_BASELINE_A = {a:.2f}")
-    print(f"  -> score_calculator.py: _SMALL_DONOR_BASELINE_B = {b:.2f}")
+    print(f"Fit: expected_pct = {a:.2f} + {b:.2f} * ln(population_millions)")
 
     residuals = [y - (a + b * x) for x, y in zip(xs, ys)]
     resid_stdev = statistics.pstdev(residuals)
     print(f"Residual stdev: {resid_stdev:.2f}")
     national_mean = statistics.mean(ys)
     print(f"National mean small-donor %: {national_mean:.2f}")
-    print(f"  -> score_calculator.py: _SMALL_DONOR_NATIONAL_MEAN_PCT = {national_mean:.2f}")
 
     # Saturation constant: full credit/deficit at ~1.5 residual-stdevs
     # past the baseline, the same "roughly one meaningful standard
@@ -103,22 +102,39 @@ def main() -> None:
     # calibration constants (see MIN_STDEV's docstring in ground_truth.py
     # for the same style of justification).
     saturation = round(1.5 * resid_stdev, 1)
-    print(f"\nSuggested saturation (full credit/deficit at this many points past baseline): {saturation}")
-    print(f"  -> score_calculator.py: _SMALL_DONOR_SATURATION_PT = {saturation}")
+    print(f"Saturation (full credit/deficit at this many points past baseline): {saturation}")
 
     # Bounds: the observed range of *fitted* baselines across all 50
     # states, padded 2 points each direction so a state right at the
     # sample's population extreme doesn't sit exactly on the clamp.
     min_expected = round(min(a + b * x for x in xs), 1)
     max_expected = round(max(a + b * x for x in xs), 1)
-    print(f"\nFitted baseline range across all states: {min_expected:.1f}% - {max_expected:.1f}%")
-    print(f"  -> score_calculator.py: _SMALL_DONOR_MIN_EXPECTED_PCT = {max(0.0, min_expected - 2):.1f}")
-    print(f"  -> score_calculator.py: _SMALL_DONOR_MAX_EXPECTED_PCT = {max_expected + 2:.1f}")
+    bound_lo = round(max(0.0, min_expected - 2), 1)
+    bound_hi = round(max_expected + 2, 1)
+    print(f"Fitted baseline range across all states: {min_expected:.1f}% - {max_expected:.1f}%")
+    print(f"Clamp bounds (padded 2 points): {bound_lo:.1f}% - {bound_hi:.1f}%")
 
     print("\nPer-state expected baseline:")
     for state, pop in sorted(state_population.items(), key=lambda kv: kv[1]):
         expected = a + b * math.log(pop)
         print(f"  {state}: pop={pop:>5.1f}M  expected={expected:5.1f}%")
+
+    json.dump(
+        {
+            "_source": f"OLS regression of {len(pairs)} live senators' smallDonorPercentage "
+                       "against ln(state population); regenerate with "
+                       "backend/scripts/fetch_state_small_donor_baseline.py",
+            "A": round(a, 2),
+            "B": round(b, 2),
+            "national_mean_pct": round(national_mean, 2),
+            "min_expected_pct": bound_lo,
+            "max_expected_pct": bound_hi,
+            "saturation_pt": saturation,
+        },
+        open(OUTPUT_PATH, "w"),
+        indent=1, sort_keys=True,
+    )
+    print(f"\nwrote {OUTPUT_PATH}")
 
 
 if __name__ == "__main__":
