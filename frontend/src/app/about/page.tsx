@@ -1085,10 +1085,14 @@ export default function AboutPage() {
               <div>
                 <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">DATA PRIVACY</h3>
                 <P>
-                  No user data is collected, stored, or transmitted. The site does not use cookies,
-                  analytics trackers, or advertising networks. All data displayed is derived
-                  exclusively from public government records. The only network requests are to
-                  official government APIs (congress.gov, fec.gov, api.bls.gov, federalregister.gov).
+                  No accounts, no cookies, no third-party analytics trackers, and no advertising
+                  networks. The site does record anonymized visit counts on its own server, to
+                  understand usage — a salted hash of (IP, browser, date) that rotates daily so the
+                  same visitor is unrecoverable across days, plus per-page view counts. Raw IP
+                  addresses and user agents are never stored. This data is never shared, sold, or
+                  transmitted anywhere. All data displayed is derived exclusively from public
+                  government records. The only outbound network requests are to official government
+                  APIs (congress.gov, fec.gov, api.bls.gov, federalregister.gov).
                 </P>
               </div>
 
