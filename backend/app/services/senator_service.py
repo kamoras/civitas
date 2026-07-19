@@ -530,6 +530,7 @@ def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
                 if s.ideology_score is not None and s.leadership_score is not None
                 else None
             ),
+            leadership_score=s.leadership_score,
         )
         for s in senators
     ]

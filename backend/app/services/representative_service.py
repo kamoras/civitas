@@ -378,6 +378,7 @@ def get_rep_leaderboard(
                 if r.ideology_score is not None and r.leadership_score is not None
                 else None
             ),
+            "leadershipScore": r.leadership_score,
         }
         for r in page_reps
     ]
