@@ -17,6 +17,17 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.4",
+    date: "2026-07-19",
+    title: "Academic-fidelity audit: citations corrected, Legislative Effectiveness rebuilt to match its own methodology",
+    changes: [
+      "A citation review checked every academic paper this scoring methodology cites against what those papers actually say — not just whether the title matched, but whether the specific numbers and formulas attributed to them are really there. Several weren't: a PAC-funding calibration figure attributed to one paper doesn't appear in it (that paper studies something else entirely), and a donor-concentration figure attributed to another paper was similarly unsupported. Both have been corrected — either replaced with a paper that actually contains the relevant finding, or relabeled honestly as this platform's own empirical calibration rather than a borrowed number.",
+      "That review also surfaced a real miscalibration, not just a citation problem: re-auditing live data found the typical PAC-funding share is very different for House and Senate candidates (37% vs. 16%), but Funding Independence's PAC-dependency component was using one shared multiplier calibrated against neither figure. It's now chamber-specific, calibrated against each chamber's own real current data.",
+      "Funding Diversity's use of an industry-concentration index (HHI) gained a directly-relevant, on-topic academic citation (a 2025 paper that applies the same technique to campaign contributions) in place of a technically-accurate but off-topic one from 1990s banking regulation, plus an honest disclosure of a real, sourced limitation: this kind of index may under-weight the influence of a donor base's most dominant contributors relative to alternative measures.",
+      "Legislative Effectiveness is substantially rebuilt. The academic methodology it cited weights each sponsored bill by how significant it is and credits that weight across every stage the bill reaches in the legislative process — a bill that becomes law counts toward every earlier milestone too, not just the final one. The previous version cited this methodology but didn't actually implement it — it used three unrelated measures (a pass/fail rate, a raw bill count, and a network-influence score) instead. It now genuinely follows the cited approach: bills are weighted by significance and credited cumulatively across the stages they reach, compared against what a typical member of that chamber and party status would be expected to achieve. Two honest simplifications: the original methodology has a third significance tier (\"landmark legislation\") based on hand-curated expert judgment this platform has no access to, so only two tiers are implemented; and scores are calibrated against a live empirical average rather than requiring the kind of statistical regression infrastructure the original academic approach used, since this platform's data spans a member's full career rather than one fixed term.",
+    ],
+  },
+  {
     version: "v6.3",
     date: "2026-07-18",
     title: "Funding Independence's small-donor share is now state-population-relative",
