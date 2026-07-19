@@ -283,6 +283,7 @@ campaign instead of capping at 65).
 """
 
 import logging
+import math
 
 from app.models import PromiseAlignment
 
@@ -306,7 +307,17 @@ logger = logging.getLogger(__name__)
 # STALLED_EDGE_WEIGHT) instead of a flat weight per cosponsorship,
 # addressing an external review's finding that message-bill cosponsorship
 # was indistinguishable from real legislative collaboration.
-ALGORITHM_VERSION = "v6.2"
+#
+# v6.2 -> v6.3 (2026-07): Funding Independence's small-donor share
+# component is now state-population-relative for senators instead of a
+# flat 40%-cap, addressing a population audit that found small-state
+# senators averaged 40 vs. 59.5 for large-state senators — driven almost
+# entirely by small-donor fundraising capacity (structural: bigger states
+# have larger natural donor pools and more national media exposure), not
+# by PAC-money differences (flat-to-higher in small states). See
+# _state_small_donor_baseline/_small_donor_capacity_score. House
+# unaffected — districts are population-equalized by design.
+ALGORITHM_VERSION = "v6.3"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -378,6 +389,38 @@ STATE_PVI: dict[str, int] = {
     "DC": -30, "PR": 0, "GU": 0, "VI": 0, "AS": 0, "MP": 0,
 }
 
+_state_population_cache: dict[str, float] | None = None
+
+
+def _state_population() -> dict[str, float]:
+    """State population in millions, 2020 Census (state abbreviation ->
+    float). Used only by _state_small_donor_baseline (Funding
+    Independence's small-donor component, Senate only — see that
+    function's docstring); DC/territories have no voting senators and are
+    intentionally omitted, falling back to the national mean baseline.
+
+    Ingested from Wikipedia into app/data/state_population.json;
+    regenerate with scripts/fetch_state_population.py (also the single
+    source scripts/fetch_state_small_donor_baseline.py's regression audit
+    reads, so the two can't silently drift apart the way a second
+    hardcoded copy could). Population, unlike Cook PVI, doesn't shift
+    enough between censuses to need per-cycle regeneration — rerun after
+    the 2030 census.
+    """
+    global _state_population_cache
+    if _state_population_cache is None:
+        import json
+        import pathlib
+        path = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "state_population.json"
+        try:
+            _state_population_cache = {
+                k: float(v) for k, v in json.loads(path.read_text())["states"].items()
+            }
+        except Exception:
+            logger.warning("state_population.json unavailable — small-donor baseline will use the national mean for every state")
+            _state_population_cache = {}
+    return _state_population_cache
+
 
 def clamp(value: float, min_val: int = 0, max_val: int = 100) -> int:
     """Clamp a value to [min_val, max_val] and round to int."""
@@ -426,7 +469,9 @@ def calculate_scores(senator: dict) -> dict:
     lobbying_matches = senator.get("lobbyingMatches", [])
 
     return {
-        "fundingIndependence": _calc_funding_independence(funding),
+        "fundingIndependence": _calc_funding_independence(
+            funding, senator.get("state", ""), senator.get("district"),
+        ),
         "promisePersistence": _calc_promise_persistence(
             voting_record,
             senator.get("party", "I"),
@@ -473,7 +518,9 @@ def explain_scores(senator: dict) -> dict:
     lobbying_matches = senator.get("lobbyingMatches", [])
 
     return {
-        "fundingIndependence": _funding_independence_core(funding),
+        "fundingIndependence": _funding_independence_core(
+            funding, senator.get("state", ""), senator.get("district"),
+        ),
         "independentVoting": _constituent_alignment_core(
             voting_record,
             lobbying_matches,
@@ -548,7 +595,115 @@ def calculate_confidence(senator: dict) -> dict[str, str]:
     }
 
 
-def _calc_funding_independence(funding: dict) -> int:
+# Small-donor share (Funding Independence component 2) baseline.
+#
+# WHY a state-population-relative baseline at all: a population-tercile
+# audit found the old flat 40%-cap version of this component penalized
+# small-state senators for a structural fact about their state (small
+# states average 10.4% small-donor share vs 23.4% in large states —
+# bigger states have larger natural donor pools and more national media
+# exposure driving grassroots giving) rather than their own funding
+# choices, while PAC dollar *amounts* were flat-to-higher in small states
+# (PACs pay for committee power, not local media costs) — i.e. only the
+# small-donor signal needed a state-relative fix, not PAC dependency.
+# Same "expected vs. actual for this seat" pattern as
+# _signed_state_alignment/_calc_constituent_alignment (Independent
+# Voting's v4.2 redesign), minus IV's credit-shrinking multiplier: unlike
+# vote-crossing, there's no directional ambiguity in raising more small-
+# dollar money than your state predicts, so surplus is credited at full
+# weight.
+#
+# WHERE these specific numbers come from: an ordinary-least-squares
+# regression of live senators' real smallDonorPercentage against
+# ln(state population) — expected_pct = A + B*ln(population_millions).
+# These are calculated values, not hand-picked, so (per AGENTS.md
+# "Calibrated constants are generated data") they live in a generated
+# JSON file rather than as Python literals someone copy-pasted from a
+# script's printed output — see _small_donor_baseline_fit() below and
+# scripts/fetch_state_small_donor_baseline.py, which computes and writes
+# app/data/small_donor_baseline.json. Rerun that script (network
+# required) to refresh the fit against current data.
+
+
+_small_donor_baseline_fit_cache: dict[str, float] | None = None
+
+
+def _small_donor_baseline_fit() -> dict[str, float]:
+    """Load the small-donor baseline regression fit: {A, B,
+    national_mean_pct, min_expected_pct, max_expected_pct, saturation_pt}.
+
+    Ingested from app/data/small_donor_baseline.json (written by
+    scripts/fetch_state_small_donor_baseline.py); falls back to the
+    2026-07 fit (101 live senators) if the file is unavailable — missing
+    data degrades to a fixed prior rather than crashing scoring, same
+    convention as _district_pvi()/_state_population().
+    """
+    global _small_donor_baseline_fit_cache
+    if _small_donor_baseline_fit_cache is None:
+        import json
+        import pathlib
+        path = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "small_donor_baseline.json"
+        try:
+            data = json.loads(path.read_text())
+            _small_donor_baseline_fit_cache = {
+                "A": float(data["A"]),
+                "B": float(data["B"]),
+                "national_mean_pct": float(data["national_mean_pct"]),
+                "min_expected_pct": float(data["min_expected_pct"]),
+                "max_expected_pct": float(data["max_expected_pct"]),
+                "saturation_pt": float(data["saturation_pt"]),
+            }
+        except Exception:
+            logger.warning("small_donor_baseline.json unavailable — using the 2026-07 fit as a fallback")
+            _small_donor_baseline_fit_cache = {
+                "A": 12.26, "B": 4.53, "national_mean_pct": 18.62,
+                "min_expected_pct": 7.9, "max_expected_pct": 30.9, "saturation_pt": 21.2,
+            }
+    return _small_donor_baseline_fit_cache
+
+
+def _state_small_donor_baseline(state: str) -> float:
+    """Expected small-donor % for a state's population. Unresolved states
+    (unknown code, DC, territories) fall back to the national mean so an
+    unresolvable state is never itself a penalty or a windfall."""
+    fit = _small_donor_baseline_fit()
+    pop = _state_population().get(state)
+    if not pop:
+        return fit["national_mean_pct"]
+    expected = fit["A"] + fit["B"] * math.log(pop)
+    return max(fit["min_expected_pct"], min(fit["max_expected_pct"], expected))
+
+
+def _small_donor_capacity_score(
+    small_pct: float, state: str, district: int | None
+) -> tuple[float, float]:
+    """Small-donor credit relative to what this state's population
+    predicts, not a flat absolute cap. Returns (score, expected_pct).
+
+    Senate-only: House districts are apportioned to ~700-800k population
+    each by design, so the state-population bias this fixes for the
+    Senate (0.6M-39.5M range, a 65x spread) shouldn't exist at anywhere
+    near the same magnitude for House seats. `district is not None`
+    bypasses the adjustment entirely (falls back to the original flat
+    40%-cap behavior) until a real district-population audit — mirroring
+    _signed_state_alignment's existing district-vs-state branch — shows
+    it's needed there too.
+    """
+    if district is not None:
+        return min(small_pct / 40.0, 1.0) * 100, _small_donor_baseline_fit()["national_mean_pct"]
+
+    expected = _state_small_donor_baseline(state)
+    saturation = _small_donor_baseline_fit()["saturation_pt"]
+    if small_pct >= expected:
+        surplus = small_pct - expected
+        score = 50.0 + 50.0 * min(surplus / saturation, 1.0)
+    else:
+        deficit = expected - small_pct
+        score = 50.0 - 50.0 * min(deficit / saturation, 1.0)
+    return score, expected
+
+
+def _calc_funding_independence(funding: dict, state: str = "", district: int | None = None) -> int:
     """
     Funding Independence Score (0-100, higher = better).
 
@@ -579,10 +734,16 @@ def _calc_funding_independence(funding: dict) -> int:
          (e.g. all lookups failed) — missing data degrades gracefully
          rather than silently skipping the correction.
 
-      2. Small-donor share (25%): unitemized (<$200) contributions as a
-         share of total receipts — the broadest-possible funding base and
-         a well-established grassroots proxy (Bonica 2014; Malbin 2009).
-         Full credit at 40% (audit p90 ≈43%); median ≈17% scores ≈43.
+      2. Small-donor share (25%, Senate only — see
+         _small_donor_capacity_score): unitemized (<$200) contributions as
+         a share of total receipts, scored relative to what this state's
+         population predicts rather than a flat cap (2026-07 audit: small
+         states average 10.4% small-donor share vs 23.4% in large states —
+         a structural fact about donor-pool size and media exposure, not a
+         funding choice — while PAC dollar amounts were flat-to-higher in
+         small states, so only this component needed the fix). House
+         members keep the original flat-cap behavior: full credit at 40%
+         (audit p90 ≈43%); median ≈17% scores ≈43.
 
       3. Relative top-donor concentration (25%): top-10 external donors as
          a share of the full external donor pool (candidate-affiliated
@@ -603,10 +764,10 @@ def _calc_funding_independence(funding: dict) -> int:
     Public Choice 124(1–2), 135–156) confirms the linear PAC-dependency
     relationship in the relevant range.
     """
-    return _funding_independence_core(funding)["score"]
+    return _funding_independence_core(funding, state, district)["score"]
 
 
-def _funding_independence_core(funding: dict) -> dict:
+def _funding_independence_core(funding: dict, state: str = "", district: int | None = None) -> dict:
     """Same math as _calc_funding_independence, returning every intermediate
     value alongside the final score. Single implementation — _calc_funding_
     independence and the on-demand explain_scores() breakdown both call this;
@@ -687,9 +848,10 @@ def _funding_independence_core(funding: dict) -> dict:
 
     pac_score = ratio_score * volume_factor
 
-    # Component 2: small-donor share (25% weight)
+    # Component 2: small-donor share (25% weight), state-relative for
+    # senators — see _small_donor_capacity_score.
     small_pct = funding.get("smallDonorPercentage", 0) or 0
-    small_score = min(small_pct / 40.0, 1.0) * 100
+    small_score, small_expected_pct = _small_donor_capacity_score(small_pct, state, district)
 
     # Component 3: relative top-donor concentration (25% weight)
     external = sorted(
@@ -736,7 +898,14 @@ def _funding_independence_core(funding: dict) -> dict:
                 "label": "Small-donor share",
                 "weight": 0.25,
                 "score": round(small_score, 1),
-                "detail": f"{small_pct:.0f}% of funding from small (<$200) donors",
+                "detail": (
+                    f"{small_pct:.0f}% of funding from small (<$200) donors"
+                    + (
+                        f" vs. an expected ~{small_expected_pct:.0f}% for a state this size"
+                        if district is None
+                        else ""
+                    )
+                ),
             },
             {
                 "label": "Top-donor concentration",

@@ -1,0 +1,9 @@
+{
+ "A": 12.26,
+ "B": 4.53,
+ "_source": "OLS regression of 101 live senators' smallDonorPercentage against ln(state population); regenerate with backend/scripts/fetch_state_small_donor_baseline.py",
+ "max_expected_pct": 30.9,
+ "min_expected_pct": 7.9,
+ "national_mean_pct": 18.62,
+ "saturation_pt": 21.2
+}

@@ -209,6 +209,54 @@ Key mathematical properties:
 - **Shannon entropy**: Funding diversity uses information-theoretic entropy
   to measure concentration across industry sources
 
+### 3a. Calibrated constants are generated data, never hand-typed
+
+Any scoring constant derived from real data — a regression coefficient, a
+population mean, a percentile-based ceiling, a saturation point, a raw
+population/count figure — must never be a Python literal a human
+copy-pasted from a script's printed output into source code. That exact
+pattern drew repeated review pushback (PR #152): the resulting numbers
+are opaque ("where does 21.4 come from?"), and duplicating the same
+underlying data as a second hardcoded copy in another file lets the two
+drift apart silently.
+
+The correct pattern, established by `_district_pvi()` /
+`app/data/district_pvi.json` (`scripts/fetch_district_pvi.py`) and
+`_state_population()` / `app/data/state_population.json`
+(`scripts/fetch_state_population.py`):
+
+1. A one-off script under `backend/scripts/` computes the value(s) from
+   real data (a public API, a DB query, a scrape of a stable public
+   source) and writes them to a checked-in JSON file under
+   `backend/app/data/`, with a `_source` field documenting exactly where
+   the data came from and when it was generated.
+2. The scoring module reads that JSON file through a small cached loader
+   function (module-level `_foo_cache`, lazy-loaded on first call — see
+   `_district_pvi()` for the exact shape), never as an inline dict/tuple
+   literal typed directly into the `.py` file.
+3. Any other file that needs the same underlying data (an audit script,
+   a different scoring dimension) reads the same JSON file or calls the
+   same loader — never a second hardcoded copy of the same numbers.
+4. Rerun the generating script and commit the refreshed JSON when the
+   underlying data goes stale (a new census, a population audit finding
+   drift) — this is normal, expected maintenance, not a one-time setup
+   step to forget about.
+
+This also applies to constants that are themselves the *output* of a
+fitting script (regression coefficients, saturation points derived from
+a residual stdev, min/max clamp ranges) — if a script prints "paste this
+value into score_calculator.py," that script should instead write the
+value into a JSON file the code reads, exactly like population/PVI data.
+
+A plain hardcoded constant is still fine for a genuine, non-calculated
+fact with a clear citable source that doesn't drift from run to run
+(e.g. `STATE_PVI`'s Cook Political Report values, updated by hand "per
+election cycle" per its own comment, or a physical/legal constant like
+an FEC contribution limit). The bar is specifically about **calculated**
+values — anything a regression, an average, or a percentile produced —
+which must trace back to a generating script and a data file, not a
+comment asserting "trust me, I ran a script once."
+
 ### 4. Content-based party alignment
 
 Party alignment for bills is determined by what the bill does (embedding

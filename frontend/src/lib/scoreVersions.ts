@@ -17,6 +17,17 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.3",
+    date: "2026-07-18",
+    title: "Funding Independence's small-donor share is now state-population-relative",
+    changes: [
+      "A population audit (prompted by a look at North Dakota's senators) found the small-donor share component — previously a flat 40%-of-receipts cap for every senator regardless of state — systematically scored small-population states lower: senators from the smallest third of states by population averaged 40 on Funding Independence overall vs. 59.5 for the largest third, a ~19-point gap.",
+      "The cause wasn't PAC money: PAC dollar amounts were flat-to-slightly-higher in small states (PACs pay for committee power and access, not local media costs, so the check size doesn't shrink with the state). What actually differs is small-donor fundraising capacity — small states averaged 10.4% small-donor share vs. 23.4% in large states, because larger states have bigger natural donor pools and more national media exposure driving grassroots giving. That's a structural fact about a state's size, not a funding choice by the politician representing it — the same category of problem Independent Voting's v4.2 redesign already fixed for partisan lean.",
+      "The small-donor component is now scored relative to what a state's population predicts (fit via regression against live data), the same 'expected vs. actual for this seat' shape as Independent Voting, rather than an absolute cap. PAC dependency (50% of Funding Independence) and top-donor concentration (25%) are unchanged — the data showed no small-state penalty to correct there.",
+      "House members are unaffected — congressional districts are apportioned to roughly equal population (~700-800k each) by design, so this state-population bias shouldn't exist at anywhere near the same magnitude there. House keeps the original flat 40%-cap behavior pending a district-level audit.",
+    ],
+  },
+  {
     version: "v6.2",
     date: "2026-07-16",
     title: "Legislative Leadership no longer treats every cosponsorship equally",

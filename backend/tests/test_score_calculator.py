@@ -56,9 +56,10 @@ class TestFundingIndependence:
         assert _calc_funding_independence(funding) < 20
 
     def test_balanced_funding(self):
-        # Median-ish senator: 30% PAC (→40), 17% small donors (→42.5),
-        # concentration pool below the $250K floor (→ neutral 50):
-        # FI = 0.5*40 + 0.25*42.5 + 0.25*50 ≈ 43.
+        # Median-ish senator, no state given (falls back to the national-
+        # mean baseline): 30% PAC (→40), 17% small donors (~46.6, just
+        # under the ~18.5% national mean), concentration pool below the
+        # $250K floor (→ neutral 50): FI = 0.5*40 + 0.25*46.6 + 0.25*50 ≈ 44.
         funding = {
             "totalRaised": 1_000_000,
             "totalFromPACs": 300_000,
@@ -238,6 +239,69 @@ class TestFundingIndependence:
         breakdown = _funding_independence_core(funding)
         detail = breakdown["components"][0]["detail"]
         assert "no PAC committee-type data" in detail
+
+    def test_small_state_not_penalized_for_identical_raw_percentage(self):
+        """The core regression test: WY (population 0.6M, one of the
+        smallest states) and CA (39.5M, the largest) with IDENTICAL raw
+        small-donor % must NOT score identically — WY's modest raw %
+        beats its low state baseline, CA's identical raw % falls further
+        short of its much higher baseline. Pre-fix, both scored the exact
+        same min(15/40,1)*100 = 37.5 regardless of state."""
+        funding = {
+            "totalRaised": 5_000_000,
+            "totalFromPACs": 500_000,
+            "smallDonorPercentage": 15,
+            "topDonors": [],
+        }
+        wy_breakdown = _funding_independence_core(funding, state="WY")
+        ca_breakdown = _funding_independence_core(funding, state="CA")
+        wy_small = wy_breakdown["components"][1]["score"]
+        ca_small = ca_breakdown["components"][1]["score"]
+        assert wy_small > ca_small
+
+    def test_unknown_state_falls_back_to_national_mean(self):
+        """An unresolvable state code must never itself be a penalty or a
+        windfall — falls back to the same national-mean baseline as no
+        state at all."""
+        funding = {
+            "totalRaised": 5_000_000,
+            "totalFromPACs": 500_000,
+            "smallDonorPercentage": 15,
+            "topDonors": [],
+        }
+        no_state = _funding_independence_core(funding)
+        unknown_state = _funding_independence_core(funding, state="XX")
+        assert no_state["components"][1]["score"] == unknown_state["components"][1]["score"]
+
+    def test_district_bypasses_state_population_adjustment(self):
+        """House members (district is not None) keep the original flat
+        40%-cap behavior — the state-population fix is Senate-only until a
+        real district-population audit justifies extending it. A ND House
+        seat must score identically to the same raw % from any other
+        state once district is given."""
+        funding = {
+            "totalRaised": 2_000_000,
+            "totalFromPACs": 400_000,
+            "smallDonorPercentage": 15,
+            "topDonors": [],
+        }
+        nd_house = _funding_independence_core(funding, state="ND", district=1)
+        ca_house = _funding_independence_core(funding, state="CA", district=12)
+        assert nd_house["components"][1]["score"] == ca_house["components"][1]["score"] == 37.5
+
+    def test_at_state_baseline_scores_neutral(self):
+        """A senator whose raw % exactly matches their state's expected
+        baseline lands at neutral 50 on the small-donor component."""
+        # ND's fitted baseline is ~11.1%.
+        funding = {
+            "totalRaised": 5_000_000,
+            "totalFromPACs": 500_000,
+            "smallDonorPercentage": 11,
+            "topDonors": [],
+        }
+        breakdown = _funding_independence_core(funding, state="ND")
+        small_score = breakdown["components"][1]["score"]
+        assert 45 <= small_score <= 55
 
 
 class TestConstituentAlignment:
