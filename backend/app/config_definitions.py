@@ -13,14 +13,24 @@ from enum import StrEnum
 # — both driven by the same underlying funding-profile signal (grassroots
 # small-dollar money scores well on both; PAC/large-donor-heavy fundraising
 # scores poorly on both), not the "distinct dimension" each is meant to
-# measure independently. At the prior 25%/15% weights, that correlated pair
-# carried 40% combined — nearly double any other single dimension's 20% —
-# and could single-handedly override strong performance elsewhere (the
-# audit's reference case: the sitting Senate Majority Leader ranked 2nd from
-# last Senate-wide, driven almost entirely by this pair, despite
-# above-median scores on the other three dimensions). Rebalanced so the
-# correlated pair's combined weight (25%) matches what one genuinely
-# distinct dimension gets, split proportionally to the prior 25:15 ratio.
+# measure independently. A prior fix (2026-07, this dict's v6.0-era history)
+# rebalanced the two to a combined 25% rather than let the redundant pair
+# dominate (the audit's reference case: the sitting Senate Majority Leader
+# ranked 2nd from last Senate-wide, driven almost entirely by this pair,
+# despite above-median scores on the other three dimensions) — but a
+# rebalance still measures the same signal twice under two labels. v6.5
+# (2026-07) folds fundingDiversity into fundingIndependence outright: one
+# dimension, weight = sum of the two prior weights (0.20 + 0.13 = 0.33).
+# fundingDiversity's two signals (source breadth, industry concentration)
+# are now components inside fundingIndependence's own score, at internal
+# weights equal to each component's PRIOR contribution to the overall
+# score divided by the merged weight — a linear renormalization, not a new
+# judgment call, so it changes zero senators' overall scores on the day it
+# ships (see score_calculator.py's v6.4->v6.5 changelog note for the exact
+# math). score_funding_diversity keeps being computed and stored, same
+# "kept independently visible, excluded from the weighted sum" pattern as
+# promisePersistence below — it just no longer has its own SCORE_WEIGHTS
+# entry or top-level scorecard panel.
 #
 # promisePersistence removed entirely (2026-07, ALGORITHM_VERSION v6.0):
 # a live measurement across all 100 senators found 0 of 100 reached even
@@ -39,9 +49,8 @@ from enum import StrEnum
 # absorb the largest shares, fundingIndependence a smaller share consistent
 # with its correlated-pair status.
 SCORE_WEIGHTS: dict[str, float] = {
-    "fundingIndependence": 0.20,
+    "fundingIndependence": 0.33,
     "independentVoting": 0.33,
-    "fundingDiversity": 0.13,
     "legislativeEffectiveness": 0.34,
 }
 

@@ -40,22 +40,30 @@ class TestFundingIndependence:
     top-donor concentration (v4: 50% PAC+outside / 25% small / 25% conc)."""
 
     def test_ideal_grassroots(self):
-        # 0% PAC (→100), 55% small donors (→100), donor pool too small to
-        # measure concentration (→ neutral 50): 50 + 25 + 12.5 = 87.5.
+        # v6.5: industryBreakdown now feeds the folded-in source-breadth/
+        # industry-concentration components too — 0% PAC (→100), 55% small
+        # donors (→100), donor pool too small to measure top-donor
+        # concentration (→ neutral 50), and the remaining 45% spread evenly
+        # across 10 industries (→ high breadth, near-zero HHI → both ~80-100).
         funding = {
             "totalRaised": 1_000_000,
             "totalFromPACs": 0,
             "smallDonorPercentage": 55,
             "topDonors": [{"total": 100} for _ in range(10)],
+            "industryBreakdown": [{"industry": f"IND{i}", "total": 45_000} for i in range(10)],
         }
         score = _calc_funding_independence(funding)
         assert score >= 85
 
     def test_fully_pac_funded_concentrated(self):
+        # v6.5: all non-PAC money concentrated in a single industry, and a
+        # top-heavy external donor pool (30 donors, top 10 hold the vast
+        # majority) — worst case on all five folded-in components.
         funding = {
             "totalRaised": 1_000_000,
             "totalFromPACs": 1_000_000,
-            "topDonors": [{"total": 500_000}],
+            "topDonors": [{"total": 40_000} for _ in range(10)] + [{"total": 1_000} for _ in range(20)],
+            "industryBreakdown": [{"industry": "DEFENSE", "total": 1_000_000}],
         }
         assert _calc_funding_independence(funding) < 20
 
@@ -463,13 +471,12 @@ class TestConstituentAlignment:
             record, [], funding, state="ID", party="R"
         )
 
-    def test_lobbying_matches_penalize_via_donation_and_non_consensus_share(self):
-        """senatorVoteAligned is always None in production (detect_donor_vote_connections
-        never sets it — see score_calculator.py's structural note); the only
-        donor-independence branch runs on donation share + non-consensus-vote
-        share, not on alignment. Non-consensus votes (isConsensusVote omitted
-        or False) plus real donation amounts should score worse than a
-        member with no detected matches at all."""
+    def test_lobbying_matches_no_longer_affect_score(self):
+        """v6.5: Donor independence removed from Constituent Alignment
+        (folded into/duplicative of Funding Independence — see
+        config_definitions.SCORE_WEIGHTS's r=0.72 rationale). lobbying_matches
+        is still accepted for call-site compatibility but no longer changes
+        the score."""
         record = {
             "keyVotes": self._make_votes(with_party=90, against_party=10),
             "recentVotes": [],
@@ -487,7 +494,7 @@ class TestConstituentAlignment:
             record, [],
             {"totalRaised": 1_000_000, "totalFromPACs": 500_000},
         )
-        assert score_with < score_without
+        assert score_with == score_without
 
     def test_donor_industry_votes_no_longer_exempt(self):
         """v4.1 exempted party-line votes on policy areas related to the
