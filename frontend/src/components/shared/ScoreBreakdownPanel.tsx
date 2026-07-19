@@ -9,6 +9,7 @@ import {
 } from "@/lib/api";
 import { getScoreColor } from "@/lib/corruption";
 import type { ScoreBreakdownComponent } from "@/types/scoreBreakdown";
+import Modal from "./Modal";
 
 export type BreakdownEntityType = "senator" | "representative" | "president" | "justice";
 
@@ -73,19 +74,19 @@ function formatWeight(w: number): string {
 
 function ComponentRow({ c }: { c: ScoreBreakdownComponent }) {
   return (
-    <div className="py-1.5 border-t border-matrix-green/10 first:border-t-0 first:pt-0">
+    <div className="py-2.5 border-t border-matrix-green/10 first:border-t-0 first:pt-0">
       <div className="flex items-baseline justify-between gap-3">
-        <span className="text-matrix-green/70">
+        <span className="text-matrix-green/80 text-sm">
           {c.label}
           {c.weight !== undefined && (
-            <span className="text-matrix-green/40"> ({formatWeight(c.weight)})</span>
+            <span className="text-matrix-green/40"> ({formatWeight(c.weight)} of this score)</span>
           )}
         </span>
         {c.score !== undefined && (
-          <span className={`font-mono shrink-0 ${getScoreColor(c.score)}`}>{c.score.toFixed(1)}</span>
+          <span className={`font-mono shrink-0 text-base ${getScoreColor(c.score)}`}>{c.score.toFixed(1)}</span>
         )}
       </div>
-      <div className="text-matrix-green/40 text-[11px] leading-relaxed mt-0.5">{c.detail}</div>
+      <div className="text-matrix-green/50 text-sm leading-relaxed mt-1">{c.detail}</div>
     </div>
   );
 }
@@ -105,7 +106,7 @@ function DimensionBody({ dimension }: { dimension: FetchedDimension }) {
           <ComponentRow key={i} c={c} />
         ))}
         {dimension.note && (
-          <p className="text-matrix-green/40 italic mt-2 pt-2 border-t border-matrix-green/10">{dimension.note}</p>
+          <p className="text-matrix-green/40 italic mt-3 pt-3 border-t border-matrix-green/10">{dimension.note}</p>
         )}
       </div>
     );
@@ -126,10 +127,9 @@ export default function ScoreBreakdownPanel({ entityType, entityId, dimensionKey
   const [state, setState] = useState<LoadState>("idle");
   const [dimension, setDimension] = useState<FetchedDimension | null>(null);
 
-  const handleToggle = () => {
-    const next = !open;
-    setOpen(next);
-    if (next && state === "idle") {
+  const handleOpen = () => {
+    setOpen(true);
+    if (state === "idle") {
       setState("loading");
       fetchEntityBreakdown(entityType, entityId)
         .then((data) => {
@@ -144,23 +144,19 @@ export default function ScoreBreakdownPanel({ entityType, entityId, dimensionKey
     <div className="mt-1">
       <button
         type="button"
-        onClick={handleToggle}
-        aria-expanded={open}
+        onClick={handleOpen}
         className="text-[10px] text-matrix-green/40 hover:text-matrix-green/70 transition-colors underline underline-offset-2 cursor-pointer"
       >
-        {open ? "hide the math" : "show the math"}
+        show the math
       </button>
-      {open && (
-        <div className="mt-2 border border-matrix-green/20 rounded-sm p-3 bg-black/30 text-xs">
-          <h4 className="text-neon-cyan/70 text-[11px] tracking-widest mb-2">{label.toUpperCase()}</h4>
-          {state === "loading" && <p className="text-matrix-green/40">Loading…</p>}
-          {state === "error" && <p className="text-red-500/70">Couldn&apos;t load the breakdown — try again.</p>}
-          {state === "ready" && dimension && <DimensionBody dimension={dimension} />}
-          {state === "ready" && !dimension && (
-            <p className="text-matrix-green/40 italic">No breakdown data for this dimension.</p>
-          )}
-        </div>
-      )}
+      <Modal open={open} onClose={() => setOpen(false)} title={label}>
+        {state === "loading" && <p className="text-matrix-green/40">Loading…</p>}
+        {state === "error" && <p className="text-red-500/70">Couldn&apos;t load the breakdown — try again.</p>}
+        {state === "ready" && dimension && <DimensionBody dimension={dimension} />}
+        {state === "ready" && !dimension && (
+          <p className="text-matrix-green/40 italic">No breakdown data for this dimension.</p>
+        )}
+      </Modal>
     </div>
   );
 }
