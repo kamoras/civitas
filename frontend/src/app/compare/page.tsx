@@ -15,9 +15,8 @@ import {
 } from "@/lib/api";
 import type { StateInfo, RepStateInfo } from "@/lib/api";
 import type { Senator } from "@/types/senator";
-import { calculateOverallScore, getScoreColor } from "@/lib/representation";
+import { getScoreColor } from "@/lib/representation";
 import { formatCurrency } from "@/lib/formatting";
-import { useScoreWeights } from "@/hooks/useConfig";
 import { useUserState } from "@/hooks/useUserState";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 
@@ -200,9 +199,8 @@ function ComparisonTable({
   leftChamber: Chamber;
   rightChamber: Chamber;
 }) {
-  const weights = useScoreWeights();
-  const leftOverall = calculateOverallScore(left.representationScore, weights);
-  const rightOverall = calculateOverallScore(right.representationScore, weights);
+  const leftOverall = left.representationScore.overall;
+  const rightOverall = right.representationScore.overall;
   const leftColorClass = getScoreColor(leftOverall);
   const rightColorClass = getScoreColor(rightOverall);
   const leftPacPct =

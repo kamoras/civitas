@@ -1,8 +1,7 @@
 "use client";
 
 import { Senator, VotingRecord, SponsoredBill } from "@/types/senator";
-import { calculateOverallScore, getScoreLabel, getScoreColor, getScoreBgColor } from "@/lib/representation";
-import { useScoreWeights } from "@/hooks/useConfig";
+import { getScoreLabel, getScoreColor, getScoreBgColor } from "@/lib/representation";
 import MetricTooltip from "./MetricTooltip";
 import ScoreBreakdownPanel from "@/components/shared/ScoreBreakdownPanel";
 import { SCORE_TERMS } from "@/lib/scoreTerms";
@@ -118,8 +117,7 @@ function ScoreBar({
 
 export default function RepresentationScore({ breakdown, votingRecord, funding, sponsoredBills, rank, totalInChamber, entityId, chamber }: RepresentationScoreProps) {
   const entityType = chamber === "house" ? "representative" : "senator";
-  const weights = useScoreWeights();
-  const overall = calculateOverallScore(breakdown, weights);
+  const overall = breakdown.overall;
   const label = getScoreLabel(overall);
   const colorClass = getScoreColor(overall);
   const grade = getScoreGrade(overall);

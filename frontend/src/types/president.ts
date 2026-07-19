@@ -5,6 +5,8 @@ export interface PresidentialScore {
   effectiveness: number;
   competence: number;
   agencyAlignment: number;
+  /** Backend-computed weighted total — never recompute this client-side. */
+  overall: number;
 }
 
 export interface President {

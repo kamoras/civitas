@@ -1,10 +1,9 @@
 import { Senator } from "@/types/senator";
-import { calculateOverallScore } from "@/lib/representation";
 import { formatCurrency } from "@/lib/formatting";
 
 export function generateCommentary(senator: Senator): string[] {
   const comments: string[] = [];
-  const score = calculateOverallScore(senator.representationScore);
+  const score = senator.representationScore.overall;
   const { funding, votingRecord, lobbyingMatches } = senator;
 
   // Funding concentration

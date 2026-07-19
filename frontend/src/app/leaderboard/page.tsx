@@ -10,10 +10,9 @@ import BranchSelector, { type Branch } from "@/components/BranchSelector";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import { fetchLeaderboard, fetchRepLeaderboard, fetchPresidentLeaderboard, fetchJusticeLeaderboard } from "@/lib/api";
-import { calculateOverallScore, calculatePresidentScore, calculateJusticeScore, getScoreColor, getScoreBgColor } from "@/lib/representation";
+import { getScoreColor, getScoreBgColor } from "@/lib/representation";
 import { PARTY_BADGE } from "@/lib/partyStyles";
 import { formatCurrency } from "@/lib/formatting";
-import { useScoreWeights } from "@/hooks/useConfig";
 import type { LeaderboardEntry, ScoreTrend } from "@/types/senator";
 import type { PresidentLeaderboardEntry } from "@/types/president";
 import type { JusticeLeaderboardEntry } from "@/types/justice";
@@ -189,7 +188,7 @@ function PresidentLeaderboard({
             <tbody>
               {entries.map((entry, idx) => {
                 const rank = idx + 1;
-                const score = calculatePresidentScore(entry.score);
+                const score = entry.score.overall;
                 return (
                   <tr
                     key={entry.id}
@@ -252,7 +251,7 @@ function PresidentLeaderboard({
         <div className="md:hidden divide-y divide-matrix-green/10">
           {entries.map((entry, idx) => {
             const rank = idx + 1;
-            const score = calculatePresidentScore(entry.score);
+            const score = entry.score.overall;
             return (
               <Link
                 key={entry.id}
@@ -361,7 +360,7 @@ function JusticeLeaderboard({
             <tbody>
               {entries.map((entry, idx) => {
                 const rank = idx + 1;
-                const score = calculateJusticeScore(entry.score);
+                const score = entry.score.overall;
                 const pp = apptParty(entry.appointingParty);
                 return (
                   <tr
@@ -426,7 +425,7 @@ function JusticeLeaderboard({
         <div className="md:hidden divide-y divide-matrix-green/10">
           {entries.map((entry, idx) => {
             const rank = idx + 1;
-            const score = calculateJusticeScore(entry.score);
+            const score = entry.score.overall;
             const pp = apptParty(entry.appointingParty);
             return (
               <Link
@@ -506,7 +505,6 @@ function LeaderboardContent() {
   const [error, setError] = useState<string | null>(null);
   const [partyFilter, setPartyFilter] = useState<PartyFilter>("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("score");
-  const weights = useScoreWeights();
 
   useEffect(() => {
     fetchLeaderboard()
@@ -565,10 +563,10 @@ function LeaderboardContent() {
         return pctB - pctA;
       }
       return (
-        calculateOverallScore(b.representationScore, weights) - calculateOverallScore(a.representationScore, weights)
+        b.representationScore.overall - a.representationScore.overall
       );
     });
-  }, [activeEntries, branch, partyFilter, sortKey, weights]);
+  }, [activeEntries, branch, partyFilter, sortKey]);
 
   const counts = useMemo(() => {
     if (branch === "house") {
@@ -705,7 +703,7 @@ function LeaderboardContent() {
                   {displayed.map((entry, idx) => {
                     const rankOffset = branch === "house" ? (housePage - 1) * 50 : 0;
                     const rank = rankOffset + idx + 1;
-                    const score = calculateOverallScore(entry.representationScore, weights);
+                    const score = entry.representationScore.overall;
                     const pacPct =
                       (entry.totalRaised ?? 0) > 0
                         ? Math.round(((entry.totalFromPacs ?? 0) / entry.totalRaised) * 100)
@@ -780,7 +778,7 @@ function LeaderboardContent() {
               {displayed.map((entry, idx) => {
                 const mobileRankOffset = branch === "house" ? (housePage - 1) * 50 : 0;
                 const rank = mobileRankOffset + idx + 1;
-                const score = calculateOverallScore(entry.representationScore, weights);
+                const score = entry.representationScore.overall;
                 const pacPct =
                   (entry.totalRaised ?? 0) > 0
                     ? Math.round(((entry.totalFromPacs ?? 0) / entry.totalRaised) * 100)

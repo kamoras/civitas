@@ -50,6 +50,10 @@ class RepresentationScoreSchema(CamelModel):
     independent_voting: float
     funding_diversity: float
     legislative_effectiveness: float = 0.0
+    # Backend-computed overall (score_calculator.compute_overall_score) — the
+    # frontend must never recompute this from the sub-scores itself (see
+    # lib/representation.ts's removed weightedScore).
+    overall: float = 0.0
     # Per-dimension data-sufficiency: "high" | "medium" | "low"
     confidence: dict[str, str] | None = None
 
@@ -369,6 +373,8 @@ class PresidentialScoreSchema(CamelModel):
     effectiveness: float
     competence: float
     agency_alignment: float
+    # Backend-computed overall (president_scorer.compute_president_overall_score).
+    overall: float = 0.0
 
 
 class PresidentSchema(CamelModel):
@@ -418,6 +424,8 @@ class JusticeScoreSchema(CamelModel):
     independence: float
     bipartisan_agreement: float
     judicial_restraint: float
+    # Backend-computed overall (justice_service._build_score).
+    overall: float = 0.0
 
 
 class JusticeSchema(CamelModel):

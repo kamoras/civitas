@@ -26,6 +26,8 @@ export interface Senator {
     independentVoting: number;
     fundingDiversity: number;
     legislativeEffectiveness: number;
+    /** Backend-computed weighted overall — never recompute this client-side. */
+    overall: number;
     /** Per-dimension data-sufficiency, keyed by the score fields above. */
     confidence?: Record<string, "high" | "medium" | "low">;
   };

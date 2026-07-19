@@ -3,6 +3,8 @@ export interface JusticeScore {
   independence: number;
   bipartisanAgreement: number;
   judicialRestraint: number;
+  /** Backend-computed weighted total — never recompute this client-side. */
+  overall: number;
 }
 
 export interface Justice {
