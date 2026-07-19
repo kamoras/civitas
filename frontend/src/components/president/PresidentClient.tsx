@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import { fetchPresident, fetchPresidentLeaderboard } from "@/lib/api";
-import { calculatePresidentScore, getScoreColor, getScoreBgColor, getScoreLabel } from "@/lib/corruption";
+import { calculatePresidentScore, getScoreColor, getScoreBgColor, getScoreLabel } from "@/lib/representation";
 import ScoreBreakdownPanel from "@/components/shared/ScoreBreakdownPanel";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 

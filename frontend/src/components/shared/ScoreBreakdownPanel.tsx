@@ -7,7 +7,7 @@ import {
   fetchRepScoreBreakdown,
   fetchSenatorScoreBreakdown,
 } from "@/lib/api";
-import { getScoreColor } from "@/lib/corruption";
+import { getScoreColor } from "@/lib/representation";
 import type { ScoreBreakdownComponent } from "@/types/scoreBreakdown";
 import Modal from "./Modal";
 

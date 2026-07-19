@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import { fetchJustice, fetchJusticeLeaderboard } from "@/lib/api";
-import { calculateJusticeScore, getJusticeLabel, getScoreColor, getScoreBgColor } from "@/lib/corruption";
+import { calculateJusticeScore, getJusticeLabel, getScoreColor, getScoreBgColor } from "@/lib/representation";
 import ScoreBreakdownPanel from "@/components/shared/ScoreBreakdownPanel";
 import type { Justice, JusticeLeaderboardEntry, JusticeScore } from "@/types/justice";
 

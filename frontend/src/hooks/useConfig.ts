@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { AppConfig, fetchConfig, IndustryInfo } from "@/lib/api";
-import { DEFAULT_WEIGHTS } from "@/lib/corruption";
+import { DEFAULT_WEIGHTS } from "@/lib/representation";
 
 const ConfigContext = createContext<AppConfig | null>(null);
 

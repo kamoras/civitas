@@ -10,7 +10,7 @@ import BranchSelector, { type Branch } from "@/components/BranchSelector";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import { fetchLeaderboard, fetchRepLeaderboard, fetchPresidentLeaderboard, fetchJusticeLeaderboard } from "@/lib/api";
-import { calculateOverallScore, calculatePresidentScore, calculateJusticeScore, getScoreColor, getScoreBgColor } from "@/lib/corruption";
+import { calculateOverallScore, calculatePresidentScore, calculateJusticeScore, getScoreColor, getScoreBgColor } from "@/lib/representation";
 import { PARTY_BADGE } from "@/lib/partyStyles";
 import { formatCurrency } from "@/lib/formatting";
 import { useScoreWeights } from "@/hooks/useConfig";

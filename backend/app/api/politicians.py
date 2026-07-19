@@ -43,7 +43,7 @@ def _cached_json(data, max_age: int = CACHE_TTL_DETAIL_S) -> JSONResponse:
 
 
 # ---------------------------------------------------------------------------
-# Score helpers — mirrors frontend lib/corruption.ts calculations
+# Score helpers — mirrors frontend lib/representation.ts calculations
 # ---------------------------------------------------------------------------
 
 _JUSTICE_WEIGHTS = {
