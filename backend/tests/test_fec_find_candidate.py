@@ -89,6 +89,24 @@ async def test_no_district_provided_no_fallback_attempted(db_session):
 
 
 @pytest.mark.asyncio
+async def test_primary_search_requires_genuine_name_match(db_session):
+    """A same-surname/state/office candidate from the primary (non-district)
+    search must NOT be accepted as a fallback match either — e.g. a newly
+    appointed senator sharing a surname with a long-tenured incumbent must
+    not get that incumbent's committee attributed to them."""
+    with patch(
+        "app.pipeline.fetch.fec._fetch_with_retry", new_callable=AsyncMock
+    ) as mock_fetch:
+        mock_fetch.return_value = {
+            "results": [_candidate("GRAHAM, LINDSEY O", "S0SC00149", "")]
+        }
+        result = await find_candidate(
+            None, db_session, "Darline Graham", "SC", office="S"
+        )
+        assert result is None
+
+
+@pytest.mark.asyncio
 async def test_both_searches_empty_returns_none(db_session):
     with patch(
         "app.pipeline.fetch.fec._fetch_with_retry", new_callable=AsyncMock
