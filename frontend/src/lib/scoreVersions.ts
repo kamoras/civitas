@@ -17,6 +17,17 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.5",
+    date: "2026-07-19",
+    title: "Funding Diversity folded into Funding Independence; Donor Independence removed from Constituent Alignment",
+    changes: [
+      "v6.0's companion audit found Funding Independence and Funding Diversity correlate at r=0.72 — the same underlying funding-profile signal under two labels, not two genuinely distinct dimensions. v6.0 responded by rebalancing their combined weight down to 33% so the redundant pair couldn't dominate the overall score, but didn't address the redundancy itself. This version folds them into one dimension outright: Funding Independence's weight becomes 33% (the sum of the two prior weights), and Funding Diversity's two signals — source breadth and industry concentration — are now components inside Funding Independence's own score. The internal weights are a straight linear renormalization of each component's prior contribution to the overall score, not a fresh judgment call about relative importance — the underlying continuous math is identical to the pre-merge weighted sum; because scores round to whole numbers, an individual senator's overall score can still shift by a fraction of a point purely from rounding happening once instead of twice, not from any change in what's being measured.",
+      "Constituent Alignment's Donor Independence component (25% of that dimension, a heuristic scoring the money associated with donor-vote topical overlaps) is removed. It measured a close cousin of the Funding Independence signal — both driven by total money raised and donor-industry concentration — and in practice reduced to one of four fixed baseline values for 85% of senators, since no data source discloses how a specific donor's money maps to a specific vote (senatorVoteAligned, the field that would carry that signal, is structurally always empty). Its freed weight goes entirely to seat-relative vote alignment; coalition breadth keeps its own independently-justified 20%.",
+      "Funding Diversity's underlying computation and score_funding_diversity storage are unchanged and still shown wherever they were before (e.g. Bluesky spotlight text) — this is purely a change to which dimension its signal counts toward in the weighted overall score, the same 'kept running, just excluded from the weighted sum' pattern v6.0 used when removing Promise Persistence.",
+      "Legislative Effectiveness's score explanation now breaks a sponsor's substantive-bill count into introduced-only / advanced-further / became-law, instead of a single opaque credit number, after a report that a high score looked wrong for a member who hadn't passed anything. Investigation confirmed the underlying data was correctly scoped to the current term only (not career-cumulative) and the formula itself faithfully implements Volden & Wiseman's real methodology, where introducing a substantive bill earns real credit on its own — the fix was making that visible as real numbers instead of implied by a footnote.",
+    ],
+  },
+  {
     version: "v6.4",
     date: "2026-07-19",
     title: "Academic-fidelity audit: citations corrected, Legislative Effectiveness rebuilt to match its own methodology",
