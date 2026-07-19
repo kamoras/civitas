@@ -274,8 +274,9 @@ def _collect_vector_db_stats(db: Session) -> dict:
         stats["embeddingModelVersion"] = get_model_version()
         stats["embeddingDimensions"] = EMBEDDING_DIMENSIONS
 
-    except Exception as e:
-        stats = {"status": "unavailable", "error": str(e)}
+    except Exception:
+        logger.exception("Vector DB stats collection failed")
+        stats = {"status": "unavailable", "error": "collection failed — see server logs"}
 
     # Learning store metrics (always attempt even if chroma is down)
     try:
@@ -312,8 +313,9 @@ def _collect_vector_db_stats(db: Session) -> dict:
             "newestEntry": newest.isoformat() if newest else None,
             "oldestEntry": oldest.isoformat() if oldest else None,
         }
-    except Exception as e:
-        stats["learningStore"] = {"error": str(e)}
+    except Exception:
+        logger.exception("Learning store metrics collection failed")
+        stats["learningStore"] = {"error": "collection failed — see server logs"}
 
     return stats
 
