@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { SponsoredBill } from "@/types/senator";
-import { billUrl } from "@/lib/sources";
 import { safeHref } from "@/lib/formatting";
 import CollapsibleSection from "../shared/CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
@@ -136,7 +135,7 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
         {/* Bill list */}
         <div className="space-y-1.5">
           {visible.map((bill) => {
-            const url = billUrl(bill.billId);
+            const url = `/bills?q=${encodeURIComponent(bill.billId)}`;
             const badge = bill.partyLeaning ? PARTY_BADGE[bill.partyLeaning] : null;
             return (
               <div
@@ -150,18 +149,14 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      {url ? (
-                        <a
-                          href={safeHref(url) || "#"}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-matrix-green/80 hover:text-neon-cyan transition-colors"
-                        >
-                          {bill.title}
-                        </a>
-                      ) : (
-                        <span className="text-sm text-matrix-green/80">{bill.title}</span>
-                      )}
+                      <a
+                        href={safeHref(url) || "#"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-matrix-green/80 hover:text-neon-cyan transition-colors"
+                      >
+                        {bill.title}
+                      </a>
                     </div>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       <span className="text-[10px] text-matrix-green/30">{bill.billId}</span>
