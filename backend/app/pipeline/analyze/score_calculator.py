@@ -4,14 +4,17 @@ Score calculator — computes the five representation sub-scores from real data.
 Higher score = better representation of constituents.
 All scores are 0-100 where 100 = ideal representative, 0 = fully captured.
 
-The five dimensions:
-  1. Funding Independence       — donor concentration, PAC dependency, self-funding
-  2. Promise Persistence        — campaign commitments kept vs broken + participation
-  3. Constituent Alignment      — voting behavior vs what the seat's electorate
+The scored dimensions (SCORE_WEIGHTS) — Promise Persistence (removed
+v6.0) and Funding Diversity (folded into Funding Independence, v6.5)
+still run and still store their score_* columns, just excluded from
+the weighted sum below:
+  1. Funding Independence       — donor concentration, PAC dependency, self-funding,
+                                  source breadth, industry diversification (v6.5: incl.
+                                  the former Funding Diversity dimension)
+  2. Constituent Alignment      — voting behavior vs what the seat's electorate
                                   expects (PVI-relative; stored/keyed as
                                   independentVoting for compatibility)
-  4. Funding Diversity          — source traceability and industry diversification
-  5. Legislative Effectiveness  — bill passage, cosponsorship leadership, volume
+  3. Legislative Effectiveness  — bill passage, cosponsorship leadership, volume
 
 North star (owner, 2026-07): scores measure how well members REPRESENT
 their constituents — not independence as an intrinsic virtue. Party-line
@@ -310,6 +313,34 @@ small_frac (50 + small_frac*50 — still 50 at small_frac=0, still 65 at
 exactly the old 0.3 threshold, so continuous with prior behavior there,
 but now able to reach 100 for a hypothetical fully-small-dollar
 campaign instead of capping at 65).
+
+Changes from v6.4 → v6.5 (2026-07): Funding Diversity folded into Funding
+Independence as one dimension; Donor Independence removed from Constituent
+Alignment. Both changes respond to the same underlying finding
+(config_definitions.SCORE_WEIGHTS's r=0.72 audit): Funding Independence
+and Funding Diversity measure the same underlying funding-profile signal,
+and Constituent Alignment's Donor Independence component measured a
+close cousin of it (both keyed off total_raised and donor-industry
+concentration) while itself degrading to one of four fixed values for
+85% of senators (ground_truth.py). Funding Diversity's two signals
+(source breadth, industry concentration) are now two additional
+components inside Funding Independence's weighted score, at internal
+weights equal to their PRIOR contribution to the overall score divided
+by the merged dimension's new weight (0.20 and 0.13 respectively,
+summing to the new 0.33) — a linear renormalization, not a fresh
+judgment call: the continuous math is provably identical to the pre-
+merge weighted sum. clamp() rounds to an int, though, and the merge
+moves from two independent roundings (FI, then FD) to one — so a given
+senator's overall score can shift by roughly half a point from that
+reorganization, not from any new weighting decision. score_funding_
+diversity keeps being computed and stored
+exactly as before (still real, same "kept independently visible" pattern
+as promisePersistence's v6.0 removal) — only SCORE_WEIGHTS and the
+Funding Independence breakdown change. Donor Independence's freed 25%
+goes entirely to Constituent Alignment's seat-relative vote alignment
+component (coalition breadth keeps its own independently-justified 20%)
+rather than being redistributed to prop up a three-way split that no
+longer has three genuinely distinct signals.
 """
 
 import logging
@@ -381,7 +412,15 @@ logger = logging.getLogger(__name__)
 #     ratio, since this platform's data is career-cumulative, not
 #     single-term. See _les_component_score and the module comment above
 #     _LES_STAGE_ORDER for the full account.
-ALGORITHM_VERSION = "v6.4"
+#
+# v6.4 -> v6.5 (2026-07): Funding Diversity folded into Funding
+# Independence as one scored dimension (SCORE_WEIGHTS: fundingDiversity
+# removed, fundingIndependence 0.20 -> 0.33); Donor Independence removed
+# from Constituent Alignment, its freed 25% going to seat-relative vote
+# alignment. Both respond to the same r=0.72 correlated-signal finding
+# (config_definitions.SCORE_WEIGHTS's docstring). See the top-of-file
+# "Changes from v6.4 -> v6.5" note for the full account.
+ALGORITHM_VERSION = "v6.5"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -771,8 +810,10 @@ def _calc_funding_independence(funding: dict, state: str = "", district: int | N
     """
     Funding Independence Score (0-100, higher = better).
 
-    Three components, calibrated so the median senator scores ≈50 on each
-    (empirical distributions from the 2026-06 audit of FEC cycle totals):
+    Five components (the last two folded in from the former Funding
+    Diversity dimension, v6.5 — see this file's v6.4->v6.5 changelog note),
+    calibrated so the median senator scores ≈50 on each (empirical
+    distributions from the 2026-06 audit of FEC cycle totals):
 
       1. PAC dependency (50%): PAC *share*, scaled by how close the
          contributing PACs actually are to their legal per-election
@@ -828,6 +869,29 @@ def _calc_funding_independence(funding: dict, state: str = "", district: int | N
          The relative pool ratio discriminates at any scale: audit median
          0.60 maps to 50, p10 (0.34) to ≈82, p90 (0.93) to ≈9.
 
+      4. Source breadth (formerly Funding Diversity's 1st component): how
+         broad and distributed the funding base is — small-donor money
+         counts fullest, classified-industry money partially, UNCLASSIFIED
+         (unattributable, not evidence of concentration) neutrally, opaque
+         OTHER/POLITICAL money least. See _funding_diversity_core's own
+         docstring for the full derivation, reused unchanged here.
+
+      5. Industry concentration (formerly Funding Diversity's 2nd
+         component): inverse HHI across classified industry categories,
+         blended toward a grassroots-scaled neutral when too little
+         funding is industry-classified to measure HHI meaningfully. Same
+         reuse as above.
+
+    Internal weights for all five: a linear renormalization of each
+    component's PRIOR contribution to the overall score under the pre-v6.5
+    two-dimension split (see the score = clamp(...) line below for the
+    exact fractions) — not a fresh judgment call: the continuous math is
+    provably identical to the pre-merge weighted sum. clamp() rounds to an
+    int though, and this merge moves from two independent roundings (FI,
+    then FD) to one, so an individual senator's overall score can shift by
+    roughly half a point from that reorganization alone, not from a new
+    weighting decision.
+
     Academic rationale
     ------------------
     Neither Barber (2016, POQ 80(S1)) nor Bonica (2014, AJPS 58(2)) contains
@@ -846,7 +910,10 @@ def _calc_funding_independence(funding: dict, state: str = "", district: int | N
     124(1–2), 135–156) is a real, on-topic academic source: it finds a
     linear PAC-contribution-to-vote relationship, which is genuine support
     for using a linear (not step-function or logarithmic) PAC-dependency
-    curve — that citation stays.
+    curve — that citation stays. Source breadth and industry concentration
+    carry their own academic notes on _calc_funding_diversity, reused
+    unchanged (Bonica 2014/Malbin 2009 for the small-dollar grassroots
+    proxy; Parmigiani 2025/Rhoades 1993 for the HHI concentration metric).
     """
     return _funding_independence_core(funding, state, district)["score"]
 
@@ -972,13 +1039,48 @@ def _funding_independence_core(funding: dict, state: str = "", district: int | N
             "— too few to measure concentration, neutral 50"
         )
 
-    score = clamp(pac_score * 0.50 + small_score * 0.25 + concentration_score * 0.25)
+    # Components 4-5: source breadth and industry concentration (folded in
+    # from the former Funding Diversity dimension, v6.5 — see this file's
+    # v6.4->v6.5 changelog note and config_definitions.SCORE_WEIGHTS's
+    # docstring for the r=0.72 rationale). Reuses _funding_diversity_core
+    # rather than reimplementing its formula — single source of truth,
+    # same reuse contract this file already follows elsewhere. Falls back
+    # to a neutral 50 with the same "missing data" phrasing the rest of
+    # this file uses when industryBreakdown isn't available; total_raised
+    # is already known nonzero at this point (checked above).
+    fd_components = {c["label"]: c for c in _funding_diversity_core(funding)["components"]}
+    breadth_score = fd_components.get("Source breadth", {}).get("score", 50.0)
+    breadth_detail = fd_components.get("Source breadth", {}).get(
+        "detail", "no industry breakdown available — neutral 50"
+    )
+    industry_concentration_score = fd_components.get("Industry concentration", {}).get("score", 50.0)
+    industry_concentration_detail = fd_components.get("Industry concentration", {}).get(
+        "detail", "no industry breakdown available — neutral 50"
+    )
+
+    # Internal weights: a linear renormalization of each component's PRIOR
+    # contribution to the OVERALL score, not a fresh judgment call — old FI
+    # weight 0.20 x its own 50/25/25 split, old FD weight 0.13 x its own
+    # 50/50 split, each divided by the merged dimension's new 0.33 weight.
+    # 20:10:10:13:13 out of 66 (= 0.10:0.05:0.05:0.065:0.065 / 0.33). This
+    # is why folding the two dimensions together doesn't change the
+    # underlying weighting logic — clamp()'s rounding (each dimension to
+    # an int) still applies once instead of twice, so an individual
+    # senator's overall score can shift by roughly half a point from that
+    # alone, not from any new judgment call about relative importance.
+    score = clamp(
+        pac_score * (20 / 66)
+        + small_score * (10 / 66)
+        + concentration_score * (10 / 66)
+        + breadth_score * (13 / 66)
+        + industry_concentration_score * (13 / 66)
+    )
     return {
         "score": score,
         "components": [
             {
                 "label": "PAC dependency",
-                "weight": 0.50,
+                "weight": round(20 / 66, 4),
                 "score": round(pac_score, 1),
                 "detail": (
                     f"{pac_ratio:.0%} of ${total_raised:,.0f} raised came from PACs"
@@ -989,7 +1091,7 @@ def _funding_independence_core(funding: dict, state: str = "", district: int | N
             },
             {
                 "label": "Small-donor share",
-                "weight": 0.25,
+                "weight": round(10 / 66, 4),
                 "score": round(small_score, 1),
                 "detail": (
                     f"{small_pct:.0f}% of funding from small (<$200) donors"
@@ -1002,9 +1104,21 @@ def _funding_independence_core(funding: dict, state: str = "", district: int | N
             },
             {
                 "label": "Top-donor concentration",
-                "weight": 0.25,
+                "weight": round(10 / 66, 4),
                 "score": round(concentration_score, 1),
                 "detail": concentration_detail,
+            },
+            {
+                "label": "Source breadth",
+                "weight": round(13 / 66, 4),
+                "score": breadth_score,
+                "detail": breadth_detail,
+            },
+            {
+                "label": "Industry concentration",
+                "weight": round(13 / 66, 4),
+                "score": industry_concentration_score,
+                "detail": industry_concentration_detail,
             },
         ],
     }
@@ -1240,11 +1354,11 @@ def _calc_constituent_alignment(
     called the median elected official a failure for party-line voting
     that, in a safe seat, IS constituent representation.
 
-    Two components:
-      1. Seat-relative vote alignment (75%, or 60% when real
-         donor-alignment data exists): the member's contested-vote break
-         rate compared to an EXPECTED break rate derived from state
-         partisan lean (Cook PVI):
+    Components:
+      1. Seat-relative vote alignment (80%, or 100% when cosponsorship
+         data is unavailable): the member's contested-vote break rate
+         compared to an EXPECTED break rate derived from state partisan
+         lean (Cook PVI):
            aligned safe seat → ~3% expected (base-rate dissent),
            swing seat        → ~8%,
            opposed seat      → up to ~20% (a member whose party opposes
@@ -1260,13 +1374,25 @@ def _calc_constituent_alignment(
          swing or opposed seat drifts down to at most 25 — below
          neutral, but never the old failure-grade floor.
 
-      2. Donor independence (25%): based on donor-vote connection
-         matches, with the visibility-scaled baseline. senatorVoteAligned
-         is always None (structural data limitation, not a bug — see
-         the note in the module docstring under "Independent Voting"),
-         so this always runs the donation-share/non-consensus-vote-share
-         formula; a higher-weight "real alignment data" tier was removed
-         2026-07-15 as dead code (see module docstring).
+      2. Coalition breadth (20%, when cosponsorship data exists): see
+         below.
+
+    Removed (2026-07): "Donor independence," a 25%-weighted component
+    based on donor-vote connection matches with a fundraising-total-scaled
+    baseline. It measured essentially the same underlying signal as the
+    Funding Independence dimension (both driven by total raised and
+    donor-industry concentration — see config_definitions.py's r=0.72
+    funding-pair rationale for the analogous Funding Independence/Funding
+    Diversity finding), and in practice reduced to a coarse function of
+    total_raised: senatorVoteAligned is always None (structural data
+    limitation — no source discloses per-bill donor positions, see the
+    module docstring under "Independent Voting"), and 85% of senators
+    have zero detected lobbying matches, leaving one of four fixed
+    baseline values by fundraising bucket for the large majority. The
+    freed weight now goes entirely to seat-relative alignment (and
+    coalition breadth keeps its own independently-justified 20%) rather
+    than being redistributed to preserve a three-way split that no
+    longer has three genuinely distinct signals.
 
     Removed in v4.2: the "state-relevant policy" exemption that skipped
     party-line votes on policy areas related to the member's TOP DONOR
@@ -1401,53 +1527,6 @@ def _constituent_alignment_core(
         against_pct = None
         party_score = 50
 
-    # Donor independence via donor-vote connection matches
-    total_raised = funding.get("totalRaised", 0)
-
-    # Baseline reflects data visibility: a small operation with no visible
-    # donor-vote connections is plausibly independent; a $100M+ fundraiser
-    # with no visible connections almost certainly has a data gap — at
-    # that scale influence flows through bundled donations and outside
-    # spending rather than anything our matching can see.
-    if total_raised >= 100_000_000:
-        base_donor = 50.0
-    elif total_raised >= 50_000_000:
-        base_donor = 60.0
-    elif total_raised >= 10_000_000:
-        base_donor = 67.0
-    else:
-        base_donor = 72.0
-
-    if lobbying_matches:
-        # Penalize the visibility baseline by how much money the matched
-        # donors represent and how many matches involve divided votes.
-        # senatorVoteAligned is always None (see module docstring's
-        # structural note) -- there's no live-or-planned code path that
-        # produces a real value for it, so there is no separate
-        # "real alignment data" tier here; this is the only branch.
-        # NOTE: do not use raw match count against a fixed divisor — the
-        # match list is capped upstream, which made count/8 a constant.
-        total_lobby_donations = sum(
-            m.get("donationToSenator", 0) for m in lobbying_matches
-        )
-        donation_ratio = (
-            total_lobby_donations / total_raised if total_raised > 0 else 0
-        )
-        non_consensus_share = sum(
-            1 for m in lobbying_matches if not m.get("isConsensusVote")
-        ) / len(lobbying_matches)
-
-        penalty = min(donation_ratio * 4, 0.20) + 0.08 * non_consensus_share
-        donor_score = base_donor * (1 - penalty)
-        donor_detail = (
-            f"baseline {base_donor:.0f} (${total_raised:,.0f} raised) reduced "
-            f"{penalty:.0%} by {len(lobbying_matches)} donor-vote match(es)"
-        )
-    else:
-        donor_score = base_donor
-        donor_detail = f"baseline {base_donor:.0f} (${total_raised:,.0f} raised), no donor-vote matches"
-    donor_weight = 0.25
-
     # Coalition breadth (v5): cross-party cosponsorship rate normalized to
     # the chamber cohort (Lugar Center Bipartisan Index method; Harbridge
     # 2015). Voting congruence asks "do you vote the way your seat
@@ -1465,10 +1544,9 @@ def _constituent_alignment_core(
         breadth_weight = 0.0
         breadth_score = 0.0
 
-    party_weight = 1.0 - donor_weight - breadth_weight
+    party_weight = 1.0 - breadth_weight
     score = clamp(
         party_score * party_weight
-        + donor_score * donor_weight
         + breadth_score * breadth_weight
     )
 
@@ -1490,12 +1568,6 @@ def _constituent_alignment_core(
             "score": round(party_score, 1),
             "detail": party_alignment_detail,
         },
-        {
-            "label": "Donor independence",
-            "weight": donor_weight,
-            "score": round(donor_score, 1),
-            "detail": donor_detail,
-        },
     ]
     if breadth_weight > 0:
         components.append({
@@ -1510,6 +1582,17 @@ def _constituent_alignment_core(
 def _calc_funding_diversity(funding: dict) -> int:
     """
     Funding Diversity Score (0-100, higher = better).
+
+    v6.5 (2026-07): no longer its own SCORE_WEIGHTS entry or top-level
+    scorecard panel — folded into Funding Independence as two additional
+    components (_funding_independence_core calls _funding_diversity_core
+    directly and reuses these two signals). Kept running and stored to
+    score_funding_diversity exactly as before (same "still real, still
+    computed, just excluded from the weighted sum" pattern as
+    promisePersistence's v6.0 removal) since other consumers (action
+    center, Bluesky spotlight text, the funding-diversity DB column
+    itself) still read it independently. See config_definitions.
+    SCORE_WEIGHTS's docstring for the r=0.72 fold-in rationale.
 
     Measures how broad and distributed a senator's funding base is.
     Higher = funding comes from many independent sources (harder to

@@ -65,12 +65,18 @@ class TestSenatorCoreConsistency:
     }
 
     def test_funding_independence_core_matches_calc(self):
+        # v6.5: 5 components — the original 3 plus Funding Diversity's
+        # source breadth/industry concentration, folded in (see
+        # config_definitions.SCORE_WEIGHTS's r=0.72 rationale).
         breakdown = _funding_independence_core(self.FUNDING)
         assert breakdown["score"] == _calc_funding_independence(self.FUNDING)
-        assert len(breakdown["components"]) == 3
-        assert sum(c["weight"] for c in breakdown["components"]) == 1.0
+        assert len(breakdown["components"]) == 5
+        assert abs(sum(c["weight"] for c in breakdown["components"]) - 1.0) < 1e-6
 
     def test_constituent_alignment_core_matches_calc(self):
+        # v6.5: Donor independence removed (see config_definitions.
+        # SCORE_WEIGHTS's r=0.72 rationale) — with no bipartisanship data
+        # in this fixture, only seat-relative vote alignment remains.
         voting_record = {
             "keyVotes": [{"votedWithParty": True} for _ in range(8)]
             + [{"votedWithParty": False} for _ in range(2)],
@@ -78,7 +84,7 @@ class TestSenatorCoreConsistency:
         args = (voting_record, [], self.FUNDING, "CA", "D")
         breakdown = _constituent_alignment_core(*args)
         assert breakdown["score"] == _calc_constituent_alignment(*args)
-        assert len(breakdown["components"]) >= 2
+        assert len(breakdown["components"]) == 1
 
     def test_funding_diversity_core_matches_calc(self):
         funding = {
@@ -220,7 +226,7 @@ class TestSenatorScoreBreakdownService:
         }
         fi = breakdown["fundingIndependence"]
         assert 0 <= fi["score"] <= 100
-        assert len(fi["components"]) == 3
+        assert len(fi["components"]) == 5  # v6.5: Funding Diversity folded in
 
 
 class TestRepresentativeScoreBreakdownService:
