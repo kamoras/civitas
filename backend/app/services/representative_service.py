@@ -244,6 +244,8 @@ def get_representative_score_breakdown(db: Session, rep_id: str) -> dict | None:
         return {
             "votedWithParty": v.voted_with_party,
             "partyAlignmentWeight": v.party_alignment_weight,
+            "partyLeaning": v.party_leaning,
+            "opposingPartyUnityPct": v.opposing_party_unity_pct,
         }
 
     voting_record = {
@@ -467,6 +469,7 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
             stance=v.get("stance", "neutral"),
             description=v.get("description", ""),
             party_leaning=v.get("partyLeaning"),
+            opposing_party_unity_pct=v.get("opposingPartyUnityPct"),
             voted_with_party=v.get("votedWithParty"),
             vote_category=category,
             key_vote_reasoning=v.get("keyVoteReasoning"),

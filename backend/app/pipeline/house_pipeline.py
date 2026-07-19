@@ -59,6 +59,8 @@ from app.pipeline.transform.normalize_votes import (
     find_house_roll_call,
     normalize_votes,
     compute_party_split,
+    compute_party_vote_split,
+    opposing_party_unity,
 )
 
 logger = logging.getLogger(__name__)
@@ -271,25 +273,39 @@ async def run_house_pipeline() -> dict:
             # only used when the LLM produced no label, so bipartisan-passed
             # bills kept partisan content labels and half the chamber was
             # marked as voting "against party" on near-unanimous bills.
-            from app.pipeline.analyze.party_platform import refine_with_vote_data
+            from app.pipeline.analyze.party_platform import (
+                classify_party_alignment_multi,
+                refine_with_vote_data,
+            )
+            from app.pipeline.analyze.bill_analyzer import classify_policy_areas_multi
 
             for bill in classified_bills:
                 bill_id = bill.get("billId", "")
                 rc = house_roll_calls.get(bill_id)
                 if rc:
-                    split = compute_party_split(rc)
+                    vote_split = compute_party_vote_split(rc)
+                    split = vote_split["label"] if vote_split else None
                     bill["partyLeaning"] = refine_with_vote_data(
                         bill.get("partyLeaning", "bipartisan"), split,
                     )
+                    if vote_split and bill["partyLeaning"] in ("R", "D"):
+                        bill["opposingPartyUnityPct"] = opposing_party_unity(
+                            bill["partyLeaning"], vote_split["r_yea_pct"], vote_split["d_yea_pct"],
+                        )
 
             for bill in classified_recent:
                 bill_id = bill.get("billId", "")
                 rc = recent_rc_map.get(bill_id)
                 if rc:
-                    split = compute_party_split(rc)
+                    vote_split = compute_party_vote_split(rc)
+                    split = vote_split["label"] if vote_split else None
                     bill["partyLeaning"] = refine_with_vote_data(
                         bill.get("partyLeaning", "bipartisan"), split,
                     )
+                    if vote_split and bill["partyLeaning"] in ("R", "D"):
+                        bill["opposingPartyUnityPct"] = opposing_party_unity(
+                            bill["partyLeaning"], vote_split["r_yea_pct"], vote_split["d_yea_pct"],
+                        )
 
             progress.complete(
                 "classify_bills",
@@ -353,21 +369,58 @@ async def run_house_pipeline() -> dict:
                             if not sp_num:
                                 continue
                             sp_key = f"{sp_type}.{sp_num}"
+                            sp_title = sp.get("title", "")
                             latest_action_text = (sp.get("latestAction") or {}).get("text", "")
                             is_law = "became public law" in latest_action_text.lower()
                             sp_congress = sp.get("congress", 0)
                             bill_actions = await fetch_bill_actions(
                                 client, db, sp_congress, sp_type.lower(), int(sp_num),
                             )
+                            # Sponsored bills previously got no policy/party
+                            # classification at all here (always None/[]) —
+                            # unlike Senate, which classifies every sponsored
+                            # bill. Title-only text is thinner than the
+                            # official-title+summary text key bills get
+                            # (fast-follow, not fixed here), but it's real
+                            # signal where there was none before. Refine with
+                            # the real roll-call split when this bill also
+                            # got a floor vote, same as classified_bills/
+                            # classified_recent above — a bill that's both
+                            # sponsored and voted on should show one
+                            # consistent label, not content-only here and
+                            # vote-refined elsewhere on the same scorecard.
+                            policy_areas_raw: list[dict] = []
+                            party_leaning = None
+                            if sp_title and len(sp_title) > 10:
+                                policy_areas_raw = classify_policy_areas_multi(sp_title, db_session=db)
+                                if policy_areas_raw:
+                                    alignment = classify_party_alignment_multi(
+                                        sp_title, policy_areas_raw, "pro",
+                                    )
+                                    party_leaning = alignment.get("overall", "bipartisan")
+                                    rc = house_roll_calls.get(sp_key)
+                                    if rc:
+                                        split = compute_party_split(rc)
+                                        party_leaning = refine_with_vote_data(party_leaning, split)
                             sp_list.append({
                                 "billId": sp_key,
-                                "title": sp.get("title", ""),
+                                "title": sp_title,
                                 "introducedDate": sp.get("introducedDate", ""),
                                 "latestAction": latest_action_text,
                                 "latestActionDate": (sp.get("latestAction") or {}).get("actionDate", ""),
-                                "policyArea": "",
-                                "policyAreas": [],
-                                "partyLeaning": None,
+                                "policyArea": policy_areas_raw[0]["area"] if policy_areas_raw else "",
+                                "policyAreas": [
+                                    {
+                                        "area": a["area"],
+                                        "confidence": a["confidence"],
+                                        "party": {
+                                            pa["area"]: pa["party"]
+                                            for pa in alignment.get("areas", [])
+                                        }.get(a["area"], "bipartisan"),
+                                    }
+                                    for a in policy_areas_raw
+                                ] if policy_areas_raw else [],
+                                "partyLeaning": party_leaning,
                                 "congress": sp_congress,
                                 "billType": sp.get("type", ""),
                                 "isLaw": is_law,
@@ -548,6 +601,7 @@ async def run_house_pipeline() -> dict:
                             "stance": rv.get("stance", "neutral"),
                             "description": rv.get("description", ""),
                             "partyLeaning": party_leaning,
+                            "opposingPartyUnityPct": rv.get("opposingPartyUnityPct"),
                             "votedWithParty": voted_with_party,
                             "voteCategory": "recent",
                             "keyVoteReasoning": None,
