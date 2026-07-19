@@ -148,7 +148,16 @@ async def find_candidate(
             break
 
     if match is None:
-        match = results[0]
+        # Don't fall back to the top same-surname/state/office hit — that
+        # silently attributes an unrelated candidate's committee (e.g. a
+        # long-tenured incumbent) to whoever we searched for. No genuine
+        # match means no FEC data, same as the no-results case above.
+        logger.warning(
+            "No genuine FEC name match for %s (%s, %s); top hit was %s",
+            name, state, office, results[0].get("name"),
+        )
+        api_cache_set(db, "fec", cache_key, None)
+        return None
 
     logger.debug(
         "FEC candidate match for %s: %s (%s)",
