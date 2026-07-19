@@ -1942,7 +1942,9 @@ def _les_component_score(
     score = raw_score * conf + 50.0 * (1 - conf)
     detail = (
         f"{raw_per_congress:.1f} significance-weighted stage-credit/congress "
-        f"vs. {expected_per_congress:.1f} expected for this sponsor's status "
+        f"(credits introducing a substantive bill, not just bills that advanced "
+        f"further — Volden & Wiseman's real methodology) vs. "
+        f"{expected_per_congress:.1f} expected for this sponsor's status "
         f"({n_sub} substantive bills)"
     )
     if conf < 1.0:
