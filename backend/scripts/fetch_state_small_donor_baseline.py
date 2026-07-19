@@ -3,20 +3,25 @@ component (see score_calculator.py's _state_small_donor_baseline).
 
 One-off calibration tool, not part of the live pipeline — mirrors
 fetch_district_pvi.py in spirit (offline data-fitting script whose output
-gets pasted into score_calculator.py as a constant), except population is
-static enough between censuses that there's no JSON file to regenerate
-on a schedule; this script only needs to be rerun if the regression looks
-stale (a new census, or a multi-year drift in fundraising patterns).
+gets pasted into score_calculator.py as a constant); rerun this whenever
+the regression looks stale (a multi-year drift in fundraising patterns —
+state population itself is static enough between censuses to only need
+scripts/fetch_state_population.py rerun after 2030).
 
 Pulls live (state, smallDonorPercentage) pairs from the public API rather
 than the DB directly, so this can run from any machine with network
 access — same reasoning fetch_district_pvi.py gives for scraping over a
-local data source.
+local data source. State population comes from app/data/state_population.json
+(scripts/fetch_state_population.py) — the same file score_calculator.py's
+_state_population() reads, so this script's inputs can't silently drift
+from what the live formula actually uses.
 
 Fits smallDonorPercentage = A + B * ln(population_millions) by ordinary
 least squares (closed-form, stdlib only — matches score_calibration.py's
 "no numpy" convention), then reports residual-based saturation constants
-for the surplus/deficit scoring curve.
+for the surplus/deficit scoring curve. Each printed line below maps
+directly to a _SMALL_DONOR_* constant in score_calculator.py — paste the
+printed values in when this script's fit changes.
 
 Run from the repo (network required):
     python3 backend/scripts/fetch_state_small_donor_baseline.py
@@ -24,27 +29,14 @@ Run from the repo (network required):
 
 import json
 import math
+import pathlib
 import statistics
 import urllib.request
 
 API_BASE = "https://civitas-research.org/api"
 UA = {"User-Agent": "CivitasCivicPlatform/1.0 (funding-baseline calibration; contact: mack.ryanm@gmail.com)"}
 
-# 2020 Census populations, millions. Static between censuses — update
-# after 2030. Same 50-state key set as STATE_PVI in score_calculator.py;
-# DC/territories are intentionally omitted here (no voting senators) and
-# fall back to the national mean in _state_small_donor_baseline.
-STATE_POPULATION_M: dict[str, float] = {
-    "CA": 39.5, "TX": 29.1, "FL": 21.5, "NY": 20.2, "PA": 13.0, "IL": 12.8,
-    "OH": 11.8, "GA": 10.7, "NC": 10.4, "MI": 10.1, "NJ": 9.3, "VA": 8.6,
-    "WA": 7.7, "AZ": 7.2, "MA": 7.0, "TN": 6.9, "IN": 6.8, "MO": 6.2,
-    "MD": 6.2, "WI": 5.9, "CO": 5.8, "MN": 5.7, "SC": 5.1, "AL": 5.0,
-    "LA": 4.6, "KY": 4.5, "OR": 4.2, "OK": 4.0, "CT": 3.6, "UT": 3.3,
-    "IA": 3.2, "NV": 3.1, "AR": 3.0, "MS": 2.9, "KS": 2.9, "NM": 2.1,
-    "NE": 2.0, "ID": 1.8, "WV": 1.8, "HI": 1.5, "NH": 1.4, "ME": 1.4,
-    "MT": 1.1, "RI": 1.1, "DE": 1.0, "SD": 0.9, "ND": 0.8, "AK": 0.7,
-    "VT": 0.6, "WY": 0.6,
-}
+STATE_POPULATION_PATH = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "state_population.json"
 
 
 def _fetch_json(url: str):
@@ -53,7 +45,13 @@ def _fetch_json(url: str):
         return json.load(resp)
 
 
-def fetch_senator_small_donor_pairs() -> list[tuple[str, float]]:
+def _load_state_population() -> dict[str, float]:
+    """Same file (and same convention) score_calculator.py's
+    _state_population() reads — see fetch_state_population.py."""
+    return {k: float(v) for k, v in json.loads(STATE_POPULATION_PATH.read_text())["states"].items()}
+
+
+def fetch_senator_small_donor_pairs(state_population: dict[str, float]) -> list[tuple[str, float]]:
     """(state, smallDonorPercentage) for every current senator with a scorecard."""
     listing = _fetch_json(f"{API_BASE}/politicians?branch=senate")
     ids = [d["id"] for d in listing if d.get("hasScorecard")]
@@ -64,7 +62,7 @@ def fetch_senator_small_donor_pairs() -> list[tuple[str, float]]:
         sc = detail.get("scorecard", {})
         state = sc.get("state")
         pct = (sc.get("funding") or {}).get("smallDonorPercentage")
-        if state in STATE_POPULATION_M and pct is not None:
+        if state in state_population and pct is not None:
             pairs.append((state, float(pct)))
     return pairs
 
@@ -80,35 +78,45 @@ def fit_ols(xs: list[float], ys: list[float]) -> tuple[float, float]:
 
 
 def main() -> None:
-    pairs = fetch_senator_small_donor_pairs()
+    state_population = _load_state_population()
+    pairs = fetch_senator_small_donor_pairs(state_population)
     print(f"{len(pairs)} senators with state + small-donor data")
 
-    xs = [math.log(STATE_POPULATION_M[state]) for state, _ in pairs]
+    xs = [math.log(state_population[state]) for state, _ in pairs]
     ys = [pct for _, pct in pairs]
 
     a, b = fit_ols(xs, ys)
     print(f"\nFit: expected_pct = {a:.2f} + {b:.2f} * ln(population_millions)")
+    print(f"  -> score_calculator.py: _SMALL_DONOR_BASELINE_A = {a:.2f}")
+    print(f"  -> score_calculator.py: _SMALL_DONOR_BASELINE_B = {b:.2f}")
 
     residuals = [y - (a + b * x) for x, y in zip(xs, ys)]
     resid_stdev = statistics.pstdev(residuals)
     print(f"Residual stdev: {resid_stdev:.2f}")
-    print(f"National mean small-donor %: {statistics.mean(ys):.2f}")
+    national_mean = statistics.mean(ys)
+    print(f"National mean small-donor %: {national_mean:.2f}")
+    print(f"  -> score_calculator.py: _SMALL_DONOR_NATIONAL_MEAN_PCT = {national_mean:.2f}")
 
-    # Saturation constants: full credit/deficit at ~1.5 residual-stdevs
+    # Saturation constant: full credit/deficit at ~1.5 residual-stdevs
     # past the baseline, the same "roughly one meaningful standard
     # deviation of real spread" reasoning used elsewhere in this file's
     # calibration constants (see MIN_STDEV's docstring in ground_truth.py
     # for the same style of justification).
     saturation = round(1.5 * resid_stdev, 1)
-    print(f"\nSuggested SURPLUS_SATURATION_PT = DEFICIT_SATURATION_PT = {saturation}")
+    print(f"\nSuggested saturation (full credit/deficit at this many points past baseline): {saturation}")
+    print(f"  -> score_calculator.py: _SMALL_DONOR_SATURATION_PT = {saturation}")
 
+    # Bounds: the observed range of *fitted* baselines across all 50
+    # states, padded 2 points each direction so a state right at the
+    # sample's population extreme doesn't sit exactly on the clamp.
     min_expected = round(min(a + b * x for x in xs), 1)
     max_expected = round(max(a + b * x for x in xs), 1)
-    print(f"Suggested MIN_EXPECTED_PCT = {max(0.0, min_expected - 2):.1f}")
-    print(f"Suggested MAX_EXPECTED_PCT = {max_expected + 2:.1f}")
+    print(f"\nFitted baseline range across all states: {min_expected:.1f}% - {max_expected:.1f}%")
+    print(f"  -> score_calculator.py: _SMALL_DONOR_MIN_EXPECTED_PCT = {max(0.0, min_expected - 2):.1f}")
+    print(f"  -> score_calculator.py: _SMALL_DONOR_MAX_EXPECTED_PCT = {max_expected + 2:.1f}")
 
     print("\nPer-state expected baseline:")
-    for state, pop in sorted(STATE_POPULATION_M.items(), key=lambda kv: kv[1]):
+    for state, pop in sorted(state_population.items(), key=lambda kv: kv[1]):
         expected = a + b * math.log(pop)
         print(f"  {state}: pop={pop:>5.1f}M  expected={expected:5.1f}%")
 

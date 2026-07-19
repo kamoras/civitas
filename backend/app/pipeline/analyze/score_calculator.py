@@ -389,24 +389,37 @@ STATE_PVI: dict[str, int] = {
     "DC": -30, "PR": 0, "GU": 0, "VI": 0, "AS": 0, "MP": 0,
 }
 
-# 2020 Census populations, millions. Source: census.gov. Update after the
-# 2030 census — population, unlike Cook PVI, doesn't shift enough between
-# censuses to need per-cycle updates. Used only by
-# _state_small_donor_baseline (Funding Independence's small-donor
-# component, Senate only — see that function's docstring); DC/territories
-# have no voting senators and are intentionally omitted, falling back to
-# the national mean baseline.
-STATE_POPULATION_M: dict[str, float] = {
-    "CA": 39.5, "TX": 29.1, "FL": 21.5, "NY": 20.2, "PA": 13.0, "IL": 12.8,
-    "OH": 11.8, "GA": 10.7, "NC": 10.4, "MI": 10.1, "NJ": 9.3, "VA": 8.6,
-    "WA": 7.7, "AZ": 7.2, "MA": 7.0, "TN": 6.9, "IN": 6.8, "MO": 6.2,
-    "MD": 6.2, "WI": 5.9, "CO": 5.8, "MN": 5.7, "SC": 5.1, "AL": 5.0,
-    "LA": 4.6, "KY": 4.5, "OR": 4.2, "OK": 4.0, "CT": 3.6, "UT": 3.3,
-    "IA": 3.2, "NV": 3.1, "AR": 3.0, "MS": 2.9, "KS": 2.9, "NM": 2.1,
-    "NE": 2.0, "ID": 1.8, "WV": 1.8, "HI": 1.5, "NH": 1.4, "ME": 1.4,
-    "MT": 1.1, "RI": 1.1, "DE": 1.0, "SD": 0.9, "ND": 0.8, "AK": 0.7,
-    "VT": 0.6, "WY": 0.6,
-}
+_state_population_cache: dict[str, float] | None = None
+
+
+def _state_population() -> dict[str, float]:
+    """State population in millions, 2020 Census (state abbreviation ->
+    float). Used only by _state_small_donor_baseline (Funding
+    Independence's small-donor component, Senate only — see that
+    function's docstring); DC/territories have no voting senators and are
+    intentionally omitted, falling back to the national mean baseline.
+
+    Ingested from Wikipedia into app/data/state_population.json;
+    regenerate with scripts/fetch_state_population.py (also the single
+    source scripts/fetch_state_small_donor_baseline.py's regression audit
+    reads, so the two can't silently drift apart the way a second
+    hardcoded copy could). Population, unlike Cook PVI, doesn't shift
+    enough between censuses to need per-cycle regeneration — rerun after
+    the 2030 census.
+    """
+    global _state_population_cache
+    if _state_population_cache is None:
+        import json
+        import pathlib
+        path = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "state_population.json"
+        try:
+            _state_population_cache = {
+                k: float(v) for k, v in json.loads(path.read_text())["states"].items()
+            }
+        except Exception:
+            logger.warning("state_population.json unavailable — small-donor baseline will use the national mean for every state")
+            _state_population_cache = {}
+    return _state_population_cache
 
 
 def clamp(value: float, min_val: int = 0, max_val: int = 100) -> int:
@@ -582,36 +595,59 @@ def calculate_confidence(senator: dict) -> dict[str, str]:
     }
 
 
-# Small-donor share (Funding Independence component 2) baseline, fitted
-# 2026-07 via scripts/fetch_state_small_donor_baseline.py against 100 live
-# senators: expected_pct = A + B*ln(population_millions), residual stdev
-# ≈14.3 points. A population-tercile audit found the flat 40%-cap version
-# of this component penalized small-state senators for a structural fact
-# about their state (small states average 10.4% small-donor share vs
-# 23.4% in large states — bigger states have larger natural donor pools
-# and more national media exposure driving grassroots giving) rather than
-# their own funding choices, while PAC dollar *amounts* were flat-to-
-# higher in small states (PACs pay for committee power, not local media
-# costs) — i.e. only the small-donor signal needed a state-relative fix,
-# not PAC dependency. Same "expected vs. actual for this seat" pattern as
+# Small-donor share (Funding Independence component 2) baseline.
+#
+# WHY a state-population-relative baseline at all: a population-tercile
+# audit found the old flat 40%-cap version of this component penalized
+# small-state senators for a structural fact about their state (small
+# states average 10.4% small-donor share vs 23.4% in large states —
+# bigger states have larger natural donor pools and more national media
+# exposure driving grassroots giving) rather than their own funding
+# choices, while PAC dollar *amounts* were flat-to-higher in small states
+# (PACs pay for committee power, not local media costs) — i.e. only the
+# small-donor signal needed a state-relative fix, not PAC dependency.
+# Same "expected vs. actual for this seat" pattern as
 # _signed_state_alignment/_calc_constituent_alignment (Independent
 # Voting's v4.2 redesign), minus IV's credit-shrinking multiplier: unlike
 # vote-crossing, there's no directional ambiguity in raising more small-
 # dollar money than your state predicts, so surplus is credited at full
 # weight.
-_SMALL_DONOR_BASELINE_A = 12.15
-_SMALL_DONOR_BASELINE_B = 4.51
-_SMALL_DONOR_NATIONAL_MEAN_PCT = 18.47
-_SMALL_DONOR_MIN_EXPECTED_PCT = 7.8
-_SMALL_DONOR_MAX_EXPECTED_PCT = 30.7
-_SMALL_DONOR_SATURATION_PT = 21.4  # ~1.5x the regression's residual stdev
+#
+# WHERE these specific numbers come from — none are hand-picked; every
+# one is a directly-printed value from scripts/fetch_state_small_donor_
+# baseline.py, an ordinary-least-squares regression of live senators'
+# real smallDonorPercentage against ln(state population). Formula:
+# expected_pct = _SMALL_DONOR_BASELINE_A + _SMALL_DONOR_BASELINE_B *
+# ln(population_millions). Rerun that script (network required) to
+# reproduce or refresh these — it prints each constant's exact name
+# alongside its value. 2026-07 fit, 101 live senators:
+#   _SMALL_DONOR_BASELINE_A/B: the fitted intercept/slope themselves.
+#   _SMALL_DONOR_NATIONAL_MEAN_PCT: the sample's raw mean small-donor %
+#     (18.6) — used as the fallback baseline for a state this table can't
+#     resolve (unknown code, DC, territory), so an unresolvable state is
+#     never itself a penalty or a windfall.
+#   _SMALL_DONOR_MIN/MAX_EXPECTED_PCT: the fitted baseline's observed
+#     range across all 50 states (9.9%-28.9% this fit), padded 2 points
+#     each direction so a state at the population extreme (VT/WY on the
+#     low end, CA on the high end) doesn't sit exactly on the clamp.
+#   _SMALL_DONOR_SATURATION_PT: full surplus/deficit credit at ~1.5x the
+#     regression's residual stdev (14.1 points this fit) past the
+#     baseline — "roughly one meaningful standard deviation of real
+#     spread," the same style of justification MIN_STDEV uses in
+#     ground_truth.py.
+_SMALL_DONOR_BASELINE_A = 12.26
+_SMALL_DONOR_BASELINE_B = 4.53
+_SMALL_DONOR_NATIONAL_MEAN_PCT = 18.62
+_SMALL_DONOR_MIN_EXPECTED_PCT = 7.9
+_SMALL_DONOR_MAX_EXPECTED_PCT = 30.9
+_SMALL_DONOR_SATURATION_PT = 21.2
 
 
 def _state_small_donor_baseline(state: str) -> float:
     """Expected small-donor % for a state's population. Unresolved states
     (unknown code, DC, territories) fall back to the national mean so an
     unresolvable state is never itself a penalty or a windfall."""
-    pop = STATE_POPULATION_M.get(state)
+    pop = _state_population().get(state)
     if not pop:
         return _SMALL_DONOR_NATIONAL_MEAN_PCT
     expected = _SMALL_DONOR_BASELINE_A + _SMALL_DONOR_BASELINE_B * math.log(pop)
