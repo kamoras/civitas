@@ -71,9 +71,16 @@ const config: Config = {
           "50%": { opacity: "1" },
           "100%": { opacity: "0.98" },
         },
+        // The rendered text is two back-to-back copies of the same content
+        // (see Marquee.tsx's `doubled`) so a -50% shift — exactly one
+        // copy's width — lands the second copy precisely where the first
+        // started, looping seamlessly. The previous 100% -> -100% slid the
+        // whole (already-doubled, so extra-wide) block fully off both
+        // edges each cycle, which read as a visible snap back at the loop
+        // boundary instead of a continuous scroll.
         marquee: {
-          "0%": { transform: "translateX(100%)" },
-          "100%": { transform: "translateX(-100%)" },
+          "0%": { transform: "translateX(0%)" },
+          "100%": { transform: "translateX(-50%)" },
         },
         "pulse-neon": {
           "0%": {
