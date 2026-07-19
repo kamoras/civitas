@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import { fetchPresident, fetchPresidentLeaderboard } from "@/lib/api";
-import { calculatePresidentScore, getScoreColor, getScoreBgColor, getScoreLabel } from "@/lib/representation";
+import { getScoreColor, getScoreBgColor, getScoreLabel } from "@/lib/representation";
 import ScoreBreakdownPanel from "@/components/shared/ScoreBreakdownPanel";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 
@@ -95,7 +95,7 @@ function StatBox({ label, value, unit, isEstimate }: { label: string; value: str
 }
 
 export function PresidentCard({ president }: { president: President }) {
-  const overall = calculatePresidentScore(president.score);
+  const overall = president.score.overall;
   const pm = getPartyMeta(president.party);
   const termEnd = president.termEnd ? president.termEnd.slice(0, 4) : "Present";
 

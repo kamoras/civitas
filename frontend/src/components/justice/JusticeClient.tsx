@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import { fetchJustice, fetchJusticeLeaderboard } from "@/lib/api";
-import { calculateJusticeScore, getJusticeLabel, getScoreColor, getScoreBgColor } from "@/lib/representation";
+import { getJusticeLabel, getScoreColor, getScoreBgColor } from "@/lib/representation";
 import ScoreBreakdownPanel from "@/components/shared/ScoreBreakdownPanel";
 import type { Justice, JusticeLeaderboardEntry, JusticeScore } from "@/types/justice";
 
@@ -105,7 +105,7 @@ function AgreementRow({ name, pct }: { name: string; pct: number }) {
 }
 
 export function JusticeCard({ justice }: { justice: Justice }) {
-  const overall = calculateJusticeScore(justice.score);
+  const overall = justice.score.overall;
   const pb = getPartyBadge(justice.appointingParty);
 
   const agreementEntries = Object.entries(justice.agreementMatrix)
@@ -250,7 +250,7 @@ function JusticeSelector({
       {entries.map((e) => {
         const active = e.id === selectedId;
         const pb = getPartyBadge(e.appointingParty);
-        const overall = calculateJusticeScore(e.score);
+        const overall = e.score.overall;
         return (
           <button
             key={e.id}

@@ -25,21 +25,19 @@ _SCORE_WEIGHTS = {
 }
 
 
-def _weighted_total(score: JusticeScoreSchema) -> float:
-    return (
-        score.consistency * _SCORE_WEIGHTS["consistency"]
-        + score.independence * _SCORE_WEIGHTS["independence"]
-        + score.bipartisan_agreement * _SCORE_WEIGHTS["bipartisan_agreement"]
-        + score.judicial_restraint * _SCORE_WEIGHTS["judicial_restraint"]
-    )
-
-
 def _build_score(j: Justice) -> JusticeScoreSchema:
+    overall = (
+        j.score_consistency * _SCORE_WEIGHTS["consistency"]
+        + j.score_independence * _SCORE_WEIGHTS["independence"]
+        + j.score_bipartisan_agreement * _SCORE_WEIGHTS["bipartisan_agreement"]
+        + j.score_judicial_restraint * _SCORE_WEIGHTS["judicial_restraint"]
+    )
     return JusticeScoreSchema(
         consistency=j.score_consistency,
         independence=j.score_independence,
         bipartisan_agreement=j.score_bipartisan_agreement,
         judicial_restraint=j.score_judicial_restraint,
+        overall=overall,
     )
 
 
@@ -111,7 +109,7 @@ def get_justice_leaderboard(db: Session) -> list[JusticeLeaderboardEntry]:
             dissent_pct=j.dissent_pct,
             cross_bloc_pct=j.cross_bloc_pct,
         ))
-    entries.sort(key=lambda e: _weighted_total(e.score), reverse=True)
+    entries.sort(key=lambda e: e.score.overall, reverse=True)
     return entries
 
 

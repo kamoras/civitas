@@ -274,6 +274,7 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
             independent_voting=senator.score_independent_voting,
             funding_diversity=senator.score_funding_diversity,
             legislative_effectiveness=senator.score_legislative_effectiveness,
+            overall=compute_overall_score(senator),
             confidence=json.loads(senator.score_confidence or "{}") or None,
         ),
         funding=FundingSchema(
@@ -515,6 +516,7 @@ def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
                 independent_voting=s.score_independent_voting,
                 funding_diversity=s.score_funding_diversity,
                 legislative_effectiveness=s.score_legislative_effectiveness,
+                overall=compute_overall_score(s),
             ),
             total_raised=s.total_raised,
             total_from_pacs=s.total_from_pacs,

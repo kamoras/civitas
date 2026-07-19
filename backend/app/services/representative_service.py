@@ -92,6 +92,7 @@ def build_rep_response(rep: Representative, _db: Session = None) -> Representati
             "independentVoting": rep.score_independent_voting,
             "fundingDiversity": rep.score_funding_diversity,
             "legislativeEffectiveness": rep.score_legislative_effectiveness,
+            "overall": compute_overall_score(rep),
             "confidence": json.loads(rep.score_confidence or "{}"),
         },
         funding={
@@ -363,6 +364,7 @@ def get_rep_leaderboard(
                 "independentVoting": r.score_independent_voting,
                 "fundingDiversity": r.score_funding_diversity,
                 "legislativeEffectiveness": r.score_legislative_effectiveness,
+                "overall": compute_overall_score(r),
             },
             "totalRaised": r.total_raised,
             "totalFromPacs": r.total_from_pacs,

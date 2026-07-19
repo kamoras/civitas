@@ -1,78 +1,11 @@
-import { Senator } from "@/types/senator";
-import type { PresidentialScore } from "@/types/president";
-import type { JusticeScore } from "@/types/justice";
-
-// Matches backend/app/config_definitions.py's SCORE_WEIGHTS — only used as
-// a fallback before /api/config's live weights load (or if that fetch
-// fails), so it must stay in sync by hand. promisePersistence removed
-// entirely (2026-07, ALGORITHM_VERSION v6.0) — see that file's docstring
-// for the empirical finding (0 of 100 senators reached even "medium"
-// promise-evaluation confidence).
-export const DEFAULT_WEIGHTS: Record<string, number> = {
-  fundingIndependence: 0.33,
-  independentVoting: 0.33,
-  legislativeEffectiveness: 0.34,
-};
-
-export const DEFAULT_PRESIDENT_WEIGHTS: Record<string, number> = {
-  independence: 0.15,
-  followThrough: 0.20,
-  publicMandate: 0.15,
-  effectiveness: 0.20,
-  competence: 0.15,
-  agencyAlignment: 0.15,
-};
-
-const DEFAULT_JUSTICE_WEIGHTS: Record<string, number> = {
-  consistency: 0.35,
-  independence: 0.30,
-  bipartisanAgreement: 0.15,
-  judicialRestraint: 0.20,
-};
-
-// Shared by calculateOverallScore/calculatePresidentScore/calculateJusticeScore
-// below — each was its own copy-pasted "round(sum of field * (weight ?? default))"
-// with only the field names and default weights differing.
-function weightedScore(
-  // `object`, not Record<string, number>: none of the three score-breakdown
-  // interfaces declare an index signature (so TS won't structurally accept
-  // them as a Record), and some carry non-numeric fields alongside the
-  // score_* ones (e.g. representationScore.confidence) that this never reads.
-  breakdown: object,
-  defaultWeights: Record<string, number>,
-  weights?: Record<string, number>,
-): number {
-  const b = breakdown as Record<string, unknown>;
-  const w = weights ?? defaultWeights;
-  let sum = 0;
-  for (const key of Object.keys(defaultWeights)) {
-    const value = b[key];
-    sum += (typeof value === "number" ? value : 0) * (w[key] ?? defaultWeights[key]);
-  }
-  return Math.round(sum);
-}
-
-export function calculateOverallScore(
-  breakdown: Senator["representationScore"] | undefined | null,
-  weights?: Record<string, number>,
-): number {
-  if (!breakdown) return 0;
-  return weightedScore(breakdown, DEFAULT_WEIGHTS, weights);
-}
-
-export function calculatePresidentScore(
-  s: PresidentialScore,
-  weights?: Record<string, number>,
-): number {
-  return weightedScore(s, DEFAULT_PRESIDENT_WEIGHTS, weights);
-}
-
-export function calculateJusticeScore(
-  s: JusticeScore,
-  weights?: Record<string, number>,
-): number {
-  return weightedScore(s, DEFAULT_JUSTICE_WEIGHTS, weights);
-}
+// Score-to-presentation helpers only. Overall scores are computed by the
+// backend (score_calculator.compute_overall_score / president_scorer.
+// compute_president_overall_score / justice_service._build_score) and sent
+// as the `overall` field on each score breakdown — the frontend must never
+// recompute a weighted sum from sub-scores itself (see git history for the
+// bug this caused: a hardcoded fallback-weights object here went stale
+// after a backend scoring-dimension merge and silently mis-weighted scores
+// until /api/config loaded).
 
 export function getJusticeLabel(score: number): string {
   if (score >= 75) return "HIGHLY CONSISTENT";

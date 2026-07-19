@@ -14,8 +14,8 @@ import logging
 
 from sqlalchemy.orm import Session
 
-from app.config_definitions import PRESIDENT_SCORE_WEIGHTS
 from app.models import President
+from app.pipeline.analyze.president_scorer import compute_president_overall_score
 from app.schemas import (
     PresidentialScoreSchema,
     PresidentLeaderboardEntry,
@@ -632,6 +632,7 @@ def _build_response(p: President) -> PresidentSchema:
             effectiveness=p.score_effectiveness,
             competence=p.score_competence,
             agency_alignment=p.score_agency_alignment,
+            overall=compute_president_overall_score(p),
         ),
         avg_approval=p.avg_approval,
         gdp_growth_avg=p.gdp_growth_avg,
@@ -750,6 +751,7 @@ def get_president_leaderboard(db: Session) -> list[PresidentLeaderboardEntry]:
             effectiveness=p.score_effectiveness,
             competence=p.score_competence,
             agency_alignment=p.score_agency_alignment,
+            overall=compute_president_overall_score(p),
         )
         entries.append(PresidentLeaderboardEntry(
             id=p.id,
@@ -764,16 +766,5 @@ def get_president_leaderboard(db: Session) -> list[PresidentLeaderboardEntry]:
             gdp_growth_avg=p.gdp_growth_avg,
         ))
 
-    w = PRESIDENT_SCORE_WEIGHTS
-    entries.sort(
-        key=lambda e: (
-            e.score.independence * w.get("independence", 0.15)
-            + e.score.follow_through * w.get("followThrough", 0.20)
-            + e.score.public_mandate * w.get("publicMandate", 0.15)
-            + e.score.effectiveness * w.get("effectiveness", 0.20)
-            + e.score.competence * w.get("competence", 0.15)
-            + e.score.agency_alignment * w.get("agencyAlignment", 0.15)
-        ),
-        reverse=True,
-    )
+    entries.sort(key=lambda e: e.score.overall, reverse=True)
     return entries

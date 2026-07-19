@@ -4,7 +4,6 @@ import type { Justice, JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssuesResponse, MyRepsResponse } from "@/types/action";
 import type { PoliticianCard } from "@/types/politicians";
 import type { PaginatedBills } from "@/types/bill";
-import { DEFAULT_PRESIDENT_WEIGHTS, DEFAULT_WEIGHTS } from "@/lib/representation";
 import type {
   JusticeScoreBreakdown,
   PresidentScoreBreakdown,
@@ -258,8 +257,6 @@ export interface BillStageInfo {
 }
 
 export interface AppConfig {
-  scoreWeights: Record<string, number>;
-  presidentScoreWeights: Record<string, number>;
   industries: Record<string, IndustryInfo>;
   platformCategories: Record<string, string>;
   policyAreas: string[];
@@ -267,10 +264,6 @@ export interface AppConfig {
 }
 
 const DEFAULT_CONFIG: AppConfig = {
-  // Shared with lib/representation.ts's weightedScore fallback — see that
-  // file's comment for why these must stay in sync with the backend.
-  scoreWeights: DEFAULT_WEIGHTS,
-  presidentScoreWeights: DEFAULT_PRESIDENT_WEIGHTS,
   industries: {},
   platformCategories: {},
   policyAreas: [],

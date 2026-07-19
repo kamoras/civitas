@@ -30,6 +30,36 @@ def clamp(v: float) -> int:
     return max(0, min(100, round(v)))
 
 
+def compute_president_overall_score(entity) -> float:
+    """Weighted overall score from a scored President row.
+
+    Single source of truth for the PRESIDENT_SCORE_WEIGHTS-weighted sum —
+    previously hand-rolled independently in both president_service.py's
+    response builder and its leaderboard sort, with default weight values
+    baked into one of the two copies. Mirrors score_calculator.
+    compute_overall_score's reasoning for senators/reps: summing
+    dynamically over PRESIDENT_SCORE_WEIGHTS.items() means a future
+    weight-table change can't silently desync from this formula again.
+    """
+    from app.config_definitions import PRESIDENT_SCORE_WEIGHTS
+
+    _FIELD_MAP = {
+        "independence": "score_independence",
+        "followThrough": "score_follow_through",
+        "publicMandate": "score_public_mandate",
+        "effectiveness": "score_effectiveness",
+        "competence": "score_competence",
+        "agencyAlignment": "score_agency_alignment",
+    }
+    return round(
+        sum(
+            getattr(entity, _FIELD_MAP[key], 0) * weight
+            for key, weight in PRESIDENT_SCORE_WEIGHTS.items()
+        ),
+        2,
+    )
+
+
 def calc_competence(
     eo_count: int | None,
     eo_court_success_pct: float | None,

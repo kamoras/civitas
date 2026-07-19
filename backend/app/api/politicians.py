@@ -23,9 +23,9 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json
-from app.config_definitions import PRESIDENT_SCORE_WEIGHTS
 from app.database import get_db
 from app.models import ActionIssue, ExploreDocument, Justice, President, Representative, Senator
+from app.pipeline.analyze.president_scorer import compute_president_overall_score
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.services.senator_service import STATE_NAMES
 
@@ -79,15 +79,7 @@ def _president_overall(p: President) -> float | None:
     ]
     if all(v == 0.0 for v in scores):
         return None
-    return round(
-        p.score_independence * PRESIDENT_SCORE_WEIGHTS["independence"]
-        + p.score_follow_through * PRESIDENT_SCORE_WEIGHTS["followThrough"]
-        + p.score_public_mandate * PRESIDENT_SCORE_WEIGHTS["publicMandate"]
-        + p.score_effectiveness * PRESIDENT_SCORE_WEIGHTS["effectiveness"]
-        + p.score_competence * PRESIDENT_SCORE_WEIGHTS["competence"]
-        + p.score_agency_alignment * PRESIDENT_SCORE_WEIGHTS["agencyAlignment"],
-        1,
-    )
+    return round(compute_president_overall_score(p), 1)
 
 
 def _justice_overall(j: Justice) -> float | None:
