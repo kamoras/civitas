@@ -2,7 +2,7 @@ import { Senator } from "@/types/senator";
 import { formatCurrency } from "@/lib/formatting";
 import { safeHref } from "@/lib/formatting";
 import { fecCommitteeSearchUrl, currentCongressLabel } from "@/lib/sources";
-import { getScoreColor } from "@/lib/corruption";
+import { getScoreColor } from "@/lib/representation";
 import RepresentationScore from "./RepresentationScore";
 import IndustryBreakdown from "./IndustryBreakdown";
 import VotingRecord from "./VotingRecord";

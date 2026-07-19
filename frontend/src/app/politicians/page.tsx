@@ -9,7 +9,7 @@ import MatrixRain from "@/components/effects/MatrixRain";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import { fetchPoliticianDirectory } from "@/lib/api";
-import { getScoreBgColor } from "@/lib/corruption";
+import { getScoreBgColor } from "@/lib/representation";
 import type { PoliticianCard } from "@/types/politicians";
 
 type BranchFilter = "all" | "senate" | "house" | "president" | "scotus";

@@ -6,7 +6,7 @@ import { SCORE_TERMS } from "@/lib/scoreTerms";
 import { fetchMyReps, fetchActionIssues } from "@/lib/api";
 import { STATES } from "@/data/states";
 import { PARTY_COLORS, PARTY_BORDER, PARTY_BG } from "@/lib/partyStyles";
-import { getScoreBgColor } from "@/lib/corruption";
+import { getScoreBgColor } from "@/lib/representation";
 import { useCopyFeedback } from "@/hooks/useCopyFeedback";
 import type { ActionIssue, MyRepRep, MyRepSenator, MyRepsResponse } from "@/types/action";
 

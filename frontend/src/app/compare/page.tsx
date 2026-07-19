@@ -15,7 +15,7 @@ import {
 } from "@/lib/api";
 import type { StateInfo, RepStateInfo } from "@/lib/api";
 import type { Senator } from "@/types/senator";
-import { calculateOverallScore, getScoreColor } from "@/lib/corruption";
+import { calculateOverallScore, getScoreColor } from "@/lib/representation";
 import { formatCurrency } from "@/lib/formatting";
 import { useScoreWeights } from "@/hooks/useConfig";
 import { useUserState } from "@/hooks/useUserState";

@@ -9,7 +9,7 @@ import TerminalTitlebar from "@/components/TerminalTitlebar";
 import SenatorCard from "@/components/checker/SenatorCard";
 import { PresidentCard } from "@/components/president/PresidentClient";
 import { JusticeCard } from "@/components/justice/JusticeClient";
-import { getScoreLabel, getScoreColor } from "@/lib/corruption";
+import { getScoreLabel, getScoreColor } from "@/lib/representation";
 import type { PoliticianProfile, GovernmentDoc } from "@/types/politicians";
 import type { Senator } from "@/types/senator";
 import type { President } from "@/types/president";

@@ -1,7 +1,7 @@
 "use client";
 
 import { Senator, VotingRecord, SponsoredBill } from "@/types/senator";
-import { calculateOverallScore, getScoreLabel, getScoreColor, getScoreBgColor } from "@/lib/corruption";
+import { calculateOverallScore, getScoreLabel, getScoreColor, getScoreBgColor } from "@/lib/representation";
 import { useScoreWeights } from "@/hooks/useConfig";
 import MetricTooltip from "./MetricTooltip";
 import ScoreBreakdownPanel from "@/components/shared/ScoreBreakdownPanel";

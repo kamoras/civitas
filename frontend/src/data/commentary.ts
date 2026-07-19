@@ -1,5 +1,5 @@
 import { Senator } from "@/types/senator";
-import { calculateOverallScore } from "@/lib/corruption";
+import { calculateOverallScore } from "@/lib/representation";
 import { formatCurrency } from "@/lib/formatting";
 
 export function generateCommentary(senator: Senator): string[] {
