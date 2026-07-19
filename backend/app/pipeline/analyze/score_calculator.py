@@ -1672,9 +1672,20 @@ _HOUSE_MAJORITY: dict[int, str] = {
 }
 
 
+# House bill types (substantive + commemorative) — used for chamber
+# detection wherever a bill's own billType is the only chamber signal
+# available (no explicit chamber field on sponsored-bill records).
+_LES_HOUSE_TYPES = {"hr", "hjres", "hres", "hconres"}
+
+
 def _advancement_baseline(bill_type: str, congress: int | None, party: str | None) -> float:
-    """Expected substantive-bill advancement rate for a sponsor."""
-    is_house = bill_type in ("hr", "hjres")
+    """Expected bill advancement rate for a sponsor, by chamber/congress/
+    party. Chamber detection must cover every House bill type (including
+    commemorative hres/hconres), not just substantive ones — this is
+    averaged over a member's full sponsored-bill list (_les_component_
+    score), not pre-filtered to substantive bills the way the old
+    advancement-rate formula filtered it."""
+    is_house = bill_type in _LES_HOUSE_TYPES
     majority = (_HOUSE_MAJORITY if is_house else _SENATE_MAJORITY).get(congress or 0)
     if not majority or party not in ("D", "R"):
         return 0.030  # overall measured mean when status is unknowable
@@ -1833,8 +1844,6 @@ _LES_AVG_BASELINE = 0.0404
 # 175.5), checked against the population stdev floor — LE has no
 # per-senator GROUND_TRUTH entries to check against (ground_truth.py).
 _LES_CREDIT_SATURATION = 175.5
-
-_LES_HOUSE_TYPES = {"hr", "hjres", "hres", "hconres"}
 
 
 def _les_component_score(

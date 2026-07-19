@@ -1259,6 +1259,16 @@ class TestMajorityAdjustedAdvancement:
     def test_unknown_congress_neutral_baseline(self):
         assert _advancement_baseline("s", 90, "D") == 0.030
 
+    def test_house_commemorative_bill_types_use_house_baseline(self):
+        """hres/hconres are House bill types too — _les_component_score
+        averages _advancement_baseline over a member's FULL sponsored-bill
+        list (not substantive-filtered), so a commemorative resolution
+        misclassified as a Senate bill would silently pull a House
+        majority sponsor's baseline down toward the Senate rate."""
+        assert _advancement_baseline("hres", 118, "R") == _advancement_baseline("hr", 118, "R")
+        assert _advancement_baseline("hconres", 118, "R") == _advancement_baseline("hr", 118, "R")
+        assert _advancement_baseline("hres", 118, "R") != _advancement_baseline("s", 118, "R")
+
 
 class TestCoalitionBreadth:
     def _vr(self):
