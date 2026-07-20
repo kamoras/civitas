@@ -3,7 +3,8 @@ Stock Trades "clear stuck run" admin endpoints (consolidated from two
 near-identical copies — see admin.py's _clear_stuck_runs).
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
+from app.time_utils import utcnow
 
 import pytest
 from fastapi import HTTPException
@@ -17,7 +18,7 @@ async def test_clear_stuck_house_marks_running_rows_failed(db_session):
 
     db_session.add(HousePipelineRun(
         status="running",
-        started_at=datetime.utcnow() - timedelta(hours=9),
+        started_at=utcnow() - timedelta(hours=9),
     ))
     db_session.commit()
 
@@ -36,7 +37,7 @@ async def test_clear_stuck_stock_trades_marks_running_rows_failed(db_session):
 
     db_session.add(StockTradesPipelineRun(
         status="running",
-        started_at=datetime.utcnow() - timedelta(hours=3),
+        started_at=utcnow() - timedelta(hours=3),
     ))
     db_session.commit()
 
