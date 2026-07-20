@@ -86,8 +86,8 @@ class TestSupplementaryPipelineRunTracking:
         db_session.commit()
 
         # Pin "now" to a Wednesday (weekday() == 2), not Sunday (6).
-        with patch("app.pipeline.supplementary_pipeline.datetime") as mock_dt:
-            mock_dt.utcnow.return_value = datetime(2026, 7, 15)  # a Wednesday
+        with patch("app.pipeline.supplementary_pipeline.utcnow",
+                   return_value=datetime(2026, 7, 15)):  # a Wednesday
             result = _run(db_session, justice_result={"justices": 9})
 
         assert result["justices_scored"] == 0

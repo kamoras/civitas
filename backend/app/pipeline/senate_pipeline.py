@@ -16,7 +16,6 @@ Uses SQLAlchemy sessions for persistence and PipelineRun records to track progre
 import json
 import logging
 import time
-from datetime import datetime
 
 import httpx
 from sqlalchemy.orm import Session
@@ -99,6 +98,7 @@ from app.pipeline.analyze.score_calculator import calculate_confidence, calculat
 
 # Assemble modules
 from app.pipeline.assemble.senator_builder import build_senator
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -170,7 +170,7 @@ def upsert_senator(db: Session, data: dict) -> None:
         "contact_form_url": data.get("contactFormUrl") or "",
         "office_phone": data.get("officePhone") or "",
         "office_address": data.get("officeAddress") or "",
-        "updated_at": datetime.utcnow(),
+        "updated_at": utcnow(),
     }
 
     if existing:
@@ -186,7 +186,7 @@ def upsert_senator(db: Session, data: dict) -> None:
             LobbyingMatch.senator_id == senator_id
         ).delete()
     else:
-        senator_fields["created_at"] = datetime.utcnow()
+        senator_fields["created_at"] = utcnow()
         existing = Senator(**senator_fields)
         db.add(existing)
 
@@ -332,7 +332,7 @@ def _record_score_snapshots(db: Session) -> None:
     """Snapshot today's scores for all senators so we can compute trends."""
     from app.pipeline.analyze.score_calculator import ALGORITHM_VERSION, compute_overall_score
 
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = utcnow().strftime("%Y-%m-%d")
     existing = db.query(ScoreSnapshot).filter(
         ScoreSnapshot.entity_type == "senator",
         ScoreSnapshot.date == today,
@@ -374,17 +374,17 @@ def _acquire_pipeline_lock(db: Session) -> PipelineRun | None:
         .first()
     )
     if running:
-        age = (datetime.utcnow() - running.started_at).total_seconds()
+        age = (utcnow() - running.started_at).total_seconds()
         if age > STALE_PIPELINE_TIMEOUT_S:
             running.status = PipelineStatus.STALE
-            running.completed_at = datetime.utcnow()
+            running.completed_at = utcnow()
             running.error_message = "Marked stale: exceeded 12-hour timeout"
             db.commit()
             logger.warning("Cleaned up stale pipeline run #%d (age: %ds)", running.id, int(age))
         else:
             return None
 
-    pipeline_run = PipelineRun(started_at=datetime.utcnow(), status=PipelineStatus.RUNNING)
+    pipeline_run = PipelineRun(started_at=utcnow(), status=PipelineStatus.RUNNING)
     db.add(pipeline_run)
     db.commit()
     return pipeline_run
@@ -1113,7 +1113,7 @@ async def run_senate_pipeline(
                 progress.skip(sk, detail="fetch-only mode")
             elapsed = time.time() - start_time
             pipeline_run.status = PipelineStatus.COMPLETED
-            pipeline_run.completed_at = datetime.utcnow()
+            pipeline_run.completed_at = utcnow()
             pipeline_run.elapsed_seconds = elapsed
             db.commit()
             return {
@@ -1602,7 +1602,7 @@ async def run_senate_pipeline(
                     # federal lobbying by the matched organization. Cached per
                     # org+year, so only the first pipeline run pays the fetch.
                     await enrich_lobbying_matches_with_lda(
-                        lobbying_matches, db, datetime.utcnow().year - 1,
+                        lobbying_matches, db, utcnow().year - 1,
                     )
 
                     bio_id_for_score = senator.get("bioguideId", "")
@@ -1859,7 +1859,7 @@ async def run_senate_pipeline(
         elapsed = time.time() - start_time
 
         pipeline_run.status = PipelineStatus.COMPLETED
-        pipeline_run.completed_at = datetime.utcnow()
+        pipeline_run.completed_at = utcnow()
         pipeline_run.senators_processed = success_count
         pipeline_run.senators_failed = fail_count
         pipeline_run.bills_classified = len(classified_bills)
@@ -1896,7 +1896,7 @@ async def run_senate_pipeline(
         try:
             db.rollback()
             pipeline_run.status = PipelineStatus.FAILED
-            pipeline_run.completed_at = datetime.utcnow()
+            pipeline_run.completed_at = utcnow()
             pipeline_run.error_message = "Senate pipeline failed — see server logs"
             pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
             db.commit()

@@ -1,10 +1,11 @@
 """Shared score-trend computation for the Senate/House leaderboard endpoints."""
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from sqlalchemy.orm import Session
 
 from app.models import ScoreSnapshot
+from app.time_utils import utcnow
 
 TREND_LOOKBACK_DAYS = 7
 TREND_THRESHOLD = 0.5
@@ -19,7 +20,7 @@ def compute_score_trend_map(db: Session, entity_type: str) -> dict[str, dict]:
     copy-pasted (down to the same lookback/threshold constants) between
     senator_service.py and representative_service.py's leaderboards.
     """
-    today = datetime.utcnow().date()
+    today = utcnow().date()
     target_date = today - timedelta(days=TREND_LOOKBACK_DAYS)
 
     latest_snapshots = (

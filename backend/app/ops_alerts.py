@@ -16,11 +16,12 @@ pipeline it is reporting on.
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import httpx
 
 from app.config import settings
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +96,7 @@ def _record(subject: str, body: str, dedupe_key: str | None) -> None:
     from app.database import SessionLocal
     from app.models import ApiCache
 
-    now = datetime.utcnow()
+    now = utcnow()
     payload = json.dumps({
         "subject": subject,
         "body": body,
@@ -156,7 +157,7 @@ def check_pipeline_overrun() -> None:
     for label, run in checks:
         if run is None:
             continue
-        age = datetime.utcnow() - run.started_at
+        age = utcnow() - run.started_at
         if age > budget:
             hours = age.total_seconds() / 3600
             send_ops_alert(

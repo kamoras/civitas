@@ -46,6 +46,7 @@ from app.models import (
     SponsoredBill,
     TimelineEntry,
 )
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,7 @@ def _live_elapsed(run) -> float | None:
     completion), so while it's in flight we compute it against now instead.
     """
     if run.status == PipelineStatus.RUNNING and run.started_at:
-        return round((datetime.utcnow() - run.started_at).total_seconds(), 1)
+        return round((utcnow() - run.started_at).total_seconds(), 1)
     return run.elapsed_seconds
 
 
@@ -116,7 +117,7 @@ def _clear_stuck_runs(db: Session, model, is_running: bool, pipeline_label: str)
     if not stuck:
         return {"cleared": 0, "message": "No stuck runs found"}
 
-    now = datetime.utcnow()
+    now = utcnow()
     for run in stuck:
         run.status = PipelineStatus.FAILED
         run.error_message = "Cleared by admin (container restart)"
@@ -350,7 +351,7 @@ async def admin_visitor_breakdown(date: str | None = None, db: Session = Depends
     Aggregate counts only — never joined back to individual visitor_hash
     rows in the response, so this can't be used to profile a single visit.
     """
-    from datetime import datetime, UTC as _UTC
+    from datetime import UTC as _UTC
 
     day = date or datetime.now(_UTC).date().isoformat()
 
@@ -385,7 +386,7 @@ async def admin_top_pages(days: int = 7, limit: int = 10, db: Session = Depends(
     models.py for why that's a separate table from SiteVisit) grouped by
     normalized route template (e.g. "/politicians/[id]").
     """
-    from datetime import datetime, timedelta, UTC as _UTC
+    from datetime import timedelta, UTC as _UTC
 
     cutoff = (datetime.now(_UTC).date() - timedelta(days=days - 1)).isoformat()
     rows = (

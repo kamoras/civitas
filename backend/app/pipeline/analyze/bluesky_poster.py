@@ -30,6 +30,7 @@ from app.pipeline.analyze.grounding import (
     hedge_and_editorializing_violations,
 )
 from app.pipeline.analyze.ollama_client import call_llm
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -249,7 +250,7 @@ def process_issues_for_bluesky(issues: list, db: Session) -> int:
     _US_EAST = ZoneInfo("America/New_York")
     today = datetime.now(tz=_US_EAST).strftime("%Y-%m-%d")
 
-    now = datetime.utcnow()
+    now = utcnow()
     posted = 0
 
     for issue in issues:

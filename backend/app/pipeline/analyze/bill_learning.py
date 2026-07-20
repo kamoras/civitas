@@ -51,12 +51,12 @@ References
 import json
 import logging
 from collections import Counter
-from datetime import datetime
 
 import numpy as np
 from sqlalchemy.orm import Session
 
 from app.models import LearnedClassification
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -255,7 +255,7 @@ def record_classification(
         source=source,
         model_version=get_model_version(),
         match_metadata=meta,
-        learned_at=datetime.utcnow(),
+        learned_at=utcnow(),
     ).on_conflict_do_update(
         index_elements=["entity_name", "entity_type"],
         set_={
@@ -263,7 +263,7 @@ def record_classification(
             "confidence": confidence,
             "source": source,
             "match_metadata": meta,
-            "learned_at": datetime.utcnow(),
+            "learned_at": utcnow(),
         },
     )
     db.execute(stmt)

@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import threading
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -16,6 +16,7 @@ from app.pipeline.stock_pipeline import (
     run_stock_trades_pipeline, is_stock_pipeline_running, stock_pipeline_age,
 )
 from app.pipeline.analyze.action_center import get_action_refresh_state, refresh_action_issues
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,7 @@ def _nightly_pipeline() -> None:
                     "The scheduled Senate pipeline did not start because a "
                     "previous run is still active. Senate data will be a day "
                     "stale unless triggered manually.",
-                    dedupe_key=f"skipped-{datetime.utcnow():%Y-%m-%d}",
+                    dedupe_key=f"skipped-{utcnow():%Y-%m-%d}",
                 )
             else:
                 logger.info("Senate pipeline done — starting supplementary pipeline")
@@ -69,7 +70,7 @@ def _nightly_pipeline() -> None:
             send_ops_alert(
                 "Nightly pipeline crashed",
                 f"{type(e).__name__}: {e}",
-                dedupe_key=f"crashed-{datetime.utcnow():%Y-%m-%d}",
+                dedupe_key=f"crashed-{utcnow():%Y-%m-%d}",
             )
         finally:
             loop.close()
@@ -93,7 +94,7 @@ def _hourly_action_refresh() -> None:
             state = get_action_refresh_state()
             if state.get("is_running"):
                 started = state.get("started_at")
-                age = datetime.utcnow() - started if started else None
+                age = utcnow() - started if started else None
                 if _is_stale(age, timedelta(hours=4)):
                     # Same reasoning as the stale-PipelineRun checks below: a
                     # refresh this old (normal is minutes, worst case with a
@@ -120,7 +121,7 @@ def _hourly_action_refresh() -> None:
             finally:
                 db.close()
             if running:
-                age = datetime.utcnow() - running.started_at
+                age = utcnow() - running.started_at
                 if _is_stale(age, timedelta(hours=8)):
                     # Pipeline run has been "running" for >8h — it almost certainly
                     # crashed without updating its status. Proceed rather than blocking
@@ -156,7 +157,7 @@ def _hourly_action_refresh() -> None:
                         "(normal is 1-2h) and is likely hung. The action center "
                         "is no longer waiting for it; the run may need "
                         "clear-stuck-house and a container restart.",
-                        dedupe_key=f"house-overrun-{datetime.utcnow():%Y-%m-%d}",
+                        dedupe_key=f"house-overrun-{utcnow():%Y-%m-%d}",
                     )
                 else:
                     logger.info("Action center refresh skipped — house pipeline is running")
@@ -179,7 +180,7 @@ def _hourly_action_refresh() -> None:
                         f"The supplementary (explore/SCOTUS/presidents) pipeline "
                         f"has been running for {supp_age} and is likely hung. "
                         "The action center is no longer waiting for it.",
-                        dedupe_key=f"supplementary-overrun-{datetime.utcnow():%Y-%m-%d}",
+                        dedupe_key=f"supplementary-overrun-{utcnow():%Y-%m-%d}",
                     )
                 else:
                     logger.info("Action center refresh skipped — supplementary pipeline is running")
@@ -202,7 +203,7 @@ def _hourly_action_refresh() -> None:
                         f"The stock trades pipeline has been running for {stock_age} "
                         "(normal is under 2h) and is likely hung. The action center "
                         "is no longer waiting for it.",
-                        dedupe_key=f"stock-overrun-{datetime.utcnow():%Y-%m-%d}",
+                        dedupe_key=f"stock-overrun-{utcnow():%Y-%m-%d}",
                     )
                 else:
                     logger.info("Action center refresh skipped — stock trades pipeline is running")

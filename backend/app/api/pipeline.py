@@ -11,6 +11,7 @@ from app.database import get_db
 from app.models import PipelineRun, PipelineStatus
 from app.pipeline.senate_pipeline import run_senate_pipeline
 from app.schemas import PipelineRunSchema, PipelineStatusSchema
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -22,9 +23,9 @@ def _is_pipeline_running(db: Session) -> bool:
 
     A run older than 2 hours is considered stale and ignored.
     """
-    from datetime import datetime, timedelta
+    from datetime import timedelta
 
-    cutoff = datetime.utcnow() - timedelta(hours=12)
+    cutoff = utcnow() - timedelta(hours=12)
     return (
         db.query(PipelineRun)
         .filter(PipelineRun.status == PipelineStatus.RUNNING, PipelineRun.started_at > cutoff)

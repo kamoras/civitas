@@ -3,7 +3,6 @@
 import asyncio
 import logging
 import re
-from datetime import datetime
 from urllib.parse import quote
 
 import httpx
@@ -13,6 +12,7 @@ from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
 from app.pipeline.rate_limiter import RateLimiter
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -212,7 +212,7 @@ def _sort_financials_recent_first(results: list[dict]) -> list[dict]:
     election year sort last rather than being treated as "most recent"
     (see financials_election_year / _is_confirmed_past_or_current_election).
     """
-    current_year = datetime.utcnow().year
+    current_year = utcnow().year
     return sorted(
         results,
         key=lambda c: (
@@ -248,7 +248,7 @@ def select_recent_elections(financials: list[dict], n: int = 1) -> list[dict]:
     see financials_election_year for why an off-cycle dormant row must
     not outrank the real most recent election.
     """
-    current_year = datetime.utcnow().year
+    current_year = utcnow().year
     by_year: dict[int, dict] = {}
     for row in financials:
         if not _is_confirmed_past_or_current_election(row, current_year):

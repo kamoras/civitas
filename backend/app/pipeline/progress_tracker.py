@@ -12,9 +12,9 @@ progress_detail: str | None and elapsed_seconds: float | None columns.
 import json
 import logging
 import time
-from datetime import datetime
 
 from sqlalchemy.orm import Session
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -101,4 +101,4 @@ class ProgressTracker:
 
 
 def _now_iso() -> str:
-    return datetime.utcnow().isoformat()
+    return utcnow().isoformat()

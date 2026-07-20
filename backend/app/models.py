@@ -5,6 +5,7 @@ from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Te
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.time_utils import utcnow
 
 
 class PipelineStatus(StrEnum):
@@ -123,8 +124,8 @@ class Senator(Base):
     office_phone: Mapped[str] = mapped_column(String(20), default="")
     office_address: Mapped[str] = mapped_column(String, default="")
 
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
 
     donors: Mapped[list["Donor"]] = relationship(back_populates="senator", cascade="all, delete-orphan")
     industry_donations: Mapped[list["IndustryDonation"]] = relationship(back_populates="senator", cascade="all, delete-orphan")
@@ -341,8 +342,8 @@ class Representative(Base):
     vacancy_reason: Mapped[str | None] = mapped_column(String, nullable=True)
     left_office_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
 
     donors: Mapped[list["RepDonor"]] = relationship(back_populates="representative", cascade="all, delete-orphan")
     industry_donations: Mapped[list["RepIndustryDonation"]] = relationship(back_populates="representative", cascade="all, delete-orphan")
@@ -527,8 +528,8 @@ class President(Base):
     key_achievements: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
     key_failures: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
 
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
 
 
 class Justice(Base):
@@ -564,8 +565,8 @@ class Justice(Base):
     agreement_matrix: Mapped[str] = mapped_column(Text, default="{}")  # JSON
     summary: Mapped[str] = mapped_column(Text, default="")
 
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
 
     votes = relationship("JusticeVote", back_populates="justice", cascade="all, delete-orphan")
 
@@ -616,7 +617,7 @@ class ExploreDocument(Base):
     policy_areas: Mapped[str] = mapped_column(Text, default="[]")
     external_id: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
 
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
 
 class ActionIssue(Base):
@@ -640,7 +641,7 @@ class ActionIssue(Base):
     related_monitor_slugs: Mapped[str] = mapped_column(Text, default="[]")
     concerned_count: Mapped[int] = mapped_column(Integer, default=0)
     not_priority_count: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
     full_story: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     bsky_posted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
     bsky_posted_rank: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
@@ -666,7 +667,7 @@ class ScoreSnapshot(Base):
     # Lets trend charts annotate methodology changes so a score shift from
     # an algorithm update isn't read as a behavior change.
     algorithm_version: Mapped[str | None] = mapped_column(String(16), nullable=True, default=None)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
 
 class LearnedClassification(Base):
@@ -686,7 +687,7 @@ class LearnedClassification(Base):
     source: Mapped[str] = mapped_column(String, nullable=False)  # "rule", "embedding", "llm", "fec"
     model_version: Mapped[str | None] = mapped_column(String, nullable=True)  # embedding model that produced this
     match_metadata: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON: top scores, matched anchors
-    learned_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    learned_at: Mapped[datetime] = mapped_column(default=utcnow)
 
 
 class TimelineEntry(Base):
@@ -701,7 +702,7 @@ class TimelineEntry(Base):
     source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     source_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     monitor_slug: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
 
 class WeekSummary(Base):
@@ -716,7 +717,7 @@ class WeekSummary(Base):
     summary: Mapped[str] = mapped_column(Text, default="")
     top_policy_areas: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
     entry_count: Mapped[int] = mapped_column(Integer, default=0)
-    generated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    generated_at: Mapped[datetime] = mapped_column(default=utcnow)
     bsky_posted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
 
 
@@ -730,7 +731,7 @@ class MonthSummary(Base):
     summary: Mapped[str] = mapped_column(Text, default="")
     top_policy_areas: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
     entry_count: Mapped[int] = mapped_column(Integer, default=0)
-    generated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    generated_at: Mapped[datetime] = mapped_column(default=utcnow)
 
 
 class YearSummary(Base):
@@ -742,7 +743,7 @@ class YearSummary(Base):
     summary: Mapped[str] = mapped_column(Text, default="")
     top_policy_areas: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
     entry_count: Mapped[int] = mapped_column(Integer, default=0)
-    generated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    generated_at: Mapped[datetime] = mapped_column(default=utcnow)
 
 
 class NationalMonitor(Base):
@@ -756,8 +757,8 @@ class NationalMonitor(Base):
     category: Mapped[str] = mapped_column(String(50), default="general")
     status: Mapped[str] = mapped_column(String(20), default=MonitorStatus.ACTIVE, index=True)
     policy_areas: Mapped[str] = mapped_column(Text, default="[]")
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
     last_article_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
     updates = relationship("MonitorUpdate", back_populates="monitor",
@@ -776,7 +777,7 @@ class MonitorUpdate(Base):
     source_url: Mapped[str] = mapped_column(String(1000), nullable=False)
     source_name: Mapped[str] = mapped_column(String(200), default="")
     article_title: Mapped[str] = mapped_column(String(500), default="")
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
     monitor = relationship("NationalMonitor", back_populates="updates")
 
@@ -787,7 +788,7 @@ class ApiCache(Base):
     tier: Mapped[str] = mapped_column(String, primary_key=True)
     cache_key: Mapped[str] = mapped_column(String, primary_key=True)
     data_json: Mapped[str] = mapped_column(Text, nullable=False)
-    cached_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    cached_at: Mapped[datetime] = mapped_column(default=utcnow)
 
 
 class AnalysisCache(Base):
@@ -796,14 +797,14 @@ class AnalysisCache(Base):
     prompt_version: Mapped[str] = mapped_column(String, primary_key=True)
     input_hash: Mapped[str] = mapped_column(String, primary_key=True)
     result_json: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
 
 class PipelineRun(Base):
     __tablename__ = "pipeline_runs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    started_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    started_at: Mapped[datetime] = mapped_column(default=utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
     status: Mapped[str] = mapped_column(String, default=PipelineStatus.RUNNING)
     current_phase: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -827,7 +828,7 @@ class HousePipelineRun(Base):
     __tablename__ = "house_pipeline_runs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    started_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    started_at: Mapped[datetime] = mapped_column(default=utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
     status: Mapped[str] = mapped_column(String, default=PipelineStatus.RUNNING)
     reps_processed: Mapped[int] = mapped_column(Integer, default=0)
@@ -853,7 +854,7 @@ class SupplementaryPipelineRun(Base):
     __tablename__ = "supplementary_pipeline_runs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    started_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    started_at: Mapped[datetime] = mapped_column(default=utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
     status: Mapped[str] = mapped_column(String, default=PipelineStatus.RUNNING)
     current_phase: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -871,7 +872,7 @@ class StockTradesPipelineRun(Base):
     __tablename__ = "stock_trades_pipeline_runs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    started_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    started_at: Mapped[datetime] = mapped_column(default=utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
     status: Mapped[str] = mapped_column(String, default=PipelineStatus.RUNNING)
     house_trades_ingested: Mapped[int] = mapped_column(Integer, default=0)
@@ -887,7 +888,7 @@ class BskySenatorSpotlight(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     senator_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
-    posted_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    posted_at: Mapped[datetime] = mapped_column(default=utcnow)
     post_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 

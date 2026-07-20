@@ -62,6 +62,7 @@ from app.pipeline.transform.normalize_votes import (
     compute_party_vote_split,
     opposing_party_unity,
 )
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +104,7 @@ async def run_house_pipeline() -> dict:
     start_time = time.time()
 
     # Record run start so failures are visible in the admin dashboard.
-    house_run = HousePipelineRun(started_at=datetime.utcnow(), status=PipelineStatus.RUNNING)
+    house_run = HousePipelineRun(started_at=utcnow(), status=PipelineStatus.RUNNING)
     db.add(house_run)
     db.commit()
     progress = ProgressTracker(house_run, HOUSE_PIPELINE_STEPS, db, start_time)
@@ -122,7 +123,7 @@ async def run_house_pipeline() -> dict:
                 logger.warning("No House members found — aborting")
                 elapsed = round(time.time() - start_time, 1)
                 house_run.status = PipelineStatus.FAILED
-                house_run.completed_at = datetime.utcnow()
+                house_run.completed_at = utcnow()
                 house_run.error_message = "No House members returned from Congress API"
                 house_run.elapsed_seconds = elapsed
                 progress.fail("fetch_members", detail="no members returned")
@@ -700,7 +701,7 @@ async def run_house_pipeline() -> dict:
                         rep["funding"].get("industryBreakdown", []),
                     )
                     await enrich_lobbying_matches_with_lda(
-                        lobbying_matches, db, datetime.utcnow().year - 1,
+                        lobbying_matches, db, utcnow().year - 1,
                     )
                     rep["lobbyingMatches"] = lobbying_matches
 
@@ -793,7 +794,7 @@ async def run_house_pipeline() -> dict:
                 else PipelineStatus.FAILED
             )
             house_run.status = status
-            house_run.completed_at = datetime.utcnow()
+            house_run.completed_at = utcnow()
             house_run.reps_processed = success_count
             house_run.reps_total = success_count + fail_count
             house_run.reps_failed = fail_count
@@ -813,7 +814,7 @@ async def run_house_pipeline() -> dict:
         logger.exception("House pipeline failed: %s", e)
         try:
             house_run.status = PipelineStatus.FAILED
-            house_run.completed_at = datetime.utcnow()
+            house_run.completed_at = utcnow()
             house_run.elapsed_seconds = round(time.time() - start_time, 1)
             house_run.error_message = "House pipeline failed — see server logs"
             db.commit()
@@ -829,7 +830,7 @@ def _record_rep_snapshots(db: Session) -> None:
     """Snapshot today's scores for all representatives."""
     from app.pipeline.analyze.score_calculator import ALGORITHM_VERSION, compute_overall_score
 
-    today = datetime.utcnow().date().isoformat()
+    today = utcnow().date().isoformat()
     reps = db.query(Representative).all()
     count = 0
     for r in reps:

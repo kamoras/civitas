@@ -12,6 +12,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from app.api.router import api_router
 from app.database import init_db
 from app.scheduler import start_scheduler, stop_scheduler
+from app.time_utils import utcnow
 
 # Configure logging level from PIPELINE_LOG_LEVEL env setting
 _level_name = (settings.PIPELINE_LOG_LEVEL or "info").upper()
@@ -70,7 +71,6 @@ def _invalidate_orphaned_pipelines() -> None:
     If the app is starting, no pipeline thread from this process can be
     active -- any 'running' row is left over from a prior crash or deploy.
     """
-    from datetime import datetime
     from app.database import SessionLocal
     from app.models import PipelineRun, PipelineStatus
 
@@ -79,7 +79,7 @@ def _invalidate_orphaned_pipelines() -> None:
         orphaned = db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).all()
         for run in orphaned:
             run.status = PipelineStatus.STALE
-            run.completed_at = datetime.utcnow()
+            run.completed_at = utcnow()
             run.error_message = "Marked stale: app restarted while pipeline was running"
             logging.getLogger("app.main").warning(
                 "Invalidated orphaned pipeline run #%d (started %s)",

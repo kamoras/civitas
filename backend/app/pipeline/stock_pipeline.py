@@ -35,6 +35,7 @@ from app.pipeline.fetch.senate_ptr import (
 from app.pipeline.progress_tracker import ProgressTracker
 from app.pipeline.run_tracker import PipelineRunTracker
 from app.pipeline.transform.industry_classifier import classify_batch_with_learning
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -252,7 +253,7 @@ async def run_stock_trades_pipeline() -> dict:
         _tracker.start()
         start_time = time.time()
 
-        run = StockTradesPipelineRun(started_at=datetime.utcnow(), status=PipelineStatus.RUNNING)
+        run = StockTradesPipelineRun(started_at=utcnow(), status=PipelineStatus.RUNNING)
         db.add(run)
         db.commit()
         progress = ProgressTracker(run, STOCK_PIPELINE_STEPS, db, start_time)
@@ -282,7 +283,7 @@ async def run_stock_trades_pipeline() -> dict:
         logger.info("Stock trades pipeline: %d House rows, %d Senate rows", house_count, senate_count)
 
         run.status = PipelineStatus.FAILED if len(error_parts) == 2 else PipelineStatus.COMPLETED
-        run.completed_at = datetime.utcnow()
+        run.completed_at = utcnow()
         run.house_trades_ingested = house_count
         run.senate_trades_ingested = senate_count
         run.elapsed_seconds = elapsed
