@@ -66,6 +66,7 @@ from app.pipeline.fetch.fec import (
 )
 from app.pipeline.fetch.govinfo import fetch_bill_text
 from app.pipeline.fetch.lda import enrich_lobbying_matches_with_lda
+from app.pipeline.run_checks import persist_ground_truth_failures, run_calibration_check
 from app.pipeline.progress_tracker import ProgressTracker
 # Transform modules
 from app.pipeline.transform.normalize_finance import normalize_finance
@@ -1805,19 +1806,7 @@ async def run_senate_pipeline(
 
         _record_score_snapshots(db)
 
-        try:
-            from app.pipeline.analyze.score_calibration import generate_calibration_report
-            report = generate_calibration_report("senator")
-            if report and report["drift_events"]:
-                for evt in report["drift_events"]:
-                    logger.warning(
-                        "SCORE DRIFT [%s] %s: %s",
-                        evt["severity"], evt["dimension"], evt["message"],
-                    )
-            else:
-                logger.info("Score calibration: no drift detected")
-        except Exception:
-            logger.exception("Score calibration check failed (non-fatal)")
+        run_calibration_check("senator")
 
         try:
             from app.pipeline.analyze.ground_truth import (
@@ -1836,21 +1825,20 @@ async def run_senate_pipeline(
             # a named-reference check, but it catches the failure mode
             # those checks can't: everyone converging to the same score.
             gt_failures += check_score_distribution(db)
-            pipeline_run.ground_truth_failures = json.dumps(gt_failures)
-            db.commit()
-            if gt_failures:
-                from app.ops_alerts import send_ops_alert
-                lines = "\n".join(
-                    f"- {f.get('senator', '?')} {f.get('dimension', '?')}="
-                    f"{f.get('score', '?')} expected {f.get('expected', '?')}"
-                    for f in gt_failures
-                )
-                send_ops_alert(
-                    f"Ground-truth gate failed ({len(gt_failures)})",
+            lines = "\n".join(
+                f"- {f.get('senator', '?')} {f.get('dimension', '?')}="
+                f"{f.get('score', '?')} expected {f.get('expected', '?')}"
+                for f in gt_failures
+            )
+            persist_ground_truth_failures(
+                db, pipeline_run, gt_failures,
+                alert_title=f"Ground-truth gate failed ({len(gt_failures)})",
+                alert_body=(
                     f"Reference senators outside expected score ranges "
-                    f"(run #{pipeline_run.id}):\n{lines}",
-                    dedupe_key=f"ground-truth-run-{pipeline_run.id}",
-                )
+                    f"(run #{pipeline_run.id}):\n{lines}"
+                ),
+                dedupe_key=f"ground-truth-run-{pipeline_run.id}",
+            )
         except Exception:
             logger.exception("Ground truth check failed (non-fatal)")
 

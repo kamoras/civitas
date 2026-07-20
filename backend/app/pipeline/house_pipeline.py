@@ -11,7 +11,6 @@ computed deterministically and don't need LLM calls.
 """
 
 
-import json
 import logging
 import time
 from datetime import datetime, timedelta
@@ -54,6 +53,7 @@ from app.pipeline.fetch.fec import (
     reset_run_state as reset_fec_run_state,
 )
 from app.pipeline.fetch.lda import enrich_lobbying_matches_with_lda
+from app.pipeline.run_checks import persist_ground_truth_failures, run_calibration_check
 from app.pipeline.transform.normalize_members import normalize_house_members
 from app.pipeline.transform.normalize_votes import (
     extract_representative_vote,
@@ -742,19 +742,7 @@ async def run_house_pipeline() -> dict:
             progress.begin("snapshots")
             _record_rep_snapshots(db)
 
-            try:
-                from app.pipeline.analyze.score_calibration import generate_calibration_report
-                report = generate_calibration_report("representative")
-                if report and report["drift_events"]:
-                    for evt in report["drift_events"]:
-                        logger.warning(
-                            "SCORE DRIFT [%s] %s: %s",
-                            evt["severity"], evt["dimension"], evt["message"],
-                        )
-                else:
-                    logger.info("Score calibration: no drift detected")
-            except Exception:
-                logger.exception("Score calibration check failed (non-fatal)")
+            run_calibration_check("representative")
 
             try:
                 # Population-stdev regression gate — House's counterpart to
@@ -765,21 +753,20 @@ async def run_house_pipeline() -> dict:
                 # scores collapsing toward a neutral prior population-wide.
                 from app.pipeline.analyze.ground_truth import check_score_distribution
                 gt_failures = check_score_distribution(db, model=Representative)
-                house_run.ground_truth_failures = json.dumps(gt_failures)
-                db.commit()
-                if gt_failures:
-                    from app.ops_alerts import send_ops_alert
-                    lines = "\n".join(
-                        f"- {f.get('dimension', '?')}={f.get('score', '?')} "
-                        f"expected {f.get('expected', '?')}"
-                        for f in gt_failures
-                    )
-                    send_ops_alert(
-                        f"House ground-truth gate failed ({len(gt_failures)})",
+                lines = "\n".join(
+                    f"- {f.get('dimension', '?')}={f.get('score', '?')} "
+                    f"expected {f.get('expected', '?')}"
+                    for f in gt_failures
+                )
+                persist_ground_truth_failures(
+                    db, house_run, gt_failures,
+                    alert_title=f"House ground-truth gate failed ({len(gt_failures)})",
+                    alert_body=(
                         f"House score distribution outside expected ranges "
-                        f"(run #{house_run.id}):\n{lines}",
-                        dedupe_key=f"house-ground-truth-run-{house_run.id}",
-                    )
+                        f"(run #{house_run.id}):\n{lines}"
+                    ),
+                    dedupe_key=f"house-ground-truth-run-{house_run.id}",
+                )
             except Exception:
                 logger.exception("House ground truth check failed (non-fatal)")
 
