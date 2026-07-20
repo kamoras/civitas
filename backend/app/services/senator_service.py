@@ -526,7 +526,10 @@ def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
             trend=trend_map.get(s.id, ScoreTrendSchema()),
             ideology_score=s.ideology_score,
             ideology_label=(
-                describe_senator_position(s.ideology_score, s.leadership_score, s.party)
+                describe_senator_position(
+                    s.ideology_score, s.leadership_score, s.party,
+                    years_in_office=s.years_in_office,
+                )
                 if s.ideology_score is not None and s.leadership_score is not None
                 else None
             ),

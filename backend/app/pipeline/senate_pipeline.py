@@ -1750,6 +1750,7 @@ async def run_senate_pipeline(
                     if l_score is not None and i_score is not None:
                         result["sponsorshipDescription"] = describe_senator_position(
                             i_score, l_score, senator.get("party", ""),
+                            years_in_office=senator.get("yearsInOffice"),
                         )
                         logger.info(
                             "    sponsorship: leadership=%.2f ideology=%.2f (%s)",

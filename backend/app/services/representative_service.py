@@ -374,7 +374,10 @@ def get_rep_leaderboard(
             "trend": trend_map.get(r.id, {"direction": "new", "change": 0.0, "previousScore": None}),
             "ideologyScore": r.ideology_score,
             "ideologyLabel": (
-                describe_senator_position(r.ideology_score, r.leadership_score, r.party)
+                describe_senator_position(
+                    r.ideology_score, r.leadership_score, r.party,
+                    years_in_office=r.years_in_office,
+                )
                 if r.ideology_score is not None and r.leadership_score is not None
                 else None
             ),

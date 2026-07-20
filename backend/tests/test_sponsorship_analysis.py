@@ -273,6 +273,35 @@ class TestDescribePosition:
         for substr in expected_not_in:
             assert substr not in desc
 
+    def test_freshman_low_pagerank_is_not_labeled_follower(self):
+        """A first-year member with a near-zero raw leadership score reflects
+        no time to build a cosponsorship network, not follower behavior —
+        the tenure shrink should keep them out of the 'follower' bucket
+        (GovTrack refuses to score <10-bill members for the same reason;
+        AGENTS.md 'seniority alone is never penalized')."""
+        desc = describe_senator_position(0.9, 0.02, "R", years_in_office=0.5)
+        assert "follower" not in desc
+        assert "conservative" in desc  # ideology label still applies
+
+    def test_veteran_low_pagerank_is_still_a_follower(self):
+        """A long-tenured member with a genuinely low leadership score has
+        had the time — that IS a behavioral signal, so the label stands."""
+        desc = describe_senator_position(0.9, 0.02, "R", years_in_office=20)
+        assert "follower" in desc
+
+    def test_veteran_high_pagerank_is_still_a_leader(self):
+        """The tenure shrink is toward neutral, so it never manufactures a
+        'leader' — a genuine high scorer with full tenure keeps the label."""
+        assert "leader" in describe_senator_position(0.1, 0.95, "D", years_in_office=18)
+
+    def test_unknown_tenure_preserves_prior_behavior(self):
+        """years_in_office=None (unknown) applies no shrink — backwards
+        compatible with call sites/tests that don't pass tenure."""
+        assert describe_senator_position(0.9, 0.02, "R") == describe_senator_position(
+            0.9, 0.02, "R", years_in_office=None
+        )
+        assert "follower" in describe_senator_position(0.9, 0.02, "R")
+
 
 # ── Bipartisanship (v5) ──────────────────────────────────────────
 

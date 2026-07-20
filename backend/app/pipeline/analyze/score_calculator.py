@@ -480,6 +480,19 @@ SUBSTANTIVE_BILL_TYPES = {"s", "hr", "sjres", "hjres"}
 # Effectiveness and Legislative Leadership.
 _ADVANCEMENT_ACTION_KEYWORDS = ("passed", "agreed to", "ordered to be reported")
 
+# Tenure (years) at which a member's raw cosponsorship-PageRank leadership
+# score is trusted at full face value. Below it, the score is shrunk toward
+# neutral because PageRank centrality is structurally a function of network
+# size, which takes years to build — a freshman's near-zero percentile
+# reflects time in office, not ineffectiveness (2026-07 audit; see the
+# v5.12 changelog note). Scaled to a full 6-year Senate term: long enough to
+# plausibly build a real network, short enough that a second-term member
+# isn't still getting a pass. Shared by Legislative Effectiveness's
+# leadership component (_legislative_effectiveness_core) and the displayed
+# leader/follower label (sponsorship_analysis.describe_senator_position), so
+# the same "seniority alone is never penalized" correction applies to both.
+LEADERSHIP_TENURE_FULL_CREDIT_YEARS = 6.0
+
 # Per-state Cook PVI (positive = R lean, negative = D lean) — the seat
 # expectation for SENATORS, the state-level analog of the per-district
 # district_pvi.json used for House members (_district_pvi below).
@@ -2160,7 +2173,7 @@ def _legislative_effectiveness_core(
         # (this repo's design principle: missing data is never "bad").
         leadership_raw = 50.0
 
-    leadership_conf = min((years_in_office or 0) / 6.0, 1.0)
+    leadership_conf = min((years_in_office or 0) / LEADERSHIP_TENURE_FULL_CREDIT_YEARS, 1.0)
     leadership_pct = leadership_raw * leadership_conf + 50 * (1 - leadership_conf)
     leadership_detail = (
         f"PageRank percentile {leadership_raw:.0f}, tenure-confidence-scaled "

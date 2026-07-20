@@ -275,13 +275,33 @@ def describe_senator_position(
     ideology: float,
     leadership: float,
     party: str,
+    years_in_office: float | None = None,
 ) -> str:
     """Generate a GovTrack-style description of a senator's position.
 
     Uses the ideology × leadership grid to produce labels like
     "progressive Democratic leader" or "conservative Republican follower"
     (Tauberer 2012).
+
+    ``years_in_office`` gates the leader/follower role by tenure. Raw
+    cosponsorship-PageRank leadership is structurally a function of network
+    size, which takes years to build, so a freshman's near-zero score
+    reflects time in office, not follower behavior — GovTrack itself refuses
+    to compute a leadership score for members with fewer than ~10 sponsored
+    bills for exactly this reason, and warns the score "doesn't necessarily
+    make a legislator any better or worse." Rather than brand juniors
+    "follower", the score is shrunk toward neutral by the same tenure
+    confidence Legislative Effectiveness's leadership component already uses
+    (score_calculator.LEADERSHIP_TENURE_FULL_CREDIT_YEARS), so a low-tenure
+    member lands in the unlabeled middle instead of at "follower". When
+    ``years_in_office`` is None (unknown) the score is used as-is, preserving
+    the prior behavior. This honors the platform's "seniority alone is never
+    penalized" design principle (AGENTS.md) for the displayed label, not just
+    the effectiveness score.
     """
+    from app.pipeline.analyze.score_calculator import (
+        LEADERSHIP_TENURE_FULL_CREDIT_YEARS,
+    )
     # ideology is already rescaled to [0, 1] with 0 = most-left, 1 = most-
     # right (see compute_ideology_scores), so these are terciles of that
     # scale, not raw SVD output. D/R buckets use a wider 30/70 split (the
@@ -316,9 +336,18 @@ def describe_senator_position(
     # (most senators cluster low, a few attract disproportionate cosponsor
     # weight) — top/bottom quartile on that spread scale is a meaningfully
     # large gap in raw influence, not just a quartile of a linear scale.
-    if leadership > 0.75:
+    #
+    # Tenure-shrink toward neutral 0.5 before thresholding so a junior member
+    # isn't labeled "follower" for not having had time to build a
+    # cosponsorship network (see the docstring). Unknown tenure -> no shrink.
+    if years_in_office is None:
+        leadership_adj = leadership
+    else:
+        conf = min(max(years_in_office, 0.0) / LEADERSHIP_TENURE_FULL_CREDIT_YEARS, 1.0)
+        leadership_adj = leadership * conf + 0.5 * (1 - conf)
+    if leadership_adj > 0.75:
         role = "leader"
-    elif leadership < 0.25:
+    elif leadership_adj < 0.25:
         role = "follower"
     else:
         role = ""
