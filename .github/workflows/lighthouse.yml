@@ -1,0 +1,54 @@
+name: Lighthouse
+
+# Accessibility & SEO quality gate. Builds the frontend, boots it with no
+# backend reachable (so pages render their error/empty shells — the worst
+# case a real visitor can hit), and asserts every audited route still scores
+# 100 on both the accessibility and SEO categories. Performance and
+# best-practices are intentionally out of scope: they swing with CI machine
+# load and the absent backend, and would only add flake here.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Only the default read-only token is needed — this job never writes.
+permissions:
+  contents: read
+
+jobs:
+  lighthouse:
+    name: Accessibility & SEO
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run Lighthouse CI
+        run: |
+          npm install -g @lhci/cli@0.15.x
+          lhci autorun
+
+      - name: Upload Lighthouse reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-reports
+          path: frontend/.lighthouseci
+          if-no-files-found: ignore
+          retention-days: 14

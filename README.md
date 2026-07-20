@@ -1,5 +1,9 @@
 # Civitas — Political Representation Tracker
 
+[![CI](https://github.com/kamoras/civitas/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kamoras/civitas/actions/workflows/ci.yml)
+[![Lighthouse — Accessibility & SEO](https://github.com/kamoras/civitas/actions/workflows/lighthouse.yml/badge.svg?branch=main)](https://github.com/kamoras/civitas/actions/workflows/lighthouse.yml)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
+
 Civitas is an open-data AI/ML platform that aggregates data from official
 U.S. government sources into unified transparency scorecards for senators,
 House representatives, presidents, and Supreme Court justices. It also
