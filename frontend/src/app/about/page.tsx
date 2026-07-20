@@ -194,16 +194,20 @@ export default function AboutPage() {
                   representation of the coalition that elected the member (not the geographic
                   median voter), it is the structural norm for both parties in the modern
                   Senate, and being &quot;out of step&quot; is a matter of ideological position, not a
-                  loyalty rate — so we decline to score it rather than penalize it. Above-expected
-                  crossing is the readable side: it earns credit only where it plausibly moves
-                  toward the seat&apos;s political center, via two directional discounts — by seat
-                  (full credit in opposed and swing seats, near-neutral in deep aligned seats,
-                  since there the center sits with the party) and by the member&apos;s own
-                  ideological flank (a moderate-wing member&apos;s crossing is credited, an
-                  extreme-flank member&apos;s — more likely a break <em>away</em> from the center — is
-                  credited less, not penalized). This is a deliberately humble use of the
-                  delegate model, with partisan lean standing in for issue-level constituent
-                  opinion — a measurable, disclosed simplification (see
+                  loyalty rate — so we decline to score it rather than penalize it. This
+                  loyalty floor is the only behavioral change in v6.6, and it is deterministic:
+                  a below-expected loyalist scores exactly 50 on this component, no calibration
+                  involved. Above-expected crossing is the readable side: it earns credit only
+                  where it plausibly moves toward the seat&apos;s political center, discounted by
+                  seat lean (full credit in opposed and swing seats, near-neutral in deep
+                  aligned seats, since there the center sits with the party). A further discount
+                  for members positioned on their party&apos;s ideological flank — whose crossings
+                  more likely point <em>away</em> from the center (Kirkland &amp; Slapin 2017) — was
+                  designed but deliberately <em>not</em> shipped: its strength changes real scores and
+                  can only be calibrated against the live scored data, so shipping a guessed
+                  value is declined in favor of fitting it against real data first. This is a
+                  deliberately humble use of the delegate model, with partisan lean standing in
+                  for issue-level constituent opinion — a measurable, disclosed simplification (see
                   <a href="#known-limitations" className="underline underline-offset-2 hover:text-matrix-green/70"> Known Limitations</a>
                   {" "}below, including why this measures the rate and direction of a member&apos;s
                   deviation rather than the distance between their position and their

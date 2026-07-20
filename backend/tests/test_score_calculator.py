@@ -327,8 +327,10 @@ class TestConstituentAlignment:
     component asymmetric: below-expected loyalty is NOT penalized (floors
     at neutral — a low defection rate is not misrepresentation), while
     above-expected crossing earns credit only where it plausibly moves
-    toward the state median, discounted both by seat lean and by the
-    member's own ideological flank position.
+    toward the state median (discounted by seat lean). A member-level flank
+    direction discount was designed but not shipped in v6.6 (uncalibratable
+    without the live scored ideology distribution — see score_calculator.py),
+    so the crossing side here is seat-direction only.
     """
 
     def _make_votes(self, with_party=0, against_party=0, policy="JUSTICE", crossing_unity=None):
@@ -673,83 +675,6 @@ class TestConstituentAlignment:
         for i in range(1, len(scores)):
             assert scores[i] >= scores[i - 1]
         assert scores[-1] - scores[0] >= 25
-
-    def test_flank_defector_credited_less_than_moderate_crosser(self):
-        """v6.6 direction awareness: identical crossing rate, same swing
-        seat — but a member on their party's extreme wing earns less
-        'moved toward my constituents' credit than a moderate-wing member,
-        because a flank member's crossings most likely point AWAY from the
-        state median (Kirkland & Slapin 2017)."""
-        record = {
-            "keyVotes": self._make_votes(with_party=75, against_party=25),
-            "recentVotes": [],
-        }
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
-        # NV is PVI 0 → a swing seat for a Democrat (alignment 0). D ideology
-        # near center (0.45) = moderate wing; near 0.0 = far-left flank.
-        moderate = _calc_constituent_alignment(
-            record, [], funding, state="NV", party="D", ideology_score=0.45
-        )
-        extreme = _calc_constituent_alignment(
-            record, [], funding, state="NV", party="D", ideology_score=0.05
-        )
-        assert moderate > extreme
-
-    def test_flank_discount_is_party_relative(self):
-        """The flank is measured toward each party's OWN wing: for a
-        Republican the extreme is ideology→1, for a Democrat it is
-        ideology→0. The same raw ideology score is 'moderate' for one party
-        and 'extreme' for the other."""
-        record = {
-            "keyVotes": self._make_votes(with_party=75, against_party=25),
-            "recentVotes": [],
-        }
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
-        # ideology 0.9: moderate-wing for a Republican, far-flank for a "D".
-        r_moderate_wing = _calc_constituent_alignment(
-            record, [], funding, state="NV", party="R", ideology_score=0.55
-        )
-        r_far_right = _calc_constituent_alignment(
-            record, [], funding, state="NV", party="R", ideology_score=0.95
-        )
-        assert r_moderate_wing > r_far_right
-
-    def test_missing_ideology_applies_no_flank_discount(self):
-        """Missing ideology never penalizes: a surplus-crossing score with
-        ideology_score=None equals a perfectly centrist member's (flank 0),
-        and both keep more credit than a flank member."""
-        record = {
-            "keyVotes": self._make_votes(with_party=75, against_party=25),
-            "recentVotes": [],
-        }
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
-        none_score = _calc_constituent_alignment(
-            record, [], funding, state="NV", party="D", ideology_score=None
-        )
-        center_score = _calc_constituent_alignment(
-            record, [], funding, state="NV", party="D", ideology_score=0.5
-        )
-        flank_score = _calc_constituent_alignment(
-            record, [], funding, state="NV", party="D", ideology_score=0.0
-        )
-        assert none_score == center_score
-        assert none_score > flank_score
-
-    def test_flank_position_does_not_affect_loyalists(self):
-        """The flank discount only touches surplus (above-expected) crossing.
-        A below-expected loyalist floors at neutral whatever their ideology —
-        an extreme-flank loyalist is not scored differently from a
-        moderate-wing loyalist."""
-        record = {
-            "keyVotes": self._make_votes(with_party=99, against_party=1),
-            "recentVotes": [],
-        }
-        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
-        for ideo in (0.0, 0.25, 0.5):
-            assert _calc_constituent_alignment(
-                record, [], funding, state="NV", party="D", ideology_score=ideo
-            ) == 50
-
 
 class TestFundingDiversity:
     """Higher score = broader, more distributed funding base."""

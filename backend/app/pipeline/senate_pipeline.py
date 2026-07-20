@@ -1614,11 +1614,6 @@ async def run_senate_pipeline(
                         "campaignPromises": platform_data.get("campaignPromises", []),
                         "leadershipScore": leadership_scores.get(bio_id_for_score),
                         "bipartisanshipScore": bipartisanship_scores.get(bio_id_for_score),
-                        # Party-blind SVD ideology (0=left, 1=right) feeds
-                        # Constituent Alignment's member-flank direction
-                        # discount (v6.6). Available here from the same
-                        # ideology_scores map used below for partisanDepth.
-                        "ideologyScore": ideology_scores.get(bio_id_for_score),
                         "sponsoredBills": prepared.get("sponsoredBills", []),
                     }
                     corruption_score = calculate_scores(temp_senator)
