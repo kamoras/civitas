@@ -7,6 +7,7 @@ from typing import Sequence
 
 from sqlalchemy.orm import Session
 
+from app.config_definitions import JUSTICE_SCORE_WEIGHTS
 from app.models import Justice, JusticeVote
 from app.pipeline.analyze.justice_analyzer import analyze_justice_votes
 from app.schemas import (
@@ -17,20 +18,13 @@ from app.schemas import (
 
 logger = logging.getLogger(__name__)
 
-_SCORE_WEIGHTS = {
-    "consistency": 0.35,
-    "independence": 0.30,
-    "bipartisan_agreement": 0.15,
-    "judicial_restraint": 0.20,
-}
-
 
 def _build_score(j: Justice) -> JusticeScoreSchema:
     overall = (
-        j.score_consistency * _SCORE_WEIGHTS["consistency"]
-        + j.score_independence * _SCORE_WEIGHTS["independence"]
-        + j.score_bipartisan_agreement * _SCORE_WEIGHTS["bipartisan_agreement"]
-        + j.score_judicial_restraint * _SCORE_WEIGHTS["judicial_restraint"]
+        j.score_consistency * JUSTICE_SCORE_WEIGHTS["consistency"]
+        + j.score_independence * JUSTICE_SCORE_WEIGHTS["independence"]
+        + j.score_bipartisan_agreement * JUSTICE_SCORE_WEIGHTS["bipartisan_agreement"]
+        + j.score_judicial_restraint * JUSTICE_SCORE_WEIGHTS["judicial_restraint"]
     )
     return JusticeScoreSchema(
         consistency=j.score_consistency,

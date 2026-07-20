@@ -206,8 +206,9 @@ def list_senators(
 ) -> JSONResponse:
     """US Senators ranked by overall representation score.
 
-    Scores are computed from: funding independence (25%), promise persistence (20%),
-    independent voting (20%), funding diversity (15%), legislative effectiveness (20%).
+    Scores are the weighted sum defined by ``config_definitions.SCORE_WEIGHTS``:
+    funding independence (33%), independent voting (33%), and legislative
+    effectiveness (34%).
     """
     from app.services.senator_service import get_leaderboard
 

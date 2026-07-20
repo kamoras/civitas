@@ -543,8 +543,7 @@ async def admin_dashboard(db: Session = Depends(get_db)):
         dash_progress_steps = None
         if last_run.progress_detail:
             try:
-                import json as _json
-                dash_progress_steps = _json.loads(last_run.progress_detail)
+                dash_progress_steps = json.loads(last_run.progress_detail)
             except (ValueError, TypeError):
                 pass
         pipeline_info["lastRun"] = {
@@ -903,7 +902,6 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
         _write_model_version()
         return count
 
-    import asyncio
     count = await asyncio.to_thread(_run)
     return {"embedded": count}
 

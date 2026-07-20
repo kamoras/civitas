@@ -18,7 +18,11 @@ from app.models import (
 )
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.pipeline.analyze.sponsorship_analysis import describe_senator_position
-from app.schemas import PaginatedRepresentativesSchema, RepresentativeSchema
+from app.schemas import (
+    PaginatedRepresentativesSchema,
+    RepresentativeSchema,
+    STOCK_ACT_DISCLOSURE_DEADLINE_DAYS,
+)
 from app.services.pagination import paginate_bounds
 from app.services.score_trends import compute_score_trend_map
 from app.services.senator_service import (
@@ -628,7 +632,7 @@ def get_rep_stock_trades(
 
     query = db.query(RepStockTrade).filter(RepStockTrade.representative_id == rep_id)
     total = query.count()
-    late_count = query.filter(RepStockTrade.days_to_disclose > 45).count()
+    late_count = query.filter(RepStockTrade.days_to_disclose > STOCK_ACT_DISCLOSURE_DEADLINE_DAYS).count()
     total_pages, page = paginate_bounds(total, page, per_page)
 
     trades_db = (
@@ -648,7 +652,7 @@ def get_rep_stock_trades(
                 "transactionDate": t.transaction_date,
                 "disclosureDate": t.disclosure_date,
                 "daysToDisclose": t.days_to_disclose,
-                "late": t.days_to_disclose > 45,
+                "late": t.days_to_disclose > STOCK_ACT_DISCLOSURE_DEADLINE_DAYS,
                 "amountLow": t.amount_low,
                 "amountHigh": t.amount_high,
                 "industry": t.industry,

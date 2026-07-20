@@ -66,6 +66,17 @@ PRESIDENT_SCORE_WEIGHTS: dict[str, float] = {
     "agencyAlignment": 0.15,
 }
 
+# Supreme Court impartiality-score weights. Single source of truth shared by
+# the scorer (services/justice_service.py), the directory's overall-score calc
+# (api/politicians.py), and the public /justices/weights endpoint — previously
+# these were three independent copies that could silently drift.
+JUSTICE_SCORE_WEIGHTS: dict[str, float] = {
+    "consistency": 0.35,
+    "independence": 0.30,
+    "bipartisan_agreement": 0.15,
+    "judicial_restraint": 0.20,
+}
+
 INDUSTRIES: dict[str, dict] = {
     "PHARMA":          {"name": "Pharmaceuticals",          "color": "#ff4444"},
     "INSURANCE":       {"name": "Insurance",                "color": "#ff6600"},

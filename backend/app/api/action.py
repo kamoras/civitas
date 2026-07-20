@@ -196,8 +196,8 @@ async def get_action_issues(
     date: str | None = Query(None, description="Date in YYYY-MM-DD format; defaults to most recent"),
     db: Session = Depends(get_db),
 ):
-    response.headers["Cache-Control"] = "public, max-age=300"
     """Return the current day's action issues (or most recent available)."""
+    response.headers["Cache-Control"] = "public, max-age=300"
     issues = _latest_current_issues(db, for_date=date)
 
     if not issues:
@@ -325,8 +325,8 @@ async def get_recent_by_branch(
     limit: int = Query(15, ge=1, le=50),
     db: Session = Depends(get_db),
 ):
-    response.headers["Cache-Control"] = "public, max-age=120"
     """Return the most recent explore documents for a government branch."""
+    response.headers["Cache-Control"] = "public, max-age=120"
     chambers = _BRANCH_CHAMBERS.get(branch.lower())
     if not chambers:
         raise HTTPException(400, f"Unknown branch: {branch}. Use senate, house, or executive.")
@@ -462,7 +462,9 @@ def _extract_country_mentions(articles: list) -> list[dict]:
                     "date": article.published.isoformat() if article.published else "",
                 })
         for alias, canonical in _ALIASES.items():
-            if alias in text and canonical not in [a.get("_matched") for a in country_articles.get(canonical, [])]:
+            # A country matched via both its name and an alias (e.g. "Russia"
+            # and "Moscow") is de-duplicated by title in the pass below.
+            if alias in text:
                 country_articles[canonical].append({
                     "title": article.title,
                     "url": article.url,

@@ -2,6 +2,7 @@ import asyncio
 import logging
 import secrets
 import threading
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from sqlalchemy.orm import Session
@@ -17,15 +18,17 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# A RUNNING row older than this is treated as a crashed/stale run and ignored,
+# so a leftover row can't wedge the "is a pipeline already running?" guard.
+_STALE_RUN_AFTER = timedelta(hours=12)
+
 
 def _is_pipeline_running(db: Session) -> bool:
     """Check the shared database for a currently running pipeline.
 
-    A run older than 2 hours is considered stale and ignored.
+    A run older than ``_STALE_RUN_AFTER`` is considered stale and ignored.
     """
-    from datetime import timedelta
-
-    cutoff = utcnow() - timedelta(hours=12)
+    cutoff = utcnow() - _STALE_RUN_AFTER
     return (
         db.query(PipelineRun)
         .filter(PipelineRun.status == PipelineStatus.RUNNING, PipelineRun.started_at > cutoff)
