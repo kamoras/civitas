@@ -32,8 +32,8 @@ SITE = "https://civitas-research.org"
 _SYSTEM_PROMPT = (
     "You are a nonpartisan civic journalist writing brief, factual posts for "
     "the Civitas transparency platform. Civitas scores U.S. senators on "
-    "funding independence, independent voting, funding diversity, and "
-    "legislative effectiveness. Your posts are data-driven, "
+    "funding independence, independent voting, and legislative effectiveness "
+    "into an overall representation score. Your posts are data-driven, "
     "neutral, and written to help citizens understand how their representatives "
     "are performing."
 )
@@ -117,10 +117,12 @@ def _most_notable_score(scores: dict[str, float]) -> tuple[str, float, bool]:
 
 def _generate_spotlight_post(senator: "Senator", rank: int, total: int) -> str | None:
     """Ask the LLM to write a score highlight post for this senator."""
+    # v6.5: funding diversity folded into funding independence — no longer
+    # its own scored dimension (score_funding_independence already reflects
+    # it), so it's deliberately not listed here alongside the other three.
     scores = {
         "Funding independence": round(senator.score_funding_independence or 0, 1),
         "Independent voting": round(senator.score_independent_voting or 0, 1),
-        "Funding diversity": round(senator.score_funding_diversity or 0, 1),
         "Legislative effectiveness": round(senator.score_legislative_effectiveness or 0, 1),
     }
     # The posted overall must be the same weighted composite the site shows
@@ -147,7 +149,7 @@ def _generate_spotlight_post(senator: "Senator", rank: int, total: int) -> str |
             "State the overall score and rank plainly."
         )
 
-    user_prompt = f"""Write a Bluesky post spotlighting this senator's Civitas transparency score.
+    user_prompt = f"""Write a Bluesky post spotlighting this senator's Civitas representation score.
 
 Senator: {senator.name} ({senator.party}-{senator.state})
 Overall score: {overall}/100 ({standing})
