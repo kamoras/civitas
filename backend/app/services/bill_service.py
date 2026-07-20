@@ -15,7 +15,13 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.config_definitions import BillStage
 from app.models import ActionIssue, Representative, RepSponsoredBill, Senator, SponsoredBill
-from app.schemas import BillInFlightSchema, PaginatedBillsSchema
+from app.schemas import (
+    BillDetailSchema,
+    BillInFlightSchema,
+    PaginatedBillsSchema,
+    PolicyAreaDetail,
+    RelatedIssueSchema,
+)
 
 # _collect_bills rebuilds ~17k rows (query + join + Pydantic construction)
 # from scratch on every call — ~1.3-1.7s measured in production, even for a
@@ -152,6 +158,101 @@ def _collect_bills(db: Session) -> list[_Row]:
 
     _collect_cache = (now, rows)
     return list(rows)
+
+
+def _parse_policy_areas(raw_json: str | None) -> list[PolicyAreaDetail]:
+    if not raw_json:
+        return []
+    try:
+        raw_areas = json.loads(raw_json)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    return [
+        PolicyAreaDetail(
+            area=a.get("area", ""),
+            confidence=a.get("confidence", 0.0),
+            party=a.get("party", "bipartisan"),
+        )
+        for a in raw_areas
+        if a.get("area")
+    ]
+
+
+def _issues_mentioning(db: Session, bill_id: str) -> list[RelatedIssueSchema]:
+    """Current Action Center issues whose related_bill_ids references this bill."""
+    issues = (
+        db.query(ActionIssue.id, ActionIssue.date, ActionIssue.title, ActionIssue.related_bill_ids)
+        .filter(ActionIssue.is_current == True)  # noqa: E712
+        .all()
+    )
+    result: list[RelatedIssueSchema] = []
+    for issue_id, date, title, related_bill_ids in issues:
+        if not related_bill_ids:
+            continue
+        try:
+            entries = json.loads(related_bill_ids)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if any(e.get("id") == bill_id for e in entries):
+            result.append(RelatedIssueSchema(id=issue_id, date=date, title=title))
+    return result
+
+
+def get_bill_detail(db: Session, bill_id: str) -> BillDetailSchema | None:
+    """Look up a single bill by its bill_id (e.g. "S.4967", "HR.22") among
+    current senators' and representatives' sponsored bills.
+
+    Queried directly rather than through _collect_bills' cache — a single
+    indexed-column lookup is cheaper than scanning the ~17k-row cache, and
+    this endpoint is hit far less often than the list view.
+    """
+    bill_id = bill_id.upper()
+
+    row = (
+        db.query(SponsoredBill, Senator)
+        .join(Senator, SponsoredBill.senator_id == Senator.id)
+        .filter(SponsoredBill.bill_id == bill_id)
+        .filter(Senator.is_current == True)  # noqa: E712
+        .first()
+    )
+    chamber = "senate"
+    if row is None:
+        row = (
+            db.query(RepSponsoredBill, Representative)
+            .join(Representative, RepSponsoredBill.representative_id == Representative.id)
+            .filter(RepSponsoredBill.bill_id == bill_id)
+            .filter(Representative.is_current == True)  # noqa: E712
+            .first()
+        )
+        chamber = "house"
+    if row is None:
+        return None
+
+    sp, member = row
+    related = _issues_mentioning(db, bill_id)
+
+    return BillDetailSchema(
+        bill_id=sp.bill_id,
+        title=sp.title,
+        chamber=chamber,
+        sponsor_id=member.id,
+        sponsor_name=member.name,
+        sponsor_party=member.party,
+        sponsor_state=member.state,
+        sponsor_thumbnail_url=_bioguide_photo(member.bioguide_id),
+        introduced_date=sp.introduced_date,
+        latest_action=sp.latest_action,
+        latest_action_date=sp.latest_action_date,
+        stage=sp.stage or BillStage.INTRODUCED,
+        policy_area=sp.policy_area,
+        congress=sp.congress,
+        bill_type=sp.bill_type,
+        is_law=sp.is_law,
+        mention_count=len(related),
+        policy_areas=_parse_policy_areas(sp.policy_areas),
+        party_leaning=sp.party_leaning,
+        related_issues=related,
+    )
 
 
 def clear_bill_collection_cache() -> None:
