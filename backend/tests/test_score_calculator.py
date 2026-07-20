@@ -1428,3 +1428,65 @@ class TestComputeOverallScoreOnDict:
 
     def test_missing_keys_default_to_zero(self):
         assert compute_overall_score({}) == 0.0
+
+
+class TestStatePviData:
+    """Guards the generated state PVI data (app/data/state_pvi.json) and the
+    generator's compute logic. STATE_PVI used to be a hand-typed inline dict;
+    it is now COMPUTED from presidential returns by scripts/fetch_state_pvi.py
+    and read via _state_pvi(). These tests lock in both the shipped data's
+    sanity and the formula, so a bad regeneration (swapped D/R column, wrong
+    baseline, sign flip) fails here instead of silently skewing every
+    senator's seat expectation."""
+
+    # A few hand-verified Cook Political Report 2022 published PVIs. The
+    # computed values must land within +/-1 (Cook's exact formula applies
+    # undisclosed recency weighting we deliberately don't replicate).
+    COOK_ANCHORS = {
+        "WY": 25, "WV": 22, "MA": -15, "CA": -13, "MI": 1, "PA": 2,
+        "GA": 3, "TX": 5, "DC": -43,
+    }
+
+    def test_shipped_json_is_sane(self):
+        pvi = score_calculator._state_pvi()
+        assert len(pvi) == 51  # 50 states + DC
+        assert all(-50 <= v <= 50 for v in pvi.values())
+        r_lean = sum(1 for v in pvi.values() if v > 0)
+        d_lean = sum(1 for v in pvi.values() if v < 0)
+        assert 18 <= r_lean <= 32 and 18 <= d_lean <= 32
+
+    def test_shipped_json_matches_cook_within_one(self):
+        pvi = score_calculator._state_pvi()
+        for st, expected in self.COOK_ANCHORS.items():
+            assert st in pvi, f"{st} missing from state_pvi.json"
+            assert abs(pvi[st] - expected) <= 1, (
+                f"{st}: shipped {pvi[st]:+d} vs Cook {expected:+d} (>1 off)"
+            )
+
+    def test_generator_compute_pvi_formula(self):
+        """The generator's compute_pvi implements Cook's formula: a state
+        that ran exactly at the national two-party split is EVEN; running
+        more Republican than the nation yields a positive (R) PVI."""
+        import importlib.util
+        import pathlib
+
+        script = (
+            pathlib.Path(__file__).resolve().parent.parent
+            / "scripts" / "fetch_state_pvi.py"
+        )
+        spec = importlib.util.spec_from_file_location("fetch_state_pvi", script)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        # National two-party D share = 50% both cycles.
+        counts = {
+            "2016": {"national": {"D": 100, "R": 100},
+                     "XX": {"D": 50, "R": 50},    # exactly national -> EVEN
+                     "YY": {"D": 40, "R": 60}},   # 10pts more R -> R+10
+            "2020": {"national": {"D": 100, "R": 100},
+                     "XX": {"D": 50, "R": 50},
+                     "YY": {"D": 40, "R": 60}},
+        }
+        out = mod.compute_pvi(counts)
+        assert out["XX"] == 0
+        assert out["YY"] == 10  # positive = R lean
