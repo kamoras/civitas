@@ -866,7 +866,7 @@ def _deduplicate_top_clusters(
 def _validate_facts(facts: list, source_text: str | None = None) -> list:
     """Drop hallucinated or self-referential facts before saving.
 
-    Catches four LLM failure modes:
+    Catches five LLM failure modes:
     - Self-comparison: "Meta surpasses Meta Platforms" — same root word on both sides
     - Non-list return: LLM occasionally wraps facts in a dict or returns a string
     - Stale future dates: fact says "will remain until December 2025" in June 2026
@@ -874,6 +874,18 @@ def _validate_facts(facts: list, source_text: str | None = None) -> list:
       was shown) is provided, any fact containing a digit group that never
       appears in the source is dropped. The prompt already forbids inferred
       numbers; this enforces it mechanically (see grounding.py).
+    - Meta-facts: "No specific dates were provided in the articles" describes
+      the coverage's limits, not something that happened in the world — the
+      prompt's fact rule (5) already forbids this, but unlike the other
+      three prompt-only rules above it had no mechanical backstop, and it's
+      the single most common failure mode of the smaller LFM2.5-1.2B model
+      (2026-07-16 swap, #96) on real production output — spotted live on
+      2026-07-19 issues: "No specific dates or names of the bills were
+      provided in the articles," "Specific details about security
+      protocols were mentioned but not expanded in the articles," "No
+      formal policy changes or legal actions were reported in the
+      coverage." All three self-reference the source material as the
+      fact's subject instead of describing an actual event.
     """
     if not isinstance(facts, list):
         return []
@@ -886,6 +898,10 @@ def _validate_facts(facts: list, source_text: str | None = None) -> list:
         _re.IGNORECASE,
     )
     _FORWARD_PHRASES = ("will remain", "is expected", "continue", "until ", "through ", "by the end")
+    _META_PHRASES = (
+        "in the article", "in the articles", "in the coverage", "in the report",
+        "in the reporting", "the coverage ", "the reporting ",
+    )
     _today = datetime.now(_US_EAST).date()
     _month_index = {m: i for i, m in enumerate(calendar.month_name) if m}
 
@@ -922,6 +938,12 @@ def _validate_facts(facts: list, source_text: str | None = None) -> list:
                 except ValueError:
                     pass
         if stale:
+            continue
+
+        # Detect meta-facts that describe the source material's limits rather
+        # than an actual event — see the docstring for real production examples.
+        if any(phrase in lower for phrase in _META_PHRASES):
+            logger.warning("Dropping meta-fact referencing the coverage itself: %s", fact[:120])
             continue
 
         # Fabricated-statistic check against the articles the LLM was shown.
