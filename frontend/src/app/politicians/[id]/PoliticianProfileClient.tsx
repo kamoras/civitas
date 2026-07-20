@@ -115,6 +115,7 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
           {/* Identity header */}
           <div className="mb-6 flex flex-col sm:flex-row items-start gap-4">
             {identity.thumbnailUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- external, varied politician-photo hosts; not worth per-host next/image remotePatterns
               <img
                 src={identity.thumbnailUrl}
                 alt={identity.name}

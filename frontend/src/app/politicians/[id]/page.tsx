@@ -1,5 +1,4 @@
 import { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { PoliticianProfile } from "@/types/politicians";
 import PoliticianProfileClient from "./PoliticianProfileClient";

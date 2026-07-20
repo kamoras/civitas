@@ -13,7 +13,7 @@ import {
   type ExploreResult,
   type ExploreStats,
 } from "@/lib/api";
-import { safeHref, localDateStr, formatUtcDate } from "@/lib/formatting";
+import { localDateStr, formatUtcDate } from "@/lib/formatting";
 import { chamberColor, chamberBg, chamberLabel } from "@/lib/chamber";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 

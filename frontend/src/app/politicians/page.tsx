@@ -28,13 +28,6 @@ function partyDot(party: string) {
   return <span className={`inline-block w-2 h-2 rounded-full ${cls} mr-1.5`} />;
 }
 
-function partyLabel(party: string) {
-  if (party === "D") return "Democrat";
-  if (party === "R") return "Republican";
-  if (party === "I") return "Independent";
-  return party;
-}
-
 function ScoreBar({ score }: { score: number }) {
   const color = getScoreBgColor(score);
   return (
@@ -63,6 +56,7 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
     >
       <div className="flex items-start gap-3">
         {p.thumbnailUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- external, varied politician-photo hosts; not worth per-host next/image remotePatterns
           <img src={p.thumbnailUrl} alt={p.name} className="w-10 h-10 rounded object-cover shrink-0 opacity-80 group-hover:opacity-100 transition-opacity" />
         ) : (
           <div className="w-10 h-10 rounded border border-matrix-green/20 flex items-center justify-center shrink-0">
