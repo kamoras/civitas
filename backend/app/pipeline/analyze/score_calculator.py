@@ -480,22 +480,30 @@ SUBSTANTIVE_BILL_TYPES = {"s", "hr", "sjres", "hjres"}
 # Effectiveness and Legislative Leadership.
 _ADVANCEMENT_ACTION_KEYWORDS = ("passed", "agreed to", "ordered to be reported")
 
-# Cook Partisan Voting Index approximation (2024 cycle, based on
-# 2020 presidential results).  Source: Cook Political Report.
-# Positive = R lean, negative = D lean.  Updated per election cycle;
-# see https://www.cookpolitical.com/cook-pvi for current values.
+# Cook Partisan Voting Index — 2022 edition (the current state-level
+# release, based on the 2016 AND 2020 presidential results, per Cook's
+# two-election methodology; still current as of this file's 2026-07
+# refresh — no post-2024 state PVI has been published).
+# Source: Cook Political Report, "2022 Cook PVI State Map and List"
+# (cookpolitical.com/cook-pvi/2022-partisan-voting-index/state-map-and-list),
+# cross-checked against the underlying 2016/2020 two-party vote shares.
+# Positive = R lean, negative = D lean.  Updated by hand per election
+# cycle (a genuine citable constant, not calculated data — see AGENTS.md
+# "Calibrated constants are generated data" for why this stays inline
+# while district_pvi.json is generated). Rerun the check when Cook
+# publishes a post-2024 edition.  Values last verified 2026-07-20.
 STATE_PVI: dict[str, int] = {
-    "AL": 15, "AK": 9, "AZ": 2, "AR": 16, "CA": -15,
-    "CO": -4, "CT": -7, "DE": -7, "FL": 5, "GA": 1,
-    "HI": -15, "ID": 19, "IL": -8, "IN": 8, "IA": 6,
-    "KS": 10, "KY": 16, "LA": 12, "ME": -3, "MD": -14,
-    "MA": -15, "MI": -1, "MN": -2, "MS": 8, "MO": 10,
-    "MT": 8, "NE": 12, "NV": 0, "NH": 0, "NJ": -4,
-    "NM": -3, "NY": -10, "NC": 3, "ND": 17, "OH": 6,
-    "OK": 20, "OR": -5, "PA": 1, "RI": -9, "SC": 8,
-    "SD": 14, "TN": 14, "TX": 6, "UT": 13, "VT": -15,
-    "VA": -3, "WA": -8, "WV": 20, "WI": 0, "WY": 25,
-    "DC": -30, "PR": 0, "GU": 0, "VI": 0, "AS": 0, "MP": 0,
+    "AL": 15, "AK": 8, "AZ": 2, "AR": 16, "CA": -13,
+    "CO": -4, "CT": -7, "DE": -7, "FL": 3, "GA": 3,
+    "HI": -14, "ID": 18, "IL": -7, "IN": 11, "IA": 6,
+    "KS": 10, "KY": 16, "LA": 12, "ME": -2, "MD": -14,
+    "MA": -15, "MI": 1, "MN": -1, "MS": 11, "MO": 10,
+    "MT": 11, "NE": 13, "NV": 1, "NH": -1, "NJ": -6,
+    "NM": -3, "NY": -10, "NC": 3, "ND": 20, "OH": 6,
+    "OK": 20, "OR": -6, "PA": 2, "RI": -8, "SC": 8,
+    "SD": 16, "TN": 14, "TX": 5, "UT": 13, "VT": -16,
+    "VA": -3, "WA": -8, "WV": 22, "WI": 2, "WY": 25,
+    "DC": -43, "PR": 0, "GU": 0, "VI": 0, "AS": 0, "MP": 0,
 }
 
 _state_population_cache: dict[str, float] | None = None
