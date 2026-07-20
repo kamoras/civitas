@@ -541,20 +541,26 @@ function LeaderboardContent() {
   const [housePage, setHousePage] = useState(1);
   const [houseTotalPages, setHouseTotalPages] = useState(1);
   const [houseTotal, setHouseTotal] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  // Per-branch error state — a failed fetch on one tab must not surface as an
+  // error on the other three (each fetches independently).
+  const [senateError, setSenateError] = useState<string | null>(null);
+  const [houseError, setHouseError] = useState<string | null>(null);
+  const [presError, setPresError] = useState<string | null>(null);
+  const [justiceError, setJusticeError] = useState<string | null>(null);
   const [partyFilter, setPartyFilter] = useState<PartyFilter>("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("score");
 
   useEffect(() => {
     fetchLeaderboard()
       .then(setEntries)
-      .catch((e) => setError(e.message))
+      .catch((e) => setSenateError(e.message))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
     if (branch !== "house") return;
     setHouseLoading(true);
+    setHouseError(null);
     const partyParam = partyFilter !== "ALL" ? partyFilter : undefined;
     fetchRepLeaderboard(housePage, 50, partyParam)
       .then((data) => {
@@ -562,7 +568,7 @@ function LeaderboardContent() {
         setHouseTotalPages(data.totalPages);
         setHouseTotal(data.total);
       })
-      .catch((e) => setError(e.message))
+      .catch((e) => setHouseError(e.message))
       .finally(() => setHouseLoading(false));
   }, [branch, housePage, partyFilter]);
 
@@ -572,7 +578,7 @@ function LeaderboardContent() {
     setPresLoading(true);
     fetchPresidentLeaderboard()
       .then(setPresEntries)
-      .catch((e) => setError(e.message))
+      .catch((e) => setPresError(e.message))
       .finally(() => setPresLoading(false));
   }, [branch, presEntries.length]);
 
@@ -582,11 +588,15 @@ function LeaderboardContent() {
     setJusticeLoading(true);
     fetchJusticeLeaderboard()
       .then(setJusticeEntries)
-      .catch((e) => setError(e.message))
+      .catch((e) => setJusticeError(e.message))
       .finally(() => setJusticeLoading(false));
   }, [branch, justiceEntries.length]);
 
   const activeEntries = branch === "house" ? houseEntries : entries;
+  // The senate/house table view is shared; show whichever branch's
+  // loading/error applies so the house table isn't gated on the senate flag.
+  const activeError = branch === "house" ? houseError : senateError;
+  const activeLoading = branch === "house" ? houseLoading : loading;
 
   const displayed = useMemo(() => {
     let list = activeEntries;
@@ -660,9 +670,9 @@ function LeaderboardContent() {
         </div>
 
         <div id={`branch-panel-${branch}`} role="tabpanel" aria-labelledby={`branch-tab-${branch}`} tabIndex={-1}>
-        {branch === "president" && <PresidentLeaderboard entries={presEntries} loading={presLoading} error={error} />}
+        {branch === "president" && <PresidentLeaderboard entries={presEntries} loading={presLoading} error={presError} />}
 
-        {branch === "scotus" && <JusticeLeaderboard entries={justiceEntries} loading={justiceLoading} error={error} />}
+        {branch === "scotus" && <JusticeLeaderboard entries={justiceEntries} loading={justiceLoading} error={justiceError} />}
 
         {(branch === "senate" || branch === "house") && <>
         {/* Controls */}
@@ -721,21 +731,21 @@ function LeaderboardContent() {
         </div>
 
         {/* Loading / Error */}
-        {(branch === "senate" ? loading : houseLoading) && (
+        {activeLoading && (
           <div className="terminal-window p-8 text-center" role="status" aria-live="polite">
             <p className="text-matrix-green/60 font-mono text-xs tracking-widest animate-pulse">
               LOADING {branch === "house" ? "REPRESENTATIVE" : "SENATOR"} DATA...
             </p>
           </div>
         )}
-        {error && (
+        {activeError && (
           <div className="terminal-window p-8 text-center border-red-500/40" role="alert">
-            <p className="text-red-400">{">"} ERROR: {error}</p>
+            <p className="text-red-400">{">"} ERROR: {activeError}</p>
           </div>
         )}
 
         {/* Table */}
-        {!loading && !error && (
+        {!activeLoading && !activeError && (
           <div className="terminal-window overflow-hidden">
             <TerminalTitlebar title={`${branch === "house" ? "house" : "senate"}_leaderboard.db — ${branch === "house" ? `${houseTotal} representatives` : `${displayed.length} senators`}`} />
 
@@ -941,12 +951,11 @@ function LeaderboardContent() {
         )}
 
         {/* Footer note */}
-        {!loading && !error && displayed.length > 0 && (
+        {!activeLoading && !activeError && displayed.length > 0 && (
           <div className="mt-4 space-y-1 text-center">
             <p className="text-matrix-green/50 text-xs">
-              Higher score = better constituent representation. Computed from: funding independence (25%) +
-              promise persistence (20%) + independent voting (20%) + funding diversity (15%) +
-              legislative effectiveness (20%). Click any row to view full profile.
+              Higher score = better constituent representation. Computed from: funding independence (33%) +
+              independent voting (33%) + legislative effectiveness (34%). Click any row to view full profile.
             </p>
             <p className="text-matrix-green/30 text-[10px] font-mono">
               Scores use Bayesian shrinkage — members with limited public data are pulled toward 50, not penalized or rewarded

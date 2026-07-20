@@ -321,7 +321,10 @@ export default function MyRepsTab({
         iss.relatedSenators?.some((s) => myRepIds.has(s.id))
       )
       .slice(0, 3);
-  }, [issues, myRepIds]);
+    // activeIssues (not issues): when the issues prop is absent, the async
+    // fallback fetch changes activeIssues, and this must recompute for the
+    // "reps in the news" list to populate.
+  }, [activeIssues, myRepIds]);
 
   if (!userState) {
     return (
