@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect, useId, type ReactNode } from "react";
+import { useState, useRef, useEffect, useId, useCallback, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 interface MetricTooltipProps {
   text: string;
@@ -9,20 +10,81 @@ interface MetricTooltipProps {
 
 // Minimum gap kept between the tooltip and the viewport edge when clamping.
 const EDGE_PADDING_PX = 8;
+// Gap between the trigger and the tooltip along the vertical axis.
+const TRIGGER_GAP_PX = 6;
+
+interface Coords {
+  left: number;
+  top: number;
+}
 
 export default function MetricTooltip({ text, children }: MetricTooltipProps) {
   const [open, setOpen] = useState(false);
-  const [offsetX, setOffsetX] = useState(0);
+  const [coords, setCoords] = useState<Coords | null>(null);
   const ref = useRef<HTMLSpanElement>(null);
-  const tooltipRef = useRef<HTMLSpanElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
   const tooltipId = useId();
+
+  // Position the tooltip in viewport coordinates (position: fixed) rather
+  // than as an absolutely-positioned child of the trigger. The trigger
+  // lives inside `.terminal-window`, which sets `overflow: hidden` — an
+  // absolutely-positioned popover near the card's edge is clipped by that
+  // ancestor no matter how high its z-index, because overflow clipping and
+  // stacking order are independent. Portaling to <body> and positioning
+  // with fixed coords escapes every `overflow: hidden`/stacking-context
+  // ancestor, so the tooltip always draws over everything.
+  const reposition = useCallback(() => {
+    if (!ref.current || !tooltipRef.current) return;
+    const triggerRect = ref.current.getBoundingClientRect();
+    const tipWidth = tooltipRef.current.offsetWidth;
+    const tipHeight = tooltipRef.current.offsetHeight;
+
+    // Horizontal: center on the trigger, then clamp both edges to the
+    // viewport so the text is never cut off near a screen edge.
+    const center = triggerRect.left + triggerRect.width / 2;
+    let left = center - tipWidth / 2;
+    const maxLeft = window.innerWidth - EDGE_PADDING_PX - tipWidth;
+    left = Math.min(Math.max(left, EDGE_PADDING_PX), Math.max(EDGE_PADDING_PX, maxLeft));
+
+    // Vertical: prefer above the trigger; flip below when there isn't room
+    // (e.g. a metric near the very top of the card / viewport).
+    let top = triggerRect.top - tipHeight - TRIGGER_GAP_PX;
+    if (triggerRect.top < tipHeight + TRIGGER_GAP_PX + EDGE_PADDING_PX) {
+      top = triggerRect.bottom + TRIGGER_GAP_PX;
+    }
+
+    setCoords({ left, top });
+  }, []);
+
+  // Measure + place once open. The bubble renders at opacity-0 / off-screen
+  // until coords are set, so there's no flash at the wrong spot even though
+  // this runs after the first paint (kept as useEffect, not layout effect,
+  // to avoid the "useLayoutEffect does nothing on the server" SSR warning).
+  useEffect(() => {
+    if (!open) return;
+    reposition();
+  }, [open, reposition]);
+
+  // Keep it anchored while open: fixed coordinates are viewport-relative, so
+  // scrolling or resizing the page would otherwise leave the bubble stranded.
+  useEffect(() => {
+    if (!open) return;
+    const onScroll = () => reposition();
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [open, reposition]);
 
   useEffect(() => {
     if (!open) return;
     function handleOutside(e: MouseEvent | TouchEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const target = e.target as Node;
+      if (ref.current?.contains(target)) return;
+      if (tooltipRef.current?.contains(target)) return;
+      setOpen(false);
     }
     document.addEventListener("mousedown", handleOutside);
     document.addEventListener("touchstart", handleOutside);
@@ -32,36 +94,15 @@ export default function MetricTooltip({ text, children }: MetricTooltipProps) {
     };
   }, [open]);
 
-  // The tooltip is centered on the trigger by default (left-1/2 in the
-  // className below); near a viewport edge that pushes it off-screen and
-  // clips the text. Measure on open and shift it back on-screen — using
-  // the tooltip's own rendered width (via ref) rather than a hardcoded
-  // one, since it's visibility:hidden (not display:none) while closed and
-  // so already has real layout geometry to measure before it's shown.
-  useEffect(() => {
-    if (!open || !ref.current || !tooltipRef.current) return;
-    const triggerRect = ref.current.getBoundingClientRect();
-    const tooltipWidth = tooltipRef.current.offsetWidth;
-    const center = triggerRect.left + triggerRect.width / 2;
-    const halfWidth = tooltipWidth / 2;
-
-    let shift = 0;
-    if (center - halfWidth < EDGE_PADDING_PX) {
-      shift = EDGE_PADDING_PX - (center - halfWidth);
-    } else if (center + halfWidth > window.innerWidth - EDGE_PADDING_PX) {
-      shift = (window.innerWidth - EDGE_PADDING_PX) - (center + halfWidth);
-    }
-    setOffsetX(shift);
-  }, [open]);
-
   return (
-    <span ref={ref} className="relative inline-flex items-center group">
+    <span ref={ref} className="relative inline-flex items-center">
       {children}
       <button
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={() => setOpen((o) => !o)}
         onMouseEnter={() => setOpen(true)}
         onMouseLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
         onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}
         title={text}
@@ -72,25 +113,29 @@ export default function MetricTooltip({ text, children }: MetricTooltipProps) {
         [?]
       </button>
       {/*
-        Always in the DOM (not gated on `open`) for two reasons: aria-describedby
-        must resolve to real content for screen readers regardless of hover/click
-        state, and CSS-only group-hover/group-focus-within visibility means this
-        works with JavaScript disabled — the `open` state below is a progressive
-        enhancement (click-to-pin on touch devices), not the only way in.
+        Screen-reader anchor for aria-describedby — always in the DOM so the
+        description resolves regardless of hover/click/portal state. The
+        visible bubble below is portaled and aria-hidden (decorative), so
+        assistive tech reads this text, not the floating copy.
       */}
-      <span
-        ref={tooltipRef}
-        id={tooltipId}
-        role="tooltip"
-        style={{ transform: `translateX(calc(-50% + ${offsetX}px))` }}
-        className={`absolute z-50 bottom-full left-1/2 mb-1.5 w-48 sm:w-56 px-2.5 py-2 text-[11px] leading-snug text-matrix-green/90 bg-black/95 border border-matrix-green/30 shadow-lg pointer-events-none transition-opacity ${
-          open
-            ? "opacity-100"
-            : "opacity-0 invisible group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
-        }`}
-      >
-        {text}
-      </span>
+      <span id={tooltipId} className="sr-only">{text}</span>
+      {open && createPortal(
+        <div
+          ref={tooltipRef}
+          role="tooltip"
+          aria-hidden="true"
+          style={{
+            left: coords ? `${coords.left}px` : "-9999px",
+            top: coords ? `${coords.top}px` : "-9999px",
+          }}
+          className={`fixed z-[100] w-48 sm:w-56 max-w-[calc(100vw-16px)] px-2.5 py-2 text-[11px] leading-snug text-matrix-green/90 bg-black/95 border border-matrix-green/30 shadow-lg pointer-events-none transition-opacity ${
+            coords ? "opacity-100" : "opacity-0"
+          }`}
+        >
+          {text}
+        </div>,
+        document.body,
+      )}
     </span>
   );
 }
