@@ -15,12 +15,12 @@ locally on a single self-hosted device with zero cloud AI calls.
 
 ## Architecture
 
-- **Frontend**: Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS — port 3000/3001
-- **Backend**: FastAPI (Python 3.13), SQLAlchemy ORM, SQLite — port 8000/8001
+- **Frontend**: Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS — port 3000 (not published to the host under Swarm — see Deployment)
+- **Backend**: FastAPI (Python 3.13), SQLAlchemy ORM, SQLite — port 8000 (same)
 - **LLM**: LFM2.5-1.2B-Instruct via llama.cpp (native ARM, port 8070) or Ollama (Docker, port 11434)
 - **Embeddings**: sentence-transformers (Snowflake Arctic-XS), runs in-process
 - **Vector Store**: ChromaDB for semantic search document store
-- **Deployment**: Docker Compose, blue/green zero-downtime via `deploy.sh`, nginx reverse proxy with caching
+- **Deployment**: Docker Swarm (single-node), `docker stack deploy` for zero-downtime rolling updates, nginx (in-stack) reverse proxy with caching
 - **Branches covered**: Senate (100 senators), House (435 representatives), Presidents (historical + modern), Supreme Court (9 justices)
 - **News Feeds**: RSS parsing (AP, NPR, Reuters, PBS) + Google Trends + Reddit trending for Action Center
 - **Action Center**: National monitors (auto-detected ongoing concerns), year-in-review timeline, elections tab
@@ -65,8 +65,10 @@ civitas/
 │   ├── package.json
 │   └── Dockerfile
 ├── docker-compose.yml
+├── docker-compose.swarm.yml     # Swarm-only overlay (production stack deploy)
 ├── docker-compose.dev.yml
-├── deploy.sh                    # Blue/green zero-downtime deployment
+├── check-and-deploy.sh          # Cron poller: builds images + docker stack deploy
+├── nginx/                       # Dockerfile + static config (in-stack reverse proxy)
 ├── .env.example                 # Template for environment variables
 ├── AGENTS.md                    # This file — project design principles and developer guide
 └── README.md
@@ -564,18 +566,41 @@ SQLAlchemy ORM models are in `backend/app/models.py`. Key tables: `senators`,
 
 ### Deployment
 
-- **Always use `deploy.sh`** for production deploys — never `docker compose up -d`.
-  `deploy.sh` implements blue/green zero-downtime deployment: it builds the new
-  image, starts it on the standby port, health-checks it, then switches nginx
-  over. Running `docker compose up -d` bypasses blue/green and creates containers
-  that conflict with the deploy script's port slots.
-- Usage: `./deploy.sh` (all), `./deploy.sh frontend`, `./deploy.sh backend`
-- Blue slot: frontend=3000, backend=8000. Green slot: frontend=3001, backend=8001.
-  Active slot is tracked in `.deploy-frontend-slot` / `.deploy-backend-slot`.
-- `docker compose up -d` is for **local development only** — it binds directly
-  to ports 3000/8000 without blue/green rotation.
-- Docker images built from `backend/Dockerfile` and `frontend/Dockerfile`
-- Data persists in Docker named volumes (`app_data`) that survive rebuilds
+- **Production runs in Docker Swarm mode** (single-node — `docker swarm init`
+  is a one-time host setup step, not part of any deploy script). Deploys are
+  `docker stack deploy -c docker-compose.yml -c docker-compose.swarm.yml
+  civitas` — nothing else. There is no hand-rolled blue/green script anymore
+  (`deploy.sh`, removed 2026-07): Swarm's own `update_config.order:
+  start-first` (start the new task, health-check it, *then* stop the old one)
+  and `failure_action: rollback` (auto-revert if the new task never becomes
+  healthy) are the zero-downtime + rollback mechanism natively — `deploy.sh`
+  was reimplementing exactly this in ~600 lines of bash.
+- `docker-compose.swarm.yml` is a Swarm-only overlay on top of the base
+  `docker-compose.yml` (which is also the plain-dev `docker compose up -d`
+  file). Read the comment block at the top of `docker-compose.swarm.yml` for
+  what it changes and why — the two things worth knowing without opening it:
+  backend/frontend publish **no** host port under Swarm (nginx is the only
+  published service, on 8081, same as before — Swarm's host-mode port
+  publishing can't bind to `127.0.0.1` only like plain `docker run -p` can,
+  confirmed live, so the fix was to stop publishing those ports to the host
+  at all rather than accept LAN-wide exposure); and `app_data` is pinned to
+  the pre-existing `civitas_app_data` named volume via `external: true`, not
+  whatever a fresh stack deploy would otherwise auto-name it.
+- nginx is **in** the stack now (`nginx/Dockerfile` + `nginx/civitas.conf`),
+  attached to the same Swarm overlay network as backend/frontend. Its config
+  is static — no more per-deploy template rewrite — because Swarm's overlay
+  DNS (`backend`, `frontend`) already resolves to whichever task is healthy,
+  blue/green-flip semantics included.
+- Usage: `./check-and-deploy.sh` (the cron-invoked poller, safe to run
+  manually — see CI/CD below) builds fresh images tagged `sha-<short-sha>`
+  and runs the stack-deploy command above. There's no separate
+  frontend-only/backend-only deploy anymore; Swarm only rolls the services
+  whose image tag actually changed.
+- Docker images built from `backend/Dockerfile`, `frontend/Dockerfile`,
+  `nginx/Dockerfile`
+- Data persists in the `civitas_app_data` Docker named volume, which survives
+  rebuilds and stack redeploys (it's external to the stack, never recreated
+  by `docker stack deploy`)
 - Frontend Dockerfile uses multi-stage build (deps → build → runner) with non-root user
 
 ### CI/CD
@@ -584,9 +609,10 @@ Pushes to `main` run `.github/workflows/ci.yml` (lint/build/tests) on
 GitHub-hosted runners only. Deployment is **pull-based**, not triggered by
 GitHub Actions: a cron job on the production Pi (`*/5 * * * *
 check-and-deploy.sh`) polls `origin/main` and, when it finds a new commit,
-runs the existing `deploy.sh` — which independently checks `gh run list
---workflow CI` for that commit and refuses to ship a red build (override
-with `FORCE_DEPLOY=1`). GitHub Actions never executes anything on the Pi.
+checks `gh run list --workflow CI` for that commit and refuses to ship a red
+build (override with `FORCE_DEPLOY=1`), then builds images and runs
+`docker stack deploy` itself — no separate `deploy.sh` to call anymore.
+GitHub Actions never executes anything on the Pi.
 
 **Why not a self-hosted GitHub Actions runner (removed 2026-07):** the
 deploy job used to run on a self-hosted runner registered directly on the
@@ -599,21 +625,23 @@ the same runner label. GitHub's own guidance is that self-hosted runners
 removes this attack surface entirely: nothing GitHub Actions runs has any
 path to executing code on the Pi.
 
-- Check deploy status: `tail -f deploy-poll.log` on the Pi, or `git log -1`
-  in the deploy checkout to see what's currently live.
+- Check deploy status: `tail -f deploy-poll.log` on the Pi, `git log -1` in
+  the deploy checkout to see what's currently live, or `docker stack
+  services civitas` / `docker service ps civitas_backend` for Swarm's own
+  rollout state.
 - Trigger a deploy without waiting for the next cron tick: SSH in and run
-  `./check-and-deploy.sh` directly, or just `./deploy.sh` (same command
-  used for every manual deploy).
+  `./check-and-deploy.sh` directly — it's the same command cron runs, safe
+  to invoke manually.
 - Cron entry: `crontab -l` on the Pi (runs as user `ryan`).
 
 **Secrets are Pi-local now, not synced from GitHub.** The old system wrote
 `.env` fresh from GitHub Secrets on every deploy (only possible because
 GitHub Actions can inject secrets into a running job — external scripts
 can never fetch them). Rotating a secret now means: SSH in, edit the
-relevant line in `.env` directly, then deploy (`./deploy.sh` or wait for
-the next cron tick). `gh secret set NAME` still works and is worth keeping
-as a record of the current intended value, but it no longer does anything
-functional on its own — it's bookkeeping, not a sync mechanism.
+relevant line in `.env` directly, then deploy (`./check-and-deploy.sh` or
+wait for the next cron tick). `gh secret set NAME` still works and is worth
+keeping as a record of the current intended value, but it no longer does
+anything functional on its own — it's bookkeeping, not a sync mechanism.
 
 **Setting up a new deploy target** (replacing the Pi, or adding a second
 one): clone the repo to the target device, create `.env` there by hand
@@ -622,12 +650,12 @@ secrets are auto-provisioned anymore), then add the same crontab entry
 pointing at `check-and-deploy.sh` in that checkout. No GitHub Actions
 runner registration needed.
 
-**`deploy.sh` builds Docker images locally on the Pi, not via GHCR pull —
-this is unrelated to the runner change above and still applies.** The
-original design — `build-and-push` in `ci.yml` cross-builds images on
-GitHub-hosted runners and pushes to GHCR, deploy runs `SKIP_BUILD=1
-./deploy.sh` — is still there in `ci.yml` and still runs on every push to
-`main`, but nothing currently deploys from those tags. Reason: `ci.yml`
+**Images build locally on the Pi, not via GHCR pull — this is unrelated to
+the runner change above and still applies.** The original design —
+`build-and-push` in `ci.yml` cross-builds images on GitHub-hosted runners
+and pushes to GHCR, `check-and-deploy.sh` pulls those tags instead of
+building — is still there in `ci.yml` (currently `if: false`, disabled) but
+nothing currently deploys from those tags. Reason: `ci.yml`
 first used `ubuntu-latest` + QEMU emulation, which crashed mid-build on
 Node's JIT (2026-07-12, "Illegal instruction"). The fix was switching to
 `ubuntu-24.04-arm` — a *native* ARM64 hosted runner, no emulation. That
@@ -648,18 +676,21 @@ it from source on whichever machine runs the build, and its build system
 likely auto-detects and bakes in build-host SIMD instruction support. That
 lines up exactly with the crash point (first real HNSW-index use, at
 ChromaDB init) and explains why building on the Pi itself is reliably safe:
-the Pi compiling for itself can't produce an incompatible binary. A real fix
-would pin a conservative `CXXFLAGS`/`CFLAGS` architecture target (e.g.
-`-march=armv8-a`) for the build stage so hnswlib compiles to a portable
-baseline regardless of build host — **untested**, don't ship this without
-verifying a GHCR-built image survives past ChromaDB init on the Pi first
+the Pi compiling for itself can't produce an incompatible binary.
+`backend/Dockerfile` now pins `CFLAGS`/`CXXFLAGS=-march=armv8-a` for
+`TARGETARCH=arm64` builds — a portable baseline instruction set every
+aarch64 chip (including the CI runners' Ampere/Cobalt cores) supports —
+but this has **not been re-verified against a GHCR-built image running
+past ChromaDB init on the Pi**, only reasoned about; don't re-enable
+`build-and-push` on the strength of this fix alone
 (the health check alone won't catch it).
 
-Until the build is fixed and re-verified, `deploy.sh` runs plain
-`./deploy.sh` (no `SKIP_BUILD`), building on the Pi itself — slower, but
-guaranteed instruction-set-compatible since it's the target hardware.
-`ci.yml`'s `build-and-push` job still runs and still pushes to GHCR;
-nothing currently deploys from those tags. Do not re-enable the GHCR pull
+Until re-verified, `check-and-deploy.sh` builds images locally on the Pi
+on every deploy — slower, but guaranteed instruction-set-compatible since
+it's the target hardware. `ci.yml`'s `build-and-push` job is still present
+(currently `if: false`, disabled) and would still push to GHCR if
+re-enabled; nothing currently deploys from those tags. Do not re-enable the
+GHCR pull path
 path without first confirming a GHCR-built image actually runs on the Pi
 past ChromaDB init, not just that it deploys and passes the HTTP health
 check (the crash happens on first real vector-store use, which the health

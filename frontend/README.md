@@ -3,9 +3,9 @@
 Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS.
 
 See the [repository root README](../README.md) for architecture, setup, and
-deployment — this app doesn't deploy to Vercel; it runs in Docker behind
-nginx with a blue/green rollout (`../deploy.sh`), alongside the FastAPI
-backend it talks to.
+deployment — this app doesn't deploy to Vercel; it runs in Docker Swarm
+behind nginx with a zero-downtime rolling update (`docker stack deploy`),
+alongside the FastAPI backend it talks to.
 
 ## Local development
 

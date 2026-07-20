@@ -1,0 +1,143 @@
+# Swarm-only overlay — apply alongside the base file:
+#   docker stack deploy -c docker-compose.yml -c docker-compose.swarm.yml civitas
+#
+# What this changes and why:
+#
+# - `networks.default.driver: overlay` — gives every service a stable
+#   DNS name (backend/frontend/ollama/nginx) that keeps resolving to
+#   whichever task is currently healthy across a rolling update. This is
+#   what replaces deploy.sh's blue/green slot bookkeeping + dynamically
+#   rewritten nginx upstreams: Swarm's `update_config.order: start-first`
+#   below already IS zero-downtime blue/green, just built into the
+#   engine instead of hand-rolled in bash.
+#
+# - backend/frontend/ollama `ports: !reset []` — Swarm services can't
+#   restrict a published port to 127.0.0.1 the way plain `docker run -p
+#   127.0.0.1:PORT:PORT` can — confirmed live with a throwaway
+#   `docker service create --publish mode=host,...` test, reachable from
+#   another LAN host, not just localhost; the same limitation applies to
+#   the default `ingress` mode (the compose ports long-syntax `host_ip:`
+#   field is a plain-Docker-only feature, silently not enforceable by
+#   Swarm's PortConfig). Rather than accept that regression (all three
+#   are deliberately loopback-only today — nginx is the only intended
+#   path to backend/frontend, and nothing outside the stack needs to
+#   reach ollama at all) or bolt on host firewall rules, none of them
+#   publish a host port under Swarm — nginx (below) is the only service
+#   published to the host, on the same port 8081 as before. This is
+#   *more* restrictive than the pre-Swarm setup, not less. (`ports: []`
+#   alone does NOT work here — Compose's merge treats an empty list
+#   override as "no override," not "clear the base list"; `!reset` is
+#   the documented way to force that.)
+#
+# - `volumes.app_data`/`volumes.ollama_data` `external: true` — the real
+#   production sqlite DB and ollama model cache live in Docker volumes
+#   already named civitas_app_data / modern-punk_ollama_data (created by
+#   the original hand-rolled `docker run`/`docker compose up`, predating
+#   this compose file — verified live via `docker inspect`, not assumed;
+#   `modern-punk_ollama_data` in particular does NOT match what this
+#   file's own naming convention would auto-generate). Pinning both
+#   explicitly removes any ambiguity about which volume a stack deploy
+#   binds to — getting this wrong would mean starting from an empty
+#   database, or ollama re-pulling a multi-GB model. Plain `docker
+#   compose up` dev usage doesn't apply this overlay, so it still gets
+#   ordinary auto-created local volumes, not these pinned production ones.
+#
+# - `nginx` service — nginx moves into the stack, attached to the same
+#   overlay network, so it can reach `backend`/`frontend` by Swarm's
+#   own DNS instead of a config file deploy.sh rewrites and reloads on
+#   every deploy. Published on 8081 (unchanged — this is the port the
+#   host's router port-forwarding targets, per-request from the site
+#   owner not to change it) via `mode: host`, which is fine here since
+#   8081 is meant to be reachable from the LAN/internet already.
+
+networks:
+  default:
+    driver: overlay
+
+volumes:
+  app_data:
+    external: true
+    name: civitas_app_data
+  # Predates this compose file too, from the original hand-rolled
+  # `docker compose up -d ollama` (project name "modern-punk", container
+  # prefix `mp-`, before the repo/volumes were renamed to civitas) —
+  # verified live via `docker inspect mp-ollama`. Pinning this avoids
+  # ollama silently starting with an empty model cache and re-pulling a
+  # multi-GB model on first Swarm deploy.
+  ollama_data:
+    external: true
+    name: modern-punk_ollama_data
+
+services:
+  backend:
+    ports: !reset []
+    deploy:
+      update_config:
+        order: start-first
+        failure_action: rollback
+        delay: 5s
+        monitor: 20s
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+  frontend:
+    ports: !reset []
+    deploy:
+      update_config:
+        order: start-first
+        failure_action: rollback
+        delay: 5s
+        monitor: 20s
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+  ollama:
+    # Same reasoning as backend/frontend above: nothing outside the overlay
+    # network needs to reach ollama directly (only the backend does, via
+    # `ollama:11434`) — don't publish it to the host at all.
+    ports: !reset []
+    deploy:
+      restart_policy:
+        condition: any
+        delay: 5s
+
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    image: civitas-nginx:${IMAGE_TAG:-latest}
+    ports:
+      - target: 8081
+        published: 8081
+        protocol: tcp
+        mode: host
+    # No depends_on — see the same note on frontend in docker-compose.yml;
+    # nginx not strictly waiting for backend/frontend to exist first is
+    # fine, its own healthcheck/update_config below still gates traffic.
+    deploy:
+      # order: stop-first, not start-first like backend/frontend above —
+      # `mode: host` port publishing binds the literal host port, and on
+      # a single-node swarm there's nowhere else to schedule a second
+      # task while the first still holds it. Live-verified: with
+      # start-first here, the new task sat in "Pending" forever
+      # ("no suitable node (host-mode port already in use on 1 node)"),
+      # since nothing was ever going to free the port for it. nginx
+      # updates get a few seconds of real gap as a result — the honest
+      # trade-off for being the one service that must bind the host port
+      # directly. backend/frontend publish no host port at all, so they
+      # keep true zero-downtime start-first updates (live-verified: 60/60
+      # polls at 1s intervals stayed 200 through a real backend rollout).
+      update_config:
+        order: stop-first
+        failure_action: rollback
+        delay: 5s
+        monitor: 15s
+      restart_policy:
+        condition: any
+        delay: 5s
