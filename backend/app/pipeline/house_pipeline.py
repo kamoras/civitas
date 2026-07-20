@@ -51,6 +51,7 @@ from app.pipeline.fetch.fec import (
     fetch_outside_spending,
     fetch_pac_receipts,
     find_candidate,
+    reset_run_state as reset_fec_run_state,
 )
 from app.pipeline.fetch.lda import enrich_lobbying_matches_with_lda
 from app.pipeline.transform.normalize_members import normalize_house_members
@@ -102,6 +103,7 @@ async def run_house_pipeline() -> dict:
     _tracker.start()
     db = SessionLocal()
     start_time = time.time()
+    reset_fec_run_state()  # clear the by_contributor circuit breaker from any prior run
 
     # Record run start so failures are visible in the admin dashboard.
     house_run = HousePipelineRun(started_at=utcnow(), status=PipelineStatus.RUNNING)

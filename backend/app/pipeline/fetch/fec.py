@@ -1,6 +1,5 @@
 """Fetch modules for the FEC (Federal Election Commission) API."""
 
-import asyncio
 import logging
 import re
 from urllib.parse import quote
@@ -10,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
-from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
+from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S, fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 from app.time_utils import utcnow
 
@@ -24,53 +23,41 @@ _rate_limiter = RateLimiter(settings.FEC_RPS)
 
 # Set to True once we detect the by_contributor endpoint is broken for this run,
 # so we skip all 3 URL variants for every remaining senator instead of retrying.
+# Reset at the start of each pipeline run via reset_run_state() — otherwise a
+# single transient outage would latch this on for the life of the (long-lived)
+# server process and permanently skip the endpoint until restart.
 _by_contributor_broken = False
+
+
+def reset_run_state() -> None:
+    """Clear per-run FEC circuit-breaker state. Call at pipeline start."""
+    global _by_contributor_broken
+    _by_contributor_broken = False
 
 
 async def _fetch_with_retry(
     client: httpx.AsyncClient, url: str, retries: int = MAX_RETRIES
 ) -> dict | None:
-    """Fetch an FEC API URL with rate limiting, retries, and API key injection."""
-    await _rate_limiter.acquire()
+    """Fetch an FEC API URL with rate limiting, retries, and API key injection.
+
+    Thin wrapper over the shared http_utils.fetch_with_retry: FEC keeps its
+    stricter 2x rate-limit backoff and treats 4xx as terminal (retry_on_4xx
+    False), and passes the api-key-bearing URL via request_url so the key is
+    never part of the logged `url`.
+    """
     separator = "&" if "?" in url else "?"
     full_url = f"{url}{separator}api_key={settings.DATA_GOV_API_KEY}"
-
-    for attempt in range(1, retries + 1):
-        try:
-            logger.debug("FEC API: %s (attempt %d)", url, attempt)
-            resp = await client.get(full_url, timeout=DEFAULT_FETCH_TIMEOUT_S)
-
-            if resp.status_code == 429:
-                wait = RETRY_BACKOFF_S * attempt * 2  # FEC rate limits are tighter
-                logger.warning("FEC rate limited, waiting %.1fs...", wait)
-                await asyncio.sleep(wait)
-                continue
-
-            if resp.status_code >= 400:
-                err = httpx.HTTPStatusError(
-                    f"HTTP {resp.status_code}: {resp.reason_phrase}",
-                    request=resp.request,
-                    response=resp,
-                )
-                # 4xx errors (except 429) are client errors — retrying won't help
-                if 400 <= resp.status_code < 500:
-                    logger.error("FEC API client error (no retry): %s — %s", url, err)
-                    return None
-                raise err
-
-            return resp.json()
-        except Exception as e:
-            # httpx.HTTPStatusError (raised above for 5xx) is an Exception, so
-            # a single handler covers both it and transport-level errors.
-            if attempt == retries:
-                logger.error(
-                    "FEC API failed after %d attempts: %s — %s",
-                    retries, url, str(e),
-                )
-                return None
-            await asyncio.sleep(RETRY_BACKOFF_S * attempt)
-
-    return None
+    resp = await fetch_with_retry(
+        client, _rate_limiter, "GET", url,
+        retries=retries,
+        backoff_s=RETRY_BACKOFF_S,
+        rate_limit_backoff_multiplier=2.0,  # FEC rate limits are tighter
+        retry_on_4xx=False,
+        timeout=DEFAULT_FETCH_TIMEOUT_S,
+        log_label="FEC API",
+        request_url=full_url,
+    )
+    return resp.json() if resp is not None else None
 
 
 async def find_candidate(

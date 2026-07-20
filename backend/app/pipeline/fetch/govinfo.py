@@ -1,6 +1,5 @@
 """Fetch modules for the GovInfo API (bill text)."""
 
-import asyncio
 import logging
 import re
 
@@ -9,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
-from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
+from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S, fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -24,44 +23,25 @@ _rate_limiter = RateLimiter(settings.GOVINFO_RPS)
 async def _fetch_with_retry(
     client: httpx.AsyncClient, url: str, retries: int = MAX_RETRIES
 ) -> dict | None:
-    """Fetch a GovInfo API URL with rate limiting, retries, and API key injection."""
-    await _rate_limiter.acquire()
+    """Fetch a GovInfo API URL with rate limiting, retries, and API key injection.
+
+    Thin wrapper over the shared http_utils.fetch_with_retry. A 404 is an
+    expected miss (bill text not published yet), so it terminates immediately
+    via no_retry_statuses rather than being retried; the api-key-bearing URL
+    is passed via request_url so the key is never part of the logged `url`.
+    """
     separator = "&" if "?" in url else "?"
     full_url = f"{url}{separator}api_key={settings.DATA_GOV_API_KEY}"
-
-    for attempt in range(1, retries + 1):
-        try:
-            logger.debug("GovInfo API: %s (attempt %d)", url, attempt)
-            resp = await client.get(full_url, timeout=DEFAULT_FETCH_TIMEOUT_S)
-
-            if resp.status_code == 429:
-                wait = RETRY_BACKOFF_S * attempt
-                logger.warning("GovInfo rate limited, waiting %.1fs...", wait)
-                await asyncio.sleep(wait)
-                continue
-
-            if resp.status_code == 404:
-                logger.debug("GovInfo 404: %s", url)
-                return None
-
-            if resp.status_code >= 400:
-                raise httpx.HTTPStatusError(
-                    f"HTTP {resp.status_code}: {resp.reason_phrase}",
-                    request=resp.request,
-                    response=resp,
-                )
-
-            return resp.json()
-        except Exception as e:
-            if attempt == retries:
-                logger.error(
-                    "GovInfo API failed after %d attempts: %s — %s",
-                    retries, url, str(e),
-                )
-                return None
-            await asyncio.sleep(RETRY_BACKOFF_S * attempt)
-
-    return None
+    resp = await fetch_with_retry(
+        client, _rate_limiter, "GET", url,
+        retries=retries,
+        backoff_s=RETRY_BACKOFF_S,
+        no_retry_statuses=(404,),
+        timeout=DEFAULT_FETCH_TIMEOUT_S,
+        log_label="GovInfo API",
+        request_url=full_url,
+    )
+    return resp.json() if resp is not None else None
 
 
 async def fetch_bill_package(

@@ -62,6 +62,7 @@ from app.pipeline.fetch.fec import (
     fetch_outside_spending,
     fetch_pac_receipts,
     find_candidate,
+    reset_run_state as reset_fec_run_state,
 )
 from app.pipeline.fetch.govinfo import fetch_bill_text
 from app.pipeline.fetch.lda import enrich_lobbying_matches_with_lda
@@ -605,6 +606,7 @@ async def run_senate_pipeline(
 
     reset_stats()
     reset_client()
+    reset_fec_run_state()
 
     # Clear in-memory caches from prior runs to bound memory usage.
     clear_alignment_cache()
