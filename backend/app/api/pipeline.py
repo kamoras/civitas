@@ -1,12 +1,11 @@
-import asyncio
 import logging
 import secrets
-import threading
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from sqlalchemy.orm import Session
 
+from app.api.pipeline_runner import run_pipeline_in_thread
 from app.config import settings
 from app.database import get_db
 from app.models import PipelineRun, PipelineStatus
@@ -96,20 +95,12 @@ async def trigger_pipeline(
     if _is_pipeline_running(db):
         raise HTTPException(status_code=409, detail="Pipeline is already running")
 
-    def _run_in_thread():
+    async def _run_pipelines():
         from app.pipeline.house_pipeline import run_house_pipeline
-        loop = asyncio.new_event_loop()
-        try:
-            result = loop.run_until_complete(
-                run_senate_pipeline(senator_filter=senator, fetch_only=fetch_only)
-            )
-            if senator is None and not fetch_only and result.get("status") not in ("skipped", "failed"):
-                logger.info("Senate pipeline done — starting House pipeline")
-                loop.run_until_complete(run_house_pipeline())
-        except BaseException:
-            logger.exception("Pipeline run failed")
-        finally:
-            loop.close()
+        result = await run_senate_pipeline(senator_filter=senator, fetch_only=fetch_only)
+        if senator is None and not fetch_only and result.get("status") not in ("skipped", "failed"):
+            logger.info("Senate pipeline done — starting House pipeline")
+            await run_house_pipeline()
 
-    threading.Thread(target=_run_in_thread, daemon=True, name="pipeline-run").start()
+    run_pipeline_in_thread(_run_pipelines, name="pipeline-run", error_label="Pipeline run failed")
     return {"message": "Pipeline run triggered", "senator_filter": senator, "fetch_only": fetch_only}
