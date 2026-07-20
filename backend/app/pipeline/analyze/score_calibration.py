@@ -71,12 +71,14 @@ def _dim_stats(values: list[float]) -> dict:
             "p90": None,
         }
 
+    # n >= MIN_COUNT_FOR_STATS (>= 5) is guaranteed by the early return above,
+    # so stdev/percentiles always have enough data — no n < 2 fallback needed.
     mean = statistics.mean(values)
     median = statistics.median(values)
-    stdev = statistics.stdev(values) if n >= 2 else 0.0
+    stdev = statistics.stdev(values)
     lo = min(values)
     hi = max(values)
-    p10, p90 = _percentiles(values) if n >= 2 else (lo, hi)
+    p10, p90 = _percentiles(values)
 
     return {
         "count": n,

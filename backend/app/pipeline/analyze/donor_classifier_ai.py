@@ -52,6 +52,7 @@ References
 """
 
 import logging
+import re
 
 import numpy as np
 from sqlalchemy.orm import Session
@@ -231,8 +232,7 @@ def classify_donor_type_semantic(
     # unambiguous marker for political action committees (FEC Disclosure Guide
     # 2023). This catches cases where the embedding model's compressed score
     # space makes Party/Ideological win over PAC for explicitly-named PACs.
-    import re as _re
-    if _re.search(r'\bPAC\b', name.upper()):
+    if re.search(r'\bPAC\b', name.upper()):
         return "PAC"
 
     from app.pipeline.vector_store import get_embedding_model

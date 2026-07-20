@@ -281,7 +281,7 @@ def _resolve_url(url: str, timeout: float = 6.0) -> str:
             logger.debug("Resolved Google News URL → %s", final[:100])
             return final
     except Exception:
-        pass
+        logger.debug("Google News URL resolution (HEAD) failed for %s", url[:100], exc_info=True)
     try:
         resp = httpx.get(url, follow_redirects=True, timeout=timeout, headers={
             "User-Agent": "Mozilla/5.0 (compatible; Civitas/1.0)",
@@ -291,7 +291,7 @@ def _resolve_url(url: str, timeout: float = 6.0) -> str:
             logger.debug("Resolved Google News URL (GET) → %s", final[:100])
             return final
     except Exception:
-        pass
+        logger.debug("Google News URL resolution (GET) failed for %s", url[:100], exc_info=True)
     return url
 
 

@@ -175,8 +175,6 @@ POLICY_TAXONOMY = {
     ),
 }
 
-POLICY_AREAS = ", ".join(POLICY_TAXONOMY.keys())
-
 _PROCEDURAL_PROTOTYPE = (
     "naming building commemorating honoring designating week month "
     "electing member relative to death fixing daily hour authorizing rotunda "

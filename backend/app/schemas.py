@@ -333,7 +333,7 @@ class LeaderboardEntrySchema(CamelModel):
     total_from_pacs: float
     small_donor_percentage: float
     top_industry: str | None = None
-    trend: ScoreTrendSchema = ScoreTrendSchema()
+    trend: ScoreTrendSchema = Field(default_factory=ScoreTrendSchema)
     # SVD-based, cosponsorship-derived (Tauberer 2012) — 0 = most-left,
     # 1 = most-right, computed without party labels as input. None when
     # too little cosponsorship data exists to compute it (see
