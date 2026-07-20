@@ -203,6 +203,9 @@ def build_payload(cur, s, search, fin):
         "bipartisanshipScore": (
             s["bipartisanship_score"] if "bipartisanship_score" in s.keys() else None
         ),
+        "ideologyScore": (
+            s["ideology_score"] if "ideology_score" in s.keys() else None
+        ),
     }
 
 

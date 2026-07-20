@@ -17,6 +17,16 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.6",
+    date: "2026-07-20",
+    title: "Constituent Alignment stops penalizing party loyalty and stops crediting defection direction-blind",
+    changes: [
+      "A fairness review asked whether it is fair to score a senator down for \"sticking with their party too much.\" Under v4.2, a member who voted with their party more loyally than their seat's partisan lean \"expected\" was scored below neutral for it — a swing- or opposed-seat loyalist could lose ~14 points purely for a low party-defection rate. We checked this against the political-science literature on representation and concluded it isn't supported: a low defection rate is not evidence of failing to represent constituents. Senators represent the coalition that elected them, not the geographic midpoint of their state (Fenno 1978; Bishin 2009; Clinton 2006); members of both parties sit well to the partisan side of their state's median voter as the structural norm (Bafumi & Herron 2010); party-line voting above 90% is now near-universal in a sorted, nationalized electorate (Levendusky 2009; Hopkins 2018); and the thing that actually signals being \"out of step\" is ideological extremity relative to the district (Canes-Wrone, Brady & Cogan 2002), which is a different measurement from a party-loyalty rate (Krehbiel 2000) — a member can be highly loyal and still sit right at their state's center. Below-expected loyalty now floors at neutral (50) instead of dropping below it. Loyalty is no longer treated as a failing.",
+      "The flip side is fixed too. Crossing party lines was credited by RATE, blind to DIRECTION — but the members who defect most are often ideological extremists breaking from their own flank (voting against their party for being insufficiently pure), not moderates moving toward the center (Kirkland & Slapin 2017). Above-expected crossing now carries a second directional discount based on the member's own ideological position: a member on their party's moderate wing (whose crossings most plausibly move toward the state's center) keeps full credit, while a member on the party's extreme flank (whose crossings most plausibly move away from it) is credited less. This uses the platform's existing party-blind cosponsorship-ideology measure; a member with no ideology data is never penalized.",
+      "Net effect: party-line loyalists — especially in swing and opposed seats — are no longer scored below neutral for loyalty alone, and high-defection-rate members whose breaks come from their ideological wing rather than toward their constituents are no longer rewarded as if they were moderates. The seat-relative expectation itself is unchanged; only how the score responds above and below it changed. The strength of the new flank discount is a research-informed starting value to be tuned against live data.",
+    ],
+  },
+  {
     version: "v6.5",
     date: "2026-07-19",
     title: "Funding Diversity folded into Funding Independence; Donor Independence removed from Constituent Alignment",

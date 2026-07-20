@@ -185,12 +185,20 @@ export default function AboutPage() {
                   partisan lean (Cook PVI<Cite id="4">Carson et al. 2010</Cite>): an aligned
                   safe seat expects near-base-rate dissent (~3%), a swing seat ~8%, and a
                   seat whose electorate leans toward the opposing party up to ~20%. Matching
-                  the expectation scores ~50 — a typical partisan for that seat. Crossing is
-                  not rewarded for its own sake: surplus crossing earns credit only where it
-                  plausibly moves toward the state&apos;s median voter (opposed and swing seats);
-                  in a deep aligned seat it sits near neutral, since break direction relative
-                  to state opinion is unobservable. Hyper-loyalty in a
-                  swing or opposed seat drifts below neutral. This is the delegate model of
+                  the expectation scores ~50 — a typical partisan for that seat. The score is
+                  deliberately asymmetric around that expectation (v6.6). Below-expected
+                  loyalty is <em>not</em> penalized: it floors at neutral, never below. Party-line
+                  voting is how a member represents the coalition that elected them, a low
+                  defection rate is the structural norm for both parties in the modern
+                  Senate, and being &quot;out of step&quot; with a constituency is a matter of
+                  ideological position, not of a loyalty rate — so a below-expected defection
+                  rate is not treated as misrepresentation. Above-expected crossing earns
+                  credit only where it plausibly moves toward the state&apos;s median voter, via
+                  two directional discounts: by seat (full credit in opposed and swing seats,
+                  near-neutral in deep aligned seats, since there the median sits with the
+                  party) and by the member&apos;s own ideological flank (a moderate-wing member&apos;s
+                  crossing is credited, an extreme-flank member&apos;s — more likely a break
+                  <em>away</em> from the state center — is discounted). This is the delegate model of
                   representation with partisan lean standing in for issue-level constituent
                   opinion — a measurable, disclosed simplification (see
                   <a href="#known-limitations" className="underline underline-offset-2 hover:text-matrix-green/70"> Known Limitations</a>

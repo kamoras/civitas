@@ -341,6 +341,82 @@ goes entirely to Constituent Alignment's seat-relative vote alignment
 component (coalition breadth keeps its own independently-justified 20%)
 rather than being redistributed to prop up a three-way split that no
 longer has three genuinely distinct signals.
+
+Changes from v6.5 -> v6.6 (2026-07): Constituent Alignment's seat-relative
+vote component (_constituent_alignment_core) reworked to stop penalizing
+party loyalty and to stop crediting party defection direction-blind. This
+responds to a fairness review of the "sticks with the party too much"
+penalty (a swing/opposed-seat loyalist could be driven ~14 points below
+neutral purely for a below-expected defection rate) against the political-
+science literature on representation. Two coupled changes:
+
+  1. Over-loyalty no longer penalized (floors at neutral). The v4.2 design
+     scored a below-expected defection rate as a deficit, dropping
+     swing-seat and opposed-seat loyalists as low as 25. The literature does
+     not support reading a low loyalty rate as poor representation:
+       - A senator represents the reelection/primary coalition that elected
+         them, not the geographic median voter (Fenno, Home Style 1978;
+         Bishin, Tyranny of the Minority 2009; Clinton, J. Politics 2006,
+         finds members track copartisans, not the district mean). Members
+         are systematically more partisan than their state median in BOTH
+         parties (Bafumi & Herron, APSR 2010) — the norm, not a failing.
+       - Party-unity ≈90%+ is now structural for the average member of both
+         parties even in competitive states (Voteview/CQ; Aldrich & Rohde
+         conditional party government), driven by a sorted (Levendusky 2009)
+         and nationalized (Hopkins 2018) electorate, so a low defection rate
+         has little discriminating power and is largely an era/institution
+         property (Sinclair, Party Wars 2006), not an individual signal.
+       - The accountability construct that DOES track being "out of step"
+         is district-relative ideological EXTREMITY (Canes-Wrone, Brady &
+         Cogan, APSR 2002), a spatial position measure distinct from a
+         party-loyalty rate (Krehbiel, AJPS 2000 — unity scores conflate
+         discipline with shared preferences and are agenda-contaminated). A
+         member can be maximally loyal AND sit at their state's median if
+         the party's positions match the state.
+       - The one construct-appropriate citation the prior design leaned on,
+         Carson/Koger/Lebo/Young (AJPS 2010), documents an electoral COST of
+         loyalty that members rationally trade off — not a representational
+         failure — is House-only and pre-nationalization, and even the ACA
+         "loyalty penalty" (Nyhan et al. 2012) ran through PERCEIVED
+         ideological distance, not the rate itself.
+     The branch now floors at 50: loyalty is treated as near-neutral, the
+     symmetric twin of the existing safe-seat rule that treats surplus
+     crossing as near-neutral (not a virtue) because direction is
+     unobservable. Above-expected crossing is still credited as before.
+
+  2. Crossing credit is now direction-aware at the member level (not just
+     the seat level). A raw defection rate is direction-blind, and the
+     empirically highest defectors are ideological EXTREMISTS breaking from
+     their own flank, not moderates: Rand Paul from the right (fiscal-hawk
+     "no" votes), Bernie Sanders from the left (against bipartisan
+     compromises as insufficiently progressive), the Freedom Caucus
+     (Kirkland & Slapin, Electoral Studies 2017 — strategic grandstanding
+     from the wing). Rewarding a high defection rate direction-blind
+     rewards flank extremism as much as genuine moderation. Surplus-crossing
+     credit now carries a second directional discount keyed to the member's
+     ideological flank position (FLANK_DIRECTION_DISCOUNT / _flank_extremity,
+     using the already-computed party-blind SVD ideology_score): a
+     moderate-wing crosser (defection likely toward the state median) keeps
+     full credit; an extreme-flank crosser (defection likely away from it)
+     is discounted. Missing ideology never penalizes.
+
+  The ideal fix the literature points to is signing each defection by the
+  roll-call cutting line relative to the state median (NOMINATE-style); the
+  platform ingests no per-vote member-level position data to do that
+  directly, so the member-level flank prior is the honest available proxy —
+  same "best signal the data supports" posture the file takes elsewhere
+  (see senatorVoteAligned's structural note).
+
+  Validation posture: change (1) is deterministic and unit-tested. Change
+  (2)'s magnitude (FLANK_DIRECTION_DISCOUNT = 0.5) is a research-informed
+  PRIOR, shippable non-zero because ideology_score is real populated data,
+  but its exact value and the net effect on the population stdev floor
+  (ground_truth.MIN_STDEV) and the per-senator GROUND_TRUTH ranges must be
+  verified on the next live scored database — run
+  scripts/calibrate_flank_direction.py and the score-audit playbook. If IV
+  stdev dips below its floor, that reflects removing an unjustified source
+  of artificial spread (the loyalty penalty), to be handled by revisiting
+  the floor, not by restoring the penalty.
 """
 
 import logging
@@ -420,7 +496,19 @@ logger = logging.getLogger(__name__)
 # alignment. Both respond to the same r=0.72 correlated-signal finding
 # (config_definitions.SCORE_WEIGHTS's docstring). See the top-of-file
 # "Changes from v6.4 -> v6.5" note for the full account.
-ALGORITHM_VERSION = "v6.5"
+#
+# v6.5 -> v6.6 (2026-07): Constituent Alignment's seat-relative vote
+# component reworked so it no longer penalizes party loyalty and no longer
+# credits party defection direction-blind. Two coupled changes: (1) the
+# over-loyalty branch floors at neutral (50) instead of dropping to as low
+# as 25 — a below-expected defection rate is not scored as
+# misrepresentation; (2) surplus-crossing credit now carries a second,
+# member-ideology directional discount so flank defectors (who break from
+# their party's wing, away from the state median) are not rewarded like
+# moderate-wing crossers. See the top-of-file "Changes from v6.5 -> v6.6"
+# note for the full account and citations. Major-behavior change to a
+# scored dimension → minor-version bump within v6, matching v6.1/v6.2/etc.
+ALGORITHM_VERSION = "v6.6"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -597,6 +685,7 @@ def calculate_scores(senator: dict) -> dict:
             senator.get("party", "I"),
             bipartisanship=senator.get("bipartisanshipScore"),
             district=senator.get("district"),
+            ideology_score=senator.get("ideologyScore"),
         ),
         "fundingDiversity": _calc_funding_diversity(funding),
         "legislativeEffectiveness": _calc_legislative_effectiveness(
@@ -638,6 +727,7 @@ def explain_scores(senator: dict) -> dict:
             senator.get("party", "I"),
             bipartisanship=senator.get("bipartisanshipScore"),
             district=senator.get("district"),
+            ideology_score=senator.get("ideologyScore"),
         ),
         "fundingDiversity": _funding_diversity_core(funding),
         "legislativeEffectiveness": _legislative_effectiveness_core(
@@ -1340,6 +1430,57 @@ def _signed_state_alignment(
 CROSSING_QUALITY_DISCOUNT = 0.0
 
 
+# Directional discount applied to surplus-crossing CREDIT based on the
+# member's OWN ideological flank position (v6.6). A member on their party's
+# extreme wing who crosses is most plausibly defecting AWAY from the state
+# median — voting against their own party from the flank for being
+# insufficiently pure (Kirkland & Slapin 2017, "Ideology and strategic party
+# disloyalty in the US House," Electoral Studies 49; the empirically highest
+# defectors — Paul from the right, Sanders from the left — are ideological
+# extremes, not moderates) — so their surplus crossing should not earn the
+# same "moved toward my constituents" credit as a moderate-wing member's.
+# At maximum flank extremity the seat-based credit is scaled by
+# (1 - FLANK_DIRECTION_DISCOUNT); a center-positioned member is unaffected.
+# See _flank_extremity and the v6.6 changelog note.
+#
+# Unlike CROSSING_QUALITY_DISCOUNT above (which ships inert at 0.0 because
+# its input, opposingPartyUnityPct, is NULL for every row until a pipeline
+# recompute), this ships NON-ZERO because its input — ideology_score — is
+# real, already-populated data computed every run
+# (sponsorship_analysis.compute_ideology_scores). 0.5 is a research-informed
+# PRIOR (a maximally-flank member's directional presumption is roughly
+# neutralized), not a fitted constant. Tune it against live ground truth
+# with scripts/calibrate_flank_direction.py (grid search vs. GROUND_TRUTH +
+# the population stdev floor) and set it to the value that best separates
+# known flank-defectors from known median-directed crossers without
+# collapsing spread.
+FLANK_DIRECTION_DISCOUNT = 0.5
+
+
+def _flank_extremity(ideology_score: float | None, effective_party: str) -> float:
+    """How far the member sits toward their party's ideological FLANK, in
+    [0, 1] (0 = at the political center / their party's moderate wing,
+    1 = at the party's extreme edge). Used to estimate the likely DIRECTION
+    of a party defection relative to the state's median voter.
+
+    ideology_score is the party-blind SVD cosponsorship position (0 = most
+    left, 1 = most right; sponsorship_analysis.compute_ideology_scores),
+    measured against the 0.5 political center. A moderate-wing member (near
+    the center) who breaks with the party is most plausibly moving TOWARD
+    the state median; an extreme-flank member who breaks is most plausibly
+    moving AWAY from it. Missing ideology data returns 0.0 (no directional
+    prior — missing data is never punitive, same principle as every other
+    component in this file).
+    """
+    if ideology_score is None:
+        return 0.0
+    if effective_party == "D":
+        return max(0.0, (0.5 - ideology_score) / 0.5)
+    if effective_party == "R":
+        return max(0.0, (ideology_score - 0.5) / 0.5)
+    return 0.0
+
+
 def _calc_constituent_alignment(
     voting_record: dict,
     lobbying_matches: list[dict],
@@ -1348,6 +1489,7 @@ def _calc_constituent_alignment(
     party: str = "I",
     bipartisanship: float | None = None,
     district: int | None = None,
+    ideology_score: float | None = None,
 ) -> int:
     """
     Constituent Alignment Score (0-100, higher = better). v4.2 rebuild of
@@ -1370,15 +1512,50 @@ def _calc_constituent_alignment(
            opposed seat      → up to ~20% (a member whose party opposes
                                the state median should cross more often).
          Matching expectation scores ~50 ("typical partisan for this
-         seat"). Crossing is NOT rewarded for its own sake: surplus
-         crossing earns credit only where it plausibly moves toward the
-         state's median voter — full credit in opposed/swing seats,
-         shrinking to a near-neutral 0.25 in deep aligned seats, where
-         surplus defection is ideology rather than constituent
-         representation (an undiscounted credit once let a 9%-break
-         party leader score ≈72; see 2026-06 audit). Hyper-loyalty in a
-         swing or opposed seat drifts down to at most 25 — below
-         neutral, but never the old failure-grade floor.
+         seat"). The score is ASYMMETRIC by design (v6.6), and the
+         asymmetry is the point:
+
+         - Below-expected loyalty is NOT penalized — it floors at neutral
+           (50), never below. A low party-defection rate is not evidence of
+           misrepresentation: it is the modal, structurally near-universal
+           behavior of the modern Senate (party-unity ≈90%+ for both
+           parties even in competitive states), it is often the faithful
+           choice for the coalition that actually elected the member (a
+           senator represents their reelection/primary constituency, not
+           the geographic median — Fenno 1978; Bishin 2009; Clinton 2006),
+           and the accountability construct that DOES track being "out of
+           step" is district-relative ideological EXTREMITY (Canes-Wrone,
+           Brady & Cogan 2002), a spatial position distinct from a loyalty
+           rate (Krehbiel 2000) — a member can be maximally loyal and sit
+           at their state's median because the party's position matches it.
+           In a sorted, nationalized electorate (Levendusky 2009; Hopkins
+           2018) loyalty and representation have largely converged. This is
+           the symmetric twin of the safe-seat crossing rule below: because
+           break DIRECTION is unobservable, under-defection is treated as
+           near-neutral, not as a vice, exactly as surplus defection in an
+           aligned seat is treated as near-neutral, not as a virtue. (Prior
+           to v6.6 this branch drove swing/opposed-seat loyalists as low as
+           25; the cited literature does not support scoring a loyalty rate
+           as poor representation. See the v6.6 changelog note.)
+
+         - Above-expected crossing earns credit ONLY where it plausibly
+           moves toward the state's median voter, via TWO independent
+           directional discounts, because a raw defection rate is
+           direction-blind and the highest defectors are often flank
+           extremists, not moderates (Kirkland & Slapin 2017):
+             (a) SEAT direction: full credit in opposed/swing seats,
+                 shrinking to a near-neutral 0.25 in deep aligned seats,
+                 where the median sits with the party so surplus crossing
+                 moves away from it (an undiscounted credit once let a
+                 9%-break party leader score ≈72; see 2026-06 audit);
+             (b) MEMBER-FLANK direction (v6.6): a member on their party's
+                 extreme wing who crosses most likely defects AWAY from the
+                 state median (Sanders from the left, Paul from the right),
+                 so their surplus credit is scaled down by their ideological
+                 flank extremity (_flank_extremity / FLANK_DIRECTION_
+                 DISCOUNT); a moderate-wing crosser keeps full credit.
+           Missing data (unknown seat lean or unknown ideology) never
+           triggers a discount.
 
       2. Coalition breadth (20%, when cosponsorship data exists): see
          below.
@@ -1408,7 +1585,8 @@ def _calc_constituent_alignment(
     expectations now carry the constituent-representation adjustment.
     """
     return _constituent_alignment_core(
-        voting_record, lobbying_matches, funding, state, party, bipartisanship, district,
+        voting_record, lobbying_matches, funding, state, party, bipartisanship,
+        district, ideology_score,
     )["score"]
 
 
@@ -1420,6 +1598,7 @@ def _constituent_alignment_core(
     party: str = "I",
     bipartisanship: float | None = None,
     district: int | None = None,
+    ideology_score: float | None = None,
 ) -> dict:
     """Same math as _calc_constituent_alignment, returning every intermediate
     value alongside the final score. Single implementation, same reuse
@@ -1486,6 +1665,12 @@ def _constituent_alignment_core(
     else:
         expected = 0.08 + 0.12 * (-alignment)
 
+    # Member-flank directional prior (v6.6): how far the member sits toward
+    # their party's ideological wing, used only to discount surplus-crossing
+    # credit (below). Computed once here so it can also appear in the
+    # breakdown detail. 0.0 when ideology is unknown (never punitive).
+    flank_extremity = _flank_extremity(ideology_score, effective_party)
+
     if party_total >= 3.0:
         against_pct = voted_against / party_total
         if against_pct >= expected:
@@ -1520,15 +1705,37 @@ def _constituent_alignment_core(
             else:
                 crossing_quality = 1.0
             credit *= crossing_quality
+            # Third, independent directional discount from the member's OWN
+            # ideological flank (v6.6): a wing member's crossings most likely
+            # point AWAY from the state median (Kirkland & Slapin 2017), so
+            # their surplus crossing earns less "moved toward my
+            # constituents" credit than a moderate-wing member's. Complements
+            # the seat-based credit above — that asks whether the SEAT puts
+            # the median across the aisle; this asks whether the MEMBER is
+            # positioned to cross toward it. flank_extremity is 0.0 when
+            # ideology is unknown, so this never penalizes missing data.
+            direction_factor = 1.0 - FLANK_DIRECTION_DISCOUNT * flank_extremity
+            credit *= direction_factor
             party_score = 50.0 + 50.0 * min(surplus / 0.25, 1.0) * credit
         else:
-            # More loyal than the seat expects: drift below neutral by up
-            # to 25 points, scaled in absolute break-rate points so an
-            # aligned-safe-seat loyalist (expected ≈3%, actual ≈1%) stays
-            # near 47 while a swing-state hyper-loyalist (expected ≈8%,
-            # actual ≈1%) lands near 33.
-            deficit = expected - against_pct
-            party_score = 50.0 - 25.0 * min(deficit / 0.10, 1.0)
+            # More loyal than the seat expects. A below-expected defection
+            # rate is NOT scored as misrepresentation (v6.6, was a penalty of
+            # up to 25 points): party-line voting is the modal, structurally
+            # near-universal behavior of the modern Senate; a low defection
+            # rate does not identify a member as out of step with their
+            # constituents (the accountability construct that does is
+            # district-relative ideological EXTREMITY, not a loyalty rate —
+            # Canes-Wrone/Brady/Cogan 2002, Krehbiel 2000); and in a sorted,
+            # nationalized electorate (Levendusky 2009; Hopkins 2018) loyalty
+            # is often the faithful choice for the coalition that elected the
+            # member (Fenno 1978; Clinton 2006). Break DIRECTION is
+            # unobservable, so a low rate cannot be read as pointing away
+            # from constituents. Symmetric twin of the safe-seat crossing
+            # rule above: under-defection is treated as near-neutral, not as
+            # a vice, exactly as surplus defection in an aligned seat is
+            # treated as near-neutral, not as a virtue. Floors at neutral.
+            # See the v6.6 changelog note for the full account and citations.
+            party_score = 50.0
     else:
         against_pct = None
         party_score = 50
@@ -1562,6 +1769,13 @@ def _constituent_alignment_core(
         if against_pct is not None
         else "fewer than 3 party-labeled votes available — neutral 50"
     )
+    if against_pct is not None and against_pct < expected:
+        party_alignment_detail += " — more loyal than the seat expects, held at neutral (loyalty is not penalized)"
+    if against_pct is not None and against_pct >= expected and flank_extremity > 0:
+        party_alignment_detail += (
+            f", surplus-crossing credit ×{1.0 - FLANK_DIRECTION_DISCOUNT * flank_extremity:.2f} "
+            f"for member flank position (ideology {ideology_score:.2f})"
+        )
     if against_pct is not None and avg_crossing_unity is not None:
         party_alignment_detail += (
             f", crossings averaged {avg_crossing_unity:.0%} opposing-party unity"

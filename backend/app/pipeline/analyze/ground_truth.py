@@ -45,6 +45,21 @@ logger = logging.getLogger(__name__)
 # aligned seats center near 50 ("typical partisan for this seat") rather
 # than pinning at the old ≤3% floor of ~26-38. Frequent crossers whose
 # crossing tracks their state (Collins/Murkowski) still score high.
+#
+# IV ranges revised again 2026-07 for v6.6 (loyalty-penalty fairness):
+# below-expected loyalty now floors at neutral (50) instead of dropping to
+# 25, and surplus-crossing credit carries a member-flank direction discount
+# (see score_calculator.py's v6.5->v6.6 note). Two consequences reflected
+# below: (1) swing/opposed-seat LOYALISTS (Ossoff) center at ~50, no longer
+# "below seat expectation"; (2) high-defection-rate FLANK defectors (Paul —
+# breaks from the right) are credited less than crossers who track their
+# state median (Collins/Murkowski, who are moderate-wing and unaffected).
+# The exact post-v6.6 values for the flank-discounted senators depend on
+# each member's live SVD ideology_score and coalition-breadth inputs, which
+# aren't reproducible here, so the affected ranges are set with margin and
+# should be re-tightened after the first live v6.6 scoring run confirms the
+# realized values (same "verify on live data" posture as the FLANK_
+# DIRECTION_DISCOUNT constant itself).
 GROUND_TRUTH: list[tuple[str, str, tuple[int, int], str]] = [
     ("Collins",   "score_independent_voting",    (70, 100), "≈36% breaks, D-lean state — crossing IS representation"),
     ("Murkowski", "score_independent_voting",    (70, 100), "≈33% breaks, independent-streak state"),
@@ -56,12 +71,12 @@ GROUND_TRUTH: list[tuple[str, str, tuple[int, int], str]] = [
     ("Cruz",      "score_funding_independence",  (50, 95),  "large small-dollar base"),
     ("McConnell", "score_independent_voting",    (30, 60),  "party leader, ≈9% breaks in R+16 KY ≈ at/above seat expectation; must NOT exceed 60 (2026-06 audit trap)"),
     ("McConnell", "score_funding_independence",  (30, 90),  "recent-window profile is mid-pack; see module docstring"),
-    ("Paul",      "score_independent_voting",    (55, 95),  "≈16% breaks, far beyond safe-seat expectation (discounted credit)"),
+    ("Paul",      "score_independent_voting",    (40, 78),  "≈16% breaks but from the RIGHT flank (fiscal-hawk 'no' votes, not toward the KY median) — surplus credit now discounted by member-flank direction (v6.6), so centers nearer neutral than the old direction-blind 55-95"),
     ("Paul",      "score_funding_independence",  (60, 100), "small-dollar base"),
     ("Klobuchar", "score_independent_voting",    (40, 70),  "≈10% breaks in D+2 MN ≈ slightly above seat expectation"),
     ("Klobuchar", "score_funding_independence",  (35, 75),  "mid-range PAC reliance, no capture signal"),
     # Added 2026-07-04, anchored to Voteview S119 party-unity data:
-    ("Ossoff",    "score_independent_voting",    (28, 50),  "≈4% breaks as a swing-state D — below seat expectation (Voteview)"),
+    ("Ossoff",    "score_independent_voting",    (40, 60),  "≈4% breaks as a swing-state D — below-expected loyalty now floors at neutral (v6.6), no longer penalized; centers ≈50"),
     ("Thune",     "score_independent_voting",    (38, 62),  "party leader, ≈2% breaks in safe-R SD ≈ seat expectation (Voteview)"),
     ("Fetterman", "score_independent_voting",    (50, 85),  "frequent crosser in swing-state PA — crossing toward the state median"),
 ]
