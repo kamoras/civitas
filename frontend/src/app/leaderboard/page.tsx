@@ -576,17 +576,20 @@ function LeaderboardContent() {
 
   // Clicking a different key selects it at its natural direction; clicking the
   // already-active key toggles direction (e.g. most progressive ⇄ most
-  // conservative) instead of doing nothing.
-  const handleSort = useCallback((key: SortKey) => {
-    setSortKey((prevKey) => {
-      if (prevKey === key) {
+  // conservative) instead of doing nothing. Kept as two independent setState
+  // calls (never one nested in the other's updater) so StrictMode's
+  // double-invocation can't toggle the direction twice and cancel it out.
+  const handleSort = useCallback(
+    (key: SortKey) => {
+      if (key === sortKey) {
         setSortDir((d) => (d === "asc" ? "desc" : "asc"));
       } else {
+        setSortKey(key);
         setSortDir(defaultSortDir(key));
       }
-      return key;
-    });
-  }, []);
+    },
+    [sortKey],
+  );
 
   useEffect(() => {
     fetchLeaderboard()
