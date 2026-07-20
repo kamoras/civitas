@@ -90,11 +90,15 @@ class Senator(Base):
     leadership_title: Mapped[str | None] = mapped_column(String, nullable=True)
     committees: Mapped[str] = mapped_column(Text, default="[]")
 
-    score_funding_independence: Mapped[float] = mapped_column(Float, default=0.0)
-    score_promise_persistence: Mapped[float] = mapped_column(Float, default=0.0)
-    score_independent_voting: Mapped[float] = mapped_column(Float, default=0.0)
-    score_funding_diversity: Mapped[float] = mapped_column(Float, default=0.0)
-    score_legislative_effectiveness: Mapped[float] = mapped_column(Float, default=0.0)
+    # New-insert default is the neutral prior (50), not 0: a row created
+    # before its first scoring pass is "unknown", and per the scoring
+    # standard (score_calculator: "Missing data yields a neutral 50, never a
+    # perfect 100 or 0") unknown must not read as a fully-captured 0.
+    score_funding_independence: Mapped[float] = mapped_column(Float, default=50.0)
+    score_promise_persistence: Mapped[float] = mapped_column(Float, default=50.0)
+    score_independent_voting: Mapped[float] = mapped_column(Float, default=50.0)
+    score_funding_diversity: Mapped[float] = mapped_column(Float, default=50.0)
+    score_legislative_effectiveness: Mapped[float] = mapped_column(Float, default=50.0)
     # Per-dimension data-sufficiency ("high"/"medium"/"low") as JSON —
     # see score_calculator.calculate_confidence.
     score_confidence: Mapped[str] = mapped_column(Text, default="{}")
@@ -304,11 +308,15 @@ class Representative(Base):
     leadership_title: Mapped[str | None] = mapped_column(String, nullable=True)
     committees: Mapped[str] = mapped_column(Text, default="[]")
 
-    score_funding_independence: Mapped[float] = mapped_column(Float, default=0.0)
-    score_promise_persistence: Mapped[float] = mapped_column(Float, default=0.0)
-    score_independent_voting: Mapped[float] = mapped_column(Float, default=0.0)
-    score_funding_diversity: Mapped[float] = mapped_column(Float, default=0.0)
-    score_legislative_effectiveness: Mapped[float] = mapped_column(Float, default=0.0)
+    # New-insert default is the neutral prior (50), not 0: a row created
+    # before its first scoring pass is "unknown", and per the scoring
+    # standard (score_calculator: "Missing data yields a neutral 50, never a
+    # perfect 100 or 0") unknown must not read as a fully-captured 0.
+    score_funding_independence: Mapped[float] = mapped_column(Float, default=50.0)
+    score_promise_persistence: Mapped[float] = mapped_column(Float, default=50.0)
+    score_independent_voting: Mapped[float] = mapped_column(Float, default=50.0)
+    score_funding_diversity: Mapped[float] = mapped_column(Float, default=50.0)
+    score_legislative_effectiveness: Mapped[float] = mapped_column(Float, default=50.0)
     # Per-dimension data-sufficiency ("high"/"medium"/"low") as JSON —
     # see score_calculator.calculate_confidence.
     score_confidence: Mapped[str] = mapped_column(Text, default="{}")

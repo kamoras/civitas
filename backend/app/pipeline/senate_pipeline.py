@@ -155,11 +155,16 @@ def upsert_senator(db: Session, data: dict) -> None:
         "party": data.get("party") or "I",
         "years_in_office": data.get("yearsInOffice") or 0,
         "initials": data.get("initials") or "",
-        "score_funding_independence": corruption.get("fundingIndependence") or 0,
-        "score_promise_persistence": corruption.get("promisePersistence") or 0,
-        "score_independent_voting": corruption.get("independentVoting") or 0,
-        "score_funding_diversity": corruption.get("fundingDiversity") or 0,
-        "score_legislative_effectiveness": corruption.get("legislativeEffectiveness") or 0,
+        # A dimension we never computed is unknown, not "fully captured" —
+        # default an ABSENT score to the neutral 50, matching the scoring
+        # standard (score_calculator: "Missing data yields a neutral 50").
+        # `.get(key, 50)` (not `... or 0`) so a genuinely-computed 0 is
+        # preserved rather than being conflated with missing data.
+        "score_funding_independence": corruption.get("fundingIndependence", 50),
+        "score_promise_persistence": corruption.get("promisePersistence", 50),
+        "score_independent_voting": corruption.get("independentVoting", 50),
+        "score_funding_diversity": corruption.get("fundingDiversity", 50),
+        "score_legislative_effectiveness": corruption.get("legislativeEffectiveness", 50),
         "total_raised": funding.get("totalRaised") or 0,
         "total_from_pacs": funding.get("totalFromPACs") or 0,
         "small_donor_percentage": funding.get("smallDonorPercentage") or 0,

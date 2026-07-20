@@ -12,6 +12,14 @@ logger = logging.getLogger(__name__)
 VALID_PARTIES = {"D", "R", "I"}
 VALID_VOTES = {"Yea", "Nay", "Not Voting"}
 
+# Neutral prior for a score dimension we have no computed value for. Matches
+# the scoring engine's own standard (score_calculator's module docstring:
+# "Missing data yields a neutral 50, never a perfect 100 or 0") and its
+# _funding_independence_core no-funding early-return. Only applies when a
+# dimension key is genuinely ABSENT — a value that was actually computed
+# (even a real 0 for a fully-captured profile) is preserved as-is.
+NEUTRAL_SCORE = 50
+
 
 def clamp(value: float, min_val: int = 0, max_val: int = 100) -> int:
     """Clamp a value to [min_val, max_val] and round to int."""
@@ -85,11 +93,11 @@ def validate_senator(senator: dict) -> dict:
     # Representation score
     cs = senator.get("representationScore") or {}
     validated_score = {
-        "fundingIndependence": clamp(cs.get("fundingIndependence", 0)),
-        "promisePersistence": clamp(cs.get("promisePersistence", 0)),
-        "independentVoting": clamp(cs.get("independentVoting", 0)),
-        "fundingDiversity": clamp(cs.get("fundingDiversity", 0)),
-        "legislativeEffectiveness": clamp(cs.get("legislativeEffectiveness", 0)),
+        "fundingIndependence": clamp(cs.get("fundingIndependence", NEUTRAL_SCORE)),
+        "promisePersistence": clamp(cs.get("promisePersistence", NEUTRAL_SCORE)),
+        "independentVoting": clamp(cs.get("independentVoting", NEUTRAL_SCORE)),
+        "fundingDiversity": clamp(cs.get("fundingDiversity", NEUTRAL_SCORE)),
+        "legislativeEffectiveness": clamp(cs.get("legislativeEffectiveness", NEUTRAL_SCORE)),
     }
     # Data-sufficiency grades (calculate_confidence) ride alongside the
     # numeric scores, not IN them — pass through untouched so senator_service
