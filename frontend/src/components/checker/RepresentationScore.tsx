@@ -1,7 +1,7 @@
 "use client";
 
 import { Senator, VotingRecord, SponsoredBill } from "@/types/senator";
-import { getScoreLabel, getScoreColor, getScoreBgColor } from "@/lib/representation";
+import { getScoreLabel, getScoreColor, getScoreBgColor, asciiScoreBar } from "@/lib/representation";
 import MetricTooltip from "./MetricTooltip";
 import ScoreBreakdownPanel from "@/components/shared/ScoreBreakdownPanel";
 import { SCORE_TERMS } from "@/lib/scoreTerms";
@@ -66,9 +66,7 @@ function ScoreBar({
   entityId?: string;
   dimensionKey?: ScoreKey;
 }) {
-  const filled = Math.round(value / 5);
-  const empty = 20 - filled;
-  const bar = "█".repeat(filled) + "░".repeat(empty);
+  const bar = asciiScoreBar(value);
 
   const colorClass = getScoreColor(value);
 

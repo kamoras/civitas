@@ -330,7 +330,9 @@ export default function PresidentClient() {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [selectedId]);
+  // Mount-only: selectedId excluded to avoid refetching the leaderboard on selection change.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!selectedId) return;

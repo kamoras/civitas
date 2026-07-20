@@ -15,7 +15,7 @@ import {
 } from "@/lib/api";
 import type { StateInfo, RepStateInfo } from "@/lib/api";
 import type { Senator } from "@/types/senator";
-import { getScoreColor } from "@/lib/representation";
+import { getScoreColor, asciiScoreBar } from "@/lib/representation";
 import { formatCurrency } from "@/lib/formatting";
 import { useUserState } from "@/hooks/useUserState";
 import { PARTY_COLORS } from "@/lib/partyStyles";
@@ -40,12 +40,9 @@ const SCORE_LABELS: Record<ScoreKey, string> = {
 
 
 function ScoreBar({ value, colorClass }: { value: number; colorClass: string }) {
-  const filled = Math.round(value / 5);
-  const empty = 20 - filled;
-  const bar = "█".repeat(filled) + "░".repeat(empty);
   return (
     <span className={`font-mono text-xs tracking-tight ${colorClass}`} aria-hidden="true">
-      {bar}
+      {asciiScoreBar(value)}
     </span>
   );
 }

@@ -26,6 +26,17 @@ const CHAMBER_PATH: Record<Chamber, string> = {
   [Chamber.House]: "representatives",
 };
 
+// Client-side cache TTLs for cachedFetch. Named so the intent (how volatile
+// each endpoint is) is explicit and the same tier can't drift between callers.
+const TTL = {
+  /** Directory/leaderboard lists — refreshed a couple times per session. */
+  SHORT: 120_000, // 2 min
+  /** Deterministic derived data (score breakdowns, monitors) — changes at most daily. */
+  MEDIUM: 300_000, // 5 min
+  /** Rarely-changing reference data (score history, elections, open comments). */
+  LONG: 3_600_000, // 1 hour
+} as const;
+
 const _fetchCache = new Map<string, { data: unknown; expiry: number }>();
 
 async function cachedFetch<T>(url: string, ttlMs: number): Promise<T> {
@@ -63,11 +74,11 @@ export interface StateInfo {
 }
 
 export async function fetchStates(): Promise<StateInfo[]> {
-  return cachedFetch(`${API_BASE}/senators/states`, 120_000);
+  return cachedFetch(`${API_BASE}/senators/states`, TTL.SHORT);
 }
 
 export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
-  return cachedFetch(`${API_BASE}/senators/leaderboard`, 120_000);
+  return cachedFetch(`${API_BASE}/senators/leaderboard`, TTL.SHORT);
 }
 
 // --- House Representatives ---
@@ -79,7 +90,7 @@ export interface RepStateInfo {
 }
 
 export async function fetchRepStates(): Promise<RepStateInfo[]> {
-  return cachedFetch(`${API_BASE}/representatives/states`, 120_000);
+  return cachedFetch(`${API_BASE}/representatives/states`, TTL.SHORT);
 }
 
 export interface PaginatedReps {
@@ -112,20 +123,20 @@ export async function fetchRepresentative(repId: string): Promise<Senator> {
 // a day at most (the nightly pipeline run).
 
 export async function fetchSenatorScoreBreakdown(senatorId: string): Promise<RepresentationScoreBreakdown> {
-  return cachedFetch(`${API_BASE}/senators/${senatorId}/score-breakdown`, 300_000);
+  return cachedFetch(`${API_BASE}/senators/${senatorId}/score-breakdown`, TTL.MEDIUM);
 }
 
 export async function fetchRepScoreBreakdown(repId: string): Promise<RepresentationScoreBreakdown> {
-  return cachedFetch(`${API_BASE}/representatives/${repId}/score-breakdown`, 300_000);
+  return cachedFetch(`${API_BASE}/representatives/${repId}/score-breakdown`, TTL.MEDIUM);
 }
 
 export async function fetchPresidentScoreBreakdown(id: string): Promise<PresidentScoreBreakdown> {
-  const raw = await cachedFetch(`${API_BASE}/presidents/${id}/score-breakdown`, 300_000);
+  const raw = await cachedFetch(`${API_BASE}/presidents/${id}/score-breakdown`, TTL.MEDIUM);
   return camelizeKeys(raw) as PresidentScoreBreakdown;
 }
 
 export async function fetchJusticeScoreBreakdown(id: string): Promise<JusticeScoreBreakdown> {
-  const raw = await cachedFetch(`${API_BASE}/justices/${id}/score-breakdown`, 300_000);
+  const raw = await cachedFetch(`${API_BASE}/justices/${id}/score-breakdown`, TTL.MEDIUM);
   return camelizeKeys(raw) as JusticeScoreBreakdown;
 }
 
@@ -877,7 +888,7 @@ export async function submitPulseVote(
 }
 
 export async function fetchMyReps(state: string): Promise<MyRepsResponse> {
-  return cachedFetch(`${API_BASE}/action/my-reps?state=${encodeURIComponent(state)}`, 300_000);
+  return cachedFetch(`${API_BASE}/action/my-reps?state=${encodeURIComponent(state)}`, TTL.MEDIUM);
 }
 
 export interface ScoreSnapshot {
@@ -899,11 +910,11 @@ export interface ScoreHistory {
 }
 
 export async function fetchSenatorHistory(senatorId: string): Promise<ScoreHistory> {
-  return cachedFetch(`${API_BASE}/senators/${senatorId}/history`, 3_600_000);
+  return cachedFetch(`${API_BASE}/senators/${senatorId}/history`, TTL.LONG);
 }
 
 export async function fetchRepresentativeHistory(repId: string): Promise<ScoreHistory> {
-  return cachedFetch(`${API_BASE}/representatives/${repId}/history`, 3_600_000);
+  return cachedFetch(`${API_BASE}/representatives/${repId}/history`, TTL.LONG);
 }
 
 export interface OpenCommentItem {
@@ -919,7 +930,7 @@ export interface OpenCommentItem {
 }
 
 export async function fetchOpenComments(): Promise<OpenCommentItem[]> {
-  return cachedFetch(`${API_BASE}/action/open-comments`, 3_600_000);
+  return cachedFetch(`${API_BASE}/action/open-comments`, TTL.LONG);
 }
 
 export interface CountryArticle {
@@ -981,7 +992,7 @@ export interface ElectionInfo {
 }
 
 export async function fetchElectionInfo(): Promise<ElectionInfo> {
-  return cachedFetch(`${API_BASE}/action/elections`, 3_600_000);
+  return cachedFetch(`${API_BASE}/action/elections`, TTL.LONG);
 }
 
 
@@ -1014,11 +1025,11 @@ export interface NationalMonitorDetail extends NationalMonitor {
 }
 
 export async function fetchMonitors(): Promise<{ monitors: NationalMonitor[] }> {
-  return cachedFetch(`${API_BASE}/action/monitors`, 300_000);
+  return cachedFetch(`${API_BASE}/action/monitors`, TTL.MEDIUM);
 }
 
 export async function fetchMonitorDetail(slug: string): Promise<NationalMonitorDetail> {
-  return cachedFetch(`${API_BASE}/action/monitors/${encodeURIComponent(slug)}`, 300_000);
+  return cachedFetch(`${API_BASE}/action/monitors/${encodeURIComponent(slug)}`, TTL.MEDIUM);
 }
 
 
@@ -1077,7 +1088,7 @@ export interface TimelineResponse {
 
 export async function fetchTimeline(year?: number): Promise<TimelineResponse> {
   const params = year ? `?year=${year}` : "";
-  return cachedFetch(`${API_BASE}/action/timeline${params}`, 300_000);
+  return cachedFetch(`${API_BASE}/action/timeline${params}`, TTL.MEDIUM);
 }
 
 // ---------------------------------------------------------------------------
@@ -1096,7 +1107,7 @@ export async function fetchPoliticianDirectory(params?: {
   if (params?.party) qs.set("party", params.party);
   if (params?.q) qs.set("q", params.q);
   const query = qs.toString() ? `?${qs.toString()}` : "";
-  return cachedFetch(`${API_BASE}/politicians${query}`, 120_000);
+  return cachedFetch(`${API_BASE}/politicians${query}`, TTL.SHORT);
 }
 
 export interface FeedbackSubmission {
