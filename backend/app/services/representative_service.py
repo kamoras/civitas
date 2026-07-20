@@ -236,6 +236,7 @@ def get_representative_score_breakdown(db: Session, rep_id: str) -> dict | None:
     has vote counts, not per-vote votedWithParty/partyAlignmentWeight).
     """
     from app.pipeline.analyze.score_calculator import explain_scores
+    from app.services._scorecard_common import build_score_breakdown_entity
 
     rep = (
         db.query(Representative)
@@ -246,65 +247,7 @@ def get_representative_score_breakdown(db: Session, rep_id: str) -> dict | None:
     if rep is None:
         return None
 
-    def _vote_dict(v: RepKeyVote) -> dict:
-        return {
-            "votedWithParty": v.voted_with_party,
-            "partyAlignmentWeight": v.party_alignment_weight,
-            "partyLeaning": v.party_leaning,
-            "opposingPartyUnityPct": v.opposing_party_unity_pct,
-        }
-
-    voting_record = {
-        "effectiveParty": None,
-        "keyVotes": [_vote_dict(v) for v in rep.key_votes if v.vote_category == "key"],
-        "recentVotes": [_vote_dict(v) for v in rep.key_votes if v.vote_category == "recent"],
-    }
-
-    funding = {
-        "totalRaised": rep.total_raised,
-        "totalFromPACs": rep.total_from_pacs,
-        "smallDonorPercentage": rep.small_donor_percentage,
-        "outsideSpendingFor": rep.outside_spending_for,
-        "topDonors": [
-            {"name": d.name, "total": d.total, "type": d.type, "committeeType": d.committee_type}
-            for d in rep.donors
-        ],
-        "industryBreakdown": [
-            {"industry": ind.industry, "total": ind.total}
-            for ind in rep.industry_donations
-        ],
-    }
-
-    lobbying_matches = [
-        {
-            "donationToSenator": lm.donation_to_representative,
-            "isConsensusVote": lm.is_consensus_vote,
-        }
-        for lm in rep.lobbying_matches
-    ]
-
-    sponsored_bills = [
-        {
-            "billType": sb.bill_type,
-            "congress": sb.congress,
-            "isLaw": sb.is_law,
-            "latestAction": sb.latest_action,
-        }
-        for sb in rep.sponsored_bills
-    ]
-
-    entity = {
-        "funding": funding,
-        "votingRecord": voting_record,
-        "lobbyingMatches": lobbying_matches,
-        "sponsoredBills": sponsored_bills,
-        "state": rep.state,
-        "party": rep.party,
-        "district": rep.district,
-        "bipartisanshipScore": rep.bipartisanship_score,
-        "leadershipScore": rep.leadership_score,
-        "yearsInOffice": rep.years_in_office,
-    }
+    entity = build_score_breakdown_entity(rep, lobbying_donation_attr="donation_to_representative")
     return explain_scores(entity)
 
 
