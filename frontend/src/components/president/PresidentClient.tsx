@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import { fetchPresident, fetchPresidentLeaderboard } from "@/lib/api";
-import { getScoreColor, getScoreBgColor, getScoreLabel } from "@/lib/representation";
-import ScoreBreakdownPanel from "@/components/shared/ScoreBreakdownPanel";
+import { getScoreColor, getScoreLabel } from "@/lib/representation";
+import { MetricBar, StatBox } from "@/components/shared/ScoreMetric";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 
 const PARTY_META: Record<string, { label: string; color: string; bg: string; border: string }> = {
@@ -29,70 +29,6 @@ const METRIC_LABELS: { key: keyof President["score"]; label: string; desc: strin
   { key: "competence", label: "COMPETENCE", desc: "Executive order activity rate and administrative execution. Court-success and cabinet-turnover rates have no live data source and are not currently part of this score." },
   { key: "agencyAlignment", label: "AGENCY ALIGNMENT", desc: "How effectively federal agencies execute the president's agenda through rulemaking" },
 ];
-
-function MetricBar({ label, value, desc, isEstimate, entityId, dimensionKey }: { label: string; value: number; desc: string; isEstimate?: boolean; entityId?: string; dimensionKey?: string }) {
-  const color = getScoreBgColor(value);
-
-  return (
-    <div className="group">
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-xs text-matrix-green/60 tracking-widest">
-          {label}
-          {isEstimate && (
-            <span
-              className="ml-1.5 text-neon-yellow/70 normal-case tracking-normal"
-              title="No live data source exists for this metric — it's a one-time editorial estimate, not computed from an API."
-            >
-              · editorial estimate
-            </span>
-          )}
-        </span>
-        <span className={`text-sm font-bold tabular-nums ${getScoreColor(value)}`} aria-hidden="true">{value}</span>
-      </div>
-      <div
-        className="w-full h-2 bg-white/10 rounded-full overflow-hidden"
-        role="progressbar"
-        aria-valuenow={value}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-label={`${label}: ${value} out of 100. ${desc}`}
-      >
-        <div
-          className={`h-full rounded-full ${color} transition-all duration-700`}
-          style={{ width: `${value}%` }}
-        />
-      </div>
-      <p className="text-[10px] text-matrix-green/50 mt-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-        {desc}
-      </p>
-      {entityId && dimensionKey && (
-        <ScoreBreakdownPanel entityType="president" entityId={entityId} dimensionKey={dimensionKey} label={label} />
-      )}
-    </div>
-  );
-}
-
-function StatBox({ label, value, unit, isEstimate }: { label: string; value: string | null; unit?: string; isEstimate?: boolean }) {
-  return (
-    <div className="border border-matrix-green/20 bg-terminal-bg/50 px-3 py-2 text-center">
-      <div className="text-[10px] text-matrix-green/40 tracking-widest mb-1">
-        {label}
-        {isEstimate && (
-          <span
-            className="text-neon-yellow/70"
-            title="No live data source exists for this figure — it's a one-time editorial estimate, not tracked or updated from an API."
-          >
-            {" "}*
-          </span>
-        )}
-      </div>
-      <div className="text-lg font-bold text-white/80 tabular-nums">
-        {value ?? "—"}
-        {unit && value && <span className="text-xs text-matrix-green/40 ml-0.5">{unit}</span>}
-      </div>
-    </div>
-  );
-}
 
 export function PresidentCard({ president }: { president: President }) {
   const overall = president.score.overall;
@@ -184,6 +120,7 @@ export function PresidentCard({ president }: { president: President }) {
                 label={label}
                 value={president.score[key]}
                 desc={desc}
+                entityType="president"
                 isEstimate={alwaysEstimate || (key === "competence" && !president.competenceHasLiveData)}
                 entityId={president.id}
                 dimensionKey={key}

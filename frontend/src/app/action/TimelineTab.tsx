@@ -6,6 +6,9 @@ import { fetchTimeline } from "@/lib/api";
 import { safeHref } from "@/lib/formatting";
 import type { TimelineResponse, TimelineEntry, TimelineWeek, TimelineMonth, UpcomingEvent } from "@/lib/api";
 
+const MONTH_NAMES = ["", "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
+  "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
+
 const EVENT_STYLES: Record<string, { border: string; dot: string; badge: string; badgeText: string }> = {
   election:  { border: "border-red-400/30",     dot: "bg-red-400",     badge: "border-red-400/40 text-red-400/90 bg-red-400/10",     badgeText: "ELECTION" },
   scotus:    { border: "border-blue-400/30",    dot: "bg-blue-400",    badge: "border-blue-400/40 text-blue-400/90 bg-blue-400/10",   badgeText: "SCOTUS" },
@@ -296,9 +299,6 @@ export default function TimelineTab() {
     .map(Number)
     .filter((m) => !monthsWithEntries.has(m))
     .sort((a, b) => a - b);
-
-  const MONTH_NAMES = ["", "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
-    "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
 
   return (
     <div className="space-y-6">

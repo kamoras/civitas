@@ -143,24 +143,14 @@ export default async function IssuePage({
         {paragraphs ? (
           <article className="space-y-5 text-sm text-matrix-green/80 leading-relaxed mb-12">
             {paragraphs.map((para, i) => {
-              // Detect markdown-style headers (## Heading)
-              if (para.startsWith("## ")) {
+              // Detect markdown-style headers (# or ## Heading)
+              if (para.startsWith("# ") || para.startsWith("## ")) {
                 return (
                   <h2
                     key={i}
                     className="text-base text-matrix-green font-bold mt-8 first:mt-0 border-l-2 border-matrix-green/40 pl-3"
                   >
-                    {para.replace(/^##\s+/, "")}
-                  </h2>
-                );
-              }
-              if (para.startsWith("# ")) {
-                return (
-                  <h2
-                    key={i}
-                    className="text-base text-matrix-green font-bold mt-8 first:mt-0 border-l-2 border-matrix-green/40 pl-3"
-                  >
-                    {para.replace(/^#\s+/, "")}
+                    {para.replace(/^#+\s+/, "")}
                   </h2>
                 );
               }
