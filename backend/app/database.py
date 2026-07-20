@@ -1,5 +1,6 @@
 import logging
 from collections.abc import Generator
+from contextlib import contextmanager
 
 from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -285,6 +286,22 @@ def reset_all_data() -> dict:
 
 def get_db() -> Generator[Session, None, None]:
     """FastAPI dependency that yields a database session."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+@contextmanager
+def session_scope() -> Generator[Session, None, None]:
+    """`with`-based session for non-request code (pipeline stages, scripts).
+
+    Guarantees the session is closed even on an early return or exception —
+    the drop-in for the hand-rolled ``SessionLocal()`` / ``try`` / ``finally:
+    db.close()`` blocks. Does not auto-commit; callers commit explicitly, as
+    those blocks did.
+    """
     db = SessionLocal()
     try:
         yield db
