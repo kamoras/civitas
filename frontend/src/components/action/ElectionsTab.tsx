@@ -41,6 +41,12 @@ function formatCountdown(days: number): { value: string; unit: string }[] {
   return parts;
 }
 
+/** The next even (federal-election) year: this year if even, else next year. */
+function nextElectionYear(): number {
+  const y = new Date().getFullYear();
+  return y % 2 === 0 ? y : y + 1;
+}
+
 function SenatorRow({ senator }: { senator: ElectionSenator }) {
   return (
     <Link
@@ -133,7 +139,7 @@ function StatePanel({
                   : `${stateData.houseDistricts} congressional districts`}
               </span>
               <span className="text-[10px] font-pixel text-neon-pink/60">
-                ALL UP IN {new Date().getFullYear() % 2 === 0 ? new Date().getFullYear() : new Date().getFullYear() + 1}
+                ALL UP IN {nextElectionYear()}
               </span>
             </div>
             <p className="text-[11px] text-matrix-green/40 mt-2">

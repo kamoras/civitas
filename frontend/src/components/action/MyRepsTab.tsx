@@ -23,7 +23,19 @@ function ContactScript({
 }) {
   const [open, setOpen] = useState(false);
   const [copied, copy] = useCopyFeedback(2000);
-  const script = `My name is [YOUR NAME] and I am a constituent from ${stateName}. I am calling to express my concern about [ISSUE]. I urge ${name} to [TAKE ACTION]. Please leave a record of this call. Thank you.`;
+
+  // One source for both the copyable plain text and the highlighted JSX, so
+  // the two can't drift. `fill` segments are the user-replaceable placeholders.
+  const scriptSegments: { text: string; fill?: boolean }[] = [
+    { text: "My name is " },
+    { text: "[YOUR NAME]", fill: true },
+    { text: ` and I am a constituent from ${stateName}. I am calling to express my concern about ` },
+    { text: "[ISSUE]", fill: true },
+    { text: `. I urge ${name} to ` },
+    { text: "[TAKE ACTION]", fill: true },
+    { text: ". Please leave a record of this call. Thank you." },
+  ];
+  const script = scriptSegments.map((s) => s.text).join("");
 
   if (!phone && !contactFormUrl) return null;
 
@@ -64,13 +76,13 @@ function ContactScript({
       {open && (
         <div className="bg-matrix-dark-green/20 border border-matrix-green/20 p-3 space-y-2">
           <p className="text-[11px] text-matrix-green/80 leading-relaxed font-mono">
-            {`My name is `}
-            <span className="text-neon-yellow/90">[YOUR NAME]</span>
-            {` and I am a constituent from ${stateName}. I am calling to express my concern about `}
-            <span className="text-neon-yellow/90">[ISSUE]</span>
-            {`. I urge ${name} to `}
-            <span className="text-neon-yellow/90">[TAKE ACTION]</span>
-            {`. Please leave a record of this call. Thank you.`}
+            {scriptSegments.map((seg, i) =>
+              seg.fill ? (
+                <span key={i} className="text-neon-yellow/90">{seg.text}</span>
+              ) : (
+                <span key={i}>{seg.text}</span>
+              )
+            )}
           </p>
           <button
             onClick={copyScript}
