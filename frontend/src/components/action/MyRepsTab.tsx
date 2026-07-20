@@ -231,25 +231,18 @@ export default function MyRepsTab({
       .catch(() => {});
   }, [issues]);
 
-  const myRepIds = useMemo(() => {
-    if (!data) return new Set<string>();
-    const ids = new Set<string>();
-    data.senators.forEach((s) => ids.add(s.id));
-    (data.representatives || []).forEach((r) => ids.add(r.id));
-    return ids;
-  }, [data]);
-
   const repIssues = useMemo(() => {
-    if (myRepIds.size === 0 || activeIssues.length === 0) return [];
-    return activeIssues
-      .filter((iss) =>
-        iss.relatedSenators?.some((s) => myRepIds.has(s.id))
-      )
-      .slice(0, 3);
-    // activeIssues (not issues): when the issues prop is absent, the async
-    // fallback fetch changes activeIssues, and this must recompute for the
-    // "reps in the news" list to populate.
-  }, [activeIssues, myRepIds]);
+    if (!data || activeIssues.length === 0) return [];
+    // Issues the user's own reps are connected to, via the backend-precomputed
+    // per-member connectedIssues (covers both senators and House reps — the
+    // prior relatedSenators filter missed the House), intersected with what's
+    // currently trending. Depends on activeIssues so it recomputes when the
+    // async fallback fetch resolves (issues prop absent).
+    const connectedIds = new Set<number>();
+    data.senators.forEach((s) => s.connectedIssues.forEach((i) => connectedIds.add(i.id)));
+    (data.representatives ?? []).forEach((r) => r.connectedIssues.forEach((i) => connectedIds.add(i.id)));
+    return activeIssues.filter((iss) => connectedIds.has(iss.id));
+  }, [activeIssues, data]);
 
   if (!userState) {
     return (
@@ -382,36 +375,6 @@ export default function MyRepsTab({
               </div>
             </div>
           )}
-
-          {/* YOUR REPS IN THE NEWS — shown when parent passes pre-fetched issues */}
-          {(() => {
-            if (!issues || issues.length === 0) return null;
-            const repIssueIds = new Set<number>([
-              ...data.senators.flatMap((s) => s.connectedIssues.map((i) => i.id)),
-              ...(data.representatives ?? []).flatMap((r) => r.connectedIssues.map((i) => i.id)),
-            ]);
-            const matched = issues.filter((iss) => repIssueIds.has(iss.id));
-            if (matched.length === 0) return null;
-            return (
-              <div className="space-y-4">
-                <div className="font-pixel text-xs text-amber-400/60">
-                  {">"} YOUR REPS IN THE NEWS
-                </div>
-                <div className="space-y-2">
-                  {matched.map((iss) => (
-                    <Link
-                      key={iss.id}
-                      href={`/action?issue=${iss.id}`}
-                      className="block terminal-window border border-amber-400/20 p-3 hover:border-amber-400/40 transition-colors"
-                    >
-                      <div className="text-[10px] font-pixel text-amber-400/50 mb-1">{iss.date}</div>
-                      <div className="text-sm text-matrix-green/80 leading-snug">{iss.title}</div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            );
-          })()}
         </div>
       ) : (
         <div className="terminal-window p-8 text-center">
