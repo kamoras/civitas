@@ -10,7 +10,7 @@ import pytest
 
 from app.config import settings
 from app.models import ActionIssue, Representative, RepSponsoredBill, Senator, SponsoredBill
-from app.services.bill_service import clear_bill_collection_cache, get_bills_in_flight
+from app.services.bill_service import clear_bill_collection_cache, get_bill_detail, get_bills_in_flight
 
 CURRENT = settings.CURRENT_CONGRESS
 
@@ -339,3 +339,77 @@ class TestCollectionCache:
 
         assert [b.bill_id for b in recent.bills] == ["S.2", "S.1"]
         assert [b.bill_id for b in stale.bills] == ["S.1", "S.2"]
+
+
+class TestGetBillDetail:
+    def test_finds_senate_bill(self, db_session):
+        senator = _make_senator(db_session)
+        _make_sponsored_bill(db_session, senator.id, "S.4967", "IN_COMMITTEE", title="A bill")
+
+        detail = get_bill_detail(db_session, "S.4967")
+
+        assert detail is not None
+        assert detail.chamber == "senate"
+        assert detail.sponsor_id == senator.id
+        assert detail.title == "A bill"
+
+    def test_finds_house_bill(self, db_session):
+        rep = _make_rep(db_session)
+        _make_rep_sponsored_bill(db_session, rep.id, "HR.22", "ENACTED")
+
+        detail = get_bill_detail(db_session, "HR.22")
+
+        assert detail is not None
+        assert detail.chamber == "house"
+        assert detail.sponsor_id == rep.id
+
+    def test_lookup_is_case_insensitive(self, db_session):
+        senator = _make_senator(db_session)
+        _make_sponsored_bill(db_session, senator.id, "S.4967", "IN_COMMITTEE")
+
+        detail = get_bill_detail(db_session, "s.4967")
+
+        assert detail is not None
+        assert detail.bill_id == "S.4967"
+
+    def test_returns_none_for_unknown_bill(self, db_session):
+        assert get_bill_detail(db_session, "S.99999") is None
+
+    def test_excludes_non_current_sponsor(self, db_session):
+        senator = _make_senator(db_session, is_current=False)
+        _make_sponsored_bill(db_session, senator.id, "S.4967", "IN_COMMITTEE")
+
+        assert get_bill_detail(db_session, "S.4967") is None
+
+    def test_parses_policy_areas(self, db_session):
+        senator = _make_senator(db_session)
+        bill = _make_sponsored_bill(db_session, senator.id, "S.4967", "IN_COMMITTEE")
+        bill.policy_areas = json.dumps([{"area": "JUSTICE", "confidence": 0.9, "party": "D"}])
+        db_session.flush()
+
+        detail = get_bill_detail(db_session, "S.4967")
+
+        assert len(detail.policy_areas) == 1
+        assert detail.policy_areas[0].area == "JUSTICE"
+
+    def test_includes_related_current_issues(self, db_session):
+        senator = _make_senator(db_session)
+        _make_sponsored_bill(db_session, senator.id, "S.4967", "IN_COMMITTEE")
+        _make_action_issue(db_session, ["S.4967"], date="2026-07-01")
+        _make_action_issue(db_session, ["S.9999"])  # different bill, should not show up
+
+        detail = get_bill_detail(db_session, "S.4967")
+
+        assert detail.mention_count == 1
+        assert len(detail.related_issues) == 1
+        assert detail.related_issues[0].date == "2026-07-01"
+
+    def test_excludes_non_current_issues_from_related(self, db_session):
+        senator = _make_senator(db_session)
+        _make_sponsored_bill(db_session, senator.id, "S.4967", "IN_COMMITTEE")
+        _make_action_issue(db_session, ["S.4967"], is_current=False)
+
+        detail = get_bill_detail(db_session, "S.4967")
+
+        assert detail.mention_count == 0
+        assert detail.related_issues == []

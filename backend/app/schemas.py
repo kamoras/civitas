@@ -237,6 +237,18 @@ class PaginatedBillsSchema(CamelModel):
     stage_counts: dict[str, int]
 
 
+class RelatedIssueSchema(CamelModel):
+    id: int
+    date: str
+    title: str
+
+
+class BillDetailSchema(BillInFlightSchema):
+    policy_areas: list[PolicyAreaDetail] = []
+    party_leaning: Literal["R", "D", "bipartisan"] | None = None
+    related_issues: list[RelatedIssueSchema] = []
+
+
 class SenatorSchema(CamelModel):
     id: str
     name: str

@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { BillInFlight } from "@/types/bill";
-import { billUrl } from "@/lib/sources";
 import { useConfig } from "@/hooks/useConfig";
 import { PARTY_BADGE } from "@/lib/partyStyles";
 
@@ -40,14 +39,12 @@ export default function BillRow({ bill }: { bill: BillInFlight }) {
 
       <div className="min-w-0 flex-1">
         <div className="flex items-start gap-2">
-          <a
-            href={billUrl(bill.billId)}
-            target="_blank"
-            rel="noopener noreferrer"
+          <Link
+            href={`/bills/${encodeURIComponent(bill.billId)}`}
             className="min-w-0 flex-1 text-sm text-matrix-green hover:text-neon-cyan hover:underline leading-snug truncate"
           >
             {bill.title || bill.billId}
-          </a>
+          </Link>
           {bill.mentionCount > 0 && (
             <span
               className="shrink-0 text-[9px] font-mono text-neon-cyan border border-neon-cyan/30 bg-neon-cyan/10 px-1.5 py-0.5 rounded"

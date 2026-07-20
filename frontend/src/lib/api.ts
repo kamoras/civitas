@@ -3,7 +3,7 @@ import type { President, PresidentLeaderboardEntry } from "@/types/president";
 import type { Justice, JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssuesResponse, MyRepsResponse } from "@/types/action";
 import type { PoliticianCard } from "@/types/politicians";
-import type { PaginatedBills } from "@/types/bill";
+import type { BillDetail, PaginatedBills } from "@/types/bill";
 import type {
   JusticeScoreBreakdown,
   PresidentScoreBreakdown,
@@ -227,6 +227,13 @@ export async function fetchBillsInFlight(options?: {
   if (options?.perPage) params.set("per_page", String(options.perPage));
   const res = await fetch(`${API_BASE}/bills?${params}`);
   if (!res.ok) throw new Error(`Failed to load bills: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchBillDetail(billId: string): Promise<BillDetail | null> {
+  const res = await fetch(`${API_BASE}/bills/${encodeURIComponent(billId)}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Failed to load bill: ${res.status}`);
   return res.json();
 }
 

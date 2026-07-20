@@ -2,13 +2,13 @@
 Bills-in-flight API — all bills currently moving through Congress,
 unioned across the Senate and House, for the process-flow visualization.
 """
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json
 from app.database import get_db
-from app.services.bill_service import get_bills_in_flight
+from app.services.bill_service import get_bill_detail, get_bills_in_flight
 
 router = APIRouter()
 
@@ -38,3 +38,12 @@ def list_bills_in_flight(
         db, stage=stage, chamber=chamber, party=party, q=q, sort=sort, page=page, per_page=per_page,
     )
     return _cached_json(data.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)
+
+
+@router.get("/bills/{bill_id}")
+def get_bill(bill_id: str, db: Session = Depends(get_db)) -> JSONResponse:
+    """Return full detail for a single bill by its bill_id (e.g. "S.4967")."""
+    detail = get_bill_detail(db, bill_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Bill not found")
+    return _cached_json(detail.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)
