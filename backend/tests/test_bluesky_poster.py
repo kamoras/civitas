@@ -160,3 +160,34 @@ class TestValidateFacts:
         facts = ["Inflation exceeded expectations for the third consecutive month."]
         result = _validate_facts(facts)
         assert result == facts
+
+    # --- Meta-fact detection (fact describes the coverage, not an event) ---
+
+    @pytest.mark.parametrize(
+        "fact",
+        [
+            # Verbatim examples spotted on real 2026-07-19 production output
+            pytest.param(
+                "No specific dates or names of the bills were provided in the articles.",
+                id="drops_no_dates_provided_in_articles",
+            ),
+            pytest.param(
+                "Specific details about security protocols were mentioned but not "
+                "expanded in the articles.",
+                id="drops_not_expanded_in_articles",
+            ),
+            pytest.param(
+                "No formal policy changes or legal actions were reported in the coverage.",
+                id="drops_not_reported_in_coverage",
+            ),
+        ],
+    )
+    def test_meta_fact_about_coverage_dropped(self, fact):
+        assert _validate_facts([fact]) == []
+
+    def test_keeps_fact_that_mentions_report_as_a_real_document(self):
+        # "report" appears, but as the actual event (a report was released),
+        # not as a meta-reference to "the articles"/"the coverage" itself.
+        facts = ["The inspector general released a report finding no wrongdoing."]
+        result = _validate_facts(facts)
+        assert result == facts
