@@ -35,17 +35,6 @@ logger = logging.getLogger(__name__)
 _embedding_cache: dict[str, np.ndarray] = {}
 
 
-def _embed(text: str) -> np.ndarray:
-    """Embed text with caching to avoid redundant model calls."""
-    if text in _embedding_cache:
-        return _embedding_cache[text]
-    from app.pipeline.vector_store import get_embedding_model
-    emb = get_embedding_model().encode([text], show_progress_bar=False)[0]
-    emb = emb / np.linalg.norm(emb)
-    _embedding_cache[text] = emb
-    return emb
-
-
 def _embed_batch(texts: list[str]) -> np.ndarray:
     """Embed multiple texts efficiently, reusing cached embeddings.
 

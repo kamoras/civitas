@@ -32,6 +32,7 @@ fresh for every document and results are stored under the new version key.
 Old version rows remain in the DB until pruned — they do not affect correctness.
 """
 import json
+import logging
 from datetime import timedelta
 
 from sqlalchemy.orm import Session
@@ -39,6 +40,8 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models import AnalysisCache, ApiCache
 from app.time_utils import utcnow
+
+logger = logging.getLogger(__name__)
 
 
 def api_cache_get(
@@ -119,6 +122,10 @@ def analysis_cache_get(
             return None
         return json.loads(entry.result_json)
     except Exception:
+        # Treat any failure (corrupt cached JSON, DB error) as a miss so the
+        # caller recomputes rather than crashing — but log it, since a silent
+        # permanent miss would otherwise rerun expensive analysis forever.
+        logger.debug("analysis_cache_get failed for %s/%s", version, input_hash, exc_info=True)
         return None
 
 

@@ -702,7 +702,7 @@ def _classify_remaining_via_nn(
         try:
             on_progress()
         except Exception:
-            pass
+            logger.debug("on_progress callback raised", exc_info=True)
 
     return all_results
 

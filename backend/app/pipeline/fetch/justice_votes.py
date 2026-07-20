@@ -10,16 +10,14 @@ for each sitting justice.
 
 import asyncio
 import logging
-import re
 from datetime import UTC, datetime
 
 import httpx
 
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
+from app.pipeline.fetch.oyez_common import OYEZ_BASE, unix_to_date as _unix_to_date
 
 logger = logging.getLogger(__name__)
-
-OYEZ_BASE = "https://api.oyez.org"
 
 _PRESIDENT_PARTY: dict[str, str] = {
     "George Washington": "",
@@ -72,28 +70,11 @@ _OYEZ_DATA_GAPS: dict[str, tuple[str, str]] = {
     "ketanji_brown_jackson": ("Joe Biden", "D"),
 }
 
-_HTML_TAG = re.compile(r"<[^>]+>")
-
-
-def _strip_html(text: str) -> str:
-    if not text:
-        return ""
-    return _HTML_TAG.sub("", text).strip()
-
 
 def _appointing_party(president_name: str | None) -> str:
     if not president_name:
         return ""
     return _PRESIDENT_PARTY.get(president_name, "")
-
-
-def _unix_to_date(ts: int | float | None) -> str:
-    if ts is None:
-        return ""
-    try:
-        return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d")
-    except (ValueError, OSError):
-        return ""
 
 
 async def fetch_current_justices(client: httpx.AsyncClient) -> list[dict]:

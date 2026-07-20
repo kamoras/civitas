@@ -137,7 +137,7 @@ def engage_with_news_posts(db: Session) -> None:
                     post_time = datetime.fromisoformat(str(indexed_at).replace("Z", "+00:00"))
                     if post_time < cutoff:
                         continue
-                except Exception:
+                except (ValueError, TypeError):
                     pass
 
             if _already_processed(cid, db):

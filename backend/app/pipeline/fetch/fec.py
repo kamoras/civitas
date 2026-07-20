@@ -59,15 +59,9 @@ async def _fetch_with_retry(
                 raise err
 
             return resp.json()
-        except httpx.HTTPStatusError as e:
-            if attempt == retries:
-                logger.error(
-                    "FEC API failed after %d attempts: %s — %s",
-                    retries, url, str(e),
-                )
-                return None
-            await asyncio.sleep(RETRY_BACKOFF_S * attempt)
         except Exception as e:
+            # httpx.HTTPStatusError (raised above for 5xx) is an Exception, so
+            # a single handler covers both it and transport-level errors.
             if attempt == retries:
                 logger.error(
                     "FEC API failed after %d attempts: %s — %s",

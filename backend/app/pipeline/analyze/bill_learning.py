@@ -335,7 +335,7 @@ def _purge_reference_entries(bill_ids: list[str]) -> None:
             collection.delete(ids=ids_to_delete)
             logger.info("Purged %d stale entries from reference corpus", len(ids_to_delete))
     except Exception:
-        pass
+        logger.debug("Failed to purge stale reference-corpus entries", exc_info=True)
 
 
 def classify_motion_type(question: str) -> str:

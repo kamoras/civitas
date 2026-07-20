@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
 
 REG_BASE = "https://api.regulations.gov/v4"
 
+# The comments listing is a lighter query than a full document fetch, so it
+# uses a shorter timeout than DEFAULT_FETCH_TIMEOUT_S (used for the POST below).
+_COMMENTS_TIMEOUT_S = 15.0
+
 
 def _extract_document_object_id(comment_url: str) -> str | None:
     """Extract the regulations.gov document objectId from a comment URL.
@@ -63,7 +67,7 @@ async def fetch_comments(
                 f"{REG_BASE}/comments",
                 params=params,
                 headers={"X-Api-Key": api_key},
-                timeout=15.0,
+                timeout=_COMMENTS_TIMEOUT_S,
             )
 
             if resp.status_code == 429:
