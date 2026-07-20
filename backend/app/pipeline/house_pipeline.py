@@ -315,12 +315,17 @@ async def run_house_pipeline() -> dict:
             # ── PHASE 4b: SPONSORSHIP ANALYSIS (PageRank + SVD) ──
             logger.info("--- House Phase 4b: SPONSORSHIP ANALYSIS ---")
             progress.begin("sponsorship")
+            # Defined up front so the "continuing with empty scores" failure
+            # path below leaves it a safe empty map (label falls back to the
+            # fixed global cutoffs).
+            ideology_bounds_by_party: dict[str, tuple[float, float]] = {}
 
             from app.pipeline.analyze.sponsorship_analysis import (
                 compute_leadership_scores,
                 compute_ideology_scores,
                 compute_bipartisanship_scores,
                 describe_senator_position,
+                party_ideology_bounds,
             )
 
             cosponsors_map: dict[str, list[dict]] = {}
@@ -487,6 +492,12 @@ async def run_house_pipeline() -> dict:
                 )
                 ideology_scores = compute_ideology_scores(
                     all_bills_for_analysis, cosponsors_map, rep_bio_ids, rep_party_map,
+                )
+                # Party-relative ideology label thresholds over the full
+                # cohort (see party_ideology_bounds) so progressive/moderate/
+                # centrist reflects position WITHIN a party, not party identity.
+                ideology_bounds_by_party = party_ideology_bounds(
+                    [(ideology_scores.get(bio), rep_party_map.get(bio)) for bio in rep_bio_ids]
                 )
                 logger.info(
                     "Sponsorship analysis: %d leadership scores, %d ideology scores",
@@ -715,6 +726,7 @@ async def run_house_pipeline() -> dict:
                         rep["sponsorshipDescription"] = describe_senator_position(
                             i_score, l_score, rep.get("party", "I"),
                             years_in_office=rep.get("yearsInOffice"),
+                            ideology_bounds=ideology_bounds_by_party.get(rep.get("party", "I")),
                         )
 
                     # Calculate scores

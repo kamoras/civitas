@@ -14,6 +14,7 @@ from app.pipeline.analyze.sponsorship_analysis import (
     compute_ideology_scores,
     compute_leadership_scores,
     describe_senator_position,
+    party_ideology_bounds,
 )
 
 
@@ -301,6 +302,54 @@ class TestDescribePosition:
             0.9, 0.02, "R", years_in_office=None
         )
         assert "follower" in describe_senator_position(0.9, 0.02, "R")
+
+
+class TestPartyRelativeIdeologyLabels:
+    """Ideology labels are relative to the member's own party's distribution
+    (party_ideology_bounds), so progressive/moderate/centrist each capture ~a
+    third of the party instead of collapsing to party identity."""
+
+    def test_bounds_are_party_terciles_and_skip_small_parties(self):
+        # Democrats span 0.00..0.20; the 33rd/67th percentiles sit inside that.
+        members = [(i / 100.0, "D") for i in range(0, 21)]  # 21 D from 0.00..0.20
+        members += [(0.9, "R"), (0.95, "R")]  # only 2 R -> below min size
+        bounds = party_ideology_bounds(members)
+        assert "D" in bounds
+        lo, hi = bounds["D"]
+        assert 0.0 < lo < hi < 0.20
+        assert "R" not in bounds  # too few to define a stable distribution
+
+    def test_relative_bounds_spread_a_clustered_party(self):
+        """The core fix: a party clustered in [0,0.2] (bimodal-rescaled) gets
+        all three labels under party-relative bounds, where fixed 0.30/0.70
+        cutoffs would have labeled every one of them 'progressive'."""
+        d_scores = [i / 100.0 for i in range(0, 21)]
+        bounds = party_ideology_bounds([(s, "D") for s in d_scores])["D"]
+        labels = set()
+        for s in d_scores:
+            # fixed cutoffs: everyone is "progressive"
+            assert "progressive" in describe_senator_position(s, 0.5, "D")
+            # party-relative: the label varies across the party
+            labels.add(
+                describe_senator_position(s, 0.5, "D", ideology_bounds=bounds).split()[0]
+            )
+        assert {"progressive", "moderate", "centrist"} <= labels
+
+    def test_most_left_democrat_is_progressive_most_right_is_centrist(self):
+        bounds = party_ideology_bounds([(i / 100.0, "D") for i in range(0, 21)])["D"]
+        assert describe_senator_position(0.00, 0.5, "D", ideology_bounds=bounds).startswith("progressive")
+        assert describe_senator_position(0.20, 0.5, "D", ideology_bounds=bounds).startswith("centrist")
+
+    def test_republican_direction_is_reversed(self):
+        r_scores = [0.80 + i / 100.0 for i in range(0, 21)]  # 0.80..1.00
+        bounds = party_ideology_bounds([(s, "R") for s in r_scores])["R"]
+        # least-right R reads centrist, most-right reads conservative
+        assert describe_senator_position(0.80, 0.5, "R", ideology_bounds=bounds).startswith("centrist")
+        assert describe_senator_position(1.00, 0.5, "R", ideology_bounds=bounds).startswith("conservative")
+
+    def test_no_bounds_falls_back_to_fixed_cutoffs(self):
+        assert describe_senator_position(0.1, 0.5, "D").startswith("progressive")
+        assert describe_senator_position(0.5, 0.5, "D", ideology_bounds=None).startswith("moderate")
 
 
 # ── Bipartisanship (v5) ──────────────────────────────────────────
