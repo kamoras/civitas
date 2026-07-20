@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import BskySenatorSpotlight, Senator, WeekSummary
-from app.pipeline.analyze.bluesky_utils import build_link_card
+from app.pipeline.analyze.bluesky_utils import publish_post
 from app.pipeline.analyze.grounding import (
     hedge_and_editorializing_violations,
     ungrounded_numbers,
@@ -235,52 +235,12 @@ Return JSON: {{"post": "<your post text>"}}"""
 
 def _publish_spotlight(text: str, senator: Senator) -> bool:
     """Post the spotlight to Bluesky. Returns True on success."""
-    handle = getattr(settings, "BSKY_HANDLE", "")
-    app_password = getattr(settings, "BSKY_APP_PASSWORD", "")
-    if not handle or not app_password:
-        return False
-
     url = f"{SITE}/politicians/{senator.id}"
-    full_text = f"{text}\n\n{url}"
-
-    if len(full_text) > 300:
-        budget = 300 - len(url) - 2
-        trimmed = text[:budget]
-        cut = max(
-            (trimmed.rfind(p) + 1 for p in (".", "!", "?") if trimmed.rfind(p) > 0),
-            default=-1,
-        )
-        trimmed = trimmed[:cut] if cut > 0 else trimmed[: trimmed.rfind(" ")]
-        full_text = f"{trimmed}\n\n{url}"
-
-    try:
-        from atproto import Client, models
-
-        client = Client()
-        client.login(handle, app_password)
-
-        encoded = full_text.encode("utf-8")
-        url_bytes = url.encode("utf-8")
-        url_start = encoded.find(url_bytes)
-        facets = [
-            models.AppBskyRichtextFacet.Main(
-                features=[models.AppBskyRichtextFacet.Link(uri=url)],
-                index=models.AppBskyRichtextFacet.ByteSlice(
-                    byte_start=url_start,
-                    byte_end=url_start + len(url_bytes),
-                ),
-            )
-        ]
-        embed = build_link_card(client, url)
-        client.send_post(full_text, facets=facets, embed=embed)
-        logger.info("Posted senator spotlight: %s", senator.name)
-        return True
-    except ImportError:
-        logger.error("atproto not installed — cannot post spotlight")
-        return False
-    except Exception:
-        logger.exception("Spotlight post failed for senator %s", senator.id)
-        return False
+    return publish_post(
+        text, url,
+        success_msg=f"Posted senator spotlight: {senator.name}",
+        error_context=f"senator {senator.id}",
+    )
 
 
 def post_daily_spotlight(db: Session) -> None:
@@ -407,50 +367,11 @@ Return JSON: {{"post": "<your post text>"}}"""
 
 def _publish_weekly(text: str, week: WeekSummary) -> bool:
     """Post the weekly summary to Bluesky. Returns True on success."""
-    handle = getattr(settings, "BSKY_HANDLE", "")
-    app_password = getattr(settings, "BSKY_APP_PASSWORD", "")
-    if not handle or not app_password:
-        return False
-
-    full_text = f"{text}\n\n{TIMELINE_URL}"
-    if len(full_text) > 300:
-        budget = 300 - len(TIMELINE_URL) - 2
-        trimmed = text[:budget]
-        cut = max(
-            (trimmed.rfind(p) + 1 for p in (".", "!", "?") if trimmed.rfind(p) > 0),
-            default=-1,
-        )
-        trimmed = trimmed[:cut] if cut > 0 else trimmed[: trimmed.rfind(" ")]
-        full_text = f"{trimmed}\n\n{TIMELINE_URL}"
-
-    try:
-        from atproto import Client, models
-
-        client = Client()
-        client.login(handle, app_password)
-
-        encoded = full_text.encode("utf-8")
-        url_bytes = TIMELINE_URL.encode("utf-8")
-        url_start = encoded.find(url_bytes)
-        facets = [
-            models.AppBskyRichtextFacet.Main(
-                features=[models.AppBskyRichtextFacet.Link(uri=TIMELINE_URL)],
-                index=models.AppBskyRichtextFacet.ByteSlice(
-                    byte_start=url_start,
-                    byte_end=url_start + len(url_bytes),
-                ),
-            )
-        ]
-        embed = build_link_card(client, TIMELINE_URL)
-        client.send_post(full_text, facets=facets, embed=embed)
-        logger.info("Posted weekly summary for week %d/%d", week.year, week.week_num)
-        return True
-    except ImportError:
-        logger.error("atproto not installed — cannot post weekly summary")
-        return False
-    except Exception:
-        logger.exception("Weekly summary post failed for week %d/%d", week.year, week.week_num)
-        return False
+    return publish_post(
+        text, TIMELINE_URL,
+        success_msg=f"Posted weekly summary for week {week.year}/{week.week_num}",
+        error_context=f"week {week.year}/{week.week_num}",
+    )
 
 
 def post_weekly_summary(db: Session) -> None:
