@@ -7,7 +7,7 @@ _validate_facts which are pure functions with no external dependencies.
 
 import pytest
 
-from app.pipeline.analyze.bluesky_poster import _sanitize
+from app.pipeline.analyze.bluesky_poster import _is_near_duplicate, _sanitize
 from app.pipeline.analyze.action_center import _validate_facts
 
 
@@ -68,6 +68,50 @@ class TestSanitize:
         assert "#" not in result
         # Words are preserved
         assert "Ukraine" in result
+
+
+# ---------------------------------------------------------------------------
+# _is_near_duplicate
+# ---------------------------------------------------------------------------
+
+class TestIsNearDuplicate:
+    def test_identical_text_is_duplicate(self):
+        post = "The Senate passed the funding bill on a 68-32 vote."
+        assert _is_near_duplicate(post, [post]) is True
+
+    def test_reworded_same_story_is_duplicate(self):
+        prior = "The Senate passed the funding bill on a 68-32 vote Thursday."
+        candidate = "On Thursday the Senate passed the funding bill by a 68-32 vote."
+        assert _is_near_duplicate(candidate, [prior]) is True
+
+    def test_different_story_not_duplicate(self):
+        prior = "The Senate passed the funding bill on a 68-32 vote."
+        candidate = "The Supreme Court heard arguments on the new immigration rule."
+        assert _is_near_duplicate(candidate, [prior]) is False
+
+    def test_genuine_update_with_new_content_not_duplicate(self):
+        # Same topic but a materially new development introduces enough new
+        # vocabulary to clear the threshold.
+        prior = "The Senate advanced the funding bill in committee this week."
+        candidate = (
+            "The House rejected the funding bill 210-225 after the Senate "
+            "amendment on immigration enforcement failed a procedural motion."
+        )
+        assert _is_near_duplicate(candidate, [prior]) is False
+
+    def test_checks_all_prior_texts(self):
+        candidate = "The Senate passed the funding bill on a 68-32 vote."
+        priors = [
+            "The Supreme Court heard arguments on the immigration rule.",
+            "The Senate passed the funding bill on a 68-32 vote Thursday.",
+        ]
+        assert _is_near_duplicate(candidate, priors) is True
+
+    def test_empty_candidate_not_duplicate(self):
+        assert _is_near_duplicate("", ["some prior post text here"]) is False
+
+    def test_no_priors_not_duplicate(self):
+        assert _is_near_duplicate("A brand new post about a new topic.", []) is False
 
 
 # ---------------------------------------------------------------------------

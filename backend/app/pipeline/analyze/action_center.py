@@ -2090,6 +2090,7 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
         from app.pipeline.analyze.grounding import (
             hedge_and_editorializing_violations,
             repeated_sentences,
+            ungrounded_electoral_claims,
             ungrounded_statistics,
             ungrounded_titled_names,
         )
@@ -2097,7 +2098,14 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
         names = ungrounded_titled_names(story, source_material)
         dupes = repeated_sentences(story)
         hedge_editorial = hedge_and_editorializing_violations(story)
-        if not novel and not names and not dupes and not hedge_editorial:
+        # Same relational-fabrication guard the Bluesky poster runs: a full
+        # story that invents a race/campaign between two officials who both
+        # appear in the facts for an unrelated reason (2026-07: a Graham story
+        # claiming he "was facing competition from Susan Collins for his senate
+        # race") slips past the number and name checks — both surnames are
+        # grounded and no figure is fabricated.
+        electoral = ungrounded_electoral_claims(story, source_material)
+        if not novel and not names and not dupes and not hedge_editorial and not electoral:
             logger.info(
                 "Generated full story for issue %s (%d chars): %s",
                 issue.id, len(story), issue.title[:60],
@@ -2136,14 +2144,24 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
                 "Full story failed hedge/editorializing check for issue %s (attempt %d): %s",
                 issue.id, attempt + 1, "; ".join(hedge_editorial),
             )
+        if electoral:
+            problems.append(
+                f"an election or campaign not present in the key facts ({', '.join(electoral)})"
+            )
+            logger.warning(
+                "Full story invented an electoral contest for issue %s (attempt %d): %s",
+                issue.id, attempt + 1, ", ".join(electoral),
+            )
         retry_note = (
             "\n\nYour previous attempt was rejected because it contained "
             f"{' and '.join(problems)}. Stop writing once the facts are "
             "covered instead of repeating yourself, use only numbers "
             "that appear in the material above, do not name or quote "
-            "anyone who isn't named in the material above, report events "
-            "directly instead of through phrases like 'reports say,' and "
-            "do not evaluate whether any action was warranted or justified."
+            "anyone who isn't named in the material above, do not describe "
+            "any election, race, campaign, or challenge for office unless the "
+            "material above says so, report events directly instead of "
+            "through phrases like 'reports say,' and do not evaluate whether "
+            "any action was warranted or justified."
         )
 
     return None
