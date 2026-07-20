@@ -1,3 +1,5 @@
+import type { PolicyAreaDetail } from "./senator";
+
 export interface BillInFlight {
   billId: string;
   title: string;
@@ -25,4 +27,16 @@ export interface PaginatedBills {
   perPage: number;
   totalPages: number;
   stageCounts: Record<string, number>;
+}
+
+export interface RelatedIssue {
+  id: number;
+  date: string;
+  title: string;
+}
+
+export interface BillDetail extends BillInFlight {
+  policyAreas: PolicyAreaDetail[];
+  partyLeaning: "R" | "D" | "bipartisan" | null;
+  relatedIssues: RelatedIssue[];
 }

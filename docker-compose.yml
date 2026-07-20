@@ -1,5 +1,9 @@
 # For development or simple usage: docker compose up -d
-# For zero-downtime production deploys: ./deploy.sh (manages frontend/backend separately)
+# For production deploys: docker stack deploy -c docker-compose.yml
+#   -c docker-compose.swarm.yml civitas (see docker-compose.swarm.yml for
+#   what that overlay changes and why — the short version is: no more
+#   deploy.sh, Swarm's own rolling-update + healthcheck-gated rollback
+#   replaces the hand-rolled blue/green port-flip script).
 name: civitas
 services:
   ollama:
@@ -32,6 +36,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    image: civitas-backend:${IMAGE_TAG:-latest}
     container_name: mp-backend
     ports:
       - "127.0.0.1:8000:8000"
@@ -40,7 +45,7 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       - DATABASE_URL=sqlite:////data/civitas.db
-      - OLLAMA_BASE_URL=http://mp-ollama:11434
+      - OLLAMA_BASE_URL=http://ollama:11434
       - LLM_BACKEND=llama-server
       - LLAMA_SERVER_URL=http://host.docker.internal:8070
     volumes:
@@ -60,31 +65,47 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    image: civitas-frontend:${IMAGE_TAG:-latest}
     container_name: mp-frontend
     ports:
       - "127.0.0.1:3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=/api
-    depends_on:
-      backend:
-        condition: service_healthy
+    # No depends_on — Swarm has no concept of startup-order dependencies
+    # between services (each task's lifecycle is independent) and rejects
+    # the long `condition: service_healthy` form outright ("must be a
+    # list"); `docker compose config`'s resolver re-expands *any* source
+    # syntax (including a plain short-form list) back into that same
+    # rejected long form, so there's no source syntax that survives the
+    # resolve-then-stack-deploy path. Frontend not strictly waiting for
+    # backend on a fresh `docker compose up` is a minor, harmless local-
+    # dev-only difference — it'll just show a fetch error in the UI for
+    # the few seconds until backend's healthcheck passes.
     restart: unless-stopped
     deploy:
       resources:
         limits:
           memory: 512M
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/"]
+      # 127.0.0.1, not localhost — the container's /etc/hosts resolves
+      # "localhost" to ::1 (IPv6) first, and Next's standalone server only
+      # binds the IPv4 wildcard (0.0.0.0), not dual-stack (live-verified:
+      # `wget http://127.0.0.1:3000/` returns the page fine, `wget
+      # http://localhost:3000/` gets "Connection refused" on the exact
+      # same running container — busybox wget doesn't fall back to a
+      # second resolved address the way curl does).
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/"]
       interval: 15s
       timeout: 5s
       retries: 3
       start_period: 20s
 
-  # nginx container disabled — host nginx serves on port 8081 instead
-  # (port 80 is in use by another service on this host)
-
 volumes:
-  ollama_data:
-    driver: local
-  app_data:
-    driver: local
+  # No `driver: local` on either volume below — the Swarm overlay
+  # (docker-compose.swarm.yml) sets `external: true` on both, and Compose
+  # rejects `driver` and `external` both being set for the same volume
+  # even when they come from different merged files. Omitting `driver` is
+  # a no-op for plain `docker compose up` dev usage (local is already the
+  # default), so this stays compatible with both.
+  ollama_data: {}
+  app_data: {}

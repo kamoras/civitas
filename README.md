@@ -625,9 +625,9 @@ cmake --build . --config Release -j4
 
 **Option B: Ollama (simpler setup)**
 ```bash
-# Ollama runs as a Docker container alongside the app
+# Ollama runs as a Swarm service alongside the app
 # Set LLM_BACKEND=ollama in .env
-docker exec mp-ollama ollama pull LiquidAI/lfm2.5-1.2b-instruct
+docker exec "$(docker ps -q -f name=civitas_ollama)" ollama pull LiquidAI/lfm2.5-1.2b-instruct
 ```
 
 The data pipeline runs automatically on the cron schedule in `.env`
@@ -640,47 +640,68 @@ curl -X POST http://localhost:8000/api/admin/pipeline/trigger \
 
 ## Deployment
 
-### Blue/Green Architecture
+### Docker Swarm Architecture
 
-The project uses zero-downtime blue/green deployment with nginx as the traffic router:
+The project runs on a single-node Docker Swarm (`docker swarm init` is a
+one-time host setup step, not part of any deploy script). Zero-downtime
+deploys come from Swarm's own rolling-update mechanism, not a hand-rolled
+blue/green script:
 
 ```
-                    ┌─── nginx (port 80/443) ───┐
-                    │   upstream backend { }     │
-                    │   upstream frontend { }    │
-                    └──────────┬────────────────┘
-                               │ proxy_pass
+                    ┌─── nginx (in-stack, port 8081) ───┐
+                    │   upstream backend { }             │
+                    │   upstream frontend { }            │
+                    └──────────┬─────────────────────────┘
+                               │ proxy_pass (overlay network DNS)
               ┌────────────────┴────────────────┐
               ▼                                 ▼
-   mp-backend-blue (8000)          mp-backend-green (8001)
-   mp-frontend-blue (3000)         mp-frontend-green (3001)
-        [idle]                          [live]
+        backend (task)                    frontend (task)
+   start-first rolling update        start-first rolling update
 ```
 
-`deploy.sh` follows this sequence:
-1. Build the new Docker image locally, or (in CI/CD) pull a pre-built image from GHCR — every push to `main` that passes CI is built once on GitHub-hosted ARM64 runners and pulled here instead of rebuilding on the Pi (`SKIP_BUILD=1`)
-2. Start the new container on the idle port (e.g. green on 8001)
-3. Poll `GET /health` until the container responds — up to 180s for the backend, 60s for the frontend
-4. Rewrite the nginx upstream block to point to the new port
-5. `nginx -s reload` — zero-downtime config swap (nginx drains in-flight requests)
-6. Stop and remove the old container
+`docker stack deploy -c docker-compose.yml -c docker-compose.swarm.yml
+civitas` follows this sequence, all built into Swarm rather than scripted:
+1. Build the new Docker image locally, tagged with the deploying commit's
+   short SHA (GHCR pull is disabled — see `AGENTS.md` "CI/CD" for why)
+2. Swarm starts a new task on the same overlay network (`update_config.order:
+   start-first`)
+3. Swarm waits for the new task's `HEALTHCHECK` to pass
+4. Traffic shifts to the new task via the overlay network's own service DNS
+   — nginx's config never changes, `backend`/`frontend` always resolve to
+   whichever task is currently healthy
+5. The old task is stopped and removed
+6. If the new task never becomes healthy, `failure_action: rollback`
+   reverts to the previous image automatically — no manual intervention
 
-The script auto-detects which slot is currently live by parsing the active nginx config, so it always starts the container on the idle slot without manual bookkeeping.
-
-Data is persisted in a Docker named volume (`app_data`) mounted at `/app/data` inside every container. The SQLite database and ChromaDB files live here and survive container rebuilds. Both blue and green containers mount the same volume, so the new container has full access to the current database the moment it starts — no data migration needed on deploy.
+Data is persisted in the `civitas_app_data` Docker named volume, mounted at
+`/data` inside the backend container. The SQLite database and ChromaDB files
+live here and survive image rebuilds and stack redeploys — the volume is
+`external: true` in `docker-compose.swarm.yml`, so `docker stack deploy`
+never recreates or touches it directly.
 
 ### Service Layout
 
 ```
-Host ports                 Container            Purpose
+Host ports    Swarm service   Purpose
 ──────────────────────────────────────────────────────────
-8000 or 8001               mp-backend-{slot}    FastAPI backend
-3000 or 3001               mp-frontend-{slot}   Next.js frontend
-8070                       llama-server         llama.cpp inference (systemd)
-80 / 443                   nginx                Reverse proxy + TLS termination
+8081          nginx           Reverse proxy + caching (the only service
+                               published to the host — port-forwarded
+                               externally, don't change without updating
+                               that forwarding rule)
+—             backend         FastAPI backend (overlay-network only)
+—             frontend        Next.js frontend (overlay-network only)
+—             ollama          Fallback LLM backend (overlay-network only)
+8070          llama-server    llama.cpp inference (systemd, not in the stack)
 ```
 
-llama.cpp runs as a systemd service (not Docker) so the model weights stay in RAM across backend redeploys. The backend connects to it via `http://host.docker.internal:8070`. If the llama.cpp server is unavailable, all LLM calls fall through to a timeout error and the pipeline records a per-member failure without aborting the run.
+Backend and frontend publish **no host port** — Swarm's host-mode port
+publishing can't restrict to `127.0.0.1` the way plain `docker run -p
+127.0.0.1:PORT:PORT` can (confirmed live: it always binds `0.0.0.0`), so
+rather than accept LAN-wide exposure of ports that were deliberately
+loopback-only before, they simply aren't published to the host at all —
+nginx, inside the same overlay network, is the only path to either of them.
+
+llama.cpp runs as a systemd service (not Docker, not in the stack) so the model weights stay in RAM across backend redeploys. The backend connects to it via `http://host.docker.internal:8070`. If the llama.cpp server is unavailable, all LLM calls fall through to a timeout error and the pipeline records a per-member failure without aborting the run.
 
 ### Health Check
 
@@ -694,10 +715,11 @@ llama.cpp runs as a systemd service (not Docker) so the model weights stay in RA
 }
 ```
 
-`deploy.sh` considers the new container healthy purely by HTTP status —
-it polls until `GET /health` returns 200, without parsing the response body.
-`database`/`ollama` are informational for the admin dashboard and don't
-gate deployment.
+Swarm considers a task healthy purely by its Docker `HEALTHCHECK` exit code
+(`curl -sf http://localhost:8000/api/health` for the backend) — the same
+"HTTP 200, don't parse the body" criterion the old deploy script used.
+`database`/`ollama` in the response body are informational for the admin
+dashboard and don't gate the rolling update.
 
 ## Development Setup
 
@@ -787,8 +809,10 @@ civitas/
 │   │   └── admin/            # Pipeline control panel with granular progress
 │   ├── src/components/       # React components
 │   └── Dockerfile
-├── deploy.sh                 # Blue/green zero-downtime deploy
+├── check-and-deploy.sh       # Cron poller: builds images + docker stack deploy
 ├── docker-compose.yml
+├── docker-compose.swarm.yml  # Swarm-only overlay (production stack deploy)
+├── nginx/                    # Dockerfile + static config (in-stack reverse proxy)
 ├── .env.example
 ├── AGENTS.md                 # Project design principles and developer guide
 └── README.md

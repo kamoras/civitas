@@ -1399,3 +1399,32 @@ class TestComputeOverallScoreOnPartialColumnRows:
         full = db_session.query(Senator).filter(Senator.id == "S001").first()
 
         assert compute_overall_score(row) == compute_overall_score(full)
+
+
+class TestComputeOverallScoreOnDict:
+    """compute_overall_score also accepts a plain representationScore-shaped
+    dict (camelCase keys matching SCORE_WEIGHTS directly) — api/public.py's
+    serialized API responses, consolidated onto this function rather than
+    keeping a second, independent weighted-sum implementation there."""
+
+    def test_dict_matches_equivalent_orm_object(self, db_session):
+        db_session.add(Senator(
+            id="S002", name="Test2", state="TX", party="R",
+            score_funding_independence=60, score_promise_persistence=999,
+            score_independent_voting=70, score_funding_diversity=65,
+            score_legislative_effectiveness=82,
+        ))
+        db_session.commit()
+        full = db_session.query(Senator).filter(Senator.id == "S002").first()
+
+        as_dict = {
+            "fundingIndependence": 60,
+            "promisePersistence": 999,
+            "independentVoting": 70,
+            "fundingDiversity": 65,
+            "legislativeEffectiveness": 82,
+        }
+        assert compute_overall_score(as_dict) == compute_overall_score(full)
+
+    def test_missing_keys_default_to_zero(self):
+        assert compute_overall_score({}) == 0.0

@@ -428,6 +428,22 @@ body {
   }
 }
 
+/* ===== A11Y: MINIMUM FONT SIZE (always on) =====
+   8-10px pixel-font badges/labels (bill-type tags, committee names, dates)
+   are common across the site (~450 Tailwind arbitrary-value call sites —
+   too many to hand-edit, same reasoning as the contrast floor above).
+   Floored to 11px globally rather than per component; Tailwind v4 keeps
+   arbitrary-value class names literal in the DOM (`text-[9px]`, not
+   hashed), so this attribute selector reliably matches every call site.
+   Verified live against production (Playwright, Action Center's dense
+   badge grid and a senator scorecard's sponsored-bill tag list) — 11px
+   doesn't overflow or wrap any of the bordered/padded badges it touches. */
+[class*="text-[8px]"],
+[class*="text-[9px]"],
+[class*="text-[10px]"] {
+  font-size: 11px !important;
+}
+
 /* Tailwind's built-in animate-pulse dips to 50% opacity at its keyframe
    midpoint — fine for a bare decorative dot, but on TEXT it multiplies
    against whatever alpha is already baked into the color (same pitfall as

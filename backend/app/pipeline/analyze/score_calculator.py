@@ -434,23 +434,29 @@ _SCORE_FIELD_MAP: dict[str, str] = {
 
 
 def compute_overall_score(entity) -> float:
-    """Weighted overall score from a scored Senator/Representative row.
+    """Weighted overall score from a scored Senator/Representative row, or
+    from a plain representationScore-shaped dict (camelCase keys matching
+    SCORE_WEIGHTS directly — api/public.py's serialized API responses).
 
     Shared by senate_pipeline.py's and house_pipeline.py's daily
-    ScoreSnapshot recorders — both weight the same score_* columns by the
-    same config_definitions.SCORE_WEIGHTS, previously copy-pasted. Sums
-    dynamically over SCORE_WEIGHTS.items() rather than naming each
-    dimension, so a weight-table change (e.g. removing a dimension) can't
-    silently desync this formula from the config again — that gap was
-    exactly what made the promisePersistence removal above require an
-    audit of 7 independently hardcoded copies instead of touching one file.
+    ScoreSnapshot recorders and api/public.py's response builders — all
+    weight the same score_* fields by the same config_definitions.
+    SCORE_WEIGHTS, previously copy-pasted in each. Sums dynamically over
+    SCORE_WEIGHTS.items() rather than naming each dimension, so a weight-
+    table change (e.g. removing a dimension) can't silently desync this
+    formula from the config again — that gap was exactly what made the
+    promisePersistence removal above require an audit of 7 independently
+    hardcoded copies instead of touching one file.
     """
     from app.config_definitions import SCORE_WEIGHTS
 
-    overall = sum(
-        getattr(entity, _SCORE_FIELD_MAP[key], 0) * weight
-        for key, weight in SCORE_WEIGHTS.items()
-    )
+    if isinstance(entity, dict):
+        overall = sum(entity.get(key, 0) * weight for key, weight in SCORE_WEIGHTS.items())
+    else:
+        overall = sum(
+            getattr(entity, _SCORE_FIELD_MAP[key], 0) * weight
+            for key, weight in SCORE_WEIGHTS.items()
+        )
     return round(overall, 2)
 
 

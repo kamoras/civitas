@@ -524,6 +524,39 @@ def _build_donor_entries(senators: list[dict], fec_data: dict) -> list[dict]:
     return entries
 
 
+def _build_current_term_sponsored_for_cosponsor(senator_prepared: list[dict]) -> list[dict]:
+    """Every current-congress sponsored bill, for every senator, formatted
+    for the cosponsorship-enrichment fetch that feeds SVD ideology and
+    PageRank leadership scoring.
+
+    No per-senator cap — see the call site's comment for why a prior 10-
+    bill cap silently starved prolific sponsors of most of their own
+    signal. Restricted to the current congress only (not `>=` some older
+    congress) to match this platform's "current term, not career"
+    principle (AGENTS.md "6. Current term, not career") and to keep the
+    now-uncapped total bounded to a known quantity.
+    """
+    entries: list[dict] = []
+    for prep in senator_prepared:
+        senator = prep["senator"]
+        bio_id = senator.get("bioguideId", "")
+        party = senator.get("party", "")
+        if not bio_id:
+            continue
+        for sp in prep.get("sponsoredBills", []):
+            if sp.get("congress", 0) != settings.CURRENT_CONGRESS or not sp.get("billId"):
+                continue
+            entries.append({
+                "billId": sp["billId"],
+                "congress": sp["congress"],
+                "sponsorBioguide": bio_id,
+                "sponsorParty": party,
+                "isLaw": sp.get("isLaw", False),
+                "latestAction": sp.get("latestAction", ""),
+            })
+    return entries
+
+
 def _build_analysis_input(prepared: dict, platform_texts: dict) -> dict:
     """Build the analysis input dict for a senator's embedding pre-computation."""
     senator = prepared["senator"]
@@ -1372,32 +1405,28 @@ async def run_senate_pipeline(
 
         # 3f. Enrich cosponsorship data with senators' own sponsored bills
         # The significant-bills cosponsorship matrix (33 bills) is too sparse
-        # for 100 senators. Sample each senator's recent sponsored bills
-        # (118th-119th Congress) and fetch their cosponsors to build a richer
+        # for 100 senators. Pull every current-congress sponsored bill (not a
+        # capped sample) and fetch their cosponsors to build a richer
         # senator-senator cosponsorship graph for SVD ideology and PageRank.
-        sponsored_bills_for_cosponsor: list[dict] = []
-        max_per_senator = 10
-        min_congress = 118
-        for prep in senator_prepared:
-            senator = prep["senator"]
-            bio_id = senator.get("bioguideId", "")
-            party = senator.get("party", "")
-            if not bio_id:
-                continue
-            recent_sp = [
-                sp for sp in prep.get("sponsoredBills", [])
-                if sp.get("congress", 0) >= min_congress
-                and sp.get("billId")
-            ]
-            for sp in recent_sp[:max_per_senator]:
-                sponsored_bills_for_cosponsor.append({
-                    "billId": sp["billId"],
-                    "congress": sp["congress"],
-                    "sponsorBioguide": bio_id,
-                    "sponsorParty": party,
-                    "isLaw": sp.get("isLaw", False),
-                    "latestAction": sp.get("latestAction", ""),
-                })
+        #
+        # Previously capped at 10 bills/senator across two congresses
+        # (118th-119th): harmless for a senator who sponsors 8 bills a term
+        # (their whole record fit under the cap anyway), but for a prolific
+        # sponsor it meant computing their ideology position from under 15%
+        # of their actual legislative footprint — 2026-07 audit found this
+        # was the likely cause of a senator with 49 sponsored bills in the
+        # 119th Congress alone (and a real-world reputation as one of the
+        # most ideologically extreme senators, corroborated by GovTrack
+        # independently ranking them the most-left senator every year
+        # 2020-2024) landing near the ideological center on this platform's
+        # score instead. Restricting to the current congress only — instead
+        # of two — also brings this in line with this platform's "current
+        # term, not career" principle applied everywhere else (AGENTS.md
+        # "6. Current term, not career"), and keeps the now-uncapped total
+        # bounded to a known, precedented quantity (2026-07 measurement:
+        # ~6,000 bills across all 100 senators — comparable to the official-
+        # titles fetch phase, which already handles a similar volume).
+        sponsored_bills_for_cosponsor = _build_current_term_sponsored_for_cosponsor(senator_prepared)
 
         if sponsored_bills_for_cosponsor:
             logger.info(
