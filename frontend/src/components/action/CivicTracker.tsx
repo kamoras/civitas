@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { localDateStr } from "@/lib/formatting";
+import { localDateStr, formatUtcDate } from "@/lib/formatting";
 
 const STORAGE_KEY = "civitas_actions";
 
@@ -52,14 +52,8 @@ function computeStreak(actions: CivicAction[]): number {
   return streak;
 }
 
-function formatDate(dateStr: string): string {
-  try {
-    const d = new Date(dateStr + "T00:00:00");
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  } catch {
-    return dateStr;
-  }
-}
+const formatDate = (dateStr: string): string =>
+  formatUtcDate(dateStr, { month: "short", day: "numeric" }, "en-US");
 
 // Custom event so LogActionButton can notify the widget without prop drilling
 const TRACKER_EVENT = "civitas:action-logged";

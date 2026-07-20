@@ -8,7 +8,7 @@ import { STATES } from "@/data/states";
 import { PARTY_COLORS, PARTY_BORDER, PARTY_BG } from "@/lib/partyStyles";
 import { getScoreBgColor } from "@/lib/representation";
 import { useCopyFeedback } from "@/hooks/useCopyFeedback";
-import type { ActionIssue, MyRepRep, MyRepSenator, MyRepsResponse } from "@/types/action";
+import type { ActionIssue, MyRepSenator, MyRepsResponse } from "@/types/action";
 
 function ContactScript({
   name,
@@ -112,33 +112,40 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
   );
 }
 
-function SenatorCard({ senator }: { senator: MyRepSenator }) {
-  const s = senator.scores;
+// One card for both senators and representatives — the House-only district
+// (shown as `STATE-NN` and a DISTRICT line) is the sole difference.
+function RepresentativeCard({ person, district }: { person: MyRepSenator; district?: number }) {
+  const s = person.scores;
 
   return (
     <div
-      className={`terminal-window border ${PARTY_BORDER[senator.party]} ${PARTY_BG[senator.party]} p-5`}
+      className={`terminal-window border ${PARTY_BORDER[person.party]} ${PARTY_BG[person.party]} p-5`}
     >
       <div className="flex items-start justify-between gap-3 mb-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <span
-              className={`font-pixel text-xs px-1.5 py-0.5 border ${PARTY_BORDER[senator.party]} ${PARTY_COLORS[senator.party]}`}
+              className={`font-pixel text-xs px-1.5 py-0.5 border ${PARTY_BORDER[person.party]} ${PARTY_COLORS[person.party]}`}
             >
-              {senator.party}
+              {person.party}
             </span>
             <span className="text-matrix-green/40 text-[10px] font-pixel">
-              {senator.state}
+              {district != null ? `${person.state}-${district}` : person.state}
             </span>
-            {senator.yearsInOffice > 0 && (
+            {person.yearsInOffice > 0 && (
               <span className="text-matrix-green/50 text-[10px] font-pixel">
-                {senator.yearsInOffice}yr{senator.yearsInOffice !== 1 ? "s" : ""}
+                {person.yearsInOffice}yr{person.yearsInOffice !== 1 ? "s" : ""}
               </span>
             )}
           </div>
           <h3 className="font-pixel text-base sm:text-lg text-matrix-green leading-snug">
-            {senator.name}
+            {person.name}
           </h3>
+          {district != null && (
+            <div className="text-[10px] text-neon-cyan/40 font-pixel mt-0.5">
+              DISTRICT {district}
+            </div>
+          )}
         </div>
         <div className="text-right shrink-0">
           <div className="font-pixel text-2xl text-matrix-green">{Math.round(s.overall)}</div>
@@ -153,95 +160,13 @@ function SenatorCard({ senator }: { senator: MyRepSenator }) {
         <ScoreBar label={SCORE_TERMS["legislativeEffectiveness"].shortLabel} value={s.legislativeEffectiveness} />
       </div>
 
-      {senator.connectedIssues.length > 0 && (
+      {person.connectedIssues.length > 0 && (
         <div className="border-t border-matrix-green/10 pt-3 mb-3">
           <h4 className="font-pixel text-[10px] text-neon-cyan/60 mb-2">
             CONNECTED TO TODAY&apos;S ISSUES
           </h4>
           <div className="space-y-1.5">
-            {senator.connectedIssues.map((iss) => (
-              <div
-                key={iss.id}
-                className="flex items-start gap-2 text-sm"
-              >
-                <span className="text-[10px] font-pixel text-neon-cyan/40 shrink-0 mt-0.5">
-                  #{iss.rank}
-                </span>
-                <span className="text-matrix-green/70 leading-snug">{iss.title}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <Link
-        href={`/politicians/${senator.id}`}
-        className="inline-block font-pixel text-[10px] text-neon-cyan border border-neon-cyan/30 px-3 py-1.5 hover:bg-neon-cyan/10 transition-colors"
-      >
-        VIEW FULL SCORECARD →
-      </Link>
-
-      <ContactScript
-        name={senator.name}
-        stateName={STATES.find((s) => s.code === senator.state)?.name || senator.state}
-        phone={senator.officePhone}
-        contactFormUrl={senator.contactFormUrl}
-      />
-    </div>
-  );
-}
-
-function RepCard({ rep }: { rep: MyRepRep }) {
-  const s = rep.scores;
-
-  return (
-    <div
-      className={`terminal-window border ${PARTY_BORDER[rep.party]} ${PARTY_BG[rep.party]} p-5`}
-    >
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span
-              className={`font-pixel text-xs px-1.5 py-0.5 border ${PARTY_BORDER[rep.party]} ${PARTY_COLORS[rep.party]}`}
-            >
-              {rep.party}
-            </span>
-            <span className="text-matrix-green/40 text-[10px] font-pixel">
-              {rep.state}-{rep.district}
-            </span>
-            {rep.yearsInOffice > 0 && (
-              <span className="text-matrix-green/50 text-[10px] font-pixel">
-                {rep.yearsInOffice}yr{rep.yearsInOffice !== 1 ? "s" : ""}
-              </span>
-            )}
-          </div>
-          <h3 className="font-pixel text-base sm:text-lg text-matrix-green leading-snug">
-            {rep.name}
-          </h3>
-          <div className="text-[10px] text-neon-cyan/40 font-pixel mt-0.5">
-            DISTRICT {rep.district}
-          </div>
-        </div>
-        <div className="text-right shrink-0">
-          <div className="font-pixel text-2xl text-matrix-green">{Math.round(s.overall)}</div>
-          <div className="text-[10px] text-matrix-green/40 font-pixel">OVERALL</div>
-        </div>
-      </div>
-
-      {/* v6.5: fundingDiversity folded into fundingIndependence, no longer its own dimension */}
-      <div className="space-y-1.5 mb-4">
-        <ScoreBar label={SCORE_TERMS["fundingIndependence"].shortLabel} value={s.fundingIndependence} />
-        <ScoreBar label={SCORE_TERMS["independentVoting"].shortLabel} value={s.independentVoting} />
-        <ScoreBar label={SCORE_TERMS["legislativeEffectiveness"].shortLabel} value={s.legislativeEffectiveness} />
-      </div>
-
-      {rep.connectedIssues.length > 0 && (
-        <div className="border-t border-matrix-green/10 pt-3 mb-3">
-          <h4 className="font-pixel text-[10px] text-neon-cyan/60 mb-2">
-            CONNECTED TO TODAY&apos;S ISSUES
-          </h4>
-          <div className="space-y-1.5">
-            {rep.connectedIssues.map((iss) => (
+            {person.connectedIssues.map((iss) => (
               <div key={iss.id} className="flex items-start gap-2 text-sm">
                 <span className="text-[10px] font-pixel text-neon-cyan/40 shrink-0 mt-0.5">
                   #{iss.rank}
@@ -254,17 +179,17 @@ function RepCard({ rep }: { rep: MyRepRep }) {
       )}
 
       <Link
-        href={`/politicians/${rep.id}`}
+        href={`/politicians/${person.id}`}
         className="inline-block font-pixel text-[10px] text-neon-cyan border border-neon-cyan/30 px-3 py-1.5 hover:bg-neon-cyan/10 transition-colors"
       >
         VIEW FULL SCORECARD →
       </Link>
 
       <ContactScript
-        name={rep.name}
-        stateName={STATES.find((s) => s.code === rep.state)?.name || rep.state}
-        phone={rep.officePhone}
-        contactFormUrl={rep.contactFormUrl}
+        name={person.name}
+        stateName={STATES.find((st) => st.code === person.state)?.name || person.state}
+        phone={person.officePhone}
+        contactFormUrl={person.contactFormUrl}
       />
     </div>
   );
@@ -439,7 +364,7 @@ export default function MyRepsTab({
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {data.senators.map((senator) => (
-                  <SenatorCard key={senator.id} senator={senator} />
+                  <RepresentativeCard key={senator.id} person={senator} />
                 ))}
               </div>
             </div>
@@ -452,7 +377,7 @@ export default function MyRepsTab({
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {data.representatives.map((rep) => (
-                  <RepCard key={rep.id} rep={rep} />
+                  <RepresentativeCard key={rep.id} person={rep} district={rep.district} />
                 ))}
               </div>
             </div>
