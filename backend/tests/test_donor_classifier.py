@@ -185,3 +185,59 @@ class TestHybridClassification:
         ]
         result = await classify_donors_hybrid(donors, db_session=db_session)
         assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_does_not_block_the_event_loop(self):
+        """classify_donors_hybrid must run its CPU-bound work off the event
+        loop (asyncio.to_thread), not directly on it — a full Senate run's
+        ~18k donors blocking the loop for minutes is what took down
+        production on 2026-07-21: nothing else on the process, including
+        the /api/health endpoint Docker's healthcheck polls, could respond,
+        so Docker killed the "unhealthy" container mid-pipeline. This
+        doesn't call the real classifier (too slow/model-dependent for a
+        unit test) — it stands in a blocking time.sleep for the sync body
+        and races it against a concurrently-running coroutine of known
+        duration.
+
+        Elapsed time, not tick count, is the discriminator here:
+        asyncio.gather always waits for BOTH coroutines to finish either
+        way, so a version of this test that only checked "did the ticker
+        complete" would pass whether or not the sleep actually overlapped
+        with it. If the sync body runs on the event loop's own thread
+        (the bug), gather's total wall time is sleep_time + ticker_time
+        (sequential — the ticker can't make progress until the blocking
+        call releases the thread). If it runs in a separate thread (the
+        fix), total wall time is ~max(sleep_time, ticker_time) (they
+        overlap). Live-verified both ways while writing this fix: ~0.70s
+        with the sync body inlined (the pre-fix shape), ~0.40s through
+        asyncio.to_thread (the shipped fix, sleep_time=0.3s < ticker_time=0.4s
+        so ticker dominates)."""
+        import asyncio
+        import time
+        from app.pipeline.analyze import donor_classifier_ai
+
+        def fake_sync_classify(donors, db_session, on_progress, candidate_name):
+            time.sleep(0.3)
+            return {}
+
+        async def ticker():
+            for _ in range(20):
+                await asyncio.sleep(0.02)
+
+        with patch.object(
+            donor_classifier_ai, "_classify_donors_hybrid_sync", fake_sync_classify,
+        ):
+            start = time.monotonic()
+            await asyncio.gather(
+                classify_donors_hybrid([{"name": "X"}]),
+                ticker(),
+            )
+            elapsed = time.monotonic() - start
+
+        # Sequential (blocked loop) would be ~0.3 + 0.4 = 0.7s; concurrent
+        # (fixed) is ~max(0.3, 0.4) = 0.4s. 0.55s cleanly separates them.
+        assert elapsed < 0.55, (
+            f"gather took {elapsed:.2f}s (expected ~0.4s if concurrent) — "
+            "the sync classification body is blocking the event loop's own "
+            "thread instead of running in a worker thread"
+        )

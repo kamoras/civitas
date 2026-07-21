@@ -51,6 +51,7 @@ References
 - Yarowsky, D. (1995). ACL, 189-196.
 """
 
+import asyncio
 import logging
 import re
 
@@ -459,6 +460,22 @@ async def classify_donors_hybrid(
 ) -> dict[str, dict]:
     """Classify donors using the full tiered strategy.
 
+    Thin async wrapper around _classify_donors_hybrid_sync, run in a worker
+    thread via asyncio.to_thread. The sync function is 100% CPU-bound
+    (sentence-transformer embedding calls, no I/O) and previously ran
+    directly on the event loop despite the `async def` — for a full Senate
+    run's ~18k unique donors that blocked the event loop for minutes
+    straight, during which nothing else on the process (including the
+    /api/health endpoint Docker's healthcheck polls) could respond. Docker
+    then killed the "unhealthy" container mid-pipeline (observed 2026-07-21,
+    pipeline runs #90 and #91 both died here), which is a stronger failure
+    mode than merely blocking user traffic: it aborts the run entirely and,
+    since Swarm restarts a fresh container, silently loses all progress.
+    asyncio.to_thread doesn't parallelize the classification itself (the GIL
+    still serializes CPU-bound Python), but it lets the event loop's own
+    thread keep servicing the health check and other requests during the
+    (same total) time this takes to run.
+
     Args:
         donors: List of dicts with 'name' and optionally 'amount', 'fec_receipt'.
         db_session: SQLAlchemy session for learning store access.
@@ -468,6 +485,19 @@ async def classify_donors_hybrid(
     Returns:
         Dict mapping UPPERCASE donor name -> {type, industry, skip}
     """
+    return await asyncio.to_thread(
+        _classify_donors_hybrid_sync, donors, db_session, on_progress, candidate_name,
+    )
+
+
+def _classify_donors_hybrid_sync(
+    donors: list[dict],
+    db_session: Session | None = None,
+    on_progress=None,
+    candidate_name: str | None = None,
+) -> dict[str, dict]:
+    """Synchronous body of classify_donors_hybrid — see that function's
+    docstring for why it's called via a thread instead of directly."""
     if not donors:
         return {}
 
