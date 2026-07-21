@@ -1287,6 +1287,78 @@ function PipelineStatusRow({
   );
 }
 
+// Generic per-pipeline "last run" detail card: status/started/duration/error
+// plus the full step breakdown, for any pipeline type that shares that base
+// shape (HouseRunInfo, StockTradesRunInfo, SupplementaryRunInfo all do — see
+// api.ts). Senate's own equivalent card is hand-written below with its
+// richer, senate-specific stats (senators/bills/LLM calls/cache hit rate)
+// left as-is rather than folded into this generic shape, to avoid touching
+// working code — but before this, House/Stock Trades/Supplementary had no
+// equivalent detail card at all, only a compact one-line status row in the
+// System section below with steps collapsed inside it. This gives them the
+// same prominent, dedicated view Senate already had.
+function PipelineRunDetailCard({
+  title,
+  run,
+  extraStats,
+}: {
+  title: string;
+  run:
+    | {
+        status: string;
+        startedAt: string | null;
+        completedAt: string | null;
+        elapsedSeconds: number | null;
+        errorMessage: string | null;
+        progressSteps?: PipelineStepInfo[] | null;
+      }
+    | null
+    | undefined;
+  extraStats?: ReactNode;
+}) {
+  if (!run) return null;
+  return (
+    <div className="terminal-window mb-6">
+      <TerminalTitlebar title={title} />
+      <div className="p-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm font-terminal">
+          <div>
+            <span className="text-matrix-green/50 text-xs block">STATUS</span>
+            <span
+              className={
+                run.status === "completed"
+                  ? "text-matrix-green"
+                  : run.status === "failed"
+                    ? "text-neon-pink"
+                    : "text-neon-cyan"
+              }
+            >
+              {run.status.toUpperCase()}
+            </span>
+          </div>
+          <div>
+            <span className="text-matrix-green/50 text-xs block">STARTED</span>
+            <span>{formatTime(run.startedAt)}</span>
+          </div>
+          <div>
+            <span className="text-matrix-green/50 text-xs block">DURATION</span>
+            <span>{formatDuration(run.elapsedSeconds)}</span>
+          </div>
+          {extraStats}
+        </div>
+        {run.errorMessage && (
+          <div className="mt-3 p-2 border border-neon-pink/30 rounded bg-neon-pink/5">
+            <span className="text-neon-pink text-xs font-terminal">
+              ERROR: {run.errorMessage}
+            </span>
+          </div>
+        )}
+        <LastRunSteps steps={run.progressSteps} />
+      </div>
+    </div>
+  );
+}
+
 function LastRunSteps({ steps }: { steps?: PipelineStepInfo[] | null }) {
   const [expanded, setExpanded] = useState(false);
   if (!steps || steps.length === 0) return null;
@@ -1813,6 +1885,7 @@ function AdminDashboardView({
                     })()}
                   </span>
                 </div>
+                <LastRunSteps steps={pipelineStatus?.lastRun?.progressSteps} />
 
                 {/* House pipeline */}
                 {(() => {
@@ -2325,6 +2398,69 @@ function AdminDashboardView({
             </div>
           </div>
         )}
+
+        <PipelineRunDetailCard
+          title="last_run_detail_house"
+          run={pipelineStatus?.houseLastRun}
+          extraStats={
+            pipelineStatus?.houseLastRun && (
+              <div>
+                <span className="text-matrix-green/50 text-xs block">REPS</span>
+                <span>
+                  {pipelineStatus.houseLastRun.repsProcessed}/{pipelineStatus.houseLastRun.repsTotal}
+                  {pipelineStatus.houseLastRun.repsFailed > 0 && (
+                    <span className="text-neon-pink ml-1">
+                      ({pipelineStatus.houseLastRun.repsFailed} failed)
+                    </span>
+                  )}
+                </span>
+              </div>
+            )
+          }
+        />
+
+        <PipelineRunDetailCard
+          title="last_run_detail_stock_trades"
+          run={pipelineStatus?.stockTradesLastRun}
+          extraStats={
+            pipelineStatus?.stockTradesLastRun && (
+              <div>
+                <span className="text-matrix-green/50 text-xs block">TRADES INGESTED</span>
+                <span>
+                  {pipelineStatus.stockTradesLastRun.houseTradesIngested}H /{" "}
+                  {pipelineStatus.stockTradesLastRun.senateTradesIngested}S
+                </span>
+              </div>
+            )
+          }
+        />
+
+        <PipelineRunDetailCard
+          title="last_run_detail_supplementary"
+          run={pipelineStatus?.supplementaryLastRun}
+          extraStats={
+            pipelineStatus?.supplementaryLastRun && (
+              <>
+                <div>
+                  <span className="text-matrix-green/50 text-xs block">EXPLORE DOCS</span>
+                  <span>{pipelineStatus.supplementaryLastRun.exploreDocsIngested}</span>
+                </div>
+                <div>
+                  <span className="text-matrix-green/50 text-xs block">SCOTUS</span>
+                  <span>
+                    {pipelineStatus.supplementaryLastRun.justicesSkipped
+                      ? "skipped"
+                      : `${pipelineStatus.supplementaryLastRun.justicesScored} scored`}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-matrix-green/50 text-xs block">PRESIDENTS</span>
+                  <span>{pipelineStatus.supplementaryLastRun.presidentsUpdated}</span>
+                </div>
+              </>
+            )
+          }
+        />
 
         {/* LLM Stats */}
         {d?.llm && Object.keys(d.llm).length > 0 && (
