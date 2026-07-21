@@ -366,6 +366,15 @@ body {
 [class*="text-neon-pink/80"]:not(:hover) {
   color: rgb(255 0 255 / 0.9) !important; /* neon-pink/90 -> ~4.9:1 — needs to be nearly opaque */
 }
+/* red-400 (#f87171) is the error/empty-state color (fetch failures on
+   /politicians, /bills, president "KEY FAILURES"). Full opacity clears
+   ~7.5:1, but the /50 and /60 steps in use composite toward #0d0208 and
+   fall under 4.5:1 (Lighthouse a11y flagged the rendered error state).
+   Clamp those steps to full opacity — same approach as the colors above. */
+[class*="text-red-400/50"]:not(:hover),
+[class*="text-red-400/60"]:not(:hover) {
+  color: rgb(248 113 113 / 1) !important; /* red-400 -> ~7.5:1 */
+}
 
 /* dem-blue (#0066ff, 4.22:1) and ind-purple (#9933ff, 4.15:1) both fail
    4.5:1 even at full opacity — not an opacity problem, the base color
