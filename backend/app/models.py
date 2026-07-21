@@ -510,8 +510,6 @@ class President(Base):
     term_end: Mapped[str | None] = mapped_column(String, nullable=True)
     is_current: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    score_independence: Mapped[float] = mapped_column(Float, default=0.0)
-    score_follow_through: Mapped[float] = mapped_column(Float, default=0.0)
     score_public_mandate: Mapped[float] = mapped_column(Float, default=0.0)
     score_effectiveness: Mapped[float] = mapped_column(Float, default=0.0)
     score_competence: Mapped[float] = mapped_column(Float, default=0.0)

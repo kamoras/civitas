@@ -145,8 +145,6 @@ async def run_president_pipeline(db: Session) -> dict:
             president.rulemaking_finalized_pct = rulemaking_data[pid]["rulemaking_finalized_pct"]
 
         seed_scores = {
-            "score_independence": president.score_independence,
-            "score_follow_through": president.score_follow_through,
             "score_public_mandate": president.score_public_mandate,
             "score_effectiveness": president.score_effectiveness,
             "score_competence": president.score_competence,

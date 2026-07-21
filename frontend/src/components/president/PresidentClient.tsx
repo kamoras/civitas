@@ -22,8 +22,6 @@ function getPartyMeta(party: string) {
 }
 
 const METRIC_LABELS: { key: keyof President["score"]; label: string; desc: string; alwaysEstimate?: boolean }[] = [
-  { key: "independence", label: "INDEPENDENCE", desc: "Cabinet & advisor independence from corporate/lobbyist influence", alwaysEstimate: true },
-  { key: "followThrough", label: "FOLLOW-THROUGH", desc: "Campaign promise to executive/legislative action ratio", alwaysEstimate: true },
   { key: "publicMandate", label: "PUBLIC MANDATE", desc: "Approval trajectory and coalition retention", alwaysEstimate: true },
   { key: "effectiveness", label: "EFFECTIVENESS", desc: "GDP growth, job creation, and tangible outcomes for voters" },
   { key: "competence", label: "COMPETENCE", desc: "Executive order activity rate and administrative execution. Court-success and cabinet-turnover rates have no live data source and are not currently part of this score." },

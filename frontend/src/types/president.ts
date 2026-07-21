@@ -1,6 +1,4 @@
 export interface PresidentialScore {
-  independence: number;
-  followThrough: number;
   publicMandate: number;
   effectiveness: number;
   competence: number;

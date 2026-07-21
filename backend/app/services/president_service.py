@@ -7,6 +7,22 @@ and the American Presidency Project.
 Dynamic scoring for recent presidents (Clinton onward) is handled by
 the president pipeline, which fetches live data from the Federal Register
 and BLS APIs and recalculates affected metrics.
+
+Independence and Follow-Through removed entirely (2026-07): both were
+always 100% hand-set per-president values with no live formula and, unlike
+the citations above (which back real, checkable per-metric figures — e.g.
+avg_approval literally IS a Gallup/APP number), no per-metric sourcing
+existed for these two beyond a one-time editorial judgment call, never
+revisited. Same precedent as senators' Promise Persistence removal (v6.0,
+config_definitions.py) after 4 failed attempts at a real formula: rather
+than keep presenting a hand-set number as a computed score, remove it and
+redistribute its weight to dimensions with a genuine live-or-cited basis.
+Independence's obvious real data source (OpenSecrets' revolving-door API)
+was itself discontinued in 2025 — there is currently no viable free,
+structured path to compute it; Follow-Through would need the same
+platform-text-vs-action embedding match already proven unworkable for
+senators. See PRESIDENT_SCORE_WEIGHTS (config_definitions.py) for the
+redistribution.
 """
 
 import json
@@ -24,7 +40,7 @@ from app.schemas import (
 
 logger = logging.getLogger(__name__)
 
-SEED_VERSION = 3  # bump to re-seed after schema/data changes
+SEED_VERSION = 4  # bump to re-seed after schema/data changes
 
 # fmt: off
 SEED_PRESIDENTS: list[dict] = [
@@ -32,7 +48,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "washington-1", "name": "George Washington", "party": "I", "number": 1,
         "term_start": "1789-04-30", "term_end": "1797-03-04",
-        "score_independence": 85, "score_follow_through": 72,
         "score_public_mandate": 90, "score_effectiveness": 70, "score_competence": 88, "score_agency_alignment": 72,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 8, "eo_court_success_pct": None, "cabinet_turnover_pct": 20.0,
@@ -43,7 +58,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "adams-2", "name": "John Adams", "party": "F", "number": 2,
         "term_start": "1797-03-04", "term_end": "1801-03-04",
-        "score_independence": 70, "score_follow_through": 50,
         "score_public_mandate": 42, "score_effectiveness": 48, "score_competence": 58, "score_agency_alignment": 55,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 1, "eo_court_success_pct": None, "cabinet_turnover_pct": 25.0,
@@ -54,7 +68,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "jefferson-3", "name": "Thomas Jefferson", "party": "DR", "number": 3,
         "term_start": "1801-03-04", "term_end": "1809-03-04",
-        "score_independence": 68, "score_follow_through": 75,
         "score_public_mandate": 78, "score_effectiveness": 72, "score_competence": 65, "score_agency_alignment": 58,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 4, "eo_court_success_pct": None, "cabinet_turnover_pct": 15.0,
@@ -65,7 +78,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "madison-4", "name": "James Madison", "party": "DR", "number": 4,
         "term_start": "1809-03-04", "term_end": "1817-03-04",
-        "score_independence": 60, "score_follow_through": 52,
         "score_public_mandate": 55, "score_effectiveness": 48, "score_competence": 58, "score_agency_alignment": 42,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 1, "eo_court_success_pct": None, "cabinet_turnover_pct": 30.0,
@@ -76,7 +88,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "monroe-5", "name": "James Monroe", "party": "DR", "number": 5,
         "term_start": "1817-03-04", "term_end": "1825-03-04",
-        "score_independence": 62, "score_follow_through": 65,
         "score_public_mandate": 82, "score_effectiveness": 62, "score_competence": 65, "score_agency_alignment": 62,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 1, "eo_court_success_pct": None, "cabinet_turnover_pct": 10.0,
@@ -87,7 +98,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "jqadams-6", "name": "John Quincy Adams", "party": "DR", "number": 6,
         "term_start": "1825-03-04", "term_end": "1829-03-04",
-        "score_independence": 75, "score_follow_through": 38,
         "score_public_mandate": 30, "score_effectiveness": 42, "score_competence": 55, "score_agency_alignment": 38,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 3, "eo_court_success_pct": None, "cabinet_turnover_pct": 5.0,
@@ -98,7 +108,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "jackson-7", "name": "Andrew Jackson", "party": "D", "number": 7,
         "term_start": "1829-03-04", "term_end": "1837-03-04",
-        "score_independence": 55, "score_follow_through": 72,
         "score_public_mandate": 75, "score_effectiveness": 50, "score_competence": 55, "score_agency_alignment": 48,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 12, "eo_court_success_pct": None, "cabinet_turnover_pct": 50.0,
@@ -109,7 +118,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "vanburen-8", "name": "Martin Van Buren", "party": "D", "number": 8,
         "term_start": "1837-03-04", "term_end": "1841-03-04",
-        "score_independence": 52, "score_follow_through": 35,
         "score_public_mandate": 35, "score_effectiveness": 25, "score_competence": 42, "score_agency_alignment": 38,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 10, "eo_court_success_pct": None, "cabinet_turnover_pct": 10.0,
@@ -120,7 +128,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "harrison-9", "name": "William Henry Harrison", "party": "W", "number": 9,
         "term_start": "1841-03-04", "term_end": "1841-04-04",
-        "score_independence": 50, "score_follow_through": 10,
         "score_public_mandate": 55, "score_effectiveness": 10, "score_competence": 30, "score_agency_alignment": 10,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 0, "eo_court_success_pct": None, "cabinet_turnover_pct": 0.0,
@@ -131,7 +138,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "tyler-10", "name": "John Tyler", "party": "W", "number": 10,
         "term_start": "1841-04-04", "term_end": "1845-03-04",
-        "score_independence": 60, "score_follow_through": 35,
         "score_public_mandate": 22, "score_effectiveness": 38, "score_competence": 42, "score_agency_alignment": 28,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 17, "eo_court_success_pct": None, "cabinet_turnover_pct": 70.0,
@@ -143,7 +149,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "polk-11", "name": "James K. Polk", "party": "D", "number": 11,
         "term_start": "1845-03-04", "term_end": "1849-03-04",
-        "score_independence": 60, "score_follow_through": 92,
         "score_public_mandate": 55, "score_effectiveness": 65, "score_competence": 75, "score_agency_alignment": 78,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 18, "eo_court_success_pct": None, "cabinet_turnover_pct": 5.0,
@@ -154,7 +159,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "taylor-12", "name": "Zachary Taylor", "party": "W", "number": 12,
         "term_start": "1849-03-04", "term_end": "1850-07-09",
-        "score_independence": 58, "score_follow_through": 25,
         "score_public_mandate": 50, "score_effectiveness": 30, "score_competence": 40, "score_agency_alignment": 25,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 5, "eo_court_success_pct": None, "cabinet_turnover_pct": 0.0,
@@ -165,7 +169,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "fillmore-13", "name": "Millard Fillmore", "party": "W", "number": 13,
         "term_start": "1850-07-09", "term_end": "1853-03-04",
-        "score_independence": 38, "score_follow_through": 40,
         "score_public_mandate": 30, "score_effectiveness": 35, "score_competence": 42, "score_agency_alignment": 42,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 12, "eo_court_success_pct": None, "cabinet_turnover_pct": 15.0,
@@ -176,7 +179,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "pierce-14", "name": "Franklin Pierce", "party": "D", "number": 14,
         "term_start": "1853-03-04", "term_end": "1857-03-04",
-        "score_independence": 30, "score_follow_through": 35,
         "score_public_mandate": 28, "score_effectiveness": 22, "score_competence": 28, "score_agency_alignment": 35,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 35, "eo_court_success_pct": None, "cabinet_turnover_pct": 5.0,
@@ -187,7 +189,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "buchanan-15", "name": "James Buchanan", "party": "D", "number": 15,
         "term_start": "1857-03-04", "term_end": "1861-03-04",
-        "score_independence": 25, "score_follow_through": 20,
         "score_public_mandate": 20, "score_effectiveness": 12, "score_competence": 18, "score_agency_alignment": 15,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 16, "eo_court_success_pct": None, "cabinet_turnover_pct": 30.0,
@@ -198,7 +199,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "lincoln-16", "name": "Abraham Lincoln", "party": "R", "number": 16,
         "term_start": "1861-03-04", "term_end": "1865-04-15",
-        "score_independence": 82, "score_follow_through": 90,
         "score_public_mandate": 72, "score_effectiveness": 85, "score_competence": 92, "score_agency_alignment": 75,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 48, "eo_court_success_pct": None, "cabinet_turnover_pct": 35.0,
@@ -209,7 +209,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "ajohnson-17", "name": "Andrew Johnson", "party": "D", "number": 17,
         "term_start": "1865-04-15", "term_end": "1869-03-04",
-        "score_independence": 40, "score_follow_through": 22,
         "score_public_mandate": 18, "score_effectiveness": 18, "score_competence": 20, "score_agency_alignment": 18,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 79, "eo_court_success_pct": None, "cabinet_turnover_pct": 40.0,
@@ -220,7 +219,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "grant-18", "name": "Ulysses S. Grant", "party": "R", "number": 18,
         "term_start": "1869-03-04", "term_end": "1877-03-04",
-        "score_independence": 48, "score_follow_through": 58,
         "score_public_mandate": 52, "score_effectiveness": 48, "score_competence": 42, "score_agency_alignment": 35,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 217, "eo_court_success_pct": None, "cabinet_turnover_pct": 45.0,
@@ -231,7 +229,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "hayes-19", "name": "Rutherford B. Hayes", "party": "R", "number": 19,
         "term_start": "1877-03-04", "term_end": "1881-03-04",
-        "score_independence": 58, "score_follow_through": 42,
         "score_public_mandate": 30, "score_effectiveness": 42, "score_competence": 52, "score_agency_alignment": 48,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 92, "eo_court_success_pct": None, "cabinet_turnover_pct": 15.0,
@@ -242,7 +239,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "garfield-20", "name": "James A. Garfield", "party": "R", "number": 20,
         "term_start": "1881-03-04", "term_end": "1881-09-19",
-        "score_independence": 60, "score_follow_through": 15,
         "score_public_mandate": 48, "score_effectiveness": 15, "score_competence": 35, "score_agency_alignment": 15,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 6, "eo_court_success_pct": None, "cabinet_turnover_pct": 0.0,
@@ -254,7 +250,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "arthur-21", "name": "Chester A. Arthur", "party": "R", "number": 21,
         "term_start": "1881-09-19", "term_end": "1885-03-04",
-        "score_independence": 62, "score_follow_through": 52,
         "score_public_mandate": 40, "score_effectiveness": 45, "score_competence": 55, "score_agency_alignment": 60,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 96, "eo_court_success_pct": None, "cabinet_turnover_pct": 20.0,
@@ -265,7 +260,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "cleveland-22", "name": "Grover Cleveland", "party": "D", "number": 22,
         "term_start": "1885-03-04", "term_end": "1889-03-04",
-        "score_independence": 65, "score_follow_through": 55,
         "score_public_mandate": 48, "score_effectiveness": 48, "score_competence": 58, "score_agency_alignment": 55,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 113, "eo_court_success_pct": None, "cabinet_turnover_pct": 10.0,
@@ -276,7 +270,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "bharrison-23", "name": "Benjamin Harrison", "party": "R", "number": 23,
         "term_start": "1889-03-04", "term_end": "1893-03-04",
-        "score_independence": 40, "score_follow_through": 48,
         "score_public_mandate": 35, "score_effectiveness": 40, "score_competence": 48, "score_agency_alignment": 42,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 143, "eo_court_success_pct": None, "cabinet_turnover_pct": 15.0,
@@ -287,7 +280,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "cleveland-24", "name": "Grover Cleveland", "party": "D", "number": 24,
         "term_start": "1893-03-04", "term_end": "1897-03-04",
-        "score_independence": 62, "score_follow_through": 42,
         "score_public_mandate": 35, "score_effectiveness": 28, "score_competence": 48, "score_agency_alignment": 38,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 140, "eo_court_success_pct": None, "cabinet_turnover_pct": 15.0,
@@ -298,7 +290,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "mckinley-25", "name": "William McKinley", "party": "R", "number": 25,
         "term_start": "1897-03-04", "term_end": "1901-09-14",
-        "score_independence": 40, "score_follow_through": 60,
         "score_public_mandate": 60, "score_effectiveness": 58, "score_competence": 55, "score_agency_alignment": 52,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 185, "eo_court_success_pct": None, "cabinet_turnover_pct": 10.0,
@@ -309,7 +300,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "troosevelt-26", "name": "Theodore Roosevelt", "party": "R", "number": 26,
         "term_start": "1901-09-14", "term_end": "1909-03-04",
-        "score_independence": 78, "score_follow_through": 82,
         "score_public_mandate": 80, "score_effectiveness": 75, "score_competence": 80, "score_agency_alignment": 82,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 1081, "eo_court_success_pct": None, "cabinet_turnover_pct": 20.0,
@@ -320,7 +310,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "taft-27", "name": "William Howard Taft", "party": "R", "number": 27,
         "term_start": "1909-03-04", "term_end": "1913-03-04",
-        "score_independence": 50, "score_follow_through": 45,
         "score_public_mandate": 32, "score_effectiveness": 45, "score_competence": 55, "score_agency_alignment": 58,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 724, "eo_court_success_pct": None, "cabinet_turnover_pct": 20.0,
@@ -331,7 +320,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "wilson-28", "name": "Woodrow Wilson", "party": "D", "number": 28,
         "term_start": "1913-03-04", "term_end": "1921-03-04",
-        "score_independence": 55, "score_follow_through": 65,
         "score_public_mandate": 55, "score_effectiveness": 55, "score_competence": 52, "score_agency_alignment": 68,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 1803, "eo_court_success_pct": None, "cabinet_turnover_pct": 25.0,
@@ -342,7 +330,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "harding-29", "name": "Warren G. Harding", "party": "R", "number": 29,
         "term_start": "1921-03-04", "term_end": "1923-08-02",
-        "score_independence": 22, "score_follow_through": 30,
         "score_public_mandate": 48, "score_effectiveness": 35, "score_competence": 18, "score_agency_alignment": 20,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 522, "eo_court_success_pct": None, "cabinet_turnover_pct": 15.0,
@@ -353,7 +340,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "coolidge-30", "name": "Calvin Coolidge", "party": "R", "number": 30,
         "term_start": "1923-08-02", "term_end": "1929-03-04",
-        "score_independence": 52, "score_follow_through": 55,
         "score_public_mandate": 58, "score_effectiveness": 50, "score_competence": 55, "score_agency_alignment": 48,
         "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 1203, "eo_court_success_pct": None, "cabinet_turnover_pct": 20.0,
@@ -364,7 +350,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "hoover-31", "name": "Herbert Hoover", "party": "R", "number": 31,
         "term_start": "1929-03-04", "term_end": "1933-03-04",
-        "score_independence": 52, "score_follow_through": 35,
         "score_public_mandate": 22, "score_effectiveness": 18, "score_competence": 35, "score_agency_alignment": 32,
         "avg_approval": None, "gdp_growth_avg": -8.0, "jobs_created_millions": None,
         "eo_count": 968, "eo_court_success_pct": None, "cabinet_turnover_pct": 10.0,
@@ -376,7 +361,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "fdr-32", "name": "Franklin D. Roosevelt", "party": "D", "number": 32,
         "term_start": "1933-03-04", "term_end": "1945-04-12",
-        "score_independence": 65, "score_follow_through": 85,
         "score_public_mandate": 75, "score_effectiveness": 72, "score_competence": 80, "score_agency_alignment": 88,
         "avg_approval": 63.0, "gdp_growth_avg": 9.4, "jobs_created_millions": None,
         "eo_count": 3721, "eo_court_success_pct": None, "cabinet_turnover_pct": None,
@@ -387,7 +371,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "truman-33", "name": "Harry S. Truman", "party": "D", "number": 33,
         "term_start": "1945-04-12", "term_end": "1953-01-20",
-        "score_independence": 62, "score_follow_through": 60,
         "score_public_mandate": 45, "score_effectiveness": 58, "score_competence": 65, "score_agency_alignment": 65,
         "avg_approval": 45.4, "gdp_growth_avg": 1.3, "jobs_created_millions": 8.4,
         "eo_count": 907, "eo_court_success_pct": None, "cabinet_turnover_pct": None,
@@ -398,7 +381,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "eisenhower-34", "name": "Dwight D. Eisenhower", "party": "R", "number": 34,
         "term_start": "1953-01-20", "term_end": "1961-01-20",
-        "score_independence": 50, "score_follow_through": 68,
         "score_public_mandate": 65, "score_effectiveness": 60, "score_competence": 75, "score_agency_alignment": 70,
         "avg_approval": 65.0, "gdp_growth_avg": 3.0, "jobs_created_millions": 3.5,
         "eo_count": 484, "eo_court_success_pct": None, "cabinet_turnover_pct": 25.0,
@@ -409,7 +391,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "jfk-35", "name": "John F. Kennedy", "party": "D", "number": 35,
         "term_start": "1961-01-20", "term_end": "1963-11-22",
-        "score_independence": 62, "score_follow_through": 52,
         "score_public_mandate": 70, "score_effectiveness": 62, "score_competence": 58, "score_agency_alignment": 58,
         "avg_approval": 70.1, "gdp_growth_avg": 4.3, "jobs_created_millions": 3.6,
         "eo_count": 214, "eo_court_success_pct": None, "cabinet_turnover_pct": 8.0,
@@ -420,7 +401,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "lbj-36", "name": "Lyndon B. Johnson", "party": "D", "number": 36,
         "term_start": "1963-11-22", "term_end": "1969-01-20",
-        "score_independence": 58, "score_follow_through": 78,
         "score_public_mandate": 55, "score_effectiveness": 65, "score_competence": 68, "score_agency_alignment": 78,
         "avg_approval": 55.1, "gdp_growth_avg": 5.3, "jobs_created_millions": 9.9,
         "eo_count": 325, "eo_court_success_pct": None, "cabinet_turnover_pct": 30.0,
@@ -431,7 +411,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "nixon-37", "name": "Richard Nixon", "party": "R", "number": 37,
         "term_start": "1969-01-20", "term_end": "1974-08-09",
-        "score_independence": 42, "score_follow_through": 55,
         "score_public_mandate": 49, "score_effectiveness": 42, "score_competence": 38, "score_agency_alignment": 62,
         "avg_approval": 49.1, "gdp_growth_avg": 3.0, "jobs_created_millions": 6.2,
         "eo_count": 346, "eo_court_success_pct": None, "cabinet_turnover_pct": 35.0,
@@ -442,7 +421,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "ford-38", "name": "Gerald Ford", "party": "R", "number": 38,
         "term_start": "1974-08-09", "term_end": "1977-01-20",
-        "score_independence": 55, "score_follow_through": 40,
         "score_public_mandate": 47, "score_effectiveness": 38, "score_competence": 55, "score_agency_alignment": 45,
         "avg_approval": 47.2, "gdp_growth_avg": 2.6, "jobs_created_millions": 1.8,
         "eo_count": 169, "eo_court_success_pct": None, "cabinet_turnover_pct": 20.0,
@@ -453,7 +431,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "carter-39", "name": "Jimmy Carter", "party": "D", "number": 39,
         "term_start": "1977-01-20", "term_end": "1981-01-20",
-        "score_independence": 72, "score_follow_through": 45,
         "score_public_mandate": 45, "score_effectiveness": 35, "score_competence": 42, "score_agency_alignment": 52,
         "avg_approval": 45.5, "gdp_growth_avg": 3.3, "jobs_created_millions": 10.3,
         "eo_count": 320, "eo_court_success_pct": None, "cabinet_turnover_pct": 30.0,
@@ -464,7 +441,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "reagan-40", "name": "Ronald Reagan", "party": "R", "number": 40,
         "term_start": "1981-01-20", "term_end": "1989-01-20",
-        "score_independence": 38, "score_follow_through": 72,
         "score_public_mandate": 53, "score_effectiveness": 58, "score_competence": 60, "score_agency_alignment": 55,
         "avg_approval": 52.8, "gdp_growth_avg": 3.5, "jobs_created_millions": 16.0,
         "eo_count": 381, "eo_court_success_pct": None, "cabinet_turnover_pct": 40.0,
@@ -475,7 +451,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "bush-41", "name": "George H.W. Bush", "party": "R", "number": 41,
         "term_start": "1989-01-20", "term_end": "1993-01-20",
-        "score_independence": 48, "score_follow_through": 48,
         "score_public_mandate": 61, "score_effectiveness": 45, "score_competence": 65, "score_agency_alignment": 60,
         "avg_approval": 60.9, "gdp_growth_avg": 2.2, "jobs_created_millions": 2.6,
         "eo_count": 166, "eo_court_success_pct": None, "cabinet_turnover_pct": 15.0,
@@ -486,7 +461,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "clinton-42", "name": "Bill Clinton", "party": "D", "number": 42,
         "term_start": "1993-01-20", "term_end": "2001-01-20",
-        "score_independence": 52, "score_follow_through": 68,
         "score_public_mandate": 55, "score_effectiveness": 78, "score_competence": 62, "score_agency_alignment": 70,
         "avg_approval": 55.1, "gdp_growth_avg": 3.9, "jobs_created_millions": 22.7,
         "eo_count": 364, "eo_court_success_pct": None, "cabinet_turnover_pct": 35.0,
@@ -497,7 +471,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "gwbush-43", "name": "George W. Bush", "party": "R", "number": 43,
         "term_start": "2001-01-20", "term_end": "2009-01-20",
-        "score_independence": 35, "score_follow_through": 55,
         "score_public_mandate": 49, "score_effectiveness": 38, "score_competence": 42, "score_agency_alignment": 45,
         "avg_approval": 49.4, "gdp_growth_avg": 2.1, "jobs_created_millions": 1.3,
         "eo_count": 291, "eo_court_success_pct": 75.0, "cabinet_turnover_pct": 40.0,
@@ -508,7 +481,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "obama-44", "name": "Barack Obama", "party": "D", "number": 44,
         "term_start": "2009-01-20", "term_end": "2017-01-20",
-        "score_independence": 55, "score_follow_through": 62,
         "score_public_mandate": 48, "score_effectiveness": 55, "score_competence": 65, "score_agency_alignment": 65,
         "avg_approval": 47.9, "gdp_growth_avg": 1.6, "jobs_created_millions": 11.6,
         "eo_count": 276, "eo_court_success_pct": 78.0, "cabinet_turnover_pct": 30.0,
@@ -519,7 +491,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "trump-45", "name": "Donald Trump", "party": "R", "number": 45,
         "term_start": "2017-01-20", "term_end": "2021-01-20",
-        "score_independence": 30, "score_follow_through": 48,
         "score_public_mandate": 41, "score_effectiveness": 48, "score_competence": 35, "score_agency_alignment": 35,
         "avg_approval": 41.1, "gdp_growth_avg": 1.5, "jobs_created_millions": -2.7,
         "eo_count": 220, "eo_court_success_pct": 55.0, "cabinet_turnover_pct": 65.0,
@@ -530,7 +501,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "biden-46", "name": "Joe Biden", "party": "D", "number": 46,
         "term_start": "2021-01-20", "term_end": "2025-01-20",
-        "score_independence": 55, "score_follow_through": 52,
         "score_public_mandate": 41, "score_effectiveness": 48, "score_competence": 52, "score_agency_alignment": 58,
         "avg_approval": 40.8, "gdp_growth_avg": 3.4, "jobs_created_millions": 16.6,
         "eo_count": 162, "eo_court_success_pct": 70.0, "cabinet_turnover_pct": 20.0,
@@ -541,7 +511,6 @@ SEED_PRESIDENTS: list[dict] = [
     {
         "id": "trump-47", "name": "Donald Trump", "party": "R", "number": 47,
         "term_start": "2025-01-20", "term_end": None, "is_current": True,
-        "score_independence": 30, "score_follow_through": 50,
         "score_public_mandate": 48, "score_effectiveness": 45, "score_competence": 38, "score_agency_alignment": 28,
         "avg_approval": 47.0, "gdp_growth_avg": None, "jobs_created_millions": None,
         "eo_count": 80, "eo_court_success_pct": 45.0, "cabinet_turnover_pct": 10.0,
@@ -578,8 +547,6 @@ def seed_presidents(db: Session) -> int:
             term_start=data["term_start"],
             term_end=data.get("term_end"),
             is_current=data.get("is_current", False),
-            score_independence=data.get("score_independence", 50),
-            score_follow_through=data.get("score_follow_through", 50),
             score_public_mandate=data.get("score_public_mandate", 50),
             score_effectiveness=data.get("score_effectiveness", 50),
             score_competence=data.get("score_competence", 50),
@@ -626,8 +593,6 @@ def _build_response(p: President) -> PresidentSchema:
         term_end=p.term_end,
         is_current=p.is_current,
         score=PresidentialScoreSchema(
-            independence=p.score_independence,
-            follow_through=p.score_follow_through,
             public_mandate=p.score_public_mandate,
             effectiveness=p.score_effectiveness,
             competence=p.score_competence,
@@ -672,10 +637,15 @@ def get_president_score_breakdown(db: Session, president_id: str) -> dict | None
     alone would fabricate a "live" breakdown that was never really
     computed for them.
 
-    Independence/Follow-Through/Public Mandate have no calc function at
-    all — always pure editorial seed values (see president_scorer.py
-    module docstring) — represented as {"seedOnly": True} for the frontend
-    to render as "editorial estimate," not a formula breakdown.
+    Public Mandate has no calc function yet — always a pure seed value
+    (see president_scorer.py module docstring) — represented as
+    {"seedOnly": True} for the frontend to render as "editorial estimate,"
+    not a formula breakdown. Independence and Follow-Through were removed
+    entirely (2026-07, see this module's docstring) rather than left in
+    this same seed-only state — no per-metric data source exists for them
+    at all, unlike Public Mandate which is a real Gallup/APP figure for
+    Truman onward and is on a path to a live formula (see the roadmap
+    note in president_scorer.py).
     """
     from app.pipeline.analyze.president_scorer import (
         _agency_alignment_core,
@@ -700,8 +670,6 @@ def get_president_score_breakdown(db: Session, president_id: str) -> dict | None
         return {"score": score, "seedOnly": True}
 
     return {
-        "independence": _seed_only(p.score_independence),
-        "followThrough": _seed_only(p.score_follow_through),
         "publicMandate": _seed_only(p.score_public_mandate),
         "competence": (
             _competence_core(
@@ -745,8 +713,6 @@ def get_president_leaderboard(db: Session) -> list[PresidentLeaderboardEntry]:
     entries = []
     for p in presidents:
         score = PresidentialScoreSchema(
-            independence=p.score_independence,
-            follow_through=p.score_follow_through,
             public_mandate=p.score_public_mandate,
             effectiveness=p.score_effectiveness,
             competence=p.score_competence,
