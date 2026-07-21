@@ -54,6 +54,7 @@ References
 import asyncio
 import logging
 import re
+import time
 
 import numpy as np
 from sqlalchemy.orm import Session
@@ -186,26 +187,38 @@ _SEMANTIC_PROTOTYPES = {
     "SKIP": _SKIP_PROTOTYPE,
 }
 
-# How many _store_donor_learning writes accumulate in one SQLAlchemy
-# transaction before an intermediate commit. SQLite allows exactly one
-# writer at a time; without this, a full Senate run's ~18k donors (up to
-# 2 writes each) all land in ONE transaction that stays open for the
-# entire ~3-minute classification pass (SQLAlchemy's default "begin on
-# first write, commit on session.commit()" behavior — see
+# Max wall-clock seconds any single SQLAlchemy transaction may span while
+# writing donor learning-store rows. SQLite allows exactly one writer at a
+# time; without a bound here, a full Senate run's ~18k donors (up to 2
+# _store_donor_learning writes each) all land in ONE transaction that stays
+# open for the entire classification pass (SQLAlchemy's default "begin on
+# first write, commit on session.commit()" — see
 # _classify_donors_hybrid_sync's final db_session.commit()). Every other
 # write anywhere in the app — including ordinary request traffic like
 # site-visit tracking — then either waits out the 30s SQLite busy_timeout
 # (database.py) or fails outright with "database is locked" (observed
-# 2026-07-21 in production: a live 500 on POST /api/track-visit while a
-# donor classification run was in progress). This was invisible before
-# classify_donors_hybrid ran on the event loop (nothing else could run
-# concurrently with it anyway — see that function's docstring for the
-# unrelated bug that was); moving it to a worker thread surfaced this
-# separate, real one. 500 is short enough that no single batch takes
-# more than a few seconds even on Pi-class CPU, so other writers are
-# never blocked for long, while still being far fewer commits than
-# committing every donor individually.
-_COMMIT_BATCH_SIZE = 500
+# live in production 2026-07-21, twice: a 500 on POST /api/track-visit,
+# followed by the container going unhealthy and getting killed — both
+# times while a donor classification run was in progress). This was
+# invisible before classify_donors_hybrid ran on the event loop (nothing
+# else could run concurrently with it anyway — see that function's
+# docstring for the unrelated bug that was); moving it to a worker thread
+# surfaced this separate, real one.
+#
+# This is a TIME bound, not a donor-count bound, and that distinction is
+# the fix: an earlier version of this constant capped the batch at 500
+# donors, reasoning that 500 plain DB writes take at most a few seconds.
+# That reasoning didn't hold — most donors in this loop also need a real
+# sentence-transformer encode() call (the semantic tier, or the
+# candidate-affiliated check), which is 10-100x slower than a DB write and
+# highly variable per name. Live-observed: contention hit again with the
+# count-based version, ~100 seconds and roughly ~100 donors into a run —
+# nowhere near the 500-donor mark, because per-donor cost was far higher
+# than assumed. A count threshold can only bound wall-clock duration if
+# per-item cost is roughly constant; it isn't here. Time is the actual
+# thing every other writer is waiting on, so bound that directly instead
+# of a proxy for it.
+_COMMIT_INTERVAL_SECONDS = 2.0
 
 _semantic_embeddings: dict[str, np.ndarray] | None = None
 
@@ -577,9 +590,11 @@ def _classify_donors_hybrid_sync(
     # has a strong positive signal for a different industry.
     _CORRECTION_THRESHOLD = 0.25
 
-    for i, donor in enumerate(unique_donors):
-        if db_session is not None and i > 0 and i % _COMMIT_BATCH_SIZE == 0:
+    last_commit = time.monotonic()
+    for donor in unique_donors:
+        if db_session is not None and time.monotonic() - last_commit > _COMMIT_INTERVAL_SECONDS:
             db_session.commit()
+            last_commit = time.monotonic()
 
         name = donor["name"]
         name_upper = name.upper().strip()
@@ -734,9 +749,11 @@ def _classify_remaining_via_nn(
     all_results: dict[str, dict] = {}
     industry_learnings: dict[str, str] = {}
 
-    for i, donor in enumerate(unique_donors):
-        if i > 0 and i % _COMMIT_BATCH_SIZE == 0:
+    last_commit = time.monotonic()
+    for donor in unique_donors:
+        if time.monotonic() - last_commit > _COMMIT_INTERVAL_SECONDS:
             db_session.commit()
+            last_commit = time.monotonic()
 
         name = donor["name"]
         name_upper = name.upper().strip()

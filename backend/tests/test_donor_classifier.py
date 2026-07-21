@@ -243,24 +243,34 @@ class TestHybridClassification:
         )
 
     @pytest.mark.asyncio
-    async def test_commits_in_batches_not_one_long_transaction(self, db_session):
+    async def test_commits_periodically_by_elapsed_time_not_one_long_transaction(self, db_session):
         """SQLite allows exactly one writer at a time. Moving classification
-        off the event loop (test above) made it genuinely run CONCURRENTLY
-        with the rest of the app for the first time — which surfaced a
-        second, separate bug: _store_donor_learning was called once or
-        twice per donor with a single db_session.commit() only at the very
-        end, so a full run held one open write transaction for its entire
-        ~3 minutes. Every other write anywhere in the app during that
-        window either waited out the busy_timeout or failed outright —
-        live-observed 2026-07-21 as a real 500 on POST /api/track-visit
-        while a donor classification run was in progress. Committing every
-        _COMMIT_BATCH_SIZE donors bounds how long any single transaction
-        holds SQLite's one write slot.
+        off the event loop (an earlier test in this file) made it genuinely
+        run CONCURRENTLY with the rest of the app for the first time —
+        which surfaced a second, separate bug: _store_donor_learning was
+        called once or twice per donor with a single db_session.commit()
+        only at the very end, so a full run held one open write transaction
+        for its entire ~3 minutes. Every other write anywhere in the app
+        during that window either waited out the busy_timeout or failed
+        outright — live-observed 2026-07-21 as a real 500 on POST
+        /api/track-visit while a donor classification run was in progress.
 
-        Patches classify_industries_batch_scored and
-        classify_donor_type_semantic so this resolves via the FEC tier
-        (fast, no real model calls) with a controlled non-OTHER industry,
-        guaranteeing every donor reaches _store_donor_learning."""
+        This is deliberately a TIME bound (_COMMIT_INTERVAL_SECONDS), not a
+        donor-count bound — a first attempt at this fix used a count (commit
+        every 500 donors) reasoning that 500 plain DB writes take a few
+        seconds. That didn't hold in production: most donors also need a
+        real sentence-transformer encode() call (the semantic tier), which
+        is far slower and more variable than a DB write, so contention hit
+        again with ~100 donors still short of the 500-donor mark. This test
+        reproduces that shape — patches classify_donor_type_from_fec to add
+        a small per-call delay standing in for that variable cost — and
+        asserts on WALL-CLOCK commit frequency, not donor count, so it
+        would have caught the count-based version's failure.
+
+        Patches classify_industries_batch_scored so industry resolves to a
+        controlled non-OTHER value without a real model call, guaranteeing
+        every donor reaches _store_donor_learning."""
+        import time
         from app.pipeline.analyze import donor_classifier_ai
 
         donors = [
@@ -269,7 +279,7 @@ class TestHybridClassification:
                 "amount": 100,
                 "fec_receipt": {"entity_type": "ORG"},
             }
-            for i in range(5)
+            for i in range(10)
         ]
 
         commit_calls = 0
@@ -280,19 +290,31 @@ class TestHybridClassification:
             commit_calls += 1
             real_commit()
 
-        with patch.object(donor_classifier_ai, "_COMMIT_BATCH_SIZE", 2), \
+        real_fec_classify = donor_classifier_ai.classify_donor_type_from_fec
+
+        def slow_fec_classify(receipt):
+            time.sleep(0.03)  # stand-in for a real per-donor encode() call
+            return real_fec_classify(receipt)
+
+        with patch.object(donor_classifier_ai, "_COMMIT_INTERVAL_SECONDS", 0.05), \
              patch.object(
                  donor_classifier_ai, "classify_industries_batch_scored",
                  return_value={d["name"]: ("TECH", 0.9) for d in donors},
              ), \
+             patch.object(
+                 donor_classifier_ai, "classify_donor_type_from_fec", slow_fec_classify,
+             ), \
              patch.object(db_session, "commit", counting_commit):
             result = await classify_donors_hybrid(donors, db_session=db_session)
 
-        assert len(result) == 5
-        # 5 donors / batch size 2 -> intermediate commits at i=2,4, plus the
-        # unconditional final commit = 3. The exact count matters less than
-        # confirming more than the single final commit happened at all.
+        assert len(result) == 10
+        # 10 donors * 0.03s = ~0.3s total, against a 0.05s commit interval:
+        # several intermediate commits plus the unconditional final one. The
+        # exact count matters less than confirming more than one commit
+        # happened at all — a count-based batch (e.g. every 500 donors)
+        # would produce exactly 1 here, which is the failure this test
+        # guards against.
         assert commit_calls > 1, (
-            f"only {commit_calls} commit(s) for 5 donors at batch size 2 — "
-            "writes are accumulating in one long transaction again"
+            f"only {commit_calls} commit(s) for 10 slow donors — writes are "
+            "accumulating in one long transaction again"
         )
