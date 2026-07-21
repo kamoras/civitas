@@ -380,8 +380,6 @@ class StateCountSchema(CamelModel):
 
 
 class PresidentialScoreSchema(CamelModel):
-    independence: float
-    follow_through: float
     public_mandate: float
     effectiveness: float
     competence: float

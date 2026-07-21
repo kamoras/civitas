@@ -357,9 +357,8 @@ function PresidentLeaderboard({
 
           <div className="mt-4 space-y-1 text-center">
             <p className="text-matrix-green/50 text-xs">
-              Higher score = better representation of public mandate. Computed from: independence (15%) +
-              follow-through (20%) + public mandate (15%) + effectiveness (20%) +
-              competence (15%) + agency alignment (15%). Click any row to view full profile.
+              Higher score = better presidential performance. Computed from: public mandate (23%) +
+              effectiveness (31%) + competence (23%) + agency alignment (23%). Click any row to view full profile.
             </p>
             <p className="text-matrix-green/30 text-[10px] font-mono">
               <span className="text-amber-400/50 border border-amber-400/20 px-1 mr-1.5">HIST</span>

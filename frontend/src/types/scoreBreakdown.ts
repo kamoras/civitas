@@ -28,8 +28,6 @@ export interface SeedOnlyDimension {
 }
 
 export interface PresidentScoreBreakdown {
-  independence: SeedOnlyDimension;
-  followThrough: SeedOnlyDimension;
   publicMandate: SeedOnlyDimension;
   competence: ScoreBreakdownDimension | SeedOnlyDimension;
   effectiveness: ScoreBreakdownDimension | SeedOnlyDimension;

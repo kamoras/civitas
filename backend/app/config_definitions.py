@@ -57,13 +57,24 @@ SCORE_WEIGHTS: dict[str, float] = {
     "legislativeEffectiveness": 0.34,
 }
 
+# Independence (15%) and Follow-Through (20%) removed entirely (2026-07):
+# both were always 100% hand-set editorial values with no live formula and
+# no realistic path to one — Independence's obvious source (OpenSecrets'
+# revolving-door API) was discontinued in 2025, and Follow-Through would
+# need the same platform-text-vs-action embedding match already tried and
+# abandoned 4x for senators' Promise Persistence (config_definitions.py's
+# v6.0 note, above). Same precedent as that removal: rather than keep
+# presenting a hand-set number as a computed score, drop it and
+# redistribute the freed weight proportionally across the remaining
+# dimensions — combined 35% split by each dimension's prior share of the
+# remaining 65%: publicMandate 15->23%, effectiveness 20->31%,
+# competence 15->23%, agencyAlignment 15->23%. See
+# president_service.py's module docstring for the full account.
 PRESIDENT_SCORE_WEIGHTS: dict[str, float] = {
-    "independence": 0.15,
-    "followThrough": 0.20,
-    "publicMandate": 0.15,
-    "effectiveness": 0.20,
-    "competence": 0.15,
-    "agencyAlignment": 0.15,
+    "publicMandate": 0.23,
+    "effectiveness": 0.31,
+    "competence": 0.23,
+    "agencyAlignment": 0.23,
 }
 
 # Supreme Court impartiality-score weights. Single source of truth shared by

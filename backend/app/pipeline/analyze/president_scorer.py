@@ -4,6 +4,16 @@ For presidents with live API data (Clinton onward), recalculates affected
 metric scores from real data. Falls back to seed values for metrics
 where live data is unavailable.
 
+Independence and Follow-Through removed entirely (2026-07, see
+president_service.py's module docstring for the full account) — both were
+always 100% hand-set with no live formula and no realistic path to one
+(Independence's obvious source, OpenSecrets' revolving-door API, was
+discontinued in 2025; Follow-Through needs the same promise-matching
+technique already proven unworkable for senators). Rather than keep
+presenting a hand-set number as a computed score, they're gone, and their
+combined weight was redistributed (see PRESIDENT_SCORE_WEIGHTS in
+config_definitions.py) to the four dimensions below.
+
 Metrics that can be dynamically computed:
   - Competence: EO activity rate only (30% of the formula's weight — see
     calc_competence). Court-success rate and cabinet-turnover rate are
@@ -12,13 +22,21 @@ Metrics that can be dynamically computed:
     never passed and the remaining 70% blends with the seed score.
   - Effectiveness: Derived from employment/GDP data
 
-Metrics that remain static (until more data sources are added):
-  - Independence: Requires cabinet composition analysis
-  - Follow-Through: Requires promise tracking (PolitiFact-style)
-  - Public Mandate: Requires polling data aggregation
-  - Competence's court-success-rate and cabinet-turnover-rate components
-    (70% of the formula's weight): no structured, machine-readable data
-    source for EO litigation outcomes or cabinet tenure is wired up
+Metrics that remain static (roadmap, not abandoned):
+  - Public Mandate: Gallup (this platform's only live source) ended
+    presidential approval tracking entirely in Feb 2026. UCSB's American
+    Presidency Project is the identified replacement (still updated for
+    the sitting president, aggregating AP-NORC/CNN-SSRS/Marist/Pew/
+    Verasight) — needs a scraper, no clean API exists.
+  - Competence's cabinet-turnover-rate: Wikidata SPARQL (wdt:P39
+    position-held with date qualifiers) is a real, precedented candidate
+    — direct date math, not fuzzy matching. Not yet built.
+  - Competence's court-success-rate: deliberately not pursued. Matching
+    an EO to its litigation outcomes needs the same kind of fuzzy
+    text-matching that sank Follow-Through — CourtListener has the case
+    law but nothing connects "EO 14036" to "the lawsuits that challenged
+    it" without it. Treated the same as Independence/Follow-Through:
+    don't build an unreliable pipeline just to have a number.
 """
 
 import logging
@@ -76,8 +94,6 @@ def compute_president_overall_score(entity) -> float:
     from app.config_definitions import PRESIDENT_SCORE_WEIGHTS
 
     _FIELD_MAP = {
-        "independence": "score_independence",
-        "followThrough": "score_follow_through",
         "publicMandate": "score_public_mandate",
         "effectiveness": "score_effectiveness",
         "competence": "score_competence",
@@ -319,7 +335,8 @@ def recalculate_president_scores(
 
     Args:
         president_id: e.g. "obama-44"
-        seed_scores: Dict with keys independence, follow_through, etc.
+        seed_scores: Dict with keys score_public_mandate, score_effectiveness,
+            score_competence, score_agency_alignment.
         live_data: Dict with keys eo_count, jobs_created_millions, etc.
         term_years: Length of term in years
 

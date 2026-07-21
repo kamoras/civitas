@@ -619,46 +619,48 @@ export default function AboutPage() {
           {/* ── President Metrics ── */}
           <Section title="PRESIDENTIAL SCORECARD METRICS">
             <P>
-              Presidents are scored on six dimensions, also 0-100 scale. Historical
+              Presidents are scored on four dimensions, 0-100 scale. Historical
               presidents (pre-Clinton) use static scores derived from the C-SPAN
               Presidential Historians Survey, Gallup approval records, and BEA/BLS
               economic data. Recent presidents (Clinton onward) have scores partially
               computed from live API data.
             </P>
+            <P>
+              <em className="text-matrix-green/80">Independence and Follow-Through were
+              removed entirely (2026-07)</em>, not just disclosed as limitations. Both
+              were always a one-time hand-set number with no live formula and, unlike
+              every dimension below, no realistic path to one: Independence&apos;s
+              obvious data source (OpenSecrets&apos; cabinet/appointee revolving-door
+              tracking) was itself discontinued in 2025, and Follow-Through would need
+              the same platform-text-vs-action matching technique already tried four
+              times and abandoned for senators&apos; Promise Persistence (see the{" "}
+              <a href="/changelog" className="underline underline-offset-2 hover:text-matrix-green/70">scoring changelog</a>{" "}
+              — v6.0). Rather than keep presenting a hand-set number as a computed
+              score, they&apos;re gone, and their combined weight was redistributed
+              proportionally to the four dimensions below (Public Mandate 15→23%,
+              Effectiveness 20→31%, Competence 15→23%, Agency Alignment 15→23%).
+            </P>
 
             <div className="space-y-4 mt-4">
               <div>
-                <Label>Independence (15%)</Label>
-                <P>
-                  Assesses cabinet and advisor independence from corporate and lobbyist
-                  influence. Based on historical analysis of cabinet compositions — how
-                  many appointees came from industry versus public service backgrounds.
-                  Currently uses curated seed data; automated analysis is planned.
-                </P>
-              </div>
-
-              <div>
-                <Label>Follow-Through (20%)</Label>
-                <P>
-                  Measures the ratio of campaign promises to executive and legislative
-                  action. Based on historian assessments and promise-tracking analysis.
-                  Currently uses curated seed data for historical presidents.
-                </P>
-              </div>
-
-              <div>
-                <Label>Public Mandate (15%)</Label>
+                <Label>Public Mandate (23%)</Label>
                 <P>
                   Reflects approval trajectory and coalition retention. For modern
                   presidents (Truman onward), this is grounded in Gallup average approval
                   ratings; pre-Gallup presidents are scored based on election margins and
                   historian consensus. No live polling API is wired up — approval figures
-                  are a one-time snapshot in the curated seed data, not continuously updated.
+                  are a one-time snapshot in the curated seed data, not continuously
+                  updated. This is also now a genuine constraint rather than just an
+                  unfinished feature: Gallup itself ended presidential approval tracking
+                  entirely in February 2026 after 88 years. We&apos;re evaluating a
+                  replacement built on the American Presidency Project&apos;s ongoing
+                  approval aggregation (presidency.ucsb.edu, still updated for the
+                  sitting president) rather than treating this as done.
                 </P>
               </div>
 
               <div>
-                <Label>Effectiveness (20%) — Partially Dynamic</Label>
+                <Label>Effectiveness (31%) — Partially Dynamic</Label>
                 <P>
                   Measures tangible economic outcomes: GDP growth and job creation. The
                   pipeline fetches real employment data from the Bureau of Labor Statistics
@@ -670,7 +672,7 @@ export default function AboutPage() {
               </div>
 
               <div>
-                <Label>Competence (15%) — Partially Dynamic</Label>
+                <Label>Competence (23%) — Partially Dynamic</Label>
                 <P>
                   Evaluates administrative execution quality. The pipeline fetches executive
                   order counts from the Federal Register API (federalregister.gov) for each
@@ -681,11 +683,17 @@ export default function AboutPage() {
                   or cabinet tenure — so in practice that 70% of the weight always falls back
                   to the curated seed estimate rather than a live figure (marked with an
                   &ldquo;editorial estimate&rdquo; badge on the president&apos;s page).
+                  Cabinet turnover has a real candidate data source (Wikidata&apos;s public
+                  records of each official&apos;s time in office) we&apos;re evaluating;
+                  court-success-rate does not — matching an executive order to its
+                  litigation outcomes needs the same kind of unreliable text-matching that
+                  Follow-Through was removed for, so it isn&apos;t being pursued as a live
+                  metric.
                 </P>
               </div>
 
               <div>
-                <Label>Agency Alignment (15%) — Dynamic</Label>
+                <Label>Agency Alignment (23%) — Dynamic</Label>
                 <P>
                   Measures how well executive agency actions align with stated
                   presidential priorities. For presidents from Clinton onward, the pipeline
@@ -1288,7 +1296,7 @@ export default function AboutPage() {
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-neon-yellow shrink-0">-</span>
-                    <span>Independence, Follow-Through, and Public Mandate are editorially curated (C-SPAN Presidential Historians Survey, Gallup, and election-margin data — see the Presidents methodology below) rather than computed from a live feed, for every president including the current one. Competence&apos;s court-success and cabinet-turnover components have no live source either, though its EO-activity-rate component is genuinely computed. Effectiveness and Agency Alignment are fully data-derived from Clinton onward. We mark editorial-estimate figures on the president&apos;s page rather than presenting them with the same certainty as measured data.</span>
+                    <span>Presidential scoring used to include two dimensions, Independence and Follow-Through, that were a one-time hand-set number for every president with no live formula behind them at all. We removed both entirely (2026-07) rather than keep presenting a hand-set number as a computed score — see the Presidents methodology below for the full account, including why the obvious real data sources for each turned out not to be viable. Public Mandate remains editorially curated for now (C-SPAN Presidential Historians Survey, Gallup, and election-margin data) — unlike the two removed dimensions, it has a real, cited number behind every figure and an identified path to a live source, so it&apos;s disclosed as a limitation rather than removed. Competence&apos;s court-success and cabinet-turnover components have no live source either, though its EO-activity-rate component is genuinely computed. Effectiveness and Agency Alignment are fully data-derived from Clinton onward. We mark editorial-estimate figures on the president&apos;s page rather than presenting them with the same certainty as measured data.</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-neon-yellow shrink-0">-</span>

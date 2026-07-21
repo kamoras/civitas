@@ -263,7 +263,7 @@ class TestPresidentScoreBreakdownService:
         p = President(
             id="obama-44", name="Barack Obama", party="D", number=44,
             term_start="2009-01-20", term_end="2017-01-20",
-            score_independence=60, score_follow_through=55, score_public_mandate=65,
+            score_public_mandate=65,
             score_competence=58, score_effectiveness=62, score_agency_alignment=59,
             eo_count=276, gdp_growth_avg=2.1, jobs_created_millions=11.6,
             gdp_growth_adjusted=2.3, rulemaking_count=1800, rulemaking_finalized_pct=68.0,
@@ -272,8 +272,8 @@ class TestPresidentScoreBreakdownService:
         db_session.commit()
 
         breakdown = get_president_score_breakdown(db_session, "obama-44")
-        assert breakdown["independence"]["seedOnly"] is True
-        assert breakdown["followThrough"]["seedOnly"] is True
+        assert "independence" not in breakdown
+        assert "followThrough" not in breakdown
         assert breakdown["publicMandate"]["seedOnly"] is True
         assert "seedOnly" not in breakdown["competence"]
         assert len(breakdown["competence"]["components"]) >= 1
@@ -285,7 +285,7 @@ class TestPresidentScoreBreakdownService:
         p = President(
             id="lincoln-16", name="Abraham Lincoln", party="R", number=16,
             term_start="1861-03-04", term_end="1865-04-15",
-            score_independence=70, score_follow_through=60, score_public_mandate=80,
+            score_public_mandate=80,
             score_competence=75, score_effectiveness=50, score_agency_alignment=50,
             eo_count=48,  # seeded informational value — must NOT trigger a live formula
         )
@@ -293,7 +293,9 @@ class TestPresidentScoreBreakdownService:
         db_session.commit()
 
         breakdown = get_president_score_breakdown(db_session, "lincoln-16")
-        for dim in ("independence", "followThrough", "publicMandate", "competence", "effectiveness", "agencyAlignment"):
+        assert "independence" not in breakdown
+        assert "followThrough" not in breakdown
+        for dim in ("publicMandate", "competence", "effectiveness", "agencyAlignment"):
             assert breakdown[dim]["seedOnly"] is True, f"{dim} should be seed-only for a historical president"
 
     def test_returns_none_for_missing_president(self, db_session):
