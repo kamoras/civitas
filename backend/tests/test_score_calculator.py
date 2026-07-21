@@ -579,6 +579,104 @@ class TestConstituentAlignment:
         # Both are below-expected loyalists → both floor at neutral.
         assert score_deep_red == score_swing == 50
 
+    def _patch_bounds(self, monkeypatch, bounds=None):
+        # Fixed D/R terciles so these tests don't drift with the live
+        # party_ideology_bounds.json data file (regenerated every pipeline
+        # run — see score_calculator.write_party_ideology_bounds). Patches
+        # the cache dict directly (not the file) and pytest's monkeypatch
+        # auto-reverts it after the test, so this can't leak into other
+        # tests in the module.
+        if bounds is None:
+            bounds = {"D": (0.3, 0.7), "R": (0.3, 0.7)}
+        monkeypatch.setattr(
+            score_calculator, "_party_ideology_bounds_cache",
+            {"senate": bounds, "house": bounds},
+        )
+
+    def test_position_mismatch_discounts_extreme_loyalist_in_unsafe_seat(self, monkeypatch):
+        """v6.7: loyalty rate is still unreadable, but ideology_score is a
+        second, independent, legible signal — a below-expected loyalist
+        whose ideology sits in their own party's extreme tercile, in a seat
+        that isn't safely aligned for that extremity, IS the "blatantly
+        progressive senator in a moderate state" case the rate-only v6.6
+        design couldn't see. NV (alignment 0.0, a swing seat) makes this a
+        maximally-unsafe seat so the discount hits full strength."""
+        self._patch_bounds(monkeypatch)
+        record = {
+            "keyVotes": self._make_votes(with_party=98, against_party=2),
+            "recentVotes": [],
+        }
+        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
+        score = _calc_constituent_alignment(
+            record, [], funding, state="NV", party="D", ideology_score=0.05,
+        )
+        assert score < 50
+
+    def test_position_mismatch_zero_in_deep_safe_seat_despite_extreme_ideology(self, monkeypatch):
+        """The discount scales with how UNSAFE the seat is (mirrors the
+        surplus-crossing seat-direction discount): extremity in a deep safe
+        seat is the structural norm (Bafumi & Herron 2010), not
+        misrepresentation, so it stays at neutral there."""
+        self._patch_bounds(monkeypatch)
+        record = {
+            "keyVotes": self._make_votes(with_party=98, against_party=2),
+            "recentVotes": [],
+        }
+        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
+        # VT is D+15, pinning alignment to exactly 1.0 (the ±15 PVI
+        # normalization cap) — a maximally safe seat.
+        score = _calc_constituent_alignment(
+            record, [], funding, state="VT", party="D", ideology_score=0.05,
+        )
+        assert score == 50
+
+    def test_position_mismatch_never_triggers_for_a_moderate_position(self, monkeypatch):
+        """A loyalist whose ideology sits WITHIN their party's middle third
+        (not extreme) is not flagged, regardless of seat safety — only
+        district-relative ideological EXTREMITY is the misrepresentation
+        signal (Canes-Wrone/Brady/Cogan 2002), not mere party membership."""
+        self._patch_bounds(monkeypatch)
+        record = {
+            "keyVotes": self._make_votes(with_party=98, against_party=2),
+            "recentVotes": [],
+        }
+        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
+        score = _calc_constituent_alignment(
+            record, [], funding, state="NV", party="D", ideology_score=0.5,
+        )
+        assert score == 50
+
+    def test_position_mismatch_never_triggers_without_ideology_data(self, monkeypatch):
+        """Missing ideology_score (senator has no SVD-scored cosponsorship
+        signal, or the caller doesn't pass it) never triggers a discount —
+        missing data is never punitive, same convention as every other
+        component in this file."""
+        self._patch_bounds(monkeypatch)
+        record = {
+            "keyVotes": self._make_votes(with_party=98, against_party=2),
+            "recentVotes": [],
+        }
+        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
+        score = _calc_constituent_alignment(
+            record, [], funding, state="NV", party="D", ideology_score=None,
+        )
+        assert score == 50
+
+    def test_position_mismatch_never_triggers_without_bounds_data(self, monkeypatch):
+        """A party too small for a stable tercile distribution (bounds
+        missing from party_ideology_bounds.json) never triggers a
+        discount — same missing-data posture as the ideology_score check."""
+        self._patch_bounds(monkeypatch, bounds={})
+        record = {
+            "keyVotes": self._make_votes(with_party=98, against_party=2),
+            "recentVotes": [],
+        }
+        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
+        score = _calc_constituent_alignment(
+            record, [], funding, state="NV", party="D", ideology_score=0.05,
+        )
+        assert score == 50
+
     def test_opposed_seat_still_expects_more_crossing_for_crossers(self):
         """The seat-relative EXPECTED break rate still differs by lean — it
         just only affects CROSSERS now, not loyalists. A member who crosses

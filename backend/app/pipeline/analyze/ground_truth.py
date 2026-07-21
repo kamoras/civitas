@@ -59,6 +59,18 @@ logger = logging.getLogger(__name__)
 # member-flank crossing discount that would have shifted Paul et al. was
 # designed but NOT shipped — see score_calculator.py's not-shipped note —
 # precisely so no range here has to be guessed.)
+#
+# IV ranges re-verified 2026-07-20 for v6.7 (position-mismatch discount):
+# below-expected loyalists can now also be discounted below neutral if their
+# ideology_score sits in their own party's extreme tercile in a seat that
+# isn't safely aligned for it (score_calculator.py's v6.6->v6.7 note) — the
+# Ossoff "exactly 50, PROVABLE from the formula" claim above holds only
+# because Ossoff's live ideology_score does not fall in that flagged set as
+# of this pipeline run; it is no longer an unconditional formula guarantee,
+# just a currently-true fact about his data. Every current GROUND_TRUTH
+# reference senator was checked against v6.7 live (grid search + this file's
+# checks) and all pass; re-verify after any run that meaningfully shifts a
+# reference senator's ideology_score.
 GROUND_TRUTH: list[tuple[str, str, tuple[int, int], str]] = [
     ("Collins",   "score_independent_voting",    (70, 100), "≈36% breaks, D-lean state — crossing IS representation"),
     ("Murkowski", "score_independent_voting",    (70, 100), "≈33% breaks, independent-streak state"),

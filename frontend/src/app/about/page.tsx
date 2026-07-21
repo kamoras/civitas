@@ -194,10 +194,18 @@ export default function AboutPage() {
                   representation of the coalition that elected the member (not the geographic
                   median voter), it is the structural norm for both parties in the modern
                   Senate, and being &quot;out of step&quot; is a matter of ideological position, not a
-                  loyalty rate — so we decline to score it rather than penalize it. This
-                  loyalty floor is the only behavioral change in v6.6, and it is deterministic:
-                  a below-expected loyalist scores exactly 50 on this component, no calibration
-                  involved. Above-expected crossing is the readable side: it earns credit only
+                  loyalty rate — so we decline to score the rate itself rather than penalize it.
+                  This loyalty floor was the only behavioral change in v6.6, and it is
+                  deterministic: a below-expected loyalist with no other signal available scores
+                  exactly 50 on this component. v6.7 adds one legible exception: if a member&apos;s
+                  cosponsorship-derived ideology score places them in their own party&apos;s most
+                  extreme third, and their seat isn&apos;t safely aligned for that extremity, they
+                  are discounted below neutral (scaled by how unsafe the seat is — not penalized
+                  at all in a genuinely safe seat, where that extremity is the structural norm
+                  for both parties). This targets ideological POSITION, not the loyalty rate
+                  itself, so it doesn&apos;t reopen the rate-is-unreadable problem above — a member
+                  can be maximally loyal and still be flagged if their position is a clear
+                  outlier for their seat. Above-expected crossing is the readable side: it earns credit only
                   where it plausibly moves toward the seat&apos;s political center, discounted by
                   seat lean (full credit in opposed and swing seats, near-neutral in deep
                   aligned seats, since there the center sits with the party). A further discount
@@ -353,26 +361,25 @@ export default function AboutPage() {
               than trade this platform&apos;s auditability for a partial, hard-to-explain fix.
             </P>
             <P>
-              <em className="text-matrix-green/80">Constituent Alignment measures deviation,
-              not congruence.</em> The dimension scores the <em>rate</em> and <em>direction</em> of a
-              member&apos;s deviation from their party — how often they break, and whether a break
-              plausibly moves toward the seat&apos;s center — not the <em>distance</em> between the
-              member&apos;s own position and their constituency&apos;s. Since v6.6 it no longer punishes
-              loyalty and it credits visible crossing toward the center, but it still cannot
-              positively reward representation achieved through congruent loyalty: a senator
-              whose party&apos;s positions already match a lopsided state scores a neutral ~50, even
-              if they are perfectly aligned, because loyalty alone is not readable evidence
-              either way. The political-science construct that would capture this directly is
+              <em className="text-matrix-green/80">Constituent Alignment still cannot positively
+              credit congruent loyalty.</em> As of v6.7 the dimension can flag a below-expected
+              loyalist whose <em>position</em> is a clear outlier for their seat (the
+              position-mismatch discount, above) — but it still has no way to reward the mirror
+              case: a senator whose party&apos;s positions already match a lopsided state, voting
+              loyally in a way that is genuinely representative, scores the same neutral ~50 as
+              an unreadable loyalist, not higher. Penalizing a legible mismatch is a lower
+              evidentiary bar than crediting a legible match — the platform is confident an
+              extreme position in an unsafe seat is not neutral, but is not yet confident enough
+              in any target to say a given position affirmatively <em>is</em> what a seat wants.
+              The political-science construct that would capture the positive case directly is
               positional distance — how close a member&apos;s revealed ideological position sits to
               their seat&apos;s expected position (Canes-Wrone, Brady &amp; Cogan 2002; Bafumi &amp;
               Herron 2010). The platform already computes both ingredients (a party-blind
-              cosponsorship-ideology score and state partisan lean), so a congruence-based
-              rebuild is feasible and is the honest long-term direction. It is deferred rather
-              than shipped because it needs a party- or coalition-relative target — every
+              cosponsorship-ideology score and state partisan lean), so this is a data problem,
+              not a data-availability one: it needs a party- or coalition-relative target — every
               member sits more extreme than their state&apos;s raw median, so the median itself is
-              the wrong yardstick — plus live calibration, and it edges toward an authored
-              benchmark this platform&apos;s no-hardcoded-conclusions rule resists. Disclosed here
-              rather than papered over.
+              the wrong yardstick — and edges toward an authored benchmark this platform&apos;s
+              no-hardcoded-conclusions rule resists. Disclosed here rather than papered over.
             </P>
           </Section>
 
