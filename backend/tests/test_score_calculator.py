@@ -11,6 +11,8 @@ from app.pipeline.analyze.score_calculator import (
     _calc_legislative_effectiveness,
     _calc_promise_persistence,
     _funding_independence_core,
+    _LES_AVG_BASELINE_HOUSE,
+    _LES_AVG_BASELINE_SENATE,
     _les_bill_stage,
     _les_cumulative_credit,
     _les_significance_weight,
@@ -1158,14 +1160,21 @@ class TestLegislativeEffectiveness:
         """Many bills introduced but none advanced past stage 1 still
         earns real (if modest) credit under the cumulative-stage sum —
         raw volume counts for something in V&W's real methodology, unlike
-        the old percentage-based advancement rate which this replaced."""
+        the old percentage-based advancement rate which this replaced.
+        Lower bound trimmed from 45 to 40 (2026-07-21): party=None here
+        maps to _advancement_baseline's flat unknowable-status rate
+        (0.030), which sits almost exactly at the Senate's own real
+        average (_LES_AVG_BASELINE_SENATE=0.0305, since that fix) — so
+        this scenario is now correctly compared against close to the full
+        Senate population-average bar rather than the old pooled
+        cross-chamber constant's easier one."""
         bills = [
             {"title": f"Bill {i}", "isLaw": False, "latestAction": "Introduced",
              "billType": "s", "congress": 119}
             for i in range(50)
         ]
         score = _calc_legislative_effectiveness(bills, None)
-        assert 45 <= score <= 75
+        assert 40 <= score <= 75
 
     def test_high_passage_rate(self):
         """Bills that became law contribute credit at every earlier stage
@@ -1173,8 +1182,14 @@ class TestLegislativeEffectiveness:
         only bills for ones that became law must raise the score at the
         same total bill count — a relative comparison, not an absolute
         threshold, since the absolute score also depends on the
-        population-average baseline this component is compared against."""
-        n = 13
+        population-average baseline this component is compared against.
+        Bill count raised from 13 to 50 (2026-07-21): the chamber-specific
+        _LES_AVG_BASELINE_SENATE fix correctly raised the real Senate bar,
+        and at only 13 bills both variants saturated at the same score
+        floor (neither could show credit for the 2 became-law bills) —
+        50 bills gives both scenarios room above the floor to actually
+        differ."""
+        n = 50
         all_introduced = [
             {"title": f"Bill {i}", "isLaw": False, "latestAction": "Introduced",
              "billType": "s", "congress": 119}
@@ -1359,6 +1374,23 @@ class TestLegislativeEffectiveness:
             None,
         )
         assert house_score > senate_score
+
+    def test_advancement_baseline_is_chamber_specific(self):
+        """2026-07-21 fix: a single pooled _LES_AVG_BASELINE compared every
+        member's own majority/minority advancement rate against ONE
+        cross-chamber average, even though the two chambers' real rates
+        genuinely differ (live audit: House mean ~0.044, Senate mean
+        ~0.031 — see the constants' own comment in score_calculator.py).
+        That silently inflated House members' expected-credit bar and
+        deflated the Senate's on top of the already-correct chamber split
+        for _LES_POPULATION_AVG_*, flipping the fairness the chamber split
+        was supposed to provide (live population: House went from 61%
+        scoring below neutral vs Senate's 38% to a much closer ~53-58%
+        split for both after this fix). This guards against a future
+        refactor silently re-collapsing the two constants back into one
+        shared value."""
+        assert _LES_AVG_BASELINE_HOUSE != _LES_AVG_BASELINE_SENATE
+        assert _LES_AVG_BASELINE_HOUSE > _LES_AVG_BASELINE_SENATE
 
 
 class TestCalculateScoresIntegration:

@@ -1,6 +1,7 @@
 """Calibrate Legislative Effectiveness's V&W-based component constants:
-_LES_POPULATION_AVG_SENATE, _LES_POPULATION_AVG_HOUSE, _LES_AVG_BASELINE,
-_LES_CREDIT_SATURATION (score_calculator.py).
+_LES_POPULATION_AVG_SENATE, _LES_POPULATION_AVG_HOUSE,
+_LES_AVG_BASELINE_SENATE, _LES_AVG_BASELINE_HOUSE, _LES_CREDIT_SATURATION
+(score_calculator.py).
 
 V&W's real LES normalizes to the chamber-term population mean (average
 member = 1.0). This platform's sponsored-bill data is career-cumulative
@@ -62,7 +63,14 @@ def _member_baseline(bills: list[dict], party: str | None) -> float | None:
 
 def main() -> None:
     per_congress_by_chamber: dict[str, list[float]] = {"senate": [], "house": []}
-    member_baselines: list[float] = []
+    # Chamber-specific as of 2026-07-21: a single pooled baseline compared
+    # every member against a cross-chamber average, systematically
+    # inflating House members' expected credit and deflating the Senate's
+    # since the two chambers' real _advancement_baseline rates genuinely
+    # differ (House mean ~0.044 vs Senate ~0.031) — see the constants'
+    # comment in score_calculator.py for the live-population impact this
+    # had before the fix (61% of House below neutral vs 38% of Senate).
+    member_baselines_by_chamber: dict[str, list[float]] = {"senate": [], "house": []}
 
     for branch in ("senate", "house"):
         listing = _fetch_json(f"{API_BASE}/politicians?branch={branch}")
@@ -82,7 +90,7 @@ def main() -> None:
 
             mb = _member_baseline(bills, party)
             if mb is not None:
-                member_baselines.append(mb)
+                member_baselines_by_chamber[branch].append(mb)
 
     for chamber in ("senate", "house"):
         values = per_congress_by_chamber[chamber]
@@ -98,15 +106,20 @@ def main() -> None:
             f"stdev={stdev:.2f} p90={p90:.2f}"
         )
 
-    avg_baseline = statistics.mean(member_baselines) if member_baselines else 0.0
-    print(f"\npopulation-average _advancement_baseline: {avg_baseline:.4f}")
+    avg_baseline_by_chamber = {
+        chamber: statistics.mean(values) if values else 0.0
+        for chamber, values in member_baselines_by_chamber.items()
+    }
+    for chamber, avg in avg_baseline_by_chamber.items():
+        print(f"\n{chamber}-average _advancement_baseline: {avg:.4f}")
 
     print("\nSuggested constants:")
     for chamber in ("senate", "house"):
         values = per_congress_by_chamber[chamber]
         if values:
             print(f"  _LES_POPULATION_AVG_{chamber.upper()} = {statistics.mean(values):.2f}")
-    print(f"  _LES_AVG_BASELINE = {avg_baseline:.4f}")
+    for chamber in ("senate", "house"):
+        print(f"  _LES_AVG_BASELINE_{chamber.upper()} = {avg_baseline_by_chamber[chamber]:.4f}")
     # Saturation: same "~1.5x the residual spread" reasoning used
     # elsewhere in this file's calibration constants (e.g. the FI
     # small-donor baseline script) — full credit/deficit at roughly one
