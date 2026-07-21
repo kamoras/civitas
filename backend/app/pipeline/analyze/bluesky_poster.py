@@ -64,6 +64,47 @@ def _sanitize(text: str, budget: int) -> str:
     return text.strip()
 
 
+# A repost whose body shares at least this fraction of its words with an
+# already-published post is treated as a near-duplicate and suppressed. Set
+# high enough that a genuine development (a new vote, a resolution, a fresh
+# number) still introduces enough new vocabulary to clear the bar, but low
+# enough to catch the same facts reworded. The failure directions are
+# asymmetric and both tolerable: a missed duplicate posts exactly as it did
+# before this guard existed, and a false positive suppresses one update
+# (logged, so it's observable) — the user asked us to err against repeats.
+_NEAR_DUP_JACCARD = 0.65
+
+_WORD_RE = re.compile(r"[a-z0-9]+")
+
+
+def _post_word_set(text: str) -> set[str]:
+    """Lowercased alphanumeric word set for near-duplicate comparison."""
+    return set(_WORD_RE.findall((text or "").lower()))
+
+
+def _is_near_duplicate(candidate: str, prior_texts: list[str]) -> bool:
+    """True if ``candidate`` reads as essentially the same post as any of
+    ``prior_texts``, by word-set Jaccard overlap.
+
+    Reposts fire whenever a topic gets a newer-dated article (the pipeline
+    resets bsky_posted_at upstream), but ongoing coverage of one story often
+    carries the same title/summary/facts day to day, so the generated post
+    says the same thing again. Comparing against what we actually published
+    catches that regardless of which row or run it came from.
+    """
+    cand = _post_word_set(candidate)
+    if not cand:
+        return False
+    for prior in prior_texts:
+        other = _post_word_set(prior)
+        if not other:
+            continue
+        overlap = len(cand & other) / len(cand | other)
+        if overlap >= _NEAR_DUP_JACCARD:
+            return True
+    return False
+
+
 def _build_source_context(source_names_json: str) -> str:
     names = json.loads(source_names_json or "[]")
     if not names:
@@ -165,8 +206,10 @@ Return JSON: {{"post": "<your post text>"}}"""
             "\n\nYour previous attempt was rejected because it included "
             f"{'; '.join(reasons)}. Rewrite using only the Title, Summary, and "
             "Key facts, report events directly instead of through phrases "
-            "like 'sources show' or 'reports indicate,' and do not evaluate "
-            "whether any action was warranted or justified."
+            "like 'sources show' or 'reports indicate,' do not describe any "
+            "election, race, campaign, or challenge for office unless the Key "
+            "facts say so, and do not evaluate whether any action was "
+            "warranted or justified."
         )
 
     return None  # ungrounded twice — skip; the next refresh cycle retries
@@ -245,23 +288,62 @@ def process_issues_for_bluesky(issues: list, db: Session) -> int:
     if not getattr(settings, "BSKY_HANDLE", "") or not getattr(settings, "BSKY_APP_PASSWORD", ""):
         return 0  # fast-path: no credentials configured
 
+    from datetime import timedelta
     from zoneinfo import ZoneInfo
+
+    from app.models import ActionIssue
+
     _US_EAST = ZoneInfo("America/New_York")
     today = datetime.now(tz=_US_EAST).strftime("%Y-%m-%d")
 
     now = datetime.utcnow()
     posted = 0
 
+    # Bodies of every post published in the last few days, so a repost (or a
+    # near-identical second trending topic) that would say the same thing as a
+    # recent post is suppressed instead of duplicated. Loaded once per run.
+    recent_cutoff = now - timedelta(days=3)
+    recent_texts: list[str] = [
+        row[0]
+        for row in db.query(ActionIssue.bsky_last_post_text)
+        .filter(
+            ActionIssue.bsky_posted_at.isnot(None),
+            ActionIssue.bsky_posted_at >= recent_cutoff,
+            ActionIssue.bsky_last_post_text.isnot(None),
+        )
+        .all()
+        if row[0]
+    ]
+
     for issue in issues:
         if issue.bsky_posted_at is not None:
             continue  # pipeline didn't flag this issue for posting
 
         text = _generate_new_post(issue, today)
-        if text and _publish(text, issue):
+        if not text:
+            continue
+
+        if _is_near_duplicate(text, recent_texts):
+            # Same story, nothing materially new to say — mark it handled so
+            # the hourly pipeline doesn't regenerate and re-check it every run,
+            # but publish nothing.
+            logger.info(
+                "Suppressing near-duplicate Bluesky post for issue %s: %s",
+                issue.id, issue.title[:80],
+            )
             issue.bsky_posted_at = now
             issue.bsky_posted_rank = issue.rank
+            continue
+
+        if _publish(text, issue):
+            issue.bsky_posted_at = now
+            issue.bsky_posted_rank = issue.rank
+            issue.bsky_last_post_text = text
+            recent_texts.append(text)
             posted += 1
 
-    if posted:
-        db.commit()
+    # Commit unconditionally: a suppressed near-duplicate sets bsky_posted_at
+    # without incrementing `posted`, and that state must persist so the issue
+    # isn't regenerated and re-checked on every subsequent run.
+    db.commit()
     return posted

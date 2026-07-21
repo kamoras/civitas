@@ -8,6 +8,7 @@ from app.pipeline.analyze.grounding import (
     hedge_and_editorializing_violations,
     hedge_language,
     repeated_sentences,
+    ungrounded_electoral_claims,
     ungrounded_numbers,
     ungrounded_statistics,
     ungrounded_titled_names,
@@ -199,6 +200,61 @@ class TestEditorializingLanguage:
         assert len(editorializing_language(text)) == expected_count
 
 
+class TestUngroundedElectoralClaims:
+    # A source with no electoral vocabulary at all — a senator's death.
+    NON_ELECTORAL = (
+        "Senator Lindsey Graham died Thursday at 70. Colleagues including "
+        "Susan Collins issued statements. Flags were lowered at the Capitol."
+    )
+    # A source that genuinely covers an election.
+    ELECTORAL = (
+        "Susan Collins faces a competitive re-election campaign. Her "
+        "challenger leads in recent polls ahead of the November race."
+    )
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            pytest.param(
+                "Graham was facing competition from Susan Collins for his senate race.",
+                id="the_reported_graham_collins_bug",
+            ),
+            pytest.param("Collins launched a re-election bid this week.", id="reelection_bid"),
+            pytest.param("Graham is running against Collins for the seat.", id="running_against"),
+            pytest.param("A primary challenger emerged to unseat the senator.", id="unseat"),
+            pytest.param("The senate race between the two tightened.", id="senate_race"),
+        ],
+    )
+    def test_fabricated_electoral_framing_flagged(self, text):
+        # Source never mentions an election → electoral framing is invented.
+        assert ungrounded_electoral_claims(text, self.NON_ELECTORAL) != []
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            pytest.param(
+                "Collins faces competition from a challenger in her senate race.",
+                id="race_post_grounded_by_race_source",
+            ),
+            pytest.param("Her re-election campaign drew a new opponent.", id="reelection_grounded"),
+        ],
+    )
+    def test_electoral_framing_grounded_when_source_covers_election(self, text):
+        # Source discusses the campaign → the same framing is grounded.
+        assert ungrounded_electoral_claims(text, self.ELECTORAL) == []
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            pytest.param("Opponents of the bill delayed the vote.", id="bill_opponents_not_electoral"),
+            pytest.param("The senator issued a statement on the ruling.", id="no_electoral_language"),
+            pytest.param("Collins voted for the funding package.", id="floor_vote_not_electoral"),
+        ],
+    )
+    def test_non_electoral_text_not_flagged(self, text):
+        assert ungrounded_electoral_claims(text, self.NON_ELECTORAL) == []
+
+
 class TestGroundingViolations:
     def test_clean_text_no_violations(self):
         assert grounding_violations("Collins backed the 68-32 vote.", SOURCE) == []
@@ -210,6 +266,13 @@ class TestGroundingViolations:
         assert len(problems) == 2
         assert any("9.9" in p for p in problems)
         assert any("Alvarez" in p for p in problems)
+
+    def test_reports_fabricated_electoral_contest(self):
+        problems = grounding_violations(
+            "Graham was facing competition from Collins for his senate race.",
+            "Senator Graham died Thursday. Collins issued a statement.",
+        )
+        assert any("electoral contest" in p for p in problems)
 
 
 class TestHedgeAndEditorializingViolations:
