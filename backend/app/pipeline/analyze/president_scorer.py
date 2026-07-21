@@ -108,6 +108,17 @@ def compute_president_overall_score(entity) -> float:
     )
 
 
+# Presidential scoring formula version, same purpose as score_calculator.
+# ALGORITHM_VERSION for senators/reps (tags each ScoreSnapshot so trend
+# charts can mark a formula change instead of reading it as a behavior
+# change) — introduced here (2026-07) rather than retroactively for the
+# implicit original 6-dimension formula, since presidents only start
+# getting snapshotted at this version. v2 = the 4-dimension formula after
+# Independence/Follow-Through were removed and their weight redistributed
+# (see PRESIDENT_SCORE_WEIGHTS's own comment).
+PRESIDENT_ALGORITHM_VERSION = "v2"
+
+
 def calc_competence(
     eo_count: int | None,
     eo_court_success_pct: float | None,
