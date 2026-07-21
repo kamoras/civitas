@@ -45,6 +45,20 @@ logger = logging.getLogger(__name__)
 # aligned seats center near 50 ("typical partisan for this seat") rather
 # than pinning at the old ≤3% floor of ~26-38. Frequent crossers whose
 # crossing tracks their state (Collins/Murkowski) still score high.
+#
+# IV range revised 2026-07 for v6.6 (loyalty-penalty fairness): below-expected
+# loyalty now floors at neutral (50) instead of dropping toward 25 (see
+# score_calculator.py's v6.5->v6.6 note). Only swing/opposed-seat LOYALISTS
+# move, and only upward toward neutral — Ossoff (below-expected swing-state D)
+# centers at ~50 rather than "below seat expectation." His new range is
+# PROVABLE from the formula, not estimated: a below-expected loyalist scores
+# exactly 50 on the seat-relative component (80% weight), so final IV is
+# 50 with no coalition-breadth data or 50*0.8 + breadth*0.2 in [40, 60] with
+# it. Every other reference senator is a CROSSER (above-expected) whose
+# crossing side is unchanged in v6.6, so their ranges are untouched. (The
+# member-flank crossing discount that would have shifted Paul et al. was
+# designed but NOT shipped — see score_calculator.py's not-shipped note —
+# precisely so no range here has to be guessed.)
 GROUND_TRUTH: list[tuple[str, str, tuple[int, int], str]] = [
     ("Collins",   "score_independent_voting",    (70, 100), "≈36% breaks, D-lean state — crossing IS representation"),
     ("Murkowski", "score_independent_voting",    (70, 100), "≈33% breaks, independent-streak state"),
@@ -61,7 +75,7 @@ GROUND_TRUTH: list[tuple[str, str, tuple[int, int], str]] = [
     ("Klobuchar", "score_independent_voting",    (40, 70),  "≈10% breaks in D+2 MN ≈ slightly above seat expectation"),
     ("Klobuchar", "score_funding_independence",  (35, 75),  "mid-range PAC reliance, no capture signal"),
     # Added 2026-07-04, anchored to Voteview S119 party-unity data:
-    ("Ossoff",    "score_independent_voting",    (28, 50),  "≈4% breaks as a swing-state D — below seat expectation (Voteview)"),
+    ("Ossoff",    "score_independent_voting",    (40, 60),  "≈4% breaks as a swing-state D — below-expected loyalty now floors at neutral (v6.6), no longer penalized; centers ≈50"),
     ("Thune",     "score_independent_voting",    (38, 62),  "party leader, ≈2% breaks in safe-R SD ≈ seat expectation (Voteview)"),
     ("Fetterman", "score_independent_voting",    (50, 85),  "frequent crosser in swing-state PA — crossing toward the state median"),
 ]

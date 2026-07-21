@@ -12,6 +12,25 @@ from app.pipeline.transform.committee_data import (
 
 logger = logging.getLogger(__name__)
 
+# Neutral prior for a base member record that has not yet been scored.
+# Per the scoring standard (score_calculator's module docstring: "Missing
+# data yields a neutral 50, never a perfect 100 or 0"), an un-scored member
+# — e.g. one with no FEC match, or one whose analysis pass fails and falls
+# back to this base record — must surface as neutral/unknown (50), NOT as a
+# 0 that reads as "fully captured." The keys here are the five currently
+# scored dimensions (score_calculator.calculate_scores); the old stub seeded
+# 0s under stale keys (transparency/accessibility, removed years ago), which
+# both misrepresented unknown members as maximally captured and no longer
+# matched the columns downstream code reads.
+NEUTRAL_SCORE = 50
+_NEUTRAL_REPRESENTATION_SCORE = {
+    "fundingIndependence": NEUTRAL_SCORE,
+    "promisePersistence": NEUTRAL_SCORE,
+    "independentVoting": NEUTRAL_SCORE,
+    "fundingDiversity": NEUTRAL_SCORE,
+    "legislativeEffectiveness": NEUTRAL_SCORE,
+}
+
 STATE_NAME_TO_CODE = {
     "Alabama": "AL",
     "Alaska": "AK",
@@ -144,13 +163,7 @@ def normalize_members(
             "officePhone": office_phone,
             "officeAddress": office_address,
             "contactFormUrl": contact_form,
-            "representationScore": {
-                "fundingIndependence": 0,
-                "promisePersistence": 0,
-                "independentVoting": 0,
-                "transparency": 0,
-                "accessibility": 0,
-            },
+            "representationScore": dict(_NEUTRAL_REPRESENTATION_SCORE),
             "funding": {
                 "totalRaised": 0,
                 "totalFromPACs": 0,
@@ -249,13 +262,7 @@ def normalize_house_members(
             "officePhone": office_phone,
             "officeAddress": office_address,
             "contactFormUrl": contact_form,
-            "representationScore": {
-                "fundingIndependence": 0,
-                "promisePersistence": 0,
-                "independentVoting": 0,
-                "transparency": 0,
-                "accessibility": 0,
-            },
+            "representationScore": dict(_NEUTRAL_REPRESENTATION_SCORE),
             "funding": {
                 "totalRaised": 0,
                 "totalFromPACs": 0,

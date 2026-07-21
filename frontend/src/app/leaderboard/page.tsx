@@ -20,6 +20,34 @@ import type { JusticeLeaderboardEntry } from "@/types/justice";
 
 type PartyFilter = "ALL" | "D" | "R" | "I";
 type SortKey = "score" | "pac_dollars" | "pac_pct" | "ideology" | "leadership";
+type SortDir = "asc" | "desc";
+
+// Direction a sort key lands on when first selected. Everything defaults to
+// "desc" (highest value on top) except ideology, whose default "asc" surfaces
+// the most-progressive (lowest ideologyScore) member first. Re-clicking the
+// active key flips this — see handleSort in LeaderboardContent.
+function defaultSortDir(key: SortKey): SortDir {
+  return key === "ideology" ? "asc" : "desc";
+}
+
+// Button label for a (key, dir) pair. The two ideological axes read their
+// direction into the label rather than relying on an arrow alone, so neither
+// pole is framed as the "top" of the list: progressive⇄conservative and
+// leader⇄follower are presented as equal-weight directions, not good⇄bad.
+function sortLabel(key: SortKey, dir: SortDir): string {
+  switch (key) {
+    case "pac_dollars":
+      return "PAC $";
+    case "pac_pct":
+      return "PAC %";
+    case "ideology":
+      return dir === "asc" ? "MOST PROGRESSIVE" : "MOST CONSERVATIVE";
+    case "leadership":
+      return dir === "desc" ? "MOST LEADER" : "MOST FOLLOWER";
+    default:
+      return "REPRESENTATION SCORE";
+  }
+}
 
 // Row-navigation onClick/onKeyDown pair, identical across the president,
 // justice, and senate/house tables below (previously copy-pasted 3x,
@@ -549,6 +577,24 @@ function LeaderboardContent() {
   const [justiceError, setJusticeError] = useState<string | null>(null);
   const [partyFilter, setPartyFilter] = useState<PartyFilter>("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("score");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  // Clicking a different key selects it at its natural direction; clicking the
+  // already-active key toggles direction (e.g. most progressive ⇄ most
+  // conservative) instead of doing nothing. Kept as two independent setState
+  // calls (never one nested in the other's updater) so StrictMode's
+  // double-invocation can't toggle the direction twice and cancel it out.
+  const handleSort = useCallback(
+    (key: SortKey) => {
+      if (key === sortKey) {
+        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+      } else {
+        setSortKey(key);
+        setSortDir(defaultSortDir(key));
+      }
+    },
+    [sortKey],
+  );
 
   useEffect(() => {
     fetchLeaderboard()
@@ -604,32 +650,33 @@ function LeaderboardContent() {
       list = list.filter((e) => e.party === partyFilter);
     }
 
+    // "desc" always orders high→low; "asc" flips it. Missing data sorts last
+    // in BOTH directions (never treated as a maximal/minimal value), so the
+    // null guards run before direction is applied.
+    const flip = sortDir === "asc" ? -1 : 1;
+
     return [...list].sort((a, b) => {
-      if (sortKey === "pac_dollars") return (b.totalFromPacs ?? 0) - (a.totalFromPacs ?? 0);
+      if (sortKey === "pac_dollars") return flip * ((b.totalFromPacs ?? 0) - (a.totalFromPacs ?? 0));
       if (sortKey === "pac_pct") {
         const pctA = (a.totalRaised ?? 0) > 0 ? (a.totalFromPacs ?? 0) / a.totalRaised : 0;
         const pctB = (b.totalRaised ?? 0) > 0 ? (b.totalFromPacs ?? 0) / b.totalRaised : 0;
-        return pctB - pctA;
+        return flip * (pctB - pctA);
       }
       if (sortKey === "ideology") {
-        // Most-progressive (lowest score) first; missing data sorts last
-        // regardless of direction, not as if it were maximally conservative.
         if (a.ideologyScore == null) return b.ideologyScore == null ? 0 : 1;
         if (b.ideologyScore == null) return -1;
-        return a.ideologyScore - b.ideologyScore;
+        // asc (default) = most progressive (lowest) first; desc = most conservative.
+        return flip * (b.ideologyScore - a.ideologyScore);
       }
       if (sortKey === "leadership") {
-        // Most-leader (highest score) first; missing data sorts last
-        // regardless of direction, not as if it were maximally a follower.
         if (a.leadershipScore == null) return b.leadershipScore == null ? 0 : 1;
         if (b.leadershipScore == null) return -1;
-        return b.leadershipScore - a.leadershipScore;
+        // desc (default) = most leader (highest) first; asc = most follower.
+        return flip * (b.leadershipScore - a.leadershipScore);
       }
-      return (
-        b.representationScore.overall - a.representationScore.overall
-      );
+      return flip * (b.representationScore.overall - a.representationScore.overall);
     });
-  }, [activeEntries, branch, partyFilter, sortKey]);
+  }, [activeEntries, branch, partyFilter, sortKey, sortDir]);
 
   const counts = useMemo(() => {
     if (branch === "house") {
@@ -704,29 +751,28 @@ function LeaderboardContent() {
           {/* Sort */}
           <div className="flex items-center gap-2 text-sm text-matrix-green/60" role="group" aria-label="Sort order">
             <span id="sort-label">SORT:</span>
-            {(
-              [
-                ["score", "REPRESENTATION SCORE"],
-                ["pac_dollars", "PAC $"],
-                ["pac_pct", "PAC %"],
-                ["ideology", "MOST PROGRESSIVE"],
-                ["leadership", "MOST LEADER"],
-              ] as [SortKey, string][]
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => setSortKey(key)}
-                aria-pressed={sortKey === key}
-                className={`px-2 py-0.5 border text-xs transition-all ${
-                  sortKey === key
-                    ? "border-neon-yellow text-neon-yellow"
-                    : "border-white/10 text-white/50 hover:border-white/30 hover:text-white/70"
-                }`}
-              >
-                {label}
-                {sortKey === key && <span aria-hidden="true"> ▼</span>}
-              </button>
-            ))}
+            {(["score", "pac_dollars", "pac_pct", "ideology", "leadership"] as SortKey[]).map((key) => {
+              const active = sortKey === key;
+              // Inactive buttons preview the direction they'd select, so the
+              // label always matches what a click will do.
+              const dir = active ? sortDir : defaultSortDir(key);
+              return (
+                <button
+                  key={key}
+                  onClick={() => handleSort(key)}
+                  aria-pressed={active}
+                  title={active ? "Click to reverse sort direction" : undefined}
+                  className={`px-2 py-0.5 border text-xs transition-all ${
+                    active
+                      ? "border-neon-yellow text-neon-yellow"
+                      : "border-white/10 text-white/50 hover:border-white/30 hover:text-white/70"
+                  }`}
+                >
+                  {sortLabel(key, dir)}
+                  {active && <span aria-hidden="true"> {dir === "asc" ? "▲" : "▼"}</span>}
+                </button>
+              );
+            })}
           </div>
         </div>
 

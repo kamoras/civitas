@@ -321,11 +321,16 @@ class TestFundingIndependence:
 
 
 class TestConstituentAlignment:
-    """v4.2: score is relative to what the seat's electorate expects.
+    """Score is relative to what the seat's electorate expects.
 
-    Matching the seat's expected break rate ≈ neutral 50; crossing
-    beyond it earns credit; hyper-loyalty in a swing/opposed seat
-    drifts below neutral but never to a failure-grade floor.
+    Matching the seat's expected break rate ≈ neutral 50. v6.6 made the
+    component asymmetric: below-expected loyalty is NOT penalized (floors
+    at neutral — a low defection rate is not misrepresentation), while
+    above-expected crossing earns credit only where it plausibly moves
+    toward the state median (discounted by seat lean). A member-level flank
+    direction discount was designed but not shipped in v6.6 (uncalibratable
+    without the live scored ideology distribution — see score_calculator.py),
+    so the crossing side here is seat-direction only.
     """
 
     def _make_votes(self, with_party=0, against_party=0, policy="JUSTICE", crossing_unity=None):
@@ -415,15 +420,21 @@ class TestConstituentAlignment:
         score_min_unity = _calc_constituent_alignment(record_min_unity, [], funding)
         assert score_no_signal == score_min_unity
 
-    def test_pure_party_line_voter_below_neutral_in_swing_seat(self):
+    def test_pure_party_line_voter_not_penalized_in_swing_seat(self):
+        """v6.6: a below-expected defection rate is not scored as
+        misrepresentation. A perfectly loyal voter in a swing seat floors
+        at neutral (50), never below — party-line voting is not evidence of
+        failing to represent the coalition that elected the member (Fenno
+        1978; Levendusky 2009; Krehbiel 2000). Pre-v6.6 this scored ~30."""
         record = {
             "keyVotes": self._make_votes(with_party=100, against_party=0),
             "recentVotes": [],
         }
+        # party="I" / no state → swing-equivalent (alignment 0, expected 8%).
         score = _calc_constituent_alignment(
             record, [], {"totalRaised": 1_000_000, "totalFromPACs": 500_000}
         )
-        assert score < 50
+        assert score == 50
 
     def test_safe_seat_loyalist_scores_near_neutral(self):
         """THE v4.2 regression test: a member of a deep-safe seat voting
@@ -441,10 +452,35 @@ class TestConstituentAlignment:
         assert 45 <= score <= 62
 
     def test_district_lean_overrides_state_lean_for_house(self):
-        """A loyalist Democrat in a deep-blue district of a red state is a
-        safe-seat member (typical representation, ~neutral), not an
-        'opposed seat' member who should be crossing 20% of the time.
-        AL-7 is D+13 while Alabama is R+15."""
+        """The per-district lean, not the state lean, sets the seat
+        expectation for a House member. AL-7 is D+13 while Alabama is R+15,
+        so a Democrat there sits in a SAFE seat, not an 'opposed seat.'
+
+        A 10% crosser makes the override observable: under the correct D+13
+        district lean, 10% is ABOVE the seat's low expectation and earns
+        credit; under the wrong R+15 state-only lean, the same member looks
+        like an opposed-seat UNDER-crosser and floors at neutral. District
+        data therefore produces a different (here higher) score — proving
+        the per-district lean is what sets the seat expectation."""
+        record = {
+            "keyVotes": self._make_votes(with_party=90, against_party=10),
+            "recentVotes": [],
+        }
+        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
+        with_state_only = _calc_constituent_alignment(
+            record, [], funding, state="AL", party="D"
+        )
+        with_district = _calc_constituent_alignment(
+            record, [], funding, state="AL", party="D", district=7
+        )
+        assert with_district > with_state_only
+
+    def test_loyalist_not_penalized_regardless_of_district_or_state_lean(self):
+        """v6.6 corollary: because loyalty is never penalized, a loyalist
+        Democrat floors at neutral under BOTH the safe-district and the
+        (wrongly) opposed state-only lean. The district override still
+        matters for crossers (test above) — it just no longer rescues a
+        loyalist from a penalty that no longer exists."""
         record = {
             "keyVotes": self._make_votes(with_party=97, against_party=3),
             "recentVotes": [],
@@ -456,8 +492,7 @@ class TestConstituentAlignment:
         with_district = _calc_constituent_alignment(
             record, [], funding, state="AL", party="D", district=7
         )
-        assert with_district > with_state_only
-        assert 45 <= with_district <= 62  # same band as any safe-seat loyalist
+        assert with_state_only == with_district == 50
 
     def test_unknown_district_falls_back_to_state(self):
         record = {
@@ -522,11 +557,15 @@ class TestConstituentAlignment:
         # 20 extra party-line votes dilute the break rate → lower score
         assert score_with_energy < score_just_other
 
-    def test_swing_seat_loyalty_scores_below_safe_seat_loyalty(self):
-        """The same 95% party-line record represents a deep-red state's
-        electorate but diverges from a swing state's median voter."""
+    def test_swing_seat_loyalty_not_penalized_below_safe_seat_loyalty(self):
+        """v6.6: a loyal record is not penalized for being in a swing seat.
+        Pre-v6.6 the same 95% party-line record scored materially lower in a
+        swing state than a safe one (loyalty read as diverging from the
+        swing-state median). Now a below-expected defection rate floors at
+        neutral in either seat, so swing-seat loyalty is never driven below
+        safe-seat loyalty."""
         record = {
-            "keyVotes": self._make_votes(with_party=95, against_party=5),
+            "keyVotes": self._make_votes(with_party=98, against_party=2),
             "recentVotes": [],
         }
         funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
@@ -537,24 +576,37 @@ class TestConstituentAlignment:
         score_swing = _calc_constituent_alignment(
             record, [], funding, state="NV", party="R"
         )
-        assert score_deep_red > score_swing
+        # Both are below-expected loyalists → both floor at neutral.
+        assert score_deep_red == score_swing == 50
 
-    def test_opposed_seat_expects_more_crossing(self):
-        """A member whose party opposes the state lean is expected to
-        cross more; the same loyal record scores lower there than in a
-        seat aligned with the party."""
-        record = {
-            "keyVotes": self._make_votes(with_party=95, against_party=5),
+    def test_opposed_seat_still_expects_more_crossing_for_crossers(self):
+        """The seat-relative EXPECTED break rate still differs by lean — it
+        just only affects CROSSERS now, not loyalists. A member who crosses
+        20% gets more credit where the seat opposes their party (crossing
+        toward the state median) than where the seat aligns with it. A loyal
+        record, by contrast, floors at neutral in both seats (v6.6 — loyalty
+        is not penalized even where the seat 'expects' more crossing)."""
+        crosser = {
+            "keyVotes": self._make_votes(with_party=65, against_party=35),
+            "recentVotes": [],
+        }
+        loyalist = {
+            "keyVotes": self._make_votes(with_party=98, against_party=2),
             "recentVotes": [],
         }
         funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
-        score_opposed = _calc_constituent_alignment(
-            record, [], funding, state="MA", party="R"
+        # Crosser: opposed seat rewards crossing more than aligned seat.
+        assert _calc_constituent_alignment(
+            crosser, [], funding, state="MA", party="R"
+        ) > _calc_constituent_alignment(
+            crosser, [], funding, state="ID", party="R"
         )
-        score_aligned = _calc_constituent_alignment(
-            record, [], funding, state="ID", party="R"
-        )
-        assert score_opposed < score_aligned
+        # Loyalist: floored at neutral regardless of seat lean.
+        assert _calc_constituent_alignment(
+            loyalist, [], funding, state="MA", party="R"
+        ) == _calc_constituent_alignment(
+            loyalist, [], funding, state="ID", party="R"
+        ) == 50
 
     def test_crossing_not_rewarded_for_its_own_sake(self):
         """Owner principle (2026-07-04): the goal is carrying out the
@@ -623,7 +675,6 @@ class TestConstituentAlignment:
         for i in range(1, len(scores)):
             assert scores[i] >= scores[i - 1]
         assert scores[-1] - scores[0] >= 25
-
 
 class TestFundingDiversity:
     """Higher score = broader, more distributed funding base."""
@@ -1428,3 +1479,65 @@ class TestComputeOverallScoreOnDict:
 
     def test_missing_keys_default_to_zero(self):
         assert compute_overall_score({}) == 0.0
+
+
+class TestStatePviData:
+    """Guards the generated state PVI data (app/data/state_pvi.json) and the
+    generator's compute logic. STATE_PVI used to be a hand-typed inline dict;
+    it is now COMPUTED from presidential returns by scripts/fetch_state_pvi.py
+    and read via _state_pvi(). These tests lock in both the shipped data's
+    sanity and the formula, so a bad regeneration (swapped D/R column, wrong
+    baseline, sign flip) fails here instead of silently skewing every
+    senator's seat expectation."""
+
+    # A few hand-verified Cook Political Report 2022 published PVIs. The
+    # computed values must land within +/-1 (Cook's exact formula applies
+    # undisclosed recency weighting we deliberately don't replicate).
+    COOK_ANCHORS = {
+        "WY": 25, "WV": 22, "MA": -15, "CA": -13, "MI": 1, "PA": 2,
+        "GA": 3, "TX": 5, "DC": -43,
+    }
+
+    def test_shipped_json_is_sane(self):
+        pvi = score_calculator._state_pvi()
+        assert len(pvi) == 51  # 50 states + DC
+        assert all(-50 <= v <= 50 for v in pvi.values())
+        r_lean = sum(1 for v in pvi.values() if v > 0)
+        d_lean = sum(1 for v in pvi.values() if v < 0)
+        assert 18 <= r_lean <= 32 and 18 <= d_lean <= 32
+
+    def test_shipped_json_matches_cook_within_one(self):
+        pvi = score_calculator._state_pvi()
+        for st, expected in self.COOK_ANCHORS.items():
+            assert st in pvi, f"{st} missing from state_pvi.json"
+            assert abs(pvi[st] - expected) <= 1, (
+                f"{st}: shipped {pvi[st]:+d} vs Cook {expected:+d} (>1 off)"
+            )
+
+    def test_generator_compute_pvi_formula(self):
+        """The generator's compute_pvi implements Cook's formula: a state
+        that ran exactly at the national two-party split is EVEN; running
+        more Republican than the nation yields a positive (R) PVI."""
+        import importlib.util
+        import pathlib
+
+        script = (
+            pathlib.Path(__file__).resolve().parent.parent
+            / "scripts" / "fetch_state_pvi.py"
+        )
+        spec = importlib.util.spec_from_file_location("fetch_state_pvi", script)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        # National two-party D share = 50% both cycles.
+        counts = {
+            "2016": {"national": {"D": 100, "R": 100},
+                     "XX": {"D": 50, "R": 50},    # exactly national -> EVEN
+                     "YY": {"D": 40, "R": 60}},   # 10pts more R -> R+10
+            "2020": {"national": {"D": 100, "R": 100},
+                     "XX": {"D": 50, "R": 50},
+                     "YY": {"D": 40, "R": 60}},
+        }
+        out = mod.compute_pvi(counts)
+        assert out["XX"] == 0
+        assert out["YY"] == 10  # positive = R lean

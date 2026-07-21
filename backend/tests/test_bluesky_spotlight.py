@@ -76,8 +76,12 @@ class TestPublishSpotlightUrl:
     def test_links_to_politicians_profile_not_old_scorecard_route(self):
         senator = Senator(id="chuck-grassley", name="Chuck Grassley", state="IA", party="R")
 
-        with patch("app.pipeline.analyze.bluesky_spotlight.settings") as mock_settings, \
-             patch("app.pipeline.analyze.bluesky_spotlight.build_link_card", return_value=None), \
+        # _publish_spotlight delegates to the shared bluesky_utils.publish_post,
+        # which reads its own `settings` import and calls build_link_card
+        # within its own module — patch both there, not on bluesky_spotlight
+        # (which no longer references either directly for this path).
+        with patch("app.pipeline.analyze.bluesky_utils.settings") as mock_settings, \
+             patch("app.pipeline.analyze.bluesky_utils.build_link_card", return_value=None), \
              patch("atproto.Client") as mock_client_cls:
             mock_settings.BSKY_HANDLE = "civitas-research.org"
             mock_settings.BSKY_APP_PASSWORD = "unused-in-test"

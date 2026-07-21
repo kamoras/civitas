@@ -166,17 +166,17 @@ export default function RepresentationScore({ breakdown, votingRecord, funding, 
   return (
     <div>
       <div className="flex items-end gap-4 mb-1">
-        <div className="flex items-baseline gap-2">
+        <div className="flex items-baseline gap-2 shrink-0">
           <div className={`text-5xl sm:text-6xl font-pixel ${colorClass}`}>{overall}</div>
           <div className={`text-2xl sm:text-3xl font-pixel ${colorClass} opacity-70`} title={`Grade: ${grade}`}>{grade}</div>
         </div>
-        <div className="pb-2">
+        <div className="pb-2 min-w-0">
           <div className="text-xs text-matrix-green/40">
             <MetricTooltip text="Weighted average of 3 sub-scores measuring how well this senator represents constituents. Based on funding independence (incl. donor-base diversity), voting alignment with their constituents, and legislative effectiveness. 100 = ideal representation, 0 = none. Scores near 50 mean limited data.">
               REPRESENTATION SCORECARD
             </MetricTooltip>
           </div>
-          <div className={`text-sm font-pixel ${colorClass} tracking-wider`}>{label}</div>
+          <div className={`text-sm font-pixel ${colorClass} tracking-wider break-words`}>{label}</div>
           <div className="text-[10px] text-matrix-green/50 mt-0.5">100 = fully represents constituents</div>
         </div>
       </div>

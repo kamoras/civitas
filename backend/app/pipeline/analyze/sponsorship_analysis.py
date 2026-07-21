@@ -270,35 +270,122 @@ def compute_ideology_scores(
     return {row_to_id[i]: scores[i] for i in range(n) if row_to_id[i] in senator_bioguide_ids}
 
 
+# Minimum members of a party before its own ideology distribution is trusted
+# to define within-party terciles. Below it (e.g. the 2-3 Independents, or a
+# tiny minority in a lopsided cohort) the fixed global cutoffs are used
+# instead — too few points to place a stable 33rd/67th percentile.
+_MIN_PARTY_SIZE_FOR_RELATIVE_BOUNDS = 5
+
+# Fixed global fallback cutoffs on the [0,1] ideology scale, used when no
+# cohort-relative bounds are supplied for a party (small party, or a caller
+# that doesn't compute them). D/R keep the original 0.30/0.70 split.
+_DEFAULT_DR_BOUNDS = (0.30, 0.70)
+
+
+def party_ideology_bounds(
+    members: list[tuple[float | None, str | None]],
+    min_party_size: int = _MIN_PARTY_SIZE_FOR_RELATIVE_BOUNDS,
+) -> dict[str, tuple[float, float]]:
+    """Per-party (low, high) ideology label thresholds = the 33rd/67th
+    percentiles of each party's OWN ideology-score distribution across the
+    cohort.
+
+    Why: the ideology score is min-max-rescaled across the whole chamber
+    (compute_ideology_scores), so its distribution is bimodal — two party
+    clusters with an empty middle. Fixed absolute cutoffs (0.30/0.70) then
+    fall in that empty valley, so the "moderate/centrist" band captures ~0%
+    of members and every D reads "progressive", every R "conservative" —
+    the label collapses to party identity even though the WITHIN-party
+    spread is real and large (DW-NOMINATE: Warren far left of Fetterman,
+    both Democrats). Scoring each member against their own party's terciles
+    makes "moderate Democrat" mean moderate AMONG Democrats — the same
+    cohort-relative, recomputed-every-run pattern this module already uses
+    for bipartisanship and score_calculator uses for seat-relative alignment.
+
+    ``members``: (ideology_score, party) for every scored member of the
+    cohort. Parties with fewer than ``min_party_size`` scored members are
+    omitted from the result; describe_senator_position then falls back to the
+    fixed global cutoffs for them.
+    """
+    by_party: dict[str, list[float]] = {}
+    for score, party in members:
+        if score is not None and party in ("D", "R"):
+            by_party.setdefault(party, []).append(float(score))
+    bounds: dict[str, tuple[float, float]] = {}
+    for party, scores in by_party.items():
+        if len(scores) < min_party_size:
+            continue
+        lo = float(np.quantile(scores, 1.0 / 3.0))
+        hi = float(np.quantile(scores, 2.0 / 3.0))
+        if hi > lo:  # guard a degenerate all-identical party distribution
+            bounds[party] = (lo, hi)
+    return bounds
+
+
 def describe_senator_position(
     ideology: float,
     leadership: float,
     party: str,
+    years_in_office: float | None = None,
+    ideology_bounds: tuple[float, float] | None = None,
 ) -> str:
     """Generate a GovTrack-style description of a senator's position.
 
     Uses the ideology × leadership grid to produce labels like
     "progressive Democratic leader" or "conservative Republican follower"
     (Tauberer 2012).
+
+    ``ideology_bounds`` is this member's own party's (low, high) ideology
+    thresholds from party_ideology_bounds() — the 33rd/67th percentiles of
+    that party's distribution in the current cohort. When supplied, the
+    progressive/moderate/centrist (D) and centrist/moderate/conservative (R)
+    bands are relative to the party, so each captures ~a third of it instead
+    of collapsing to party identity (see party_ideology_bounds for the full
+    rationale). When None (a caller that doesn't compute them, or a party too
+    small for a stable distribution), the fixed global 0.30/0.70 cutoffs are
+    used — preserving prior behavior.
+
+    ``years_in_office`` gates the leader/follower role by tenure. Raw
+    cosponsorship-PageRank leadership is structurally a function of network
+    size, which takes years to build, so a freshman's near-zero score
+    reflects time in office, not follower behavior — GovTrack itself refuses
+    to compute a leadership score for members with fewer than ~10 sponsored
+    bills for exactly this reason, and warns the score "doesn't necessarily
+    make a legislator any better or worse." Rather than brand juniors
+    "follower", the score is shrunk toward neutral by the same tenure
+    confidence Legislative Effectiveness's leadership component already uses
+    (score_calculator.LEADERSHIP_TENURE_FULL_CREDIT_YEARS), so a low-tenure
+    member lands in the unlabeled middle instead of at "follower". When
+    ``years_in_office`` is None (unknown) the score is used as-is, preserving
+    the prior behavior. This honors the platform's "seniority alone is never
+    penalized" design principle (AGENTS.md) for the displayed label, not just
+    the effectiveness score.
     """
+    from app.pipeline.analyze.score_calculator import (
+        LEADERSHIP_TENURE_FULL_CREDIT_YEARS,
+    )
     # ideology is already rescaled to [0, 1] with 0 = most-left, 1 = most-
-    # right (see compute_ideology_scores), so these are terciles of that
-    # scale, not raw SVD output. D/R buckets use a wider 30/70 split (the
-    # middle 40% reads as "moderate" for a party member) than Independents'
-    # 35/65 split, since Independents have no "centrist" party label to fall
-    # back to and a narrower middle band better matches GovTrack's original
-    # three-way split for unaffiliated members (Tauberer 2012).
+    # right (see compute_ideology_scores). D/R bands are relative to the
+    # member's own party (ideology_bounds — the party's 33rd/67th
+    # percentiles) when supplied, so ~a third of the party reads
+    # progressive/moderate/centrist; otherwise the fixed 0.30/0.70 cutoffs
+    # apply. Independents keep the fixed 0.35/0.65 split — there are too few
+    # of them to define a within-party distribution, and a narrower middle
+    # band better matches GovTrack's original three-way split for
+    # unaffiliated members (Tauberer 2012).
     if party == "D":
+        lo, hi = ideology_bounds or _DEFAULT_DR_BOUNDS
         ideo_label = (
-            "progressive" if ideology < 0.30
-            else "centrist" if ideology > 0.70
+            "progressive" if ideology < lo
+            else "centrist" if ideology > hi
             else "moderate"
         )
         party_label = "Democrat"
     elif party == "R":
+        lo, hi = ideology_bounds or _DEFAULT_DR_BOUNDS
         ideo_label = (
-            "centrist" if ideology < 0.30
-            else "conservative" if ideology > 0.70
+            "centrist" if ideology < lo
+            else "conservative" if ideology > hi
             else "moderate"
         )
         party_label = "Republican"
@@ -315,9 +402,18 @@ def describe_senator_position(
     # (most senators cluster low, a few attract disproportionate cosponsor
     # weight) — top/bottom quartile on that spread scale is a meaningfully
     # large gap in raw influence, not just a quartile of a linear scale.
-    if leadership > 0.75:
+    #
+    # Tenure-shrink toward neutral 0.5 before thresholding so a junior member
+    # isn't labeled "follower" for not having had time to build a
+    # cosponsorship network (see the docstring). Unknown tenure -> no shrink.
+    if years_in_office is None:
+        leadership_adj = leadership
+    else:
+        conf = min(max(years_in_office, 0.0) / LEADERSHIP_TENURE_FULL_CREDIT_YEARS, 1.0)
+        leadership_adj = leadership * conf + 0.5 * (1 - conf)
+    if leadership_adj > 0.75:
         role = "leader"
-    elif leadership < 0.25:
+    elif leadership_adj < 0.25:
         role = "follower"
     else:
         role = ""

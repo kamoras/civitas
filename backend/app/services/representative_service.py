@@ -17,7 +17,10 @@ from app.models import (
     Representative,
 )
 from app.pipeline.analyze.score_calculator import compute_overall_score
-from app.pipeline.analyze.sponsorship_analysis import describe_senator_position
+from app.pipeline.analyze.sponsorship_analysis import (
+    describe_senator_position,
+    party_ideology_bounds,
+)
 from app.schemas import (
     PaginatedRepresentativesSchema,
     RepresentativeSchema,
@@ -276,6 +279,13 @@ def get_rep_leaderboard(
 ) -> dict:
     reps = db.query(Representative).all()
 
+    # Party-relative ideology label thresholds over the FULL cohort — before
+    # the party filter/pagination below — so the terciles are stable
+    # regardless of which page or party is requested. See party_ideology_bounds.
+    ideology_bounds_by_party = party_ideology_bounds(
+        [(r.ideology_score, r.party) for r in reps]
+    )
+
     top_industry_map: dict[str, str] = {}
     ind_rows = (
         db.query(RepIndustryDonation.representative_id, RepIndustryDonation.name)
@@ -321,7 +331,11 @@ def get_rep_leaderboard(
             "trend": trend_map.get(r.id, {"direction": "new", "change": 0.0, "previousScore": None}),
             "ideologyScore": r.ideology_score,
             "ideologyLabel": (
-                describe_senator_position(r.ideology_score, r.leadership_score, r.party)
+                describe_senator_position(
+                    r.ideology_score, r.leadership_score, r.party,
+                    years_in_office=r.years_in_office,
+                    ideology_bounds=ideology_bounds_by_party.get(r.party),
+                )
                 if r.ideology_score is not None and r.leadership_score is not None
                 else None
             ),
@@ -362,11 +376,14 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
     if "committees" in rep_data:
         existing.committees = json.dumps(rep_data["committees"])
 
-    existing.score_funding_independence = cs.get("fundingIndependence", 0)
-    existing.score_promise_persistence = cs.get("promisePersistence", 0)
-    existing.score_independent_voting = cs.get("independentVoting", 0)
-    existing.score_funding_diversity = cs.get("fundingDiversity", 0)
-    existing.score_legislative_effectiveness = cs.get("legislativeEffectiveness", 0)
+    # Absent score => unknown, not "fully captured": default to neutral 50,
+    # matching the scoring standard (score_calculator: "Missing data yields a
+    # neutral 50, never a perfect 100 or 0").
+    existing.score_funding_independence = cs.get("fundingIndependence", 50)
+    existing.score_promise_persistence = cs.get("promisePersistence", 50)
+    existing.score_independent_voting = cs.get("independentVoting", 50)
+    existing.score_funding_diversity = cs.get("fundingDiversity", 50)
+    existing.score_legislative_effectiveness = cs.get("legislativeEffectiveness", 50)
     existing.score_confidence = json.dumps(cs.get("confidence") or {})
 
     existing.total_raised = funding.get("totalRaised", 0)

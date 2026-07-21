@@ -15,7 +15,10 @@ from app.pipeline.analyze.promise_quality import (
     clean_promises,
 )
 from app.pipeline.analyze.score_calculator import compute_overall_score
-from app.pipeline.analyze.sponsorship_analysis import describe_senator_position
+from app.pipeline.analyze.sponsorship_analysis import (
+    describe_senator_position,
+    party_ideology_bounds,
+)
 from app.services.pagination import paginate_bounds
 from app.services.score_trends import compute_score_trend_map
 from app.schemas import (
@@ -447,6 +450,13 @@ def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
 
     senators.sort(key=compute_overall_score, reverse=True)
 
+    # Party-relative ideology label thresholds over the full cohort (this
+    # query is .all(), so no pagination skew) — keeps progressive/moderate/
+    # centrist meaningful within a party. See party_ideology_bounds.
+    ideology_bounds_by_party = party_ideology_bounds(
+        [(s.ideology_score, s.party) for s in senators]
+    )
+
     return [
         LeaderboardEntrySchema(
             id=s.id,
@@ -470,7 +480,11 @@ def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
             trend=trend_map.get(s.id, ScoreTrendSchema()),
             ideology_score=s.ideology_score,
             ideology_label=(
-                describe_senator_position(s.ideology_score, s.leadership_score, s.party)
+                describe_senator_position(
+                    s.ideology_score, s.leadership_score, s.party,
+                    years_in_office=s.years_in_office,
+                    ideology_bounds=ideology_bounds_by_party.get(s.party),
+                )
                 if s.ideology_score is not None and s.leadership_score is not None
                 else None
             ),

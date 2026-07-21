@@ -91,11 +91,15 @@ class Senator(Base):
     leadership_title: Mapped[str | None] = mapped_column(String, nullable=True)
     committees: Mapped[str] = mapped_column(Text, default="[]")
 
-    score_funding_independence: Mapped[float] = mapped_column(Float, default=0.0)
-    score_promise_persistence: Mapped[float] = mapped_column(Float, default=0.0)
-    score_independent_voting: Mapped[float] = mapped_column(Float, default=0.0)
-    score_funding_diversity: Mapped[float] = mapped_column(Float, default=0.0)
-    score_legislative_effectiveness: Mapped[float] = mapped_column(Float, default=0.0)
+    # New-insert default is the neutral prior (50), not 0: a row created
+    # before its first scoring pass is "unknown", and per the scoring
+    # standard (score_calculator: "Missing data yields a neutral 50, never a
+    # perfect 100 or 0") unknown must not read as a fully-captured 0.
+    score_funding_independence: Mapped[float] = mapped_column(Float, default=50.0)
+    score_promise_persistence: Mapped[float] = mapped_column(Float, default=50.0)
+    score_independent_voting: Mapped[float] = mapped_column(Float, default=50.0)
+    score_funding_diversity: Mapped[float] = mapped_column(Float, default=50.0)
+    score_legislative_effectiveness: Mapped[float] = mapped_column(Float, default=50.0)
     # Per-dimension data-sufficiency ("high"/"medium"/"low") as JSON —
     # see score_calculator.calculate_confidence.
     score_confidence: Mapped[str] = mapped_column(Text, default="{}")
@@ -305,11 +309,15 @@ class Representative(Base):
     leadership_title: Mapped[str | None] = mapped_column(String, nullable=True)
     committees: Mapped[str] = mapped_column(Text, default="[]")
 
-    score_funding_independence: Mapped[float] = mapped_column(Float, default=0.0)
-    score_promise_persistence: Mapped[float] = mapped_column(Float, default=0.0)
-    score_independent_voting: Mapped[float] = mapped_column(Float, default=0.0)
-    score_funding_diversity: Mapped[float] = mapped_column(Float, default=0.0)
-    score_legislative_effectiveness: Mapped[float] = mapped_column(Float, default=0.0)
+    # New-insert default is the neutral prior (50), not 0: a row created
+    # before its first scoring pass is "unknown", and per the scoring
+    # standard (score_calculator: "Missing data yields a neutral 50, never a
+    # perfect 100 or 0") unknown must not read as a fully-captured 0.
+    score_funding_independence: Mapped[float] = mapped_column(Float, default=50.0)
+    score_promise_persistence: Mapped[float] = mapped_column(Float, default=50.0)
+    score_independent_voting: Mapped[float] = mapped_column(Float, default=50.0)
+    score_funding_diversity: Mapped[float] = mapped_column(Float, default=50.0)
+    score_legislative_effectiveness: Mapped[float] = mapped_column(Float, default=50.0)
     # Per-dimension data-sufficiency ("high"/"medium"/"low") as JSON —
     # see score_calculator.calculate_confidence.
     score_confidence: Mapped[str] = mapped_column(Text, default="{}")
@@ -645,6 +653,10 @@ class ActionIssue(Base):
     full_story: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     bsky_posted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
     bsky_posted_rank: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    # Text of the most recent Bluesky post published for this issue. Used to
+    # suppress near-duplicate reposts when a topic gets fresh coverage whose
+    # post would say essentially the same thing as the last one.
+    bsky_last_post_text: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     is_current: Mapped[bool] = mapped_column(Boolean, default=True)
     primary_article_date: Mapped[str | None] = mapped_column(String(10), nullable=True, default=None)
 

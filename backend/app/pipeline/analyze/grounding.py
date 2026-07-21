@@ -238,6 +238,66 @@ def editorializing_language(generated: str) -> list[str]:
     return sorted({m.group(0) for m in _EDITORIALIZING_RE.finditer(generated or "")})
 
 
+# Electoral-contest framing in the GENERATED text — a claim that someone is
+# running, being challenged, or competing for an office. High-specificity
+# phrases only: bare "opponent"/"challenger" are excluded because they also
+# describe opponents of a bill or challengers to a ruling.
+_ELECTORAL_CLAIM_RE = re.compile(
+    r"\b(?:"
+    r"(?:senate|house|gubernatorial|presidential|congressional|governor'?s?)\s+race"
+    r"|race\s+for\s+(?:the\s+)?(?:senate|house|white\s+house|governor|governorship|president|presidency|congress)"
+    r"|re-?election(?:\s+bid|\s+campaign|\s+race)?"
+    r"|primar(?:y|ies)\s+challeng(?:e|er)|primary\s+opponent|primaried"
+    r"|general\s+election|on\s+the\s+ballot|up\s+for\s+re-?election"
+    r"|running\s+(?:for|against)|run\s+for\s+(?:the\s+)?(?:senate|house|office|president|governor|re-?election)"
+    r"|facing\s+(?:competition|a\s+challenge|a\s+challenger|a\s+primary|a\s+re-?election|an?\s+opponent)"
+    r"|campaign(?:ing)?\s+(?:against|for\s+re-?election)"
+    r"|unseat|electoral\s+challenge|bid\s+for\s+(?:the\s+)?(?:senate|house|governorship|presidency)"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# Any electoral vocabulary in the SOURCE material. Deliberately broad: this is
+# the permissive side of the check, so more terms here means fewer rejections,
+# never more. Some terms ("campaign", "race") have non-electoral senses, but
+# including them only makes the check less likely to fire, which is the safe
+# direction for a high-precision guard. "vote" is excluded on purpose — it is
+# overwhelmingly a legislative floor-vote word in this domain, not an electoral
+# one — while "voters"/"ballot"/"vote for" are kept.
+_ELECTORAL_CONTEXT_RE = re.compile(
+    r"\b(?:race|elect(?:ion|ed|ing|s|oral)?|re-?election|campaign|ballot|"
+    r"primar(?:y|ies)|challenger|opponent|candidate|candidacy|midterms?|"
+    r"unseat|incumbent|voters?|constituents?|poll(?:s|ing|ed)?|"
+    r"running\s+for|contest(?:ed|ing|s)?|nominee|nomination)\b",
+    re.IGNORECASE,
+)
+
+
+def ungrounded_electoral_claims(generated: str, source: str) -> list[str]:
+    """Electoral-contest claims in ``generated`` with no electoral basis in
+    ``source``.
+
+    A recurring, high-damage hallucination class for a civic platform is the
+    model inventing an *electoral contest* between two officials who both
+    appear in the source material for an unrelated reason — e.g. a post about
+    Sen. Graham's death that stated he "was facing competition from Susan
+    Collins for his senate race" (2026-07). Both surnames were grounded and no
+    number was fabricated, so neither ungrounded_titled_names nor
+    ungrounded_numbers caught it: the fabrication was the *relationship*,
+    framed as a campaign that never existed.
+
+    High precision by construction — the claim is flagged only when the source
+    contains NO electoral vocabulary whatsoever. A post summarizing a genuine
+    race is grounded by the election coverage it draws from and passes
+    untouched; only electoral framing with zero electoral basis in the source
+    is rejected. Like the rest of this module, nothing here encodes what the
+    text *should* say — only that a campaign asserted out of nowhere is not.
+    """
+    if _ELECTORAL_CONTEXT_RE.search(source or ""):
+        return []
+    return sorted({m.group(0).strip() for m in _ELECTORAL_CLAIM_RE.finditer(generated or "")})
+
+
 def grounding_violations(generated: str, source: str) -> list[str]:
     """Human-readable list of grounding failures, empty when clean."""
     problems = []
@@ -247,6 +307,11 @@ def grounding_violations(generated: str, source: str) -> list[str]:
     names = ungrounded_titled_names(generated, source)
     if names:
         problems.append(f"officials not in source: {', '.join(names)}")
+    electoral = ungrounded_electoral_claims(generated, source)
+    if electoral:
+        problems.append(
+            f"electoral contest not in source: {', '.join(electoral)}"
+        )
     return problems
 
 

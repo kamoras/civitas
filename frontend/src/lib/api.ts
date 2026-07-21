@@ -55,21 +55,43 @@ async function requestJson<T>(
 }
 
 const _fetchCache = new Map<string, { data: unknown; expiry: number }>();
+// In-flight requests keyed by URL. Concurrent callers of the same URL (e.g.
+// the home preview, the Action Center parent, and IssuesTab all requesting
+// /action/issues on mount) share a single network request instead of each
+// firing their own — the resolved-data cache above can't dedupe these because
+// they start before any of them has populated it. Entries are removed as soon
+// as the request settles so a later call re-fetches once the TTL lapses, and a
+// rejected request isn't cached (retries work).
+const _inflight = new Map<string, Promise<unknown>>();
 
 async function cachedFetch<T>(url: string, ttlMs: number): Promise<T> {
   const now = Date.now();
   const hit = _fetchCache.get(url);
   if (hit && hit.expiry > now) return hit.data as T;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
-  const data: T = await res.json();
-  _fetchCache.set(url, { data, expiry: now + ttlMs });
-  if (_fetchCache.size > 100) {
-    _fetchCache.forEach((entry, key) => {
-      if (entry.expiry <= now) _fetchCache.delete(key);
-    });
+
+  const pending = _inflight.get(url);
+  if (pending) return pending as Promise<T>;
+
+  const request = (async () => {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+    const data: T = await res.json();
+    _fetchCache.set(url, { data, expiry: Date.now() + ttlMs });
+    if (_fetchCache.size > 100) {
+      const cutoff = Date.now();
+      _fetchCache.forEach((entry, key) => {
+        if (entry.expiry <= cutoff) _fetchCache.delete(key);
+      });
+    }
+    return data;
+  })();
+
+  _inflight.set(url, request);
+  try {
+    return (await request) as T;
+  } finally {
+    _inflight.delete(url);
   }
-  return data;
 }
 
 export async function fetchSenatorsByState(state: string): Promise<Senator[]> {
@@ -828,7 +850,11 @@ export async function fetchConfig(): Promise<AppConfig> {
 
 export async function fetchActionIssues(date?: string): Promise<ActionIssuesResponse> {
   const params = date ? `?date=${date}` : "";
-  return requestJson(`${API_BASE}/action/issues${params}`, "Failed to load action issues");
+  // Cached + de-duped like the other Action Center endpoints. The backend
+  // already serves this with `Cache-Control: public, max-age=300`, so a
+  // 5-minute client cache matches its own freshness policy while collapsing
+  // the several consumers that request the same day's issues on load.
+  return cachedFetch(`${API_BASE}/action/issues${params}`, 300_000);
 }
 
 export async function submitPulseVote(

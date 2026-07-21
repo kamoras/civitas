@@ -1,0 +1,36 @@
+{
+  "ci": {
+    "collect": {
+      "startServerCommand": "npm start",
+      "startServerReadyPattern": "Ready in",
+      "startServerReadyTimeout": 60000,
+      "numberOfRuns": 1,
+      "url": [
+        "http://localhost:3000/",
+        "http://localhost:3000/about",
+        "http://localhost:3000/accessibility",
+        "http://localhost:3000/politicians",
+        "http://localhost:3000/bills",
+        "http://localhost:3000/leaderboard",
+        "http://localhost:3000/action",
+        "http://localhost:3000/explore",
+        "http://localhost:3000/compare",
+        "http://localhost:3000/changelog"
+      ],
+      "settings": {
+        "onlyCategories": ["accessibility", "seo"],
+        "chromeFlags": "--no-sandbox --headless=new"
+      }
+    },
+    "assert": {
+      "assertions": {
+        "categories:accessibility": ["error", { "minScore": 1 }],
+        "categories:seo": ["error", { "minScore": 1 }]
+      }
+    },
+    "upload": {
+      "target": "filesystem",
+      "outputDir": ".lighthouseci"
+    }
+  }
+}
