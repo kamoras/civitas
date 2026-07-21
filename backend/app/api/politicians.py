@@ -23,6 +23,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json
+from app.config_definitions import JUSTICE_SCORE_WEIGHTS
 from app.database import get_db
 from app.models import ActionIssue, ExploreDocument, Justice, President, Representative, Senator
 from app.pipeline.analyze.president_scorer import compute_president_overall_score
@@ -45,14 +46,6 @@ def _cached_json(data, max_age: int = CACHE_TTL_DETAIL_S) -> JSONResponse:
 # ---------------------------------------------------------------------------
 # Score helpers — mirrors frontend lib/representation.ts calculations
 # ---------------------------------------------------------------------------
-
-_JUSTICE_WEIGHTS = {
-    "consistency": 0.35,
-    "independence": 0.30,
-    "bipartisan_agreement": 0.15,
-    "judicial_restraint": 0.20,
-}
-
 
 def _senator_overall(s) -> float | None:
     """Overall score for a Senator or Representative — duck-typed, both
@@ -87,10 +80,10 @@ def _justice_overall(j: Justice) -> float | None:
     if all(v == 0.0 for v in scores):
         return None
     return round(
-        j.score_consistency * _JUSTICE_WEIGHTS["consistency"]
-        + j.score_independence * _JUSTICE_WEIGHTS["independence"]
-        + j.score_bipartisan_agreement * _JUSTICE_WEIGHTS["bipartisan_agreement"]
-        + j.score_judicial_restraint * _JUSTICE_WEIGHTS["judicial_restraint"],
+        j.score_consistency * JUSTICE_SCORE_WEIGHTS["consistency"]
+        + j.score_independence * JUSTICE_SCORE_WEIGHTS["independence"]
+        + j.score_bipartisan_agreement * JUSTICE_SCORE_WEIGHTS["bipartisan_agreement"]
+        + j.score_judicial_restraint * JUSTICE_SCORE_WEIGHTS["judicial_restraint"],
         1,
     )
 
@@ -112,12 +105,13 @@ def _build_active_issue_map(db: Session) -> dict[str, list[int]]:
             if not field:
                 continue
             try:
-                for entry in json.loads(field):
-                    pid = entry.get("id")
-                    if pid:
-                        mapping.setdefault(pid, []).append(issue_id)
-            except Exception:
-                pass
+                entries = json.loads(field)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            for entry in entries:
+                pid = entry.get("id") if isinstance(entry, dict) else None
+                if pid:
+                    mapping.setdefault(pid, []).append(issue_id)
     return mapping
 
 
@@ -364,7 +358,7 @@ def _get_active_issues(politician_id: str, db: Session) -> list[dict]:
             if field:
                 try:
                     related.extend(json.loads(field))
-                except Exception:
+                except (json.JSONDecodeError, TypeError):
                     pass
         if any(e.get("id") == politician_id for e in related):
             result.append({

@@ -26,9 +26,11 @@ export function localDateStr(d: Date = new Date()): string {
 export function formatUtcDate(
   dateStr: string,
   opts: Intl.DateTimeFormatOptions = { year: "numeric", month: "long", day: "numeric" },
+  locale?: string,
 ): string {
+  if (!dateStr) return "";
   try {
-    return new Date(dateStr + "T12:00:00").toLocaleDateString(undefined, opts);
+    return new Date(dateStr + "T12:00:00").toLocaleDateString(locale, opts);
   } catch {
     return dateStr;
   }

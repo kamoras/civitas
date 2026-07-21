@@ -47,6 +47,7 @@ from app.pipeline.vector_store import (
     get_embedding_model,
     search_explore_documents,
 )
+from app.time_utils import utcnow
 
 _US_EAST = ZoneInfo("America/New_York")
 
@@ -280,7 +281,7 @@ def _resolve_url(url: str, timeout: float = 6.0) -> str:
             logger.debug("Resolved Google News URL → %s", final[:100])
             return final
     except Exception:
-        pass
+        logger.debug("Google News URL resolution (HEAD) failed for %s", url[:100], exc_info=True)
     try:
         resp = httpx.get(url, follow_redirects=True, timeout=timeout, headers={
             "User-Agent": "Mozilla/5.0 (compatible; Civitas/1.0)",
@@ -290,7 +291,7 @@ def _resolve_url(url: str, timeout: float = 6.0) -> str:
             logger.debug("Resolved Google News URL (GET) → %s", final[:100])
             return final
     except Exception:
-        pass
+        logger.debug("Google News URL resolution (GET) failed for %s", url[:100], exc_info=True)
     return url
 
 
@@ -3027,7 +3028,7 @@ def _run_refresh(db: Session) -> int:
     logger.info("Action center refresh starting for %s", today)
     _set_refresh_state(
         is_running=True, stage="fetch", stage_detail=None,
-        started_at=datetime.utcnow(),
+        started_at=utcnow(),
     )
 
     # 1. Fetch articles
@@ -3432,7 +3433,7 @@ def _run_refresh(db: Session) -> int:
     # This prevents a briefly-trending topic from displacing a solid story on
     # a single run, then the original story coming back an hour later.
     # Grace period: issue must be older than 90 minutes to be eligible for retirement.
-    _grace_cutoff = datetime.utcnow() - timedelta(minutes=90)
+    _grace_cutoff = utcnow() - timedelta(minutes=90)
     all_current = (
         db.query(ActionIssue)
         .filter(ActionIssue.is_current == True)  # noqa: E712
@@ -3582,7 +3583,7 @@ def _run_refresh(db: Session) -> int:
     )
     _set_refresh_state(
         is_running=False, stage=None, stage_detail=None,
-        last_completed_at=datetime.utcnow(),
+        last_completed_at=utcnow(),
         last_elapsed=round(elapsed, 1),
     )
     return issues_created

@@ -11,12 +11,13 @@ pipeline" where they don't belong.
 
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from app.database import SessionLocal
 from app.models import Justice, PipelineStatus, SupplementaryPipelineRun
 from app.pipeline.progress_tracker import ProgressTracker
 from app.pipeline.run_tracker import PipelineRunTracker
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ async def run_supplementary_pipeline() -> dict:
     db = SessionLocal()
     start_time = time.time()
 
-    run = SupplementaryPipelineRun(started_at=datetime.utcnow(), status=PipelineStatus.RUNNING)
+    run = SupplementaryPipelineRun(started_at=utcnow(), status=PipelineStatus.RUNNING)
     db.add(run)
     db.commit()
     progress = ProgressTracker(run, SUPPLEMENTARY_PIPELINE_STEPS, db, start_time)
@@ -78,7 +79,7 @@ async def run_supplementary_pipeline() -> dict:
         # uncached per-case crawling (5h+ in run 69). Refresh weekly
         # (Sunday UTC), or whenever the justices table is empty.
         justices_missing = db.query(Justice.id).first() is None
-        run_justices = justices_missing or datetime.utcnow().weekday() == 6
+        run_justices = justices_missing or utcnow().weekday() == 6
         if not run_justices:
             logger.info("Justice refresh skipped (weekly cadence; next on Sunday UTC)")
             run.justices_skipped = True
@@ -111,7 +112,7 @@ async def run_supplementary_pipeline() -> dict:
 
         run.current_phase = "finalize"
         run.status = PipelineStatus.COMPLETED
-        run.completed_at = datetime.utcnow()
+        run.completed_at = utcnow()
         run.elapsed_seconds = round(time.time() - start_time, 1)
         db.commit()
         logger.info("=== SUPPLEMENTARY PIPELINE COMPLETE ===")
@@ -131,7 +132,7 @@ async def run_supplementary_pipeline() -> dict:
         summary = "supplementary pipeline failed — see server logs"
         try:
             run.status = PipelineStatus.FAILED
-            run.completed_at = datetime.utcnow()
+            run.completed_at = utcnow()
             run.elapsed_seconds = round(time.time() - start_time, 1)
             run.error_message = summary
             db.commit()

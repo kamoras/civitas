@@ -103,7 +103,12 @@ function ContactInfo({ senator }: { senator: Senator }) {
 }
 
 export default function SenatorCard({ senator, chamber = "senate" }: SenatorCardProps) {
-  const pacPercentRaw = (senator.funding.totalFromPACs / senator.funding.totalRaised) * 100;
+  // Guard against zero fundraising (0/0 = NaN) — matches the compare and
+  // leaderboard views, which both gate on totalRaised > 0.
+  const pacPercentRaw =
+    senator.funding.totalRaised > 0
+      ? (senator.funding.totalFromPACs / senator.funding.totalRaised) * 100
+      : 0;
   const pacPercent =
     pacPercentRaw > 0 && pacPercentRaw < 1 ? "<1" : Math.round(pacPercentRaw).toString();
 

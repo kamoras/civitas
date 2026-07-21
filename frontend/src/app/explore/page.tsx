@@ -13,7 +13,7 @@ import {
   type ExploreResult,
   type ExploreStats,
 } from "@/lib/api";
-import { safeHref, localDateStr } from "@/lib/formatting";
+import { localDateStr, formatUtcDate } from "@/lib/formatting";
 import { chamberColor, chamberBg, chamberLabel } from "@/lib/chamber";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 
@@ -43,19 +43,8 @@ function docTypeLabel(docType: string): string {
   return docType || "Document";
 }
 
-function formatDate(dateStr: string): string {
-  if (!dateStr) return "";
-  try {
-    const d = new Date(dateStr + "T00:00:00");
-    return d.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  } catch {
-    return dateStr;
-  }
-}
+const formatDate = (dateStr: string): string =>
+  formatUtcDate(dateStr, { year: "numeric", month: "short", day: "numeric" }, "en-US");
 
 function isCommentOpen(result: ExploreResult): boolean {
   if (!result.commentUrl || !result.commentsCloseOn) return false;

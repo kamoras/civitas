@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { localDateStr } from "@/lib/formatting";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { localDateStr, formatUtcDate } from "@/lib/formatting";
 
 const STORAGE_KEY = "civitas_actions";
 
@@ -52,20 +52,34 @@ function computeStreak(actions: CivicAction[]): number {
   return streak;
 }
 
-function formatDate(dateStr: string): string {
-  try {
-    const d = new Date(dateStr + "T00:00:00");
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  } catch {
-    return dateStr;
-  }
-}
+const formatDate = (dateStr: string): string =>
+  formatUtcDate(dateStr, { month: "short", day: "numeric" }, "en-US");
 
 // Custom event so LogActionButton can notify the widget without prop drilling
 const TRACKER_EVENT = "civitas:action-logged";
 
 export function dispatchActionLogged(): void {
   window.dispatchEvent(new Event(TRACKER_EVENT));
+}
+
+function subscribeActions(callback: () => void): () => void {
+  window.addEventListener(TRACKER_EVENT, callback);
+  window.addEventListener("storage", callback);
+  return () => {
+    window.removeEventListener(TRACKER_EVENT, callback);
+    window.removeEventListener("storage", callback);
+  };
+}
+
+// Whether this issue was already logged today (localStorage-backed). A boolean
+// useSyncExternalStore snapshot — updated via TRACKER_EVENT on log — so no
+// read-into-state effect.
+function useLoggedToday(issueTitle: string): boolean {
+  return useSyncExternalStore(
+    subscribeActions,
+    () => loadActions().some((a) => a.issue_title === issueTitle && a.date === today()),
+    () => false,
+  );
 }
 
 // ── Log Action Button ─────────────────────────────────────────────────────────
@@ -77,18 +91,10 @@ export function LogActionButton({
   issueTitle: string;
   senatorName?: string;
 }) {
-  const [logged, setLogged] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [text, setText] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
-
-  // Check if already logged today for this issue
-  useEffect(() => {
-    const existing = loadActions().find(
-      (a) => a.issue_title === issueTitle && a.date === today(),
-    );
-    if (existing) setLogged(true);
-  }, [issueTitle]);
+  const logged = useLoggedToday(issueTitle);
 
   useEffect(() => {
     if (showForm) inputRef.current?.focus();
@@ -105,10 +111,9 @@ export function LogActionButton({
       senator_name: senatorName,
     });
     saveActions(actions);
-    setLogged(true);
     setShowForm(false);
     setText("");
-    dispatchActionLogged();
+    dispatchActionLogged();  // → useLoggedToday re-reads true
   }
 
   if (logged) {
@@ -175,6 +180,9 @@ export default function CivicActionWidget() {
   }, []);
 
   useEffect(() => {
+    // Client-only hydration gate: render nothing on the server (localStorage
+    // isn't available there), then mount + subscribe to action-log updates.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
     refresh();
     window.addEventListener(TRACKER_EVENT, refresh);

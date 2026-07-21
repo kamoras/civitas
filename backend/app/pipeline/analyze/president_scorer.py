@@ -30,6 +30,38 @@ def clamp(v: float) -> int:
     return max(0, min(100, round(v)))
 
 
+def _blend_components_with_seed(components: list[dict], seed_score: float) -> dict:
+    """Combine weighted live-data components with the editorial seed value.
+
+    Shared by _competence_core / _effectiveness_core / _agency_alignment_core,
+    which each gathered their own `components` list and then ran this identical
+    blending math. With no components it's the pure seed; otherwise the live
+    score fills its own weight and the seed fills any remaining (unfetched)
+    weight, appended as a visible component.
+    """
+    if not components:
+        return {
+            "score": clamp(seed_score), "components": [],
+            "note": "No live data available — pure editorial seed value.",
+        }
+
+    total_weight = sum(c["weight"] for c in components)
+    weighted_sum = sum(c["score"] * c["weight"] for c in components)
+    live_score = weighted_sum / total_weight
+
+    remaining_weight = 1.0 - total_weight
+    if remaining_weight > 0.01:
+        score = clamp(live_score * total_weight + seed_score * remaining_weight)
+        components.append({
+            "label": "Editorial seed (unfetched components)", "weight": round(remaining_weight, 2),
+            "score": round(seed_score, 1),
+            "detail": "no live source for the remaining weight — blended with the editorial seed value",
+        })
+    else:
+        score = clamp(live_score)
+    return {"score": score, "components": components}
+
+
 def compute_president_overall_score(entity) -> float:
     """Weighted overall score from a scored President row.
 
@@ -134,27 +166,7 @@ def _competence_core(
             "detail": f"{eo_count} executive orders over {term_years:.1f} years = {eo_per_year:.1f}/year",
         })
 
-    if not components:
-        return {
-            "score": clamp(seed_score), "components": [],
-            "note": "No live data available — pure editorial seed value.",
-        }
-
-    total_weight = sum(c["weight"] for c in components)
-    weighted_sum = sum(c["score"] * c["weight"] for c in components)
-    live_score = weighted_sum / total_weight
-
-    remaining_weight = 1.0 - total_weight
-    if remaining_weight > 0.01:
-        score = clamp(live_score * total_weight + seed_score * remaining_weight)
-        components.append({
-            "label": "Editorial seed (unfetched components)", "weight": round(remaining_weight, 2),
-            "score": round(seed_score, 1),
-            "detail": "no live source for the remaining weight — blended with the editorial seed value",
-        })
-    else:
-        score = clamp(live_score)
-    return {"score": score, "components": components}
+    return _blend_components_with_seed(components, seed_score)
 
 
 def calc_effectiveness(
@@ -238,27 +250,7 @@ def _effectiveness_core(
             "detail": f"{jobs_created_millions:.1f}M jobs over {term_years:.1f} years = {jobs_per_year:.2f}M/year",
         })
 
-    if not components:
-        return {
-            "score": clamp(seed_score), "components": [],
-            "note": "No live data available — pure editorial seed value.",
-        }
-
-    total_weight = sum(c["weight"] for c in components)
-    weighted_sum = sum(c["score"] * c["weight"] for c in components)
-    live_score = weighted_sum / total_weight
-
-    remaining_weight = 1.0 - total_weight
-    if remaining_weight > 0.01:
-        score = clamp(live_score * total_weight + seed_score * remaining_weight)
-        components.append({
-            "label": "Editorial seed (unfetched components)", "weight": round(remaining_weight, 2),
-            "score": round(seed_score, 1),
-            "detail": "no live source for the remaining weight — blended with the editorial seed value",
-        })
-    else:
-        score = clamp(live_score)
-    return {"score": score, "components": components}
+    return _blend_components_with_seed(components, seed_score)
 
 
 def calc_agency_alignment(
@@ -314,27 +306,7 @@ def _agency_alignment_core(
             "detail": f"{rulemaking_finalized_pct:.0f}% of rulemakings reached a final rule",
         })
 
-    if not components:
-        return {
-            "score": clamp(seed_score), "components": [],
-            "note": "No live data available — pure editorial seed value.",
-        }
-
-    total_weight = sum(c["weight"] for c in components)
-    weighted_sum = sum(c["score"] * c["weight"] for c in components)
-    live_score = weighted_sum / total_weight
-
-    remaining_weight = 1.0 - total_weight
-    if remaining_weight > 0.01:
-        score = clamp(live_score * total_weight + seed_score * remaining_weight)
-        components.append({
-            "label": "Editorial seed (unfetched components)", "weight": round(remaining_weight, 2),
-            "score": round(seed_score, 1),
-            "detail": "no live source for the remaining weight — blended with the editorial seed value",
-        })
-    else:
-        score = clamp(live_score)
-    return {"score": score, "components": components}
+    return _blend_components_with_seed(components, seed_score)
 
 
 def recalculate_president_scores(

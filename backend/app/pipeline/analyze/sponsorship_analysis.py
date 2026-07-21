@@ -36,7 +36,6 @@ Ideology (SVD/PCA, Poole & Rosenthal 1985):
 """
 
 import logging
-import math
 
 import numpy as np
 
@@ -134,9 +133,9 @@ def _build_cosponsorship_matrix(
     for sponsor_idx, cosponsor_idx, weight in cells:
         P[sponsor_idx, cosponsor_idx] += weight
 
-    for i in range(n):
-        for j in range(n):
-            P[i, j] = math.sqrt(P[i, j])
+    # Elementwise sqrt (all cells are >= 0: identity diagonal + nonnegative
+    # cosponsorship weights) — vectorized instead of an O(n^2) Python loop.
+    P = np.sqrt(P)
 
     return id_to_row, n, P
 

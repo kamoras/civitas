@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
 import { submitPulseVote } from "@/lib/api";
 
 const STORAGE_KEY = "civitas_pulse_votes";
+const PULSE_EVENT = "civitas:pulse-votes";
 
 function getVotedIssues(): Set<number> {
   try {
@@ -19,6 +20,27 @@ function markVoted(issueId: number): void {
   const voted = getVotedIssues();
   voted.add(issueId);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(voted)));
+  window.dispatchEvent(new Event(PULSE_EVENT));
+}
+
+function subscribeVoted(callback: () => void): () => void {
+  window.addEventListener(PULSE_EVENT, callback);
+  window.addEventListener("storage", callback);
+  return () => {
+    window.removeEventListener(PULSE_EVENT, callback);
+    window.removeEventListener("storage", callback);
+  };
+}
+
+// Whether the user has already voted on this issue (localStorage-backed).
+// useSyncExternalStore returns a boolean snapshot — stable across renders, and
+// updated when markVoted dispatches PULSE_EVENT — so no read-into-state effect.
+function useHasVoted(issueId: number): boolean {
+  return useSyncExternalStore(
+    subscribeVoted,
+    () => getVotedIssues().has(issueId),
+    () => false,
+  );
 }
 
 export default function StancePulse({
@@ -32,12 +54,8 @@ export default function StancePulse({
 }) {
   const [concerned, setConcerned] = useState(initialConcerned);
   const [notPriority, setNotPriority] = useState(initialNotPriority);
-  const [hasVoted, setHasVoted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    setHasVoted(getVotedIssues().has(issueId));
-  }, [issueId]);
+  const hasVoted = useHasVoted(issueId);
 
   const vote = useCallback(
     async (stance: "concerned" | "not_priority") => {
@@ -47,8 +65,7 @@ export default function StancePulse({
         const result = await submitPulseVote(issueId, stance);
         setConcerned(result.concernedCount);
         setNotPriority(result.notPriorityCount);
-        markVoted(issueId);
-        setHasVoted(true);
+        markVoted(issueId);  // dispatches PULSE_EVENT → useHasVoted re-reads true
       } catch {
         /* fail silently — non-critical feature */
       } finally {

@@ -26,6 +26,34 @@ const CHAMBER_PATH: Record<Chamber, string> = {
   [Chamber.House]: "representatives",
 };
 
+// Client-side cache TTLs for cachedFetch. Named so the intent (how volatile
+// each endpoint is) is explicit and the same tier can't drift between callers.
+const TTL = {
+  /** Directory/leaderboard lists — refreshed a couple times per session. */
+  SHORT: 120_000, // 2 min
+  /** Deterministic derived data (score breakdowns, monitors) — changes at most daily. */
+  MEDIUM: 300_000, // 5 min
+  /** Rarely-changing reference data (score history, elections, open comments). */
+  LONG: 3_600_000, // 1 hour
+} as const;
+
+// Single fetch-and-parse path for the many endpoints that share the exact
+// "fetch → throw `<label>: <status>` on !ok → return JSON" shape. `camelize`
+// runs the snake_case→camelCase conversion some endpoints need; `init` passes
+// method/headers (e.g. admin auth). Endpoints with bespoke handling (404→null,
+// !ok→[], a 401-specific message, returning res.ok as a boolean) intentionally
+// do NOT use this and keep their own body.
+async function requestJson<T>(
+  url: string,
+  errorLabel: string,
+  opts?: { camelize?: boolean; init?: RequestInit },
+): Promise<T> {
+  const res = await fetch(url, opts?.init);
+  if (!res.ok) throw new Error(`${errorLabel}: ${res.status}`);
+  const data = await res.json();
+  return (opts?.camelize ? camelizeKeys(data) : data) as T;
+}
+
 const _fetchCache = new Map<string, { data: unknown; expiry: number }>();
 // In-flight requests keyed by URL. Concurrent callers of the same URL (e.g.
 // the home preview, the Action Center parent, and IssuesTab all requesting
@@ -67,15 +95,11 @@ async function cachedFetch<T>(url: string, ttlMs: number): Promise<T> {
 }
 
 export async function fetchSenatorsByState(state: string): Promise<Senator[]> {
-  const res = await fetch(`${API_BASE}/senators?state=${state}`);
-  if (!res.ok) throw new Error(`Failed to load senators: ${res.status}`);
-  return res.json();
+  return requestJson(`${API_BASE}/senators?state=${state}`, "Failed to load senators");
 }
 
 export async function fetchSenator(senatorId: string): Promise<Senator> {
-  const res = await fetch(`${API_BASE}/senators/${senatorId}`);
-  if (!res.ok) throw new Error(`Senator not found: ${res.status}`);
-  return res.json();
+  return requestJson(`${API_BASE}/senators/${senatorId}`, "Senator not found");
 }
 
 export interface StateInfo {
@@ -85,11 +109,11 @@ export interface StateInfo {
 }
 
 export async function fetchStates(): Promise<StateInfo[]> {
-  return cachedFetch(`${API_BASE}/senators/states`, 120_000);
+  return cachedFetch(`${API_BASE}/senators/states`, TTL.SHORT);
 }
 
 export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
-  return cachedFetch(`${API_BASE}/senators/leaderboard`, 120_000);
+  return cachedFetch(`${API_BASE}/senators/leaderboard`, TTL.SHORT);
 }
 
 // --- House Representatives ---
@@ -101,7 +125,7 @@ export interface RepStateInfo {
 }
 
 export async function fetchRepStates(): Promise<RepStateInfo[]> {
-  return cachedFetch(`${API_BASE}/representatives/states`, 120_000);
+  return cachedFetch(`${API_BASE}/representatives/states`, TTL.SHORT);
 }
 
 export interface PaginatedReps {
@@ -117,15 +141,14 @@ export async function fetchRepresentativesByState(
   page: number = 1,
   perPage: number = 10,
 ): Promise<PaginatedReps> {
-  const res = await fetch(`${API_BASE}/representatives?state=${state}&page=${page}&per_page=${perPage}`);
-  if (!res.ok) throw new Error(`Failed to load representatives: ${res.status}`);
-  return res.json();
+  return requestJson(
+    `${API_BASE}/representatives?state=${state}&page=${page}&per_page=${perPage}`,
+    "Failed to load representatives",
+  );
 }
 
 export async function fetchRepresentative(repId: string): Promise<Senator> {
-  const res = await fetch(`${API_BASE}/representatives/${repId}`);
-  if (!res.ok) throw new Error(`Representative not found: ${res.status}`);
-  return res.json();
+  return requestJson(`${API_BASE}/representatives/${repId}`, "Representative not found");
 }
 
 // Score-breakdown ("show the math") panel data — lazy-fetched on first
@@ -134,20 +157,20 @@ export async function fetchRepresentative(repId: string): Promise<Senator> {
 // a day at most (the nightly pipeline run).
 
 export async function fetchSenatorScoreBreakdown(senatorId: string): Promise<RepresentationScoreBreakdown> {
-  return cachedFetch(`${API_BASE}/senators/${senatorId}/score-breakdown`, 300_000);
+  return cachedFetch(`${API_BASE}/senators/${senatorId}/score-breakdown`, TTL.MEDIUM);
 }
 
 export async function fetchRepScoreBreakdown(repId: string): Promise<RepresentationScoreBreakdown> {
-  return cachedFetch(`${API_BASE}/representatives/${repId}/score-breakdown`, 300_000);
+  return cachedFetch(`${API_BASE}/representatives/${repId}/score-breakdown`, TTL.MEDIUM);
 }
 
 export async function fetchPresidentScoreBreakdown(id: string): Promise<PresidentScoreBreakdown> {
-  const raw = await cachedFetch(`${API_BASE}/presidents/${id}/score-breakdown`, 300_000);
+  const raw = await cachedFetch(`${API_BASE}/presidents/${id}/score-breakdown`, TTL.MEDIUM);
   return camelizeKeys(raw) as PresidentScoreBreakdown;
 }
 
 export async function fetchJusticeScoreBreakdown(id: string): Promise<JusticeScoreBreakdown> {
-  const raw = await cachedFetch(`${API_BASE}/justices/${id}/score-breakdown`, 300_000);
+  const raw = await cachedFetch(`${API_BASE}/justices/${id}/score-breakdown`, TTL.MEDIUM);
   return camelizeKeys(raw) as JusticeScoreBreakdown;
 }
 
@@ -166,9 +189,7 @@ export async function fetchRepLeaderboard(
 ): Promise<PaginatedLeaderboard> {
   const params = new URLSearchParams({ page: String(page), per_page: String(perPage) });
   if (party) params.set("party", party);
-  const res = await fetch(`${API_BASE}/representatives/leaderboard?${params}`);
-  if (!res.ok) throw new Error(`Failed to load house leaderboard: ${res.status}`);
-  return res.json();
+  return requestJson(`${API_BASE}/representatives/leaderboard?${params}`, "Failed to load house leaderboard");
 }
 
 // Shared by the fetchRepVotes/fetchSenatorVotes and fetchRepStockTrades/
@@ -184,9 +205,7 @@ async function fetchPaginatedVotes(
   if (options?.page) params.set("page", String(options.page));
   if (options?.perPage) params.set("per_page", String(options.perPage));
   if (options?.filter) params.set("filter", options.filter);
-  const res = await fetch(`${API_BASE}/${CHAMBER_PATH[chamber]}/${entityId}/votes?${params}`);
-  if (!res.ok) throw new Error(`Failed to load votes: ${res.status}`);
-  return res.json();
+  return requestJson(`${API_BASE}/${CHAMBER_PATH[chamber]}/${entityId}/votes?${params}`, "Failed to load votes");
 }
 
 export async function fetchRepVotes(
@@ -211,9 +230,7 @@ async function fetchPaginatedStockTrades(
   const params = new URLSearchParams();
   if (options?.page) params.set("page", String(options.page));
   if (options?.perPage) params.set("per_page", String(options.perPage));
-  const res = await fetch(`${API_BASE}/${CHAMBER_PATH[chamber]}/${entityId}/stock-trades?${params}`);
-  if (!res.ok) throw new Error(`Failed to load stock trades: ${res.status}`);
-  return res.json();
+  return requestJson(`${API_BASE}/${CHAMBER_PATH[chamber]}/${entityId}/stock-trades?${params}`, "Failed to load stock trades");
 }
 
 export async function fetchRepStockTrades(
@@ -247,9 +264,7 @@ export async function fetchBillsInFlight(options?: {
   if (options?.sort) params.set("sort", options.sort);
   if (options?.page) params.set("page", String(options.page));
   if (options?.perPage) params.set("per_page", String(options.perPage));
-  const res = await fetch(`${API_BASE}/bills?${params}`);
-  if (!res.ok) throw new Error(`Failed to load bills: ${res.status}`);
-  return res.json();
+  return requestJson(`${API_BASE}/bills?${params}`, "Failed to load bills");
 }
 
 export async function fetchBillDetail(billId: string): Promise<BillDetail | null> {
@@ -426,31 +441,19 @@ function camelizeKeys(obj: unknown): unknown {
 }
 
 export async function fetchPresidentLeaderboard(): Promise<PresidentLeaderboardEntry[]> {
-  const res = await fetch(`${API_BASE}/presidents/leaderboard`);
-  if (!res.ok) throw new Error(`Failed to load president leaderboard: ${res.status}`);
-  const raw = await res.json();
-  return camelizeKeys(raw) as PresidentLeaderboardEntry[];
+  return requestJson(`${API_BASE}/presidents/leaderboard`, "Failed to load president leaderboard", { camelize: true });
 }
 
 export async function fetchPresident(id: string): Promise<President> {
-  const res = await fetch(`${API_BASE}/presidents/${id}`);
-  if (!res.ok) throw new Error(`President not found: ${res.status}`);
-  const raw = await res.json();
-  return camelizeKeys(raw) as President;
+  return requestJson(`${API_BASE}/presidents/${id}`, "President not found", { camelize: true });
 }
 
 export async function fetchJusticeLeaderboard(): Promise<JusticeLeaderboardEntry[]> {
-  const res = await fetch(`${API_BASE}/justices/leaderboard`);
-  if (!res.ok) throw new Error(`Failed to load justice leaderboard: ${res.status}`);
-  const raw = await res.json();
-  return camelizeKeys(raw) as JusticeLeaderboardEntry[];
+  return requestJson(`${API_BASE}/justices/leaderboard`, "Failed to load justice leaderboard", { camelize: true });
 }
 
 export async function fetchJustice(id: string): Promise<Justice> {
-  const res = await fetch(`${API_BASE}/justices/${id}`);
-  if (!res.ok) throw new Error(`Justice not found: ${res.status}`);
-  const raw = await res.json();
-  return camelizeKeys(raw) as Justice;
+  return requestJson(`${API_BASE}/justices/${id}`, "Justice not found", { camelize: true });
 }
 
 export interface ExploreResult {
@@ -496,9 +499,7 @@ export async function searchExplore(
   if (options?.sort) params.set("sort", options.sort);
   if (options?.politicianId) params.set("politician_id", options.politicianId);
 
-  const res = await fetch(`${API_BASE}/explore?${params}`);
-  if (!res.ok) throw new Error(`Explore search failed: ${res.status}`);
-  return res.json();
+  return requestJson(`${API_BASE}/explore?${params}`, "Explore search failed");
 }
 
 export interface ExploreDocumentDetail {
@@ -525,19 +526,13 @@ export interface ExploreDocumentSummary {
 }
 
 export async function fetchExploreDocument(id: number): Promise<ExploreDocumentDetail> {
-  const res = await fetch(`${API_BASE}/explore/${id}`);
-  if (!res.ok) throw new Error(`Document not found: ${res.status}`);
-  return res.json();
+  return requestJson(`${API_BASE}/explore/${id}`, "Document not found");
 }
 
 export async function fetchExploreDocumentSummary(
   id: number,
 ): Promise<ExploreDocumentSummary> {
-  const res = await fetch(`${API_BASE}/explore/${id}/summary`, {
-    method: "POST",
-  });
-  if (!res.ok) throw new Error(`Summary failed: ${res.status}`);
-  return res.json();
+  return requestJson(`${API_BASE}/explore/${id}/summary`, "Summary failed", { init: { method: "POST" } });
 }
 
 export interface PublicComment {
@@ -570,9 +565,7 @@ export async function fetchDocumentComments(
   page: number = 1,
 ): Promise<CommentsResponse> {
   const params = new URLSearchParams({ page: String(page) });
-  const res = await fetch(`${API_BASE}/explore/${docId}/comments?${params}`);
-  if (!res.ok) throw new Error(`Failed to load comments: ${res.status}`);
-  return res.json();
+  return requestJson(`${API_BASE}/explore/${docId}/comments?${params}`, "Failed to load comments");
 }
 
 export async function submitDocumentComment(
@@ -594,9 +587,7 @@ export async function submitDocumentComment(
 }
 
 export async function fetchExploreStats(): Promise<ExploreStats> {
-  const res = await fetch(`${API_BASE}/explore/stats`);
-  if (!res.ok) throw new Error(`Explore stats failed: ${res.status}`);
-  return res.json();
+  return requestJson(`${API_BASE}/explore/stats`, "Explore stats failed");
 }
 
 // --- Admin API ---
@@ -729,55 +720,40 @@ export interface AdminPipelineStatus {
 }
 
 export async function fetchAdminPipelineStatus(token: string): Promise<AdminPipelineStatus> {
-  const res = await fetch(`${API_BASE}/admin/pipeline/status`, {
-    headers: adminHeaders(token),
+  return requestJson(`${API_BASE}/admin/pipeline/status`, "Status failed", {
+    init: { headers: adminHeaders(token) },
   });
-  if (!res.ok) throw new Error(`Status failed: ${res.status}`);
-  return res.json();
 }
 
 export async function clearStuckHousePipeline(token: string): Promise<{ cleared: number; message: string }> {
-  const res = await fetch(`${API_BASE}/admin/pipeline/clear-stuck-house`, {
-    method: "POST",
-    headers: adminHeaders(token),
+  return requestJson(`${API_BASE}/admin/pipeline/clear-stuck-house`, "Clear failed", {
+    init: { method: "POST", headers: adminHeaders(token) },
   });
-  if (!res.ok) throw new Error(`Clear failed: ${res.status}`);
-  return res.json();
 }
 
 export async function clearStuckSupplementaryPipeline(token: string): Promise<{ cleared: number; message: string }> {
-  const res = await fetch(`${API_BASE}/admin/pipeline/clear-stuck-supplementary`, {
-    method: "POST",
-    headers: adminHeaders(token),
+  return requestJson(`${API_BASE}/admin/pipeline/clear-stuck-supplementary`, "Clear failed", {
+    init: { method: "POST", headers: adminHeaders(token) },
   });
-  if (!res.ok) throw new Error(`Clear failed: ${res.status}`);
-  return res.json();
 }
 
 export async function clearStuckStockTradesPipeline(token: string): Promise<{ cleared: number; message: string }> {
-  const res = await fetch(`${API_BASE}/admin/pipeline/clear-stuck-stock-trades`, {
-    method: "POST",
-    headers: adminHeaders(token),
+  return requestJson(`${API_BASE}/admin/pipeline/clear-stuck-stock-trades`, "Clear failed", {
+    init: { method: "POST", headers: adminHeaders(token) },
   });
-  if (!res.ok) throw new Error(`Clear failed: ${res.status}`);
-  return res.json();
 }
 
 
 export async function fetchAdminPipelineHistory(token: string): Promise<PipelineRunInfo[]> {
-  const res = await fetch(`${API_BASE}/admin/pipeline/history?limit=20`, {
-    headers: adminHeaders(token),
+  return requestJson(`${API_BASE}/admin/pipeline/history?limit=20`, "History failed", {
+    init: { headers: adminHeaders(token) },
   });
-  if (!res.ok) throw new Error(`History failed: ${res.status}`);
-  return res.json();
 }
 
 export async function fetchAdminSystemStats(token: string): Promise<HostStats> {
-  const res = await fetch(`${API_BASE}/admin/system/stats`, {
-    headers: adminHeaders(token),
+  return requestJson(`${API_BASE}/admin/system/stats`, "System stats failed", {
+    init: { headers: adminHeaders(token) },
   });
-  if (!res.ok) throw new Error(`System stats failed: ${res.status}`);
-  return res.json();
 }
 
 export interface VisitorStatsDay {
@@ -789,11 +765,9 @@ export async function fetchAdminVisitorStats(
   token: string,
   days: number = 30,
 ): Promise<VisitorStatsDay[]> {
-  const res = await fetch(`${API_BASE}/admin/visitor-stats?days=${days}`, {
-    headers: adminHeaders(token),
+  return requestJson(`${API_BASE}/admin/visitor-stats?days=${days}`, "Visitor stats failed", {
+    init: { headers: adminHeaders(token) },
   });
-  if (!res.ok) throw new Error(`Visitor stats failed: ${res.status}`);
-  return res.json();
 }
 
 export interface VisitorBreakdownEntry {
@@ -809,11 +783,9 @@ export interface VisitorBreakdown {
 }
 
 export async function fetchAdminVisitorBreakdown(token: string): Promise<VisitorBreakdown> {
-  const res = await fetch(`${API_BASE}/admin/visitor-breakdown`, {
-    headers: adminHeaders(token),
+  return requestJson(`${API_BASE}/admin/visitor-breakdown`, "Visitor breakdown failed", {
+    init: { headers: adminHeaders(token) },
   });
-  if (!res.ok) throw new Error(`Visitor breakdown failed: ${res.status}`);
-  return res.json();
 }
 
 export interface TopPageEntry {
@@ -825,11 +797,9 @@ export async function fetchAdminTopPages(
   token: string,
   days: number = 7,
 ): Promise<TopPageEntry[]> {
-  const res = await fetch(`${API_BASE}/admin/top-pages?days=${days}`, {
-    headers: adminHeaders(token),
+  return requestJson(`${API_BASE}/admin/top-pages?days=${days}`, "Top pages failed", {
+    init: { headers: adminHeaders(token) },
   });
-  if (!res.ok) throw new Error(`Top pages failed: ${res.status}`);
-  return res.json();
 }
 
 export interface VacancyResult {
@@ -891,17 +861,17 @@ export async function submitPulseVote(
   issueId: number,
   stance: "concerned" | "not_priority",
 ): Promise<{ issueId: number; concernedCount: number; notPriorityCount: number }> {
-  const res = await fetch(`${API_BASE}/action/pulse`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ issue_id: issueId, stance }),
+  return requestJson(`${API_BASE}/action/pulse`, "Pulse vote failed", {
+    init: {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ issue_id: issueId, stance }),
+    },
   });
-  if (!res.ok) throw new Error(`Pulse vote failed: ${res.status}`);
-  return res.json();
 }
 
 export async function fetchMyReps(state: string): Promise<MyRepsResponse> {
-  return cachedFetch(`${API_BASE}/action/my-reps?state=${encodeURIComponent(state)}`, 300_000);
+  return cachedFetch(`${API_BASE}/action/my-reps?state=${encodeURIComponent(state)}`, TTL.MEDIUM);
 }
 
 export interface ScoreSnapshot {
@@ -923,11 +893,11 @@ export interface ScoreHistory {
 }
 
 export async function fetchSenatorHistory(senatorId: string): Promise<ScoreHistory> {
-  return cachedFetch(`${API_BASE}/senators/${senatorId}/history`, 3_600_000);
+  return cachedFetch(`${API_BASE}/senators/${senatorId}/history`, TTL.LONG);
 }
 
 export async function fetchRepresentativeHistory(repId: string): Promise<ScoreHistory> {
-  return cachedFetch(`${API_BASE}/representatives/${repId}/history`, 3_600_000);
+  return cachedFetch(`${API_BASE}/representatives/${repId}/history`, TTL.LONG);
 }
 
 export interface OpenCommentItem {
@@ -943,7 +913,7 @@ export interface OpenCommentItem {
 }
 
 export async function fetchOpenComments(): Promise<OpenCommentItem[]> {
-  return cachedFetch(`${API_BASE}/action/open-comments`, 3_600_000);
+  return cachedFetch(`${API_BASE}/action/open-comments`, TTL.LONG);
 }
 
 export interface CountryArticle {
@@ -966,9 +936,7 @@ export interface CountryNewsResponse {
 }
 
 export async function fetchCountryNews(): Promise<CountryNewsResponse> {
-  const res = await fetch(`${API_BASE}/action/country-news`);
-  if (!res.ok) throw new Error(`Failed to load country news: ${res.status}`);
-  return res.json();
+  return requestJson(`${API_BASE}/action/country-news`, "Failed to load country news");
 }
 
 export interface ElectionSenator {
@@ -1005,7 +973,7 @@ export interface ElectionInfo {
 }
 
 export async function fetchElectionInfo(): Promise<ElectionInfo> {
-  return cachedFetch(`${API_BASE}/action/elections`, 3_600_000);
+  return cachedFetch(`${API_BASE}/action/elections`, TTL.LONG);
 }
 
 
@@ -1038,11 +1006,11 @@ export interface NationalMonitorDetail extends NationalMonitor {
 }
 
 export async function fetchMonitors(): Promise<{ monitors: NationalMonitor[] }> {
-  return cachedFetch(`${API_BASE}/action/monitors`, 300_000);
+  return cachedFetch(`${API_BASE}/action/monitors`, TTL.MEDIUM);
 }
 
 export async function fetchMonitorDetail(slug: string): Promise<NationalMonitorDetail> {
-  return cachedFetch(`${API_BASE}/action/monitors/${encodeURIComponent(slug)}`, 300_000);
+  return cachedFetch(`${API_BASE}/action/monitors/${encodeURIComponent(slug)}`, TTL.MEDIUM);
 }
 
 
@@ -1101,7 +1069,7 @@ export interface TimelineResponse {
 
 export async function fetchTimeline(year?: number): Promise<TimelineResponse> {
   const params = year ? `?year=${year}` : "";
-  return cachedFetch(`${API_BASE}/action/timeline${params}`, 300_000);
+  return cachedFetch(`${API_BASE}/action/timeline${params}`, TTL.MEDIUM);
 }
 
 // ---------------------------------------------------------------------------
@@ -1120,7 +1088,7 @@ export async function fetchPoliticianDirectory(params?: {
   if (params?.party) qs.set("party", params.party);
   if (params?.q) qs.set("q", params.q);
   const query = qs.toString() ? `?${qs.toString()}` : "";
-  return cachedFetch(`${API_BASE}/politicians${query}`, 120_000);
+  return cachedFetch(`${API_BASE}/politicians${query}`, TTL.SHORT);
 }
 
 export interface FeedbackSubmission {

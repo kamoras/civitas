@@ -13,35 +13,14 @@ format them for the explore document store.
 
 import asyncio
 import logging
-import re
 from datetime import UTC, datetime
 
 import httpx
 
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
+from app.pipeline.fetch.oyez_common import OYEZ_BASE, strip_html as _strip_html, unix_to_date as _unix_to_date
 
 logger = logging.getLogger(__name__)
-
-OYEZ_BASE = "https://api.oyez.org"
-
-_HTML_TAG = re.compile(r"<[^>]+>")
-
-
-def _strip_html(text: str) -> str:
-    """Remove HTML tags from Oyez question/description fields."""
-    if not text:
-        return ""
-    return _HTML_TAG.sub("", text).strip()
-
-
-def _unix_to_date(ts: int | float | None) -> str:
-    """Convert a Unix timestamp to YYYY-MM-DD."""
-    if ts is None:
-        return ""
-    try:
-        return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d")
-    except (ValueError, OSError):
-        return ""
 
 
 async def fetch_scotus_cases(

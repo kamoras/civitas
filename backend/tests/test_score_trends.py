@@ -3,7 +3,8 @@ from senator_service.py's _compute_trend_map and representative_service.py's
 _compute_rep_trend_map (previously copy-pasted, down to the same lookback
 window and change threshold)."""
 
-from datetime import datetime, timedelta
+from datetime import timedelta
+from app.time_utils import utcnow
 
 from app.models import ScoreSnapshot
 from app.services.score_trends import compute_score_trend_map
@@ -20,7 +21,7 @@ def test_no_snapshot_today_returns_empty_map(db_session):
 
 
 def test_first_ever_snapshot_is_marked_new(db_session):
-    today = datetime.utcnow().date().isoformat()
+    today = utcnow().date().isoformat()
     db_session.add(_snapshot("senator", "S001", today, 72.0))
     db_session.commit()
 
@@ -29,8 +30,8 @@ def test_first_ever_snapshot_is_marked_new(db_session):
 
 
 def test_score_increase_above_threshold_is_up(db_session):
-    today = datetime.utcnow().date().isoformat()
-    week_ago = (datetime.utcnow().date() - timedelta(days=7)).isoformat()
+    today = utcnow().date().isoformat()
+    week_ago = (utcnow().date() - timedelta(days=7)).isoformat()
     db_session.add(_snapshot("senator", "S001", week_ago, 60.0))
     db_session.add(_snapshot("senator", "S001", today, 65.0))
     db_session.commit()
@@ -40,8 +41,8 @@ def test_score_increase_above_threshold_is_up(db_session):
 
 
 def test_score_decrease_above_threshold_is_down(db_session):
-    today = datetime.utcnow().date().isoformat()
-    week_ago = (datetime.utcnow().date() - timedelta(days=7)).isoformat()
+    today = utcnow().date().isoformat()
+    week_ago = (utcnow().date() - timedelta(days=7)).isoformat()
     db_session.add(_snapshot("representative", "R001", week_ago, 60.0))
     db_session.add(_snapshot("representative", "R001", today, 55.0))
     db_session.commit()
@@ -51,8 +52,8 @@ def test_score_decrease_above_threshold_is_down(db_session):
 
 
 def test_small_change_within_threshold_is_stable(db_session):
-    today = datetime.utcnow().date().isoformat()
-    week_ago = (datetime.utcnow().date() - timedelta(days=7)).isoformat()
+    today = utcnow().date().isoformat()
+    week_ago = (utcnow().date() - timedelta(days=7)).isoformat()
     db_session.add(_snapshot("senator", "S001", week_ago, 60.0))
     db_session.add(_snapshot("senator", "S001", today, 60.2))
     db_session.commit()
@@ -62,7 +63,7 @@ def test_small_change_within_threshold_is_stable(db_session):
 
 
 def test_entity_types_are_isolated(db_session):
-    today = datetime.utcnow().date().isoformat()
+    today = utcnow().date().isoformat()
     db_session.add(_snapshot("senator", "S001", today, 72.0))
     db_session.add(_snapshot("representative", "R001", today, 72.0))
     db_session.commit()

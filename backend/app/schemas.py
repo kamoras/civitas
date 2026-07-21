@@ -249,7 +249,14 @@ class BillDetailSchema(BillInFlightSchema):
     related_issues: list[RelatedIssueSchema] = []
 
 
-class SenatorSchema(CamelModel):
+class _PersonDetailBase(CamelModel):
+    """Shared detail-response shape for Senators and Representatives.
+
+    House and Senate detail responses are identical except for the House-only
+    `district` (added by RepresentativeSchema), so the common fields live here
+    once — previously they were maintained field-for-field in two places and
+    could silently drift.
+    """
     id: str
     name: str
     state: str
@@ -276,35 +283,13 @@ class SenatorSchema(CamelModel):
     office_address: str = ""
 
 
-class RepresentativeSchema(CamelModel):
-    """Mirrors SenatorSchema field-for-field (House and Senate detail
-    responses share nearly the same shape — see the identical sub-schemas
-    reused below), plus the House-specific `district`."""
-    id: str
-    name: str
-    state: str
+class SenatorSchema(_PersonDetailBase):
+    pass
+
+
+class RepresentativeSchema(_PersonDetailBase):
+    """The shared person-detail shape plus the House-only district."""
     district: int
-    party: Literal["D", "R", "I"]
-    years_in_office: int
-    initials: str
-    leadership_title: str | None = None
-    committees: list[CommitteeSchema] = []
-    representation_score: RepresentationScoreSchema
-    funding: FundingSchema
-    voting_record: VotingRecordSchema
-    lobbying_matches: list[LobbyingMatchSchema]
-    campaign_promises: list[CampaignPromiseSchema] = []
-    platform_summary: str = ""
-    partisan_depth: PartisanDepthSchema | None = None
-    sponsored_bills: list[SponsoredBillSchema] = []
-    leadership_score: float | None = None
-    bipartisanship_score: float | None = None
-    ideology_score: float | None = None
-    sponsorship_description: str = ""
-    website_url: str = ""
-    contact_form_url: str = ""
-    office_phone: str = ""
-    office_address: str = ""
 
 
 class PaginatedRepresentativesSchema(CamelModel):
@@ -333,7 +318,7 @@ class LeaderboardEntrySchema(CamelModel):
     total_from_pacs: float
     small_donor_percentage: float
     top_industry: str | None = None
-    trend: ScoreTrendSchema = ScoreTrendSchema()
+    trend: ScoreTrendSchema = Field(default_factory=ScoreTrendSchema)
     # SVD-based, cosponsorship-derived (Tauberer 2012) — 0 = most-left,
     # 1 = most-right, computed without party labels as input. None when
     # too little cosponsorship data exists to compute it (see

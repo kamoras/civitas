@@ -6,7 +6,7 @@ import Link from "next/link";
 import MatrixRain from "@/components/effects/MatrixRain";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
-import { safeHref, localDateStr } from "@/lib/formatting";
+import { safeHref, localDateStr, formatUtcDate } from "@/lib/formatting";
 import { chamberColor, chamberBorder, chamberLabel } from "@/lib/chamber";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import {
@@ -19,20 +19,8 @@ import {
   type PublicComment,
 } from "@/lib/api";
 
-function formatDate(dateStr: string): string {
-  if (!dateStr) return "";
-  try {
-    const d = new Date(dateStr + "T00:00:00");
-    return d.toLocaleDateString("en-US", {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-  } catch {
-    return dateStr;
-  }
-}
+const formatDate = (dateStr: string): string =>
+  formatUtcDate(dateStr, { weekday: "long", year: "numeric", month: "long", day: "numeric" }, "en-US");
 
 function resolveSourceUrl(doc: ExploreDocumentDetail): string {
   if (doc.url) return doc.url;

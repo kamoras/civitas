@@ -62,6 +62,7 @@ async def fetch_with_retry(
     backoff_s: float = DEFAULT_RETRY_BACKOFF_S,
     rate_limit_backoff_multiplier: float = 1.0,
     retry_on_4xx: bool = True,
+    no_retry_statuses: tuple[int, ...] = (),
     timeout: float = DEFAULT_FETCH_TIMEOUT_S,
     log_label: str = "",
     request_url: str | None = None,
@@ -81,6 +82,12 @@ async def fetch_with_retry(
     Returns the raw Response on success (any status < 400), or None if
     retries are exhausted or a non-retried 4xx is hit. Callers extract
     .json() / .content / .text as needed for their source.
+
+    `no_retry_statuses` lists statuses that terminate immediately with None
+    without retrying or raising (e.g. GovInfo's 404 "bill text not published
+    yet", which is an expected miss, not a transient error). It is checked
+    before the generic >=400 handling, so it applies even when
+    retry_on_4xx is True.
     """
     await rate_limiter.acquire()
     actual_url = request_url or url
@@ -95,6 +102,10 @@ async def fetch_with_retry(
                 logger.warning("%s rate limited, waiting %.1fs...", label, wait)
                 await asyncio.sleep(wait)
                 continue
+
+            if resp.status_code in no_retry_statuses:
+                logger.debug("%s: %s — HTTP %d (no retry)", label, url, resp.status_code)
+                return None
 
             if resp.status_code >= 400:
                 if not retry_on_4xx and 400 <= resp.status_code < 500:

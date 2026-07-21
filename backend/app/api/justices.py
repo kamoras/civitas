@@ -8,6 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.config_definitions import JUSTICE_SCORE_WEIGHTS
 from app.database import SessionLocal, get_db
 from app.api.response_helpers import (
     CACHE_TTL_CONFIG_S,
@@ -37,11 +38,12 @@ def leaderboard(db: Session = Depends(get_db)):
 @router.get("/weights")
 def weights():
     """Score weight breakdown for the justice scorecard."""
+    w = JUSTICE_SCORE_WEIGHTS
     return _cached_json({
-        "consistency": {"weight": 0.35, "label": "Ideological Consistency", "description": "How unpredictable are their votes? Low bloc-alignment = high consistency (follows law, not party)."},
-        "independence": {"weight": 0.30, "label": "Independence", "description": "How often they break from their appointing-party's expected voting bloc in split decisions."},
-        "bipartisanAgreement": {"weight": 0.15, "label": "Bipartisan Agreement", "description": "Fraction of cases decided unanimously or near-unanimously (broad consensus)."},
-        "judicialRestraint": {"weight": 0.20, "label": "Judicial Restraint", "description": "Balanced dissent patterns — neither rubber-stamping everything nor constant ideological dissent."},
+        "consistency": {"weight": w["consistency"], "label": "Ideological Consistency", "description": "How unpredictable are their votes? Low bloc-alignment = high consistency (follows law, not party)."},
+        "independence": {"weight": w["independence"], "label": "Independence", "description": "How often they break from their appointing-party's expected voting bloc in split decisions."},
+        "bipartisanAgreement": {"weight": w["bipartisan_agreement"], "label": "Bipartisan Agreement", "description": "Fraction of cases decided unanimously or near-unanimously (broad consensus)."},
+        "judicialRestraint": {"weight": w["judicial_restraint"], "label": "Judicial Restraint", "description": "Balanced dissent patterns — neither rubber-stamping everything nor constant ideological dissent."},
     }, max_age=CACHE_TTL_CONFIG_S)
 
 

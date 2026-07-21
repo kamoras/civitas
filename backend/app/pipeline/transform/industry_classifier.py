@@ -44,6 +44,7 @@ import numpy as np
 from sqlalchemy.orm import Session
 
 from app.models import LearnedClassification
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -522,7 +523,6 @@ def _store_classification(
 ) -> None:
     """Upsert a classification into the learning store with provenance."""
     import json
-    from datetime import datetime
     from app.pipeline.vector_store import get_model_version
 
     meta_json = json.dumps(match_metadata) if match_metadata else None
@@ -541,7 +541,7 @@ def _store_classification(
         existing.source = source
         existing.model_version = get_model_version() if source in ("embedding", "nn") else None
         existing.match_metadata = meta_json
-        existing.learned_at = datetime.utcnow()
+        existing.learned_at = utcnow()
     else:
         db_session.add(LearnedClassification(
             entity_name=entity_name,

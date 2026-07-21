@@ -64,12 +64,8 @@ def test_select_recent_elections_defaults_to_most_recent_only():
     assert result[0]["candidate_election_year"] == 2024
 
 
-class _FrozenDatetime(datetime):
-    _year = 2026
-
-    @classmethod
-    def utcnow(cls):
-        return datetime(cls._year, 7, 15)
+def _frozen_utcnow():
+    return datetime(2026, 7, 15)
 
 
 def test_financials_election_year_ignores_raw_cycle_fallback():
@@ -92,7 +88,7 @@ def test_select_recent_elections_skips_dormant_off_cycle_row_with_no_election_ye
         {"candidate_election_year": 2024, "cycle": 2024, "receipts": 5_800_000},
         {"cycle": 2026, "receipts": 48_607},  # no candidate_election_year — dormant
     ]
-    with patch("app.pipeline.fetch.fec.datetime", _FrozenDatetime):
+    with patch("app.pipeline.fetch.fec.utcnow", _frozen_utcnow):
         result = select_recent_elections(financials)
     assert len(result) == 1
     assert result[0]["receipts"] == 5_800_000
@@ -105,7 +101,7 @@ def test_select_recent_elections_excludes_future_election_year():
         {"candidate_election_year": 2024, "receipts": 5_800_000},
         {"candidate_election_year": 2030, "receipts": 12_000},  # not yet held
     ]
-    with patch("app.pipeline.fetch.fec.datetime", _FrozenDatetime):
+    with patch("app.pipeline.fetch.fec.utcnow", _frozen_utcnow):
         result = select_recent_elections(financials)
     assert len(result) == 1
     assert result[0]["candidate_election_year"] == 2024
@@ -116,6 +112,6 @@ def test_sort_financials_recent_first_puts_dormant_row_last():
         {"cycle": 2026, "receipts": 48_607},  # no candidate_election_year
         {"candidate_election_year": 2024, "receipts": 5_800_000},
     ]
-    with patch("app.pipeline.fetch.fec.datetime", _FrozenDatetime):
+    with patch("app.pipeline.fetch.fec.utcnow", _frozen_utcnow):
         result = _sort_financials_recent_first(financials)
     assert result[0]["receipts"] == 5_800_000

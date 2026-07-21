@@ -40,6 +40,7 @@ from app.schemas import (
     SponsoredBillSchema,
     StateCountSchema,
     StockTradeSchema,
+    STOCK_ACT_DISCLOSURE_DEADLINE_DAYS,
     VoteCountsSchema,
     VotingRecordSchema,
 )
@@ -383,6 +384,7 @@ def get_senator_score_breakdown(db: Session, senator_id: str) -> dict | None:
     formulas actually read.
     """
     from app.pipeline.analyze.score_calculator import explain_scores
+    from app.services._scorecard_common import build_score_breakdown_entity
 
     senator = (
         db.query(Senator)
@@ -393,66 +395,7 @@ def get_senator_score_breakdown(db: Session, senator_id: str) -> dict | None:
     if senator is None:
         return None
 
-    def _vote_dict(v: KeyVote) -> dict:
-        return {
-            "votedWithParty": v.voted_with_party,
-            "partyAlignmentWeight": v.party_alignment_weight,
-            "partyLeaning": v.party_leaning,
-            "opposingPartyUnityPct": v.opposing_party_unity_pct,
-        }
-
-    voting_record = {
-        "effectiveParty": None,  # not persisted — see score_calculator.py note; only matters for Independents
-        "keyVotes": [_vote_dict(v) for v in senator.key_votes if v.vote_category == "key"],
-        "recentVotes": [_vote_dict(v) for v in senator.key_votes if v.vote_category == "recent"],
-    }
-
-    funding = {
-        "totalRaised": senator.total_raised,
-        "totalFromPACs": senator.total_from_pacs,
-        "smallDonorPercentage": senator.small_donor_percentage,
-        "outsideSpendingFor": senator.outside_spending_for,
-        "topDonors": [
-            {"name": d.name, "total": d.total, "type": d.type, "committeeType": d.committee_type}
-            for d in senator.donors
-        ],
-        "industryBreakdown": [
-            {"industry": ind.industry, "total": ind.total}
-            for ind in senator.industry_donations
-        ],
-    }
-
-    lobbying_matches = [
-        {
-            "donationToSenator": lm.donation_to_senator,
-            "isConsensusVote": lm.is_consensus_vote,
-        }
-        for lm in senator.lobbying_matches
-    ]
-
-    sponsored_bills = [
-        {
-            "billType": sb.bill_type,
-            "congress": sb.congress,
-            "isLaw": sb.is_law,
-            "latestAction": sb.latest_action,
-        }
-        for sb in senator.sponsored_bills
-    ]
-
-    entity = {
-        "funding": funding,
-        "votingRecord": voting_record,
-        "lobbyingMatches": lobbying_matches,
-        "sponsoredBills": sponsored_bills,
-        "state": senator.state,
-        "party": senator.party,
-        "district": None,
-        "bipartisanshipScore": senator.bipartisanship_score,
-        "leadershipScore": senator.leadership_score,
-        "yearsInOffice": senator.years_in_office,
-        "ideologyScore": senator.ideology_score,
-    }
+    entity = build_score_breakdown_entity(senator, lobbying_donation_attr="donation_to_senator")
     return explain_scores(entity)
 
 
@@ -782,7 +725,7 @@ def get_senator_stock_trades(
 
     query = db.query(StockTrade).filter(StockTrade.senator_id == senator_id)
     total = query.count()
-    late_count = query.filter(StockTrade.days_to_disclose > 45).count()
+    late_count = query.filter(StockTrade.days_to_disclose > STOCK_ACT_DISCLOSURE_DEADLINE_DAYS).count()
     total_pages, page = paginate_bounds(total, page, per_page)
 
     trades_db = (

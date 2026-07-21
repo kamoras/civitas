@@ -19,7 +19,7 @@ Only stdlib (statistics, math) — no new dependencies.
 import logging
 import statistics
 
-from app.database import SessionLocal
+from app.database import session_scope
 from app.models import ScoreSnapshot
 
 logger = logging.getLogger(__name__)
@@ -71,12 +71,14 @@ def _dim_stats(values: list[float]) -> dict:
             "p90": None,
         }
 
+    # n >= MIN_COUNT_FOR_STATS (>= 5) is guaranteed by the early return above,
+    # so stdev/percentiles always have enough data — no n < 2 fallback needed.
     mean = statistics.mean(values)
     median = statistics.median(values)
-    stdev = statistics.stdev(values) if n >= 2 else 0.0
+    stdev = statistics.stdev(values)
     lo = min(values)
     hi = max(values)
-    p10, p90 = _percentiles(values) if n >= 2 else (lo, hi)
+    p10, p90 = _percentiles(values)
 
     return {
         "count": n,
@@ -150,8 +152,7 @@ def compute_distribution(entity_type: str, date: str | None = None) -> dict:
         ``p90``, ``count``.  Also includes a top-level ``"date"`` key
         and ``"_entity_scores"`` (entity_id → score) for Spearman later.
     """
-    db = SessionLocal()
-    try:
+    with session_scope() as db:
         if date is None:
             row = (
                 db.query(ScoreSnapshot.date)
@@ -193,9 +194,6 @@ def compute_distribution(entity_type: str, date: str | None = None) -> dict:
             result[dim]["_entity_scores"] = entity_scores[dim]
 
         return result
-
-    finally:
-        db.close()
 
 
 def detect_drift(prev_dist: dict, curr_dist: dict) -> list[dict]:
@@ -301,8 +299,7 @@ def generate_calibration_report(entity_type: str = "senator") -> dict | None:
         ``drift_events``, ``distribution``.  Returns ``None`` if fewer
         than 2 distinct snapshot dates exist for ``entity_type``.
     """
-    db = SessionLocal()
-    try:
+    with session_scope() as db:
         # Collect the two most recent distinct dates.
         rows = (
             db.query(ScoreSnapshot.date)
@@ -312,8 +309,6 @@ def generate_calibration_report(entity_type: str = "senator") -> dict | None:
             .limit(2)
             .all()
         )
-    finally:
-        db.close()
 
     if len(rows) < 2:
         return None

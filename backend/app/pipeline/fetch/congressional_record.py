@@ -19,7 +19,7 @@ All intermediate results are cached via the pipeline cache layer.
 
 import logging
 import re
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import httpx
 from sqlalchemy.orm import Session
@@ -28,6 +28,7 @@ from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S, fetch_with_retry, redact_url
 from app.pipeline.rate_limiter import RateLimiter
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +101,7 @@ async def fetch_crec_packages(
     if cached is not None:
         return cached
 
-    start = (datetime.utcnow() - timedelta(days=days_back)).strftime(
+    start = (utcnow() - timedelta(days=days_back)).strftime(
         "%Y-%m-%dT00:00:00Z"
     )
     logger.info("Fetching CREC package index (last %d days)...", days_back)

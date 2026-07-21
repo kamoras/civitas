@@ -81,6 +81,7 @@ import numpy as np
 from sqlalchemy.orm import Session
 
 from app.models import LearnedClassification
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -755,7 +756,6 @@ def record_sponsor_alignment(
     R senators are examples of R-aligned legislation, and vice versa.
     """
     from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-    from datetime import datetime
     import json
 
     meta = json.dumps({
@@ -770,7 +770,7 @@ def record_sponsor_alignment(
         confidence=confidence,
         source="sponsor",
         match_metadata=meta,
-        learned_at=datetime.utcnow(),
+        learned_at=utcnow(),
     ).on_conflict_do_update(
         index_elements=["entity_name", "entity_type"],
         set_={
@@ -778,7 +778,7 @@ def record_sponsor_alignment(
             "confidence": confidence,
             "source": "sponsor",
             "match_metadata": meta,
-            "learned_at": datetime.utcnow(),
+            "learned_at": utcnow(),
         },
     )
     db.execute(stmt)

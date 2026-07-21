@@ -175,8 +175,6 @@ POLICY_TAXONOMY = {
     ),
 }
 
-POLICY_AREAS = ", ".join(POLICY_TAXONOMY.keys())
-
 _PROCEDURAL_PROTOTYPE = (
     "naming building commemorating honoring designating week month "
     "electing member relative to death fixing daily hour authorizing rotunda "
@@ -916,7 +914,7 @@ def _record_if_possible(
             db_session, bill_id, text, policy_area, confidence, source="embedding",
         )
     except Exception:
-        pass
+        logger.debug("Failed to record classification for bill %s", bill_id, exc_info=True)
 
 
 def _validate_classifications(bills: list[dict]) -> None:

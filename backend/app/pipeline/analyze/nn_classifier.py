@@ -43,6 +43,7 @@ from collections import Counter
 import numpy as np
 from sqlalchemy.orm import Session
 
+from app.config_definitions import INDUSTRIES
 from app.models import LearnedClassification
 
 logger = logging.getLogger(__name__)
@@ -280,13 +281,11 @@ def classify_batch_nn(
     return results
 
 
-VALID_INDUSTRIES = {
-    "FINANCE", "POLITICAL", "LAWYERS", "HEALTHCARE", "TECH", "ENERGY",
-    "MANUFACTURING", "MEDIA", "REAL_ESTATE", "LOBBYISTS", "OIL_GAS",
-    "DEFENSE", "TELECOM", "AGRIBUSINESS", "EDUCATION", "TRANSPORT",
-    "CONSTRUCTION", "LABOR_UNIONS", "RETAIL", "INSURANCE", "PHARMA",
-    "OTHER", "GAMBLING", "GUNS", "PRIVATE_PRISON", "CRYPTO", "TOBACCO",
-}
+# The real industry codes, derived from the config_definitions single source
+# of truth minus the three non-industry contribution buckets — so a new
+# INDUSTRIES entry is recognized here automatically instead of silently
+# dropping until this copy is hand-updated.
+VALID_INDUSTRIES = set(INDUSTRIES) - {"SMALL_DONORS", "LARGE_INDIVIDUAL", "UNCLASSIFIED"}
 
 VALID_DONOR_TYPES = {
     "PAC", "Org/Employees", "Party/Ideological", "CandidateAffiliated",

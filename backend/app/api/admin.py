@@ -5,13 +5,13 @@ import json
 import logging
 import os
 import secrets
-import threading
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.api.pipeline_runner import run_pipeline_in_thread
 from app.config import settings
 from app.database import get_db
 from app.models import (
@@ -46,6 +46,7 @@ from app.models import (
     SponsoredBill,
     TimelineEntry,
 )
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,7 @@ def _live_elapsed(run) -> float | None:
     completion), so while it's in flight we compute it against now instead.
     """
     if run.status == PipelineStatus.RUNNING and run.started_at:
-        return round((datetime.utcnow() - run.started_at).total_seconds(), 1)
+        return round((utcnow() - run.started_at).total_seconds(), 1)
     return run.elapsed_seconds
 
 
@@ -116,7 +117,7 @@ def _clear_stuck_runs(db: Session, model, is_running: bool, pipeline_label: str)
     if not stuck:
         return {"cleared": 0, "message": "No stuck runs found"}
 
-    now = datetime.utcnow()
+    now = utcnow()
     for run in stuck:
         run.status = PipelineStatus.FAILED
         run.error_message = "Cleared by admin (container restart)"
@@ -350,7 +351,7 @@ async def admin_visitor_breakdown(date: str | None = None, db: Session = Depends
     Aggregate counts only — never joined back to individual visitor_hash
     rows in the response, so this can't be used to profile a single visit.
     """
-    from datetime import datetime, UTC as _UTC
+    from datetime import UTC as _UTC
 
     day = date or datetime.now(_UTC).date().isoformat()
 
@@ -385,7 +386,7 @@ async def admin_top_pages(days: int = 7, limit: int = 10, db: Session = Depends(
     models.py for why that's a separate table from SiteVisit) grouped by
     normalized route template (e.g. "/politicians/[id]").
     """
-    from datetime import datetime, timedelta, UTC as _UTC
+    from datetime import timedelta, UTC as _UTC
 
     cutoff = (datetime.now(_UTC).date() - timedelta(days=days - 1)).isoformat()
     rows = (
@@ -542,8 +543,7 @@ async def admin_dashboard(db: Session = Depends(get_db)):
         dash_progress_steps = None
         if last_run.progress_detail:
             try:
-                import json as _json
-                dash_progress_steps = _json.loads(last_run.progress_detail)
+                dash_progress_steps = json.loads(last_run.progress_detail)
             except (ValueError, TypeError):
                 pass
         pipeline_info["lastRun"] = {
@@ -834,25 +834,19 @@ async def admin_trigger_pipeline(
     if _is_pipeline_running(db):
         raise HTTPException(status_code=409, detail="Pipeline is already running")
 
-    def _run_in_thread():
+    async def _run_pipelines():
         from app.pipeline.house_pipeline import run_house_pipeline
         from app.pipeline.supplementary_pipeline import run_supplementary_pipeline
-        loop = asyncio.new_event_loop()
-        try:
-            result = loop.run_until_complete(
-                run_senate_pipeline(senator_filter=senator, fetch_only=fetch_only)
-            )
-            if senator is None and not fetch_only and result.get("status") not in ("skipped", "failed"):
-                logger.info("Senate pipeline done — starting supplementary pipeline")
-                loop.run_until_complete(run_supplementary_pipeline())
-                logger.info("Supplementary pipeline done — starting House pipeline")
-                loop.run_until_complete(run_house_pipeline())
-        except BaseException:
-            logger.exception("Admin-triggered pipeline run failed")
-        finally:
-            loop.close()
+        result = await run_senate_pipeline(senator_filter=senator, fetch_only=fetch_only)
+        if senator is None and not fetch_only and result.get("status") not in ("skipped", "failed"):
+            logger.info("Senate pipeline done — starting supplementary pipeline")
+            await run_supplementary_pipeline()
+            logger.info("Supplementary pipeline done — starting House pipeline")
+            await run_house_pipeline()
 
-    threading.Thread(target=_run_in_thread, daemon=True, name="pipeline-run").start()
+    run_pipeline_in_thread(
+        _run_pipelines, name="pipeline-run", error_label="Admin-triggered pipeline run failed",
+    )
     return {
         "message": "Pipeline triggered",
         "senatorFilter": senator,
@@ -902,7 +896,6 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
         _write_model_version()
         return count
 
-    import asyncio
     count = await asyncio.to_thread(_run)
     return {"embedded": count}
 
@@ -912,16 +905,9 @@ async def admin_trigger_house_pipeline(db: Session = Depends(get_db)):
     """Trigger a House representative pipeline run."""
     from app.pipeline.house_pipeline import run_house_pipeline
 
-    def _run_in_thread():
-        loop = asyncio.new_event_loop()
-        try:
-            loop.run_until_complete(run_house_pipeline())
-        except BaseException:
-            logger.exception("House pipeline run failed")
-        finally:
-            loop.close()
-
-    threading.Thread(target=_run_in_thread, daemon=True, name="house-pipeline-run").start()
+    run_pipeline_in_thread(
+        run_house_pipeline, name="house-pipeline-run", error_label="House pipeline run failed",
+    )
     return {"message": "House pipeline triggered"}
 
 
@@ -956,16 +942,11 @@ async def admin_trigger_supplementary_pipeline(db: Session = Depends(get_db)):
     """Trigger a supplementary (explore docs/SCOTUS/presidents) pipeline run."""
     from app.pipeline.supplementary_pipeline import run_supplementary_pipeline
 
-    def _run_in_thread():
-        loop = asyncio.new_event_loop()
-        try:
-            loop.run_until_complete(run_supplementary_pipeline())
-        except BaseException:
-            logger.exception("Supplementary pipeline run failed")
-        finally:
-            loop.close()
-
-    threading.Thread(target=_run_in_thread, daemon=True, name="supplementary-pipeline-run").start()
+    run_pipeline_in_thread(
+        run_supplementary_pipeline,
+        name="supplementary-pipeline-run",
+        error_label="Supplementary pipeline run failed",
+    )
     return {"message": "Supplementary pipeline triggered"}
 
 

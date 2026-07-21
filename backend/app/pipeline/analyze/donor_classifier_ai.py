@@ -52,6 +52,7 @@ References
 """
 
 import logging
+import re
 
 import numpy as np
 from sqlalchemy.orm import Session
@@ -69,6 +70,7 @@ from app.pipeline.transform.industry_classifier import (
     INDUSTRY_DESCRIPTIONS,
     store_llm_classifications,
 )
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -230,8 +232,7 @@ def classify_donor_type_semantic(
     # unambiguous marker for political action committees (FEC Disclosure Guide
     # 2023). This catches cases where the embedding model's compressed score
     # space makes Party/Ideological win over PAC for explicitly-named PACs.
-    import re as _re
-    if _re.search(r'\bPAC\b', name.upper()):
+    if re.search(r'\bPAC\b', name.upper()):
         return "PAC"
 
     from app.pipeline.vector_store import get_embedding_model
@@ -701,7 +702,7 @@ def _classify_remaining_via_nn(
         try:
             on_progress()
         except Exception:
-            pass
+            logger.debug("on_progress callback raised", exc_info=True)
 
     return all_results
 
@@ -729,7 +730,6 @@ def _store_donor_learning(
     Only overwrites if new confidence >= existing confidence.
     """
     import json
-    from datetime import datetime
     from sqlalchemy.dialects.sqlite import insert as sqlite_insert
     from app.pipeline.vector_store import get_model_version
 
@@ -752,7 +752,7 @@ def _store_donor_learning(
             source=source,
             model_version=model_ver,
             match_metadata=meta_json,
-            learned_at=datetime.utcnow(),
+            learned_at=utcnow(),
         ).on_conflict_do_update(
             index_elements=["entity_name", "entity_type"],
             set_={
@@ -761,7 +761,7 @@ def _store_donor_learning(
                 "source": source,
                 "model_version": model_ver,
                 "match_metadata": meta_json,
-                "learned_at": datetime.utcnow(),
+                "learned_at": utcnow(),
             },
         )
         db_session.execute(stmt)

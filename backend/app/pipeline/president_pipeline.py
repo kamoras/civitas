@@ -18,6 +18,7 @@ from app.pipeline.fetch.economic_data import (
     fetch_gdp_for_president,
 )
 from app.pipeline.fetch.federal_register import fetch_all_eo_data, fetch_all_rulemaking_stats
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ def _term_years(start: str, end: str | None) -> float:
     if end:
         e = datetime.strptime(end, "%Y-%m-%d")
     else:
-        e = datetime.utcnow()
+        e = utcnow()
     return max((e - s).days / 365.25, 0.1)
 
 
@@ -159,7 +160,7 @@ async def run_president_pipeline(db: Session) -> dict:
         president.score_competence = new_scores["score_competence"]
         president.score_effectiveness = new_scores["score_effectiveness"]
         president.score_agency_alignment = new_scores["score_agency_alignment"]
-        president.updated_at = datetime.utcnow()
+        president.updated_at = utcnow()
         updated += 1
 
         logger.info(
@@ -204,7 +205,7 @@ async def run_president_pipeline(db: Session) -> dict:
         if gdp_full is not None and president.gdp_growth_avg is None:
             president.gdp_growth_avg = gdp_full
         president.gdp_growth_adjusted = gdp_adj
-        president.updated_at = datetime.utcnow()
+        president.updated_at = utcnow()
         econ_updated += 1
         logger.info("  %s: effectiveness=%d (gdp_adj=%.1f%% jobs=%.1fM)",
                     pid, new_eff, gdp_adj or 0.0, jobs or 0.0)

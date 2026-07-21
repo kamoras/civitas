@@ -9,7 +9,8 @@ slowdown). These tests run the spawned thread synchronously (patching
 threading.Thread) so the guard's decision can be asserted directly.
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
+from app.time_utils import utcnow
 from unittest.mock import MagicMock, patch
 
 
@@ -67,7 +68,7 @@ class TestIsStale:
 
 class TestActionRefreshOverlapGuard:
     def test_skips_when_a_recent_refresh_is_still_running(self):
-        state = {"is_running": True, "started_at": datetime.utcnow() - timedelta(minutes=10)}
+        state = {"is_running": True, "started_at": utcnow() - timedelta(minutes=10)}
         mock_refresh = _run_hourly_refresh(state)
         mock_refresh.assert_not_called()
 
@@ -81,13 +82,13 @@ class TestActionRefreshOverlapGuard:
         # minutes; worst case with a degraded LLM is ~1-2h post-reorder) —
         # without this override a genuinely hung thread would block every
         # future hourly run until the container restarts.
-        state = {"is_running": True, "started_at": datetime.utcnow() - timedelta(hours=5)}
+        state = {"is_running": True, "started_at": utcnow() - timedelta(hours=5)}
         mock_refresh = _run_hourly_refresh(state)
         mock_refresh.assert_called_once()
 
     def test_does_not_skip_at_exactly_the_4_hour_boundary_edge(self):
         # Just under 4h: still treated as a legitimately running refresh.
-        state = {"is_running": True, "started_at": datetime.utcnow() - timedelta(hours=3, minutes=59)}
+        state = {"is_running": True, "started_at": utcnow() - timedelta(hours=3, minutes=59)}
         mock_refresh = _run_hourly_refresh(state)
         mock_refresh.assert_not_called()
 

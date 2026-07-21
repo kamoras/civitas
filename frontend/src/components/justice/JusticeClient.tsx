@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import { fetchJustice, fetchJusticeLeaderboard } from "@/lib/api";
 import { getJusticeLabel, getScoreColor, getScoreBgColor } from "@/lib/representation";
-import ScoreBreakdownPanel from "@/components/shared/ScoreBreakdownPanel";
+import { MetricBar, StatBox } from "@/components/shared/ScoreMetric";
 import type { Justice, JusticeLeaderboardEntry, JusticeScore } from "@/types/justice";
 
 const PARTY_BADGE: Record<string, { label: string; color: string; bg: string; border: string }> = {
@@ -39,50 +39,6 @@ const METRIC_LABELS: { key: keyof JusticeScore; label: string; desc: string }[] 
     desc: "Balanced dissent patterns — measured disagreement rather than ideological grandstanding.",
   },
 ];
-
-function MetricBar({ label, value, desc, entityId, dimensionKey }: { label: string; value: number; desc: string; entityId?: string; dimensionKey?: string }) {
-  const color = getScoreBgColor(value);
-
-  return (
-    <div className="group">
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-xs text-matrix-green/60 tracking-widest">{label}</span>
-        <span className={`text-sm font-bold tabular-nums ${getScoreColor(value)}`}>{value}</span>
-      </div>
-      <div
-        className="w-full h-2 bg-white/10 rounded-full overflow-hidden"
-        role="progressbar"
-        aria-valuenow={value}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-label={`${label}: ${value} out of 100. ${desc}`}
-      >
-        <div
-          className={`h-full rounded-full ${color} transition-all duration-700`}
-          style={{ width: `${value}%` }}
-        />
-      </div>
-      <p className="text-[10px] text-matrix-green/50 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        {desc}
-      </p>
-      {entityId && dimensionKey && (
-        <ScoreBreakdownPanel entityType="justice" entityId={entityId} dimensionKey={dimensionKey} label={label} />
-      )}
-    </div>
-  );
-}
-
-function StatBox({ label, value, unit }: { label: string; value: string | null; unit?: string }) {
-  return (
-    <div className="border border-matrix-green/20 bg-terminal-bg/50 px-3 py-2 text-center">
-      <div className="text-[10px] text-matrix-green/40 tracking-widest mb-1">{label}</div>
-      <div className="text-lg font-bold text-white/80 tabular-nums">
-        {value ?? "—"}
-        {unit && value && <span className="text-xs text-matrix-green/40 ml-0.5">{unit}</span>}
-      </div>
-    </div>
-  );
-}
 
 function AgreementRow({ name, pct }: { name: string; pct: number }) {
   const label = name
@@ -190,7 +146,7 @@ export function JusticeCard({ justice }: { justice: Justice }) {
           <h3 className="text-xs text-matrix-green/50 tracking-widest mb-4">JURISPRUDENTIAL CONSISTENCY</h3>
           <div className="space-y-3">
             {METRIC_LABELS.map(({ key, label, desc }) => (
-              <MetricBar key={key} label={label} value={justice.score[key]} desc={desc} entityId={justice.id} dimensionKey={key} />
+              <MetricBar key={key} label={label} value={justice.score[key]} desc={desc} entityType="justice" entityId={justice.id} dimensionKey={key} />
             ))}
           </div>
         </div>

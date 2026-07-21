@@ -11,7 +11,6 @@ computed deterministically and don't need LLM calls.
 """
 
 
-import json
 import logging
 import time
 from datetime import datetime, timedelta
@@ -51,8 +50,10 @@ from app.pipeline.fetch.fec import (
     fetch_outside_spending,
     fetch_pac_receipts,
     find_candidate,
+    reset_run_state as reset_fec_run_state,
 )
 from app.pipeline.fetch.lda import enrich_lobbying_matches_with_lda
+from app.pipeline.run_checks import persist_ground_truth_failures, run_calibration_check
 from app.pipeline.transform.normalize_members import normalize_house_members
 from app.pipeline.transform.normalize_votes import (
     extract_representative_vote,
@@ -62,6 +63,7 @@ from app.pipeline.transform.normalize_votes import (
     compute_party_vote_split,
     opposing_party_unity,
 )
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -101,9 +103,10 @@ async def run_house_pipeline() -> dict:
     _tracker.start()
     db = SessionLocal()
     start_time = time.time()
+    reset_fec_run_state()  # clear the by_contributor circuit breaker from any prior run
 
     # Record run start so failures are visible in the admin dashboard.
-    house_run = HousePipelineRun(started_at=datetime.utcnow(), status=PipelineStatus.RUNNING)
+    house_run = HousePipelineRun(started_at=utcnow(), status=PipelineStatus.RUNNING)
     db.add(house_run)
     db.commit()
     progress = ProgressTracker(house_run, HOUSE_PIPELINE_STEPS, db, start_time)
@@ -122,7 +125,7 @@ async def run_house_pipeline() -> dict:
                 logger.warning("No House members found — aborting")
                 elapsed = round(time.time() - start_time, 1)
                 house_run.status = PipelineStatus.FAILED
-                house_run.completed_at = datetime.utcnow()
+                house_run.completed_at = utcnow()
                 house_run.error_message = "No House members returned from Congress API"
                 house_run.elapsed_seconds = elapsed
                 progress.fail("fetch_members", detail="no members returned")
@@ -713,7 +716,7 @@ async def run_house_pipeline() -> dict:
                         rep["funding"].get("industryBreakdown", []),
                     )
                     await enrich_lobbying_matches_with_lda(
-                        lobbying_matches, db, datetime.utcnow().year - 1,
+                        lobbying_matches, db, utcnow().year - 1,
                     )
                     rep["lobbyingMatches"] = lobbying_matches
 
@@ -754,19 +757,7 @@ async def run_house_pipeline() -> dict:
             progress.begin("snapshots")
             _record_rep_snapshots(db)
 
-            try:
-                from app.pipeline.analyze.score_calibration import generate_calibration_report
-                report = generate_calibration_report("representative")
-                if report and report["drift_events"]:
-                    for evt in report["drift_events"]:
-                        logger.warning(
-                            "SCORE DRIFT [%s] %s: %s",
-                            evt["severity"], evt["dimension"], evt["message"],
-                        )
-                else:
-                    logger.info("Score calibration: no drift detected")
-            except Exception:
-                logger.exception("Score calibration check failed (non-fatal)")
+            run_calibration_check("representative")
 
             try:
                 # Population-stdev regression gate — House's counterpart to
@@ -777,21 +768,20 @@ async def run_house_pipeline() -> dict:
                 # scores collapsing toward a neutral prior population-wide.
                 from app.pipeline.analyze.ground_truth import check_score_distribution
                 gt_failures = check_score_distribution(db, model=Representative)
-                house_run.ground_truth_failures = json.dumps(gt_failures)
-                db.commit()
-                if gt_failures:
-                    from app.ops_alerts import send_ops_alert
-                    lines = "\n".join(
-                        f"- {f.get('dimension', '?')}={f.get('score', '?')} "
-                        f"expected {f.get('expected', '?')}"
-                        for f in gt_failures
-                    )
-                    send_ops_alert(
-                        f"House ground-truth gate failed ({len(gt_failures)})",
+                lines = "\n".join(
+                    f"- {f.get('dimension', '?')}={f.get('score', '?')} "
+                    f"expected {f.get('expected', '?')}"
+                    for f in gt_failures
+                )
+                persist_ground_truth_failures(
+                    db, house_run, gt_failures,
+                    alert_title=f"House ground-truth gate failed ({len(gt_failures)})",
+                    alert_body=(
                         f"House score distribution outside expected ranges "
-                        f"(run #{house_run.id}):\n{lines}",
-                        dedupe_key=f"house-ground-truth-run-{house_run.id}",
-                    )
+                        f"(run #{house_run.id}):\n{lines}"
+                    ),
+                    dedupe_key=f"house-ground-truth-run-{house_run.id}",
+                )
             except Exception:
                 logger.exception("House ground truth check failed (non-fatal)")
 
@@ -808,7 +798,7 @@ async def run_house_pipeline() -> dict:
                 else PipelineStatus.FAILED
             )
             house_run.status = status
-            house_run.completed_at = datetime.utcnow()
+            house_run.completed_at = utcnow()
             house_run.reps_processed = success_count
             house_run.reps_total = success_count + fail_count
             house_run.reps_failed = fail_count
@@ -828,7 +818,7 @@ async def run_house_pipeline() -> dict:
         logger.exception("House pipeline failed: %s", e)
         try:
             house_run.status = PipelineStatus.FAILED
-            house_run.completed_at = datetime.utcnow()
+            house_run.completed_at = utcnow()
             house_run.elapsed_seconds = round(time.time() - start_time, 1)
             house_run.error_message = "House pipeline failed — see server logs"
             db.commit()
@@ -844,7 +834,7 @@ def _record_rep_snapshots(db: Session) -> None:
     """Snapshot today's scores for all representatives."""
     from app.pipeline.analyze.score_calculator import ALGORITHM_VERSION, compute_overall_score
 
-    today = datetime.utcnow().date().isoformat()
+    today = utcnow().date().isoformat()
     reps = db.query(Representative).all()
     count = 0
     for r in reps:

@@ -1,19 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 
 export default function Marquee({ items }: { items: string[] }) {
   const text = items.join(" /// ");
   const doubled = `${text} /// ${text} /// `;
-  const [reducedMotion, setReducedMotion] = useState(false);
-
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReducedMotion(mq.matches);
-    const onChange = (e: MediaQueryListEvent) => setReducedMotion(e.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
+  const reducedMotion = usePrefersReducedMotion();
 
   return (
     <div

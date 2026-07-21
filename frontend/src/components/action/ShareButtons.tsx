@@ -94,7 +94,6 @@ export default function ShareButtons({ issue, className = "" }: ShareButtonsProp
               placeholder="mastodon.social"
               aria-label="Mastodon instance"
               className="text-[10px] font-mono bg-crt-black border border-neon-cyan/30 text-neon-cyan px-2 py-1 w-32 focus:outline-none focus:border-neon-cyan/60"
-              // eslint-disable-next-line jsx-a11y/no-autofocus
               autoFocus
             />
             <button

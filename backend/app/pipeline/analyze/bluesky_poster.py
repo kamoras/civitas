@@ -24,12 +24,13 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.pipeline.analyze.bluesky_utils import build_link_card
+from app.pipeline.analyze.bluesky_utils import publish_post
 from app.pipeline.analyze.grounding import (
     grounding_violations,
     hedge_and_editorializing_violations,
 )
 from app.pipeline.analyze.ollama_client import call_llm
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -217,65 +218,13 @@ Return JSON: {{"post": "<your post text>"}}"""
 
 def _publish(text: str, issue) -> bool:
     """Post to Bluesky. Returns True on success."""
-    handle = getattr(settings, "BSKY_HANDLE", "")
-    app_password = getattr(settings, "BSKY_APP_PASSWORD", "")
-    if not handle or not app_password:
-        logger.debug("Bluesky credentials not set — skipping publish")
-        return False
-
     text = re.sub(r"#(\w+)", r"\1", text).strip()  # final hashtag guard
     url = f"https://civitas-research.org/issue/{issue.id}"
-    full_text = f"{text}\n\n{url}"
-
-    # Hard truncate the generated body if the LLM overshot, preserving the URL.
-    # Prefer sentence boundary > word boundary so we never cut mid-sentence.
-    if len(full_text) > 300:
-        budget = 300 - len(url) - 2  # 2 for \n\n
-        trimmed = text[:budget]
-        # Try to end on a sentence boundary
-        cut = -1
-        for punct in (".", "!", "?"):
-            idx = trimmed.rfind(punct)
-            if idx > len(trimmed) // 2:
-                cut = max(cut, idx + 1)  # include the punctuation char
-        if cut > 0:
-            trimmed = trimmed[:cut]
-        else:
-            last_space = trimmed.rfind(" ")
-            if last_space > 0:
-                trimmed = trimmed[:last_space]
-        full_text = f"{trimmed}\n\n{url}"
-
-    try:
-        from atproto import Client, models  # imported here so missing package only fails at post time
-        client = Client()
-        client.login(handle, app_password)
-
-        # Build a rich-text facet so the URL renders as a clickable link.
-        # Bluesky facet byte offsets are UTF-8 encoded positions.
-        encoded = full_text.encode("utf-8")
-        url_bytes = url.encode("utf-8")
-        url_start = encoded.find(url_bytes)
-        facets = [
-            models.AppBskyRichtextFacet.Main(
-                features=[models.AppBskyRichtextFacet.Link(uri=url)],
-                index=models.AppBskyRichtextFacet.ByteSlice(
-                    byte_start=url_start,
-                    byte_end=url_start + len(url_bytes),
-                ),
-            )
-        ]
-
-        embed = build_link_card(client, url)
-        client.send_post(full_text, facets=facets, embed=embed)
-        logger.info("Posted to Bluesky: %s", issue.title[:80])
-        return True
-    except ImportError:
-        logger.error("atproto package not installed — cannot post to Bluesky")
-        return False
-    except Exception:
-        logger.exception("Bluesky post failed for issue %s", issue.id)
-        return False
+    return publish_post(
+        text, url,
+        success_msg=f"Posted to Bluesky: {issue.title[:80]}",
+        error_context=f"issue {issue.id}",
+    )
 
 
 def process_issues_for_bluesky(issues: list, db: Session) -> int:
@@ -296,7 +245,7 @@ def process_issues_for_bluesky(issues: list, db: Session) -> int:
     _US_EAST = ZoneInfo("America/New_York")
     today = datetime.now(tz=_US_EAST).strftime("%Y-%m-%d")
 
-    now = datetime.utcnow()
+    now = utcnow()
     posted = 0
 
     # Bodies of every post published in the last few days, so a repost (or a

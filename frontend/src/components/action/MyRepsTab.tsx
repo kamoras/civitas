@@ -8,7 +8,7 @@ import { STATES } from "@/data/states";
 import { PARTY_COLORS, PARTY_BORDER, PARTY_BG } from "@/lib/partyStyles";
 import { getScoreBgColor } from "@/lib/representation";
 import { useCopyFeedback } from "@/hooks/useCopyFeedback";
-import type { ActionIssue, MyRepRep, MyRepSenator, MyRepsResponse } from "@/types/action";
+import type { ActionIssue, MyRepSenator, MyRepsResponse } from "@/types/action";
 
 function ContactScript({
   name,
@@ -23,7 +23,19 @@ function ContactScript({
 }) {
   const [open, setOpen] = useState(false);
   const [copied, copy] = useCopyFeedback(2000);
-  const script = `My name is [YOUR NAME] and I am a constituent from ${stateName}. I am calling to express my concern about [ISSUE]. I urge ${name} to [TAKE ACTION]. Please leave a record of this call. Thank you.`;
+
+  // One source for both the copyable plain text and the highlighted JSX, so
+  // the two can't drift. `fill` segments are the user-replaceable placeholders.
+  const scriptSegments: { text: string; fill?: boolean }[] = [
+    { text: "My name is " },
+    { text: "[YOUR NAME]", fill: true },
+    { text: ` and I am a constituent from ${stateName}. I am calling to express my concern about ` },
+    { text: "[ISSUE]", fill: true },
+    { text: `. I urge ${name} to ` },
+    { text: "[TAKE ACTION]", fill: true },
+    { text: ". Please leave a record of this call. Thank you." },
+  ];
+  const script = scriptSegments.map((s) => s.text).join("");
 
   if (!phone && !contactFormUrl) return null;
 
@@ -64,13 +76,13 @@ function ContactScript({
       {open && (
         <div className="bg-matrix-dark-green/20 border border-matrix-green/20 p-3 space-y-2">
           <p className="text-[11px] text-matrix-green/80 leading-relaxed font-mono">
-            {`My name is `}
-            <span className="text-neon-yellow/90">[YOUR NAME]</span>
-            {` and I am a constituent from ${stateName}. I am calling to express my concern about `}
-            <span className="text-neon-yellow/90">[ISSUE]</span>
-            {`. I urge ${name} to `}
-            <span className="text-neon-yellow/90">[TAKE ACTION]</span>
-            {`. Please leave a record of this call. Thank you.`}
+            {scriptSegments.map((seg, i) =>
+              seg.fill ? (
+                <span key={i} className="text-neon-yellow/90">{seg.text}</span>
+              ) : (
+                <span key={i}>{seg.text}</span>
+              )
+            )}
           </p>
           <button
             onClick={copyScript}
@@ -112,33 +124,40 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
   );
 }
 
-function SenatorCard({ senator }: { senator: MyRepSenator }) {
-  const s = senator.scores;
+// One card for both senators and representatives — the House-only district
+// (shown as `STATE-NN` and a DISTRICT line) is the sole difference.
+function RepresentativeCard({ person, district }: { person: MyRepSenator; district?: number }) {
+  const s = person.scores;
 
   return (
     <div
-      className={`terminal-window border ${PARTY_BORDER[senator.party]} ${PARTY_BG[senator.party]} p-5`}
+      className={`terminal-window border ${PARTY_BORDER[person.party]} ${PARTY_BG[person.party]} p-5`}
     >
       <div className="flex items-start justify-between gap-3 mb-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <span
-              className={`font-pixel text-xs px-1.5 py-0.5 border ${PARTY_BORDER[senator.party]} ${PARTY_COLORS[senator.party]}`}
+              className={`font-pixel text-xs px-1.5 py-0.5 border ${PARTY_BORDER[person.party]} ${PARTY_COLORS[person.party]}`}
             >
-              {senator.party}
+              {person.party}
             </span>
             <span className="text-matrix-green/40 text-[10px] font-pixel">
-              {senator.state}
+              {district != null ? `${person.state}-${district}` : person.state}
             </span>
-            {senator.yearsInOffice > 0 && (
+            {person.yearsInOffice > 0 && (
               <span className="text-matrix-green/50 text-[10px] font-pixel">
-                {senator.yearsInOffice}yr{senator.yearsInOffice !== 1 ? "s" : ""}
+                {person.yearsInOffice}yr{person.yearsInOffice !== 1 ? "s" : ""}
               </span>
             )}
           </div>
           <h3 className="font-pixel text-base sm:text-lg text-matrix-green leading-snug">
-            {senator.name}
+            {person.name}
           </h3>
+          {district != null && (
+            <div className="text-[10px] text-neon-cyan/40 font-pixel mt-0.5">
+              DISTRICT {district}
+            </div>
+          )}
         </div>
         <div className="text-right shrink-0">
           <div className="font-pixel text-2xl text-matrix-green">{Math.round(s.overall)}</div>
@@ -153,95 +172,13 @@ function SenatorCard({ senator }: { senator: MyRepSenator }) {
         <ScoreBar label={SCORE_TERMS["legislativeEffectiveness"].shortLabel} value={s.legislativeEffectiveness} />
       </div>
 
-      {senator.connectedIssues.length > 0 && (
+      {person.connectedIssues.length > 0 && (
         <div className="border-t border-matrix-green/10 pt-3 mb-3">
           <h4 className="font-pixel text-[10px] text-neon-cyan/60 mb-2">
             CONNECTED TO TODAY&apos;S ISSUES
           </h4>
           <div className="space-y-1.5">
-            {senator.connectedIssues.map((iss) => (
-              <div
-                key={iss.id}
-                className="flex items-start gap-2 text-sm"
-              >
-                <span className="text-[10px] font-pixel text-neon-cyan/40 shrink-0 mt-0.5">
-                  #{iss.rank}
-                </span>
-                <span className="text-matrix-green/70 leading-snug">{iss.title}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <Link
-        href={`/politicians/${senator.id}`}
-        className="inline-block font-pixel text-[10px] text-neon-cyan border border-neon-cyan/30 px-3 py-1.5 hover:bg-neon-cyan/10 transition-colors"
-      >
-        VIEW FULL SCORECARD →
-      </Link>
-
-      <ContactScript
-        name={senator.name}
-        stateName={STATES.find((s) => s.code === senator.state)?.name || senator.state}
-        phone={senator.officePhone}
-        contactFormUrl={senator.contactFormUrl}
-      />
-    </div>
-  );
-}
-
-function RepCard({ rep }: { rep: MyRepRep }) {
-  const s = rep.scores;
-
-  return (
-    <div
-      className={`terminal-window border ${PARTY_BORDER[rep.party]} ${PARTY_BG[rep.party]} p-5`}
-    >
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span
-              className={`font-pixel text-xs px-1.5 py-0.5 border ${PARTY_BORDER[rep.party]} ${PARTY_COLORS[rep.party]}`}
-            >
-              {rep.party}
-            </span>
-            <span className="text-matrix-green/40 text-[10px] font-pixel">
-              {rep.state}-{rep.district}
-            </span>
-            {rep.yearsInOffice > 0 && (
-              <span className="text-matrix-green/50 text-[10px] font-pixel">
-                {rep.yearsInOffice}yr{rep.yearsInOffice !== 1 ? "s" : ""}
-              </span>
-            )}
-          </div>
-          <h3 className="font-pixel text-base sm:text-lg text-matrix-green leading-snug">
-            {rep.name}
-          </h3>
-          <div className="text-[10px] text-neon-cyan/40 font-pixel mt-0.5">
-            DISTRICT {rep.district}
-          </div>
-        </div>
-        <div className="text-right shrink-0">
-          <div className="font-pixel text-2xl text-matrix-green">{Math.round(s.overall)}</div>
-          <div className="text-[10px] text-matrix-green/40 font-pixel">OVERALL</div>
-        </div>
-      </div>
-
-      {/* v6.5: fundingDiversity folded into fundingIndependence, no longer its own dimension */}
-      <div className="space-y-1.5 mb-4">
-        <ScoreBar label={SCORE_TERMS["fundingIndependence"].shortLabel} value={s.fundingIndependence} />
-        <ScoreBar label={SCORE_TERMS["independentVoting"].shortLabel} value={s.independentVoting} />
-        <ScoreBar label={SCORE_TERMS["legislativeEffectiveness"].shortLabel} value={s.legislativeEffectiveness} />
-      </div>
-
-      {rep.connectedIssues.length > 0 && (
-        <div className="border-t border-matrix-green/10 pt-3 mb-3">
-          <h4 className="font-pixel text-[10px] text-neon-cyan/60 mb-2">
-            CONNECTED TO TODAY&apos;S ISSUES
-          </h4>
-          <div className="space-y-1.5">
-            {rep.connectedIssues.map((iss) => (
+            {person.connectedIssues.map((iss) => (
               <div key={iss.id} className="flex items-start gap-2 text-sm">
                 <span className="text-[10px] font-pixel text-neon-cyan/40 shrink-0 mt-0.5">
                   #{iss.rank}
@@ -254,17 +191,17 @@ function RepCard({ rep }: { rep: MyRepRep }) {
       )}
 
       <Link
-        href={`/politicians/${rep.id}`}
+        href={`/politicians/${person.id}`}
         className="inline-block font-pixel text-[10px] text-neon-cyan border border-neon-cyan/30 px-3 py-1.5 hover:bg-neon-cyan/10 transition-colors"
       >
         VIEW FULL SCORECARD →
       </Link>
 
       <ContactScript
-        name={rep.name}
-        stateName={STATES.find((s) => s.code === rep.state)?.name || rep.state}
-        phone={rep.officePhone}
-        contactFormUrl={rep.contactFormUrl}
+        name={person.name}
+        stateName={STATES.find((st) => st.code === person.state)?.name || person.state}
+        phone={person.officePhone}
+        contactFormUrl={person.contactFormUrl}
       />
     </div>
   );
@@ -306,22 +243,18 @@ export default function MyRepsTab({
       .catch(() => {});
   }, [issues]);
 
-  const myRepIds = useMemo(() => {
-    if (!data) return new Set<string>();
-    const ids = new Set<string>();
-    data.senators.forEach((s) => ids.add(s.id));
-    (data.representatives || []).forEach((r) => ids.add(r.id));
-    return ids;
-  }, [data]);
-
   const repIssues = useMemo(() => {
-    if (myRepIds.size === 0 || activeIssues.length === 0) return [];
-    return activeIssues
-      .filter((iss) =>
-        iss.relatedSenators?.some((s) => myRepIds.has(s.id))
-      )
-      .slice(0, 3);
-  }, [issues, myRepIds]);
+    if (!data || activeIssues.length === 0) return [];
+    // Issues the user's own reps are connected to, via the backend-precomputed
+    // per-member connectedIssues (covers both senators and House reps — the
+    // prior relatedSenators filter missed the House), intersected with what's
+    // currently trending. Depends on activeIssues so it recomputes when the
+    // async fallback fetch resolves (issues prop absent).
+    const connectedIds = new Set<number>();
+    data.senators.forEach((s) => s.connectedIssues.forEach((i) => connectedIds.add(i.id)));
+    (data.representatives ?? []).forEach((r) => r.connectedIssues.forEach((i) => connectedIds.add(i.id)));
+    return activeIssues.filter((iss) => connectedIds.has(iss.id));
+  }, [activeIssues, data]);
 
   if (!userState) {
     return (
@@ -436,7 +369,7 @@ export default function MyRepsTab({
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {data.senators.map((senator) => (
-                  <SenatorCard key={senator.id} senator={senator} />
+                  <RepresentativeCard key={senator.id} person={senator} />
                 ))}
               </div>
             </div>
@@ -449,41 +382,11 @@ export default function MyRepsTab({
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {data.representatives.map((rep) => (
-                  <RepCard key={rep.id} rep={rep} />
+                  <RepresentativeCard key={rep.id} person={rep} district={rep.district} />
                 ))}
               </div>
             </div>
           )}
-
-          {/* YOUR REPS IN THE NEWS — shown when parent passes pre-fetched issues */}
-          {(() => {
-            if (!issues || issues.length === 0) return null;
-            const repIssueIds = new Set<number>([
-              ...data.senators.flatMap((s) => s.connectedIssues.map((i) => i.id)),
-              ...(data.representatives ?? []).flatMap((r) => r.connectedIssues.map((i) => i.id)),
-            ]);
-            const matched = issues.filter((iss) => repIssueIds.has(iss.id));
-            if (matched.length === 0) return null;
-            return (
-              <div className="space-y-4">
-                <div className="font-pixel text-xs text-amber-400/60">
-                  {">"} YOUR REPS IN THE NEWS
-                </div>
-                <div className="space-y-2">
-                  {matched.map((iss) => (
-                    <Link
-                      key={iss.id}
-                      href={`/action?issue=${iss.id}`}
-                      className="block terminal-window border border-amber-400/20 p-3 hover:border-amber-400/40 transition-colors"
-                    >
-                      <div className="text-[10px] font-pixel text-amber-400/50 mb-1">{iss.date}</div>
-                      <div className="text-sm text-matrix-green/80 leading-snug">{iss.title}</div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            );
-          })()}
         </div>
       ) : (
         <div className="terminal-window p-8 text-center">
