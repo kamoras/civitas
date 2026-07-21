@@ -2,9 +2,32 @@
 
 from app.config import settings
 from app.pipeline.senate_pipeline import (
+    PIPELINE_STEPS,
     _build_current_term_sponsored_for_cosponsor,
     _build_donor_entries,
 )
+
+
+def test_fetch_sponsored_cosponsors_is_a_registered_step():
+    """ProgressTracker.begin/update/complete silently no-op for any step
+    key not in the steps list passed to its constructor (see
+    progress_tracker.py — `step = self._steps.get(key); if not step:
+    return`). fetch_sponsored_cosponsors calls all three, correctly, but
+    was missing from PIPELINE_STEPS — so every one of those calls was a
+    silent no-op, and a ~6,000-bill sequential HTTP fetch loop (uncapped
+    2026-07) ran fully invisible to the pipeline status API. Live-observed
+    2026-07-21: looked indistinguishable from a hang for 25+ minutes
+    between prepare_senators and sponsorship_analysis. The exact same
+    failure mode already happened once for fetch_official_titles (see its
+    own code comment: "in run 69 this loop ran for 80 minutes... with
+    nothing in progress_detail to show for it") and was fixed there by
+    registering the step — this is the same fix applied to the step that
+    was still missing it."""
+    step_keys = [key for key, _phase, _label in PIPELINE_STEPS]
+    assert "fetch_sponsored_cosponsors" in step_keys
+    # Must be registered before sponsorship_analysis begins, matching
+    # where it actually runs in the pipeline.
+    assert step_keys.index("fetch_sponsored_cosponsors") < step_keys.index("sponsorship_analysis")
 
 
 class TestBuildDonorEntries:

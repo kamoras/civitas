@@ -123,6 +123,7 @@ PIPELINE_STEPS = [
     ("embed_bills",          "analyze",   "Embed bills in vector DB"),
     ("classify_donors",      "analyze",   "Classify donors"),
     ("prepare_senators",     "analyze",   "Prepare senator data"),
+    ("fetch_sponsored_cosponsors", "fetch", "Fetch cosponsors for sponsored bills"),
     ("sponsorship_analysis", "analyze",   "Sponsorship leadership & ideology (SVD/PageRank)"),
     ("analyze_senators",     "analyze",   "Analyze senators"),
     ("finalize",             "finalize",  "Finalize & save"),
@@ -1472,6 +1473,7 @@ async def run_senate_pipeline(
             )
             all_bills_for_analysis = bills_data + sponsored_bills_for_cosponsor
         else:
+            progress.skip("fetch_sponsored_cosponsors", detail="no eligible sponsored bills")
             all_bills_for_analysis = bills_data
 
         # 3f. Sponsorship analysis: PageRank leadership + SVD ideology
