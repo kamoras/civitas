@@ -45,13 +45,33 @@ fi
 # over, but an *unintended* collision with the nightly scheduled run is
 # exactly this same failure mode). Skip this cycle if a pipeline is
 # currently running; cron retries every 5 min, so the commit deploys as
-# soon as the pipeline is idle. Backend is always on a fixed port under
-# Swarm (no more blue/green slot file to read).
+# soon as the pipeline is idle.
+#
+# Found 2026-07-21 investigating a House pipeline run that died mid-flight
+# three separate times with no obvious cause: this check has been a
+# complete no-op since the Swarm migration (#176, 2026-07-19) and never
+# caught it. It queries http://localhost:8000, but docker-compose.swarm.yml
+# resets backend's published ports to none (`ports: !reset []` — see that
+# file's own comment on why) — that port hasn't been reachable from the
+# host since. The curl failure fell through to `|| echo '{}'`, which reads
+# as "no pipeline running" and deploys anyway: exactly the three restarts
+# (18:47, 19:01, 19:16 UTC that day) that killed the House run, each one
+# lining up second-for-second with an ordinary "deploy OK" log entry.
+# civitas_nginx is the only one of these three services still `deploy`-
+# published under Swarm (host port 8081 — see docker-compose.swarm.yml),
+# and it proxies /api/* straight through to backend on the overlay network,
+# so it reaches the same endpoint. Also fail closed now: an unreachable
+# admin API is ambiguous, not evidence nothing is running, so a curl error
+# defers the same as a confirmed-running pipeline instead of deploying
+# through it blind.
 admin_token=$(grep '^ADMIN_TOKEN=' .env 2>/dev/null | cut -d= -f2-)
 if [[ -n "$admin_token" ]]; then
-  pipeline_status=$(curl -fsS --max-time 5 \
+  if ! pipeline_status=$(curl -fsS --max-time 5 \
     -H "Authorization: Bearer $admin_token" \
-    "http://localhost:8000/api/admin/pipeline/status" 2>/dev/null || echo '{}')
+    "http://localhost:8081/api/admin/pipeline/status" 2>/dev/null); then
+    log "new commit ${REMOTE:0:8} available but couldn't reach pipeline status — deferring"
+    exit 0
+  fi
   if echo "$pipeline_status" | grep -Eq '"(isRunning|houseIsRunning|stockTradesIsRunning|supplementaryIsRunning)":true'; then
     log "new commit ${REMOTE:0:8} available but a pipeline is running — deferring"
     exit 0
