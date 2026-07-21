@@ -17,6 +17,16 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.9",
+    date: "2026-07-21",
+    title: "Legislative Effectiveness — fixing a House/Senate scoring gap",
+    changes: [
+      "A platform-wide audit (the same night as v6.8, a different dimension) found Legislative Effectiveness compared every member's own majority/minority advancement rate against a single value pooled across both chambers, even though the House and Senate's real advancement rates genuinely differ (House averages meaningfully higher than the Senate). The population-average credit constants this component also uses were already chamber-specific — this one wasn't, and the two were quietly working against each other: it inflated the bar House members were held to and lowered the bar for senators.",
+      "Measured effect on live scores before this fix: 61% of House members scored below the neutral midpoint on Legislative Effectiveness, versus only 38% of the Senate — despite no real reason to expect House members to be systematically less legislatively effective than senators once compared fairly against their own chamber's real norms. Splitting this constant by chamber, the same way the related population-average constant already was, brings both chambers to a comparable, much less lopsided split.",
+      "A smaller residual imbalance remains in both chambers (slightly more than half of each chamber still lands below neutral) — that traces to comparing members against their chamber's population MEAN rather than its median, which skews the reference point upward since a minority of highly prolific sponsors pull the mean above where most members sit. That's a separate, symmetric effect across both chambers, not the cross-chamber bug this fix addresses.",
+    ],
+  },
+  {
     version: "v6.8",
     date: "2026-07-21",
     title: "Constituent Alignment fairness audit — fixing a double-counted signal",

@@ -300,6 +300,16 @@ export default function AboutPage() {
                   count into introduced-only / advanced-further / became-law so the
                   volume-vs-advancement split is visible as real numbers.
                 </P>
+                <P>
+                  Both the expected-credit baseline and the majority/minority-status
+                  adjustment above are calibrated separately for the House and Senate
+                  (v6.9) — the two chambers&apos; real bill volumes and advancement rates
+                  genuinely differ, and comparing every member against one shared,
+                  pooled-across-chambers figure previously understated House members&apos;
+                  effectiveness and overstated the Senate&apos;s. See the{" "}
+                  <a href="/changelog" className="underline underline-offset-2 hover:text-matrix-green/70">scoring changelog</a>{" "}
+                  for the live-population numbers behind that fix.
+                </P>
               </div>
             </div>
           </Section>

@@ -566,6 +566,47 @@ v6.6's own governing principle already calls unreadable, not damning.
   building), not a bug this pass can code its way out of. Re-run the r/r²
   correlation check (see POSITION_MISMATCH_MAX_PENALTY's comment) after any
   pipeline run meaningfully shifts either distribution.
+
+Changes from v6.8 -> v6.9 (2026-07-21): a platform-wide political-science
+audit of the live population (the same night as v6.8, a different
+dimension) found Legislative Effectiveness's chamber-fairness handling was
+only half-fixed. _LES_POPULATION_AVG_SENATE/_HOUSE (the population-average
+credit constants) were already correctly chamber-specific, but
+_LES_AVG_BASELINE — the constant every member's own majority/minority
+advancement rate gets divided by to compute their status_ratio — was a
+SINGLE value pooled across both chambers. Measuring the two chambers' real
+_advancement_baseline rates separately found they genuinely differ (House
+mean 0.0443, n=427; Senate mean 0.0305, n=101 — a real structural
+difference in how _advancement_baseline's own audited, bill-type-keyed
+rates work out per chamber, not noise), so comparing every member against
+ONE pooled average systematically inflated House members' status_ratio
+(and therefore their expected-credit bar) while deflating the Senate's —
+the two supposedly-chamber-specific constants were silently fighting each
+other.
+
+  Measured effect on the live population before this fix: 61% of House
+  members (n=431) scored below the neutral midpoint on Legislative
+  Effectiveness vs. only 38% of the Senate (n=101) — means 44.6 vs 60.5,
+  despite no real reason to expect House members to be systematically less
+  legislatively effective than senators once compared fairly against their
+  own chamber's real norms. Simulated against the live population before
+  shipping (same discipline as every calibration change in this file):
+  splitting _LES_AVG_BASELINE into _LES_AVG_BASELINE_SENATE/_HOUSE brings
+  both chambers to a comparable, much less lopsided split (~53-58% below-
+  neutral each). The residual (not exactly 50/50 either direction) is a
+  separate, smaller effect — the raw per-congress credit distribution is
+  itself right-skewed in both chambers (mean sits above median), so
+  comparing against the population MEAN as "expected" will always put
+  slightly more than half of any chamber below neutral; unlike the cross-
+  chamber pooling bug this fix targets, that skew is symmetric across
+  chambers and not something this pass changes.
+
+  scripts/calibrate_les_credit_scale.py now reports both chambers'
+  baselines separately instead of one pooled figure, so a future
+  recalibration can't silently regress back to a single shared constant.
+  Re-run it (and re-check the below-neutral split by chamber) after any
+  pipeline run meaningfully shifts either chamber's bill-type/advancement-
+  rate mix.
 """
 
 import logging
@@ -676,7 +717,22 @@ logger = logging.getLogger(__name__)
 # POSITION_MISMATCH_MAX_PENALTY cut 25.0 -> 10.0 and Coalition Breadth's
 # below-median case now gets the same seat-safety scaling every other branch
 # here already has. See the top-of-file "Changes from v6.7 -> v6.8" note.
-ALGORITHM_VERSION = "v6.8"
+#
+# v6.8 -> v6.9 (2026-07-21): a platform-wide audit (prompted the same night
+# as v6.8, different dimension) found Legislative Effectiveness's
+# _LES_AVG_BASELINE was a single value pooled across both chambers, even
+# though House and Senate members' real _advancement_baseline rates
+# genuinely differ. Comparing every member against one cross-chamber
+# average silently inflated House members' expected-credit bar and
+# deflated the Senate's — live population effect: 61% of House scored
+# below neutral vs only 38% of the Senate (means 44.6 vs 60.5, n=431/101),
+# despite both chambers performing comparably once measured against their
+# own chamber's real baseline. Split into _LES_AVG_BASELINE_SENATE/_HOUSE,
+# the same pattern _LES_POPULATION_AVG_SENATE/_HOUSE already used — the two
+# constants were meant to work together chamber-specifically and were
+# silently fighting each other. See the top-of-file "Changes from v6.8 ->
+# v6.9" note.
+ALGORITHM_VERSION = "v6.9"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -2529,8 +2585,32 @@ _LES_POPULATION_AVG_HOUSE = 122.0
 # benchmark adjustment, adapted from _advancement_baseline's real audited
 # rates without requiring the live per-term regression V&W's own
 # Benchmark Score uses (infrastructure this codebase doesn't have).
-# Same calibration script determines this. 2026-07 live audit: 0.0404.
-_LES_AVG_BASELINE = 0.0404
+# Same calibration script determines this.
+#
+# Chamber-specific as of 2026-07-21 (was a single pooled 0.0404 across both
+# chambers). Found during a political-science audit of the live population:
+# House's real per-member advancement_baseline (mean 0.0443, n=427) is
+# genuinely higher than the Senate's (mean 0.0305, n=101) — a real
+# structural difference in how _advancement_baseline's own audited,
+# bill-type-keyed pass rates work out per chamber, not noise. Comparing
+# every member's own baseline against ONE pooled cross-chamber average
+# systematically inflated House members' status_ratio (and therefore their
+# expected credit bar) while deflating the Senate's, on top of the
+# population_avg constants above already being correctly chamber-specific
+# — the two are meant to work together and were silently fighting each
+# other. Measured effect on live scores: House Legislative Effectiveness
+# was 61% below-neutral / Senate only 38% below-neutral (means 44.6 vs
+# 60.5, n=431/101) despite both chambers' members performing comparably
+# once compared against their own chamber's real baseline — simulated
+# against the live population before shipping this fix, which brings both
+# chambers to a comparable, much less lopsided split (~53-58% below-neutral
+# each — the residual is the same population-mean-vs-median right-skew
+# every other "expected vs actual" component in this file has, not a
+# chamber-comparison bug). Re-run scripts/calibrate_les_credit_scale.py
+# (now chamber-split) after any pipeline run meaningfully shifts either
+# chamber's bill-type/advancement-rate mix.
+_LES_AVG_BASELINE_SENATE = 0.0305
+_LES_AVG_BASELINE_HOUSE = 0.0444
 
 # Saturation constant for the expected-vs-actual credit gap, same "never
 # zero, never a runaway score from one outlier bill" shape as every other
@@ -2569,12 +2649,13 @@ def _les_component_score(
     )
     is_house_member = house_n > (len(sponsored_bills) - house_n)
     population_avg = _LES_POPULATION_AVG_HOUSE if is_house_member else _LES_POPULATION_AVG_SENATE
+    avg_baseline = _LES_AVG_BASELINE_HOUSE if is_house_member else _LES_AVG_BASELINE_SENATE
 
     member_baseline = sum(
         _advancement_baseline((b.get("billType") or "").lower(), b.get("congress"), party)
         for b in sponsored_bills
     ) / len(sponsored_bills)
-    status_ratio = member_baseline / _LES_AVG_BASELINE if _LES_AVG_BASELINE else 1.0
+    status_ratio = member_baseline / avg_baseline if avg_baseline else 1.0
     expected_per_congress = population_avg * status_ratio
 
     diff = raw_per_congress - expected_per_congress
