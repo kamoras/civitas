@@ -81,4 +81,5 @@ def build_score_breakdown_entity(entity: Any, *, lobbying_donation_attr: str) ->
         "bipartisanshipScore": entity.bipartisanship_score,
         "leadershipScore": entity.leadership_score,
         "yearsInOffice": entity.years_in_office,
+        "ideologyScore": entity.ideology_score,
     }
