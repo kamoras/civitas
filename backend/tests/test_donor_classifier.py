@@ -241,3 +241,58 @@ class TestHybridClassification:
             "the sync classification body is blocking the event loop's own "
             "thread instead of running in a worker thread"
         )
+
+    @pytest.mark.asyncio
+    async def test_commits_in_batches_not_one_long_transaction(self, db_session):
+        """SQLite allows exactly one writer at a time. Moving classification
+        off the event loop (test above) made it genuinely run CONCURRENTLY
+        with the rest of the app for the first time — which surfaced a
+        second, separate bug: _store_donor_learning was called once or
+        twice per donor with a single db_session.commit() only at the very
+        end, so a full run held one open write transaction for its entire
+        ~3 minutes. Every other write anywhere in the app during that
+        window either waited out the busy_timeout or failed outright —
+        live-observed 2026-07-21 as a real 500 on POST /api/track-visit
+        while a donor classification run was in progress. Committing every
+        _COMMIT_BATCH_SIZE donors bounds how long any single transaction
+        holds SQLite's one write slot.
+
+        Patches classify_industries_batch_scored and
+        classify_donor_type_semantic so this resolves via the FEC tier
+        (fast, no real model calls) with a controlled non-OTHER industry,
+        guaranteeing every donor reaches _store_donor_learning."""
+        from app.pipeline.analyze import donor_classifier_ai
+
+        donors = [
+            {
+                "name": f"Donor {i} Inc",
+                "amount": 100,
+                "fec_receipt": {"entity_type": "ORG"},
+            }
+            for i in range(5)
+        ]
+
+        commit_calls = 0
+        real_commit = db_session.commit
+
+        def counting_commit():
+            nonlocal commit_calls
+            commit_calls += 1
+            real_commit()
+
+        with patch.object(donor_classifier_ai, "_COMMIT_BATCH_SIZE", 2), \
+             patch.object(
+                 donor_classifier_ai, "classify_industries_batch_scored",
+                 return_value={d["name"]: ("TECH", 0.9) for d in donors},
+             ), \
+             patch.object(db_session, "commit", counting_commit):
+            result = await classify_donors_hybrid(donors, db_session=db_session)
+
+        assert len(result) == 5
+        # 5 donors / batch size 2 -> intermediate commits at i=2,4, plus the
+        # unconditional final commit = 3. The exact count matters less than
+        # confirming more than the single final commit happened at all.
+        assert commit_calls > 1, (
+            f"only {commit_calls} commit(s) for 5 donors at batch size 2 — "
+            "writes are accumulating in one long transaction again"
+        )
