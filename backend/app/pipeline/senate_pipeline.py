@@ -1472,6 +1472,7 @@ async def run_senate_pipeline(
             compute_ideology_scores,
             compute_leadership_scores,
             describe_senator_position,
+            party_ideology_bounds,
         )
         progress.begin("sponsorship_analysis")
         senator_bio_ids = {
@@ -1489,6 +1490,12 @@ async def run_senate_pipeline(
         )
         ideology_scores = compute_ideology_scores(
             all_bills_for_analysis, cosponsors_map, senator_bio_ids, senator_party_map,
+        )
+        # Party-relative ideology label thresholds, computed once over the
+        # full cohort (see party_ideology_bounds) so progressive/moderate/
+        # centrist reflects position WITHIN a party, not just party identity.
+        ideology_bounds_by_party = party_ideology_bounds(
+            [(ideology_scores.get(bio), senator_party_map.get(bio)) for bio in senator_bio_ids]
         )
         bipartisanship_scores = compute_bipartisanship_scores(
             all_bills_for_analysis, cosponsors_map, senator_party_map,
@@ -1750,6 +1757,8 @@ async def run_senate_pipeline(
                     if l_score is not None and i_score is not None:
                         result["sponsorshipDescription"] = describe_senator_position(
                             i_score, l_score, senator.get("party", ""),
+                            years_in_office=senator.get("yearsInOffice"),
+                            ideology_bounds=ideology_bounds_by_party.get(senator.get("party", "")),
                         )
                         logger.info(
                             "    sponsorship: leadership=%.2f ideology=%.2f (%s)",

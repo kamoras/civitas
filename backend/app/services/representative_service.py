@@ -17,7 +17,10 @@ from app.models import (
     Representative,
 )
 from app.pipeline.analyze.score_calculator import compute_overall_score
-from app.pipeline.analyze.sponsorship_analysis import describe_senator_position
+from app.pipeline.analyze.sponsorship_analysis import (
+    describe_senator_position,
+    party_ideology_bounds,
+)
 from app.schemas import PaginatedRepresentativesSchema, RepresentativeSchema
 from app.services.pagination import paginate_bounds
 from app.services.score_trends import compute_score_trend_map
@@ -329,6 +332,13 @@ def get_rep_leaderboard(
 ) -> dict:
     reps = db.query(Representative).all()
 
+    # Party-relative ideology label thresholds over the FULL cohort — before
+    # the party filter/pagination below — so the terciles are stable
+    # regardless of which page or party is requested. See party_ideology_bounds.
+    ideology_bounds_by_party = party_ideology_bounds(
+        [(r.ideology_score, r.party) for r in reps]
+    )
+
     top_industry_map: dict[str, str] = {}
     ind_rows = (
         db.query(RepIndustryDonation.representative_id, RepIndustryDonation.name)
@@ -374,7 +384,11 @@ def get_rep_leaderboard(
             "trend": trend_map.get(r.id, {"direction": "new", "change": 0.0, "previousScore": None}),
             "ideologyScore": r.ideology_score,
             "ideologyLabel": (
-                describe_senator_position(r.ideology_score, r.leadership_score, r.party)
+                describe_senator_position(
+                    r.ideology_score, r.leadership_score, r.party,
+                    years_in_office=r.years_in_office,
+                    ideology_bounds=ideology_bounds_by_party.get(r.party),
+                )
                 if r.ideology_score is not None and r.leadership_score is not None
                 else None
             ),
