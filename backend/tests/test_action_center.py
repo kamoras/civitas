@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from app.models import ActionIssue, ExploreDocument, NationalMonitor
+from app.models import ActionIssue, ExploreDocument, Justice, NationalMonitor, Representative, Senator
 from app.pipeline.fetch.news_feeds import NewsArticle
 from app.pipeline.analyze.action_center import (
     _deduplicate_top_clusters,
@@ -18,6 +18,8 @@ from app.pipeline.analyze.action_center import (
     _full_story_should_invalidate,
     _check_summary_roles,
     _find_related_explore_docs,
+    _find_related_senators,
+    _find_related_officials,
     _fix_impossible_senate_vote_counts,
     _largest_coherent_subgroup,
 )
@@ -709,3 +711,77 @@ class TestAdministrativeNoticeTitleFilter:
 
         result = _find_related_explore_docs("Sanctions on foreign officials", "summary", [], db_session)
         assert [d["id"] for d in result] == [1]
+
+
+class TestFindRelatedSenatorsCommonWordSurnames:
+    """Rep. Shomari Figures (surname "Figures", seated Jan 2025) was
+    getting tagged on any article using the common word "figures" ("the
+    data figures show...") — a bare last-name substring/word-boundary
+    match with no context requirement strong enough to filter it out
+    reliably. _COMMON_WORD_SURNAMES already existed for exactly this
+    failure mode (it already had "justice", "banks", "young", etc.) but
+    "figures" wasn't on it, and there was no test coverage to catch a
+    regression either way."""
+
+    def test_common_word_surname_not_matched_by_bare_word(self, db_session):
+        db_session.add(Representative(
+            id="s-figures", name="Shomari Figures", state="AL", party="D",
+        ))
+        db_session.commit()
+
+        result = _find_related_senators(
+            "Economic outlook", "The latest data figures show inflation cooling.", [], db_session,
+        )
+        assert result == []
+
+    def test_common_word_surname_still_matched_by_full_name(self, db_session):
+        """The stoplist only blocks bare last-name matching — a full-name
+        hit is always high-confidence and must still work."""
+        db_session.add(Representative(
+            id="s-figures", name="Shomari Figures", state="AL", party="D",
+        ))
+        db_session.commit()
+
+        result = _find_related_senators(
+            "Alabama delegation", "Rep. Shomari Figures announced a new bill today.", [], db_session,
+        )
+        assert [r["id"] for r in result] == ["s-figures"]
+
+    @patch("app.pipeline.analyze.action_center._embed_texts")
+    def test_disambiguation_phrase_uses_representative_title_not_senator(
+        self, mock_embed, db_session,
+    ):
+        """Every House candidate's disambiguation prototype was hardcoded
+        to "Senator {name} from {state}" regardless of chamber — weakening
+        the embedding signal for every one of the ~435 Representatives,
+        not just common-word-surname cases. "Delacroix" (>=4 chars, not a
+        common word) exercises the disambiguation path directly."""
+        db_session.add(Representative(
+            id="r-delacroix", name="Amara Delacroix", state="TX", party="R",
+        ))
+        db_session.commit()
+        mock_embed.return_value = np.array([[1.0, 0.0], [1.0, 0.0]])
+
+        _find_related_senators(
+            "Texas news", "Rep. Delacroix spoke at the event.", [], db_session,
+        )
+
+        texts_embedded = mock_embed.call_args[0][0]
+        assert "Representative Amara Delacroix from TX" in texts_embedded
+        assert not any(t.startswith("Senator Amara Delacroix") for t in texts_embedded)
+
+
+class TestFindRelatedOfficialsJusticeCommonWordSurnames:
+    """Same failure mode as senators/reps, applied to justice matching:
+    Justice Ketanji Brown Jackson's surname is both a common place name
+    ("Jackson, Mississippi") and an everyday word."""
+
+    def test_justice_common_word_surname_not_matched_by_bare_word(self, db_session):
+        db_session.add(Senator(id="dummy", name="Dummy Senator", state="CA", party="D"))
+        db_session.add(Justice(id="jackson", name="Ketanji Brown Jackson", last_name="Jackson"))
+        db_session.commit()
+
+        result = _find_related_officials(
+            "Travel feature", "Visitors flocked to Jackson, Mississippi this summer.", [], db_session,
+        )
+        assert result == []
