@@ -22,6 +22,15 @@ import { PARTY_COLORS, PARTY_BORDER, PARTY_LABELS } from "@/lib/partyStyles";
 interface SenatorCardProps {
   senator: Senator;
   chamber?: "senate" | "house";
+  /** Identity fields not on the Senator domain type itself — sourced from
+   * the unified politician profile (see PoliticianProfileClient), which
+   * used to render its own separate header above this card before the
+   * two were consolidated. */
+  thumbnailUrl?: string | null;
+  district?: number | null;
+  stateName?: string | null;
+  isCurrent?: boolean;
+  leadershipTitle?: string | null;
 }
 
 // Mirrors the tenure-confidence shrinkage in
@@ -102,7 +111,15 @@ function ContactInfo({ senator }: { senator: Senator }) {
   );
 }
 
-export default function SenatorCard({ senator, chamber = "senate" }: SenatorCardProps) {
+export default function SenatorCard({
+  senator,
+  chamber = "senate",
+  thumbnailUrl,
+  district,
+  stateName,
+  isCurrent,
+  leadershipTitle,
+}: SenatorCardProps) {
   // Guard against zero fundraising (0/0 = NaN) — matches the compare and
   // leaderboard views, which both gate on totalRaised > 0.
   const pacPercentRaw =
@@ -122,24 +139,60 @@ export default function SenatorCard({ senator, chamber = "senate" }: SenatorCard
       <div className="p-4 sm:p-6 space-y-6">
         {/* ── Header ── always visible */}
         <div className="flex items-start gap-4">
-          <div
-            className={`w-16 h-16 border-2 ${PARTY_BORDER[senator.party]} flex items-center justify-center font-pixel text-lg ${PARTY_COLORS[senator.party]}`}
-          >
-            {senator.initials}
-          </div>
-          <div>
-            <h2
-              className={`text-lg sm:text-2xl md:text-3xl font-pixel ${PARTY_COLORS[senator.party]} break-words`}
+          {thumbnailUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- external, varied politician-photo hosts; not worth per-host next/image remotePatterns
+            <img
+              src={thumbnailUrl}
+              alt={senator.name}
+              className={`w-16 h-16 rounded object-cover border-2 ${PARTY_BORDER[senator.party]} shrink-0`}
+            />
+          ) : (
+            <div
+              className={`w-16 h-16 border-2 ${PARTY_BORDER[senator.party]} flex items-center justify-center font-pixel text-lg ${PARTY_COLORS[senator.party]} shrink-0`}
             >
-              {senator.name}
-            </h2>
+              {senator.initials}
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-3">
+              <h2
+                className={`text-lg sm:text-2xl md:text-3xl font-pixel ${PARTY_COLORS[senator.party]} break-words`}
+              >
+                {senator.name}
+              </h2>
+              <div className="shrink-0 text-center border border-matrix-green/20 bg-crt-black/60 px-3 py-2">
+                <div className={`font-mono text-xl font-bold ${getScoreColor(senator.representationScore.overall)}`}>
+                  {senator.representationScore.overall.toFixed(0)}
+                </div>
+                <div className="font-mono text-[8px] text-matrix-green/40 tracking-widest mt-0.5">
+                  OVERALL
+                </div>
+              </div>
+            </div>
             <div className="flex flex-wrap items-center gap-2 mt-1 text-sm">
               <span className={`font-pixel text-xs ${PARTY_COLORS[senator.party]}`}>
                 [{senator.party}]
               </span>
               <span className="text-matrix-green/40">{PARTY_LABELS[senator.party]}</span>
               <span className="text-matrix-green/20">|</span>
+              <span className="text-matrix-green/40">
+                {chamber === "senate" ? "SENATOR" : "REPRESENTATIVE"}
+                {" · "}
+                {stateName ?? senator.state}
+                {district != null ? ` · District ${district}` : ""}
+              </span>
+              <span className="text-matrix-green/20">|</span>
               <span className="text-matrix-green/40">{senator.yearsInOffice} YRS IN OFFICE</span>
+              {isCurrent && (
+                <span className="font-mono text-[9px] tracking-widest border border-matrix-green/30 text-matrix-green/60 px-2 py-0.5 pulse-subtle">
+                  CURRENT
+                </span>
+              )}
+              {leadershipTitle && (
+                <span className="font-mono text-[9px] tracking-widest border border-amber-400/40 text-amber-400/80 bg-amber-400/5 px-2 py-0.5">
+                  {leadershipTitle.toUpperCase()}
+                </span>
+              )}
             </div>
             {senator.sponsorshipDescription && (
               <div className="text-[10px] text-matrix-green/60 mt-1 font-mono uppercase tracking-wider">

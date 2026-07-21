@@ -74,18 +74,33 @@ export function JusticeCard({ justice }: { justice: Justice }) {
       <div className="p-6 space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-terminal text-white">{justice.name}</h2>
-            <div className="flex items-center gap-3 mt-1 flex-wrap">
-              <span className="text-xs text-matrix-green/60">{justice.roleTitle}</span>
-              <span className={`text-xs px-2 py-0.5 border rounded-sm ${pb.bg} ${pb.border} ${pb.color}`}>
-                {pb.label}
-              </span>
-              {justice.appointingPresident && (
-                <span className="text-xs text-white/30">
-                  by {justice.appointingPresident}
+          <div className="flex items-start gap-4">
+            {justice.thumbnailUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- external, varied justice-photo hosts; not worth per-host next/image remotePatterns
+              <img
+                src={justice.thumbnailUrl}
+                alt={justice.name}
+                className={`w-14 h-14 rounded object-cover border-2 ${pb.border} shrink-0`}
+              />
+            ) : null}
+            <div>
+              <h2 className="text-2xl font-terminal text-white">{justice.name}</h2>
+              <div className="flex items-center gap-3 mt-1 flex-wrap">
+                <span className="text-xs text-matrix-green/60">{justice.roleTitle}</span>
+                <span className={`text-xs px-2 py-0.5 border rounded-sm ${pb.bg} ${pb.border} ${pb.color}`}>
+                  {pb.label}
                 </span>
-              )}
+                {justice.appointingPresident && (
+                  <span className="text-xs text-white/30">
+                    by {justice.appointingPresident}
+                  </span>
+                )}
+                {!justice.isActive && (
+                  <span className="text-xs text-neon-pink/70 border border-neon-pink/30 px-2 py-0.5">
+                    NO LONGER SERVING
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <div className="text-right">

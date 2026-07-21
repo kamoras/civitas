@@ -9,7 +9,6 @@ import TerminalTitlebar from "@/components/TerminalTitlebar";
 import SenatorCard from "@/components/checker/SenatorCard";
 import { PresidentCard } from "@/components/president/PresidentClient";
 import { JusticeCard } from "@/components/justice/JusticeClient";
-import { getScoreLabel, getScoreColor } from "@/lib/representation";
 import type { PoliticianProfile, GovernmentDoc } from "@/types/politicians";
 import type { Senator } from "@/types/senator";
 import type { President } from "@/types/president";
@@ -23,12 +22,6 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   "Supreme Court Opinion": "COURT OPINION",
   "Presidential Memorandum": "MEMO",
 };
-
-function partyLabel(party: string | undefined) {
-  if (party === "D") return { text: "DEMOCRAT", cls: "text-dem-blue border-dem-blue/40 bg-dem-blue/10" };
-  if (party === "R") return { text: "REPUBLICAN", cls: "text-rep-red border-rep-red/40 bg-rep-red/10" };
-  return { text: "INDEPENDENT", cls: "text-ind-purple border-ind-purple/40 bg-ind-purple/10" };
-}
 
 function branchLabel(branch: string) {
   const map: Record<string, string> = {
@@ -78,8 +71,7 @@ function SectionBlock({ title, children }: { title: string; children: React.Reac
 }
 
 export default function PoliticianProfileClient({ profile }: { profile: PoliticianProfile }) {
-  const { identity, branch, hasScorecard, overallScore, activeIssues, governmentRecord, scorecard } = profile;
-  const party = partyLabel(identity.party ?? undefined);
+  const { identity, branch, hasScorecard, activeIssues, governmentRecord, scorecard } = profile;
 
   return (
     <div className="min-h-screen bg-crt-black text-matrix-green">
@@ -111,82 +103,6 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
               </p>
             </div>
           )}
-
-          {/* Identity header */}
-          <div className="mb-6 flex flex-col sm:flex-row items-start gap-4">
-            {identity.thumbnailUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element -- external, varied politician-photo hosts; not worth per-host next/image remotePatterns
-              <img
-                src={identity.thumbnailUrl}
-                alt={identity.name}
-                className="w-20 h-20 rounded object-cover border border-matrix-green/20 shrink-0"
-              />
-            ) : (
-              <div className="w-20 h-20 rounded border border-matrix-green/20 flex items-center justify-center shrink-0 bg-crt-black/60">
-                <span className="font-mono text-lg text-matrix-green/30">
-                  {identity.name.split(" ").map((w: string) => w[0]).slice(0, 2).join("")}
-                </span>
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <h1 className="font-pixel text-xl sm:text-2xl text-matrix-green neon-green mb-1">
-                {identity.name}
-              </h1>
-              <div className="flex flex-wrap items-center gap-2 mb-2">
-                <span className={`font-mono text-[9px] tracking-widest border px-2 py-0.5 ${party.cls}`}>
-                  {party.text}
-                </span>
-                <span className="font-mono text-[9px] tracking-widest border border-matrix-green/20 text-matrix-green/40 px-2 py-0.5">
-                  {branchLabel(branch)}
-                </span>
-                {identity.state && (
-                  <span className="font-mono text-[9px] tracking-widest text-matrix-green/40">
-                    {identity.stateName ?? identity.state}
-                    {identity.district != null ? ` · District ${identity.district}` : ""}
-                  </span>
-                )}
-                {identity.isCurrent && (
-                  <span className="font-mono text-[9px] tracking-widest border border-matrix-green/30 text-matrix-green/60 px-2 py-0.5 pulse-subtle">
-                    CURRENT
-                  </span>
-                )}
-                {identity.leadershipTitle && (
-                  <span className="font-mono text-[9px] tracking-widest border border-amber-400/40 text-amber-400/80 bg-amber-400/5 px-2 py-0.5">
-                    {identity.leadershipTitle.toUpperCase()}
-                  </span>
-                )}
-              </div>
-              <p className="font-mono text-xs text-matrix-green/50 mb-3">{identity.role}</p>
-
-              {/* Contact links */}
-              <div className="flex flex-wrap gap-3">
-                {identity.websiteUrl && (
-                  <a href={identity.websiteUrl} target="_blank" rel="noopener noreferrer"
-                     className="font-mono text-[10px] text-matrix-green/40 hover:text-matrix-green/70 transition-colors tracking-widest">
-                    OFFICIAL SITE ↗
-                  </a>
-                )}
-                {identity.contactFormUrl && (
-                  <a href={identity.contactFormUrl} target="_blank" rel="noopener noreferrer"
-                     className="font-mono text-[10px] text-neon-cyan/50 hover:text-neon-cyan transition-colors tracking-widest">
-                    CONTACT ↗
-                  </a>
-                )}
-              </div>
-            </div>
-
-            {/* Overall score bubble */}
-            {hasScorecard && overallScore != null && (
-              <div className="shrink-0 text-center border border-matrix-green/20 bg-crt-black/60 px-4 py-3">
-                <div className={`font-mono text-2xl font-bold ${getScoreColor(overallScore)}`}>
-                  {overallScore.toFixed(0)}
-                </div>
-                <div className="font-mono text-[8px] text-matrix-green/40 tracking-widest mt-1">
-                  {getScoreLabel(overallScore)}
-                </div>
-              </div>
-            )}
-          </div>
 
           {/* Active Issues */}
           {activeIssues.length > 0 && (
@@ -262,11 +178,16 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
           {/* Scorecard */}
           {hasScorecard && scorecard && (
             <div className="mb-6">
-              {branch === "senate" && (
-                <SenatorCard senator={scorecard as unknown as Senator} chamber="senate" />
-              )}
-              {branch === "house" && (
-                <SenatorCard senator={scorecard as unknown as Senator} chamber="house" />
+              {(branch === "senate" || branch === "house") && (
+                <SenatorCard
+                  senator={scorecard as unknown as Senator}
+                  chamber={branch}
+                  thumbnailUrl={identity.thumbnailUrl}
+                  district={identity.district}
+                  stateName={identity.stateName}
+                  isCurrent={identity.isCurrent}
+                  leadershipTitle={identity.leadershipTitle}
+                />
               )}
               {branch === "president" && (
                 <PresidentCard president={scorecard as unknown as President} />
@@ -290,6 +211,26 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
 
           {!hasScorecard && (
             <SectionBlock title="scorecard.dat">
+              {/* No card header will render below to carry identity, so
+                  show a minimal one here — otherwise a not-yet-scored
+                  official's page has no name/photo/party anywhere on it. */}
+              <div className="flex items-center gap-3 mb-4">
+                {identity.thumbnailUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- external, varied politician-photo hosts
+                  <img
+                    src={identity.thumbnailUrl}
+                    alt={identity.name}
+                    className="w-12 h-12 rounded object-cover border border-matrix-green/20 shrink-0"
+                  />
+                ) : null}
+                <div>
+                  <p className="font-pixel text-base text-matrix-green">{identity.name}</p>
+                  <p className="font-mono text-[10px] text-matrix-green/40 tracking-widest">
+                    {identity.role}
+                    {identity.state ? ` · ${identity.stateName ?? identity.state}` : ""}
+                  </p>
+                </div>
+              </div>
               <p className="font-mono text-xs text-matrix-green/30 tracking-widest text-center py-4">
                 SCORECARD NOT YET GENERATED — CHECK BACK AFTER NEXT PIPELINE RUN
               </p>
