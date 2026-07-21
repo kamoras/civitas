@@ -15,8 +15,22 @@ function Section({ title, children, id }: { title: string; children: React.React
   );
 }
 
-function P({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm text-matrix-green/70 leading-relaxed">{children}</p>;
+function P({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return <p className={`text-sm text-matrix-green/70 leading-relaxed ${className}`}>{children}</p>;
+}
+
+// Plain-language lead-in for a P block below it: one or two jargon-free
+// sentences stating what a section means in practice, before the full
+// technical explanation (citations, formulas, edge cases) for readers who
+// want the depth. Added 2026-07 after feedback that the methodology page's
+// prose — accurate, but dense with citations and terms like "SVD" or "PVI"
+// — wasn't readable for a non-technical visitor on its own.
+function Gist({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-sm text-neon-cyan/90 leading-relaxed font-medium">
+      <span className="text-neon-yellow/70">In short:</span> {children}
+    </p>
+  );
 }
 
 function Label({ children }: { children: React.ReactNode }) {
@@ -138,6 +152,12 @@ export default function AboutPage() {
             <div className="space-y-4 mt-4">
               <div>
                 <Label>Funding Independence (33%)</Label>
+                <Gist>
+                  rewards senators whose campaigns are funded by lots of small individual
+                  donors rather than PACs or a handful of big donors and industries. The
+                  more spread-out and grassroots the money, the higher this score — regardless
+                  of party.
+                </Gist>
                 <P>
                   Measures five dimensions: (1) PAC dependency — a blend of the share of
                   funding from PACs and how close contributing PACs are to their legal
@@ -178,6 +198,15 @@ export default function AboutPage() {
 
               <div>
                 <Label>Constituent Alignment (33%)</Label>
+                <Gist>
+                  checks whether a member&apos;s voting and coalition-building actually match what
+                  their state elected them to do. Voting with your party is <em>not</em> penalized
+                  on its own — for a safe-seat member, that often IS representing your
+                  constituents. The score only moves below neutral when there&apos;s a clear,
+                  readable sign of a mismatch: an extreme position for a state that isn&apos;t a
+                  safe seat for that extreme, or an unusually narrow, one-party-only legislative
+                  network in a competitive state.
+                </Gist>
                 <P>
                   Measures how a member&apos;s voting compares to what their state elected them
                   to do — not raw defection from party. Each member&apos;s contested-vote break
@@ -271,6 +300,13 @@ export default function AboutPage() {
 
               <div>
                 <Label>Legislative Effectiveness (34%)</Label>
+                <Gist>
+                  measures whether a member is actually getting legislative work done —
+                  introducing bills that matter, moving them through Congress, and building a
+                  network of cosponsors other members trust. Introducing a substantive bill
+                  earns real credit even before it passes, matching how political scientists
+                  actually measure legislative productivity.
+                </Gist>
                 <P>
                   Measures whether a member is producing tangible legislative outcomes,
                   following Volden &amp; Wiseman&apos;s (2014)
@@ -306,6 +342,22 @@ export default function AboutPage() {
 
           {/* ── Known Limitations ── */}
           <Section title="KNOWN LIMITATIONS &amp; DISCLOSURES" id="known-limitations">
+            <P className="text-matrix-green/50 text-xs">
+              Every item below is an open engineering problem, not a settled tradeoff we&apos;ve
+              made peace with — several started as disclosures here and were later fixed
+              outright (see the v6.8 entry below, and the{" "}
+              <a href="/changelog" className="underline underline-offset-2 hover:text-matrix-green/70">scoring changelog</a>{" "}
+              for the full history). Where a limitation is fixable, we fix it and remove the
+              disclosure. Where it isn&apos;t — no dataset exists, or fixing it would require an
+              editorial judgment call the platform&apos;s no-hardcoded-conclusions rule resists —
+              we name the specific reason why, so it can be revisited if that changes.
+            </P>
+            <Gist>
+              Democratic and Republican senators finance their campaigns differently on
+              average, so Funding Independence scores differ by party on average too — not
+              because the formula treats parties differently, but because the underlying
+              fundraising behavior really is different.
+            </Gist>
             <P>
               <em className="text-matrix-green/80">Scores correlate with funding style,
               and funding style correlates with party.</em> In current data, Democratic
@@ -316,6 +368,12 @@ export default function AboutPage() {
               no party term; the gap reflects measured funding behavior, not editorial
               judgment.
             </P>
+            <Gist>
+              a bigger campaign naturally looks more &quot;independent&quot; by percentage even
+              with the same PAC dollars, simply because the total got bigger. We also check
+              absolute PAC dollars, but no single number fully separates &quot;independent&quot;
+              from &quot;big.&quot;
+            </Gist>
             <P>
               <em className="text-matrix-green/80">Fundraising scale still matters.</em>{" "}
               Larger campaigns naturally have smaller PAC <em>shares</em> because PAC
@@ -323,6 +381,11 @@ export default function AboutPage() {
               by scoring absolute PAC dollars alongside the share, but no single number
               fully separates &quot;independent&quot; from &quot;big.&quot;
             </P>
+            <Gist>
+              election cycles run different lengths for different members (and for the House
+              vs. the Senate), so funding scores are technically comparing different-sized
+              snapshots of time across members.
+            </Gist>
             <P>
               <em className="text-matrix-green/80">Comparison windows differ by tenure
               and chamber.</em> Funding metrics cover a member&apos;s two most recent
@@ -330,6 +393,11 @@ export default function AboutPage() {
               4 for House members — so cross-member comparisons weigh different spans of
               time.
             </P>
+            <Gist>
+              when we flag a donor whose industry overlaps with a vote, that shows where money
+              and legislative activity intersect — it is not proof the donation influenced the
+              vote.
+            </Gist>
             <P>
               <em className="text-matrix-green/80">Donor-vote connections are semantic
               overlaps, not lobbying records.</em> They aggregate employee and PAC money
@@ -337,6 +405,11 @@ export default function AboutPage() {
               similarity. They indicate where money and votes intersect; they do not
               establish influence.
             </P>
+            <Gist>
+              a senator whose donors cluster in one industry scores the same whether that
+              industry is their state&apos;s home industry or an out-of-state special interest.
+              That&apos;s deliberate, not an oversight — see below for why.
+            </Gist>
             <P>
               <em className="text-matrix-green/80">Concentrated industry funding is scored
               as capture risk even when it plausibly reflects a state&apos;s real economic
@@ -357,6 +430,13 @@ export default function AboutPage() {
               weight&quot; — concentration is scored as risk, full stop, following the same
               industrial-organization logic (Rhoades 1993) the HHI metric is built on.
             </P>
+            <Gist>
+              we estimate what a senator&apos;s state &quot;expects&quot; from how the state votes
+              for president overall, not opinion on the specific bill in front of them — a
+              broad stand-in for local opinion, not a precise one. We looked for a better
+              public alternative and didn&apos;t find one that wasn&apos;t itself stale or a black box
+              (see below).
+            </Gist>
             <P>
               <em className="text-matrix-green/80">Presidential-vote PVI doesn&apos;t capture
               issue-specific constituent opinion.</em> A senator&apos;s expected break rate
@@ -374,6 +454,12 @@ export default function AboutPage() {
               relative to every other formula on this page. We chose not to build one rather
               than trade this platform&apos;s auditability for a partial, hard-to-explain fix.
             </P>
+            <Gist>
+              the score can catch a senator who&apos;s clearly out of step with their state, but
+              it can&apos;t yet give extra credit to a senator who is genuinely, provably in step
+              with theirs — both look identical (a neutral score) today. This is on our list to
+              fix; see below for exactly what&apos;s blocking it.
+            </Gist>
             <P>
               <em className="text-matrix-green/80">Constituent Alignment still cannot positively
               credit congruent loyalty.</em> As of v6.7 the dimension can flag a below-expected
@@ -395,6 +481,12 @@ export default function AboutPage() {
               the wrong yardstick — and edges toward an authored benchmark this platform&apos;s
               no-hardcoded-conclusions rule resists. Disclosed here rather than papered over.
             </P>
+            <Gist>
+              two of the checks that can lower Constituent Alignment are both computed from
+              the same underlying data, so they were catching the same problem twice. v6.8
+              (below) cut that overlap substantially, but the two will never be fully separate
+              signals with the data sources available here.
+            </Gist>
             <P>
               <em className="text-matrix-green/80">The position-mismatch discount and coalition
               breadth are not fully independent signals.</em> A 2026-07-21 audit found the two
