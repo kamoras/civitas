@@ -399,58 +399,110 @@ moves toward the seat's center, never to penalize failure to hit a derived
   above-expected crossing side is UNCHANGED from v6.5 (seat-direction credit
   only).
 
-  DELIBERATELY NOT SHIPPED (designed, then withheld — see below): a second,
-  member-level directional discount for the crossing side. A raw defection
-  rate is direction-blind, and the empirically highest defectors are often
-  ideological EXTREMISTS breaking from their own flank, not moderates — Rand
-  Paul from the right, Bernie Sanders from the left (Kirkland & Slapin,
-  Electoral Studies 2017). Crediting a high defection rate direction-blind
-  therefore over-rewards flank grandstanding. The intended fix discounts
-  surplus-crossing credit by the member's ideological flank position (from
-  the party-blind SVD ideology_score). It is RIGHT in direction but its
-  MAGNITUDE cannot be set honestly here: the discount changes real scores for
-  real members (Paul, Sanders, every flank crosser), and calibrating it
-  requires the live scored ideology_score distribution + a live GROUND_TRUTH
-  run — which do not exist outside the production pipeline. This file's
-  standing rule is that calibration constants are FIT AGAINST REAL DATA before
-  shipping (see CROSSING_QUALITY_DISCOUNT, held at 0.0 for exactly this
-  reason). A guessed magnitude with per-senator GROUND_TRUTH ranges "set with
-  margin" is precisely the kind of unvalidated change that degrades data
-  quality, so it is not shipped — not deferred with a live TODO, withheld.
-  To land it: on a real scored DB, compute each member's ideology_score
-  distribution, grid-search the discount against GROUND_TRUTH and the IV stdev
-  floor, set the constant and the (then-known, not guessed) flank-affected
-  ranges, and add its unit tests. Only then does it touch a public score.
+  DELIBERATELY NOT SHIPPED, and now believed WRONG AS DESIGNED, not just
+  uncalibrated (revised 2026-07-20 — see v6.7's note below for how this was
+  checked): a second, member-level directional discount for the crossing
+  side. A raw defection rate is direction-blind, and the empirically highest
+  defectors are often ideological EXTREMISTS breaking from their own flank,
+  not moderates — Rand Paul from the right, Bernie Sanders from the left
+  (Kirkland & Slapin, Electoral Studies 2017). Crediting a high defection
+  rate direction-blind therefore over-rewards flank grandstanding. The
+  intended fix discounted surplus-crossing credit by the member's ideological
+  flank position, read from the party-blind SVD ideology_score computed here
+  from cosponsorship patterns. This was originally withheld only for lack of
+  live data to calibrate against (this file's standing rule: calibration
+  constants are FIT AGAINST REAL DATA before shipping — see
+  CROSSING_QUALITY_DISCOUNT, held at 0.0 for the same reason). Once live data
+  became available (v6.7), checking the premise against it found the
+  live crossers are the OPPOSITE of what the discount assumes: every one of
+  the current chamber's biggest surplus-crossers (Murkowski, Collins, Paul,
+  McConnell on the R side; the equivalent D crossers) reads as ideologically
+  CENTRIST on their own party's cosponsorship-derived scale, not flank-
+  extreme — 0 of the live population's crossers fall in their own party's
+  extreme tercile. This isn't noise to calibrate around; it's a construct-
+  validity problem: cosponsorship-based ideology and crossing rate are
+  mechanically coupled, not independent — a member who crosses often also
+  cosponsors more bipartisan legislation, which is the exact input that pulls
+  their SVD position toward the center. The signal this file has (cosponsor-
+  ship network position) cannot see the construct Kirkland & Slapin measure
+  (roll-call ideological extremity/DW-NOMINATE-style ideal points) — they are
+  different axes that happen to share a citation, not the same thing under
+  two names. Building this discount on ideology_score as currently computed
+  would either never fire (as it does not on today's population) or, if
+  recalibrated to fire on today's actual crossers, would end up discounting
+  the chamber's most centrist members for crossing — the opposite of its
+  stated intent. Not shippable without a genuinely different ideology signal
+  (a roll-call-based ideal point, which this file does not compute) or a
+  redesign of what "flank" means here; grid-searching a magnitude against the
+  current ideology_score would not fix this.
 
-  Known limitation of even the shipped design — deviation, not congruence:
-  this dimension measures the RATE and DIRECTION of a member's deviation from
-  their party, not the DISTANCE between the member's position and their
-  constituency's. So it no longer punishes loyalty and it still rewards
-  visible crossing toward the seat center, but it CANNOT positively credit
-  representation achieved through congruent loyalty — a member whose party's
-  positions already match a lopsided state scores a neutral 50, not high, even
-  if perfectly aligned. The literature's actual POSITIVE construct is
-  positional distance (Canes-Wrone 2002; Bafumi & Herron 2010): how close the
-  member's revealed ideal point sits to the seat's expected position. A
-  congruence rebuild around ideology_score vs. an expected position is the
-  faithful long-term direction; it is NOT attempted here because doing it
-  right needs a party/coalition-relative target (Bafumi & Herron: EVERY member
-  is more extreme than their state median, so the raw median is the wrong
-  target) plus live calibration, and edges toward an authored benchmark this
-  platform's no-hardcoded-conclusions principle resists. Named honestly as
-  the metric's boundary, not scaffolded with half-built code.
+  Known limitation, addressed PARTIALLY in v6.7 below — deviation, not (yet
+  fully) congruence: as shipped in v6.6, this dimension measured only the
+  RATE and DIRECTION of a member's deviation from their party, never the
+  DISTANCE between the member's position and their constituency's — so a
+  member whose party is badly mismatched with a lopsided state, but who never
+  crosses, scored an unearned neutral 50 with no way to tell them apart from
+  a genuinely representative loyalist. v6.7's position-mismatch discount
+  (below) closes the NEGATIVE half of that gap. The POSITIVE half — crediting
+  ABOVE neutral for a loyalist whose party genuinely matches their state — is
+  still not attempted, for the reason stated in v6.7's note: it needs an
+  affirmative "this position IS what the seat wants" target, a materially
+  higher evidentiary bar than "this position is an outlier for the seat,"
+  and remains a named, open boundary rather than scaffolded half-built code.
 
-  Validation posture: the shipped change (loyalty floor) is deterministic and
-  unit-tested — nothing about it depends on live data. The one genuinely
-  live-only check is inherent to ANY scoring change and is part of the
-  platform's normal post-run gate (SCORE_AUDIT.md, ground_truth.py): flooring
-  loyalists at 50 removes spread that the old penalty had manufactured, so
-  after the next pipeline run confirm IV population stdev against
-  ground_truth.MIN_STDEV. If it dips below the floor, the correct response is
-  to lower the floor with justification (the removed spread was artificial —
-  the same call already made when the IV floor went 8.0 -> 6.5), NOT to
-  restore the penalty. This is a bounded, principled follow-up, not open-ended
-  tuning.
+Changes from v6.6 -> v6.7 (2026-07): added a position-mismatch discount to
+the below-expected-loyalty branch (_constituent_alignment_core), answering a
+direct question about the v6.6 design: if loyalty is never penalized, can a
+member who votes blatantly out of step with their state — e.g. a member
+whose record reads as their party's ideological extreme, representing a
+seat that isn't a safe seat for that extreme — still score neutral forever?
+Under v6.6 alone, yes: the branch had no signal at all besides the
+(deliberately unreadable) defection rate. v6.7 adds a second, INDEPENDENT,
+legible signal the v6.6 note above already named as the real construct
+(Canes-Wrone, Brady & Cogan 2002's district-relative ideological EXTREMITY)
+and had already computed elsewhere in the pipeline: ideology_score (SVD-
+based, from cosponsorship patterns, party-blind by construction) versus
+party_ideology_bounds (that member's own party's cohort-relative terciles —
+see sponsorship_analysis.party_ideology_bounds). A below-expected loyalist
+whose ideology_score sits in their own party's extreme third, in a seat that
+isn't safely aligned for that extremity (seat-direction-discounted the same
+way surplus-crossing credit already is — 0 discount in a deep safe seat,
+full strength in a swing/opposed one), is penalized below neutral; everyone
+else in the branch is unaffected and still floors at exactly 50. This is
+NOT the same mechanism as the still-not-shipped crossing-side flank discount
+above — that one discounts CREDIT for extremist crossers; this one
+penalizes UNEARNED neutrality for extremist loyalists — but it uses the
+same ideology_score input, and checking it against live data corrected that
+discount's stated blocker in a way that argues AGAINST shipping it, not for
+it: ideology_score is not, in fact, unavailable outside the pipeline
+(party_ideology_bounds.json proves that), but checking the crossing-side
+discount's premise against the live population found the two signals it
+would multiply together are mechanically coupled, not independent — see
+the "DELIBERATELY NOT SHIPPED" note above for the full finding (0 of the
+current chamber's live crossers register as their own party's flank-
+extreme). The blocker was data availability; it is now a construct-
+validity problem instead, which recalibration cannot fix.
+
+  POSITION_MISMATCH_MAX_PENALTY (see its own comment) IS a magnitude
+  constant fit against real data before shipping, unlike CROSSING_QUALITY_
+  DISCOUNT: grid-searched at 0/5/.../40 against the live 2026-07-20
+  ideology_score + seat-lean distribution (101 senators) checked against
+  every GROUND_TRUTH range and the IV stdev floor — every value in that
+  range passed, so 25.0 was chosen by reusing this file's own existing
+  magnitude for the symmetric surplus-crossing case rather than an arbitrary
+  passing value. Re-run the grid search after any pipeline run meaningfully
+  shifts the ideology_score distribution or once GROUND_TRUTH gains a
+  reference senator inside this branch's flagged set.
+
+  Validation posture: the discount's TRIGGER condition (extreme tercile +
+  unsafe seat) and its scaling (seat-direction discount) are deterministic
+  and unit-tested, same as v6.6's floor. Its MAGNITUDE was fit against live
+  data per the above, and should be re-validated (ground_truth.py + the IV
+  stdev floor) after every pipeline run the same way v6.6's floor already
+  requires — flooring/discounting removes or redistributes spread the old
+  formula manufactured differently, so IV population stdev against
+  ground_truth.MIN_STDEV is the standing post-run check for any change to
+  this branch, not just this one.
 """
 
 import logging
@@ -540,7 +592,19 @@ logger = logging.getLogger(__name__)
 # scored ideology distribution, and this file does not ship un-fit
 # calibration constants. See the top-of-file "Changes from v6.5 -> v6.6"
 # note for the full account, citations, and the not-shipped rationale.
-ALGORITHM_VERSION = "v6.6"
+#
+# v6.6 -> v6.7 (2026-07): added a position-mismatch discount to that same
+# over-loyalty branch: a below-expected loyalist whose ideology_score sits
+# in their own party's extreme tercile, representing a seat that isn't
+# safely aligned for that extremity, is discounted below neutral (up to
+# POSITION_MISMATCH_MAX_PENALTY, seat-direction-scaled). Answers the "a
+# blatantly out-of-step loyalist floors at neutral forever" gap v6.6 left
+# open — a second, legible signal (WHERE the member sits, not how often
+# they cross) the branch previously ignored entirely. Magnitude fit against
+# the live ideology_score + seat-lean distribution (grid search vs.
+# GROUND_TRUTH + the IV stdev floor), not guessed. See the top-of-file
+# "Changes from v6.6 -> v6.7" note for the full account.
+ALGORITHM_VERSION = "v6.7"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -661,6 +725,70 @@ def _state_pvi() -> dict[str, int]:
             _state_pvi_cache = {}
     return _state_pvi_cache
 
+_party_ideology_bounds_cache: dict[str, dict[str, tuple[float, float]]] | None = None
+
+
+def _party_ideology_bounds(chamber: str) -> dict[str, tuple[float, float]]:
+    """Per-party (low, high) ideology-score terciles for one chamber ("senate"
+    or "house"), used by _constituent_alignment_core's position-mismatch
+    discount (see that function and the v6.7 changelog note) to tell whether
+    a below-expected loyalist's ideology_score sits in their own party's
+    extreme third.
+
+    Ingested from app/data/party_ideology_bounds.json, written each pipeline
+    run right after sponsorship_analysis.party_ideology_bounds() computes it
+    from that run's live ideology_score distribution (senate_pipeline.py /
+    house_pipeline.py) — same regenerate-every-run convention as
+    _state_pvi() other than being chamber-specific: Senate and House
+    ideology_score are independently SVD-fit ([0,1] per chamber's own
+    cosponsorship matrix — sponsorship_analysis.compute_ideology_scores), so
+    a Senate tercile boundary is meaningless applied to a Representative.
+    Falls back to an empty dict (discount never triggers) if the file or the
+    chamber's key is missing — missing data is never punitive, same
+    convention as every other loader in this file.
+    """
+    global _party_ideology_bounds_cache
+    if _party_ideology_bounds_cache is None:
+        import json
+        import pathlib
+        path = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "party_ideology_bounds.json"
+        try:
+            raw = json.loads(path.read_text())
+            _party_ideology_bounds_cache = {
+                ch: {p: (float(v[0]), float(v[1])) for p, v in parties.items()}
+                for ch, parties in raw.items()
+            }
+        except Exception:
+            logger.warning(
+                "party_ideology_bounds.json unavailable — position-mismatch "
+                "discount will not trigger for any senator/representative"
+            )
+            _party_ideology_bounds_cache = {}
+    return _party_ideology_bounds_cache.get(chamber, {})
+
+
+def write_party_ideology_bounds(chamber: str, bounds: dict[str, tuple[float, float]]) -> None:
+    """Persist one chamber's party_ideology_bounds() output to
+    app/data/party_ideology_bounds.json, called by senate_pipeline.py /
+    house_pipeline.py right after computing it for that run. Read-merge-write
+    (not overwrite) because the two pipelines run independently and each
+    owns only its own chamber's key in the shared file — a House run must
+    not clobber the Senate section written by the last Senate run, and
+    vice versa.
+    """
+    import json
+    import pathlib
+    global _party_ideology_bounds_cache
+    path = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "party_ideology_bounds.json"
+    try:
+        existing = json.loads(path.read_text())
+    except Exception:
+        existing = {}
+    existing[chamber] = {p: [lo, hi] for p, (lo, hi) in bounds.items()}
+    path.write_text(json.dumps(existing, indent=2, sort_keys=True) + "\n")
+    _party_ideology_bounds_cache = None  # force reload next _party_ideology_bounds() call
+
+
 _state_population_cache: dict[str, float] | None = None
 
 
@@ -760,6 +888,7 @@ def calculate_scores(senator: dict) -> dict:
             senator.get("party", "I"),
             bipartisanship=senator.get("bipartisanshipScore"),
             district=senator.get("district"),
+            ideology_score=senator.get("ideologyScore"),
         ),
         "fundingDiversity": _calc_funding_diversity(funding),
         "legislativeEffectiveness": _calc_legislative_effectiveness(
@@ -801,6 +930,7 @@ def explain_scores(senator: dict) -> dict:
             senator.get("party", "I"),
             bipartisanship=senator.get("bipartisanshipScore"),
             district=senator.get("district"),
+            ideology_score=senator.get("ideologyScore"),
         ),
         "fundingDiversity": _funding_diversity_core(funding),
         "legislativeEffectiveness": _legislative_effectiveness_core(
@@ -1502,6 +1632,25 @@ def _signed_state_alignment(
 # passes every check.
 CROSSING_QUALITY_DISCOUNT = 0.0
 
+# Max points below neutral (50) for the position-mismatch discount (v6.7 —
+# see _constituent_alignment_core and the module changelog): applies only
+# to a below-expected loyalist whose ideology_score sits in their own
+# party's extreme tercile (party_ideology_bounds) while their seat is not
+# safely aligned for that extremity. Unlike CROSSING_QUALITY_DISCOUNT above,
+# this WAS fit against real data before shipping: grid-searched at
+# 0/5/.../40 against every GROUND_TRUTH range and the IV population stdev
+# floor using the live 2026-07-20 ideology_score + seat-lean distribution
+# (101 senators) — every value in that range passed both checks, so there
+# is no data-driven ceiling to read off a curve (unlike e.g. the FI small-
+# donor baseline's OLS regression). Set to 25.0 instead of an arbitrary
+# passing value: it reuses this file's own existing magnitude for the
+# symmetric case — the surplus-crossing credit above saturates at +25pts,
+# and this is the same order of magnitude the pre-v6.6 blanket loyalty
+# penalty used (which was removed for being unscoped, not for its size —
+# see the v6.5->v6.6 changelog). Re-run the grid search after any pipeline
+# run meaningfully shifts the ideology_score distribution.
+POSITION_MISMATCH_MAX_PENALTY = 25.0
+
 
 def _calc_constituent_alignment(
     voting_record: dict,
@@ -1511,6 +1660,7 @@ def _calc_constituent_alignment(
     party: str = "I",
     bipartisanship: float | None = None,
     district: int | None = None,
+    ideology_score: float | None = None,
 ) -> int:
     """
     Constituent Alignment Score (0-100, higher = better). v4.2 rebuild of
@@ -1605,7 +1755,7 @@ def _calc_constituent_alignment(
     """
     return _constituent_alignment_core(
         voting_record, lobbying_matches, funding, state, party, bipartisanship,
-        district,
+        district, ideology_score,
     )["score"]
 
 
@@ -1617,6 +1767,7 @@ def _constituent_alignment_core(
     party: str = "I",
     bipartisanship: float | None = None,
     district: int | None = None,
+    ideology_score: float | None = None,
 ) -> dict:
     """Same math as _calc_constituent_alignment, returning every intermediate
     value alongside the final score. Single implementation, same reuse
@@ -1625,6 +1776,7 @@ def _constituent_alignment_core(
     alignment = _signed_state_alignment(
         state, party, effective_party=effective_party, district=district,
     )
+    ideology_bounds = _party_ideology_bounds("house" if district is not None else "senate").get(party)
 
     all_votes = (voting_record.get("keyVotes") or []) + (
         voting_record.get("recentVotes") or []
@@ -1683,6 +1835,7 @@ def _constituent_alignment_core(
     else:
         expected = 0.08 + 0.12 * (-alignment)
 
+    position_mismatch = 0.0
     if party_total >= 3.0:
         against_pct = voted_against / party_total
         if against_pct >= expected:
@@ -1736,10 +1889,42 @@ def _constituent_alignment_core(
             # with a lopsided state still scores 50, because congruence is not
             # what this rate/direction metric measures (see the changelog's
             # "deviation, not congruence" limitation). Floors at neutral.
-            party_score = 50.0
+            #
+            # Position-mismatch discount (v6.7): the loyalty RATE is
+            # unreadable, but ideology_score gives a second, independent,
+            # legible signal this branch previously ignored entirely — WHERE
+            # the member actually sits, not how often they cross. A loyalist
+            # whose position is in their own party's extreme tercile
+            # (party_ideology_bounds — cohort-relative, so "extreme" means
+            # extreme AMONG their party, not vs. the opposing party) AND
+            # whose seat isn't safely aligned for that extremity IS the
+            # district-relative ideological EXTREMITY construct the
+            # Canes-Wrone/Brady/Cogan citation above names as the real
+            # misrepresentation signal — e.g. a member whose cosponsorship
+            # pattern reads as their party's most progressive/conservative
+            # third, representing a seat that isn't a lopsided safe seat for
+            # that party. Discount strength scales with how UNSAFE the seat
+            # is (0 in a deep safe seat — extremity there is the structural
+            # norm, Bafumi & Herron 2010 — up to full strength in a swing or
+            # opposed seat), mirroring the surplus-crossing seat-direction
+            # discount above. Missing ideology_score or bounds (too few
+            # scored members of this party, or an Independent) never
+            # triggers a discount — same missing-data-is-never-punitive
+            # convention as everywhere else in this file.
+            position_mismatch = 0.0
+            if ideology_score is not None and ideology_bounds is not None:
+                lo, hi = ideology_bounds
+                extreme = (
+                    (party == "D" and ideology_score < lo)
+                    or (party == "R" and ideology_score > hi)
+                )
+                if extreme:
+                    position_mismatch = 1.0 - max(alignment, 0.0)
+            party_score = 50.0 - POSITION_MISMATCH_MAX_PENALTY * position_mismatch
     else:
         against_pct = None
         party_score = 50
+        position_mismatch = 0.0
 
     # Coalition breadth (v5): cross-party cosponsorship rate normalized to
     # the chamber cohort (Lugar Center Bipartisan Index method; Harbridge
@@ -1771,7 +1956,16 @@ def _constituent_alignment_core(
         else "fewer than 3 party-labeled votes available — neutral 50"
     )
     if against_pct is not None and against_pct < expected:
-        party_alignment_detail += " — more loyal than the seat expects, held at neutral (loyalty is not penalized)"
+        if position_mismatch > 0.0:
+            party_alignment_detail += (
+                " — more loyal than the seat expects; loyalty itself is not "
+                f"penalized, but ideology_score places this member in their "
+                f"party's extreme tercile for a seat that isn't safely "
+                f"aligned for that position (position-mismatch discount "
+                f"{-POSITION_MISMATCH_MAX_PENALTY * position_mismatch:.1f}pts)"
+            )
+        else:
+            party_alignment_detail += " — more loyal than the seat expects, held at neutral (loyalty is not penalized)"
     if against_pct is not None and avg_crossing_unity is not None:
         party_alignment_detail += (
             f", crossings averaged {avg_crossing_unity:.0%} opposing-party unity"

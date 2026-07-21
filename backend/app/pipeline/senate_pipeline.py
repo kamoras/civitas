@@ -1505,6 +1505,8 @@ async def run_senate_pipeline(
         ideology_bounds_by_party = party_ideology_bounds(
             [(ideology_scores.get(bio), senator_party_map.get(bio)) for bio in senator_bio_ids]
         )
+        from app.pipeline.analyze.score_calculator import write_party_ideology_bounds
+        write_party_ideology_bounds("senate", ideology_bounds_by_party)
         bipartisanship_scores = compute_bipartisanship_scores(
             all_bills_for_analysis, cosponsors_map, senator_party_map,
         )
@@ -1630,6 +1632,7 @@ async def run_senate_pipeline(
                         "leadershipScore": leadership_scores.get(bio_id_for_score),
                         "bipartisanshipScore": bipartisanship_scores.get(bio_id_for_score),
                         "sponsoredBills": prepared.get("sponsoredBills", []),
+                        "ideologyScore": ideology_scores.get(bio_id_for_score),
                     }
                     corruption_score = calculate_scores(temp_senator)
                     corruption_score["confidence"] = calculate_confidence(temp_senator)

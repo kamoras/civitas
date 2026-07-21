@@ -67,7 +67,7 @@ overrides==7.7.0
 packageurl-python==0.17.6
 packaging==26.0
 pdfplumber==0.11.10
-pillow==12.2.0
+pillow==12.3.0
 pip-api==0.0.34
 pytesseract==0.3.13
 pip-requirements-parser==32.0.1
