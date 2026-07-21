@@ -499,6 +499,8 @@ async def run_house_pipeline() -> dict:
                 ideology_bounds_by_party = party_ideology_bounds(
                     [(ideology_scores.get(bio), rep_party_map.get(bio)) for bio in rep_bio_ids]
                 )
+                from app.pipeline.analyze.score_calculator import write_party_ideology_bounds
+                write_party_ideology_bounds("house", ideology_bounds_by_party)
                 logger.info(
                     "Sponsorship analysis: %d leadership scores, %d ideology scores",
                     len(leadership_scores), len(ideology_scores),

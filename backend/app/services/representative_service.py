@@ -303,6 +303,7 @@ def get_representative_score_breakdown(db: Session, rep_id: str) -> dict | None:
         "bipartisanshipScore": rep.bipartisanship_score,
         "leadershipScore": rep.leadership_score,
         "yearsInOffice": rep.years_in_office,
+        "ideologyScore": rep.ideology_score,
     }
     return explain_scores(entity)
 

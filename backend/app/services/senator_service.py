@@ -451,6 +451,7 @@ def get_senator_score_breakdown(db: Session, senator_id: str) -> dict | None:
         "bipartisanshipScore": senator.bipartisanship_score,
         "leadershipScore": senator.leadership_score,
         "yearsInOffice": senator.years_in_office,
+        "ideologyScore": senator.ideology_score,
     }
     return explain_scores(entity)
 

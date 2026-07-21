@@ -17,6 +17,16 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.7",
+    date: "2026-07-20",
+    title: "Constituent Alignment: a legible discount for out-of-step loyalists",
+    changes: [
+      "v6.6 made below-expected party loyalty floor at neutral (50) because a raw defection rate cannot tell us WHY a member is loyal — it may be faithful representation of their coalition, or it may not be, and the rate alone can't distinguish the two. That left an open question: could a member who votes blatantly out of step with their state — while never crossing party lines — score neutral forever, with no way to tell them apart from a genuinely representative loyalist? Under v6.6 alone, yes. This version adds a second, independent, legible signal the dimension previously ignored: not how often a member crosses, but WHERE they actually stand, measured by ideology_score (derived from cosponsorship patterns, not party labels) against their own party's typical range. A below-expected loyalist whose position sits in their own party's most extreme third, representing a seat that isn't safely aligned for that extremity, is now discounted below neutral — scaled by how unsafe the seat is, so the same extremity in a genuinely safe seat (the structural norm for both parties) is still not penalized. Every other loyalist is unaffected and still scores exactly 50.",
+      "Unlike the crossing-side discount still withheld below, this one was fit against real data before shipping: grid-searched against every ground-truth reference range and the population-spread floor using the live scored ideology distribution, and set to reuse this methodology's own existing discount magnitude from the symmetric crossing-side case rather than an arbitrary passing value.",
+      "This also tested the stated reason the crossing-side discount below remains unshipped, and found a bigger problem than expected: that reasoning assumed the live ideology data needed to calibrate it doesn't exist outside the production pipeline. It does — this version's own discount is built on it. But checking the crossing-side discount's actual premise against that live data found it wouldn't work even calibrated: the members who cross party lines most often all read as ideologically centrist on their own party's cosponsorship-derived scale, not flank-extreme — the opposite of what that discount assumes. The two signals turn out to be mechanically linked (crossing more and cosponsoring more bipartisan legislation are related behaviors, and the latter is what pulls the ideology score toward the center), not independent measurements of \"how often you cross\" and \"how extreme you are.\" That discount is not just uncalibrated; as designed, it targets the wrong group.",
+    ],
+  },
+  {
     version: "v6.6",
     date: "2026-07-20",
     title: "Constituent Alignment stops penalizing party loyalty",
