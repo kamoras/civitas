@@ -185,19 +185,36 @@ export default function AboutPage() {
                   partisan lean (Cook PVI<Cite id="4">Carson et al. 2010</Cite>): an aligned
                   safe seat expects near-base-rate dissent (~3%), a swing seat ~8%, and a
                   seat whose electorate leans toward the opposing party up to ~20%. Matching
-                  the expectation scores ~50 — a typical partisan for that seat. Crossing is
-                  not rewarded for its own sake: surplus crossing earns credit only where it
-                  plausibly moves toward the state&apos;s median voter (opposed and swing seats);
-                  in a deep aligned seat it sits near neutral, since break direction relative
-                  to state opinion is unobservable. Hyper-loyalty in a
-                  swing or opposed seat drifts below neutral. This is the delegate model of
-                  representation with partisan lean standing in for issue-level constituent
-                  opinion — a measurable, disclosed simplification (see
+                  the expectation scores ~50 — a typical partisan for that seat. The score is
+                  deliberately asymmetric around that expectation (v6.6), under one governing
+                  principle: it moves off neutral only for <em>readable</em> evidence a member is
+                  representing their constituents, and treats behavior whose meaning can&apos;t be
+                  read as neutral. Below-expected loyalty is <em>not</em> penalized: it floors at
+                  neutral, never below. A low defection rate is unreadable — it may be faithful
+                  representation of the coalition that elected the member (not the geographic
+                  median voter), it is the structural norm for both parties in the modern
+                  Senate, and being &quot;out of step&quot; is a matter of ideological position, not a
+                  loyalty rate — so we decline to score it rather than penalize it. This
+                  loyalty floor is the only behavioral change in v6.6, and it is deterministic:
+                  a below-expected loyalist scores exactly 50 on this component, no calibration
+                  involved. Above-expected crossing is the readable side: it earns credit only
+                  where it plausibly moves toward the seat&apos;s political center, discounted by
+                  seat lean (full credit in opposed and swing seats, near-neutral in deep
+                  aligned seats, since there the center sits with the party). A further discount
+                  for members positioned on their party&apos;s ideological flank — whose crossings
+                  more likely point <em>away</em> from the center (Kirkland &amp; Slapin 2017) — was
+                  designed but deliberately <em>not</em> shipped: its strength changes real scores and
+                  can only be calibrated against the live scored data, so shipping a guessed
+                  value is declined in favor of fitting it against real data first. This is a
+                  deliberately humble use of the delegate model, with partisan lean standing in
+                  for issue-level constituent opinion — a measurable, disclosed simplification (see
                   <a href="#known-limitations" className="underline underline-offset-2 hover:text-matrix-green/70"> Known Limitations</a>
-                  {" "}below for why a genuinely issue-specific alternative isn&apos;t used). Note
-                  on composition: confirmation votes on nominations make up a large share of
-                  recent Senate roll calls and count at full weight — they are genuine,
-                  whipped party-line tests.
+                  {" "}below, including why this measures the rate and direction of a member&apos;s
+                  deviation rather than the distance between their position and their
+                  constituency&apos;s, so it cannot yet positively credit representation achieved
+                  through congruent loyalty). Note on composition: confirmation votes on
+                  nominations make up a large share of recent Senate roll calls and count at
+                  full weight — they are genuine, whipped party-line tests.
                 </P>
                 <P>
                   Before v4.2 this dimension was called Independent Voting and rewarded raw
@@ -334,6 +351,28 @@ export default function AboutPage() {
               survey microdata: a statistics pipeline, not a lookup, and a genuine black box
               relative to every other formula on this page. We chose not to build one rather
               than trade this platform&apos;s auditability for a partial, hard-to-explain fix.
+            </P>
+            <P>
+              <em className="text-matrix-green/80">Constituent Alignment measures deviation,
+              not congruence.</em> The dimension scores the <em>rate</em> and <em>direction</em> of a
+              member&apos;s deviation from their party — how often they break, and whether a break
+              plausibly moves toward the seat&apos;s center — not the <em>distance</em> between the
+              member&apos;s own position and their constituency&apos;s. Since v6.6 it no longer punishes
+              loyalty and it credits visible crossing toward the center, but it still cannot
+              positively reward representation achieved through congruent loyalty: a senator
+              whose party&apos;s positions already match a lopsided state scores a neutral ~50, even
+              if they are perfectly aligned, because loyalty alone is not readable evidence
+              either way. The political-science construct that would capture this directly is
+              positional distance — how close a member&apos;s revealed ideological position sits to
+              their seat&apos;s expected position (Canes-Wrone, Brady &amp; Cogan 2002; Bafumi &amp;
+              Herron 2010). The platform already computes both ingredients (a party-blind
+              cosponsorship-ideology score and state partisan lean), so a congruence-based
+              rebuild is feasible and is the honest long-term direction. It is deferred rather
+              than shipped because it needs a party- or coalition-relative target — every
+              member sits more extreme than their state&apos;s raw median, so the median itself is
+              the wrong yardstick — plus live calibration, and it edges toward an authored
+              benchmark this platform&apos;s no-hardcoded-conclusions rule resists. Disclosed here
+              rather than papered over.
             </P>
           </Section>
 
