@@ -133,11 +133,18 @@ export default function AboutPage() {
             </P>
           </Section>
 
-          {/* ── Senate Metrics ── */}
-          <Section title="SENATE SCORECARD METRICS">
+          {/* ── Congressional Metrics (Senate + House) ── */}
+          <Section title="CONGRESSIONAL SCORECARD METRICS">
             <P>
-              Each senator receives three sub-scores on a 0-100 scale, weighted into an
-              overall Representation Score. Higher is better.
+              Every senator and House representative receives three sub-scores on a
+              0-100 scale, weighted into an overall Representation Score. Higher is
+              better. All 100 senators and 435 House representatives are scored with
+              the identical framework below — same formulas, same data sources (FEC,
+              Congress.gov, GovInfo), same classification techniques — so scores are
+              directly comparable across both chambers. House members are sourced
+              from the same Congress.gov and FEC endpoints and processed in the same
+              nightly pipeline run as senators; the House leaderboard supports
+              pagination and party filtering to navigate the larger membership.
             </P>
             <P>
               Campaign-promise tracking (kept/broken/partial) is still collected and
@@ -153,10 +160,10 @@ export default function AboutPage() {
               <div>
                 <Label>Funding Independence (33%)</Label>
                 <Gist>
-                  rewards senators whose campaigns are funded by lots of small individual
+                  rewards members whose campaigns are funded by lots of small individual
                   donors rather than PACs or a handful of big donors and industries. The
                   more spread-out and grassroots the money, the higher this score — regardless
-                  of party.
+                  of party or chamber.
                 </Gist>
                 <P>
                   Measures five dimensions: (1) PAC dependency — a blend of the share of
@@ -166,7 +173,7 @@ export default function AboutPage() {
                   funding from small (&lt;$200, unitemized) donors — the broadest possible
                   funding base; (3) relative top-donor concentration — what fraction of
                   the itemized external donor pool comes from the top 10 donors, with the
-                  senator&apos;s own money and transfers from their own committees excluded;
+                  member&apos;s own money and transfers from their own committees excluded;
                   (4) source breadth — small-donor money counts fully, industry-classified
                   money counts moderately, and opaque money counts least; and (5) industry
                   concentration — the inverse Herfindahl-Hirschman Index (HHI) of industry
@@ -200,12 +207,12 @@ export default function AboutPage() {
                 <Label>Constituent Alignment (33%)</Label>
                 <Gist>
                   checks whether a member&apos;s voting and coalition-building actually match what
-                  their state elected them to do. Voting with your party is <em>not</em> penalized
+                  their state or district elected them to do. Voting with your party is <em>not</em> penalized
                   on its own — for a safe-seat member, that often IS representing your
                   constituents. The score only moves below neutral when there&apos;s a clear,
-                  readable sign of a mismatch: an extreme position for a state that isn&apos;t a
-                  safe seat for that extreme, or an unusually narrow, one-party-only legislative
-                  network in a competitive state.
+                  readable sign of a mismatch: an extreme position for a seat that isn&apos;t
+                  safe for that extreme, or an unusually narrow, one-party-only legislative
+                  network in a competitive seat.
                 </Gist>
                 <P>
                   Measures how a member&apos;s voting compares to what their state elected them
@@ -516,34 +523,17 @@ export default function AboutPage() {
             </P>
           </Section>
 
-          {/* ── House Representatives ── */}
-          <Section title="HOUSE REPRESENTATIVE SCORECARDS">
-            <P>
-              All 435 House representatives are scored using the same three-metric
-              framework as the Senate: Funding Independence,
-              Constituent Alignment, and Legislative Effectiveness. The data sources (FEC,
-              Congress.gov, GovInfo) and classification techniques are identical,
-              ensuring consistent, comparable scores across both chambers.
-            </P>
-            <P>
-              House members are sourced from the same Congress.gov API and FEC
-              endpoints. The pipeline processes representatives in the same nightly
-              run as senators, using the same embedding-based classification,
-              content-based party alignment, and deterministic scoring formulas.
-              The House leaderboard supports pagination and party filtering to
-              navigate the larger membership.
-            </P>
-          </Section>
-
           {/* ── Sponsorship Analysis ── */}
           <Section title="SPONSORSHIP ANALYSIS (LEADERSHIP &amp; IDEOLOGY)">
             <P>
-              Each senator also receives two metrics derived from cosponsorship
-              networks — the pattern of which senators sign onto each other&apos;s bills.
-              Ideology is purely informational context. Legislative Leadership is
+              Every senator and representative also receives two metrics derived from
+              cosponsorship networks — the pattern of which members sign onto each
+              other&apos;s bills (within each chamber&apos;s own network; House and Senate
+              cosponsorship are separate graphs). Ideology is purely informational
+              context. Legislative Leadership is
               <em className="text-matrix-green/80"> not</em> purely informational — it
               already feeds into Legislative Effectiveness above at 30% weight; the
-              number shown on a senator&apos;s card is the same underlying score, displayed
+              number shown on a member&apos;s card is the same underlying score, displayed
               directly (with a tenure adjustment, see below) rather than hidden inside
               the composite.
             </P>
@@ -1193,11 +1183,11 @@ export default function AboutPage() {
             </P>
 
             <div className="space-y-2 mt-4">
-              <h3 className="text-xs text-matrix-green/50 tracking-widest">SENATE DATA</h3>
-              <Row label="Congress.gov API" value="Bill text, voting records, member data, sponsored legislation, and bill sponsor party affiliation" />
-              <Row label="FEC API (fec.gov)" value="Campaign finance data: individual contributions, PAC donations, committee filings, disbursements, and committee type codes" />
-              <Row label="GovInfo API" value="Full bill text for policy area classification, Congressional Record floor proceedings for advocacy analysis" />
-              <Row label="Senate.gov" value="Official senator websites scraped for platform text and campaign promises, roll-call vote records with per-member votes" />
+              <h3 className="text-xs text-matrix-green/50 tracking-widest">CONGRESSIONAL DATA (SENATE &amp; HOUSE)</h3>
+              <Row label="Congress.gov API" value="Bill text, voting records, member data, sponsored legislation, and bill sponsor party affiliation — both chambers" />
+              <Row label="FEC API (fec.gov)" value="Campaign finance data: individual contributions, PAC donations, committee filings, disbursements, and committee type codes — both chambers" />
+              <Row label="GovInfo API" value="Full bill text for policy area classification, Congressional Record floor proceedings for advocacy analysis — both chambers" />
+              <Row label="Senate.gov" value="Official senator websites scraped for platform text and campaign promises, roll-call vote records with per-member votes — Senate only; House campaign promises are instead derived from sponsored legislation (see AI Usage above), since House platform text isn't available the same way" />
             </div>
 
             <div className="space-y-2 mt-6">
