@@ -55,6 +55,11 @@ export default function ChangelogPage() {
               {SCORE_VERSIONS.map((v) => (
                 <div key={v.version}>
                   <Label>{v.version} — {v.title} ({v.date})</Label>
+                  {v.tldr && (
+                    <p className="text-sm text-neon-cyan/90 leading-relaxed font-medium mt-1">
+                      <span className="text-neon-yellow/70">In short:</span> {v.tldr}
+                    </p>
+                  )}
                   <ul className="list-disc pl-5 space-y-1 text-sm text-matrix-green/70 mt-1">
                     {v.changes.map((c, i) => (
                       <li key={i}>{c}</li>
