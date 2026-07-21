@@ -1049,6 +1049,31 @@ def _build_llm_prompt(cluster: list[NewsArticle]) -> str:
     return _ISSUE_PROMPT_TEMPLATE.format(articles="\n\n".join(parts))
 
 
+# Last names that are also common English words — require a full-name match
+# only; a bare last-name hit for these is nearly always a false positive
+# (e.g. "justice" in "Department of Justice", "congress" in any legislative
+# text, "banks" in finance news, "figures" in "the data figures show...").
+# Shared by _find_related_senators (senators/reps) and _find_related_officials
+# (justices) — same failure mode, same fix, one list. Hand-curated against the
+# real 2026-07 member/justice roster rather than a general English dictionary:
+# the entity set here is small and bounded (~545 people total), so a reviewed
+# exclusion list is the right tool, not a wordlist dependency — but it must be
+# reviewed comprehensively against real names when problems are found, not
+# extended one name at a time reactively (that's how "figures" — Rep. Shomari
+# Figures, seated Jan 2025 — went unnoticed until it misfired in production).
+_COMMON_WORD_SURNAMES = {
+    "justice", "congress", "banks", "young", "price", "bush", "king",
+    "reed", "hunt", "law", "case", "judge", "bond",
+    # Added 2026-07-21 after Figures false-positive audit — reviewed the
+    # full current senator/representative/justice roster for the same
+    # pattern rather than only fixing the one reported name.
+    "figures", "bean", "bell", "bishop", "brown", "cloud", "cotton",
+    "crane", "crow", "dean", "drew", "fields", "fine", "flood", "foster",
+    "gray", "green", "guest", "hill", "mace", "marshall", "mills", "moody",
+    "rose", "self", "sessions", "strong", "waters", "jackson",
+}
+
+
 def _find_related_senators(
     title: str,
     summary: str,
@@ -1099,14 +1124,6 @@ def _find_related_senators(
             "website_url": getattr(s, "website_url", "") or "",
         }
 
-    # Last names that are also common institutional/legal words — require full-name match only.
-    # A bare last-name hit for these is nearly always a false positive (e.g. "justice" in
-    # "Department of Justice", "congress" in any legislative text, "banks" in finance news).
-    _COMMON_WORD_SURNAMES = {
-        "justice", "congress", "banks", "young", "price", "bush", "king",
-        "reed", "hunt", "law", "case", "judge", "bond",
-    }
-
     # Pass 1: substring matches with contextual disambiguation
     candidates_needing_disambiguation: list[tuple] = []
 
@@ -1142,7 +1159,12 @@ def _find_related_senators(
         for s, last_name, pattern, chamber in candidates_needing_disambiguation:
             if s.id in matched:
                 continue
-            senator_phrases.append(f"Senator {s.name} from {s.state}")
+            # Was hardcoded "Senator" for every candidate, including the
+            # ~435 House members — weakening disambiguation quality for
+            # every Representative match, since the prototype phrase
+            # didn't match their actual title.
+            title = "Senator" if chamber == "senate" else "Representative"
+            senator_phrases.append(f"{title} {s.name} from {s.state}")
 
             # Extract ~60 chars of context around each match
             contexts = []
@@ -1244,6 +1266,11 @@ def _find_related_officials(
                     "id": j.id, "name": j.name, "party": j.appointing_party or "R",
                     "branch": "scotus", "match_reason": "named in coverage",
                 }
+                continue
+            # Same common-word-surname gap as senators/reps — Justice
+            # Ketanji Brown Jackson's surname is a common place name
+            # ("Jackson, Mississippi") and everyday word.
+            if last.lower() in _COMMON_WORD_SURNAMES:
                 continue
             pattern = re.compile(r"\b" + re.escape(last) + r"\b", re.IGNORECASE)
             m = pattern.search(text)
