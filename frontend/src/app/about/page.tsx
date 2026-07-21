@@ -205,7 +205,11 @@ export default function AboutPage() {
                   for both parties). This targets ideological POSITION, not the loyalty rate
                   itself, so it doesn&apos;t reopen the rate-is-unreadable problem above — a member
                   can be maximally loyal and still be flagged if their position is a clear
-                  outlier for their seat. Above-expected crossing is the readable side: it earns credit only
+                  outlier for their seat. This discount&apos;s maximum strength was reduced in v6.8
+                  after a fairness audit found it overlapped with coalition breadth (below) more
+                  than intended — see the{" "}
+                  <a href="/changelog" className="underline underline-offset-2 hover:text-matrix-green/70"> scoring changelog</a>
+                  {" "}and the Known Limitations note below. Above-expected crossing is the readable side: it earns credit only
                   where it plausibly moves toward the seat&apos;s political center, discounted by
                   seat lean (full credit in opposed and swing seats, near-neutral in deep
                   aligned seats, since there the center sits with the party). A further discount
@@ -242,7 +246,13 @@ export default function AboutPage() {
                   the constituents who didn&apos;t vote for them: the rate at which they
                   attract cosponsors from the other party and lend their name to the other
                   party&apos;s bills, normalized to the chamber median (following the Lugar
-                  Center Bipartisan Index method; Harbridge 2015). Through v6.4 this
+                  Center Bipartisan Index method; Harbridge 2015). A below-median rate is,
+                  since v6.8, discounted toward neutral the same way below-expected loyalty
+                  already is above: in a safe seat, a narrow, mostly within-party coalition
+                  may be faithful representation of the coalition that elected the member,
+                  not a failure to represent — the discount fades to zero in a swing or
+                  opposed seat, where a narrow coalition is genuinely legible evidence.
+                  Through v6.4 this
                   dimension also included a Donor Independence component (25%, a
                   heuristic based on the money associated with donor-vote topical
                   overlaps) — removed in 2026-07 after finding it measured a close cousin
@@ -384,6 +394,23 @@ export default function AboutPage() {
               member sits more extreme than their state&apos;s raw median, so the median itself is
               the wrong yardstick — and edges toward an authored benchmark this platform&apos;s
               no-hardcoded-conclusions rule resists. Disclosed here rather than papered over.
+            </P>
+            <P>
+              <em className="text-matrix-green/80">The position-mismatch discount and coalition
+              breadth are not fully independent signals.</em> A 2026-07-21 audit found the two
+              components of Constituent Alignment&apos;s below-expected-loyalty case correlate at
+              r=-0.76 (58% shared variance, n=99) — both are computed from the same underlying
+              cosponsorship network (one is an SVD position on it, the other its cross-party edge
+              rate), so a member with a narrow, within-party cosponsorship pattern moves both
+              signals together rather than providing two genuinely separate pieces of evidence.
+              v6.8 reduced the position-mismatch discount&apos;s strength and seat-safety-scaled
+              coalition breadth&apos;s below-median case to cut how much this double-counted a
+              single underlying fact, but the two measures remain drawn from the same data
+              source and will never be fully orthogonal within this platform&apos;s current data —
+              a genuinely independent second signal (e.g. a roll-call-based ideal point distinct
+              from cosponsorship patterns) isn&apos;t available here. See the{" "}
+              <a href="/changelog" className="underline underline-offset-2 hover:text-matrix-green/70"> scoring changelog</a>{" "}
+              for the full account.
             </P>
           </Section>
 

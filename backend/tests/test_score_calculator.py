@@ -677,6 +677,44 @@ class TestConstituentAlignment:
         )
         assert score == 50
 
+    def test_position_mismatch_magnitude_capped_at_10_in_v6_8(self, monkeypatch):
+        """v6.8: POSITION_MISMATCH_MAX_PENALTY was cut from 25.0 to 10.0
+        after finding this discount and Coalition Breadth double-count the
+        same cosponsorship-derived signal (r=-0.76). Full-severity discount
+        (maximally unsafe seat, alignment 0.0) should land at exactly
+        50 - 10 = 40, not the pre-v6.8 25."""
+        self._patch_bounds(monkeypatch)
+        record = {
+            "keyVotes": self._make_votes(with_party=98, against_party=2),
+            "recentVotes": [],
+        }
+        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
+        score = _calc_constituent_alignment(
+            record, [], funding, state="NV", party="D", ideology_score=0.05,
+        )
+        assert score == 40
+
+    def test_extreme_loyalist_no_longer_lands_in_harsh_30s_band(self, monkeypatch):
+        """Fairness regression (v6.8): before this fix, a below-expected
+        loyalist with an extreme-tercile ideology_score AND a below-median
+        cross-party coalition breadth, in a safe seat — the actual
+        Duckworth/Murphy/Booker shape found in the 2026-07-21 fairness audit
+        (all three sit in comfortably safe D states) — scored 32-36 from the
+        two components double-penalizing the same cosponsorship-derived
+        signal. CT is Murphy's actual state. Same inputs should no longer
+        fall below 40."""
+        self._patch_bounds(monkeypatch)
+        record = {
+            "keyVotes": self._make_votes(with_party=98, against_party=2),
+            "recentVotes": [],
+        }
+        funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
+        score = _calc_constituent_alignment(
+            record, [], funding, state="CT", party="D",
+            ideology_score=0.05, bipartisanship=0.1,
+        )
+        assert score >= 40
+
     def test_opposed_seat_still_expects_more_crossing_for_crossers(self):
         """The seat-relative EXPECTED break rate still differs by lean — it
         just only affects CROSSERS now, not loyalists. A member who crosses
@@ -1501,15 +1539,34 @@ class TestCoalitionBreadth:
             "recentVotes": [],
         }
 
-    def test_breadth_moves_score(self):
+    def test_breadth_moves_score_in_swing_seat(self):
+        # PA/D is a swing seat (near-zero alignment) — the v6.8 seat-safety
+        # scaling leaves swing/opposed seats at full strength (breadth_severity
+        # ~1.0), so the pre-v6.8 "full range moves the score by ~20" behavior
+        # should still hold here.
         base = dict(voting_record=self._vr(), lobbying_matches=[], funding={},
-                    state="CA", party="D")
+                     state="PA", party="D")
         low = _calc_constituent_alignment(**base, bipartisanship=0.0)
         mid = _calc_constituent_alignment(**base, bipartisanship=0.5)
         high = _calc_constituent_alignment(**base, bipartisanship=1.0)
         assert low < mid < high
-        # 20% weight over a 0-100 component: full range moves CA by ~20
+        # 20% weight over a 0-100 component: full range moves the score by ~20
         assert 15 <= high - low <= 25
+
+    def test_breadth_low_end_dampened_in_safe_seat(self):
+        # v6.8: a below-median breadth score is seat-safety-scaled the same
+        # way the position-mismatch discount is — a safe seat's narrow
+        # cross-party coalition is unreadable, not a failure, so the low end
+        # should float much closer to neutral (50) than the swing-seat case
+        # above, while the high end (already at/above median, no discount)
+        # is unaffected.
+        base = dict(voting_record=self._vr(), lobbying_matches=[], funding={},
+                     state="CA", party="D")
+        low = _calc_constituent_alignment(**base, bipartisanship=0.0)
+        high = _calc_constituent_alignment(**base, bipartisanship=1.0)
+        assert low < high
+        assert low >= 45  # floored close to neutral, not dropped toward 40
+        assert high - low < 15  # compressed relative to the swing-seat case
 
     def test_missing_breadth_is_not_neutral_scored(self):
         """Absent cosponsorship data must reproduce the pre-v5 score exactly."""

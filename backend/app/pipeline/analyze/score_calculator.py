@@ -503,6 +503,69 @@ validity problem instead, which recalibration cannot fix.
   formula manufactured differently, so IV population stdev against
   ground_truth.MIN_STDEV is the standing post-run check for any change to
   this branch, not just this one.
+
+Changes from v6.7 -> v6.8 (2026-07-21): fairness audit of the first full
+pipeline run under v6.7 (2026-07-21 population, 99 scored D/R senators),
+prompted by a direct question ("Chris Murphy is penalized hard on
+Constituent Alignment — is this fair, or are we losing dimension on the
+metric?"). Found the position-mismatch discount (v6.7, above) and Coalition
+Breadth (v5, this dimension's other component) are NOT independent signals
+as v6.7 assumed: within-party ideology_score extremity correlates with
+bipartisanship_score at r=-0.76 (r²=0.58, n=99) — both are different linear-
+algebra projections of the SAME cosponsorship matrix (ideology_score is an
+SVD position on it; bipartisanship_score is its cross-party edge rate). A
+member with a narrow, within-party cosponsorship network was therefore
+penalized for that ONE underlying fact twice inside a single 100%-weighted
+dimension. Concretely, this over-penalized senators with no real-world
+reputation for flank extremism: Tammy Duckworth (IL, a veteran-focused
+senator broadly regarded as center-left) landed among the "10 most extreme"
+Democrats on this metric alone, alongside Chris Murphy (CT) and Cory Booker
+(NJ) — all three scored 32-36 on this dimension pre-fix, despite all three
+representing safe D states where narrow coalition-building is exactly what
+v6.6's own governing principle already calls unreadable, not damning.
+
+  Two changes, both applying the SAME "seat-safety scales the discount"
+  mechanism v6.6/v6.7 already established — no new mechanism introduced
+  (Recommendation #4 of the audit: leave the scaling mechanism itself alone,
+  fix its application):
+
+  1. POSITION_MISMATCH_MAX_PENALTY cut 25.0 -> 10.0 (see its own comment for
+     the full grid-search account). Chosen as roughly (1 - r²) of the
+     original — the ~42% of the signal this discount carries that ISN'T
+     already captured by Coalition Breadth — rather than an arbitrary lower
+     value. A swing-state member with a genuinely mismatched position (e.g.
+     David McCormick, PA) still lands at 46 instead of the pre-fix 37: a
+     real, discernible discount, not a no-op.
+
+  2. Coalition Breadth's below-median case is now seat-safety-scaled
+     (_constituent_alignment_core's breadth block), mirroring the surplus-
+     crossing and position-mismatch branches exactly: floors fully at
+     neutral in a maximally safe seat (a safe seat's median voter is with
+     the member's party, so a narrow within-party coalition may be faithful
+     representation of that mandate — Fenno 1978), stands at its full raw
+     value in a swing/opposed seat (there, low cross-party cosponsorship IS
+     legible evidence of a representational gap). Before this change,
+     Coalition Breadth was the one component in this dimension with NO
+     seat-safety adjustment at all — inconsistent with the "move off
+     neutral only for legible evidence" governing principle every other
+     branch here already follows, and the mechanical source of why a safe-
+     seat member's narrow network was fully punished through this channel
+     regardless of seat.
+
+  Together, these reduce (not eliminate — the two components still measure
+  genuinely related aspects of coalition behavior, just no longer near-
+  duplicate ones) the double-count and bring both components under the same
+  "legible evidence only" standard. Deliberately NOT attempted
+  (Recommendation #3, partially addressed by this note rather than new
+  code): a fuller disclosure of the remaining construct-validity limitation
+  — Coalition Breadth and the position-mismatch discount are still both
+  downstream of the SAME cosponsorship matrix and will never be fully
+  orthogonal signals within this dimension; that is a standing property of
+  using one data source (cosponsorship networks) for two conceptually
+  distinct measures (ideological position vs. cross-party coalition-
+  building), not a bug this pass can code its way out of. Re-run the r/r²
+  correlation check (see POSITION_MISMATCH_MAX_PENALTY's comment) after any
+  pipeline run meaningfully shifts either distribution.
 """
 
 import logging
@@ -604,7 +667,16 @@ logger = logging.getLogger(__name__)
 # the live ideology_score + seat-lean distribution (grid search vs.
 # GROUND_TRUTH + the IV stdev floor), not guessed. See the top-of-file
 # "Changes from v6.6 -> v6.7" note for the full account.
-ALGORITHM_VERSION = "v6.7"
+#
+# v6.7 -> v6.8 (2026-07-21): a fairness audit found the position-mismatch
+# discount and Coalition Breadth double-count the same cosponsorship-derived
+# signal (r=-0.76 between ideology_score extremity and bipartisanship_score,
+# n=99), over-penalizing safe-seat members with no real-world flank
+# reputation (Duckworth, Murphy, Booker all scored 32-36 pre-fix).
+# POSITION_MISMATCH_MAX_PENALTY cut 25.0 -> 10.0 and Coalition Breadth's
+# below-median case now gets the same seat-safety scaling every other branch
+# here already has. See the top-of-file "Changes from v6.7 -> v6.8" note.
+ALGORITHM_VERSION = "v6.8"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -1664,20 +1736,40 @@ CROSSING_QUALITY_DISCOUNT = 0.0
 # see _constituent_alignment_core and the module changelog): applies only
 # to a below-expected loyalist whose ideology_score sits in their own
 # party's extreme tercile (party_ideology_bounds) while their seat is not
-# safely aligned for that extremity. Unlike CROSSING_QUALITY_DISCOUNT above,
-# this WAS fit against real data before shipping: grid-searched at
-# 0/5/.../40 against every GROUND_TRUTH range and the IV population stdev
-# floor using the live 2026-07-20 ideology_score + seat-lean distribution
-# (101 senators) — every value in that range passed both checks, so there
-# is no data-driven ceiling to read off a curve (unlike e.g. the FI small-
-# donor baseline's OLS regression). Set to 25.0 instead of an arbitrary
-# passing value: it reuses this file's own existing magnitude for the
-# symmetric case — the surplus-crossing credit above saturates at +25pts,
-# and this is the same order of magnitude the pre-v6.6 blanket loyalty
-# penalty used (which was removed for being unscoped, not for its size —
-# see the v6.5->v6.6 changelog). Re-run the grid search after any pipeline
-# run meaningfully shifts the ideology_score distribution.
-POSITION_MISMATCH_MAX_PENALTY = 25.0
+# safely aligned for that extremity.
+#
+# Revised 25.0 -> 10.0 in v6.8 (2026-07-21), after the first full pipeline
+# run under v6.7 made real fairness auditing possible for the first time.
+# Found this discount and Coalition Breadth (the other component of this
+# same dimension) are not independent signals: within-party ideology_score
+# extremity correlates with bipartisanship_score at r=-0.76 (r²=0.58,
+# n=99) — both are different linear-algebra projections of the SAME
+# cosponsorship matrix, so a member with a narrow cosponsorship network
+# was effectively penalized for it twice in one 100%-weighted dimension.
+# Concretely, this over-penalized senators with no real-world reputation
+# for flank extremism — Tammy Duckworth (a veteran-focused senator
+# broadly regarded as center-left, not progressive-flank) landed in the
+# "10 most extreme" Democrats purely on this metric, alongside Chris
+# Murphy and Cory Booker, all scoring 32-36 on this dimension before this
+# fix. 25.0 -> 10.0 (roughly (1 - r²) of the original, keeping the ~42%
+# of the signal that ISN'T already captured by Coalition Breadth) was
+# grid-searched against every GROUND_TRUTH range and the IV stdev floor
+# using the live population (all pass at every value 0-25 — no data-
+# driven ceiling exists here, same situation as when this constant was
+# first set) AND checked that it still leaves a real, discernible penalty
+# for the cases the discount is actually meant to catch — a swing-state
+# member with an extreme-tercile position, e.g. David McCormick (PA,
+# swing) still lands at 46 instead of the pre-fix 37, a genuine but no
+# longer punitive discount, while Ted Budd and Rick Scott (also swing-
+# state Republicans in the extreme tercile) stay clearly below neutral
+# too. See Coalition Breadth's own comment below for the companion v6.8
+# change (seat-safety-scaling its below-median case), which independently
+# improves its fairness and further reduces this redundancy since a safe-
+# seat member's narrow network is no longer double-penalized through
+# either channel. Re-run this grid search after any pipeline run
+# meaningfully shifts the ideology_score or bipartisanship_score
+# distributions.
+POSITION_MISMATCH_MAX_PENALTY = 10.0
 
 
 def _calc_constituent_alignment(
@@ -1964,9 +2056,30 @@ def _constituent_alignment_core(
     # component carries the same "match expectation = 50" semantics as
     # seat-relative voting. When cosponsorship data is missing the
     # component is skipped entirely rather than scored neutral.
+    #
+    # Below-median discount is seat-safety-scaled (v6.8, 2026-07-21): a
+    # below-chamber-median cross-party cosponsorship rate is exactly as
+    # "unreadable" in a safe seat as a below-expected vote-defection rate
+    # already is above — a safe seat's median voter is with the member's
+    # party, so narrow, within-party coalition-building may be faithful
+    # representation of that mandate (Fenno 1978), not a failure to
+    # represent. Before this, Coalition Breadth was the one component in
+    # this dimension with NO seat-safety adjustment at all, inconsistent
+    # with the "move off neutral only for legible evidence" governing
+    # principle every other branch here follows. Same seat-direction
+    # discount shape as the position-mismatch/surplus-crossing branches:
+    # floors fully at neutral in a maximally safe seat (deficit discounted
+    # to 0), stands at its full raw value in a swing/opposed seat (deficit
+    # undiscounted — there, low cross-party cosponsorship is legible).
     if bipartisanship is not None:
         breadth_weight = 0.20
-        breadth_score = max(0.0, min(bipartisanship, 1.0)) * 100
+        raw_breadth_score = max(0.0, min(bipartisanship, 1.0)) * 100
+        if raw_breadth_score < 50.0:
+            deficit = 50.0 - raw_breadth_score
+            breadth_severity = 1.0 - max(alignment, 0.0)
+            breadth_score = 50.0 - deficit * breadth_severity
+        else:
+            breadth_score = raw_breadth_score
     else:
         breadth_weight = 0.0
         breadth_score = 0.0
@@ -2008,11 +2121,19 @@ def _constituent_alignment_core(
         },
     ]
     if breadth_weight > 0:
+        breadth_detail = f"cross-party cosponsorship rate {bipartisanship:.0%}, chamber-median-normalized"
+        if bipartisanship is not None and raw_breadth_score < 50.0:
+            breadth_detail += (
+                " — below the chamber median; held closer to neutral for a safer "
+                "seat, where narrow cross-party cosponsorship is less readable as "
+                "a representational failure (discount "
+                f"{breadth_score - raw_breadth_score:+.1f}pts)"
+            )
         components.append({
             "label": "Coalition breadth",
             "weight": breadth_weight,
             "score": round(breadth_score, 1),
-            "detail": f"cross-party cosponsorship rate {bipartisanship:.0%}, chamber-median-normalized",
+            "detail": breadth_detail,
         })
     return {"score": score, "components": components}
 
