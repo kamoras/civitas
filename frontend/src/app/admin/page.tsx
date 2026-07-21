@@ -241,6 +241,7 @@ function useAnalyzeEta(
   processed: number,
   total: number,
   elapsedSeconds: number | null | undefined,
+  unitLabel: string = "senator",
 ) {
   const liveAnchorRef = useRef<{ time: number; count: number } | null>(null);
   const [eta, setEta] = useState<string | null>(null);
@@ -273,11 +274,11 @@ function useAnalyzeEta(
 
       if (liveDelta > 0 && liveElapsed > 3) {
         const secPer = liveElapsed / liveDelta;
-        setRate(`${secPer.toFixed(0)}s/senator`);
+        setRate(`${secPer.toFixed(0)}s/${unitLabel}`);
         setEta(formatEtaSeconds(Math.round(remaining * secPer)));
       } else if (processed > 0 && elapsedSeconds && elapsedSeconds > 0) {
         const secPer = elapsedSeconds / processed;
-        setRate(`~${secPer.toFixed(0)}s/senator`);
+        setRate(`~${secPer.toFixed(0)}s/${unitLabel}`);
         setEta(formatEtaSeconds(Math.round(remaining * secPer)));
       } else {
         setEta(null);
@@ -288,7 +289,7 @@ function useAnalyzeEta(
     tick();
     const id = setInterval(tick, 2000);
     return () => clearInterval(id);
-  }, [isAnalyze, processed, total, elapsedSeconds]);
+  }, [isAnalyze, processed, total, elapsedSeconds, unitLabel]);
 
   return { eta, rate };
 }
@@ -321,16 +322,52 @@ function StepProgressMini({ step }: { step: PipelineStepInfo }) {
   );
 }
 
-function PipelineProgressBar({ status }: { status: AdminPipelineStatus }) {
-  const run = status.lastRun;
+// Generic live-progress banner — was hand-written for Senate only
+// (senatorsTotal/senatorsProcessed baked into the props type), so House,
+// Stock Trades, and Supplementary pipelines never got this prominent
+// "PIPELINE ACTIVE" view at all while actually running — only Senate's
+// isRunning flag was ever checked at the call site. Senate and House
+// share the fetch/transform/analyze/finalize phase vocabulary (PHASE_ORDER)
+// so the breadcrumb generalizes directly; Stock Trades and Supplementary
+// use different phase names (fetch-only; explore/justices/presidents), so
+// showPhaseBreadcrumb is false for those — the step-by-step breakdown
+// below still works for any phase vocabulary since it's driven by
+// PHASE_LABELS, which already covers all of them. etaConfig is optional:
+// only Senate and House have a clean "N of total processed" concept: to
+// build one for Stock Trades / Supplementary; both are also normally far
+// faster runs (~1min / ~40min vs Senate/House's ~1-2.5hr), where an ETA
+// is much less valuable anyway.
+function PipelineProgressBar({
+  title,
+  isRunning,
+  run,
+  showPhaseBreadcrumb = true,
+  etaConfig,
+  statsRow,
+}: {
+  title: string;
+  isRunning: boolean;
+  run:
+    | {
+        startedAt: string | null;
+        currentPhase?: string | null;
+        elapsedSeconds: number | null;
+        progressSteps?: PipelineStepInfo[] | null;
+      }
+    | null
+    | undefined;
+  showPhaseBreadcrumb?: boolean;
+  etaConfig?: { processed: number; total: number; unitLabel: string };
+  statsRow?: ReactNode;
+}) {
   const phase = run?.currentPhase ?? "fetch";
-  const total = run?.senatorsTotal ?? 0;
-  const processed = run?.senatorsProcessed ?? 0;
+  const total = etaConfig?.total ?? 0;
+  const processed = etaConfig?.processed ?? 0;
   const elapsed = run?.elapsedSeconds ?? null;
-  const isAnalyze = status.isRunning && phase === "analyze" && total > 0;
-  const { eta, rate } = useAnalyzeEta(isAnalyze, processed, total, elapsed);
+  const isAnalyze = isRunning && phase === "analyze" && total > 0 && !!etaConfig;
+  const { eta, rate } = useAnalyzeEta(isAnalyze, processed, total, elapsed, etaConfig?.unitLabel ?? "item");
 
-  if (!status.isRunning || !run) return null;
+  if (!isRunning || !run) return null;
 
   const steps = run.progressSteps ?? [];
   const totalSteps = steps.length;
@@ -357,14 +394,14 @@ function PipelineProgressBar({ status }: { status: AdminPipelineStatus }) {
       <div className="flex items-center justify-between mb-3">
         <span className="text-neon-cyan text-sm font-terminal font-bold flex items-center gap-2">
           <span className="inline-block w-2 h-2 rounded-full bg-neon-cyan animate-pulse" />
-          PIPELINE ACTIVE
+          {title}
         </span>
         <span className="text-matrix-green/70 text-xs font-terminal">
           <ElapsedTimer startedAt={run.startedAt} />
         </span>
       </div>
 
-      <PhaseSteps currentPhase={phase} />
+      {showPhaseBreadcrumb && <PhaseSteps currentPhase={phase} />}
 
       {/* Overall progress bar */}
       <div className="mt-3">
@@ -479,17 +516,11 @@ function PipelineProgressBar({ status }: { status: AdminPipelineStatus }) {
         </div>
       )}
 
-      <div className="flex gap-4 mt-3 pt-2 border-t border-matrix-green/10 text-[10px] text-matrix-green/50 font-terminal">
-        <span>LLM: {run.llmCalls}</span>
-        <span>Cache: {run.cacheHits}H / {run.cacheMisses}M</span>
-        <span>Bills: {run.billsClassified}</span>
-        <span>
-          Senators: {run.senatorsProcessed}/{run.senatorsTotal}
-          {run.senatorsFailed > 0 && (
-            <span className="text-neon-pink ml-1">({run.senatorsFailed}F)</span>
-          )}
-        </span>
-      </div>
+      {statsRow && (
+        <div className="flex gap-4 mt-3 pt-2 border-t border-matrix-green/10 text-[10px] text-matrix-green/50 font-terminal">
+          {statsRow}
+        </div>
+      )}
 
       <style>{`
         @keyframes pipeline-scan {
@@ -1807,10 +1838,100 @@ function AdminDashboardView({
           </div>
         )}
 
-        {/* Live pipeline progress */}
-        {pipelineStatus && pipelineStatus.isRunning && (
+        {/* Live pipeline progress — one card per pipeline type. Previously
+            only ever checked pipelineStatus.isRunning (Senate), so House /
+            Stock Trades / Supplementary never showed this view while
+            actively running, only Senate did. */}
+        {pipelineStatus?.isRunning && pipelineStatus.lastRun && (
           <div className="mb-6">
-            <PipelineProgressBar status={pipelineStatus} />
+            <PipelineProgressBar
+              title="SENATE PIPELINE ACTIVE"
+              isRunning={pipelineStatus.isRunning}
+              run={pipelineStatus.lastRun}
+              etaConfig={{
+                processed: pipelineStatus.lastRun.senatorsProcessed,
+                total: pipelineStatus.lastRun.senatorsTotal,
+                unitLabel: "senator",
+              }}
+              statsRow={
+                <>
+                  <span>LLM: {pipelineStatus.lastRun.llmCalls}</span>
+                  <span>
+                    Cache: {pipelineStatus.lastRun.cacheHits}H / {pipelineStatus.lastRun.cacheMisses}M
+                  </span>
+                  <span>Bills: {pipelineStatus.lastRun.billsClassified}</span>
+                  <span>
+                    Senators: {pipelineStatus.lastRun.senatorsProcessed}/{pipelineStatus.lastRun.senatorsTotal}
+                    {pipelineStatus.lastRun.senatorsFailed > 0 && (
+                      <span className="text-neon-pink ml-1">({pipelineStatus.lastRun.senatorsFailed}F)</span>
+                    )}
+                  </span>
+                </>
+              }
+            />
+          </div>
+        )}
+
+        {pipelineStatus?.houseIsRunning && pipelineStatus.houseLastRun && (
+          <div className="mb-6">
+            <PipelineProgressBar
+              title="HOUSE PIPELINE ACTIVE"
+              isRunning={pipelineStatus.houseIsRunning}
+              run={pipelineStatus.houseLastRun}
+              etaConfig={{
+                processed: pipelineStatus.houseLastRun.repsProcessed,
+                total: pipelineStatus.houseLastRun.repsTotal,
+                unitLabel: "rep",
+              }}
+              statsRow={
+                <span>
+                  Reps: {pipelineStatus.houseLastRun.repsProcessed}/{pipelineStatus.houseLastRun.repsTotal}
+                  {pipelineStatus.houseLastRun.repsFailed > 0 && (
+                    <span className="text-neon-pink ml-1">({pipelineStatus.houseLastRun.repsFailed}F)</span>
+                  )}
+                </span>
+              }
+            />
+          </div>
+        )}
+
+        {pipelineStatus?.stockTradesIsRunning && pipelineStatus.stockTradesLastRun && (
+          <div className="mb-6">
+            <PipelineProgressBar
+              title="STOCK TRADES PIPELINE ACTIVE"
+              isRunning={pipelineStatus.stockTradesIsRunning}
+              run={pipelineStatus.stockTradesLastRun}
+              showPhaseBreadcrumb={false}
+              statsRow={
+                <span>
+                  Trades: {pipelineStatus.stockTradesLastRun.houseTradesIngested}H /{" "}
+                  {pipelineStatus.stockTradesLastRun.senateTradesIngested}S
+                </span>
+              }
+            />
+          </div>
+        )}
+
+        {pipelineStatus?.supplementaryIsRunning && pipelineStatus.supplementaryLastRun && (
+          <div className="mb-6">
+            <PipelineProgressBar
+              title="SUPPLEMENTARY PIPELINE ACTIVE"
+              isRunning={pipelineStatus.supplementaryIsRunning}
+              run={pipelineStatus.supplementaryLastRun}
+              showPhaseBreadcrumb={false}
+              statsRow={
+                <>
+                  <span>Docs: {pipelineStatus.supplementaryLastRun.exploreDocsIngested}</span>
+                  <span>
+                    SCOTUS:{" "}
+                    {pipelineStatus.supplementaryLastRun.justicesSkipped
+                      ? "skipped"
+                      : pipelineStatus.supplementaryLastRun.justicesScored}
+                  </span>
+                  <span>Presidents: {pipelineStatus.supplementaryLastRun.presidentsUpdated}</span>
+                </>
+              }
+            />
           </div>
         )}
 
