@@ -128,6 +128,21 @@ fi
 
 if [[ "$deploy_ok" == "1" ]]; then
   log "deploy OK"
+
+  # Every deploy builds a new set of backend/frontend/nginx images tagged
+  # with this commit's SHA and leaves the previous commit's images behind
+  # (each backend image is ~9.5GB) — nothing ever pruned them. Found
+  # 2026-07-21 investigating an 85%-full disk: 92.7GB in unused images +
+  # 19.4GB in stale BuildKit layer cache, 0% of it live application data.
+  # Safe to run right here: Swarm's own automatic rollback-on-failed-
+  # healthcheck (update_config.failure_action: rollback) happens *during*
+  # the stack deploy above, using images already present — by the time
+  # this runs, wait_for_rollout has already confirmed the new image is
+  # healthy, so the previous commit's image is no longer needed for that.
+  # `docker image prune -a` only removes images with zero containers
+  # (running or stopped), so the image actually backing every current
+  # service is never at risk regardless of timing.
+  { docker image prune -a -f; docker builder prune -a -f; } >> deploy-poll.log 2>&1 || true
 else
   log "deploy FAILED"
   ntfy_url=$(grep '^ALERT_NTFY_URL=' .env 2>/dev/null | cut -d= -f2-)
