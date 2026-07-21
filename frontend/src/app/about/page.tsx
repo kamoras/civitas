@@ -211,9 +211,13 @@ export default function AboutPage() {
                   aligned seats, since there the center sits with the party). A further discount
                   for members positioned on their party&apos;s ideological flank — whose crossings
                   more likely point <em>away</em> from the center (Kirkland &amp; Slapin 2017) — was
-                  designed but deliberately <em>not</em> shipped: its strength changes real scores and
-                  can only be calibrated against the live scored data, so shipping a guessed
-                  value is declined in favor of fitting it against real data first. This is a
+                  designed but is <em>not</em> shipped, and checking it against live data found a
+                  deeper problem than a missing calibration number: the members who actually
+                  cross party lines most often all read as ideologically centrist on this
+                  platform&apos;s own cosponsorship-based ideology measure, not flank-extreme — the
+                  opposite of what the discount assumes. Crossing behavior and this measure of
+                  ideology turn out to be linked rather than independent, so this specific fix
+                  is shelved, not just uncalibrated. This is a
                   deliberately humble use of the delegate model, with partisan lean standing in
                   for issue-level constituent opinion — a measurable, disclosed simplification (see
                   <a href="#known-limitations" className="underline underline-offset-2 hover:text-matrix-green/70"> Known Limitations</a>

@@ -399,28 +399,42 @@ moves toward the seat's center, never to penalize failure to hit a derived
   above-expected crossing side is UNCHANGED from v6.5 (seat-direction credit
   only).
 
-  DELIBERATELY NOT SHIPPED (designed, then withheld — see below): a second,
-  member-level directional discount for the crossing side. A raw defection
-  rate is direction-blind, and the empirically highest defectors are often
-  ideological EXTREMISTS breaking from their own flank, not moderates — Rand
-  Paul from the right, Bernie Sanders from the left (Kirkland & Slapin,
-  Electoral Studies 2017). Crediting a high defection rate direction-blind
-  therefore over-rewards flank grandstanding. The intended fix discounts
-  surplus-crossing credit by the member's ideological flank position (from
-  the party-blind SVD ideology_score). It is RIGHT in direction but its
-  MAGNITUDE cannot be set honestly here: the discount changes real scores for
-  real members (Paul, Sanders, every flank crosser), and calibrating it
-  requires the live scored ideology_score distribution + a live GROUND_TRUTH
-  run — which do not exist outside the production pipeline. This file's
-  standing rule is that calibration constants are FIT AGAINST REAL DATA before
-  shipping (see CROSSING_QUALITY_DISCOUNT, held at 0.0 for exactly this
-  reason). A guessed magnitude with per-senator GROUND_TRUTH ranges "set with
-  margin" is precisely the kind of unvalidated change that degrades data
-  quality, so it is not shipped — not deferred with a live TODO, withheld.
-  To land it: on a real scored DB, compute each member's ideology_score
-  distribution, grid-search the discount against GROUND_TRUTH and the IV stdev
-  floor, set the constant and the (then-known, not guessed) flank-affected
-  ranges, and add its unit tests. Only then does it touch a public score.
+  DELIBERATELY NOT SHIPPED, and now believed WRONG AS DESIGNED, not just
+  uncalibrated (revised 2026-07-20 — see v6.7's note below for how this was
+  checked): a second, member-level directional discount for the crossing
+  side. A raw defection rate is direction-blind, and the empirically highest
+  defectors are often ideological EXTREMISTS breaking from their own flank,
+  not moderates — Rand Paul from the right, Bernie Sanders from the left
+  (Kirkland & Slapin, Electoral Studies 2017). Crediting a high defection
+  rate direction-blind therefore over-rewards flank grandstanding. The
+  intended fix discounted surplus-crossing credit by the member's ideological
+  flank position, read from the party-blind SVD ideology_score computed here
+  from cosponsorship patterns. This was originally withheld only for lack of
+  live data to calibrate against (this file's standing rule: calibration
+  constants are FIT AGAINST REAL DATA before shipping — see
+  CROSSING_QUALITY_DISCOUNT, held at 0.0 for the same reason). Once live data
+  became available (v6.7), checking the premise against it found the
+  live crossers are the OPPOSITE of what the discount assumes: every one of
+  the current chamber's biggest surplus-crossers (Murkowski, Collins, Paul,
+  McConnell on the R side; the equivalent D crossers) reads as ideologically
+  CENTRIST on their own party's cosponsorship-derived scale, not flank-
+  extreme — 0 of the live population's crossers fall in their own party's
+  extreme tercile. This isn't noise to calibrate around; it's a construct-
+  validity problem: cosponsorship-based ideology and crossing rate are
+  mechanically coupled, not independent — a member who crosses often also
+  cosponsors more bipartisan legislation, which is the exact input that pulls
+  their SVD position toward the center. The signal this file has (cosponsor-
+  ship network position) cannot see the construct Kirkland & Slapin measure
+  (roll-call ideological extremity/DW-NOMINATE-style ideal points) — they are
+  different axes that happen to share a citation, not the same thing under
+  two names. Building this discount on ideology_score as currently computed
+  would either never fire (as it does not on today's population) or, if
+  recalibrated to fire on today's actual crossers, would end up discounting
+  the chamber's most centrist members for crossing — the opposite of its
+  stated intent. Not shippable without a genuinely different ideology signal
+  (a roll-call-based ideal point, which this file does not compute) or a
+  redesign of what "flank" means here; grid-searching a magnitude against the
+  current ideology_score would not fix this.
 
   Known limitation, addressed PARTIALLY in v6.7 below — deviation, not (yet
   fully) congruence: as shipped in v6.6, this dimension measured only the
@@ -458,11 +472,16 @@ else in the branch is unaffected and still floors at exactly 50. This is
 NOT the same mechanism as the still-not-shipped crossing-side flank discount
 above — that one discounts CREDIT for extremist crossers; this one
 penalizes UNEARNED neutrality for extremist loyalists — but it uses the
-same ideology_score input, and its existence corrects that discount's
-stated blocker: ideology_score is not, in fact, unavailable outside the
-pipeline (party_ideology_bounds.json is regenerated and committed each
-run, same convention as state_pvi.json); a live GROUND_TRUTH run against
-the crossing-side discount specifically is still needed before shipping it.
+same ideology_score input, and checking it against live data corrected that
+discount's stated blocker in a way that argues AGAINST shipping it, not for
+it: ideology_score is not, in fact, unavailable outside the pipeline
+(party_ideology_bounds.json proves that), but checking the crossing-side
+discount's premise against the live population found the two signals it
+would multiply together are mechanically coupled, not independent — see
+the "DELIBERATELY NOT SHIPPED" note above for the full finding (0 of the
+current chamber's live crossers register as their own party's flank-
+extreme). The blocker was data availability; it is now a construct-
+validity problem instead, which recalibration cannot fix.
 
   POSITION_MISMATCH_MAX_PENALTY (see its own comment) IS a magnitude
   constant fit against real data before shipping, unlike CROSSING_QUALITY_
