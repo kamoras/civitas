@@ -142,7 +142,19 @@ if [[ "$deploy_ok" == "1" ]]; then
   # `docker image prune -a` only removes images with zero containers
   # (running or stopped), so the image actually backing every current
   # service is never at risk regardless of timing.
-  { docker image prune -a -f; docker builder prune -a -f; } >> deploy-poll.log 2>&1 || true
+  #
+  # Build cache is different from images: `docker builder prune -a` (the
+  # first version of this fix, 2026-07-21) wiped ALL of it every deploy,
+  # not just old entries — live-observed forcing the very next deploy back
+  # to a from-scratch build (recompiling numpy/chroma-hnswlib, reinstalling
+  # every pip package) instead of reusing unchanged dependency layers,
+  # turning what should be a ~1min incremental build into a 10+ min one on
+  # Pi-class hardware. `--keep-storage` caps total cache size instead of
+  # clearing it, so BuildKit's own LRU eviction — not this script — decides
+  # what to drop, preserving the most-recently-used layers that make
+  # consecutive deploys (usually just an app-code change, not a
+  # requirements.txt change) fast.
+  { docker image prune -a -f; docker builder prune -f --keep-storage=15GB; } >> deploy-poll.log 2>&1 || true
 else
   log "deploy FAILED"
   ntfy_url=$(grep '^ALERT_NTFY_URL=' .env 2>/dev/null | cut -d= -f2-)
