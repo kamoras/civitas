@@ -6,6 +6,7 @@ import TerminalTitlebar from "@/components/TerminalTitlebar";
 import { fetchPresident, fetchPresidentLeaderboard } from "@/lib/api";
 import { getScoreColor, getScoreLabel } from "@/lib/representation";
 import { MetricBar, StatBox } from "@/components/shared/ScoreMetric";
+import ScoreTrendSection from "@/components/checker/ScoreTrendSection";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 
 const PARTY_META: Record<string, { label: string; color: string; bg: string; border: string }> = {
@@ -126,6 +127,9 @@ export function PresidentCard({ president }: { president: President }) {
             ))}
           </div>
         </div>
+
+        {/* Score Trend */}
+        <ScoreTrendSection entityId={president.id} entityType="president" />
 
         {/* Key Stats */}
         <div>

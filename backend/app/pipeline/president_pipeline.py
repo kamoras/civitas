@@ -1,7 +1,11 @@
 """President data pipeline — fetches live data and recalculates scores.
 
-Targets presidents from Clinton (#42) onward where Federal Register
-and BLS data are available. Older presidents keep their seed scores.
+Live-data recalculation targets presidents from Clinton (#42) onward
+where Federal Register and BLS data are available. Older presidents keep
+their seed scores. Score-history snapshotting (_record_president_snapshots,
+2026-07) covers every president regardless — same as senators/reps, a
+historical president's unchanging score still gets a daily row so trend
+charts have a continuous line, not gaps.
 """
 
 import logging
@@ -10,8 +14,12 @@ from datetime import datetime
 import httpx
 from sqlalchemy.orm import Session
 
-from app.models import President
-from app.pipeline.analyze.president_scorer import recalculate_president_scores
+from app.models import President, ScoreSnapshot
+from app.pipeline.analyze.president_scorer import (
+    PRESIDENT_ALGORITHM_VERSION,
+    compute_president_overall_score,
+    recalculate_president_scores,
+)
 from app.pipeline.fetch.economic_data import (
     fetch_jobs_for_president,
     fetch_gdp_by_year,
@@ -212,9 +220,66 @@ async def run_president_pipeline(db: Session) -> dict:
     logger.info("President pipeline complete: %d dynamic + %d economics-only updated",
                 updated, econ_updated)
 
+    _record_president_snapshots(db)
+
     return {
         "updated": updated + econ_updated,
         "eo_data_count": len(eo_data),
         "jobs_data_count": len(jobs_data),
         "rulemaking_data_count": len(rulemaking_data),
     }
+
+
+def _record_president_snapshots(db: Session) -> None:
+    """Snapshot today's scores for every president so we can compute trends.
+
+    ScoreSnapshot (models.py) is a generic table already shared by
+    senators ("senator") and representatives ("representative") — this is
+    the first writer for "president". Runs for every president, not just
+    DYNAMIC_PRESIDENTS/ECONOMICS_ONLY_PRESIDENTS: even a historical
+    president whose scores never change still gets a daily row, same as
+    how senators/reps are snapshotted regardless of whether their score
+    happened to move that day — the trend chart needs a continuous line,
+    not gaps wherever nothing changed.
+
+    Per-row upsert (not delete-then-insert): mirrors house_pipeline.py's
+    _record_rep_snapshots rather than senate_pipeline.py's
+    _record_score_snapshots, which briefly deletes the day's rows before
+    reinserting — an upsert never leaves the table without today's data
+    mid-write.
+    """
+    today = utcnow().date().isoformat()
+    presidents = db.query(President).all()
+    count = 0
+    for p in presidents:
+        overall = compute_president_overall_score(p)
+        existing = (
+            db.query(ScoreSnapshot)
+            .filter(
+                ScoreSnapshot.entity_type == "president",
+                ScoreSnapshot.entity_id == p.id,
+                ScoreSnapshot.date == today,
+            )
+            .first()
+        )
+        if existing:
+            existing.overall_score = overall
+            existing.score_1 = p.score_public_mandate
+            existing.score_2 = p.score_effectiveness
+            existing.score_3 = p.score_competence
+            existing.score_4 = p.score_agency_alignment
+        else:
+            db.add(ScoreSnapshot(
+                entity_type="president",
+                entity_id=p.id,
+                date=today,
+                overall_score=overall,
+                score_1=p.score_public_mandate,
+                score_2=p.score_effectiveness,
+                score_3=p.score_competence,
+                score_4=p.score_agency_alignment,
+                algorithm_version=PRESIDENT_ALGORITHM_VERSION,
+            ))
+            count += 1
+    db.commit()
+    logger.info("Recorded %d new president score snapshots (%d total presidents)", count, len(presidents))

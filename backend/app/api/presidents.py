@@ -14,7 +14,9 @@ from app.api.response_helpers import (
     CACHE_TTL_CONFIG_S,
     CACHE_TTL_DETAIL_S,
     CACHE_TTL_LIST_S,
+    PRESIDENT_DIMENSION_LABELS,
     cached_json as _cached_json,
+    score_history_json,
 )
 from app.services.president_service import (
     get_all_presidents,
@@ -76,6 +78,20 @@ def detail(president_id: str, db: Session = Depends(get_db)):
     if not result:
         raise HTTPException(status_code=404, detail="President not found")
     return _cached_json(result.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)
+
+
+@router.get("/{president_id}/history")
+def get_president_history(president_id: str, db: Session = Depends(get_db)):
+    """Historical score snapshots for a president (oldest -> newest).
+
+    Written daily by president_pipeline._record_president_snapshots for
+    every president, not just DYNAMIC_PRESIDENTS — a historical
+    president's unchanging score still gets a continuous daily line, same
+    as senators/reps."""
+    return score_history_json(
+        db, "president", president_id,
+        max_age=CACHE_TTL_DETAIL_S, dimension_labels=PRESIDENT_DIMENSION_LABELS,
+    )
 
 
 @router.get("/{president_id}/score-breakdown")

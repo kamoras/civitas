@@ -33,11 +33,46 @@ def cached_json(data, max_age: int = CACHE_TTL_LIST_S) -> JSONResponse:
     )
 
 
-def score_history_json(db: Session, entity_type: str, entity_id: str, max_age: int = CACHE_TTL_CONFIG_S) -> JSONResponse:
-    """Historical score snapshots for a senator or representative.
+# Default score_1..score_5 -> dimension-name mapping (senators/reps share
+# this shape). Presidents use a different set of dimensions on the same
+# generic score_1..score_5 slots (see PRESIDENT_DIMENSION_LABELS below) —
+# score_history_json takes a labels map instead of hardcoding one, so it
+# stays the single shared implementation rather than forking a near-
+# identical copy per entity type.
+SENATOR_DIMENSION_LABELS = {
+    "score_1": "fundingIndependence",
+    "score_2": "promisePersistence",
+    "score_3": "independentVoting",
+    "score_4": "fundingDiversity",
+    "score_5": "legislativeEffectiveness",
+}
+
+# Presidents only use 4 of the 5 generic slots (score_5 unused) — see
+# president_pipeline._record_president_snapshots.
+PRESIDENT_DIMENSION_LABELS = {
+    "score_1": "publicMandate",
+    "score_2": "effectiveness",
+    "score_3": "competence",
+    "score_4": "agencyAlignment",
+}
+
+
+def score_history_json(
+    db: Session,
+    entity_type: str,
+    entity_id: str,
+    max_age: int = CACHE_TTL_CONFIG_S,
+    dimension_labels: dict[str, str] = SENATOR_DIMENSION_LABELS,
+) -> JSONResponse:
+    """Historical score snapshots for any entity type backed by the
+    generic ScoreSnapshot table (senator/representative/president).
 
     Was byte-identical between GET /senators/{id}/history and
-    GET /representatives/{id}/history apart from the entity_type filter.
+    GET /representatives/{id}/history apart from the entity_type filter;
+    generalized (2026-07) to take a dimension_labels map so
+    GET /presidents/{id}/history — a different set of dimension names on
+    the same score_1..score_5 slots — reuses this instead of forking a
+    near-identical copy.
     """
     from app.models import ScoreSnapshot
 
@@ -54,11 +89,8 @@ def score_history_json(db: Session, entity_type: str, entity_id: str, max_age: i
                 "overallScore": round(s.overall_score, 1),
                 "algorithmVersion": s.algorithm_version,
                 "scores": {
-                    "fundingIndependence": round(s.score_1, 1),
-                    "promisePersistence": round(s.score_2, 1),
-                    "independentVoting": round(s.score_3, 1),
-                    "fundingDiversity": round(s.score_4, 1),
-                    "legislativeEffectiveness": round(s.score_5, 1),
+                    label: round(getattr(s, slot), 1)
+                    for slot, label in dimension_labels.items()
                 },
             }
             for s in snapshots

@@ -879,13 +879,12 @@ export interface ScoreSnapshot {
   overallScore: number;
   /** Scoring algorithm version that produced this snapshot (null for pre-v4.1 rows). */
   algorithmVersion?: string | null;
-  scores: {
-    fundingIndependence: number;
-    promisePersistence: number;
-    independentVoting: number;
-    fundingDiversity: number;
-    legislativeEffectiveness: number;
-  };
+  /** Dimension name -> score. Keys differ by entity type (senator/rep:
+   * fundingIndependence/promisePersistence/independentVoting/
+   * fundingDiversity/legislativeEffectiveness; president: publicMandate/
+   * effectiveness/competence/agencyAlignment) — untyped here since
+   * ScoreTrend (the only consumer) only ever reads date/overallScore. */
+  scores: Record<string, number>;
 }
 
 export interface ScoreHistory {
@@ -898,6 +897,10 @@ export async function fetchSenatorHistory(senatorId: string): Promise<ScoreHisto
 
 export async function fetchRepresentativeHistory(repId: string): Promise<ScoreHistory> {
   return cachedFetch(`${API_BASE}/representatives/${repId}/history`, TTL.LONG);
+}
+
+export async function fetchPresidentHistory(presidentId: string): Promise<ScoreHistory> {
+  return cachedFetch(`${API_BASE}/presidents/${presidentId}/history`, TTL.LONG);
 }
 
 export interface OpenCommentItem {
