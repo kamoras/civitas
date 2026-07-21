@@ -17,6 +17,16 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.8",
+    date: "2026-07-21",
+    title: "Constituent Alignment fairness audit — fixing a double-counted signal",
+    changes: [
+      "A look at why Chris Murphy (CT) scored so low on Constituent Alignment led to a full population audit (99 scored senators). It found v6.7's position-mismatch discount and this dimension's existing coalition-breadth component aren't independent measurements, even though the formula treated them as two separate signals: within-party ideological extremity and cross-party cosponsorship rate correlate at r=-0.76 (58% shared variance) because both are computed from the same underlying cosponsorship network, just two different mathematical views of it. A member with a narrow, mostly-within-party cosponsorship network was effectively being penalized twice for that one fact inside a single 100%-weighted dimension. This over-penalized senators with no real-world reputation for ideological extremism — Tammy Duckworth (IL), a veteran-focused senator broadly seen as center-left, landed among the '10 most extreme' Democrats by this metric alone, alongside Murphy and Cory Booker (NJ); all three scored 32-36 pre-fix despite representing safe Democratic states.",
+      "Two changes, both reusing the seat-safety-scaling mechanism this dimension already relies on elsewhere rather than introducing a new one: the position-mismatch discount's maximum penalty is reduced (roughly to the ~42% of its signal that coalition breadth doesn't already capture), and coalition breadth's below-median case is now itself seat-safety-scaled — a safe seat's narrow, within-party coalition-building may be faithful representation of the coalition that elected the member, the same reasoning v6.6 already applied to below-expected party loyalty, so it's discounted toward neutral there and left at full strength in a swing or opposed seat where it's genuinely legible evidence.",
+      "A swing-state member with a real position-mismatch case is still meaningfully discounted — David McCormick (PA) moves to 46, down from a pre-fix 37, a real but no longer punitive penalty; other swing-state Republicans in the same situation stay clearly below neutral too. This narrows, but doesn't eliminate, the overlap between the two signals: they still measure genuinely related aspects of a member's coalition behavior, drawn from the same underlying data source, and a fully independent second signal isn't available without a data source this platform doesn't have.",
+    ],
+  },
+  {
     version: "v6.7",
     date: "2026-07-20",
     title: "Constituent Alignment: a legible discount for out-of-step loyalists",
