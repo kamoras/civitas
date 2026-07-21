@@ -429,11 +429,14 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
     if "committees" in rep_data:
         existing.committees = json.dumps(rep_data["committees"])
 
-    existing.score_funding_independence = cs.get("fundingIndependence", 0)
-    existing.score_promise_persistence = cs.get("promisePersistence", 0)
-    existing.score_independent_voting = cs.get("independentVoting", 0)
-    existing.score_funding_diversity = cs.get("fundingDiversity", 0)
-    existing.score_legislative_effectiveness = cs.get("legislativeEffectiveness", 0)
+    # Absent score => unknown, not "fully captured": default to neutral 50,
+    # matching the scoring standard (score_calculator: "Missing data yields a
+    # neutral 50, never a perfect 100 or 0").
+    existing.score_funding_independence = cs.get("fundingIndependence", 50)
+    existing.score_promise_persistence = cs.get("promisePersistence", 50)
+    existing.score_independent_voting = cs.get("independentVoting", 50)
+    existing.score_funding_diversity = cs.get("fundingDiversity", 50)
+    existing.score_legislative_effectiveness = cs.get("legislativeEffectiveness", 50)
     existing.score_confidence = json.dumps(cs.get("confidence") or {})
 
     existing.total_raised = funding.get("totalRaised", 0)

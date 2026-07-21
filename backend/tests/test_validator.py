@@ -105,17 +105,43 @@ class TestValidateSenator:
         assert scores["fundingDiversity"] == 100
         assert scores["legislativeEffectiveness"] == 100
 
-    def test_missing_scores_default_to_zero(self):
+    def test_missing_scores_default_to_neutral(self):
+        # An un-scored member is "unknown", not "fully captured": absent
+        # score dimensions default to the neutral 50, never 0. Matches the
+        # scoring standard (score_calculator: "Missing data yields a neutral
+        # 50, never a perfect 100 or 0").
         senator = _make_senator(representationScore={})
         result = validate_senator(senator)
         for v in result["representationScore"].values():
-            assert v == 0
+            assert v == 50
 
-    def test_none_scores_default_to_zero(self):
+    def test_none_scores_default_to_neutral(self):
         senator = _make_senator(representationScore=None)
         result = validate_senator(senator)
         for v in result["representationScore"].values():
-            assert v == 0
+            assert v == 50
+
+    def test_no_funding_member_is_neutral_not_zero(self):
+        # Regression: a member with no computed funding data (e.g. no FEC
+        # candidate match) must surface Funding Independence as the neutral
+        # 50 ("unknown"), never a 0 that reads as "fully captured". Mirrors
+        # the base stub normalize_members seeds for an un-scored member.
+        from app.pipeline.transform.normalize_members import (
+            _NEUTRAL_REPRESENTATION_SCORE,
+        )
+
+        senator = _make_senator(
+            representationScore=dict(_NEUTRAL_REPRESENTATION_SCORE)
+        )
+        result = validate_senator(senator)
+        assert result["representationScore"]["fundingIndependence"] == 50
+
+    def test_computed_zero_is_preserved(self):
+        # The neutral default only fills ABSENT dimensions — a dimension that
+        # was genuinely computed as 0 (a fully-captured profile) is kept.
+        senator = _make_senator(representationScore={"fundingIndependence": 0})
+        result = validate_senator(senator)
+        assert result["representationScore"]["fundingIndependence"] == 0
 
     def test_confidence_survives_validation(self):
         confidence = {
