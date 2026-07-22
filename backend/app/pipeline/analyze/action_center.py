@@ -1129,21 +1129,45 @@ def _find_related_senators(
 
     all_members = [(s, "senate") for s in senators] + [(r, "house") for r in representatives]
 
+    # Full-name matches first, over every member, before any last-name-only
+    # candidacy is considered — 2026-07 fix: a same-surname collision (30+
+    # exist in the current roster: Smith x5, Johnson x5, Moore x5, Graham
+    # x2, etc.) used to slip through undetected, because the single-pass
+    # version below checked each member independently — Sen. Lindsey Graham
+    # got fuzzy-matched onto a story that was actually about candidate
+    # Darline Graham (also SC, also just "Graham" in the text), since
+    # nothing yet knew her full-name match already fully accounts for
+    # every "Graham" in the piece. Collecting every confirmed full-name
+    # match FIRST means a shared surname is only ever a live disambiguation
+    # candidate for whichever single member wasn't already explained by a
+    # more specific match.
+    full_name_matched_last_names: set[str] = set()
     for s, chamber in all_members:
-        last_name = s.name.split()[-1].lower() if s.name else ""
-        full_name_lower = s.name.lower()
+        full_name_lower = s.name.lower() if s.name else ""
+        if full_name_lower and full_name_lower in issue_text_lower:
+            matched[s.id] = _make_entry(s, chamber, match_reason="named in coverage")
+            full_name_matched_last_names.add(s.name.split()[-1].lower())
 
-        if len(last_name) < 4:
+    for s, chamber in all_members:
+        if s.id in matched:
             continue
 
-        # Full name match is high-confidence — no disambiguation needed
-        if full_name_lower in issue_text_lower:
-            matched[s.id] = _make_entry(s, chamber, match_reason="named in coverage")
+        last_name = s.name.split()[-1].lower() if s.name else ""
+
+        if len(last_name) < 4:
             continue
 
         # Last names that are common institutional words skip bare last-name matching
         # entirely — they require the full name to appear in text.
         if last_name in _COMMON_WORD_SURNAMES:
+            continue
+
+        # A different member with this exact surname was already confirmed
+        # by full-name match above — every occurrence of the surname in
+        # this text is already accounted for by that more specific match,
+        # so this member isn't a live candidate at all (see the note above
+        # Pass 1 for the Graham/Graham case this fixes).
+        if last_name in full_name_matched_last_names:
             continue
 
         # Last-name-only match needs word-boundary + disambiguation
