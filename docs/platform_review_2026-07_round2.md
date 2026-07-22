@@ -227,5 +227,163 @@ with the same before/after shadow measurement the v5.x changes used.
 
 ## Data-science deep pass (justice, partisan depth, grounding, bill stage)
 
-_Findings from the dedicated statistics audit — see the section appended
-below._
+Ranked. F1 and F3 are concrete scoring bugs (fix-ready, though both shift
+scores platform-wide and so belong in their own measured pass per the
+project's calibration discipline); the rest are construct-validity and
+robustness findings.
+
+### F1. Partisan-depth `overallLean` mixes two incompatible scales — HIGH
+
+`party_platform.analyze_partisan_depth`: vote-derived leans are Yea/Nay
+ratios in [−1, +1], aggregated to ONE entry per policy area; promise-
+derived leans are raw embedding cosine margins (empirically |m| ≲ 0.15),
+one entry **per promise** — and both go into one unweighted average. A
+senator with 25 promises and 4 vote-areas has their reliably partisan
+voting record (±0.8 leans) numerically dragged toward 0 by 25 near-zero
+promise margins and reads "centrist." The docstring's stated hierarchy
+("promises cannot override the vote signal") is not implemented anywhere
+in the math. Fix shape: aggregate promise margins per area, rescale to
+the vote-lean range, and weight votes ≥ promises explicitly.
+
+### F2. Justice consistency clamp + double-counted construct at 65% weight — HIGH
+
+Beyond round 1's clamp finding: `max(0, own − opp)` makes a
+counter-partisan justice (agrees with the *opposing* bloc more) score a
+perfect 100 — identical to a genuinely balanced justice — and the
+breakdown panel reports the clamped value, hiding the inversion, under a
+tooltip reading "follows law, not party." Additionally, consistency
+(bloc-agreement differential) and independence (cross-bloc vote rate)
+are two transformations of the same cross-bloc behavior, jointly 65% of
+`JUSTICE_SCORE_WEIGHTS` — one construct measured twice dominates the
+overall score.
+
+### F3. Latest-action-only bill-stage classification regresses stages, and LES consumes the regression — HIGH
+
+`bill_stage.classify_bill_stage_from_actions` examines only `actions[0]`.
+The *normal* path for every bill that passes one chamber is: pass origin
+chamber (PASSED_CHAMBER) → "Read twice and referred to the Committee" in
+the second chamber → reclassified IN_COMMITTEE — a stage regression.
+`_les_bill_stage` maps IN_COMMITTEE→2 vs PASSED_CHAMBER→3, so sponsors
+are docked one cumulative-credit stage in Legislative Effectiveness at
+the exact moment their bill advances to the other chamber. A vetoed bill
+whose latest action is a failed override vote falls through to
+INTRODUCED (stage 1, from 3). Fix shape: classify from the **max** stage
+reached across the full action history (monotone stages; `is_law` already
+short-circuits correctly).
+
+### F4. Grounding layer is purely lexical — no semantic entailment — HIGH (disclosure), MEDIUM (fix)
+
+The LLM-output verification catches fabricated digit groups, ungrounded
+titled surnames, electoral phrasing, repetition, and hedging — nothing
+checks that a claimed fact is *entailed* by the sources. "Collins voted
+against the bill" when the source says she voted for it passes every
+check. Verified false-negative modes: surname check is a bare substring
+("Rep. Ford" grounded by "affordable"); untitled full names never
+checked; numbers-as-words bypass the digit check (and cause the mirror
+false positive). The electoral-claims check is additionally near-vacuous
+(F10): it disarms if the source contains "constituents"/"poll"/"race"
+anywhere. Recommendation: disclose the guarantee honestly (the About page
+should not imply fact-checking), tighten surname matching to word
+boundaries, and consider an NLI-style entailment gate for the Bluesky
+path specifically.
+
+### F5. "Judicial Restraint" measures dissent-frequency conformity, not restraint — MEDIUM
+
+The score is a curve over dissent rate plus an authored-dissent penalty;
+it never examines votes to strike down statutes vs. defer — the actual
+restraint construct in the literature the docstring cites. The API
+tooltip honestly says "balanced dissent patterns," but the dimension
+*name* (20% of the overall) asserts a construct the data cannot support.
+Rename or re-derive.
+
+### F6. Bipartisan-agreement tooltip describes a different metric than computed — MEDIUM
+
+Tooltip: "fraction of cases decided unanimously or near-unanimously."
+Code: case-weighted pairwise agreement with opposing-bloc justices. For a
+transparency platform, disclosed methodology must match code.
+
+### F7. Justice scores: unanimous-case floor, 4-term window undisclosed, no small-N shrinkage — MEDIUM
+
+Unanimous cases (~40% of docket) are correctly excluded from consistency
+and independence but included in bipartisan agreement — a high common
+floor that compresses a 15%-weighted dimension into a narrow band.
+`fetch_case_votes` windows to the last 4 terms but the UI presents
+career-level framing. And with no shrinkage anywhere, one cross-bloc vote
+in one split decision yields independence = 100 (vs neutral 50 with zero
+split decisions) on a 30%-weighted dimension. Port the senator-side
+Beta-Binomial/confidence-grade pattern.
+
+### F8. Recusal/multi-decision handling in justice votes — MEDIUM (conditional on Oyez shape)
+
+The fetch appends every vote entry unfiltered; a non-participation value
+deflates dissent rates, and two justices sharing the same non-vote value
+compare as agreeing — recusal counted as agreement. Multi-decision cases
+share one case_id and are merged, so pairwise comparisons can
+double-count. No guard exists either way; needs a live Oyez data-shape
+check.
+
+### F9. Partisan-depth confidence denominator mismatch + snapshot-frozen thresholds — MEDIUM
+
+`data_confidence = min(partisan_vote_count/15, 1)` counts every Yea/Nay
+— including votes on bipartisan bills and areas dropped by the 2-vote
+minimum — none of which contribute observations to the lean. The SVD
+prior can zero out while the lean rests on 2–3 real observations.
+Separately, the depth-label thresholds (0.20/0.10/0.02) are hard-coded
+against one 2026 snapshot whose own comment documents an asymmetric
+distribution (D: −0.30..−0.05, R: +0.10..+0.43) — at |lean|>0.20 most
+Democrats structurally cannot be labeled "deep" while a large share of
+Republicans can. Thresholds should be party-relative or regenerated per
+run (and the asymmetry disclosed).
+
+### F10. Electoral-claims grounding check disarms on common political vocabulary — MEDIUM
+
+See F4 — `_ELECTORAL_CONTEXT_RE` includes "constituents," "poll(s)," and
+"race"; one such word anywhere in the source silences the whole check.
+
+### F11. Bipartisanship score is raw edge rate — the edge-weighting fix never reached it — MEDIUM-LOW
+
+`compute_bipartisanship_scores` re-counts cosponsorships flat, ignoring
+the ENACTED/ADVANCED/STALLED edge weights added (v6.2) precisely to stop
+message-bill farming — which therefore still works for Coalition Breadth.
+The 2×-median cap also pins everyone ≥2× median at exactly 1.0, and
+`min_interactions=5` allows a 3-of-5 record to hit the cap with no
+shrinkage.
+
+### F12. Party-relative ideology labels encode rank, not position — LOW
+
+Within-party terciles guarantee ~⅓ of each party reads "centrist" every
+run regardless of absolute movement. Defensible and documented in code,
+but not disclosed at the label surface.
+
+### Verified sound (calibration)
+
+Fisher-style case weighting math checks out (correct IRT
+item-information form; 5-4 vs 8-1 ratio exactly 2.50 as documented);
+veto/enactment ordering in bill_stage is correct (`is_law`
+short-circuits before action inspection); the SVD sign-orientation fix
+is genuine outside a measure-zero degenerate case; tenure shrinkage on
+leader/follower labels is right; `refine_with_vote_data`'s vote-wins
+rule is well-reasoned; justice blocs are data-derived (the hardcoded
+Roberts-as-swing special case was correctly removed); and the displayed
+justice breakdown reuses the identical analyzer, so shown math matches
+stored scores on an unchanged bench.
+
+---
+
+## Recommended sequencing
+
+1. **Fix-ready, own PR each, with shadow measurement**: F3 (bill-stage
+   max-over-actions — LES correctness), F1 (partisan-depth scale fix),
+   the P8 donor-anchor symmetry fix, and the C1 PVI regeneration (needs
+   network).
+2. **Seed-content refresh** (P1–P7): one deliberate pass updating
+   `party_platform.py` to the parties' 2024–26 positions + ABORTION
+   category, shipped through the fingerprint cache-clear with
+   ground-truth + stdev re-checks and a before/after alignment-shift
+   measurement.
+3. **Justice scorer redesign** (F2/F5/F6/F7/F8 + round-1 O8): one
+   coherent pass — unclamp or sign the consistency differential, rename
+   or re-derive restraint, fix the tooltip/metric mismatches, add
+   shrinkage and window disclosure, and verify Oyez recusal shape live.
+4. **Grounding disclosure** (F4/F10): tighten cheap lexical holes now;
+   scope an entailment gate for outbound (Bluesky) content separately.
