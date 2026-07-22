@@ -107,7 +107,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     loop = asyncio.get_running_loop()
     loop.run_in_executor(None, _preload_embedding_model)
     asyncio.create_task(_bootstrap_explore())
+
+    from app.api.visits import run_visit_consumer
+    visit_consumer_task = asyncio.create_task(run_visit_consumer())
+
     yield
+
+    visit_consumer_task.cancel()
     stop_scheduler()
 
 

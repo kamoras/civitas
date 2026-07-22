@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.api.pipeline_runner import run_pipeline_in_thread
 from app.config import settings
-from app.database import get_db
+from app.database import get_db, get_visits_db
 from app.models import (
     ActionIssue,
     AnalysisCache,
@@ -328,7 +328,7 @@ async def admin_system_stats():
 
 
 @router.get("/visitor-stats", dependencies=[Depends(require_admin)])
-async def admin_visitor_stats(days: int = 30, db: Session = Depends(get_db)) -> list[dict]:
+def admin_visitor_stats(days: int = 30, db: Session = Depends(get_visits_db)) -> list[dict]:
     """Daily unique-visitor counts for the last N days, oldest first.
 
     Counts rows in SiteVisit (one per unique visitor per day, keyed by a
@@ -345,7 +345,7 @@ async def admin_visitor_stats(days: int = 30, db: Session = Depends(get_db)) -> 
 
 
 @router.get("/visitor-breakdown", dependencies=[Depends(require_admin)])
-async def admin_visitor_breakdown(date: str | None = None, db: Session = Depends(get_db)) -> dict:
+def admin_visitor_breakdown(date: str | None = None, db: Session = Depends(get_visits_db)) -> dict:
     """Browser/OS/device-type counts for one day (default today, UTC).
 
     Aggregate counts only — never joined back to individual visitor_hash
@@ -379,7 +379,7 @@ async def admin_visitor_breakdown(date: str | None = None, db: Session = Depends
 
 
 @router.get("/top-pages", dependencies=[Depends(require_admin)])
-async def admin_top_pages(days: int = 7, limit: int = 10, db: Session = Depends(get_db)) -> list[dict]:
+def admin_top_pages(days: int = 7, limit: int = 10, db: Session = Depends(get_visits_db)) -> list[dict]:
     """Most-visited page templates over the last N days, by raw view count.
 
     Counts PageView rows (every page view, not deduped by visitor — see

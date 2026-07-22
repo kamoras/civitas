@@ -6,11 +6,14 @@ meaningful (collapsing per-id routes to a template) and confirm repeat
 views actually accumulate rather than no-op like SiteVisit does.
 """
 
+import asyncio
 import pathlib
 from unittest.mock import MagicMock
 
+from sqlalchemy.exc import OperationalError
+
 from app.api.admin import admin_top_pages
-from app.api.visits import _normalize_path, track_visit
+from app.api.visits import _VisitEvent, _normalize_path, _visit_queue, _write_visit_batch, track_visit
 from app.models import PageView
 
 
@@ -19,6 +22,19 @@ def _make_request(peer_ip: str = "203.0.113.5", user_agent: str = "Mozilla/5.0")
     req.client.host = peer_ip
     req.headers = {"User-Agent": user_agent}
     return req
+
+
+def _drain_queue_and_write(db) -> int:
+    """Test stand-in for run_visit_consumer's drain loop: synchronously
+    pulls everything currently queued and writes it via the same
+    _write_visit_batch the real background consumer uses. Returns how
+    many events were written."""
+    batch = []
+    while not _visit_queue.empty():
+        batch.append(_visit_queue.get_nowait())
+    if batch:
+        _write_visit_batch(batch, db)
+    return len(batch)
 
 
 class TestNormalizePath:
@@ -80,8 +96,9 @@ class TestKnownRoutesStayInSync:
 
 class TestTrackVisitPageViews:
     async def test_repeat_views_accumulate_not_dedupe(self, db_session):
-        await track_visit(_make_request(), path="/politicians/chuck-grassley", db=db_session)
-        await track_visit(_make_request(), path="/politicians/jane-doe", db=db_session)
+        await track_visit(_make_request(), path="/politicians/chuck-grassley")
+        await track_visit(_make_request(), path="/politicians/jane-doe")
+        _drain_queue_and_write(db_session)
 
         rows = db_session.query(PageView).all()
         assert len(rows) == 1
@@ -89,19 +106,59 @@ class TestTrackVisitPageViews:
         assert rows[0].count == 2
 
     async def test_different_pages_get_separate_rows(self, db_session):
-        await track_visit(_make_request(), path="/leaderboard", db=db_session)
-        await track_visit(_make_request(), path="/compare", db=db_session)
+        await track_visit(_make_request(), path="/leaderboard")
+        await track_visit(_make_request(), path="/compare")
+        _drain_queue_and_write(db_session)
 
         rows = {r.path: r.count for r in db_session.query(PageView).all()}
         assert rows == {"/leaderboard": 1, "/compare": 1}
 
 
+class TestVisitQueueArchitecture:
+    """2026-07 incident + follow-up review: track_visit used to write to
+    the DB inline, both sharing SQLite's writer lock with the nightly
+    pipeline (exhausted the connection pool, OOM-killed the container)
+    and blocking the event loop with a synchronous call inside `async
+    def` (freezing every other concurrent request, not just this one).
+
+    Fixed by moving the write off the request path entirely: track_visit
+    only enqueues; a single background consumer (run_visit_consumer)
+    drains and writes in batches via asyncio.to_thread. These pin the two
+    failure modes that must never propagate: a full queue (enqueue side)
+    and write-lock contention (consumer side) — neither should ever raise
+    or block a page load.
+    """
+
+    def test_write_batch_lock_contention_does_not_raise(self):
+        db = MagicMock()
+        db.execute.side_effect = OperationalError("stmt", {}, Exception("database is locked"))
+        event = _VisitEvent(
+            date="2026-07-22", visitor_hash="abc", browser="Chrome",
+            os="Linux", device_type="desktop", normalized_path="/leaderboard",
+        )
+
+        _write_visit_batch([event], db)  # must not raise
+
+        db.rollback.assert_called_once()
+
+    async def test_queue_full_drops_event_without_raising(self, monkeypatch):
+        tiny_queue = asyncio.Queue(maxsize=1)
+        monkeypatch.setattr("app.api.visits._visit_queue", tiny_queue)
+
+        await track_visit(_make_request(), path="/leaderboard")  # fills the queue
+        result = await track_visit(_make_request(), path="/compare")  # must not raise or block
+
+        assert result is None
+        assert tiny_queue.qsize() == 1  # the second event was dropped, not queued
+
+
 class TestAdminTopPages:
     async def test_returns_pages_sorted_by_views_desc(self, db_session):
         for _ in range(3):
-            await track_visit(_make_request(), path="/leaderboard", db=db_session)
-        await track_visit(_make_request(), path="/compare", db=db_session)
+            await track_visit(_make_request(), path="/leaderboard")
+        await track_visit(_make_request(), path="/compare")
+        _drain_queue_and_write(db_session)
 
-        result = await admin_top_pages(days=7, limit=10, db=db_session)
+        result = admin_top_pages(days=7, limit=10, db=db_session)
         assert result[0] == {"path": "/leaderboard", "views": 3}
         assert result[1] == {"path": "/compare", "views": 1}

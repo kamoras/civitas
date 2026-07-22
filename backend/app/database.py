@@ -9,42 +9,103 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-_sqlite_connect_args: dict = {}
-if "sqlite" in settings.DATABASE_URL:
-    _sqlite_connect_args = {
+# Named (not inline) so callers that need to temporarily override and
+# restore a connection's busy-timeout (e.g. api/visits.py's track-visit,
+# a best-effort write that shouldn't hold a pool connection for the full
+# default wait under contention) have a single source of truth rather
+# than a second hardcoded copy of this number that could drift.
+SQLITE_BUSY_TIMEOUT_S = 30
+
+def _sqlite_connect_args_for(url: str) -> dict:
+    if "sqlite" not in url:
+        return {}
+    return {
         "check_same_thread": False,
-        "timeout": 30,  # wait up to 30s for a write lock before raising
+        "timeout": SQLITE_BUSY_TIMEOUT_S,  # wait up to 30s for a write lock before raising
     }
+
+
+def _derive_visits_database_url(main_url: str) -> str:
+    """SiteVisit/PageView (api/visits.py's track-visit — by far the
+    highest-frequency write in the app) get their own SQLite file,
+    separate from the main database the nightly pipeline writes to.
+
+    2026-07 incident: SQLite allows only one writer at a time even in
+    WAL mode, and the nightly pipeline can hold that lock for extended
+    stretches while processing a batch between commits. track-visit
+    sharing that same file meant a blocked write held a pool connection
+    for the full busy-timeout under contention, which exhausted the
+    pool and OOM-killed the container. Graceful degradation (see
+    api/visits.py) makes that contention survivable; giving these two
+    tables their own file — SQLite's writer lock is scoped per-file —
+    means the two write patterns physically can't contend at all.
+
+    Only meaningful for SQLite: other backends (e.g. Postgres) handle
+    concurrent writers natively via MVCC, so there's no lock to isolate
+    and this just returns main_url unchanged.
+    """
+    if "sqlite" not in main_url:
+        return main_url
+    if main_url.endswith(":memory:"):
+        return main_url  # a second, independent in-memory db is fine
+    prefix, _, filename = main_url.rpartition("/")
+    stem, dot, ext = filename.rpartition(".")
+    if not dot:
+        return f"{main_url}_visits"
+    return f"{prefix}/{stem}_visits{dot}{ext}"
+
+
+VISITS_DATABASE_URL = _derive_visits_database_url(settings.DATABASE_URL)
 
 engine = create_engine(
     settings.DATABASE_URL,
-    connect_args=_sqlite_connect_args,
+    connect_args=_sqlite_connect_args_for(settings.DATABASE_URL),
+    echo=False,
+    pool_pre_ping=True,
+)
+visits_engine = create_engine(
+    VISITS_DATABASE_URL,
+    connect_args=_sqlite_connect_args_for(VISITS_DATABASE_URL),
     echo=False,
     pool_pre_ping=True,
 )
 
-if "sqlite" in settings.DATABASE_URL:
-    @event.listens_for(engine, "connect")
-    def _set_sqlite_pragmas(dbapi_conn, _connection_record):
-        """Apply WAL mode and performance PRAGMAs to every new pool connection.
 
-        SQLite PRAGMAs are per-connection; setting them only once at init_db
-        time leaves connections opened later (e.g. after a pool recycle or in
-        a second container) with the default journal_mode=DELETE, which blocks
-        concurrent reads during writes and causes 'database is locked' errors.
-        """
-        cursor = dbapi_conn.cursor()
-        cursor.execute("PRAGMA journal_mode=WAL")
-        cursor.execute("PRAGMA synchronous=NORMAL")
-        cursor.execute("PRAGMA cache_size=-32000")
-        cursor.execute("PRAGMA mmap_size=268435456")
-        cursor.execute("PRAGMA temp_store=MEMORY")
-        cursor.close()
+def _set_sqlite_pragmas(dbapi_conn, _connection_record):
+    """Apply WAL mode and performance PRAGMAs to every new pool connection.
+
+    SQLite PRAGMAs are per-connection; setting them only once at init_db
+    time leaves connections opened later (e.g. after a pool recycle or in
+    a second container) with the default journal_mode=DELETE, which blocks
+    concurrent reads during writes and causes 'database is locked' errors.
+    Shared by both engine and visits_engine below (both sqlite).
+    """
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA synchronous=NORMAL")
+    cursor.execute("PRAGMA cache_size=-32000")
+    cursor.execute("PRAGMA mmap_size=268435456")
+    cursor.execute("PRAGMA temp_store=MEMORY")
+    cursor.close()
+
+
+if "sqlite" in settings.DATABASE_URL:
+    event.listens_for(engine, "connect")(_set_sqlite_pragmas)
+if "sqlite" in VISITS_DATABASE_URL:
+    event.listens_for(visits_engine, "connect")(_set_sqlite_pragmas)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+VisitsSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=visits_engine)
 
 
 class Base(DeclarativeBase):
+    pass
+
+
+class VisitsBase(DeclarativeBase):
+    """Separate declarative base for SiteVisit/PageView — see
+    _derive_visits_database_url's docstring for why these two tables are
+    physically isolated from everything else."""
     pass
 
 
@@ -86,9 +147,6 @@ def _migrate_columns() -> None:
         ("week_summaries", "bsky_posted_at", "DATETIME"),
         ("senators", "bipartisanship_score", "REAL"),
         ("representatives", "bipartisanship_score", "REAL"),
-        ("site_visits", "browser", "TEXT DEFAULT ''"),
-        ("site_visits", "os", "TEXT DEFAULT ''"),
-        ("site_visits", "device_type", "TEXT DEFAULT ''"),
         ("senators", "is_current", "BOOLEAN DEFAULT 1"),
         ("senators", "vacancy_reason", "TEXT"),
         ("senators", "left_office_date", "TEXT"),
@@ -192,13 +250,63 @@ def _ensure_indexes() -> None:
                 ))
 
 
+def _migrate_visits_data_to_own_db() -> None:
+    """One-time copy of any pre-split SiteVisit/PageView rows out of the
+    main database into their new dedicated file (see
+    _derive_visits_database_url's docstring). Only does anything on an
+    existing deployment that had these tables in the main engine before
+    2026-07; a fresh install never has anything to copy. Idempotent: once
+    the visits engine has rows, this is a no-op on every later restart,
+    so it's safe to leave in permanently rather than treat as a one-shot
+    script to run and remove.
+    """
+    main_inspector = inspect(engine)
+    if not main_inspector.has_table("site_visits") and not main_inspector.has_table("page_views"):
+        return  # already migrated (or a fresh install) — old table is gone
+
+    with visits_engine.begin() as visits_conn:
+        already_migrated = visits_conn.execute(
+            text("SELECT COUNT(*) FROM site_visits")
+        ).scalar() or visits_conn.execute(
+            text("SELECT COUNT(*) FROM page_views")
+        ).scalar()
+        if already_migrated:
+            return
+
+        with engine.begin() as main_conn:
+            if main_inspector.has_table("site_visits"):
+                rows = main_conn.execute(text("SELECT * FROM site_visits")).mappings().all()
+                for row in rows:
+                    visits_conn.execute(
+                        text(
+                            "INSERT OR IGNORE INTO site_visits "
+                            "(date, visitor_hash, browser, os, device_type) "
+                            "VALUES (:date, :visitor_hash, :browser, :os, :device_type)"
+                        ),
+                        dict(row),
+                    )
+            if main_inspector.has_table("page_views"):
+                rows = main_conn.execute(text("SELECT * FROM page_views")).mappings().all()
+                for row in rows:
+                    visits_conn.execute(
+                        text(
+                            "INSERT OR IGNORE INTO page_views (date, path, count) "
+                            "VALUES (:date, :path, :count)"
+                        ),
+                        dict(row),
+                    )
+    logger.info("Migrated SiteVisit/PageView data to their own database file")
+
+
 def init_db() -> None:
     """Create all tables defined in models and apply lightweight migrations."""
     from app import models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    VisitsBase.metadata.create_all(bind=visits_engine)
     _migrate_columns()
     _ensure_indexes()
+    _migrate_visits_data_to_own_db()
 
     # Seed president data if the table is empty
     from app.services.president_service import seed_presidents
@@ -288,6 +396,19 @@ def reset_all_data() -> dict:
 def get_db() -> Generator[Session, None, None]:
     """FastAPI dependency that yields a database session."""
     db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+def get_visits_db() -> Generator[Session, None, None]:
+    """FastAPI dependency for SiteVisit/PageView's dedicated database —
+    see VisitsBase/_derive_visits_database_url. Used by the read-only
+    admin visitor-stats endpoints; api/visits.py's track_visit uses its
+    own _get_db_or_none instead, since that write path also needs to
+    degrade gracefully on pool exhaustion rather than raise."""
+    db = VisitsSessionLocal()
     try:
         yield db
     finally:
