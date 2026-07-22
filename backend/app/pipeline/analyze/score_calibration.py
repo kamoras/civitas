@@ -127,12 +127,23 @@ def _spearman_rho(prev_map: dict[str, float], curr_map: dict[str, float]) -> flo
     prev_ranks = _ranks(prev_vals)
     curr_ranks = _ranks(curr_vals)
 
-    d_sq_sum = sum((prev_ranks[i] - curr_ranks[i]) ** 2 for i in range(n))
-
-    if n * (n ** 2 - 1) == 0:
+    # Pearson correlation of the (average) ranks. The classic
+    # 1 - 6*sum(d^2)/(n(n^2-1)) shortcut is only exact when there are NO
+    # ties — clamped integer scores tie constantly, so the shortcut was
+    # systematically biased here. Pearson-of-ranks is the exact tie-aware
+    # definition of Spearman's rho.
+    xs = [prev_ranks[i] for i in range(n)]
+    ys = [curr_ranks[i] for i in range(n)]
+    mx = sum(xs) / n
+    my = sum(ys) / n
+    num = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+    den_x = sum((x - mx) ** 2 for x in xs)
+    den_y = sum((y - my) ** 2 for y in ys)
+    if den_x == 0 or den_y == 0:
+        # One side has all-tied values — rank order carries no information.
         return None
 
-    rho = 1.0 - (6.0 * d_sq_sum) / (n * (n ** 2 - 1))
+    rho = num / ((den_x * den_y) ** 0.5)
     return round(rho, 4)
 
 

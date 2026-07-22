@@ -217,11 +217,25 @@ def check_ground_truth(db) -> dict:
     checked = 0
 
     for fragment, dim, (lo, hi), rationale in GROUND_TRUTH:
-        senator = (
+        matches = (
             db.query(Senator)
             .filter(Senator.name.like(f"%{fragment}%"))
-            .first()
+            .order_by(Senator.name)
+            .all()
         )
+        if len(matches) > 1:
+            # A fragment matching two senators (e.g. a shared surname after
+            # a new member is seated) would previously check whichever row
+            # SQLite returned first — nondeterministic across runs. Skip
+            # loudly instead: a gate that silently checks the wrong person
+            # is worse than one check fewer.
+            logger.warning(
+                "GROUND TRUTH: reference fragment %r matches %d senators (%s) — "
+                "skipping; make the fragment unambiguous",
+                fragment, len(matches), ", ".join(s.name for s in matches),
+            )
+            continue
+        senator = matches[0] if matches else None
         if senator is None:
             logger.warning(
                 "GROUND TRUTH: reference senator %r not found — skipping",

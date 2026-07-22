@@ -94,3 +94,22 @@ def test_parse_table_rows_no_ticker_in_asset_name():
     rows = parse_table_rows(table)
     assert len(rows) == 1
     assert rows[0].ticker is None
+
+
+def test_parse_table_rows_asset_type_column_does_not_shadow_type():
+    """The live Senate eFD layout puts an "Asset Type" column before
+    "Type". The old first-header-containing-any-keyword binding captured
+    "type" at the Asset Type column, so every row's transaction type read
+    "Stock"/"Bond", classify_transaction_type returned None, and the whole
+    filing was silently skipped."""
+    header = ["Transaction Date", "Owner", "Ticker", "Asset Name",
+              "Asset Type", "Type", "Amount"]
+    table = [
+        header,
+        ["1/2/2026", "SP", "AAPL", "Apple Inc. (AAPL)", "Stock",
+         "Purchase", "$1,001 - $15,000"],
+    ]
+    rows = parse_table_rows(table)
+    assert len(rows) == 1
+    assert rows[0].transaction_type == "purchase"
+    assert rows[0].ticker == "AAPL"

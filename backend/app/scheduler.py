@@ -229,12 +229,17 @@ def start_scheduler() -> None:
 
     minute, hour, day, month, day_of_week = cron_parts
 
+    # Explicit UTC: without a timezone, APScheduler fires in whatever tz
+    # the container happens to have — the docs promise "3 AM UTC" and the
+    # same-day dedupe keys/date labels elsewhere assume the run date
+    # doesn't float with container configuration.
     trigger = CronTrigger(
         minute=minute,
         hour=hour,
         day=day,
         month=month,
         day_of_week=day_of_week,
+        timezone="UTC",
     )
 
     scheduler.add_job(_nightly_pipeline, trigger, id="pipeline_run", replace_existing=True)

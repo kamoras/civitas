@@ -108,49 +108,63 @@ async def search_ptr_filings(
     Returns one dict per filing: {last, first, filed_date, report_url,
     is_paper}. Does not cache across runs (session-bound), unlike the
     House index — a fresh search is cheap and the session itself expires.
-    """
-    body = {
-        "start": "0",
-        "length": "100",
-        "report_types": f"[{REPORT_TYPE_PTR}]",
-        "filer_types": "[]",
-        "submitted_start_date": since_date,
-        "submitted_end_date": "",
-        "candidate_state": "",
-        "senator_state": "",
-        "office_id": "",
-        "first_name": "",
-        "last_name": "",
-        "csrfmiddlewaretoken": csrf_token,
-    }
-    resp = await _request_with_retry(
-        client, "POST", SEARCH_DATA_URL, data=body, headers={"Referer": SEARCH_URL},
-    )
-    if resp is None:
-        return []
 
-    try:
-        payload = resp.json()
-    except ValueError:
-        logger.error("Senate eFD search response was not JSON — session/endpoint may have changed")
-        return []
+    Paginates through the DataTables result set: a single start=0/length=100
+    page silently truncated any window with more than 100 filings (the
+    120-day cold-start lookback routinely exceeds that), and because the
+    caller advances its incremental since_date anchor past the dropped
+    rows, truncated filings were lost PERMANENTLY, not just deferred.
+    """
+    PAGE_LEN = 100
+    MAX_PAGES = 50  # 5,000 filings — far above any real window; loop backstop
 
     filings: list[dict] = []
-    for row in payload.get("data", []):
-        if len(row) < 5:
-            continue
-        link_html, last, first, _office, filed_date_raw = row[0], row[1], row[2], row[3], row[4]
-        link_match = re.search(r'href="([^"]+)"', link_html or "")
-        if not link_match:
-            continue
-        report_path = link_match.group(1)
-        filings.append({
-            "last": (last or "").strip(),
-            "first": (first or "").strip(),
-            "filed_date": normalize_date(filed_date_raw),
-            "report_url": f"{EFD_BASE}{report_path}" if report_path.startswith("/") else report_path,
-            "is_paper": "/paper/" in report_path,
-        })
+    for page in range(MAX_PAGES):
+        body = {
+            "start": str(page * PAGE_LEN),
+            "length": str(PAGE_LEN),
+            "report_types": f"[{REPORT_TYPE_PTR}]",
+            "filer_types": "[]",
+            "submitted_start_date": since_date,
+            "submitted_end_date": "",
+            "candidate_state": "",
+            "senator_state": "",
+            "office_id": "",
+            "first_name": "",
+            "last_name": "",
+            "csrfmiddlewaretoken": csrf_token,
+        }
+        resp = await _request_with_retry(
+            client, "POST", SEARCH_DATA_URL, data=body, headers={"Referer": SEARCH_URL},
+        )
+        if resp is None:
+            break
+
+        try:
+            payload = resp.json()
+        except ValueError:
+            logger.error("Senate eFD search response was not JSON — session/endpoint may have changed")
+            break
+
+        page_rows = payload.get("data", [])
+        for row in page_rows:
+            if len(row) < 5:
+                continue
+            link_html, last, first, _office, filed_date_raw = row[0], row[1], row[2], row[3], row[4]
+            link_match = re.search(r'href="([^"]+)"', link_html or "")
+            if not link_match:
+                continue
+            report_path = link_match.group(1)
+            filings.append({
+                "last": (last or "").strip(),
+                "first": (first or "").strip(),
+                "filed_date": normalize_date(filed_date_raw),
+                "report_url": f"{EFD_BASE}{report_path}" if report_path.startswith("/") else report_path,
+                "is_paper": "/paper/" in report_path,
+            })
+
+        if len(page_rows) < PAGE_LEN:
+            break
     return filings
 
 
@@ -207,6 +221,16 @@ async def fetch_and_parse_ptr(
         row.parse_confidence = confidence
         row.source_url = filing["report_url"]
         row.filing_id = filing_id
+        # The eFD electronic transactions table has no notification-date
+        # column, so parse_table_rows falls back to disclosure_date =
+        # transaction_date — which scored every electronically filed Senate
+        # trade as disclosed in 0 days, making the STOCK Act timeliness
+        # metric fiction for the whole chamber. The search result's filed
+        # date (the date the report was actually filed with the Secretary
+        # of the Senate) is the real disclosure date; use it whenever the
+        # parser had no genuine notification signal of its own.
+        if filing.get("filed_date") and row.disclosure_date == row.transaction_date:
+            row.disclosure_date = filing["filed_date"]
 
     # The API cache stores plain JSON, not dataclasses — convert at this
     # boundary and reconstruct on the cache-hit path above.

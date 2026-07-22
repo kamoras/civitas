@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models import ExploreDocument, Justice, Representative, Senator
-from app.pipeline.cache import api_cache_get, api_cache_set
+from app.pipeline.cache import api_cache_set
 from app.pipeline.fetch.congressional_record import fetch_floor_remarks
 from app.pipeline.fetch.house_record import fetch_house_floor_remarks
 from app.pipeline.fetch.presidential_actions import (
