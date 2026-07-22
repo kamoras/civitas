@@ -31,6 +31,14 @@ fetched data, never seeded:
   - Agency Alignment: Federal Register rulemaking data, Clinton onward
     only — the regulatory record-keeping mechanism this dimension
     measures didn't exist before Federal Register itself (1936).
+  - Historical Legacy (2026-07): C-SPAN's Presidential Historians
+    Survey — a real, external, periodically-run expert-consensus survey
+    (~142 professional historians in the 2021 cycle, the most recent;
+    2025 was explicitly postponed by C-SPAN), covering crisis
+    leadership, moral authority, and similar historical-consequence
+    judgments none of the other four dimensions can capture. Only rates
+    presidents whose terms were complete as of that cycle — see
+    app.pipeline.fetch.cspan_historians_survey.
 
 A dimension's score is None, never a fabricated number or a neutral
 default, for any president it's genuinely inapplicable to (see each
@@ -77,6 +85,7 @@ def _build_response(p: President) -> PresidentSchema:
             effectiveness=p.score_effectiveness,
             competence=p.score_competence,
             agency_alignment=p.score_agency_alignment,
+            historical_legacy=p.score_historical_legacy,
             overall=compute_president_overall_score(p),
         ),
         avg_approval=p.avg_approval,
@@ -86,6 +95,7 @@ def _build_response(p: President) -> PresidentSchema:
         eo_court_success_pct=p.eo_court_success_pct,
         cabinet_turnover_pct=p.cabinet_turnover_pct,
         election_margin=p.election_margin,
+        historical_legacy_score=p.historical_legacy_score,
     )
 
 
@@ -117,6 +127,7 @@ def get_president_score_breakdown(db: Session, president_id: str) -> dict | None
         _agency_alignment_core,
         _competence_core,
         _effectiveness_core,
+        _historical_legacy_core,
         _public_mandate_core,
     )
     from app.pipeline.president_pipeline import _term_years
@@ -151,6 +162,9 @@ def get_president_score_breakdown(db: Session, president_id: str) -> dict | None
             rulemaking_finalized_pct=p.rulemaking_finalized_pct,
             term_years=term_years,
         ),
+        "historicalLegacy": _historical_legacy_core(
+            historical_legacy_score=p.historical_legacy_score,
+        ),
     }
 
 
@@ -168,6 +182,7 @@ def get_president_leaderboard(db: Session) -> list[PresidentLeaderboardEntry]:
             effectiveness=p.score_effectiveness,
             competence=p.score_competence,
             agency_alignment=p.score_agency_alignment,
+            historical_legacy=p.score_historical_legacy,
             overall=compute_president_overall_score(p),
         )
         entries.append(PresidentLeaderboardEntry(

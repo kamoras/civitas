@@ -529,6 +529,11 @@ class President(Base):
     score_effectiveness: Mapped[float | None] = mapped_column(Float, nullable=True)
     score_competence: Mapped[float | None] = mapped_column(Float, nullable=True)
     score_agency_alignment: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # NULL for any currently-serving or just-departed president — C-SPAN's
+    # Presidential Historians Survey only rates a completed term, and its
+    # 2025 cycle was postponed entirely (see app.pipeline.fetch.
+    # cspan_historians_survey). Genuinely unrated, not unmeasured.
+    score_historical_legacy: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     avg_approval: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Average election-margin percentage across a president's own election
@@ -553,6 +558,11 @@ class President(Base):
     # (see calc_public_mandate) — persisted for the same on-demand
     # score-breakdown-recompute reason as gdp_growth_adjusted above.
     approval_trend: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Raw C-SPAN 2021 Presidential Historians Survey point total (e.g.
+    # Lincoln=897) — persisted alongside the normalized score_
+    # historical_legacy for the same on-demand-recompute reason as
+    # gdp_growth_adjusted/rulemaking_count above.
+    historical_legacy_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)

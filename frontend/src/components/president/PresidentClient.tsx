@@ -22,11 +22,12 @@ function getPartyMeta(party: string) {
   return PARTY_META[party] ?? { label: party, color: "text-white/50", bg: "bg-white/10", border: "border-white/20" };
 }
 
-const METRIC_LABELS: { key: "publicMandate" | "effectiveness" | "competence" | "agencyAlignment"; label: string; desc: string }[] = [
+const METRIC_LABELS: { key: "publicMandate" | "effectiveness" | "competence" | "agencyAlignment" | "historicalLegacy"; label: string; desc: string }[] = [
   { key: "publicMandate", label: "PUBLIC MANDATE", desc: "Approval polling (Truman onward) or, for earlier presidents, election-margin history. N/A for presidents who never won a presidential election." },
   { key: "effectiveness", label: "EFFECTIVENESS", desc: "GDP growth, job creation, and tangible outcomes for voters" },
   { key: "competence", label: "COMPETENCE", desc: "Executive order activity rate and administrative execution. Court-success and cabinet-turnover rates have no live data source and are not currently part of this score." },
   { key: "agencyAlignment", label: "AGENCY ALIGNMENT", desc: "How effectively federal agencies execute the president's agenda through rulemaking. N/A before Federal Register data begins in 1936." },
+  { key: "historicalLegacy", label: "HISTORICAL LEGACY", desc: "C-SPAN's Presidential Historians Survey — crisis leadership, moral authority, and vision, as assessed by ~142 professional historians. N/A for any currently-serving or just-departed president; the survey only rates a completed term." },
 ];
 
 export function PresidentCard({ president }: { president: President }) {
@@ -118,6 +119,14 @@ export function PresidentCard({ president }: { president: President }) {
           >
             [FEDERAL REGISTER]
           </a>
+          <a
+            href="https://www.c-span.org/presidentsurvey2021/?page=overall"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
+          >
+            [C-SPAN HISTORIANS SURVEY]
+          </a>
         </div>
 
         {/* Score Breakdown */}
@@ -146,7 +155,7 @@ export function PresidentCard({ president }: { president: President }) {
           <div className="flex items-baseline justify-between mb-3">
             <h3 className="text-xs text-matrix-green/50 tracking-widest">KEY METRICS</h3>
             <span className="text-[10px] text-matrix-green/50">
-              Sources: UCSB, MeasuringWorth, BLS, Federal Register
+              Sources: UCSB, MeasuringWorth, BLS, Federal Register, C-SPAN
             </span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -187,6 +196,11 @@ export function PresidentCard({ president }: { president: President }) {
               label="CABINET TURNOVER"
               value={president.cabinetTurnoverPct != null ? `${president.cabinetTurnoverPct.toFixed(0)}` : null}
               unit="%"
+            />
+            <StatBox
+              label="C-SPAN SURVEY"
+              value={president.historicalLegacyScore != null ? `${president.historicalLegacyScore}` : null}
+              unit="pts"
             />
           </div>
         </div>

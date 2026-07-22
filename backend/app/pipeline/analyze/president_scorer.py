@@ -123,6 +123,7 @@ _PRESIDENT_SCORE_FIELD_MAP = {
     "effectiveness": "score_effectiveness",
     "competence": "score_competence",
     "agencyAlignment": "score_agency_alignment",
+    "historicalLegacy": "score_historical_legacy",
 }
 
 
@@ -587,6 +588,65 @@ def _public_mandate_core(
     return _blend_live_components(components)
 
 
+# Population stats for C-SPAN's 2021 Presidential Historians Survey point
+# totals, computed 2026-07 from the real fetched data across all 44 rated
+# presidents (Grover Cleveland's single real score counted once, not
+# double-counted across this platform's cleveland-22/cleveland-24 id
+# split) via app.pipeline.fetch.cspan_historians_survey.
+_HISTORICAL_LEGACY_MEAN = 549.14
+_HISTORICAL_LEGACY_STDEV = 157.61
+
+
+def calc_historical_legacy(historical_legacy_score: int | None) -> int | None:
+    """Calculate Historical Legacy score from C-SPAN's Presidential
+    Historians Survey only.
+
+    See _historical_legacy_core for the full component breakdown — this
+    is a thin wrapper kept for the same reuse contract as calc_competence/
+    calc_effectiveness/calc_agency_alignment/calc_public_mandate.
+    """
+    return _historical_legacy_core(historical_legacy_score)["score"]
+
+
+def _historical_legacy_core(historical_legacy_score: int | None) -> dict:
+    """Same math as calc_historical_legacy, returning every intermediate
+    value alongside the final score.
+
+    Covers what none of this platform's other four president dimensions
+    can: crisis leadership, moral authority, vision, and similar
+    historical-consequence judgments that don't reduce to GDP growth,
+    approval polling, EO-activity rate, or rulemaking volume (added
+    2026-07 after review found presidents like Lincoln landing in the
+    bottom half of the overall ranking — every individual number was
+    defensible on its own terms, but nothing in the formula could credit
+    "preserved the Union, ended slavery" at all).
+
+    Sourced from C-SPAN's Presidential Historians Survey — ~142
+    professional historians in the most recent (2021) cycle, scored
+    across ten categories and aggregated into one point total. This is
+    categorically different from the hand-set Independence/Follow-
+    Through values removed elsewhere in this rewrite: a real, external,
+    periodically-run survey with a documented methodology, not a single
+    number invented for this platform — the same "trust a well-
+    documented external institution" category as citing BLS or Federal
+    Register data, just survey-based rather than administrative-record-
+    based. See app.pipeline.fetch.cspan_historians_survey for the full
+    account, including why the 2025 cycle doesn't exist (C-SPAN
+    explicitly postponed it) and why every currently-serving or just-
+    departed president has no score here at all — genuinely unrated by
+    the survey's own cadence, not a fetch gap this pipeline could close.
+    """
+    components: list[dict] = []
+    if historical_legacy_score is not None:
+        components.append(_population_zscore_component(
+            "Historians' assessment", 1.0, historical_legacy_score,
+            _HISTORICAL_LEGACY_MEAN, _HISTORICAL_LEGACY_STDEV,
+            f"{historical_legacy_score} points in C-SPAN's 2021 Presidential Historians Survey "
+            f"vs. population mean {_HISTORICAL_LEGACY_MEAN:.0f}",
+        ))
+    return _blend_live_components(components)
+
+
 def recalculate_president_scores(
     president_id: str, live_data: dict, term_years: float, term_start_year: int,
 ) -> dict:
@@ -608,16 +668,16 @@ def recalculate_president_scores(
             gdp_growth_avg, gdp_growth_adjusted, rulemaking_count,
             rulemaking_finalized_pct, eo_court_success_pct,
             cabinet_turnover_pct, avg_approval, approval_trend,
-            election_margin — any subset may be present; each calc_*
-            function handles its own missing inputs.
+            election_margin, historical_legacy_score — any subset may be
+            present; each calc_* function handles its own missing inputs.
         term_start_year: needed by calc_competence to pick the right
             EO-activity-rate era population (see _eo_activity_rate_component).
 
     Returns:
         Dict with keys score_public_mandate, score_effectiveness,
-        score_competence, score_agency_alignment — any value may be None
-        (that dimension doesn't apply to this president), never a
-        hand-set fallback.
+        score_competence, score_agency_alignment, score_historical_legacy
+        — any value may be None (that dimension doesn't apply to this
+        president), never a hand-set fallback.
     """
     return {
         "score_public_mandate": calc_public_mandate(
@@ -642,5 +702,8 @@ def recalculate_president_scores(
             rulemaking_count=live_data.get("rulemaking_count"),
             rulemaking_finalized_pct=live_data.get("rulemaking_finalized_pct"),
             term_years=term_years,
+        ),
+        "score_historical_legacy": calc_historical_legacy(
+            historical_legacy_score=live_data.get("historical_legacy_score"),
         ),
     }

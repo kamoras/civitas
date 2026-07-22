@@ -49,6 +49,7 @@ from app.pipeline.analyze.president_scorer import (
     compute_president_overall_score,
     recalculate_president_scores,
 )
+from app.pipeline.fetch.cspan_historians_survey import fetch_cspan_historians_survey
 from app.pipeline.fetch.economic_data import fetch_jobs_for_president
 from app.pipeline.fetch.federal_register import fetch_all_rulemaking_stats
 from app.pipeline.fetch.historical_executive_orders import fetch_historical_eo_counts
@@ -187,6 +188,10 @@ async def run_president_pipeline(db: Session) -> dict:
         election_margin_data = await fetch_election_margins(client, db)
         logger.info("Election-margin data fetched for %d presidents", len(election_margin_data))
 
+        logger.info("Fetching C-SPAN Presidential Historians Survey (2021 cycle)...")
+        historical_legacy_data = await fetch_cspan_historians_survey(client, db)
+        logger.info("Historians-survey data fetched for %d presidents", len(historical_legacy_data))
+
     updated = 0
     for president in presidents:
         term_years = _term_years(president.term_start, president.term_end)
@@ -231,21 +236,27 @@ async def run_president_pipeline(db: Session) -> dict:
             live["election_margin"] = election_margin_data[president.id]
             president.election_margin = live["election_margin"]
 
+        if president.id in historical_legacy_data:
+            live["historical_legacy_score"] = historical_legacy_data[president.id]
+            president.historical_legacy_score = live["historical_legacy_score"]
+
         new_scores = recalculate_president_scores(president.id, live, term_years, term_start_year)
         president.score_public_mandate = new_scores["score_public_mandate"]
         president.score_competence = new_scores["score_competence"]
         president.score_effectiveness = new_scores["score_effectiveness"]
         president.score_agency_alignment = new_scores["score_agency_alignment"]
+        president.score_historical_legacy = new_scores["score_historical_legacy"]
         president.updated_at = utcnow()
         updated += 1
 
         logger.info(
-            "  %s: mandate=%s competence=%s effectiveness=%s agency=%s",
+            "  %s: mandate=%s competence=%s effectiveness=%s agency=%s legacy=%s",
             president.id,
             new_scores["score_public_mandate"],
             new_scores["score_competence"],
             new_scores["score_effectiveness"],
             new_scores["score_agency_alignment"],
+            new_scores["score_historical_legacy"],
         )
 
     db.commit()
@@ -261,6 +272,7 @@ async def run_president_pipeline(db: Session) -> dict:
         "jobs_data_count": len(jobs_data),
         "approval_data_count": len(approval_avg_data),
         "election_margin_data_count": len(election_margin_data),
+        "historical_legacy_data_count": len(historical_legacy_data),
     }
 
 
@@ -281,14 +293,14 @@ def _record_president_snapshots(db: Session) -> None:
     reinserting — an upsert never leaves the table without today's data
     mid-write.
 
-    ScoreSnapshot's score_1..score_4 columns are NOT nullable (shared
-    schema with senators/reps, whose 5 dimensions are always all
-    present) — a President dimension that's None (genuinely inapplicable
-    for that president, see president_scorer.py) is stored as 0.0 in the
-    snapshot specifically, same as how compute_president_overall_score's
-    own renormalization already treats it as absent from the weighted
-    average. The authoritative "does this apply" answer always lives on
-    the President row's own nullable column, never on the snapshot.
+    ScoreSnapshot's score_1..score_5 columns are NOT nullable (shared
+    schema with senators/reps) — a President dimension that's None
+    (genuinely inapplicable for that president, see president_scorer.py)
+    is stored as 0.0 in the snapshot specifically, same as how compute_
+    president_overall_score's own renormalization already treats it as
+    absent from the weighted average. The authoritative "does this apply"
+    answer always lives on the President row's own nullable column, never
+    on the snapshot. score_5 = Historical Legacy (added 2026-07).
     """
     today = utcnow().date().isoformat()
     presidents = db.query(President).all()
@@ -310,6 +322,7 @@ def _record_president_snapshots(db: Session) -> None:
             existing.score_2 = p.score_effectiveness or 0.0
             existing.score_3 = p.score_competence or 0.0
             existing.score_4 = p.score_agency_alignment or 0.0
+            existing.score_5 = p.score_historical_legacy or 0.0
         else:
             db.add(ScoreSnapshot(
                 entity_type="president",
@@ -320,6 +333,7 @@ def _record_president_snapshots(db: Session) -> None:
                 score_2=p.score_effectiveness or 0.0,
                 score_3=p.score_competence or 0.0,
                 score_4=p.score_agency_alignment or 0.0,
+                score_5=p.score_historical_legacy or 0.0,
                 algorithm_version=PRESIDENT_ALGORITHM_VERSION,
             ))
             count += 1

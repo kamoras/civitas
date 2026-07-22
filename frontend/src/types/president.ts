@@ -6,6 +6,10 @@ export interface PresidentialScore {
   effectiveness: number | null;
   competence: number | null;
   agencyAlignment: number | null;
+  /** C-SPAN Presidential Historians Survey, z-scored. Null for any
+   * currently-serving or just-departed president — the survey only rates
+   * a completed term, and its 2025 cycle was postponed entirely. */
+  historicalLegacy: number | null;
   /** Backend-computed weighted total, renormalized over whichever
    * dimensions are non-null — never recompute this client-side. */
   overall: number;
@@ -31,6 +35,8 @@ export interface President {
    * presidents with live approval data, and for the five who never won a
    * presidential election in their own right. */
   electionMargin: number | null;
+  /** Raw C-SPAN 2021 Presidential Historians Survey point total. */
+  historicalLegacyScore: number | null;
 }
 
 export interface PresidentLeaderboardEntry {

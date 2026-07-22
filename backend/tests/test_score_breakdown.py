@@ -31,9 +31,11 @@ from app.pipeline.analyze.president_scorer import (
     _agency_alignment_core,
     _competence_core,
     _effectiveness_core,
+    _historical_legacy_core,
     calc_agency_alignment,
     calc_competence,
     calc_effectiveness,
+    calc_historical_legacy,
 )
 from app.pipeline.analyze.score_calculator import (
     _calc_constituent_alignment,
@@ -158,6 +160,16 @@ class TestPresidentCoreConsistency:
         breakdown = _agency_alignment_core(*args)
         assert breakdown["score"] == calc_agency_alignment(*args)
 
+    def test_historical_legacy_core_matches_calc(self):
+        breakdown = _historical_legacy_core(897)
+        assert breakdown["score"] == calc_historical_legacy(897)
+
+    def test_historical_legacy_core_none_when_no_live_data(self):
+        breakdown = _historical_legacy_core(None)
+        assert breakdown["score"] is None
+        assert breakdown["components"] == []
+        assert "note" in breakdown
+
 
 class TestJusticeBreakdownEnrichment:
     def test_analyze_justice_votes_breakdown_present(self):
@@ -276,6 +288,7 @@ class TestPresidentScoreBreakdownService:
         assert len(breakdown["competence"]["components"]) >= 1
         assert breakdown["effectiveness"]["score"] is not None
         assert breakdown["agencyAlignment"]["score"] is not None
+        assert breakdown["historicalLegacy"]["score"] is None  # no C-SPAN score stored
 
     def test_president_with_no_stored_data_is_fully_none(self, db_session):
         p = President(
@@ -288,7 +301,7 @@ class TestPresidentScoreBreakdownService:
         breakdown = get_president_score_breakdown(db_session, "lincoln-16")
         assert "independence" not in breakdown
         assert "followThrough" not in breakdown
-        for dim in ("publicMandate", "competence", "effectiveness", "agencyAlignment"):
+        for dim in ("publicMandate", "competence", "effectiveness", "agencyAlignment", "historicalLegacy"):
             assert breakdown[dim]["score"] is None, f"{dim} should be None with no stored data"
 
     def test_returns_none_for_missing_president(self, db_session):

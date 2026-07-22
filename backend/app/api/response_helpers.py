@@ -47,13 +47,14 @@ SENATOR_DIMENSION_LABELS = {
     "score_5": "legislativeEffectiveness",
 }
 
-# Presidents only use 4 of the 5 generic slots (score_5 unused) — see
+# score_5 = Historical Legacy (added 2026-07) — see
 # president_pipeline._record_president_snapshots.
 PRESIDENT_DIMENSION_LABELS = {
     "score_1": "publicMandate",
     "score_2": "effectiveness",
     "score_3": "competence",
     "score_4": "agencyAlignment",
+    "score_5": "historicalLegacy",
 }
 
 

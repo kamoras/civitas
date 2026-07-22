@@ -390,6 +390,10 @@ class PresidentialScoreSchema(CamelModel):
     effectiveness: float | None
     competence: float | None
     agency_alignment: float | None
+    # C-SPAN Presidential Historians Survey, z-scored (2026-07) — None for
+    # any currently-serving or just-departed president (survey only rates
+    # a completed term; the 2025 cycle was postponed entirely).
+    historical_legacy: float | None
     # Backend-computed overall (president_scorer.compute_president_overall_score).
     overall: float = 0.0
 
@@ -413,6 +417,9 @@ class PresidentSchema(CamelModel):
     # election win(s)) — the pre-polling-era Public Mandate proxy. See
     # app.pipeline.fetch.presidential_elections.
     election_margin: float | None = None
+    # Raw C-SPAN 2021 Presidential Historians Survey point total (e.g.
+    # Lincoln=897) — see app.pipeline.fetch.cspan_historians_survey.
+    historical_legacy_score: int | None = None
 
 
 class PresidentLeaderboardEntry(CamelModel):

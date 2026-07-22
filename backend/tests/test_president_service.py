@@ -28,6 +28,7 @@ class TestGetPresident:
         assert result.score.competence is None
         assert result.score.effectiveness is None
         assert result.score.agency_alignment is None
+        assert result.score.historical_legacy is None
         assert result.score.overall == 0.0
 
     def test_partial_scores_renormalize_overall_from_present_dimensions_only(self, db_session):
@@ -46,11 +47,13 @@ class TestGetPresidentScoreBreakdown:
     def test_missing_president_returns_none(self, db_session):
         assert get_president_score_breakdown(db_session, "nobody-0") is None
 
-    def test_breakdown_has_all_four_dimensions(self, db_session):
+    def test_breakdown_has_all_five_dimensions(self, db_session):
         db_session.add(_make_president("test-3", eo_count=200))
         db_session.commit()
 
         breakdown = get_president_score_breakdown(db_session, "test-3")
-        assert set(breakdown) == {"publicMandate", "competence", "effectiveness", "agencyAlignment"}
+        assert set(breakdown) == {
+            "publicMandate", "competence", "effectiveness", "agencyAlignment", "historicalLegacy",
+        }
         assert breakdown["competence"]["score"] is not None
         assert breakdown["publicMandate"]["score"] is None

@@ -46,7 +46,7 @@ def test_score_history_json_filters_by_entity_type_and_id(db_session):
 def test_score_history_json_uses_president_dimension_labels(db_session):
     db_session.add(ScoreSnapshot(
         entity_type="president", entity_id="test-prez", date="2026-07-01",
-        overall_score=55.0, score_1=60, score_2=55, score_3=50, score_4=65, score_5=0,
+        overall_score=55.0, score_1=60, score_2=55, score_3=50, score_4=65, score_5=72,
         algorithm_version="v2",
     ))
     db_session.commit()
@@ -57,10 +57,10 @@ def test_score_history_json_uses_president_dimension_labels(db_session):
     body = json.loads(resp.body)
 
     assert len(body["snapshots"]) == 1
-    # score_5 unused by presidents — not surfaced under any label.
     assert body["snapshots"][0]["scores"] == {
         "publicMandate": 60.0,
         "effectiveness": 55.0,
         "competence": 50.0,
         "agencyAlignment": 65.0,
+        "historicalLegacy": 72.0,
     }

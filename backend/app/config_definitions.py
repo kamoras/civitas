@@ -64,17 +64,28 @@ SCORE_WEIGHTS: dict[str, float] = {
 # need the same platform-text-vs-action embedding match already tried and
 # abandoned 4x for senators' Promise Persistence (config_definitions.py's
 # v6.0 note, above). Same precedent as that removal: rather than keep
-# presenting a hand-set number as a computed score, drop it and
-# redistribute the freed weight proportionally across the remaining
-# dimensions — combined 35% split by each dimension's prior share of the
-# remaining 65%: publicMandate 15->23%, effectiveness 20->31%,
-# competence 15->23%, agencyAlignment 15->23%. See
-# president_service.py's module docstring for the full account.
+# presenting a hand-set number as a computed score, drop it. Their
+# combined weight first redistributed proportionally across the
+# remaining four (publicMandate 15->23%, effectiveness 20->31%,
+# competence 15->23%, agencyAlignment 15->23%), then a fifth dimension —
+# historicalLegacy — was added (2026-07) to cover what none of the other
+# four can: crisis leadership, moral authority, and similar historical-
+# consequence judgments that don't reduce to GDP growth, approval
+# polling, EO rate, or rulemaking volume (see president_scorer.
+# calc_historical_legacy's docstring — sourced from C-SPAN's Presidential
+# Historians Survey, a real external expert-consensus survey, not a
+# hand-set number). Weights reset to equal fifths rather than another
+# proportional redistribution: historicalLegacy isn't a fragment of an
+# existing dimension's territory the way the two removed ones were, so
+# there's no existing-dimension "share" to redistribute from — equal
+# weighting is the least arbitrary starting point until real calibration
+# work says otherwise.
 PRESIDENT_SCORE_WEIGHTS: dict[str, float] = {
-    "publicMandate": 0.23,
-    "effectiveness": 0.31,
-    "competence": 0.23,
-    "agencyAlignment": 0.23,
+    "publicMandate": 0.20,
+    "effectiveness": 0.20,
+    "competence": 0.20,
+    "agencyAlignment": 0.20,
+    "historicalLegacy": 0.20,
 }
 
 # Supreme Court impartiality-score weights. Single source of truth shared by

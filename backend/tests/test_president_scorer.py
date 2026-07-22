@@ -10,6 +10,7 @@ from app.pipeline.analyze.president_scorer import (
     calc_agency_alignment,
     calc_competence,
     calc_effectiveness,
+    calc_historical_legacy,
     calc_public_mandate,
     recalculate_president_scores,
 )
@@ -110,6 +111,28 @@ class TestCalcAgencyAlignment:
         assert score is None
 
 
+class TestCalcHistoricalLegacy:
+    def test_no_data_returns_none(self):
+        # Any currently-serving or just-departed president — C-SPAN's
+        # 2025 cycle was postponed entirely.
+        assert calc_historical_legacy(historical_legacy_score=None) is None
+
+    def test_lincoln_real_score_lands_well_above_neutral(self):
+        # Real 2021 C-SPAN score (897), the highest of any president —
+        # should score near the top of the 0-100 scale.
+        score = calc_historical_legacy(historical_legacy_score=897)
+        assert score is not None and score > 80
+
+    def test_buchanan_real_score_lands_well_below_neutral(self):
+        # Real 2021 C-SPAN score (227), near the bottom.
+        score = calc_historical_legacy(historical_legacy_score=227)
+        assert score is not None and score < 30
+
+    def test_population_mean_score_lands_near_neutral(self):
+        score = calc_historical_legacy(historical_legacy_score=549)
+        assert score is not None and 45 <= score <= 55
+
+
 class TestCalcPublicMandate:
     def test_no_data_returns_none(self):
         # The five presidents who never won a presidential election.
@@ -144,6 +167,7 @@ class TestRecalculatePresidentScores:
         assert set(result) == {
             "score_public_mandate", "score_competence",
             "score_effectiveness", "score_agency_alignment",
+            "score_historical_legacy",
         }
         assert result["score_competence"] is not None
         assert result["score_public_mandate"] is None

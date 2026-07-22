@@ -88,6 +88,38 @@ NAME_TO_ID: dict[str, str] = {
     "donald j. trump - ii": "trump-47",
 }
 
+# Other sources reference a handful of these same presidents with a
+# fuller middle name/initial than NAME_TO_ID's keys (themselves sourced
+# from UCSB's EO table, whose own name text is inconsistent about this).
+# Reused by resolve_president_id below rather than letting every new
+# fetcher (presidential_roster.py, cspan_historians_survey.py) build its
+# own separate alias table for the identical mismatches.
+_NAME_ALIASES: dict[str, str] = {
+    "james a garfield": "james garfield",
+    "chester a arthur": "chester arthur",
+    "george h w bush": "george bush",
+    "richard m nixon": "richard nixon",
+}
+
+
+# Periods stripped from both sides at lookup time: NAME_TO_ID's own keys
+# retain them ("james k. polk"), but not every source renders a period
+# after a middle initial (e.g. presidential_roster.py's "Harry S Truman").
+_NAME_LOOKUP: dict[str, str] = {k.replace(".", ""): v for k, v in NAME_TO_ID.items()}
+
+
+def resolve_president_id(name: str) -> str | None:
+    """Resolve a plain president name (case/whitespace/period differences
+    handled here; term-disambiguating suffixes like "- I"/"- II" must
+    already be applied by the caller, since only the caller knows its own
+    source's convention for non-consecutive terms) to this platform's id
+    scheme. Shared by every fetcher that references presidents by name
+    rather than a pre-existing id."""
+    normalized = re.sub(r"\s+", " ", name.replace(".", "").strip().lower())
+    normalized = _NAME_ALIASES.get(normalized, normalized)
+    return _NAME_LOOKUP.get(normalized)
+
+
 _RATE_LIMITER = RateLimiter(rps=1.0)
 _CACHE_TIER = "historical-eo"
 _CACHE_KEY = "all-presidents"

@@ -619,14 +619,14 @@ export default function AboutPage() {
           {/* ── President Metrics ── */}
           <Section title="PRESIDENTIAL SCORECARD METRICS">
             <P>
-              Presidents are scored on four dimensions, 0-100 scale, computed entirely
-              from live and historical datasets — there is no hand-set or seeded score
-              anywhere in this pipeline (2026-07 rewrite). A dimension a president has
-              no real data source for is left blank (N/A) rather than filled with a
-              fabricated or neutral placeholder, and the overall score renormalizes
-              across whichever dimensions actually apply to that president. Identity
-              data (name, party, term dates) is fetched live too, from the same UCSB
-              roster used for the metrics below — nothing about a president&apos;s
+              Presidents are scored on five dimensions, 0-100 scale, computed entirely
+              from live, historical, and expert-survey datasets — there is no hand-set
+              or seeded score anywhere in this pipeline (2026-07 rewrite). A dimension a
+              president has no real data source for is left blank (N/A) rather than
+              filled with a fabricated or neutral placeholder, and the overall score
+              renormalizes across whichever dimensions actually apply to that president.
+              Identity data (name, party, term dates) is fetched live too, from the same
+              UCSB roster used for the metrics below — nothing about a president&apos;s
               profile is typed into this codebase by hand.
             </P>
             <P>
@@ -640,14 +640,22 @@ export default function AboutPage() {
               times and abandoned for senators&apos; Promise Persistence (see the{" "}
               <a href="/changelog" className="underline underline-offset-2 hover:text-matrix-green/70">scoring changelog</a>{" "}
               — v6.0). Rather than keep presenting a hand-set number as a computed
-              score, they&apos;re gone, and their combined weight was redistributed
-              proportionally to the four dimensions below (Public Mandate 15→23%,
-              Effectiveness 20→31%, Competence 15→23%, Agency Alignment 15→23%).
+              score, they&apos;re gone. Their combined weight first redistributed
+              proportionally across the remaining four (Public Mandate 15→23%,
+              Effectiveness 20→31%, Competence 15→23%, Agency Alignment 15→23%), then a
+              fifth dimension — Historical Legacy — was added shortly after (also
+              2026-07, following review that found presidents like Lincoln landing in
+              the bottom half of the ranking despite every individual number being
+              defensible on its own terms: nothing in the first four dimensions could
+              credit &ldquo;preserved the Union, ended slavery&rdquo; at all). Weights
+              reset to equal fifths (20% each) rather than another proportional split —
+              Historical Legacy isn&apos;t a fragment of an existing dimension&apos;s
+              territory the way the two removed ones were.
             </P>
 
             <div className="space-y-4 mt-4">
               <div>
-                <Label>Public Mandate (23%)</Label>
+                <Label>Public Mandate (20%)</Label>
                 <P>
                   Reflects approval trajectory and coalition retention. Gallup, this
                   platform&apos;s original approval source, ended presidential approval
@@ -668,7 +676,7 @@ export default function AboutPage() {
               </div>
 
               <div>
-                <Label>Effectiveness (31%)</Label>
+                <Label>Effectiveness (20%)</Label>
                 <P>
                   Measures tangible economic outcomes: GDP growth (60%) and job
                   creation (40%). GDP growth is computed for the full presidency —
@@ -685,7 +693,7 @@ export default function AboutPage() {
               </div>
 
               <div>
-                <Label>Competence (23%)</Label>
+                <Label>Competence (20%)</Label>
                 <P>
                   Evaluates administrative execution quality via executive-order
                   activity rate, now sourced from UCSB&apos;s own EO statistics table
@@ -703,7 +711,7 @@ export default function AboutPage() {
               </div>
 
               <div>
-                <Label>Agency Alignment (23%)</Label>
+                <Label>Agency Alignment (20%)</Label>
                 <P>
                   Measures how well executive agency actions align with stated
                   presidential priorities, via Federal Register rulemaking data — the
@@ -715,6 +723,30 @@ export default function AboutPage() {
                   coverage only reaches back to Clinton. Every president before Clinton
                   shows N/A for this dimension, excluded from their overall score
                   entirely rather than scored on a proxy.
+                </P>
+              </div>
+
+              <div>
+                <Label>Historical Legacy (20%)</Label>
+                <P>
+                  Covers what none of the other four dimensions can: crisis leadership,
+                  moral authority, vision, and similar historical-consequence judgments
+                  that don&apos;t reduce to GDP growth, approval polling, EO-activity
+                  rate, or rulemaking volume. Sourced from C-SPAN&apos;s Presidential
+                  Historians Survey — ~142 professional historians in the 2021 cycle
+                  (the most recent; the 2025 cycle was explicitly postponed by C-SPAN,
+                  citing the risk of turning &ldquo;historical analysis&rdquo; into
+                  &ldquo;punditry&rdquo; with a former president returning to office),
+                  scored across ten categories and aggregated into one point total. This
+                  is categorically different from the hand-set Independence/Follow-
+                  Through values removed elsewhere: a real, external, periodically-run
+                  survey with a documented methodology, not a single number invented for
+                  this platform — the same &ldquo;trust a well-documented external
+                  institution&rdquo; category as citing BLS or Federal Register data,
+                  just survey-based rather than administrative-record-based. Only rates
+                  presidents whose terms were complete as of the 2021 cycle — every
+                  currently-serving or just-departed president shows N/A here, genuinely
+                  unrated by the survey&apos;s own cadence, not a fetch gap.
                 </P>
               </div>
             </div>
