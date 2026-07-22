@@ -9,7 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.database import Base
+from app.database import Base, VisitsBase
 
 
 @pytest.fixture()
@@ -24,12 +24,19 @@ def db_session():
     connection StaticPool provides — the same fix production doesn't need
     since a file-backed SQLite DB is the same database regardless of which
     thread opens the connection.
+
+    Production splits SiteVisit/PageView onto their own database file
+    (see database.py's VisitsBase) so track-visit's writes can't contend
+    with the nightly pipeline's — but tests exercise both through this
+    one session/engine either way, so both bases are created here rather
+    than standing up a second in-memory engine tests don't need.
     """
     engine = create_engine(
         "sqlite:///:memory:", echo=False,
         connect_args={"check_same_thread": False}, poolclass=StaticPool,
     )
     Base.metadata.create_all(bind=engine)
+    VisitsBase.metadata.create_all(bind=engine)
     Session = sessionmaker(bind=engine)
     session = Session()
     yield session

@@ -4,7 +4,7 @@ from enum import StrEnum
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.database import Base
+from app.database import Base, VisitsBase
 from app.time_utils import utcnow
 
 
@@ -902,7 +902,7 @@ class BskySenatorSpotlight(Base):
     post_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
-class SiteVisit(Base):
+class SiteVisit(VisitsBase):
     """One row per unique visitor per day — never raw IP/PII.
 
     `visitor_hash` is an HMAC of (IP, User-Agent, date) keyed by a secret
@@ -911,6 +911,11 @@ class SiteVisit(Base):
     recoverable from the hash. The (date, visitor_hash) primary key means a
     second request from the same visitor on the same day is a no-op insert,
     so this table grows by unique visitors, not by page views.
+
+    2026-07: lives on VisitsBase (its own SQLite file), not the shared
+    Base — see database.py's _derive_visits_database_url for why this
+    table (fed by the highest-frequency write in the app) needed to be
+    physically isolated from the nightly pipeline's writes.
     """
     __tablename__ = "site_visits"
 
@@ -926,7 +931,7 @@ class SiteVisit(Base):
     device_type: Mapped[str] = mapped_column(String(10), default="")
 
 
-class PageView(Base):
+class PageView(VisitsBase):
     """Per-page view counts, by day — a raw hit counter, not deduped by visitor.
 
     Deliberately a separate table from SiteVisit: that table's (date,
