@@ -9,8 +9,10 @@ views actually accumulate rather than no-op like SiteVisit does.
 import pathlib
 from unittest.mock import MagicMock
 
+from sqlalchemy.exc import OperationalError, TimeoutError as SATimeoutError
+
 from app.api.admin import admin_top_pages
-from app.api.visits import _normalize_path, track_visit
+from app.api.visits import _get_db_or_none, _normalize_path, track_visit
 from app.models import PageView
 
 
@@ -94,6 +96,44 @@ class TestTrackVisitPageViews:
 
         rows = {r.path: r.count for r in db_session.query(PageView).all()}
         assert rows == {"/leaderboard": 1, "/compare": 1}
+
+
+class TestTrackVisitDegradesGracefully:
+    """2026-07 incident: this endpoint fires on every real page view and
+    shares SQLite's single writer lock with the nightly pipeline. An
+    unprotected write here held a pool connection for the full 30s
+    default lock-wait under contention, exhausting the pool and OOM-ing
+    the container. These pin the fix: a blocked write must never raise
+    out of this endpoint, at either failure point (write-lock contention
+    inside the route, or pool exhaustion at session-checkout time)."""
+
+    async def test_write_lock_contention_does_not_raise(self):
+        db = MagicMock()
+        db.execute.side_effect = [
+            None,  # set busy_timeout
+            OperationalError("stmt", {}, Exception("database is locked")),  # the write
+            None,  # restore busy_timeout in finally, still runs
+        ]
+
+        result = await track_visit(_make_request(), path="/leaderboard", db=db)
+
+        assert result is None  # no exception propagated
+        db.rollback.assert_called_once()
+        assert db.execute.call_count == 3  # set, failing write, restore — restore isn't skipped
+
+    async def test_pool_exhaustion_at_checkout_yields_none(self, monkeypatch):
+        def _raise_timeout():
+            raise SATimeoutError("QueuePool limit reached")
+
+        monkeypatch.setattr("app.api.visits.SessionLocal", _raise_timeout)
+
+        gen = _get_db_or_none()
+        assert next(gen) is None
+
+    async def test_track_visit_is_a_noop_when_db_is_none(self):
+        # What _get_db_or_none yields under pool exhaustion — must not raise.
+        result = await track_visit(_make_request(), path="/leaderboard", db=None)
+        assert result is None
 
 
 class TestAdminTopPages:

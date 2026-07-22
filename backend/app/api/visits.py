@@ -11,18 +11,56 @@ import hmac
 import logging
 import re
 from datetime import datetime, UTC
+from typing import Generator
 
 from fastapi import APIRouter, Depends, Query, Request
+from sqlalchemy import text
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.exc import OperationalError, TimeoutError as SATimeoutError
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.database import get_db
+from app.database import SQLITE_BUSY_TIMEOUT_S, SessionLocal
 from app.models import PageView, SiteVisit
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# 2026-07 incident: this endpoint fires on every real page view — by far
+# the highest-frequency write in the app — and shares the same SQLite file
+# (and connection pool) as the nightly pipeline, which can hold SQLite's
+# single writer lock for extended stretches while processing a batch of
+# senators/presidents/etc. between commits. With the engine's default 30s
+# busy-timeout (see database.py), a blocked write here held a pool
+# connection for up to 30s each; under real concurrent traffic during a
+# pipeline run, that exhausted the pool (default size 5 + overflow 10)
+# fast, piling up blocked requests until the container hit its memory
+# limit and got OOM-killed. This write is documented as best-effort
+# analytics (see module docstring) — dropping one visit ping under
+# contention is the correct tradeoff, not blocking a shared pool
+# connection for 15x longer than that.
+_IS_SQLITE = "sqlite" in settings.DATABASE_URL
+_TRACK_VISIT_BUSY_TIMEOUT_MS = 2000
+
+
+def _get_db_or_none() -> Generator[Session | None, None, None]:
+    """Like database.get_db, but yields None instead of raising when the
+    pool itself is exhausted (SessionLocal() is where a pool checkout
+    timeout actually raises — before track_visit's own body, and its
+    busy-timeout handling below, ever runs). track_visit degrades to a
+    no-op in that case rather than surfacing a 500 from a best-effort
+    analytics write."""
+    try:
+        db = SessionLocal()
+    except SATimeoutError:
+        yield None
+        return
+    try:
+        yield db
+    finally:
+        db.close()
+
 
 # Structural User-Agent parsing (RFC-shaped, not a classification decision —
 # UA tokens like "Chrome/" or "Firefox/" are a fixed, documented format, not
@@ -132,8 +170,11 @@ def _track_ip(request: Request) -> str:
 async def track_visit(
     request: Request,
     path: str = Query("/"),
-    db: Session = Depends(get_db),
+    db: Session | None = Depends(_get_db_or_none),
 ) -> None:
+    if db is None:
+        # Pool exhausted at checkout time — see _get_db_or_none's docstring.
+        return
     ip = _track_ip(request)
     user_agent = request.headers.get("User-Agent", "")
     date = datetime.now(UTC).date().isoformat()
@@ -149,7 +190,6 @@ async def track_visit(
         device_type=_parse_device(user_agent),
     )
     stmt = stmt.on_conflict_do_nothing(index_elements=["date", "visitor_hash"])
-    db.execute(stmt)
 
     # Unlike SiteVisit, this counts every page view, not unique visitors —
     # a repeat request the same day increments count rather than no-op'ing.
@@ -159,5 +199,20 @@ async def track_visit(
         index_elements=["date", "path"],
         set_={"count": PageView.count + 1},
     )
-    db.execute(page_stmt)
-    db.commit()
+
+    if _IS_SQLITE:
+        db.execute(text(f"PRAGMA busy_timeout = {_TRACK_VISIT_BUSY_TIMEOUT_MS}"))
+    try:
+        db.execute(stmt)
+        db.execute(page_stmt)
+        db.commit()
+    except (OperationalError, SATimeoutError):
+        # Best-effort write (see this module's docstring and the
+        # 2026-07 incident note above) — under contention with the
+        # nightly pipeline, drop this one visit ping rather than block
+        # a shared pool connection.
+        logger.debug("track-visit write skipped — database busy")
+        db.rollback()
+    finally:
+        if _IS_SQLITE:
+            db.execute(text(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_S * 1000}"))

@@ -9,11 +9,18 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Named (not inline) so callers that need to temporarily override and
+# restore a connection's busy-timeout (e.g. api/visits.py's track-visit,
+# a best-effort write that shouldn't hold a pool connection for the full
+# default wait under contention) have a single source of truth rather
+# than a second hardcoded copy of this number that could drift.
+SQLITE_BUSY_TIMEOUT_S = 30
+
 _sqlite_connect_args: dict = {}
 if "sqlite" in settings.DATABASE_URL:
     _sqlite_connect_args = {
         "check_same_thread": False,
-        "timeout": 30,  # wait up to 30s for a write lock before raising
+        "timeout": SQLITE_BUSY_TIMEOUT_S,  # wait up to 30s for a write lock before raising
     }
 
 engine = create_engine(
