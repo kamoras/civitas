@@ -328,17 +328,24 @@ def _agency_alignment_core(
       - Finalization rate (50%): Ratio of final rules to total rulemaking
         (proposed + final). Higher = agencies follow through effectively.
 
-    No historical proxy exists for this dimension before the Federal
-    Register itself began in 1936 (Federal Register Act) — unlike Public
-    Mandate (election margins) or Effectiveness (MeasuringWorth's GDP
-    series), "agency rulemaking" isn't a construct with an equivalent
-    that predates the record-keeping mechanism that defines it: the
-    modern notice-and-comment regulatory apparatus this dimension
-    measures didn't functionally exist yet either. This is a genuine
-    conceptual absence, not an unfetched dataset — Agency Alignment is
-    fully excluded (not defaulted) for every president before Federal
-    Register data exists, via compute_president_overall_score's
-    per-president renormalization.
+    No historical proxy exists for this dimension before Clinton-42
+    (2026-07: checked both real candidate sources rather than assumed —
+    federalregister.gov's API returns zero results for any pre-1994
+    president, e.g. Reagan; govinfo.gov's own structured/bulk Federal
+    Register data starts at year 2000, not earlier). This is a
+    digitization wall, not the conceptual absence this docstring used to
+    claim ("before the Federal Register Act of 1936") — notice-and-comment
+    rulemaking was a real, functioning practice well before 1994, this
+    platform just has no machine-readable record of it that far back.
+    Federal Register issues before ~2000 exist only as scanned PDF page
+    images with no structured document-type/agency tagging; reconstructing
+    rulemaking counts from that would mean OCR'ing and classifying decades
+    of raw scanned text, the same category of fragile, unreliable pipeline
+    already rejected for Follow-Through and Competence's court-success-rate
+    (see PRESIDENT_SCORE_WEIGHTS's comment in config_definitions.py) — not
+    attempted here for the same reason. Agency Alignment is fully excluded
+    (not defaulted) for every president outside this real coverage window,
+    via compute_president_overall_score's per-president renormalization.
     """
     components: list[dict] = []
 

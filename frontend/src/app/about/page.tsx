@@ -742,13 +742,20 @@ export default function AboutPage() {
                   Measures how well executive agency actions align with stated
                   presidential priorities, via Federal Register rulemaking data — the
                   count of final and proposed rules published during the term, and what
-                  fraction were finalized rather than left pending. This is a genuine
-                  conceptual wall, not just a data gap: the modern notice-and-comment
-                  regulatory apparatus this dimension measures didn&apos;t exist before
-                  the Federal Register Act of 1936, and this platform&apos;s data
-                  coverage only reaches back to Clinton. Every president before Clinton
-                  shows N/A for this dimension, excluded from their overall score
-                  entirely rather than scored on a proxy.
+                  fraction were finalized rather than left pending. This is a
+                  digitization wall, not a conceptual one: notice-and-comment
+                  rulemaking was a real, functioning practice well before the 1990s, but
+                  no machine-readable record of it exists that far back — checked
+                  directly (2026-07) rather than assumed: federalregister.gov&apos;s API
+                  returns zero results for any pre-1994 president, and govinfo.gov&apos;s
+                  own structured Federal Register data starts at year 2000. Earlier
+                  issues exist only as scanned page images with no structured
+                  document-type or agency tagging, and reconstructing rulemaking counts
+                  from those would mean OCR&apos;ing and classifying decades of raw
+                  scanned text — the same kind of unreliable pipeline already rejected
+                  for Follow-Through and Competence&apos;s court-success-rate. Every
+                  president before Clinton shows N/A for this dimension, excluded from
+                  their overall score entirely rather than scored on a proxy.
                 </P>
               </div>
 
@@ -1390,7 +1397,7 @@ export default function AboutPage() {
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-neon-yellow shrink-0">-</span>
-                    <span>Presidential scoring used to include two dimensions, Independence and Follow-Through, that were a one-time hand-set number for every president with no live formula behind them at all. We removed both entirely (2026-07) rather than keep presenting a hand-set number as a computed score, and rebuilt every remaining dimension — plus each president&apos;s identity data — on real live and historical datasets, with no seeded or hand-typed fallback left anywhere in the pipeline. A third dimension, Competence, was later removed too: its only live component (executive-order activity rate) measured no relationship (Spearman 0.097) with real administrative-skill judgment. See the Presidents methodology below for the full account. Agency Alignment is genuinely inapplicable before the Federal Register Act of 1936 and shows N/A for those presidents rather than a proxy score.</span>
+                    <span>Presidential scoring used to include two dimensions, Independence and Follow-Through, that were a one-time hand-set number for every president with no live formula behind them at all. We removed both entirely (2026-07) rather than keep presenting a hand-set number as a computed score, and rebuilt every remaining dimension — plus each president&apos;s identity data — on real live and historical datasets, with no seeded or hand-typed fallback left anywhere in the pipeline. A third dimension, Competence, was later removed too: its only live component (executive-order activity rate) measured no relationship (Spearman 0.097) with real administrative-skill judgment. See the Presidents methodology below for the full account. Agency Alignment has no machine-readable rulemaking data before Clinton (a real digitization wall in the underlying government sources, checked directly rather than assumed) and shows N/A for earlier presidents rather than a proxy score.</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-neon-yellow shrink-0">-</span>
