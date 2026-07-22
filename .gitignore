@@ -79,3 +79,7 @@ venv/
 *.key
 *.sqlite
 credentials.json
+
+# coverage outputs (backend CI gate; see ci.yml)
+.coverage
+htmlcov/

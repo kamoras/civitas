@@ -1,0 +1,22 @@
+# Coverage settings for the CI quality gate (ci.yml passes --cov flags;
+# they're deliberately NOT in pytest.ini's addopts so plain local `pytest`
+# runs stay fast and coverage-free unless you ask for it:
+#   python -m pytest tests/ -m "not slow" --cov=app
+#
+# The fail-under threshold lives in ci.yml next to the pytest invocation,
+# not here — it gates the FAST suite only (slow/embedding tests are a
+# separate job that doesn't run on PRs), and a threshold in this shared
+# file would wrongly apply to any local partial run too (e.g. a single
+# test file, where coverage is legitimately tiny).
+[run]
+source = app
+# Measured but meaningless for the unit-test gate: entrypoint wiring.
+omit =
+    app/main.py
+
+[report]
+# One-line safety valves, same convention as coverage.py's docs.
+exclude_lines =
+    pragma: no cover
+    if TYPE_CHECKING:
+    raise NotImplementedError

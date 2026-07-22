@@ -65,8 +65,34 @@ jobs:
           pip install ruff
           ruff check app/
 
-      - name: Run fast tests (no embedding model)
-        run: python -m pytest tests/ -v -m "not slow"
+      # Coverage gate: measured 47.6% when introduced (2026-07-22); the
+      # threshold sits ~1.5pt under the real number so ordinary
+      # fluctuation doesn't break CI, and should be RATCHETED UP (never
+      # down) as coverage genuinely improves — raise it to (current - 1)
+      # whenever a PR meaningfully lifts the number. Gate covers the fast
+      # suite only; the embedding job is main-only and adds little line
+      # coverage.
+      - name: Run fast tests with coverage gate (no embedding model)
+        run: >
+          python -m pytest tests/ -v -m "not slow"
+          --cov=app --cov-report=term --cov-report=html
+          --cov-fail-under=46
+
+      # The per-file coverage table on the Actions run summary page — the
+      # canonical "where does coverage stand" report, no external service.
+      - name: Publish coverage report to job summary
+        if: always()
+        run: |
+          echo "## Backend coverage" >> "$GITHUB_STEP_SUMMARY"
+          coverage report --format=markdown --skip-empty >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Upload HTML coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage-html
+          path: backend/htmlcov/
+          retention-days: 14
 
   backend-image:
     name: Backend — Docker Image Builds
