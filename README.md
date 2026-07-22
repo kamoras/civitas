@@ -428,34 +428,32 @@ Each issue links back to its permanent Civitas permalink (`/issue/<id>`). The pe
 The scoring formulas deliberately avoid any ground truth that encodes partisan assumptions. Every dimension measures *structural behavior* against a neutral baseline, not agreement or disagreement with any policy position.
 
 ```
-Overall = 0.25 × FundingIndependence
-        + 0.20 × PromisePersistence
-        + 0.20 × ConstituentAlignment
-        + 0.15 × FundingDiversity
-        + 0.20 × LegislativeEffectiveness
+Overall = 0.33 × FundingIndependence
+        + 0.33 × ConstituentAlignment   (stored/keyed as independentVoting)
+        + 0.34 × LegislativeEffectiveness
 ```
 
-The exact formulas are actively iterated (v1 → v5.12 as of this writing, each change measured against real data) and are documented in full — every component's weight, calibration source, and academic citation — in the module docstring of `backend/app/pipeline/analyze/score_calculator.py`, which is the source of truth. Rather than duplicate formulas here that will drift out of sync as the algorithm evolves (as this section previously did), a summary:
+The weights live in `SCORE_WEIGHTS` (`backend/app/config_definitions.py`) and are served at `GET /api/config` — that dict, not this file, is authoritative. Two former dimensions are still computed, stored, and displayed but excluded from the weighted overall: **Promise Persistence** (removed in v6.0 — a live measurement found 0 of 100 senators reached even "medium" evidence confidence, so the dimension had collapsed to its neutral prior) and **Funding Diversity** (folded into Funding Independence in v6.5 after an audit found the two correlated at r=0.72 — the same underlying funding-profile signal measured twice).
 
-- **Funding Independence**: PAC dependency (dollar-scaled, not just share — a mega-campaign diluting PAC money to a tiny share isn't automatically "independent"), small-donor share, and relative top-donor concentration.
-- **Promise Persistence**: campaign promises kept vs. broken, with Beta-Binomial shrinkage toward neutral for senators with few evaluable promises (most have very few — this is a genuine data-scarcity floor, not a bug), plus floor advocacy and vote participation.
-- **Constituent Alignment** (stored/keyed as `independentVoting` for API compatibility — the dimension was rebuilt in v4.2): how a member's voting compares to what their *seat* elected them to do, using Cook PVI as a proxy for constituent preference. Party-line voting in a safe seat that elected that platform scores as representation, not as a failure of independence — the delegate model of representation (Miller & Stokes 1963), not independence as an intrinsic virtue.
-- **Funding Diversity**: source breadth (small donors are the most diverse base) plus inverse-HHI industry concentration.
-- **Legislative Effectiveness**: bill advancement rate (benchmarked against the sponsor's majority/minority baseline, not an absolute threshold), cosponsorship-network leadership (PageRank, confidence-scaled by tenure), and sponsorship volume per congress served.
+The exact formulas are actively iterated (v1 → v6.9 as of this writing, each change measured against real data) and are documented in full — every component's weight, calibration source, and academic citation — in the module docstring of `backend/app/pipeline/analyze/score_calculator.py`, which is the source of truth. Rather than duplicate formulas here that will drift out of sync as the algorithm evolves (as this section previously did), a summary:
+
+- **Funding Independence**: PAC dependency (share scaled by how close contributing PACs run to their legal caps, chamber-specific multiplier), state-relative small-donor share, relative top-donor concentration, plus the two signals folded in from the former Funding Diversity dimension (source breadth, inverse-HHI industry concentration).
+- **Constituent Alignment** (stored/keyed as `independentVoting` for API compatibility — the dimension was rebuilt in v4.2): how a member's voting compares to what their *seat* elected them to do, using Cook PVI as a proxy for constituent preference. Party-line voting in a safe seat that elected that platform scores as representation, not as a failure of independence — the delegate model of representation (Miller & Stokes 1963), not independence as an intrinsic virtue. Since v6.6, below-expected loyalty floors at neutral rather than being penalized; v6.7 adds a position-mismatch discount for extreme-tercile loyalists in unsafe seats.
+- **Legislative Effectiveness**: significance-weighted, cumulative-stage bill credit (Volden & Wiseman 2014-based, benchmarked against the sponsor's chamber and majority/minority baseline, not an absolute threshold) plus cosponsorship-network leadership (PageRank, tenure-confidence-scaled).
 
 ### Senate & House Scores
 
-Each senator and House representative receives five sub-scores (0-100, higher = better):
+Each senator and House representative carries five sub-scores (0-100, higher = better); the three in `SCORE_WEIGHTS` are weighted into the overall, the other two are informational:
 
 | Metric | Weight | What It Measures | Key Reference |
 |--------|--------|------------------|---------------|
-| **Funding Independence** | 25% | PAC dependency + top-donor concentration + outside spending | Bonica 2014; Stratmann 2005 |
-| **Promise Persistence** | 20% | Campaign commitments kept + floor advocacy + participation | Naurin 2011; Martin 2011 |
-| **Constituent Alignment** | 20% | Seat-relative voting + cross-party coalition breadth + donor independence | Carson et al. 2010; Harbridge 2015 |
-| **Funding Diversity** | 15% | Donor traceability + industry diversity (inverse HHI) | Rhoades 1993 |
-| **Legislative Effectiveness** | 20% | Majority-status-benchmarked advancement + cosponsorship (PageRank) + volume | Volden & Wiseman 2014; Brin & Page 1998 |
+| **Funding Independence** | 33% | PAC dependency + small-donor share + top-donor concentration + source breadth + industry concentration | Stratmann 2005; Parmigiani 2025 |
+| **Constituent Alignment** | 33% | Seat-relative voting + cross-party coalition breadth | Carson et al. 2010; Harbridge 2015 |
+| **Legislative Effectiveness** | 34% | Significance-weighted stage credit (majority-status-benchmarked) + cosponsorship leadership (PageRank) | Volden & Wiseman 2014; Brin & Page 1998 |
+| Promise Persistence | unweighted (v6.0) | Campaign commitments kept vs. broken + vote participation | Naurin 2011; Martin 2011 |
+| Funding Diversity | unweighted (v6.5, folded into FI) | Donor traceability + industry diversity (inverse HHI) | Rhoades 1993; Parmigiani 2025 |
 
-House representatives use the same scoring framework, data sources, and classification pipeline as senators, ensuring comparable scores across chambers. One sourcing difference: senators' campaign commitments come from scraped senate.gov platform text (LLM-extracted, heuristic fallback), while representatives' positions are derived from the bills they sponsor and evaluated against their floor votes with embeddings only — the House pipeline makes no LLM calls for promise analysis.
+House representatives use the same scoring framework, data sources, and classification pipeline as senators, ensuring comparable scores across chambers (with chamber-specific calibration constants where the chambers' real baselines genuinely differ — PAC-ratio multiplier and effectiveness baselines). One sourcing difference: senators' campaign commitments come from scraped senate.gov platform text (LLM-extracted, heuristic fallback), while representatives' positions are derived from the bills they sponsor and evaluated against their floor votes with embeddings only — the House pipeline makes no LLM calls for promise analysis.
 
 Score history is tracked in `ScoreSnapshot` records so the frontend can render historical score trends per senator/representative.
 

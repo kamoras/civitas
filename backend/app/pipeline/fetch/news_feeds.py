@@ -77,16 +77,28 @@ NEWS_FEEDS: list[dict[str, str]] = [
 def _parse_pub_date(raw: str | None) -> datetime | None:
     if not raw:
         return None
+    parsed: datetime | None = None
     try:
-        return parsedate_to_datetime(raw)
+        parsed = parsedate_to_datetime(raw)
     except Exception:
         pass
-    for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d"):
-        try:
-            return datetime.strptime(raw, fmt).replace(tzinfo=timezone.utc)
-        except ValueError:
-            continue
-    return None
+    if parsed is None:
+        for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d"):
+            try:
+                parsed = datetime.strptime(raw, fmt)
+                break
+            except ValueError:
+                continue
+    if parsed is None:
+        return None
+    # parsedate_to_datetime returns a NAIVE datetime for "-0000"-style
+    # zones; comparing that against the aware cutoff raised TypeError
+    # inside _parse_rss_feed, which the caller's blanket except logged as
+    # "Failed to fetch feed" — one malformed item silently dropped the
+    # entire source. Treat naive as UTC.
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
 
 
 def _extract_text(el: Element | None) -> str:

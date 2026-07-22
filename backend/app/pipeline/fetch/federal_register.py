@@ -50,6 +50,12 @@ async def fetch_eo_count(
     params = {
         "conditions[type][]": "PRESDOCU",
         "conditions[presidential_document_type][]": "executive_order",
+        # The president filter is essential, not redundant with the date
+        # range: adjacent terms share Jan 20 (both endpoints inclusive), so
+        # a date-only query counted the ~26 EOs an incoming president signs
+        # on inauguration day toward the OUTGOING president too — a
+        # double-digit-percent error on per-term totals of ~50-220.
+        "conditions[president][]": slug,
         "conditions[signing_date][gte]": term_start,
         "conditions[signing_date][lte]": term_end,
         "per_page": 20,
@@ -131,13 +137,21 @@ async def fetch_rulemaking_stats(
         return None
 
     term_start, term_end = TERM_RANGES[president_id]
+    # Rules are agency documents, so the presidential-document president
+    # filter used by fetch_eo_count doesn't apply here. Instead, end the
+    # window the day BEFORE the next term starts: both endpoints are
+    # inclusive and adjacent terms share Jan 20, so a raw [start, end]
+    # query counted inauguration-day publications toward both presidents.
+    from datetime import date, timedelta
+
+    end_exclusive = (date.fromisoformat(term_end) - timedelta(days=1)).isoformat()
     counts: dict[str, int] = {}
 
     for doc_type in ("RULE", "PRORULE"):
         params = {
             "conditions[type][]": doc_type,
             "conditions[publication_date][gte]": term_start,
-            "conditions[publication_date][lte]": term_end,
+            "conditions[publication_date][lte]": end_exclusive,
             "per_page": 1,
             "page": 1,
         }

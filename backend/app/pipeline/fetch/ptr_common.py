@@ -101,9 +101,21 @@ def parse_table_rows(table: list[list[str | None]]) -> list[TradeRow]:
     header = [(cell or "").strip().lower() for cell in table[0]]
 
     def _find_col(*keywords: str) -> int | None:
-        for i, h in enumerate(header):
-            if any(kw in h for kw in keywords):
-                return i
+        # Exact header matches win before substring matches, and earlier
+        # keywords win over later ones. The old single-pass "first header
+        # containing any keyword" binding meant an "Asset Type" column
+        # appearing before "Type" captured _find_col("transaction type",
+        # "type") — every row's type cell then read "Stock"/"Bond",
+        # classify_transaction_type returned None, and the whole filing was
+        # silently skipped as unparseable.
+        for kw in keywords:
+            for i, h in enumerate(header):
+                if h == kw:
+                    return i
+        for kw in keywords:
+            for i, h in enumerate(header):
+                if kw in h:
+                    return i
         return None
 
     col_owner = _find_col("owner", "id#", "id #", "id")

@@ -855,6 +855,10 @@ def _record_rep_snapshots(db: Session) -> None:
             existing.score_3 = r.score_independent_voting
             existing.score_4 = r.score_funding_diversity
             existing.score_5 = r.score_legislative_effectiveness
+            # Same-day re-run after a code deploy: keep the version label
+            # in sync with the scores it describes (the Senate recorder
+            # delete-and-recreates, which refreshes it implicitly).
+            existing.algorithm_version = ALGORITHM_VERSION
         else:
             db.add(ScoreSnapshot(
                 entity_type="representative",

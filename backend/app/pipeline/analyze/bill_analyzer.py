@@ -669,6 +669,22 @@ async def classify_all_bills(
     return classified
 
 
+def recent_roll_call_key(rc: dict) -> str:
+    """Unique join key for one Senate roll call: congress-session-rollNumber.
+
+    documentName (the billId shown in the UI) is NOT unique — the Senate
+    votes on the same document repeatedly (motion to proceed, cloture,
+    passage; cloture + confirmation for nominations), and the same document
+    can be voted on in both sessions of a congress. Deduplicating or keying
+    roll calls by documentName silently discarded every vote on a document
+    except the newest one. Shared by classify_recent_votes (stamped on each
+    classified dict as "rcKey") and senate_pipeline's dedupe/recent_rc_map.
+    """
+    return (
+        f"{rc.get('congress', '')}-{rc.get('session', '')}-{rc.get('rollNumber', '')}"
+    )
+
+
 async def classify_recent_votes(
     roll_calls: list[dict], db_session: Any | None = None
 ) -> list[dict]:
@@ -697,6 +713,13 @@ async def classify_recent_votes(
             rc.get("documentName")
             or f"Roll-{rc.get('congress', '')}-{rc.get('session', '')}-{rc['rollNumber']}"
         )
+        # Unique per roll call, unlike documentName/billId: the Senate votes
+        # on the same document repeatedly (motion to proceed, cloture,
+        # passage; cloture + confirmation for a "PN" nomination), so billId
+        # alone collapses distinct votes. rcKey is the join key back to the
+        # parsed roll-call data (senate_pipeline's recent_rc_map and
+        # senator_votes); billId stays the display/storage identifier.
+        rc_key = recent_roll_call_key(rc)
         name = rc.get("documentTitle") or rc.get("voteTitle") or "Unknown"
         question = (rc.get("question") or "")[:200]
         vote_date = rc.get("voteDate", "")
@@ -721,6 +744,7 @@ async def classify_recent_votes(
         if is_nomination:
             classified.append({
                 "billId": bill_id,
+                "rcKey": rc_key,
                 "billName": name,
                 "date": vote_date,
                 "description": description,
@@ -743,6 +767,7 @@ async def classify_recent_votes(
         if policy_area == "PROCEDURAL" and confidence >= 0.9:
             classified.append({
                 "billId": bill_id,
+                "rcKey": rc_key,
                 "billName": name,
                 "date": vote_date,
                 "description": description,
@@ -780,6 +805,7 @@ async def classify_recent_votes(
 
             classified.append({
                 "billId": bill_id,
+                "rcKey": rc_key,
                 "billName": name,
                 "date": vote_date,
                 "description": description,
