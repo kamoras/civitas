@@ -226,6 +226,49 @@ def _migrate_columns() -> None:
                 conn.execute(text(f"ALTER TABLE {table} DROP COLUMN {column}"))
 
 
+def _migrate_president_ids() -> None:
+    """One-off id rename: George H.W. Bush's president_id changes from
+    "bush-41" to "ghwbush-41" (2026-07).
+
+    Every new UCSB-derived fetcher this platform's president pipeline
+    uses (historical_executive_orders.py, presidential_elections.py,
+    presidential_approval.py) — and economic_data.py, which pre-dates
+    this rewrite — all independently converged on "ghwbush-41" to avoid
+    ambiguity with George W. Bush's "gwbush-43". Only the now-removed
+    hand-typed SEED_PRESIDENTS list used "bush-41". Without this rename,
+    a production database seeded under the old id would get a second,
+    duplicate president row from _sync_roster (president_pipeline.py)
+    instead of updating the existing one, and orphan that row's score
+    history. Idempotent and a no-op on a fresh database that never had
+    "bush-41" to begin with.
+    """
+    inspector = inspect(engine)
+    if not inspector.has_table("presidents"):
+        return
+    with engine.begin() as conn:
+        old_exists = conn.execute(
+            text("SELECT 1 FROM presidents WHERE id = 'bush-41'"),
+        ).first()
+        if not old_exists:
+            return
+        new_exists = conn.execute(
+            text("SELECT 1 FROM presidents WHERE id = 'ghwbush-41'"),
+        ).first()
+        if new_exists:
+            # Both rows exist (shouldn't happen outside a bad manual
+            # edit) — drop the stale one rather than guess which to keep.
+            logger.warning("Both bush-41 and ghwbush-41 exist — dropping stale bush-41 row")
+            conn.execute(text("DELETE FROM presidents WHERE id = 'bush-41'"))
+            return
+        logger.info("Renaming president id bush-41 -> ghwbush-41")
+        conn.execute(text("UPDATE presidents SET id = 'ghwbush-41' WHERE id = 'bush-41'"))
+        if inspector.has_table("score_snapshots"):
+            conn.execute(text(
+                "UPDATE score_snapshots SET entity_id = 'ghwbush-41' "
+                "WHERE entity_type = 'president' AND entity_id = 'bush-41'"
+            ))
+
+
 def _ensure_indexes() -> None:
     """Create indexes on FK columns that may pre-date the index=True addition."""
     desired = [
@@ -318,6 +361,7 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     VisitsBase.metadata.create_all(bind=visits_engine)
     _migrate_columns()
+    _migrate_president_ids()
     _ensure_indexes()
     _migrate_visits_data_to_own_db()
 
