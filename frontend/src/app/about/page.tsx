@@ -735,8 +735,12 @@ export default function AboutPage() {
               <div>
                 <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">NEWS ANALYSIS PIPELINE</h3>
                 <P>
-                  RSS feeds from editorially independent, low-bias news sources (AP News,
-                  NPR Politics, Reuters, PBS NewsHour) are parsed hourly. Each article is filtered
+                  RSS feeds from eight news sources — AP News, NPR (Politics and World),
+                  PBS NewsHour, BBC World, The Hill, Politico, and Roll Call — are parsed
+                  hourly; opinion and editorial sections are filtered out of every feed.
+                  Under common media-bias ratings this mix spans center to lean-left, with
+                  no right-of-center outlet currently included — a disclosed limitation of
+                  the source diet, not a neutral sample of all coverage. Each article is filtered
                   for U.S. policy relevance using embedding cosine similarity against policy
                   area prototypes — the same sentence-transformer model used throughout the
                   platform. Articles that pass the relevance threshold are clustered by semantic
@@ -1339,7 +1343,7 @@ export default function AboutPage() {
               <Row label="Metric Tooltips" value="Every scorecard metric has a [?] tooltip explaining what it measures" />
               <Row label="Branches Covered" value="Senate (100), House (435), Presidents (historical + modern), Supreme Court (9 justices)" />
               <Row label="Action Center" value="Hourly news analysis with national monitors for ongoing concerns and year-in-review timeline tracking" />
-              <Row label="News Sources" value="AP News, NPR Politics, Reuters, PBS NewsHour — editorially independent, low-bias wire services" />
+              <Row label="News Sources" value="AP News, NPR (Politics + World), PBS NewsHour, BBC World, The Hill, Politico, Roll Call — opinion sections filtered; mix spans center to lean-left (no right-of-center outlet currently included)" />
               <Row label="Trending Integration" value="Google Trends RSS + Reddit policy subreddits, cross-referenced via embedding similarity" />
               <Row label="Globe Visualization" value="react-globe.gl — interactive 3D globe for international news mapping" />
             </div>

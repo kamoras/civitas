@@ -96,10 +96,11 @@ POLICY_TAXONOMY = {
     "GUNS": (
         "Domestic firearms regulation, gun control, gun rights, and the Second "
         "Amendment. Includes background checks for gun purchases, assault "
-        "weapons bans, ammunition regulations, concealed carry permits, red "
-        "flag laws, firearm dealer licensing, safe storage requirements, "
-        "school shootings, mass shooting response, and gun violence "
-        "prevention legislation."
+        "weapons bans, ammunition regulations, concealed carry permits and "
+        "reciprocity, constitutional carry, red flag laws, firearm dealer "
+        "licensing, safe storage requirements, suppressor and pistol-brace "
+        "rules, gun-owner rights protections, school shootings, mass shooting "
+        "response, and gun violence prevention legislation."
     ),
     "HEALTHCARE": (
         "U.S. healthcare system, medical insurance, hospitals, Medicare, and Medicaid. "
@@ -160,6 +161,14 @@ POLICY_TAXONOMY = {
         "International trade, tariffs, economic sanctions, and commerce. "
         "Includes import/export policy, USMCA, trade agreements, "
         "trade wars, and economic diplomacy."
+    ),
+    "ABORTION": (
+        "Abortion and reproductive health policy. Includes abortion access "
+        "and abortion restrictions, gestational limits, contraception, IVF "
+        "and fertility treatment, family planning funding, parental "
+        "notification and consent requirements, protections for the unborn, "
+        "Hyde Amendment and public funding rules, and conscience protections "
+        "for healthcare providers."
     ),
     "WELFARE": (
         "Social safety net, housing assistance, and disaster relief. "

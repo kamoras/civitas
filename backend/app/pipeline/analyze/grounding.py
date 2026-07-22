@@ -148,18 +148,25 @@ def ungrounded_titled_names(generated: str, source: str) -> list[str]:
 
     Only the surname (last token of the captured name) is required to
     appear, so "Sen. Collins" is grounded by source text that says
-    "Susan Collins" without a title.
+    "Susan Collins" without a title. The surname must appear as a whole
+    WORD (2026-07 fix): the original bare-substring check grounded
+    "Rep. Ford" in any source containing "affordable" and "Sen. Price"
+    in "prices" — short surnames were effectively never checkable.
     """
     source_lower = (source or "").lower()
+
+    def _grounded(surname: str) -> bool:
+        return re.search(rf"\b{re.escape(surname)}\b", source_lower) is not None
+
     missing = []
     for m in _TITLED_NAME_RE.finditer(generated or ""):
         surname = m.group(1).split()[-1].lower()
-        if surname not in source_lower:
+        if not _grounded(surname):
             missing.append(m.group(0))
     for m in _APPOSITIVE_ROLE_RE.finditer(generated or ""):
         name = m.group(1)
         surname = name.split()[-1].lower()
-        if surname not in source_lower:
+        if not _grounded(surname):
             missing.append(name)
     return sorted(set(missing))
 
@@ -257,17 +264,27 @@ _ELECTORAL_CLAIM_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Any electoral vocabulary in the SOURCE material. Deliberately broad: this is
-# the permissive side of the check, so more terms here means fewer rejections,
-# never more. Some terms ("campaign", "race") have non-electoral senses, but
-# including them only makes the check less likely to fire, which is the safe
-# direction for a high-precision guard. "vote" is excluded on purpose — it is
-# overwhelmingly a legislative floor-vote word in this domain, not an electoral
-# one — while "voters"/"ballot"/"vote for" are kept.
+# Electoral vocabulary in the SOURCE material. Still the permissive side of
+# the check (a match silences the whole guard), but no longer *vacuously*
+# permissive (2026-07 fix): the original list included words whose dominant
+# sense in civic prose is NON-electoral — "constituents" (constituent
+# service), "poll(s)" (approval polling), bare "campaign" (pressure
+# campaign, campaign finance), bare "race" (incl. the demographic sense in
+# civil-rights coverage), and "elected" (the boilerplate "elected
+# officials" appears in a large share of all political text) — so nearly
+# any source disarmed the check and the fabricated-election guard almost
+# never fired. Those senses are now excluded; genuinely electoral sources
+# remain covered by the compound forms and the many unambiguous terms
+# below. "vote" stays excluded on purpose — it is overwhelmingly a
+# legislative floor-vote word in this domain — while "voters"/"ballot" are
+# kept.
 _ELECTORAL_CONTEXT_RE = re.compile(
-    r"\b(?:race|elect(?:ion|ed|ing|s|oral)?|re-?election|campaign|ballot|"
+    r"\b(?:"
+    r"(?:senate|house|gubernatorial|presidential|congressional|governor'?s?)\s+race"
+    r"|race\s+for\b|elect(?:ion|ions|oral)\b|re-?election"
+    r"|campaign\s+(?:trail|rally|ad|stop|event)|ballot|"
     r"primar(?:y|ies)|challenger|opponent|candidate|candidacy|midterms?|"
-    r"unseat|incumbent|voters?|constituents?|poll(?:s|ing|ed)?|"
+    r"unseat|incumbent|voters?|"
     r"running\s+for|contest(?:ed|ing|s)?|nominee|nomination)\b",
     re.IGNORECASE,
 )

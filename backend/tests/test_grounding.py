@@ -296,3 +296,40 @@ class TestHedgeAndEditorializingViolations:
         problems = hedge_and_editorializing_violations("The vote was justified.")
         assert len(problems) == 1
         assert "was justified" in problems[0]
+
+
+class TestGroundingLexicalTightening:
+    """2026-07 fixes: word-boundary surnames; non-vacuous electoral context."""
+
+    def test_short_surname_not_grounded_by_substring(self):
+        from app.pipeline.analyze.grounding import ungrounded_titled_names
+        # "affordable" contains "ford"; the old substring check grounded it.
+        out = ungrounded_titled_names(
+            "Rep. Ford praised the measure.",
+            "The affordable housing bill advanced today.",
+        )
+        assert any("Ford" in x for x in out)
+
+    def test_whole_word_surname_still_grounds(self):
+        from app.pipeline.analyze.grounding import ungrounded_titled_names
+        assert ungrounded_titled_names(
+            "Rep. Ford praised the measure.",
+            "Harold Ford spoke in favor of the housing bill.",
+        ) == []
+
+    def test_elected_officials_boilerplate_does_not_disarm(self):
+        from app.pipeline.analyze.grounding import ungrounded_electoral_claims
+        # "elected officials" and "constituents" are civic boilerplate, not
+        # electoral-contest coverage; a fabricated race must still be caught.
+        out = ungrounded_electoral_claims(
+            "Collins is facing a primary challenge in her senate race.",
+            "Elected officials heard from constituents about the highway bill.",
+        )
+        assert out
+
+    def test_real_election_coverage_still_disarms(self):
+        from app.pipeline.analyze.grounding import ungrounded_electoral_claims
+        assert ungrounded_electoral_claims(
+            "Collins is facing a primary challenge in her senate race.",
+            "The senate race in Maine tightened as voters weighed the candidates.",
+        ) == []

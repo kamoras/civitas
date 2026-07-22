@@ -5,9 +5,9 @@ Flow:
   2. Embed article titles+summaries, filter for US policy relevance
   3. Fetch trending topics from social media (Google Trends, Reddit)
   4. Cluster related articles by cosine similarity
-  5. Rank clusters by combined coverage breadth + trending relevance
-     (0.4 coverage × 0.6 trending) so issues people are actually
-     discussing get prioritized over editorial selection alone
+  5. Rank clusters by 0.40 civic actionability + 0.35 coverage breadth
+     + 0.25 trending relevance (see _rank_clusters) so actionable,
+     broadly-covered issues outrank editorial selection alone
   6. Use LLM to generate factual summary, key facts, and citizen actions
   7. Cross-reference with explore documents via embedding search
   8. Persist as ActionIssue rows for the current date
@@ -97,6 +97,7 @@ _POLICY_PROTOTYPES = [
     "Civil rights, discrimination, equality, justice reform",
     "Trade policy, tariffs, sanctions, international agreements",
     "Gun legislation, firearms regulation, Second Amendment",
+    "Abortion policy, reproductive rights, contraception, IVF access, court rulings on abortion",
     "Labor policy, minimum wage, unions, workers rights, employment",
     "Housing policy, rent, mortgage, homelessness, affordable housing",
     "Social Security, retirement, pension, entitlements",

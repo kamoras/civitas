@@ -43,12 +43,18 @@ NEWS_FEEDS: list[dict[str, str]] = [
         "name": "AP News",
         "url": "https://feedx.net/rss/ap.xml",
     },
+    # Both NPR feeds share ONE source name (2026-07 fix): source-name
+    # counts drive the action center's coverage-breadth ranking signal and
+    # the National Monitor unique-source promotion bar, and two feeds from
+    # the same newsroom counting as two independent sources gave any topic
+    # NPR runs on both its politics and world desks a systematic ranking
+    # bonus. Same articles, same dedup — only the attribution is unified.
     {
-        "name": "NPR Politics",
+        "name": "NPR",
         "url": "https://feeds.npr.org/1014/rss.xml",
     },
     {
-        "name": "NPR World",
+        "name": "NPR",
         "url": "https://feeds.npr.org/1004/rss.xml",
     },
     {

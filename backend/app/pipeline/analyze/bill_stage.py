@@ -101,12 +101,43 @@ def _stage_from_type_and_text(action_type: str | None, text: str) -> BillStage |
     return None
 
 
+# Progression rank for max-over-history classification. Distinct from
+# BILL_STAGES' display `order`: VETOED outranks TO_PRESIDENT (a veto is a
+# terminal fact about a presented bill) and sits below ENACTED (an
+# overridden veto that became law is ENACTED — normally via the is_law
+# short-circuit, or a later BecameLaw action).
+_STAGE_RANK: dict[BillStage, int] = {
+    BillStage.INTRODUCED: 1,
+    BillStage.IN_COMMITTEE: 2,
+    BillStage.PASSED_CHAMBER: 3,
+    BillStage.IN_OTHER_CHAMBER: 4,
+    BillStage.TO_PRESIDENT: 5,
+    BillStage.VETOED: 6,
+    BillStage.ENACTED: 7,
+}
+
+
 def classify_bill_stage_from_actions(actions: list[dict], is_law: bool = False) -> BillStage:
-    """Classify a bill's current stage from its Congress.gov action history.
+    """Classify a bill's stage as the FURTHEST stage reached across its
+    full Congress.gov action history.
 
     `actions` is the raw list from GET .../actions (newest first).
     `is_law` is a hard fact (congress.gov's own "Became Public Law" marker)
     and short-circuits to ENACTED regardless of the action list.
+
+    Max-over-history, not latest-action (2026-07 fix): stages are monotone
+    — a bill never un-passes a chamber — but the *latest action* routinely
+    reads as an earlier stage. The normal path for every bill that passes
+    its originating chamber is "Passed House" followed by "Read twice and
+    referred to the Committee on ..." in the second chamber: under
+    latest-action classification that regressed the bill from
+    PASSED_CHAMBER back to IN_COMMITTEE, docking sponsors a
+    cumulative-credit stage in Legislative Effectiveness (_les_bill_stage)
+    at the exact moment their bill advanced. Similarly, a vetoed bill
+    whose latest action was a failed override vote fell all the way back
+    to INTRODUCED. A committee/introduction action that occurs AFTER a
+    passage action is the second chamber's referral, so it maps to
+    IN_OTHER_CHAMBER rather than merely not regressing.
     """
     if is_law:
         return BillStage.ENACTED
@@ -114,10 +145,21 @@ def classify_bill_stage_from_actions(actions: list[dict], is_law: bool = False) 
     if not actions:
         return _FALLBACK_STAGE
 
-    latest = actions[0]
-    code = latest.get("actionCode")
-    if code in _ACTION_CODE_STAGE:
-        return _ACTION_CODE_STAGE[code]
+    best: BillStage | None = None
+    passed_seen = False
+    # Oldest -> newest so "referral after passage" is detectable.
+    for action in reversed(actions):
+        code = action.get("actionCode")
+        stage = _ACTION_CODE_STAGE.get(code) if code in _ACTION_CODE_STAGE else None
+        if stage is None:
+            stage = _stage_from_type_and_text(action.get("type"), action.get("text") or "")
+        if stage is None:
+            continue
+        if stage == BillStage.PASSED_CHAMBER:
+            passed_seen = True
+        elif passed_seen and stage in (BillStage.INTRODUCED, BillStage.IN_COMMITTEE):
+            stage = BillStage.IN_OTHER_CHAMBER
+        if best is None or _STAGE_RANK[stage] > _STAGE_RANK[best]:
+            best = stage
 
-    fallback = _stage_from_type_and_text(latest.get("type"), latest.get("text") or "")
-    return fallback or _FALLBACK_STAGE
+    return best or _FALLBACK_STAGE
