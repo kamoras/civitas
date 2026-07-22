@@ -453,6 +453,17 @@ export async function fetchPresident(id: string): Promise<President> {
   return requestJson(`${API_BASE}/presidents/${id}`, "President not found");
 }
 
+/** Null when no president is currently serving (excluded from
+ * /presidents/leaderboard — see the backend's get_president_leaderboard
+ * docstring) — a real, if brief, possible state (e.g. a same-day
+ * transition), not an error. */
+export async function fetchCurrentPresident(): Promise<President | null> {
+  const res = await fetch(`${API_BASE}/presidents/current`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Failed to load current president: ${res.status}`);
+  return camelizeKeys(await res.json()) as President;
+}
+
 export async function fetchJusticeLeaderboard(): Promise<JusticeLeaderboardEntry[]> {
   return requestJson(`${API_BASE}/justices/leaderboard`, "Failed to load justice leaderboard", { camelize: true });
 }

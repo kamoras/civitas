@@ -9,13 +9,14 @@ import MatrixRain from "@/components/effects/MatrixRain";
 import BranchSelector, { type Branch } from "@/components/BranchSelector";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
-import { fetchLeaderboard, fetchRepLeaderboard, fetchPresidentLeaderboard, fetchJusticeLeaderboard } from "@/lib/api";
+import { fetchLeaderboard, fetchRepLeaderboard, fetchPresidentLeaderboard, fetchCurrentPresident, fetchJusticeLeaderboard } from "@/lib/api";
 import { getScoreColor, getScoreBgColor } from "@/lib/representation";
 import MetricTooltip from "@/components/checker/MetricTooltip";
 import { PARTY_BADGE } from "@/lib/partyStyles";
 import { formatCurrency } from "@/lib/formatting";
+import { PresidentCard } from "@/components/president/PresidentClient";
 import type { LeaderboardEntry, ScoreTrend } from "@/types/senator";
-import type { PresidentLeaderboardEntry } from "@/types/president";
+import type { President, PresidentLeaderboardEntry } from "@/types/president";
 import type { JusticeLeaderboardEntry } from "@/types/justice";
 
 type PartyFilter = "ALL" | "D" | "R" | "I";
@@ -208,6 +209,43 @@ function termYears(start: string, end: string | null): string {
   return `${s}–${e}`;
 }
 
+// The ranked table below excludes the currently-serving president
+// entirely (see fetchCurrentPresident's comment) — this renders their
+// profile separately, reusing PresidentCard (already surfaces
+// dimensionsAvailable, per-dimension N/A reasons, and the 90-day
+// rolling approval stat) rather than building a second, parallel view.
+function CurrentPresidentSpotlight({
+  president,
+  loading,
+}: {
+  president: President | null;
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="terminal-window p-6 text-center mb-6" role="status" aria-live="polite">
+        <p className="text-matrix-green/60 font-mono text-xs tracking-widest animate-pulse">LOADING CURRENT PRESIDENT...</p>
+      </div>
+    );
+  }
+  if (!president) return null;
+
+  return (
+    <div className="mb-6">
+      <div className="mb-3 flex items-center gap-2">
+        <span className="text-neon-yellow text-xs animate-pulse border border-neon-yellow/30 px-2 py-0.5 font-terminal">
+          CURRENTLY SERVING
+        </span>
+        <p className="text-matrix-green/40 text-xs">
+          Shown separately, not ranked — an in-progress term is missing data (e.g. no completed-term Historical Legacy
+          rating yet) that every ranked president below has, so comparing them under one ordinal position isn&apos;t a fair fight.
+        </p>
+      </div>
+      <PresidentCard president={president} />
+    </div>
+  );
+}
+
 function PresidentLeaderboard({
   entries,
   loading,
@@ -294,9 +332,6 @@ function PresidentLeaderboard({
                     </td>
                     <td className="px-3 py-3 text-center text-white/50 text-xs">
                       {termYears(entry.termStart, entry.termEnd)}
-                      {entry.isCurrent && (
-                        <span className="ml-1 text-neon-yellow text-[10px] animate-pulse">ACTIVE</span>
-                      )}
                     </td>
                     <td className="px-3 py-3">
                       <ScoreBar score={score} />
@@ -363,6 +398,10 @@ function PresidentLeaderboard({
             <p className="text-matrix-green/30 text-[10px] font-mono">
               <span className="text-amber-400/50 border border-amber-400/20 px-1 mr-1.5">HIST</span>
               = score uses historical/expert consensus estimates; live API data unavailable for that era
+            </p>
+            <p className="text-matrix-green/30 text-[10px]">
+              The currently-serving president is shown separately above, not ranked here — an in-progress term is
+              always missing data a completed one has.
             </p>
           </div>
     </>
@@ -559,6 +598,8 @@ function LeaderboardContent() {
 
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [presEntries, setPresEntries] = useState<PresidentLeaderboardEntry[]>([]);
+  const [currentPresident, setCurrentPresident] = useState<President | null>(null);
+  const [currentPresidentLoading, setCurrentPresidentLoading] = useState(false);
   const [justiceEntries, setJusticeEntries] = useState<JusticeLeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [presLoading, setPresLoading] = useState(false);
@@ -626,6 +667,21 @@ function LeaderboardContent() {
       .catch((e) => setPresError(e.message))
       .finally(() => setPresLoading(false));
   }, [branch, presEntries.length]);
+
+  // Separate fetch, not derived from presEntries: the leaderboard
+  // endpoint excludes the currently-serving president entirely (an
+  // incomplete-term record isn't fairly ranked against completed ones —
+  // see the backend's get_president_leaderboard docstring), so their
+  // profile has to come from its own endpoint.
+  useEffect(() => {
+    if (branch !== "president") return;
+    if (currentPresident) return;
+    setCurrentPresidentLoading(true);
+    fetchCurrentPresident()
+      .then(setCurrentPresident)
+      .catch(() => {}) // non-fatal — the ranked table still works without this
+      .finally(() => setCurrentPresidentLoading(false));
+  }, [branch, currentPresident]);
 
   useEffect(() => {
     if (branch !== "scotus") return;
@@ -716,7 +772,12 @@ function LeaderboardContent() {
         </div>
 
         <div id={`branch-panel-${branch}`} role="tabpanel" aria-labelledby={`branch-tab-${branch}`} tabIndex={-1}>
-        {branch === "president" && <PresidentLeaderboard entries={presEntries} loading={presLoading} error={presError} />}
+        {branch === "president" && (
+          <>
+            <CurrentPresidentSpotlight president={currentPresident} loading={currentPresidentLoading} />
+            <PresidentLeaderboard entries={presEntries} loading={presLoading} error={presError} />
+          </>
+        )}
 
         {branch === "scotus" && <JusticeLeaderboard entries={justiceEntries} loading={justiceLoading} error={justiceError} />}
 

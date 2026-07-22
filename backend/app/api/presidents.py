@@ -20,6 +20,7 @@ from app.api.response_helpers import (
 )
 from app.services.president_service import (
     get_all_presidents,
+    get_current_president,
     get_president,
     get_president_leaderboard,
     get_president_score_breakdown,
@@ -69,6 +70,19 @@ def _run_pipeline_background():
         logger.error("President pipeline failed: %s", e, exc_info=True)
     finally:
         db.close()
+
+
+@router.get("/current")
+def current(db: Session = Depends(get_db)):
+    """The currently-serving president, if any — excluded from /leaderboard
+    (see get_president_leaderboard's docstring: ranking someone with a
+    structurally incomplete record against completed terms isn't a fair
+    comparison). Registered before /{president_id} so the literal
+    "current" doesn't get captured as a president_id path param instead."""
+    result = get_current_president(db)
+    if not result:
+        raise HTTPException(status_code=404, detail="No current president")
+    return _cached_json(result.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)
 
 
 @router.get("/{president_id}")

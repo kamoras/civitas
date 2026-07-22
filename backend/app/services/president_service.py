@@ -166,8 +166,27 @@ def get_all_presidents(db: Session) -> list[PresidentSchema]:
     return [_build_response(p) for p in presidents]
 
 
+def get_current_president(db: Session) -> PresidentSchema | None:
+    """The currently-serving president, if any — excluded from get_
+    president_leaderboard (see that function's docstring) but still
+    needed for the frontend's separate "currently serving" spotlight
+    view. `.first()` rather than raising on >1 row: is_current should
+    never be true for more than one president, but a same-day roster
+    sync mid-transition is a real (if brief) window this shouldn't 500
+    on."""
+    p = db.query(President).filter(President.is_current == True).first()  # noqa: E712
+    return _build_response(p) if p else None
+
+
 def get_president_leaderboard(db: Session) -> list[PresidentLeaderboardEntry]:
-    presidents = db.query(President).all()
+    """Ranked, HISTORICAL presidents only — a currently-serving president
+    is structurally missing 1-2 of the 4 dimensions no matter what (no
+    completed-term C-SPAN Historians Survey rating; often no full-term
+    GDP/jobs data either), so ranking them against presidents scored on a
+    complete record is comparing partial information to complete
+    information under one ordinal position. get_current_president above
+    serves their own (separate, non-ranked) profile instead."""
+    presidents = db.query(President).filter(President.is_current == False).all()  # noqa: E712
     entries = []
     for p in presidents:
         score = PresidentialScoreSchema(

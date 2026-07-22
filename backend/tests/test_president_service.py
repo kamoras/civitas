@@ -1,7 +1,12 @@
 """Tests for president_service's response building and score breakdown."""
 
 from app.models import President
-from app.services.president_service import get_president, get_president_score_breakdown
+from app.services.president_service import (
+    get_current_president,
+    get_president,
+    get_president_leaderboard,
+    get_president_score_breakdown,
+)
 
 
 def _make_president(id_: str, **overrides) -> President:
@@ -56,6 +61,36 @@ class TestGetPresident:
 
         result = get_president(db_session, "test-5")
         assert result.score.dimensions_available == 0
+
+
+class TestGetPresidentLeaderboardExcludesCurrent:
+    """2026-07: ranking the currently-serving president alongside completed
+    terms compares a structurally-incomplete record (no C-SPAN Historians
+    Survey rating yet, often no full-term GDP/jobs data) to complete ones
+    under one ordinal position — get_current_president serves their own
+    separate, non-ranked profile instead."""
+
+    def test_current_president_excluded_from_leaderboard(self, db_session):
+        db_session.add(_make_president("current-1", is_current=True, term_end=None))
+        db_session.add(_make_president("historical-1", is_current=False, term_end="2020-01-20"))
+        db_session.commit()
+
+        entries = get_president_leaderboard(db_session)
+        assert [e.id for e in entries] == ["historical-1"]
+
+    def test_get_current_president_returns_the_current_one(self, db_session):
+        db_session.add(_make_president("current-1", is_current=True, term_end=None))
+        db_session.add(_make_president("historical-1", is_current=False, term_end="2020-01-20"))
+        db_session.commit()
+
+        result = get_current_president(db_session)
+        assert result.id == "current-1"
+
+    def test_get_current_president_returns_none_with_no_current_president(self, db_session):
+        db_session.add(_make_president("historical-1", is_current=False, term_end="2020-01-20"))
+        db_session.commit()
+
+        assert get_current_president(db_session) is None
 
 
 class TestGetPresidentScoreBreakdown:
