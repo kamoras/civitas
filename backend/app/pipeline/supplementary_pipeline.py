@@ -72,6 +72,12 @@ async def run_supplementary_pipeline() -> dict:
             logger.info("Explore pipeline ingested %d documents", total_docs)
             progress.complete("explore_documents", detail=f"{total_docs} ingested")
         except Exception:
+            # Discard any partial writes this phase staged on the shared
+            # session before the next phase's commit persists them (the
+            # justice/president sub-pipelines run on this same `db` and only
+            # commit at their end, so a mid-phase failure otherwise leaves
+            # half-written rows that the phase-boundary commit below flushes).
+            db.rollback()
             logger.exception("Explore pipeline failed — continuing")
             progress.fail("explore_documents")
 
@@ -97,6 +103,7 @@ async def run_supplementary_pipeline() -> dict:
                 logger.info("Justice pipeline scored %d justices", run.justices_scored)
                 progress.complete("justice_scorecards", detail=f"{run.justices_scored} scored")
             except Exception:
+                db.rollback()  # drop partial justice upserts before the next commit
                 logger.exception("Justice pipeline failed — continuing")
                 progress.fail("justice_scorecards")
 
@@ -112,6 +119,7 @@ async def run_supplementary_pipeline() -> dict:
             logger.info("President pipeline updated %d presidents", run.presidents_updated)
             progress.complete("president_scorecards", detail=f"{run.presidents_updated} updated")
         except Exception:
+            db.rollback()  # drop partial president updates before the next commit
             logger.exception("President pipeline failed — continuing")
             progress.fail("president_scorecards")
 
@@ -136,6 +144,7 @@ async def run_supplementary_pipeline() -> dict:
         logger.exception("Supplementary pipeline failed: %s", e)
         summary = "supplementary pipeline failed — see server logs"
         try:
+            db.rollback()  # clear a poisoned session so the FAILED write commits
             run.status = PipelineStatus.FAILED
             run.completed_at = utcnow()
             run.elapsed_seconds = round(time.time() - start_time, 1)
