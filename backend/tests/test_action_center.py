@@ -771,6 +771,72 @@ class TestFindRelatedSenatorsCommonWordSurnames:
         assert not any(t.startswith("Senator Amara Delacroix") for t in texts_embedded)
 
 
+class TestFindRelatedSenatorsSameSurnameCollision:
+    """2026-07: live production bug — the Action Center's #2-ranked issue
+    ("Endorsements for South Carolina race", about SC candidate Darline
+    Graham) also tagged Sen. Lindsey Graham as "referenced in coverage",
+    even though he is never mentioned anywhere in the title, summary,
+    facts, or full story. 30+ surnames are shared by 2+ current members
+    (Smith x5, Johnson x5, Moore x5, Graham x2, etc.), so this wasn't a
+    one-off: any story that fully-names one member also puts every OTHER
+    member with the same surname through last-name-only disambiguation,
+    and a same-state, same-general-topic collision (candidate Graham,
+    Senator Graham, both South Carolina, both "politician" context) can
+    read as similar enough to a generic "Senator {name} from {state}"
+    prototype phrase to cross the similarity threshold — despite the
+    surname's every appearance in the text being fully explained by the
+    OTHER person's own confirmed full-name match already.
+    """
+
+    def test_unrelated_same_surname_member_is_not_matched(self, db_session):
+        db_session.add(Senator(id="darline-graham", name="Darline Graham", state="SC", party="R"))
+        db_session.add(Senator(id="lindsey-graham", name="Lindsey Graham", state="SC", party="R"))
+        db_session.commit()
+
+        result = _find_related_senators(
+            "Endorsements for South Carolina race",
+            "Several officials have publicly backed Darline Graham as a candidate "
+            "for the South Carolina congressional seat.",
+            [
+                "Graham collected endorsements from political figures following her announcement.",
+                "The race is scheduled for a full six-year term as outlined in her campaign plans.",
+            ],
+            db_session,
+        )
+
+        assert [r["id"] for r in result] == ["darline-graham"]
+
+    def test_same_surname_member_still_matched_when_also_named_in_full(self, db_session):
+        """The fix must only suppress the OTHER person sharing a surname —
+        if both are genuinely named in full, both should still match."""
+        db_session.add(Senator(id="darline-graham", name="Darline Graham", state="SC", party="R"))
+        db_session.add(Senator(id="lindsey-graham", name="Lindsey Graham", state="SC", party="R"))
+        db_session.commit()
+
+        result = _find_related_senators(
+            "South Carolina endorsement",
+            "Darline Graham received an endorsement from Lindsey Graham today.",
+            [],
+            db_session,
+        )
+
+        assert {r["id"] for r in result} == {"darline-graham", "lindsey-graham"}
+
+    @patch("app.pipeline.analyze.action_center._embed_texts")
+    def test_last_name_only_reference_still_works_without_a_collision(self, mock_embed, db_session):
+        """The fix must not break ordinary last-name-only disambiguation
+        for a member with no same-surname collision in play at all."""
+        db_session.add(Senator(id="lindsey-graham", name="Lindsey Graham", state="SC", party="R"))
+        db_session.commit()
+        mock_embed.return_value = np.array([[1.0, 0.0], [1.0, 0.0]])
+
+        result = _find_related_senators(
+            "South Carolina news", "Graham criticized the bill in a floor speech.", [], db_session,
+        )
+
+        assert [r["id"] for r in result] == ["lindsey-graham"]
+
+
 class TestFindRelatedOfficialsJusticeCommonWordSurnames:
     """Same failure mode as senators/reps, applied to justice matching:
     Justice Ketanji Brown Jackson's surname is both a common place name
