@@ -619,11 +619,15 @@ export default function AboutPage() {
           {/* ── President Metrics ── */}
           <Section title="PRESIDENTIAL SCORECARD METRICS">
             <P>
-              Presidents are scored on four dimensions, 0-100 scale. Historical
-              presidents (pre-Clinton) use static scores derived from the C-SPAN
-              Presidential Historians Survey, Gallup approval records, and BEA/BLS
-              economic data. Recent presidents (Clinton onward) have scores partially
-              computed from live API data.
+              Presidents are scored on four dimensions, 0-100 scale, computed entirely
+              from live and historical datasets — there is no hand-set or seeded score
+              anywhere in this pipeline (2026-07 rewrite). A dimension a president has
+              no real data source for is left blank (N/A) rather than filled with a
+              fabricated or neutral placeholder, and the overall score renormalizes
+              across whichever dimensions actually apply to that president. Identity
+              data (name, party, term dates) is fetched live too, from the same UCSB
+              roster used for the metrics below — nothing about a president&apos;s
+              profile is typed into this codebase by hand.
             </P>
             <P>
               <em className="text-matrix-green/80">Independence and Follow-Through were
@@ -645,62 +649,72 @@ export default function AboutPage() {
               <div>
                 <Label>Public Mandate (23%)</Label>
                 <P>
-                  Reflects approval trajectory and coalition retention. For modern
-                  presidents (Truman onward), this is grounded in Gallup average approval
-                  ratings; pre-Gallup presidents are scored based on election margins and
-                  historian consensus. No live polling API is wired up — approval figures
-                  are a one-time snapshot in the curated seed data, not continuously
-                  updated. This is also now a genuine constraint rather than just an
-                  unfinished feature: Gallup itself ended presidential approval tracking
-                  entirely in February 2026 after 88 years. We&apos;re evaluating a
-                  replacement built on the American Presidency Project&apos;s ongoing
-                  approval aggregation (presidency.ucsb.edu, still updated for the
-                  sitting president) rather than treating this as done.
+                  Reflects approval trajectory and coalition retention. Gallup, this
+                  platform&apos;s original approval source, ended presidential approval
+                  tracking entirely in February 2026 after 88 years; approval data now
+                  comes from the American Presidency Project (presidency.ucsb.edu),
+                  which is still updated for the sitting president, aggregating
+                  AP-NORC/CNN-SSRS/Marist/Pew/Verasight. This covers every president
+                  from Truman onward — 70% average approval over the term, 30% the
+                  trend from term-start to term-end, both scored against real
+                  population statistics computed from every president&apos;s actual
+                  polling history. Presidents before Truman have no polling era at all,
+                  so their Public Mandate uses UCSB&apos;s historical election-margin
+                  data instead — the average margin of victory across their own
+                  election win(s), the pre-polling-era proxy. The five presidents who
+                  never won a presidential election in their own right have neither and
+                  show N/A for this dimension, not a fabricated number.
                 </P>
               </div>
 
               <div>
-                <Label>Effectiveness (31%) — Partially Dynamic</Label>
+                <Label>Effectiveness (31%)</Label>
                 <P>
-                  Measures tangible economic outcomes: GDP growth and job creation. The
-                  pipeline fetches real employment data from the Bureau of Labor Statistics
-                  API (nonfarm payroll series CES0000000001) and calculates net jobs created
-                  during each term. GDP growth averages are seeded from BEA National Income
-                  and Product Accounts tables. The formula weights GDP at 60% and job
-                  creation at 40%, normalized against post-WWII historical averages.
+                  Measures tangible economic outcomes: GDP growth (60%) and job
+                  creation (40%). GDP growth is computed for the full presidency —
+                  BEA/FRED for the modern era, MeasuringWorth&apos;s real-GDP series
+                  (1790-present) for earlier presidents, both producing the same
+                  &ldquo;average annual growth over the term&rdquo; figure, with the
+                  term&apos;s first calendar year excluded when per-year data allows it
+                  (that year mostly reflects the outgoing administration&apos;s
+                  policy). Job creation comes from BLS nonfarm payroll data, which only
+                  exists from 1939 onward — presidents before that are scored on GDP
+                  growth alone, renormalized to 100% of the formula&apos;s weight, not
+                  defaulted on the missing component.
                 </P>
               </div>
 
               <div>
-                <Label>Competence (23%) — Partially Dynamic</Label>
+                <Label>Competence (23%)</Label>
                 <P>
-                  Evaluates administrative execution quality. The pipeline fetches executive
-                  order counts from the Federal Register API (federalregister.gov) for each
-                  presidential term, and EO activity rate (30% of this score) is genuinely
-                  computed from that data. The formula also defines court-success-rate (40%)
-                  and cabinet-stability (30%) components, but no live source exists for
-                  either — no structured, machine-readable API tracks EO litigation outcomes
-                  or cabinet tenure — so in practice that 70% of the weight always falls back
-                  to the curated seed estimate rather than a live figure (marked with an
-                  &ldquo;editorial estimate&rdquo; badge on the president&apos;s page).
-                  Cabinet turnover has a real candidate data source (Wikidata&apos;s public
-                  records of each official&apos;s time in office) we&apos;re evaluating;
-                  court-success-rate does not — matching an executive order to its
-                  litigation outcomes needs the same kind of unreliable text-matching that
-                  Follow-Through was removed for, so it isn&apos;t being pursued as a live
-                  metric.
+                  Evaluates administrative execution quality via executive-order
+                  activity rate, now sourced from UCSB&apos;s own EO statistics table
+                  rather than the Federal Register API, whose machine-readable coverage
+                  is a hard wall at 1994 — UCSB covers the full presidency, Washington
+                  through the current term. The formula also defines court-success-rate
+                  and cabinet-stability components, but neither has a live source: no
+                  structured, machine-readable API links an executive order to its
+                  litigation outcomes (the same kind of unreliable text-matching that
+                  Follow-Through was removed for), and cabinet-tenure tracking hasn&apos;t
+                  been built yet. Both are simply excluded rather than defaulted —
+                  Competence currently runs on EO-activity-rate alone, renormalized to
+                  100% of the formula&apos;s weight.
                 </P>
               </div>
 
               <div>
-                <Label>Agency Alignment (23%) — Dynamic</Label>
+                <Label>Agency Alignment (23%)</Label>
                 <P>
                   Measures how well executive agency actions align with stated
-                  presidential priorities. For presidents from Clinton onward, the pipeline
-                  fetches real rulemaking activity from the Federal Register API — the count
-                  of final and proposed rules published during the term, and what fraction
-                  were finalized rather than left pending — and computes this score directly
-                  from those counts. Earlier presidents use curated seed data.
+                  presidential priorities, via Federal Register rulemaking data — the
+                  count of final and proposed rules published during the term, and what
+                  fraction were finalized rather than left pending. This is a genuine
+                  conceptual wall, not just a data gap: the modern notice-and-comment
+                  regulatory apparatus this dimension measures didn&apos;t exist before
+                  the Federal Register Act of 1936, and this platform&apos;s data
+                  coverage only reaches back to Clinton. Every president before Clinton
+                  shows N/A for this dimension, excluded from their overall score
+                  entirely rather than scored on a proxy.
                 </P>
               </div>
             </div>
@@ -1272,8 +1286,11 @@ export default function AboutPage() {
                   same visitor is unrecoverable across days, plus per-page view counts. Raw IP
                   addresses and user agents are never stored. This data is never shared, sold, or
                   transmitted anywhere. All data displayed is derived exclusively from public
-                  government records. The only outbound network requests are to official government
-                  APIs (congress.gov, fec.gov, api.bls.gov, federalregister.gov).
+                  government, academic, and economic-history records. The only outbound network
+                  requests are to official government APIs (congress.gov, fec.gov, api.bls.gov,
+                  federalregister.gov) and, for presidential data with no government API equivalent,
+                  UCSB&apos;s American Presidency Project (presidency.ucsb.edu) and MeasuringWorth&apos;s
+                  historical GDP dataset (measuringworth.com).
                 </P>
               </div>
 
@@ -1300,7 +1317,7 @@ export default function AboutPage() {
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-neon-yellow shrink-0">-</span>
-                    <span>Presidential scoring used to include two dimensions, Independence and Follow-Through, that were a one-time hand-set number for every president with no live formula behind them at all. We removed both entirely (2026-07) rather than keep presenting a hand-set number as a computed score — see the Presidents methodology below for the full account, including why the obvious real data sources for each turned out not to be viable. Public Mandate remains editorially curated for now (C-SPAN Presidential Historians Survey, Gallup, and election-margin data) — unlike the two removed dimensions, it has a real, cited number behind every figure and an identified path to a live source, so it&apos;s disclosed as a limitation rather than removed. Competence&apos;s court-success and cabinet-turnover components have no live source either, though its EO-activity-rate component is genuinely computed. Effectiveness and Agency Alignment are fully data-derived from Clinton onward. We mark editorial-estimate figures on the president&apos;s page rather than presenting them with the same certainty as measured data.</span>
+                    <span>Presidential scoring used to include two dimensions, Independence and Follow-Through, that were a one-time hand-set number for every president with no live formula behind them at all. We removed both entirely (2026-07) rather than keep presenting a hand-set number as a computed score, and rebuilt every remaining dimension — plus each president&apos;s identity data — on real live and historical datasets, with no seeded or hand-typed fallback left anywhere in the pipeline. See the Presidents methodology below for the full account. Competence&apos;s court-success and cabinet-turnover components still have no live source (no structured API links an executive order to its litigation outcomes, and cabinet-tenure tracking hasn&apos;t been built), so Competence currently runs on its EO-activity-rate component alone. Agency Alignment is genuinely inapplicable before the Federal Register Act of 1936 and shows N/A for those presidents rather than a proxy score.</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-neon-yellow shrink-0">-</span>

@@ -22,11 +22,11 @@ function getPartyMeta(party: string) {
   return PARTY_META[party] ?? { label: party, color: "text-white/50", bg: "bg-white/10", border: "border-white/20" };
 }
 
-const METRIC_LABELS: { key: keyof President["score"]; label: string; desc: string; alwaysEstimate?: boolean }[] = [
-  { key: "publicMandate", label: "PUBLIC MANDATE", desc: "Approval trajectory and coalition retention", alwaysEstimate: true },
+const METRIC_LABELS: { key: "publicMandate" | "effectiveness" | "competence" | "agencyAlignment"; label: string; desc: string }[] = [
+  { key: "publicMandate", label: "PUBLIC MANDATE", desc: "Approval polling (Truman onward) or, for earlier presidents, election-margin history. N/A for presidents who never won a presidential election." },
   { key: "effectiveness", label: "EFFECTIVENESS", desc: "GDP growth, job creation, and tangible outcomes for voters" },
   { key: "competence", label: "COMPETENCE", desc: "Executive order activity rate and administrative execution. Court-success and cabinet-turnover rates have no live data source and are not currently part of this score." },
-  { key: "agencyAlignment", label: "AGENCY ALIGNMENT", desc: "How effectively federal agencies execute the president's agenda through rulemaking" },
+  { key: "agencyAlignment", label: "AGENCY ALIGNMENT", desc: "How effectively federal agencies execute the president's agenda through rulemaking. N/A before Federal Register data begins in 1936." },
 ];
 
 export function PresidentCard({ president }: { president: President }) {
@@ -68,20 +68,39 @@ export function PresidentCard({ president }: { president: President }) {
           </div>
         </div>
 
-        {/* Summary */}
-        <div className="border border-matrix-green/10 bg-matrix-green/5 p-4">
-          <p className="text-sm text-matrix-green/70 leading-relaxed">{president.summary}</p>
-        </div>
-
         {/* Source links */}
         <div className="flex flex-wrap gap-3">
           <a
-            href="https://www.federalregister.gov/presidential-documents"
+            href="https://www.presidency.ucsb.edu/statistics/data/executive-orders"
             target="_blank"
             rel="noopener noreferrer"
             className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
           >
-            [FEDERAL REGISTER]
+            [UCSB EXECUTIVE ORDERS]
+          </a>
+          <a
+            href="https://www.presidency.ucsb.edu/statistics/data/presidential-job-approval"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
+          >
+            [UCSB APPROVAL RATINGS]
+          </a>
+          <a
+            href="https://www.presidency.ucsb.edu/statistics/data/presidential-election-mandates"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
+          >
+            [UCSB ELECTION MARGINS]
+          </a>
+          <a
+            href="https://www.measuringworth.com/datasets/usgdp/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
+          >
+            [MEASURINGWORTH GDP]
           </a>
           <a
             href="https://data.bls.gov/timeseries/CES0000000001"
@@ -92,20 +111,12 @@ export function PresidentCard({ president }: { president: President }) {
             [BLS EMPLOYMENT DATA]
           </a>
           <a
-            href="https://www.bea.gov/data/gdp/gross-domestic-product"
+            href="https://www.federalregister.gov/presidential-documents"
             target="_blank"
             rel="noopener noreferrer"
             className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
           >
-            [BEA GDP DATA]
-          </a>
-          <a
-            href="https://www.presidency.ucsb.edu/statistics/data/presidential-job-approval"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
-          >
-            [APPROVAL RATINGS]
+            [FEDERAL REGISTER]
           </a>
         </div>
 
@@ -113,14 +124,13 @@ export function PresidentCard({ president }: { president: President }) {
         <div>
           <h3 className="text-xs text-matrix-green/50 tracking-widest mb-4">SCORE BREAKDOWN</h3>
           <div className="space-y-3">
-            {METRIC_LABELS.map(({ key, label, desc, alwaysEstimate }) => (
+            {METRIC_LABELS.map(({ key, label, desc }) => (
               <MetricBar
                 key={key}
                 label={label}
                 value={president.score[key]}
                 desc={desc}
                 entityType="president"
-                isEstimate={alwaysEstimate || (key === "competence" && !president.competenceHasLiveData)}
                 entityId={president.id}
                 dimensionKey={key}
               />
@@ -136,7 +146,7 @@ export function PresidentCard({ president }: { president: President }) {
           <div className="flex items-baseline justify-between mb-3">
             <h3 className="text-xs text-matrix-green/50 tracking-widest">KEY METRICS</h3>
             <span className="text-[10px] text-matrix-green/50">
-              Sources: BLS, BEA, Federal Register
+              Sources: UCSB, MeasuringWorth, BLS, Federal Register
             </span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -144,7 +154,11 @@ export function PresidentCard({ president }: { president: President }) {
               label="AVG APPROVAL"
               value={president.avgApproval != null ? `${president.avgApproval.toFixed(0)}` : null}
               unit="%"
-              isEstimate
+            />
+            <StatBox
+              label="ELECTION MARGIN"
+              value={president.electionMargin != null ? `${president.electionMargin.toFixed(1)}` : null}
+              unit="pt"
             />
             <StatBox
               label="GDP GROWTH"
@@ -168,45 +182,13 @@ export function PresidentCard({ president }: { president: President }) {
               label="EO COURT WIN"
               value={president.eoCourtSuccessPct != null ? `${president.eoCourtSuccessPct.toFixed(0)}` : null}
               unit="%"
-              isEstimate
             />
             <StatBox
               label="CABINET TURNOVER"
               value={president.cabinetTurnoverPct != null ? `${president.cabinetTurnoverPct.toFixed(0)}` : null}
               unit="%"
-              isEstimate
             />
           </div>
-        </div>
-
-        {/* Achievements and Failures */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {president.keyAchievements.length > 0 && (
-            <div>
-              <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">KEY ACHIEVEMENTS</h3>
-              <ul className="space-y-1">
-                {president.keyAchievements.map((a, i) => (
-                  <li key={i} className="text-xs text-matrix-green/60 flex items-start gap-2">
-                    <span className="text-matrix-green shrink-0">+</span>
-                    <span>{a}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {president.keyFailures.length > 0 && (
-            <div>
-              <h3 className="text-xs text-red-400/50 tracking-widest mb-2">KEY FAILURES</h3>
-              <ul className="space-y-1">
-                {president.keyFailures.map((f, i) => (
-                  <li key={i} className="text-xs text-red-400/60 flex items-start gap-2">
-                    <span className="text-red-400 shrink-0">-</span>
-                    <span>{f}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
         </div>
       </div>
     </div>

@@ -1,9 +1,13 @@
 export interface PresidentialScore {
-  publicMandate: number;
-  effectiveness: number;
-  competence: number;
-  agencyAlignment: number;
-  /** Backend-computed weighted total — never recompute this client-side. */
+  /** Any dimension may be null — genuinely inapplicable for this
+   * president (e.g. Public Mandate for one who never won a presidential
+   * election), never a fabricated or neutral placeholder. */
+  publicMandate: number | null;
+  effectiveness: number | null;
+  competence: number | null;
+  agencyAlignment: number | null;
+  /** Backend-computed weighted total, renormalized over whichever
+   * dimensions are non-null — never recompute this client-side. */
   overall: number;
 }
 
@@ -22,12 +26,11 @@ export interface President {
   eoCount: number | null;
   eoCourtSuccessPct: number | null;
   cabinetTurnoverPct: number | null;
-  /** True if Competence blended in live EO-activity data for this term;
-   * false means it's entirely an editorial estimate (see /about). */
-  competenceHasLiveData: boolean;
-  summary: string;
-  keyAchievements: string[];
-  keyFailures: string[];
+  /** Pre-polling-era (pre-Truman) Public Mandate proxy: average margin of
+   * victory across this president's own election win(s). Null for
+   * presidents with live approval data, and for the five who never won a
+   * presidential election in their own right. */
+  electionMargin: number | null;
 }
 
 export interface PresidentLeaderboardEntry {

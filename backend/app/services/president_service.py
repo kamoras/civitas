@@ -1,31 +1,53 @@
-"""President service — seed data, querying, and score calculation.
+"""President service — querying and score calculation.
 
-Static scores are based on the C-SPAN Presidential Historians Survey (2021),
-Gallup historical approval data, BEA GDP tables, BLS employment records,
-and the American Presidency Project.
+President rows (identity fields included — name/party/term dates/number)
+are created and kept current entirely by run_president_pipeline's live
+UCSB roster fetch (president_pipeline.py's `_sync_roster`); this module
+has no seed data of its own anymore. There is no narrative summary/
+key-achievements/key-failures field either — that was hand-written
+editorial text with no live source, same problem class as the scored
+dimensions this platform removed (below), so it was dropped rather than
+kept as unscored "informational" text (2026-07).
 
-Dynamic scoring for recent presidents (Clinton onward) is handled by
-the president pipeline, which fetches live data from the Federal Register
-and BLS APIs and recalculates affected metrics.
+Every SCORED dimension
+(Public Mandate, Effectiveness, Competence, Agency Alignment) is computed
+entirely by run_president_pipeline (president_pipeline.py) from real
+fetched data, never seeded:
+  - Public Mandate: live approval polling (Truman-33 onward, UCSB
+    American Presidency Project — Gallup's own tracking ended Feb 2026)
+    or, for earlier presidents, historical election-margin data (also
+    UCSB) — see app.pipeline.fetch.presidential_approval/
+    presidential_elections.
+  - Effectiveness: GDP growth from BEA/FRED (modern era) or
+    MeasuringWorth's 1790-present historical series (earlier
+    presidents) + BLS jobs data (1939 onward) — see
+    app.pipeline.fetch.economic_data/historical_gdp.
+  - Competence: executive-order activity rate from UCSB's own EO
+    statistics table, covering the full presidency — see
+    app.pipeline.fetch.historical_executive_orders. Court-success-rate
+    and cabinet-turnover-rate have no live source yet (see
+    president_scorer.py's module docstring) and simply don't
+    contribute, rather than being backed by a guess.
+  - Agency Alignment: Federal Register rulemaking data, Clinton onward
+    only — the regulatory record-keeping mechanism this dimension
+    measures didn't exist before Federal Register itself (1936).
 
-Independence and Follow-Through removed entirely (2026-07): both were
-always 100% hand-set per-president values with no live formula and, unlike
-the citations above (which back real, checkable per-metric figures — e.g.
-avg_approval literally IS a Gallup/APP number), no per-metric sourcing
-existed for these two beyond a one-time editorial judgment call, never
-revisited. Same precedent as senators' Promise Persistence removal (v6.0,
-config_definitions.py) after 4 failed attempts at a real formula: rather
-than keep presenting a hand-set number as a computed score, remove it and
-redistribute its weight to dimensions with a genuine live-or-cited basis.
-Independence's obvious real data source (OpenSecrets' revolving-door API)
-was itself discontinued in 2025 — there is currently no viable free,
-structured path to compute it; Follow-Through would need the same
-platform-text-vs-action embedding match already proven unworkable for
-senators. See PRESIDENT_SCORE_WEIGHTS (config_definitions.py) for the
-redistribution.
+A dimension's score is None, never a fabricated number or a neutral
+default, for any president it's genuinely inapplicable to (see each
+_core function in president_scorer.py and compute_president_overall_
+score's per-president renormalization).
+
+Independence and Follow-Through were removed entirely (2026-07): both
+were always 100% hand-set per-president values with no live formula and
+no realistic path to one — Independence's obvious source (OpenSecrets'
+revolving-door API) was discontinued in 2025; Follow-Through would need
+the same platform-text-vs-action embedding match already proven
+unworkable for senators' Promise Persistence (v6.0, config_definitions.
+py, after 4 failed attempts). Same precedent: remove rather than keep
+presenting a hand-set number as a computed score. See
+PRESIDENT_SCORE_WEIGHTS (config_definitions.py) for the redistribution.
 """
 
-import json
 import logging
 
 from sqlalchemy.orm import Session
@@ -39,548 +61,6 @@ from app.schemas import (
 )
 
 logger = logging.getLogger(__name__)
-
-SEED_VERSION = 4  # bump to re-seed after schema/data changes
-
-# fmt: off
-SEED_PRESIDENTS: list[dict] = [
-    # ── #1–10 Founding Era & Early Republic ──────────────────────────────
-    {
-        "id": "washington-1", "name": "George Washington", "party": "I", "number": 1,
-        "term_start": "1789-04-30", "term_end": "1797-03-04",
-        "score_public_mandate": 90, "score_effectiveness": 70, "score_competence": 88, "score_agency_alignment": 72,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 8, "eo_court_success_pct": None, "cabinet_turnover_pct": 20.0,
-        "summary": "Set virtually every precedent for the presidency. Voluntarily stepped down after two terms, establishing the tradition of peaceful transfer of power.",
-        "key_achievements": ["Established the cabinet system", "Whiskey Rebellion resolution", "Jay Treaty maintained peace with Britain", "Voluntary two-term limit precedent"],
-        "key_failures": ["Owned enslaved people", "Whiskey tax was deeply unpopular on the frontier", "Partisan divide emerged between Hamilton and Jefferson"],
-    },
-    {
-        "id": "adams-2", "name": "John Adams", "party": "F", "number": 2,
-        "term_start": "1797-03-04", "term_end": "1801-03-04",
-        "score_public_mandate": 42, "score_effectiveness": 48, "score_competence": 58, "score_agency_alignment": 55,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 1, "eo_court_success_pct": None, "cabinet_turnover_pct": 25.0,
-        "summary": "Kept the nation out of war with France but the Alien and Sedition Acts remain a stain on civil liberties. Lost reelection in the first contested transfer of power.",
-        "key_achievements": ["Avoided war with France", "Built the US Navy", "Peaceful transfer of power to Jefferson"],
-        "key_failures": ["Alien and Sedition Acts", "Federalist Party collapsed under his leadership", "Lost reelection"],
-    },
-    {
-        "id": "jefferson-3", "name": "Thomas Jefferson", "party": "DR", "number": 3,
-        "term_start": "1801-03-04", "term_end": "1809-03-04",
-        "score_public_mandate": 78, "score_effectiveness": 72, "score_competence": 65, "score_agency_alignment": 58,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 4, "eo_court_success_pct": None, "cabinet_turnover_pct": 15.0,
-        "summary": "Doubled the nation's size with the Louisiana Purchase. Champion of individual liberty in theory, but enslaved over 600 people in practice.",
-        "key_achievements": ["Louisiana Purchase", "Lewis and Clark expedition", "Reduced national debt", "Abolished the international slave trade"],
-        "key_failures": ["Embargo Act devastated the economy", "Owned enslaved people", "Barbary Wars were costly"],
-    },
-    {
-        "id": "madison-4", "name": "James Madison", "party": "DR", "number": 4,
-        "term_start": "1809-03-04", "term_end": "1817-03-04",
-        "score_public_mandate": 55, "score_effectiveness": 48, "score_competence": 58, "score_agency_alignment": 42,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 1, "eo_court_success_pct": None, "cabinet_turnover_pct": 30.0,
-        "summary": "Father of the Constitution who led the nation through the War of 1812. The British burned the White House but the war ended with a surge of national pride.",
-        "key_achievements": ["Survived the War of 1812", "Era of Good Feelings began", "Second Bank of the United States"],
-        "key_failures": ["British burned Washington D.C.", "War of 1812 was poorly managed", "Weak wartime leadership"],
-    },
-    {
-        "id": "monroe-5", "name": "James Monroe", "party": "DR", "number": 5,
-        "term_start": "1817-03-04", "term_end": "1825-03-04",
-        "score_public_mandate": 82, "score_effectiveness": 62, "score_competence": 65, "score_agency_alignment": 62,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 1, "eo_court_success_pct": None, "cabinet_turnover_pct": 10.0,
-        "summary": "Presided over the 'Era of Good Feelings' with virtually no partisan opposition. The Monroe Doctrine defined US foreign policy for a century.",
-        "key_achievements": ["Monroe Doctrine", "Era of Good Feelings unity", "Florida acquisition from Spain", "Missouri Compromise"],
-        "key_failures": ["Panic of 1819 recession", "Deferred the slavery question", "Missouri Compromise was a temporary fix"],
-    },
-    {
-        "id": "jqadams-6", "name": "John Quincy Adams", "party": "DR", "number": 6,
-        "term_start": "1825-03-04", "term_end": "1829-03-04",
-        "score_public_mandate": 30, "score_effectiveness": 42, "score_competence": 55, "score_agency_alignment": 38,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 3, "eo_court_success_pct": None, "cabinet_turnover_pct": 5.0,
-        "summary": "Brilliant diplomat and visionary who proposed a national university and infrastructure program. But the 'corrupt bargain' charge doomed his presidency from day one.",
-        "key_achievements": ["Proposed national infrastructure plan", "Supported science and education", "Later became anti-slavery champion in Congress"],
-        "key_failures": ["'Corrupt bargain' tainted legitimacy", "Could not work with Congress", "Most of his agenda was blocked"],
-    },
-    {
-        "id": "jackson-7", "name": "Andrew Jackson", "party": "D", "number": 7,
-        "term_start": "1829-03-04", "term_end": "1837-03-04",
-        "score_public_mandate": 75, "score_effectiveness": 50, "score_competence": 55, "score_agency_alignment": 48,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 12, "eo_court_success_pct": None, "cabinet_turnover_pct": 50.0,
-        "summary": "Populist hero who expanded democracy for white men while committing genocide against Native Americans. Destroyed the national bank and reshaped presidential power.",
-        "key_achievements": ["Expanded voting rights for common men", "Paid off the national debt", "Preserved the Union during nullification crisis"],
-        "key_failures": ["Indian Removal Act / Trail of Tears", "Spoils system corrupted government", "Destroyed the Bank causing Panic of 1837"],
-    },
-    {
-        "id": "vanburen-8", "name": "Martin Van Buren", "party": "D", "number": 8,
-        "term_start": "1837-03-04", "term_end": "1841-03-04",
-        "score_public_mandate": 35, "score_effectiveness": 25, "score_competence": 42, "score_agency_alignment": 38,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 10, "eo_court_success_pct": None, "cabinet_turnover_pct": 10.0,
-        "summary": "Skilled politician who inherited the Panic of 1837 and was unable to stop it. Earned the nickname 'Martin Van Ruin' and lost reelection badly.",
-        "key_achievements": ["Independent Treasury system", "Avoided war with Britain over Canadian border", "Established 10-hour workday for federal workers"],
-        "key_failures": ["Panic of 1837 economic depression", "Could not address slavery", "Lost reelection decisively"],
-    },
-    {
-        "id": "harrison-9", "name": "William Henry Harrison", "party": "W", "number": 9,
-        "term_start": "1841-03-04", "term_end": "1841-04-04",
-        "score_public_mandate": 55, "score_effectiveness": 10, "score_competence": 30, "score_agency_alignment": 10,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 0, "eo_court_success_pct": None, "cabinet_turnover_pct": 0.0,
-        "summary": "Died 31 days into his presidency from pneumonia, making his the shortest tenure in history. His death triggered the first presidential succession crisis.",
-        "key_achievements": ["Won the presidency at age 68", "Established succession precedent (via Tyler)"],
-        "key_failures": ["Died after 31 days", "Gave the longest inaugural address in history in cold rain"],
-    },
-    {
-        "id": "tyler-10", "name": "John Tyler", "party": "W", "number": 10,
-        "term_start": "1841-04-04", "term_end": "1845-03-04",
-        "score_public_mandate": 22, "score_effectiveness": 38, "score_competence": 42, "score_agency_alignment": 28,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 17, "eo_court_success_pct": None, "cabinet_turnover_pct": 70.0,
-        "summary": "Established the precedent that a VP who succeeds becomes full president, not just acting. Expelled from his own party and governed without a base.",
-        "key_achievements": ["Established presidential succession precedent", "Texas annexation", "Webster-Ashburton Treaty with Britain"],
-        "key_failures": ["Expelled from the Whig Party", "Entire cabinet resigned except one", "Later joined the Confederacy"],
-    },
-    # ── #11–20 Antebellum, Civil War, & Reconstruction ──────────────────
-    {
-        "id": "polk-11", "name": "James K. Polk", "party": "D", "number": 11,
-        "term_start": "1845-03-04", "term_end": "1849-03-04",
-        "score_public_mandate": 55, "score_effectiveness": 65, "score_competence": 75, "score_agency_alignment": 78,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 18, "eo_court_success_pct": None, "cabinet_turnover_pct": 5.0,
-        "summary": "Set four major goals, achieved all four, and left after one term as promised. One of the most effective single-term presidents in history.",
-        "key_achievements": ["Acquired California and the Southwest", "Settled Oregon boundary with Britain", "Reduced tariffs", "Established independent treasury"],
-        "key_failures": ["Mexican-American War was controversial", "Expansion reignited the slavery crisis", "Died three months after leaving office"],
-    },
-    {
-        "id": "taylor-12", "name": "Zachary Taylor", "party": "W", "number": 12,
-        "term_start": "1849-03-04", "term_end": "1850-07-09",
-        "score_public_mandate": 50, "score_effectiveness": 30, "score_competence": 40, "score_agency_alignment": 25,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 5, "eo_court_success_pct": None, "cabinet_turnover_pct": 0.0,
-        "summary": "War hero who died 16 months into his presidency. Surprisingly opposed the expansion of slavery despite being a slaveholder himself.",
-        "key_achievements": ["Opposed expansion of slavery into new territories", "Threatened to personally lead troops against secession"],
-        "key_failures": ["Died in office before accomplishing his agenda", "Had no political experience before the presidency"],
-    },
-    {
-        "id": "fillmore-13", "name": "Millard Fillmore", "party": "W", "number": 13,
-        "term_start": "1850-07-09", "term_end": "1853-03-04",
-        "score_public_mandate": 30, "score_effectiveness": 35, "score_competence": 42, "score_agency_alignment": 42,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 12, "eo_court_success_pct": None, "cabinet_turnover_pct": 15.0,
-        "summary": "Signed the Compromise of 1850 including the Fugitive Slave Act, delaying the Civil War but at a moral cost. Opened trade with Japan.",
-        "key_achievements": ["Compromise of 1850 delayed Civil War", "Opened trade with Japan via Perry expedition"],
-        "key_failures": ["Fugitive Slave Act enforcement", "Denied renomination by his own party", "Later ran on the nativist Know-Nothing ticket"],
-    },
-    {
-        "id": "pierce-14", "name": "Franklin Pierce", "party": "D", "number": 14,
-        "term_start": "1853-03-04", "term_end": "1857-03-04",
-        "score_public_mandate": 28, "score_effectiveness": 22, "score_competence": 28, "score_agency_alignment": 35,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 35, "eo_court_success_pct": None, "cabinet_turnover_pct": 5.0,
-        "summary": "His support for the Kansas-Nebraska Act tore apart the Democratic Party and accelerated the nation toward Civil War. Widely regarded as one of the worst presidents.",
-        "key_achievements": ["Gadsden Purchase expanded southwestern territory", "Only president to retain entire original cabinet"],
-        "key_failures": ["Kansas-Nebraska Act led to 'Bleeding Kansas'", "Accelerated the path to Civil War", "Denied renomination"],
-    },
-    {
-        "id": "buchanan-15", "name": "James Buchanan", "party": "D", "number": 15,
-        "term_start": "1857-03-04", "term_end": "1861-03-04",
-        "score_public_mandate": 20, "score_effectiveness": 12, "score_competence": 18, "score_agency_alignment": 15,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 16, "eo_court_success_pct": None, "cabinet_turnover_pct": 30.0,
-        "summary": "Consistently ranked the worst or near-worst president. Watched helplessly as Southern states seceded, arguing he lacked constitutional authority to stop them.",
-        "key_achievements": ["Maintained some government function during secession crisis"],
-        "key_failures": ["Failed to prevent secession", "Supported Dred Scott decision", "Corruption scandals in his administration", "Left Lincoln an impossible situation"],
-    },
-    {
-        "id": "lincoln-16", "name": "Abraham Lincoln", "party": "R", "number": 16,
-        "term_start": "1861-03-04", "term_end": "1865-04-15",
-        "score_public_mandate": 72, "score_effectiveness": 85, "score_competence": 92, "score_agency_alignment": 75,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 48, "eo_court_success_pct": None, "cabinet_turnover_pct": 35.0,
-        "summary": "Preserved the Union and abolished slavery through the Civil War. Consistently ranked the greatest or second-greatest president by historians.",
-        "key_achievements": ["Emancipation Proclamation", "Won the Civil War and preserved the Union", "13th Amendment abolishing slavery", "Gettysburg Address redefined American purpose"],
-        "key_failures": ["Suspended habeas corpus", "Early war generals were ineffective", "Assassinated before Reconstruction could be guided"],
-    },
-    {
-        "id": "ajohnson-17", "name": "Andrew Johnson", "party": "D", "number": 17,
-        "term_start": "1865-04-15", "term_end": "1869-03-04",
-        "score_public_mandate": 18, "score_effectiveness": 18, "score_competence": 20, "score_agency_alignment": 18,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 79, "eo_court_success_pct": None, "cabinet_turnover_pct": 40.0,
-        "summary": "Vetoed civil rights legislation and obstructed Reconstruction at every turn. First president to be impeached. His lenient policies emboldened the former Confederacy.",
-        "key_achievements": ["Alaska Purchase", "Kept some continuity after Lincoln's assassination"],
-        "key_failures": ["Vetoed Civil Rights Act and Freedmen's Bureau", "Impeached by the House", "Sabotaged Reconstruction", "Emboldened former Confederate leaders"],
-    },
-    {
-        "id": "grant-18", "name": "Ulysses S. Grant", "party": "R", "number": 18,
-        "term_start": "1869-03-04", "term_end": "1877-03-04",
-        "score_public_mandate": 52, "score_effectiveness": 48, "score_competence": 42, "score_agency_alignment": 35,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 217, "eo_court_success_pct": None, "cabinet_turnover_pct": 45.0,
-        "summary": "Civil War hero who fought for civil rights during Reconstruction but whose administration was plagued by corruption scandals. Recently reassessed more favorably by historians.",
-        "key_achievements": ["Crushed the KKK with Enforcement Acts", "15th Amendment ratified", "Promoted peace with Native Americans initially", "Treaty of Washington resolved tensions with Britain"],
-        "key_failures": ["Widespread corruption scandals (Credit Mobilier, Whiskey Ring)", "Panic of 1873 depression", "Reconstruction gains eroded by end of term"],
-    },
-    {
-        "id": "hayes-19", "name": "Rutherford B. Hayes", "party": "R", "number": 19,
-        "term_start": "1877-03-04", "term_end": "1881-03-04",
-        "score_public_mandate": 30, "score_effectiveness": 42, "score_competence": 52, "score_agency_alignment": 48,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 92, "eo_court_success_pct": None, "cabinet_turnover_pct": 15.0,
-        "summary": "Won the most disputed election in US history through the Compromise of 1877, which ended Reconstruction and abandoned Black Southerners for a generation.",
-        "key_achievements": ["Civil service reform efforts", "Ended railroad strikes", "Began modernizing federal workforce"],
-        "key_failures": ["Compromise of 1877 ended Reconstruction", "Disputed election undermined legitimacy", "Abandoned civil rights in the South"],
-    },
-    {
-        "id": "garfield-20", "name": "James A. Garfield", "party": "R", "number": 20,
-        "term_start": "1881-03-04", "term_end": "1881-09-19",
-        "score_public_mandate": 48, "score_effectiveness": 15, "score_competence": 35, "score_agency_alignment": 15,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 6, "eo_court_success_pct": None, "cabinet_turnover_pct": 0.0,
-        "summary": "Assassinated six months into office by a disgruntled office seeker. His death galvanized the civil service reform movement that his successor championed.",
-        "key_achievements": ["Appointed reformers to key positions", "Challenged party machine bosses", "His death led to civil service reform"],
-        "key_failures": ["Assassinated before accomplishing his agenda", "Only served 200 days"],
-    },
-    # ── #21–31 Gilded Age & Progressive Era ──────────────────────────────
-    {
-        "id": "arthur-21", "name": "Chester A. Arthur", "party": "R", "number": 21,
-        "term_start": "1881-09-19", "term_end": "1885-03-04",
-        "score_public_mandate": 40, "score_effectiveness": 45, "score_competence": 55, "score_agency_alignment": 60,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 96, "eo_court_success_pct": None, "cabinet_turnover_pct": 20.0,
-        "summary": "Former spoils system politician who shocked everyone by championing civil service reform after becoming president. Signed the Pendleton Act.",
-        "key_achievements": ["Pendleton Civil Service Reform Act", "Modernized the US Navy", "Surprised critics by governing honestly"],
-        "key_failures": ["Chinese Exclusion Act", "Could not win his own party's nomination", "Limited vision beyond reform"],
-    },
-    {
-        "id": "cleveland-22", "name": "Grover Cleveland", "party": "D", "number": 22,
-        "term_start": "1885-03-04", "term_end": "1889-03-04",
-        "score_public_mandate": 48, "score_effectiveness": 48, "score_competence": 58, "score_agency_alignment": 55,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 113, "eo_court_success_pct": None, "cabinet_turnover_pct": 10.0,
-        "summary": "First Democrat elected after the Civil War. Known for integrity and vetoing pork-barrel legislation. Lost reelection despite winning the popular vote.",
-        "key_achievements": ["Vetoed hundreds of fraudulent pension bills", "Interstate Commerce Act", "Dawes Act reform attempt"],
-        "key_failures": ["Lost reelection", "Limited response to labor unrest", "Dawes Act harmed Native Americans in practice"],
-    },
-    {
-        "id": "bharrison-23", "name": "Benjamin Harrison", "party": "R", "number": 23,
-        "term_start": "1889-03-04", "term_end": "1893-03-04",
-        "score_public_mandate": 35, "score_effectiveness": 40, "score_competence": 48, "score_agency_alignment": 42,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 143, "eo_court_success_pct": None, "cabinet_turnover_pct": 15.0,
-        "summary": "Won the presidency despite losing the popular vote. Signed the Sherman Antitrust Act but was seen as cold and beholden to industrialists.",
-        "key_achievements": ["Sherman Antitrust Act", "McKinley Tariff", "National forest reserves created", "First Pan-American Conference"],
-        "key_failures": ["Lost popular vote", "Spending earned nickname 'Billion Dollar Congress'", "Lost reelection to Cleveland"],
-    },
-    {
-        "id": "cleveland-24", "name": "Grover Cleveland", "party": "D", "number": 24,
-        "term_start": "1893-03-04", "term_end": "1897-03-04",
-        "score_public_mandate": 35, "score_effectiveness": 28, "score_competence": 48, "score_agency_alignment": 38,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 140, "eo_court_success_pct": None, "cabinet_turnover_pct": 15.0,
-        "summary": "Only president to serve non-consecutive terms. Second term was dominated by the Panic of 1893 and the Pullman Strike. Left office deeply unpopular.",
-        "key_achievements": ["Maintained the gold standard", "Only non-consecutive two-term president"],
-        "key_failures": ["Panic of 1893 depression", "Pullman Strike — sent federal troops against workers", "Lost support of his own party"],
-    },
-    {
-        "id": "mckinley-25", "name": "William McKinley", "party": "R", "number": 25,
-        "term_start": "1897-03-04", "term_end": "1901-09-14",
-        "score_public_mandate": 60, "score_effectiveness": 58, "score_competence": 55, "score_agency_alignment": 52,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 185, "eo_court_success_pct": None, "cabinet_turnover_pct": 10.0,
-        "summary": "Presided over economic recovery and the Spanish-American War, making the US an imperial power. Assassinated at the start of his second term.",
-        "key_achievements": ["Economic recovery from 1890s depression", "Spanish-American War victory", "Gold Standard Act", "Open Door Policy with China"],
-        "key_failures": ["Philippine-American War atrocities", "Close ties to industrial trusts", "Assassinated in 1901"],
-    },
-    {
-        "id": "troosevelt-26", "name": "Theodore Roosevelt", "party": "R", "number": 26,
-        "term_start": "1901-09-14", "term_end": "1909-03-04",
-        "score_public_mandate": 80, "score_effectiveness": 75, "score_competence": 80, "score_agency_alignment": 82,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 1081, "eo_court_success_pct": None, "cabinet_turnover_pct": 20.0,
-        "summary": "Trust-buster who transformed the presidency into a 'bully pulpit.' Built the Panama Canal, created the National Parks system, and won the Nobel Peace Prize.",
-        "key_achievements": ["Trust-busting (broke up Standard Oil, etc.)", "Panama Canal", "National Parks and conservation", "Nobel Peace Prize for ending Russo-Japanese War"],
-        "key_failures": ["Paternalistic views on race", "Panama Canal acquisition was ethically questionable", "Bull Moose run split the Republican Party"],
-    },
-    {
-        "id": "taft-27", "name": "William Howard Taft", "party": "R", "number": 27,
-        "term_start": "1909-03-04", "term_end": "1913-03-04",
-        "score_public_mandate": 32, "score_effectiveness": 45, "score_competence": 55, "score_agency_alignment": 58,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 724, "eo_court_success_pct": None, "cabinet_turnover_pct": 20.0,
-        "summary": "Actually busted more trusts than Roosevelt but lacked the political skills to get credit. Lost reelection badly, later became Chief Justice of the Supreme Court.",
-        "key_achievements": ["More antitrust prosecutions than Roosevelt", "16th Amendment (income tax)", "Department of Labor established"],
-        "key_failures": ["Payne-Aldrich Tariff angered progressives", "Fired conservation chief Pinchot", "Lost reelection in a three-way race"],
-    },
-    {
-        "id": "wilson-28", "name": "Woodrow Wilson", "party": "D", "number": 28,
-        "term_start": "1913-03-04", "term_end": "1921-03-04",
-        "score_public_mandate": 55, "score_effectiveness": 55, "score_competence": 52, "score_agency_alignment": 68,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 1803, "eo_court_success_pct": None, "cabinet_turnover_pct": 25.0,
-        "summary": "Led America through WWI and championed the League of Nations, which the Senate rejected. Suffered a debilitating stroke; his wife effectively governed for months.",
-        "key_achievements": ["Federal Reserve System", "Led US through WWI", "League of Nations vision", "Clayton Antitrust Act", "19th Amendment (women's suffrage) advanced"],
-        "key_failures": ["Senate rejected League of Nations", "Debilitating stroke — incapacity hidden", "Resegregated the federal workforce", "Espionage and Sedition Acts"],
-    },
-    {
-        "id": "harding-29", "name": "Warren G. Harding", "party": "R", "number": 29,
-        "term_start": "1921-03-04", "term_end": "1923-08-02",
-        "score_public_mandate": 48, "score_effectiveness": 35, "score_competence": 18, "score_agency_alignment": 20,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 522, "eo_court_success_pct": None, "cabinet_turnover_pct": 15.0,
-        "summary": "Promised a 'return to normalcy' but his administration became synonymous with corruption. Teapot Dome was the biggest scandal until Watergate. Died in office.",
-        "key_achievements": ["Washington Naval Conference arms limitation", "Budget and Accounting Act", "Freed political prisoner Eugene Debs"],
-        "key_failures": ["Teapot Dome scandal", "Rampant cronyism and corruption", "Died in office amid emerging scandals"],
-    },
-    {
-        "id": "coolidge-30", "name": "Calvin Coolidge", "party": "R", "number": 30,
-        "term_start": "1923-08-02", "term_end": "1929-03-04",
-        "score_public_mandate": 58, "score_effectiveness": 50, "score_competence": 55, "score_agency_alignment": 48,
-        "avg_approval": None, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 1203, "eo_court_success_pct": None, "cabinet_turnover_pct": 20.0,
-        "summary": "'Silent Cal' restored trust after Harding's scandals through personal integrity. Presided over the Roaring Twenties boom but his laissez-faire policies set the stage for the crash.",
-        "key_achievements": ["Restored public trust after scandals", "Roaring Twenties prosperity", "Revenue Act cut taxes", "Immigration Act of 1924"],
-        "key_failures": ["Laissez-faire policies enabled speculation", "Ignored growing inequality", "Immigration Act was racially discriminatory"],
-    },
-    {
-        "id": "hoover-31", "name": "Herbert Hoover", "party": "R", "number": 31,
-        "term_start": "1929-03-04", "term_end": "1933-03-04",
-        "score_public_mandate": 22, "score_effectiveness": 18, "score_competence": 35, "score_agency_alignment": 32,
-        "avg_approval": None, "gdp_growth_avg": -8.0, "jobs_created_millions": None,
-        "eo_count": 968, "eo_court_success_pct": None, "cabinet_turnover_pct": 10.0,
-        "summary": "Brilliant humanitarian and engineer who was overwhelmed by the Great Depression. His initial interventions were too small and too late. 'Hoovervilles' became his legacy.",
-        "key_achievements": ["Reconstruction Finance Corporation", "Hoover Dam construction began", "Star-Spangled Banner became national anthem"],
-        "key_failures": ["Great Depression deepened on his watch", "Smoot-Hawley Tariff worsened the crisis", "Bonus Army crackdown was a PR disaster"],
-    },
-    # ── #32–47 Modern Presidents (FDR onward) ────────────────────────────
-    {
-        "id": "fdr-32", "name": "Franklin D. Roosevelt", "party": "D", "number": 32,
-        "term_start": "1933-03-04", "term_end": "1945-04-12",
-        "score_public_mandate": 75, "score_effectiveness": 72, "score_competence": 80, "score_agency_alignment": 88,
-        "avg_approval": 63.0, "gdp_growth_avg": 9.4, "jobs_created_millions": None,
-        "eo_count": 3721, "eo_court_success_pct": None, "cabinet_turnover_pct": None,
-        "summary": "Reshaped the federal government through the New Deal, guiding the nation through the Great Depression and most of World War II. Unprecedented four terms.",
-        "key_achievements": ["New Deal economic recovery programs", "Social Security Act", "Led Allied war effort in WWII", "Created the SEC and FDIC"],
-        "key_failures": ["Japanese American internment", "Court-packing scheme", "Failed to address civil rights"],
-    },
-    {
-        "id": "truman-33", "name": "Harry S. Truman", "party": "D", "number": 33,
-        "term_start": "1945-04-12", "term_end": "1953-01-20",
-        "score_public_mandate": 45, "score_effectiveness": 58, "score_competence": 65, "score_agency_alignment": 65,
-        "avg_approval": 45.4, "gdp_growth_avg": 1.3, "jobs_created_millions": 8.4,
-        "eo_count": 907, "eo_court_success_pct": None, "cabinet_turnover_pct": None,
-        "summary": "Managed the transition from war to peace, established the Truman Doctrine and Marshall Plan. Desegregated the military via executive order.",
-        "key_achievements": ["Marshall Plan for European recovery", "NATO creation", "Desegregated the armed forces", "Berlin Airlift"],
-        "key_failures": ["Korean War stalemate", "Low approval by end of term", "Failed to pass national healthcare"],
-    },
-    {
-        "id": "eisenhower-34", "name": "Dwight D. Eisenhower", "party": "R", "number": 34,
-        "term_start": "1953-01-20", "term_end": "1961-01-20",
-        "score_public_mandate": 65, "score_effectiveness": 60, "score_competence": 75, "score_agency_alignment": 70,
-        "avg_approval": 65.0, "gdp_growth_avg": 3.0, "jobs_created_millions": 3.5,
-        "eo_count": 484, "eo_court_success_pct": None, "cabinet_turnover_pct": 25.0,
-        "summary": "Military hero turned president who built the Interstate Highway System, managed Cold War tensions, and warned of the military-industrial complex.",
-        "key_achievements": ["Interstate Highway System", "Ended Korean War", "NASA creation", "Civil Rights Act of 1957"],
-        "key_failures": ["U-2 spy plane incident", "Limited civil rights enforcement", "Supported coups in Iran and Guatemala"],
-    },
-    {
-        "id": "jfk-35", "name": "John F. Kennedy", "party": "D", "number": 35,
-        "term_start": "1961-01-20", "term_end": "1963-11-22",
-        "score_public_mandate": 70, "score_effectiveness": 62, "score_competence": 58, "score_agency_alignment": 58,
-        "avg_approval": 70.1, "gdp_growth_avg": 4.3, "jobs_created_millions": 3.6,
-        "eo_count": 214, "eo_court_success_pct": None, "cabinet_turnover_pct": 8.0,
-        "summary": "Inspired a generation with the space race and Peace Corps. Managed the Cuban Missile Crisis but presidency was cut short by assassination.",
-        "key_achievements": ["Cuban Missile Crisis resolution", "Peace Corps creation", "Space program acceleration", "Nuclear Test Ban Treaty"],
-        "key_failures": ["Bay of Pigs invasion", "Slow on civil rights legislation", "Vietnam escalation began"],
-    },
-    {
-        "id": "lbj-36", "name": "Lyndon B. Johnson", "party": "D", "number": 36,
-        "term_start": "1963-11-22", "term_end": "1969-01-20",
-        "score_public_mandate": 55, "score_effectiveness": 65, "score_competence": 68, "score_agency_alignment": 78,
-        "avg_approval": 55.1, "gdp_growth_avg": 5.3, "jobs_created_millions": 9.9,
-        "eo_count": 325, "eo_court_success_pct": None, "cabinet_turnover_pct": 30.0,
-        "summary": "Master legislator who passed landmark civil rights and anti-poverty laws. The Great Society transformed domestic policy but Vietnam destroyed his presidency.",
-        "key_achievements": ["Civil Rights Act of 1964", "Voting Rights Act of 1965", "Medicare and Medicaid", "Great Society anti-poverty programs"],
-        "key_failures": ["Vietnam War escalation", "Credibility gap with public", "Urban unrest"],
-    },
-    {
-        "id": "nixon-37", "name": "Richard Nixon", "party": "R", "number": 37,
-        "term_start": "1969-01-20", "term_end": "1974-08-09",
-        "score_public_mandate": 49, "score_effectiveness": 42, "score_competence": 38, "score_agency_alignment": 62,
-        "avg_approval": 49.1, "gdp_growth_avg": 3.0, "jobs_created_millions": 6.2,
-        "eo_count": 346, "eo_court_success_pct": None, "cabinet_turnover_pct": 35.0,
-        "summary": "Opened relations with China and created the EPA, but Watergate remains the defining scandal of the American presidency. Resigned to avoid impeachment.",
-        "key_achievements": ["Opening to China", "EPA creation", "Ended Vietnam War draft", "OSHA creation"],
-        "key_failures": ["Watergate scandal and resignation", "Cambodia bombing", "Wage and price controls"],
-    },
-    {
-        "id": "ford-38", "name": "Gerald Ford", "party": "R", "number": 38,
-        "term_start": "1974-08-09", "term_end": "1977-01-20",
-        "score_public_mandate": 47, "score_effectiveness": 38, "score_competence": 55, "score_agency_alignment": 45,
-        "avg_approval": 47.2, "gdp_growth_avg": 2.6, "jobs_created_millions": 1.8,
-        "eo_count": 169, "eo_court_success_pct": None, "cabinet_turnover_pct": 20.0,
-        "summary": "Unelected president who inherited a nation in crisis after Watergate. The Nixon pardon was courageous but politically devastating.",
-        "key_achievements": ["Restored public trust post-Watergate", "Helsinki Accords", "Whip Inflation Now campaign"],
-        "key_failures": ["Nixon pardon backlash", "Fall of Saigon", "Stagflation continued"],
-    },
-    {
-        "id": "carter-39", "name": "Jimmy Carter", "party": "D", "number": 39,
-        "term_start": "1977-01-20", "term_end": "1981-01-20",
-        "score_public_mandate": 45, "score_effectiveness": 35, "score_competence": 42, "score_agency_alignment": 52,
-        "avg_approval": 45.5, "gdp_growth_avg": 3.3, "jobs_created_millions": 10.3,
-        "eo_count": 320, "eo_court_success_pct": None, "cabinet_turnover_pct": 30.0,
-        "summary": "Washington outsider who brokered Camp David Accords but was overwhelmed by the energy crisis, inflation, and Iran hostage situation.",
-        "key_achievements": ["Camp David Accords", "Department of Energy creation", "Human rights foreign policy", "Panama Canal Treaty"],
-        "key_failures": ["Iran hostage crisis", "Energy crisis mismanagement", "Malaise speech backlash", "Double-digit inflation"],
-    },
-    {
-        "id": "reagan-40", "name": "Ronald Reagan", "party": "R", "number": 40,
-        "term_start": "1981-01-20", "term_end": "1989-01-20",
-        "score_public_mandate": 53, "score_effectiveness": 58, "score_competence": 60, "score_agency_alignment": 55,
-        "avg_approval": 52.8, "gdp_growth_avg": 3.5, "jobs_created_millions": 16.0,
-        "eo_count": 381, "eo_court_success_pct": None, "cabinet_turnover_pct": 40.0,
-        "summary": "Defined modern conservatism with tax cuts, deregulation, and defense buildup. Won the Cold War but tripled the national debt and Iran-Contra scarred the second term.",
-        "key_achievements": ["Economic recovery from 1982 recession", "Cold War victory", "Tax Reform Act of 1986", "INF Treaty with USSR"],
-        "key_failures": ["Iran-Contra affair", "Tripled national debt", "Slow AIDS response", "Savings and loan crisis"],
-    },
-    {
-        "id": "bush-41", "name": "George H.W. Bush", "party": "R", "number": 41,
-        "term_start": "1989-01-20", "term_end": "1993-01-20",
-        "score_public_mandate": 61, "score_effectiveness": 45, "score_competence": 65, "score_agency_alignment": 60,
-        "avg_approval": 60.9, "gdp_growth_avg": 2.2, "jobs_created_millions": 2.6,
-        "eo_count": 166, "eo_court_success_pct": None, "cabinet_turnover_pct": 15.0,
-        "summary": "Expert foreign policy president who managed the end of the Cold War and Gulf War coalition. 'Read my lips: no new taxes' broken promise cost him reelection.",
-        "key_achievements": ["German reunification management", "Gulf War coalition", "Americans with Disabilities Act", "Clean Air Act amendments"],
-        "key_failures": ["'Read my lips' broken tax pledge", "Recession of 1990-91", "Perceived as out of touch on economy"],
-    },
-    {
-        "id": "clinton-42", "name": "Bill Clinton", "party": "D", "number": 42,
-        "term_start": "1993-01-20", "term_end": "2001-01-20",
-        "score_public_mandate": 55, "score_effectiveness": 78, "score_competence": 62, "score_agency_alignment": 70,
-        "avg_approval": 55.1, "gdp_growth_avg": 3.9, "jobs_created_millions": 22.7,
-        "eo_count": 364, "eo_court_success_pct": None, "cabinet_turnover_pct": 35.0,
-        "summary": "Presided over the longest peacetime economic expansion in US history and balanced the federal budget. Impeachment over the Lewinsky scandal defined the second term.",
-        "key_achievements": ["Balanced federal budget", "22.7M jobs created", "NAFTA", "Welfare reform"],
-        "key_failures": ["Impeachment", "Failed healthcare reform", "Rwandan genocide inaction", "Deregulation contributed to 2008 crisis"],
-    },
-    {
-        "id": "gwbush-43", "name": "George W. Bush", "party": "R", "number": 43,
-        "term_start": "2001-01-20", "term_end": "2009-01-20",
-        "score_public_mandate": 49, "score_effectiveness": 38, "score_competence": 42, "score_agency_alignment": 45,
-        "avg_approval": 49.4, "gdp_growth_avg": 2.1, "jobs_created_millions": 1.3,
-        "eo_count": 291, "eo_court_success_pct": 75.0, "cabinet_turnover_pct": 40.0,
-        "summary": "United the nation after 9/11 but Iraq War and Hurricane Katrina eroded trust. Presidency ended with the worst financial crisis since the Great Depression.",
-        "key_achievements": ["Post-9/11 national unity", "PEPFAR (AIDS relief in Africa)", "Medicare Part D", "No Child Left Behind"],
-        "key_failures": ["Iraq War based on faulty intelligence", "Hurricane Katrina response", "Great Recession began", "Guantanamo and torture controversies"],
-    },
-    {
-        "id": "obama-44", "name": "Barack Obama", "party": "D", "number": 44,
-        "term_start": "2009-01-20", "term_end": "2017-01-20",
-        "score_public_mandate": 48, "score_effectiveness": 55, "score_competence": 65, "score_agency_alignment": 65,
-        "avg_approval": 47.9, "gdp_growth_avg": 1.6, "jobs_created_millions": 11.6,
-        "eo_count": 276, "eo_court_success_pct": 78.0, "cabinet_turnover_pct": 30.0,
-        "summary": "First Black president who passed the Affordable Care Act and led economic recovery from the Great Recession. Faced historic congressional obstruction.",
-        "key_achievements": ["Affordable Care Act", "Economic recovery (11.6M jobs)", "Paris Climate Agreement", "Bin Laden operation"],
-        "key_failures": ["ACA rollout problems", "Syria red line", "Could not close Guantanamo", "Rising partisanship"],
-    },
-    {
-        "id": "trump-45", "name": "Donald Trump", "party": "R", "number": 45,
-        "term_start": "2017-01-20", "term_end": "2021-01-20",
-        "score_public_mandate": 41, "score_effectiveness": 48, "score_competence": 35, "score_agency_alignment": 35,
-        "avg_approval": 41.1, "gdp_growth_avg": 1.5, "jobs_created_millions": -2.7,
-        "eo_count": 220, "eo_court_success_pct": 55.0, "cabinet_turnover_pct": 65.0,
-        "summary": "Populist who cut taxes and reshaped federal judiciary. Pre-pandemic economy was strong but COVID-19 response and January 6th defined the final year.",
-        "key_achievements": ["Tax Cuts and Jobs Act", "Abraham Accords", "Operation Warp Speed vaccines", "USMCA trade deal"],
-        "key_failures": ["COVID-19 pandemic response", "January 6th Capitol breach", "Record cabinet turnover", "Many EOs blocked by courts"],
-    },
-    {
-        "id": "biden-46", "name": "Joe Biden", "party": "D", "number": 46,
-        "term_start": "2021-01-20", "term_end": "2025-01-20",
-        "score_public_mandate": 41, "score_effectiveness": 48, "score_competence": 52, "score_agency_alignment": 58,
-        "avg_approval": 40.8, "gdp_growth_avg": 3.4, "jobs_created_millions": 16.6,
-        "eo_count": 162, "eo_court_success_pct": 70.0, "cabinet_turnover_pct": 20.0,
-        "summary": "Passed major infrastructure and climate legislation. Record job creation but persistent inflation eroded public confidence. Withdrew from reelection.",
-        "key_achievements": ["Bipartisan Infrastructure Law", "CHIPS Act", "Inflation Reduction Act (climate)", "Record job creation"],
-        "key_failures": ["Afghanistan withdrawal", "Persistent inflation", "Border crisis", "Low approval despite economic data"],
-    },
-    {
-        "id": "trump-47", "name": "Donald Trump", "party": "R", "number": 47,
-        "term_start": "2025-01-20", "term_end": None, "is_current": True,
-        "score_public_mandate": 48, "score_effectiveness": 45, "score_competence": 38, "score_agency_alignment": 28,
-        "avg_approval": 47.0, "gdp_growth_avg": None, "jobs_created_millions": None,
-        "eo_count": 80, "eo_court_success_pct": 45.0, "cabinet_turnover_pct": 10.0,
-        "summary": "Second non-consecutive term focused on tariff policy, government restructuring (DOGE), and aggressive executive action. Many orders face legal challenges.",
-        "key_achievements": ["Aggressive executive action pace", "Government restructuring initiative", "Tariff-based trade policy"],
-        "key_failures": ["Multiple EOs blocked by courts", "Tariff-driven market volatility", "Agency staffing disruptions"],
-    },
-]
-# fmt: on
-
-
-def seed_presidents(db: Session) -> int:
-    """Populate/refresh the presidents table when seed version changes."""
-    existing = db.query(President).count()
-
-    # Check if we need to re-seed (version bump = more data added)
-    if existing > 0:
-        from app.pipeline.cache import api_cache_get, api_cache_set
-        cached_ver = api_cache_get(db, "meta", "president_seed_version")
-        if cached_ver and int(cached_ver.get("v", 0)) >= SEED_VERSION:
-            return 0
-        # Wipe and re-seed
-        db.query(President).delete()
-        db.commit()
-        logger.info("Re-seeding presidents (version %d)", SEED_VERSION)
-
-    count = 0
-    for data in SEED_PRESIDENTS:
-        president = President(
-            id=data["id"],
-            name=data["name"],
-            party=data["party"],
-            number=data["number"],
-            term_start=data["term_start"],
-            term_end=data.get("term_end"),
-            is_current=data.get("is_current", False),
-            score_public_mandate=data.get("score_public_mandate", 50),
-            score_effectiveness=data.get("score_effectiveness", 50),
-            score_competence=data.get("score_competence", 50),
-            score_agency_alignment=data.get("score_agency_alignment", 50),
-            avg_approval=data.get("avg_approval"),
-            gdp_growth_avg=data.get("gdp_growth_avg"),
-            jobs_created_millions=data.get("jobs_created_millions"),
-            eo_count=data.get("eo_count"),
-            eo_court_success_pct=data.get("eo_court_success_pct"),
-            cabinet_turnover_pct=data.get("cabinet_turnover_pct"),
-            summary=data.get("summary", ""),
-            key_achievements=json.dumps(data.get("key_achievements", [])),
-            key_failures=json.dumps(data.get("key_failures", [])),
-        )
-        db.add(president)
-        count += 1
-
-    db.commit()
-
-    # Store version
-    from app.pipeline.cache import api_cache_set
-    api_cache_set(db, "meta", "president_seed_version", {"v": SEED_VERSION})
-
-    logger.info("Seeded %d presidents (version %d)", count, SEED_VERSION)
-    return count
-
-
-def _competence_has_live_data(p: President) -> bool:
-    """True if this president's Competence score blended in real EO-rate
-    data rather than being pure seed (see calc_competence — court-success
-    and cabinet-turnover rates never have a live source, so this can only
-    ever reflect the EO-activity-rate component)."""
-    from app.pipeline.president_pipeline import DYNAMIC_PRESIDENTS
-    return p.id in DYNAMIC_PRESIDENTS and p.eo_count is not None
 
 
 def _build_response(p: President) -> PresidentSchema:
@@ -605,10 +85,7 @@ def _build_response(p: President) -> PresidentSchema:
         eo_count=p.eo_count,
         eo_court_success_pct=p.eo_court_success_pct,
         cabinet_turnover_pct=p.cabinet_turnover_pct,
-        competence_has_live_data=_competence_has_live_data(p),
-        summary=p.summary,
-        key_achievements=json.loads(p.key_achievements) if p.key_achievements else [],
-        key_failures=json.loads(p.key_failures) if p.key_failures else [],
+        election_margin=p.election_margin,
     )
 
 
@@ -620,85 +97,58 @@ def get_president(db: Session, president_id: str) -> PresidentSchema | None:
 
 
 def get_president_score_breakdown(db: Session, president_id: str) -> dict | None:
-    """Recompute a president's full score-derivation breakdown on-demand.
+    """Recompute a president's full score-derivation breakdown on-demand,
+    directly from whatever live/historical data is currently stored
+    (gdp_growth_adjusted, rulemaking_count, election_margin, etc. —
+    persisted by president_pipeline.py specifically so this recompute is
+    possible without a live re-fetch).
 
-    Competence/Effectiveness/Agency Alignment use the _core variants of
-    president_scorer.py's calc_* functions with whatever live-data columns
-    are currently stored (gdp_growth_adjusted, rulemaking_count,
-    rulemaking_finalized_pct — persisted by president_pipeline.py
-    specifically so this recompute is possible; previously only kept in a
-    local dict and discarded).
-
-    Gated on DYNAMIC_PRESIDENTS/ECONOMICS_ONLY_PRESIDENTS membership, the
-    same as president_pipeline.py itself — some presidents have seed-data
-    values in eo_count/gdp_growth_avg/etc. that were never actually fed
-    through a live formula (that pipeline never touches their Competence/
-    Effectiveness/Agency Alignment), so gating on stored-value presence
-    alone would fabricate a "live" breakdown that was never really
-    computed for them.
-
-    Public Mandate has no calc function yet — always a pure seed value
-    (see president_scorer.py module docstring) — represented as
-    {"seedOnly": True} for the frontend to render as "editorial estimate,"
-    not a formula breakdown. Independence and Follow-Through were removed
-    entirely (2026-07, see this module's docstring) rather than left in
-    this same seed-only state — no per-metric data source exists for them
-    at all, unlike Public Mandate which is a real Gallup/APP figure for
-    Truman onward and is on a path to a live formula (see the roadmap
-    note in president_scorer.py).
+    2026-07: no more DYNAMIC_PRESIDENTS/ECONOMICS_ONLY_PRESIDENTS gating
+    and no more seedOnly fallback — every _core function now takes
+    whatever's actually stored and returns score=None on its own when a
+    dimension is genuinely inapplicable for this president (see each
+    _core function's docstring in president_scorer.py). This function
+    used to need cohort membership to distinguish "not fetched" from
+    "fetched as null" before deciding whether to trust stored data as
+    live; that distinction doesn't exist anymore because there's no
+    seed-fallback state left to accidentally present as live.
     """
     from app.pipeline.analyze.president_scorer import (
         _agency_alignment_core,
         _competence_core,
         _effectiveness_core,
+        _public_mandate_core,
     )
-    from app.pipeline.president_pipeline import (
-        DYNAMIC_PRESIDENTS,
-        ECONOMICS_ONLY_PRESIDENTS,
-        _term_years,
-    )
+    from app.pipeline.president_pipeline import _term_years
 
     p = db.query(President).filter(President.id == president_id).first()
     if not p:
         return None
 
     term_years = _term_years(p.term_start, p.term_end)
-    is_dynamic = p.id in DYNAMIC_PRESIDENTS
-    is_econ = is_dynamic or p.id in ECONOMICS_ONLY_PRESIDENTS
-
-    def _seed_only(score: float) -> dict:
-        return {"score": score, "seedOnly": True}
 
     return {
-        "publicMandate": _seed_only(p.score_public_mandate),
-        "competence": (
-            _competence_core(
-                eo_count=p.eo_count,
-                eo_court_success_pct=p.eo_court_success_pct,
-                cabinet_turnover_pct=p.cabinet_turnover_pct,
-                term_years=term_years,
-                seed_score=p.score_competence,
-            )
-            if is_dynamic else _seed_only(p.score_competence)
+        "publicMandate": _public_mandate_core(
+            avg_approval=p.avg_approval,
+            approval_trend=p.approval_trend,
+            election_margin=p.election_margin,
         ),
-        "effectiveness": (
-            _effectiveness_core(
-                jobs_created_millions=p.jobs_created_millions,
-                gdp_growth_avg=p.gdp_growth_avg,
-                term_years=term_years,
-                seed_score=p.score_effectiveness,
-                gdp_growth_adjusted=p.gdp_growth_adjusted,
-            )
-            if is_econ else _seed_only(p.score_effectiveness)
+        "competence": _competence_core(
+            eo_count=p.eo_count,
+            eo_court_success_pct=p.eo_court_success_pct,
+            cabinet_turnover_pct=p.cabinet_turnover_pct,
+            term_years=term_years,
         ),
-        "agencyAlignment": (
-            _agency_alignment_core(
-                rulemaking_count=p.rulemaking_count,
-                rulemaking_finalized_pct=p.rulemaking_finalized_pct,
-                term_years=term_years,
-                seed_score=p.score_agency_alignment,
-            )
-            if is_dynamic else _seed_only(p.score_agency_alignment)
+        "effectiveness": _effectiveness_core(
+            jobs_created_millions=p.jobs_created_millions,
+            gdp_growth_avg=p.gdp_growth_avg,
+            term_years=term_years,
+            gdp_growth_adjusted=p.gdp_growth_adjusted,
+        ),
+        "agencyAlignment": _agency_alignment_core(
+            rulemaking_count=p.rulemaking_count,
+            rulemaking_finalized_pct=p.rulemaking_finalized_pct,
+            term_years=term_years,
         ),
     }
 

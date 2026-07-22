@@ -380,10 +380,16 @@ class StateCountSchema(CamelModel):
 
 
 class PresidentialScoreSchema(CamelModel):
-    public_mandate: float
-    effectiveness: float
-    competence: float
-    agency_alignment: float
+    # Nullable (2026-07): None means this dimension is genuinely
+    # inapplicable for this president (e.g. Public Mandate for one who
+    # never won a presidential election, Agency Alignment before Federal
+    # Register existed) — never a hand-set fallback. See models.py
+    # President's comment and president_scorer.py's
+    # compute_president_overall_score for the renormalization this drives.
+    public_mandate: float | None
+    effectiveness: float | None
+    competence: float | None
+    agency_alignment: float | None
     # Backend-computed overall (president_scorer.compute_president_overall_score).
     overall: float = 0.0
 
@@ -403,16 +409,10 @@ class PresidentSchema(CamelModel):
     eo_count: int | None = None
     eo_court_success_pct: float | None = None
     cabinet_turnover_pct: float | None = None
-    # True when this president's Competence score actually blended in
-    # live EO-activity data (see calc_competence) rather than being pure
-    # seed. Court-success and cabinet-turnover rates are never live for
-    # any president (no fetch source exists), so even "live" Competence
-    # here is partial — this flag distinguishes "partially computed" from
-    # "entirely a one-time editorial estimate" for the frontend badge.
-    competence_has_live_data: bool = False
-    summary: str = ""
-    key_achievements: list[str] = []
-    key_failures: list[str] = []
+    # Election-margin percentage (average across this president's own
+    # election win(s)) — the pre-polling-era Public Mandate proxy. See
+    # app.pipeline.fetch.presidential_elections.
+    election_margin: float | None = None
 
 
 class PresidentLeaderboardEntry(CamelModel):

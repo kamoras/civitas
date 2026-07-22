@@ -510,12 +510,32 @@ class President(Base):
     term_end: Mapped[str | None] = mapped_column(String, nullable=True)
     is_current: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    score_public_mandate: Mapped[float] = mapped_column(Float, default=0.0)
-    score_effectiveness: Mapped[float] = mapped_column(Float, default=0.0)
-    score_competence: Mapped[float] = mapped_column(Float, default=0.0)
-    score_agency_alignment: Mapped[float] = mapped_column(Float, default=0.0)
+    # Nullable, no default (2026-07): these used to default to 0.0 and get
+    # filled from a hand-set seed value for any president without live
+    # data. Both are gone — a hand-set number presented as a computed
+    # score undermined this platform's core promise (see president_
+    # service.py's module docstring for the full account), and 0.0 was
+    # actively misleading as a "no data yet" placeholder (it reads as the
+    # worst possible score, not "unknown"). NULL means "not computed for
+    # this president" — compute_president_overall_score renormalizes the
+    # weighted sum over whichever dimensions are actually present per
+    # president, the same pattern score_calculator.py already uses when a
+    # senator/rep is missing a signal (e.g. Coalition Breadth's
+    # breadth_weight=0). A dimension is only ever NULL when it is
+    # genuinely inapplicable for that president (e.g. Public Mandate for
+    # the five who never won a presidential election) or a fetch hasn't
+    # completed yet — never as a stand-in for a real number.
+    score_public_mandate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    score_effectiveness: Mapped[float | None] = mapped_column(Float, nullable=True)
+    score_competence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    score_agency_alignment: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     avg_approval: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Average election-margin percentage across a president's own election
+    # win(s) — the pre-polling-era (pre-Truman) Public Mandate proxy, see
+    # app.pipeline.fetch.presidential_elections. NULL for the five
+    # presidents who never won a presidential election in their own right.
+    election_margin: Mapped[float | None] = mapped_column(Float, nullable=True)
     gdp_growth_avg: Mapped[float | None] = mapped_column(Float, nullable=True)
     jobs_created_millions: Mapped[float | None] = mapped_column(Float, nullable=True)
     eo_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -529,10 +549,10 @@ class President(Base):
     gdp_growth_adjusted: Mapped[float | None] = mapped_column(Float, nullable=True)
     rulemaking_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     rulemaking_finalized_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
-
-    summary: Mapped[str] = mapped_column(Text, default="")
-    key_achievements: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
-    key_failures: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
+    # Last-quartile-minus-first-quartile average approval across the term
+    # (see calc_public_mandate) — persisted for the same on-demand
+    # score-breakdown-recompute reason as gdp_growth_adjusted above.
+    approval_trend: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)

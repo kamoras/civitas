@@ -321,14 +321,11 @@ def init_db() -> None:
     _ensure_indexes()
     _migrate_visits_data_to_own_db()
 
-    # Seed president data if the table is empty
-    from app.services.president_service import seed_presidents
-
-    db = SessionLocal()
-    try:
-        seed_presidents(db)
-    finally:
-        db.close()
+    # President rows are no longer seeded here — run_president_pipeline
+    # (president_pipeline.py) creates/updates them from a live UCSB
+    # roster fetch on every run, so a fresh database is populated by that
+    # pipeline's first pass instead of a separate hand-typed seed step
+    # (2026-07, see president_pipeline.py's module docstring).
 
 
 def reset_all_data() -> dict:
@@ -395,14 +392,9 @@ def reset_all_data() -> dict:
         logger.warning("ChromaDB reset failed: %s", exc)
         summary["chromadb_error"] = "reset failed — see server logs"
 
-    from app.services.president_service import seed_presidents
-    db = SessionLocal()
-    try:
-        seed_presidents(db)
-    finally:
-        db.close()
-
     logger.info("Full data reset complete: %s", summary)
+    # President rows will be recreated by the next run_president_pipeline
+    # run (live UCSB roster fetch) — see init_db's comment above.
     return summary
 
 

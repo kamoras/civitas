@@ -24,6 +24,19 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "President v2",
+    date: "2026-07-21",
+    title: "Presidential scoring rebuilt on real data — no more hand-set numbers",
+    tldr: "Every presidential score used to rest on a one-time, hand-typed number with no data or citation behind it, presented as if it were computed. It's now computed for real, for every president, from live and historical government/academic datasets — and a dimension with no real source for a given president shows N/A instead of a fabricated placeholder.",
+    changes: [
+      "Independence and Follow-Through are removed entirely, not just disclosed as limitations — both were always a one-time hand-set number with no live formula and no realistic path to one (Independence's obvious source, OpenSecrets' cabinet/appointee revolving-door API, was discontinued in 2025; Follow-Through needs the same platform-text-vs-action matching already tried four times and abandoned for senators' Promise Persistence, v6.0). Their combined weight redistributes proportionally across the four remaining dimensions (Public Mandate 15→23%, Effectiveness 20→31%, Competence 15→23%, Agency Alignment 15→23%).",
+      "Public Mandate now covers every president who ever won a presidential election, computed rather than curated. Gallup — this platform's original approval source — ended presidential approval tracking entirely in February 2026 after 88 years; approval data now comes from the American Presidency Project (presidency.ucsb.edu), still updated for the sitting president, aggregating AP-NORC/CNN-SSRS/Marist/Pew/Verasight. Presidents before the polling era (pre-Truman) use UCSB's historical election-margin data instead — the average margin of victory across their own election win(s) — both paths z-scored against real population statistics computed from every president's actual data. The five presidents who never won a presidential election in their own right show N/A for this dimension, not a fabricated number.",
+      "Effectiveness's GDP-growth component now covers the full presidency: BEA/FRED for the modern era, MeasuringWorth's real-GDP series (1790-present) for earlier presidents, both producing the same term-average-growth figure. Competence's EO-activity-rate component also now covers the full presidency, from UCSB's own executive-order statistics table rather than the Federal Register API, whose machine-readable coverage is a hard wall at 1994.",
+      "Every score dimension became nullable rather than defaulting to a neutral 50 or a seeded placeholder — a dimension is null only when it's genuinely inapplicable for that specific president (e.g. Agency Alignment before the Federal Register Act of 1936; Public Mandate for a never-elected president), and the overall score renormalizes across whichever dimensions actually apply, the same 'redistribute onto what's measured' pattern already used within senator/rep scoring for a missing signal.",
+      "Identity data (name, party, term dates, term number) is no longer typed into this codebase by hand either — it's fetched live from UCSB's presidential roster on every pipeline run, the same source used for the metrics above. The hand-written narrative summary/achievements/failures fields are removed rather than kept as unscored 'informational' text, for the same reason the two removed score dimensions were removed: no real, citable source behind them.",
+    ],
+  },
+  {
     version: "v6.9",
     date: "2026-07-21",
     title: "Legislative Effectiveness — fixing a House/Senate scoring gap",

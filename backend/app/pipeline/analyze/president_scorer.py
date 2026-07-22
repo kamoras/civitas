@@ -1,8 +1,10 @@
-"""Dynamic president score calculator.
+"""President score calculator.
 
-For presidents with live API data (Clinton onward), recalculates affected
-metric scores from real data. Falls back to seed values for metrics
-where live data is unavailable.
+Every dimension, for every president, is computed entirely from real
+fetched/historical data — there is no seed fallback anywhere in this
+file (removed 2026-07, see president_service.py's module docstring for
+the full account). A dimension a president has no real data source for
+is None, never a hand-set or neutral placeholder.
 
 Independence and Follow-Through removed entirely (2026-07, see
 president_service.py's module docstring for the full account) — both were
@@ -15,19 +17,24 @@ combined weight was redistributed (see PRESIDENT_SCORE_WEIGHTS in
 config_definitions.py) to the four dimensions below.
 
 Metrics that can be dynamically computed:
-  - Competence: EO activity rate only (30% of the formula's weight — see
-    calc_competence). Court-success rate and cabinet-turnover rate are
-    accepted as optional inputs for a future data source, but nothing in
-    this pipeline currently fetches them live, so in practice they are
-    never passed and the remaining 70% blends with the seed score.
+  - Competence: EO activity rate only (30% of the formula's nominal
+    weight — see calc_competence). Court-success rate and cabinet-
+    turnover rate are accepted as optional inputs for a future data
+    source, but nothing in this pipeline currently fetches them live, so
+    in practice they are never passed and Competence runs on EO-activity-
+    rate alone, renormalized to 100% of the measured weight (see
+    _blend_live_components).
   - Effectiveness: Derived from employment/GDP data
+  - Public Mandate (2026-07): average approval + trend, computed from
+    real polling data scraped from UCSB's American Presidency Project
+    (see app.pipeline.fetch.presidential_approval) — Gallup, this
+    platform's original live source, ended presidential approval tracking
+    entirely in Feb 2026; UCSB is the replacement, still updated for the
+    sitting president post-Gallup (aggregating AP-NORC/CNN-SSRS/Marist/
+    Pew/Verasight). Covers Truman-33 onward (15 presidents with a real
+    UCSB approval-poll page); earlier presidents keep their seed value.
 
 Metrics that remain static (roadmap, not abandoned):
-  - Public Mandate: Gallup (this platform's only live source) ended
-    presidential approval tracking entirely in Feb 2026. UCSB's American
-    Presidency Project is the identified replacement (still updated for
-    the sitting president, aggregating AP-NORC/CNN-SSRS/Marist/Pew/
-    Verasight) — needs a scraper, no clean API exists.
   - Competence's cabinet-turnover-rate: Wikidata SPARQL (wdt:P39
     position-held with date qualifiers) is a real, precedented candidate
     — direct date math, not fuzzy matching. Not yet built.
@@ -48,68 +55,101 @@ def clamp(v: float) -> int:
     return max(0, min(100, round(v)))
 
 
-def _blend_components_with_seed(components: list[dict], seed_score: float) -> dict:
-    """Combine weighted live-data components with the editorial seed value.
+def _blend_live_components(components: list[dict]) -> dict:
+    """Combine weighted live-data components into a score — live data
+    only, never a hand-set fallback.
 
-    Shared by _competence_core / _effectiveness_core / _agency_alignment_core,
-    which each gathered their own `components` list and then ran this identical
-    blending math. With no components it's the pure seed; otherwise the live
-    score fills its own weight and the seed fills any remaining (unfetched)
-    weight, appended as a visible component.
+    Shared by _competence_core / _effectiveness_core / _agency_alignment_
+    core / _public_mandate_core, which each gather their own `components`
+    list of whatever sub-signals actually have live data this run.
+
+    2026-07: this used to blend missing weight with a hand-set "editorial
+    seed" value — a one-time, uncited number with no more standing than a
+    guess (see president_service.py's module docstring for the full
+    account of why that was removed platform-wide). A component with no
+    live source now simply isn't included, and the WEIGHT of whatever IS
+    live gets renormalized to 100% of what was actually measured — same
+    pattern score_calculator.py already uses when a senator/rep's
+    Coalition Breadth is unavailable (breadth_weight=0, party_weight=1.0
+    there; the exact same renormalize-onto-available-signal shape here).
+
+    With zero live components, this returns score=None — NOT a neutral
+    50. Deliberately different from score_calculator.py's "missing data
+    floors at neutral" convention: that convention exists for a signal
+    that's temporarily unmeasured for one entity but conceptually always
+    applies. A president dimension with zero components isn't temporarily
+    unmeasured, it's a case this file's fetchers have identified as
+    genuinely inapplicable (e.g. Public Mandate for a president who never
+    won an election, Agency Alignment before Federal Register existed) —
+    scoring it neutral would still be presenting a number for something
+    that isn't measurable even in principle. Callers (president_pipeline.
+    py) skip writing a None score, leaving the DB column NULL; compute_
+    president_overall_score renormalizes across whichever dimensions
+    aren't NULL for that specific president.
     """
     if not components:
         return {
-            "score": clamp(seed_score), "components": [],
-            "note": "No live data available — pure editorial seed value.",
+            "score": None, "components": [],
+            "note": "Not applicable for this president — no data source exists even in principle, not merely unfetched.",
         }
 
     total_weight = sum(c["weight"] for c in components)
     weighted_sum = sum(c["score"] * c["weight"] for c in components)
-    live_score = weighted_sum / total_weight
+    score = clamp(weighted_sum / total_weight)
 
-    remaining_weight = 1.0 - total_weight
-    if remaining_weight > 0.01:
-        score = clamp(live_score * total_weight + seed_score * remaining_weight)
-        components.append({
-            "label": "Editorial seed (unfetched components)", "weight": round(remaining_weight, 2),
-            "score": round(seed_score, 1),
-            "detail": "no live source for the remaining weight — blended with the editorial seed value",
-        })
-    else:
-        score = clamp(live_score)
+    if total_weight < 0.999:
+        # Renormalize displayed weights to sum to 1.0 so the "show the
+        # math" panel's percentages reflect what was actually measured,
+        # not the full formula's nominal split.
+        for c in components:
+            c["weight"] = round(c["weight"] / total_weight, 2)
+
     return {"score": score, "components": components}
 
 
+_PRESIDENT_SCORE_FIELD_MAP = {
+    "publicMandate": "score_public_mandate",
+    "effectiveness": "score_effectiveness",
+    "competence": "score_competence",
+    "agencyAlignment": "score_agency_alignment",
+}
+
+
 def compute_president_overall_score(entity) -> float:
-    """Weighted overall score from a scored President row.
+    """Weighted overall score from a scored President row, renormalized
+    per-president over whichever dimensions actually have a value.
 
     Single source of truth for the PRESIDENT_SCORE_WEIGHTS-weighted sum —
     previously hand-rolled independently in both president_service.py's
     response builder and its leaderboard sort, with default weight values
-    baked into one of the two copies. Mirrors score_calculator.
-    compute_overall_score's reasoning for senators/reps: summing
-    dynamically over PRESIDENT_SCORE_WEIGHTS.items() means a future
-    weight-table change can't silently desync from this formula again.
+    baked into one of the two copies.
+
+    2026-07: every dimension's score field is now nullable (see models.py
+    President's comment) — a dimension is None when it's genuinely
+    inapplicable for that specific president (e.g. Public Mandate for a
+    president who never won an election; Agency Alignment for anyone
+    before the Federal Register existed in 1936), never a hand-set
+    fallback. Renormalizing PRESIDENT_SCORE_WEIGHTS over just the
+    present dimensions is the same "redistribute onto what's actually
+    measured" pattern score_calculator.compute_overall_score already uses
+    for senators/reps (and the same pattern this file's own
+    _blend_live_components uses one level down, within a single
+    dimension's components) — applied here one level up, across
+    dimensions. A president with zero computable dimensions (should not
+    happen given the coverage of the fetchers wired into president_
+    pipeline.py, but defensive) returns 0.0 rather than raising.
     """
     from app.config_definitions import PRESIDENT_SCORE_WEIGHTS
 
-    _FIELD_MAP = {
-        "publicMandate": "score_public_mandate",
-        "effectiveness": "score_effectiveness",
-        "competence": "score_competence",
-        "agencyAlignment": "score_agency_alignment",
-    }
-    # `or 0` guards the present-but-None case: getattr's default only fires
-    # when the attribute is absent, so a nullable column that is present and
-    # None would otherwise raise `None * weight` and 500 the endpoint. Scores
-    # are in [0, 100], so coercing a null (or a genuine 0) to 0 is correct.
-    return round(
-        sum(
-            (getattr(entity, _FIELD_MAP[key], 0) or 0) * weight
-            for key, weight in PRESIDENT_SCORE_WEIGHTS.items()
-        ),
-        2,
-    )
+    present = [
+        (weight, getattr(entity, _PRESIDENT_SCORE_FIELD_MAP[key]))
+        for key, weight in PRESIDENT_SCORE_WEIGHTS.items()
+        if getattr(entity, _PRESIDENT_SCORE_FIELD_MAP[key]) is not None
+    ]
+    total_weight = sum(w for w, _ in present)
+    if total_weight <= 0:
+        return 0.0
+    return round(sum(w * score for w, score in present) / total_weight, 2)
 
 
 # Presidential scoring formula version, same purpose as score_calculator.
@@ -128,15 +168,14 @@ def calc_competence(
     eo_court_success_pct: float | None,
     cabinet_turnover_pct: float | None,
     term_years: float,
-    seed_score: float,
-) -> int:
-    """Calculate competence score, blending live data with the seed score.
+) -> int | None:
+    """Calculate competence score from live data only.
 
     See _competence_core for the full component breakdown — this is a thin
     wrapper kept for existing callers/tests that expect a bare int.
     """
     return _competence_core(
-        eo_count, eo_court_success_pct, cabinet_turnover_pct, term_years, seed_score,
+        eo_count, eo_court_success_pct, cabinet_turnover_pct, term_years,
     )["score"]
 
 
@@ -145,27 +184,31 @@ def _competence_core(
     eo_court_success_pct: float | None,
     cabinet_turnover_pct: float | None,
     term_years: float,
-    seed_score: float,
 ) -> dict:
     """Same math as calc_competence, returning every intermediate value
     alongside the final score.
 
     Components (weighted):
       - Court success rate (40%): Higher = more legally sound drafting.
-        No fetch source is wired up for this (2026-07 audit) — the
-        pipeline never passes eo_court_success_pct, so this weight
-        always falls through to seed_score via the blending below.
-      - Cabinet stability (30%): Lower turnover = better management.
-        Same — cabinet_turnover_pct is never fetched live either.
+        No fetch source is wired up for this yet (2026-07 audit) — see
+        the "Metrics that remain static" note in this module's docstring
+        for why (CourtListener has case law but no structured EO-to-
+        litigation mapping) — so eo_court_success_pct is currently always
+        None and this component never contributes.
+      - Cabinet stability (30%): Lower turnover = better management. Same
+        — cabinet_turnover_pct has a real, identified candidate source
+        (Wikidata) but no fetcher built yet, so it's currently always None.
       - EO activity rate (30%): Moderate rate is ideal; very high or
         very low rates suggest either overreliance on EOs or inaction.
         This is the only component genuinely computed from live data
-        (Federal Register EO counts).
+        today (Federal Register EO counts).
 
-    Any component whose input is None is excluded and its weight blends
-    with seed_score instead (see the blending step below) — this is what
-    keeps the two permanently-unfetched components honest rather than
-    silently defaulting to some fixed number.
+    Any component whose input is None is simply excluded — the weight of
+    whatever IS live gets renormalized to 100% of what was measured (see
+    _blend_live_components). No hand-set fallback for the other two, ever
+    — a missing component means Competence is currently computed from
+    less than the full formula, disclosed as such, not papered over with
+    a fabricated number.
     """
     components: list[dict] = []
 
@@ -197,23 +240,22 @@ def _competence_core(
             "detail": f"{eo_count} executive orders over {term_years:.1f} years = {eo_per_year:.1f}/year",
         })
 
-    return _blend_components_with_seed(components, seed_score)
+    return _blend_live_components(components)
 
 
 def calc_effectiveness(
     jobs_created_millions: float | None,
     gdp_growth_avg: float | None,
     term_years: float,
-    seed_score: float,
     gdp_growth_adjusted: float | None = None,
-) -> int:
-    """Calculate effectiveness score from economic data.
+) -> int | None:
+    """Calculate effectiveness score from economic data only.
 
     See _effectiveness_core for the full component breakdown — this is a
     thin wrapper kept for existing callers/tests that expect a bare int.
     """
     return _effectiveness_core(
-        jobs_created_millions, gdp_growth_avg, term_years, seed_score, gdp_growth_adjusted,
+        jobs_created_millions, gdp_growth_avg, term_years, gdp_growth_adjusted,
     )["score"]
 
 
@@ -221,15 +263,26 @@ def _effectiveness_core(
     jobs_created_millions: float | None,
     gdp_growth_avg: float | None,
     term_years: float,
-    seed_score: float,
     gdp_growth_adjusted: float | None = None,
 ) -> dict:
     """Same math as calc_effectiveness, returning every intermediate value
     alongside the final score.
 
     Components (weighted):
-      - GDP growth (60%): Compared to post-WWII average of ~3.2%
-      - Jobs created (40%): Normalized per year of term
+      - GDP growth (60%): Compared to post-WWII average of ~3.2%. Real for
+        every president back to 1790 (gdp_growth_avg is populated from
+        BEA/FRED for Truman-33 onward, and from MeasuringWorth's
+        historical annual real-GDP series — app.pipeline.fetch.
+        historical_gdp — for every president before that; both are the
+        same "average annual growth over the term" figure regardless of
+        which live source computed it).
+      - Jobs created (40%): Normalized per year of term. Only available
+        from BLS payroll data (1939 onward, per economic_data.py) — no
+        equivalent historical employment series exists for earlier
+        presidents, so this component is genuinely absent (not
+        defaulted) for anyone before that, and Effectiveness for those
+        presidents is 100% GDP growth via _blend_live_components'
+        renormalization.
 
     GDP adjustment — first-year exclusion
     ----------------------------------------
@@ -244,7 +297,8 @@ def _effectiveness_core(
     year of the term on this basis.
 
     When gdp_growth_adjusted is None, falls back to gdp_growth_avg
-    (full-term average, used for historical presidents and as a seed).
+    (full-term average — used for historical presidents, where a
+    year-1-exclusion adjustment hasn't been computed).
 
     References:
       Blinder, A.S., & Watson, M.W. (2016). AER 106(4), 1015–1045.
@@ -281,22 +335,21 @@ def _effectiveness_core(
             "detail": f"{jobs_created_millions:.1f}M jobs over {term_years:.1f} years = {jobs_per_year:.2f}M/year",
         })
 
-    return _blend_components_with_seed(components, seed_score)
+    return _blend_live_components(components)
 
 
 def calc_agency_alignment(
     rulemaking_count: int | None,
     rulemaking_finalized_pct: float | None,
     term_years: float,
-    seed_score: float,
-) -> int:
+) -> int | None:
     """Calculate agency alignment score from Federal Register rulemaking data.
 
     See _agency_alignment_core for the full component breakdown — this is a
     thin wrapper kept for existing callers/tests that expect a bare int.
     """
     return _agency_alignment_core(
-        rulemaking_count, rulemaking_finalized_pct, term_years, seed_score,
+        rulemaking_count, rulemaking_finalized_pct, term_years,
     )["score"]
 
 
@@ -304,7 +357,6 @@ def _agency_alignment_core(
     rulemaking_count: int | None,
     rulemaking_finalized_pct: float | None,
     term_years: float,
-    seed_score: float,
 ) -> dict:
     """Same math as calc_agency_alignment, returning every intermediate
     value alongside the final score.
@@ -314,6 +366,18 @@ def _agency_alignment_core(
         aligned with the agenda. Moderate-to-high rate scores well.
       - Finalization rate (50%): Ratio of final rules to total rulemaking
         (proposed + final). Higher = agencies follow through effectively.
+
+    No historical proxy exists for this dimension before the Federal
+    Register itself began in 1936 (Federal Register Act) — unlike Public
+    Mandate (election margins) or Effectiveness (MeasuringWorth's GDP
+    series), "agency rulemaking" isn't a construct with an equivalent
+    that predates the record-keeping mechanism that defines it: the
+    modern notice-and-comment regulatory apparatus this dimension
+    measures didn't functionally exist yet either. This is a genuine
+    conceptual absence, not an unfetched dataset — Agency Alignment is
+    fully excluded (not defaulted) for every president before Federal
+    Register data exists, via compute_president_overall_score's
+    per-president renormalization.
     """
     components: list[dict] = []
 
@@ -337,50 +401,187 @@ def _agency_alignment_core(
             "detail": f"{rulemaking_finalized_pct:.0f}% of rulemakings reached a final rule",
         })
 
-    return _blend_components_with_seed(components, seed_score)
+    return _blend_live_components(components)
 
 
-def recalculate_president_scores(
-    president_id: str,
-    seed_scores: dict,
-    live_data: dict,
-    term_years: float,
+# Population statistics for the term-average-approval and approval-trend
+# components below, computed 2026-07 from real UCSB American Presidency
+# Project data across all 15 presidents with a live approval-poll page
+# (Truman-33 through the current term) via
+# app.pipeline.fetch.presidential_approval.fetch_president_approval_history
+# — same "fit against real fetched data before shipping" discipline as
+# every other calibration constant in this file (see e.g. score_calculator
+# .py's _LES_POPULATION_AVG_SENATE/_HOUSE).
+#
+# Trend is last-quartile-minus-first-quartile average approval across a
+# term. The population trend mean is sharply negative (-13.7, i.e. the
+# typical president's approval drops ~14 points from term-start to
+# term-end) — a well-documented "honeymoon fades" pattern in the
+# presidential-approval literature, not this platform's own finding, so
+# trend must be scored against that population average, not against zero:
+# comparing to zero would count normal, universal decline as a failure for
+# nearly every president in the dataset (only Reagan/Clinton/Trump-45 had
+# a flat-or-positive raw trend).
+_PUBLIC_MANDATE_AVG_APPROVAL_MEAN = 50.93
+_PUBLIC_MANDATE_AVG_APPROVAL_STDEV = 9.06
+_PUBLIC_MANDATE_TREND_MEAN = -13.72
+_PUBLIC_MANDATE_TREND_STDEV = 14.65
+
+# Full credit/deficit at 1.5 population standard deviations from the mean
+# — same saturation shape (and same "~1.5x stdev" reasoning) as
+# score_calculator.py's _LES_CREDIT_SATURATION, so an unusually large but
+# real value doesn't need an arbitrary separate cap.
+_PUBLIC_MANDATE_SATURATION_STDEV = 1.5
+
+# Pre-polling-era (pre-Truman) proxy: average margin of victory (%) across
+# a president's own election win(s) — see
+# app.pipeline.fetch.presidential_elections. Population stats computed
+# 2026-07 from real fetched data across the 42 presidents who won at
+# least one presidential election (n=42, mean=9.44, stdev=10.34) — same
+# fit-against-real-data discipline as every constant in this file. The
+# five presidents who never won a presidential election in their own
+# right (succeeded via a predecessor's death, or — Ford — appointed VP
+# under the 25th Amendment and never elected to anything nationally) have
+# neither this nor approval data; Public Mandate is fully excluded for
+# them (see compute_president_overall_score's renormalization), not
+# defaulted.
+_PUBLIC_MANDATE_ELECTION_MARGIN_MEAN = 9.44
+_PUBLIC_MANDATE_ELECTION_MARGIN_STDEV = 10.34
+
+
+def _public_mandate_zscore_component(
+    label: str, weight: float, value: float, population_mean: float,
+    population_stdev: float, detail: str,
 ) -> dict:
-    """Recalculate scores blending live data with seed values.
+    z = (value - population_mean) / population_stdev if population_stdev else 0.0
+    normalized = max(-1.0, min(z / _PUBLIC_MANDATE_SATURATION_STDEV, 1.0))
+    return {
+        "label": label, "weight": weight,
+        "score": round(50.0 + 50.0 * normalized, 1),
+        "detail": detail,
+    }
+
+
+def calc_public_mandate(
+    avg_approval: float | None,
+    approval_trend: float | None,
+    election_margin: float | None,
+) -> int | None:
+    """Calculate Public Mandate score from real data only — approval
+    polling where it exists, election margin as the pre-polling-era
+    historical proxy otherwise. None if neither exists for this
+    president (see _public_mandate_core).
+
+    See _public_mandate_core for the full component breakdown — this is a
+    thin wrapper kept for the same reuse contract as calc_competence/
+    calc_effectiveness/calc_agency_alignment.
+    """
+    return _public_mandate_core(avg_approval, approval_trend, election_margin)["score"]
+
+
+def _public_mandate_core(
+    avg_approval: float | None,
+    approval_trend: float | None,
+    election_margin: float | None,
+) -> dict:
+    """Same math as calc_public_mandate, returning every intermediate
+    value alongside the final score.
+
+    Two mutually exclusive paths, depending on what data exists for this
+    president (never both, never neither-with-a-fallback):
+
+      - Approval polling exists (Truman-33 onward, from UCSB — see
+        presidential_approval.py): average approval over the term (70%)
+        + approval trend across the term (30%), both z-scored against
+        real population stats (see constants above). This is the direct,
+        primary "public mandate" measure where it's available.
+      - No approval polling (pre-Truman): falls back to election margin
+        — the average margin of victory across the president's own
+        election win(s), z-scored against its own real population stats
+        — the pre-polling-era historical proxy, not a guess.
+      - Neither (the five presidents who never won a presidential
+        election): zero components, score=None — Public Mandate doesn't
+        apply to them, full stop, not "we don't know so it's neutral."
+    """
+    components: list[dict] = []
+
+    if avg_approval is not None:
+        components.append(_public_mandate_zscore_component(
+            "Average approval", 0.70, avg_approval,
+            _PUBLIC_MANDATE_AVG_APPROVAL_MEAN, _PUBLIC_MANDATE_AVG_APPROVAL_STDEV,
+            f"{avg_approval:.1f}% average approval over the term vs. "
+            f"population mean {_PUBLIC_MANDATE_AVG_APPROVAL_MEAN:.1f}%",
+        ))
+        if approval_trend is not None:
+            components.append(_public_mandate_zscore_component(
+                "Approval trend", 0.30, approval_trend,
+                _PUBLIC_MANDATE_TREND_MEAN, _PUBLIC_MANDATE_TREND_STDEV,
+                f"{approval_trend:+.1f}pt change from term-start to term-end vs. "
+                f"population average {_PUBLIC_MANDATE_TREND_MEAN:+.1f}pt "
+                "(most presidents' approval declines over a term)",
+            ))
+    elif election_margin is not None:
+        components.append(_public_mandate_zscore_component(
+            "Election margin (pre-polling-era proxy)", 1.0, election_margin,
+            _PUBLIC_MANDATE_ELECTION_MARGIN_MEAN, _PUBLIC_MANDATE_ELECTION_MARGIN_STDEV,
+            f"{election_margin:+.1f}pt average margin of victory across this president's "
+            f"election win(s) vs. population mean {_PUBLIC_MANDATE_ELECTION_MARGIN_MEAN:+.1f}pt "
+            "— no approval-polling era data exists for this president, so this is the "
+            "historical proxy used instead",
+        ))
+
+    return _blend_live_components(components)
+
+
+def recalculate_president_scores(president_id: str, live_data: dict, term_years: float) -> dict:
+    """Recalculate every dimension from live data only, for one president.
+
+    2026-07: this used to bundle "the DYNAMIC_PRESIDENTS cohort's full
+    recalculation" specifically, blending with a seed_scores fallback for
+    anything unfetched. Now that EO-rate (historical_executive_orders.py)
+    and GDP (historical_gdp.py) cover the full presidency rather than
+    just Federal-Register/BLS's 1994-plus and 1939/1947-plus windows,
+    every president goes through this same function — president_
+    pipeline.py calls it once per president in a single unified loop
+    rather than splitting DYNAMIC_PRESIDENTS/ECONOMICS_ONLY_PRESIDENTS
+    into separate partial-recalculation branches.
 
     Args:
         president_id: e.g. "obama-44"
-        seed_scores: Dict with keys score_public_mandate, score_effectiveness,
-            score_competence, score_agency_alignment.
-        live_data: Dict with keys eo_count, jobs_created_millions, etc.
-        term_years: Length of term in years
+        live_data: Dict with keys eo_count, jobs_created_millions,
+            gdp_growth_avg, gdp_growth_adjusted, rulemaking_count,
+            rulemaking_finalized_pct, eo_court_success_pct,
+            cabinet_turnover_pct, avg_approval, approval_trend,
+            election_margin — any subset may be present; each calc_*
+            function handles its own missing inputs.
 
     Returns:
-        Dict with updated score values.
+        Dict with keys score_public_mandate, score_effectiveness,
+        score_competence, score_agency_alignment — any value may be None
+        (that dimension doesn't apply to this president), never a
+        hand-set fallback.
     """
-    scores = dict(seed_scores)
-
-    scores["score_competence"] = calc_competence(
-        eo_count=live_data.get("eo_count"),
-        eo_court_success_pct=live_data.get("eo_court_success_pct"),
-        cabinet_turnover_pct=live_data.get("cabinet_turnover_pct"),
-        term_years=term_years,
-        seed_score=seed_scores.get("score_competence", 50),
-    )
-
-    scores["score_effectiveness"] = calc_effectiveness(
-        jobs_created_millions=live_data.get("jobs_created_millions"),
-        gdp_growth_avg=live_data.get("gdp_growth_avg"),
-        term_years=term_years,
-        seed_score=seed_scores.get("score_effectiveness", 50),
-        gdp_growth_adjusted=live_data.get("gdp_growth_adjusted"),
-    )
-
-    scores["score_agency_alignment"] = calc_agency_alignment(
-        rulemaking_count=live_data.get("rulemaking_count"),
-        rulemaking_finalized_pct=live_data.get("rulemaking_finalized_pct"),
-        term_years=term_years,
-        seed_score=seed_scores.get("score_agency_alignment", 50),
-    )
-
-    return scores
+    return {
+        "score_public_mandate": calc_public_mandate(
+            avg_approval=live_data.get("avg_approval"),
+            approval_trend=live_data.get("approval_trend"),
+            election_margin=live_data.get("election_margin"),
+        ),
+        "score_competence": calc_competence(
+            eo_count=live_data.get("eo_count"),
+            eo_court_success_pct=live_data.get("eo_court_success_pct"),
+            cabinet_turnover_pct=live_data.get("cabinet_turnover_pct"),
+            term_years=term_years,
+        ),
+        "score_effectiveness": calc_effectiveness(
+            jobs_created_millions=live_data.get("jobs_created_millions"),
+            gdp_growth_avg=live_data.get("gdp_growth_avg"),
+            term_years=term_years,
+            gdp_growth_adjusted=live_data.get("gdp_growth_adjusted"),
+        ),
+        "score_agency_alignment": calc_agency_alignment(
+            rulemaking_count=live_data.get("rulemaking_count"),
+            rulemaking_finalized_pct=live_data.get("rulemaking_finalized_pct"),
+            term_years=term_years,
+        ),
+    }
