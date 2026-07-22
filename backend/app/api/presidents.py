@@ -85,9 +85,8 @@ def get_president_history(president_id: str, db: Session = Depends(get_db)):
     """Historical score snapshots for a president (oldest -> newest).
 
     Written daily by president_pipeline._record_president_snapshots for
-    every president, not just DYNAMIC_PRESIDENTS — a historical
-    president's unchanging score still gets a continuous daily line, same
-    as senators/reps."""
+    every president — a historical president's unchanging score still
+    gets a continuous daily line, same as senators/reps."""
     return score_history_json(
         db, "president", president_id,
         max_age=CACHE_TTL_DETAIL_S, dimension_labels=PRESIDENT_DIMENSION_LABELS,
@@ -97,13 +96,15 @@ def get_president_history(president_id: str, db: Session = Depends(get_db)):
 @router.get("/{president_id}/score-breakdown")
 def score_breakdown(president_id: str, db: Session = Depends(get_db)):
     """Full component-level derivation behind each of a president's scored
-    dimensions — the "show the math" panel's data source. Public Mandate
-    is always a pure editorial estimate ({"seedOnly": true});
-    Competence/Effectiveness/Agency Alignment are a live formula only for
-    presidents with fetched data (see president_pipeline.
-    DYNAMIC_PRESIDENTS/ECONOMICS_ONLY_PRESIDENTS). Independence and
-    Follow-Through were removed entirely (2026-07) — see
-    president_service.py's module docstring."""
+    dimensions — the "show the math" panel's data source. Public Mandate,
+    Effectiveness, Agency Alignment, and Historical Legacy are all live
+    formulas computed from real fetched/historical/survey data for every
+    president (see president_pipeline.py) — none is a hand-set editorial
+    estimate. A dimension returns score=None (not a placeholder) when it's
+    genuinely inapplicable for this specific president. Independence,
+    Follow-Through, and Competence were removed entirely — see
+    president_service.py's module docstring and PRESIDENT_SCORE_WEIGHTS's
+    comment in config_definitions.py."""
     breakdown = get_president_score_breakdown(db, president_id)
     if breakdown is None:
         raise HTTPException(status_code=404, detail="President not found")

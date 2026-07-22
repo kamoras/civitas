@@ -10,7 +10,7 @@ def _make_president(**overrides) -> President:
         id="test-prez", name="Test President", party="D", number=99,
         term_start="2021-01-20", term_end=None, is_current=True,
         score_public_mandate=60.0, score_effectiveness=55.0,
-        score_competence=50.0, score_agency_alignment=65.0,
+        score_agency_alignment=65.0,
     )
     defaults.update(overrides)
     return President(**defaults)
@@ -33,7 +33,7 @@ class TestRecordPresidentSnapshots:
     def test_maps_dimensions_to_score_slots_correctly(self, db_session):
         db_session.add(_make_president(
             score_public_mandate=60.0, score_effectiveness=55.0,
-            score_competence=50.0, score_agency_alignment=65.0,
+            score_agency_alignment=65.0,
         ))
         db_session.commit()
 
@@ -44,7 +44,7 @@ class TestRecordPresidentSnapshots:
         ).first()
         assert snap.score_1 == 60.0  # publicMandate
         assert snap.score_2 == 55.0  # effectiveness
-        assert snap.score_3 == 50.0  # competence
+        assert snap.score_3 == 0.0  # competence, retired 2026-07 — always 0.0 now
         assert snap.score_4 == 65.0  # agencyAlignment
         # Pin the exact version, not just non-null: trend charts key formula-
         # change markers off this string, so a wrong stamp (e.g. the senator

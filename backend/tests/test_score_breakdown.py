@@ -29,11 +29,9 @@ from app.models import (
 )
 from app.pipeline.analyze.president_scorer import (
     _agency_alignment_core,
-    _competence_core,
     _effectiveness_core,
     _historical_legacy_core,
     calc_agency_alignment,
-    calc_competence,
     calc_effectiveness,
     calc_historical_legacy,
 )
@@ -139,17 +137,6 @@ class TestSenatorCoreConsistency:
 
 
 class TestPresidentCoreConsistency:
-    def test_competence_core_matches_calc(self):
-        args = (48, None, None, 4.0, 2000)
-        breakdown = _competence_core(*args)
-        assert breakdown["score"] == calc_competence(*args)
-
-    def test_competence_core_none_when_no_live_data(self):
-        breakdown = _competence_core(None, None, None, 4.0, 2000)
-        assert breakdown["score"] is None
-        assert breakdown["components"] == []
-        assert "note" in breakdown
-
     def test_effectiveness_core_matches_calc(self):
         args = (5.0, 3.5, 4.0)
         breakdown = _effectiveness_core(*args)
@@ -283,9 +270,8 @@ class TestPresidentScoreBreakdownService:
         breakdown = get_president_score_breakdown(db_session, "obama-44")
         assert "independence" not in breakdown
         assert "followThrough" not in breakdown
+        assert "competence" not in breakdown  # removed dimension, no bar to explain
         assert breakdown["publicMandate"]["score"] is None  # no approval/election data stored
-        assert breakdown["competence"]["score"] is not None
-        assert len(breakdown["competence"]["components"]) >= 1
         assert breakdown["effectiveness"]["score"] is not None
         assert breakdown["agencyAlignment"]["score"] is not None
         assert breakdown["historicalLegacy"]["score"] is None  # no C-SPAN score stored
@@ -301,7 +287,8 @@ class TestPresidentScoreBreakdownService:
         breakdown = get_president_score_breakdown(db_session, "lincoln-16")
         assert "independence" not in breakdown
         assert "followThrough" not in breakdown
-        for dim in ("publicMandate", "competence", "effectiveness", "agencyAlignment", "historicalLegacy"):
+        assert "competence" not in breakdown  # removed dimension, no bar to explain
+        for dim in ("publicMandate", "effectiveness", "agencyAlignment", "historicalLegacy"):
             assert breakdown[dim]["score"] is None, f"{dim} should be None with no stored data"
 
     def test_returns_none_for_missing_president(self, db_session):

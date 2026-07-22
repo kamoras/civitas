@@ -619,7 +619,7 @@ export default function AboutPage() {
           {/* ── President Metrics ── */}
           <Section title="PRESIDENTIAL SCORECARD METRICS">
             <P>
-              Presidents are scored on five dimensions, 0-100 scale, computed entirely
+              Presidents are scored on four dimensions, 0-100 scale, computed entirely
               from live, historical, and expert-survey datasets — there is no hand-set
               or seeded score anywhere in this pipeline (2026-07 rewrite). A dimension a
               president has no real data source for is left blank (N/A) rather than
@@ -668,15 +668,38 @@ export default function AboutPage() {
               Coolidge and McKinley still edge into the bottom of the top 10 at this
               weight — a disclosed, arguable disagreement with C-SPAN&apos;s own
               ranking, not something we kept tuning the weight to paper over. Each
-              president&apos;s page also shows how many of the 5 dimensions actually
+              president&apos;s page also shows how many of the 4 dimensions actually
               have a score for them (as few as 2, for a short-tenure or currently-
               serving president) — a score built from partial data is not shown with
-              the same implied confidence as one built from all 5.
+              the same implied confidence as one built from all 4.
+            </P>
+            <P>
+              A closer look at Coolidge&apos;s own numbers turned up a real hole in
+              Competence (executive-order activity rate), the dimension covering
+              administrative execution: Coolidge and Harding have nearly identical
+              EO-rates (~216/year each), yet C-SPAN&apos;s own historians rate their
+              actual administrative skill 596 vs. 334 (of 1000) — almost as far apart
+              as two presidents get. Across all 44 rated presidents, EO-rate
+              correlates just 0.097 (p=0.53) with C-SPAN&apos;s &ldquo;Administrative
+              Skill&rdquo; category — statistically no different from noise. Using
+              C-SPAN&apos;s Administrative Skill score directly instead wasn&apos;t a
+              clean fix either: it&apos;s one of the ten categories C-SPAN itself sums
+              into the same Final Score already driving Historical Legacy at 35%, so
+              folding it into a second dimension would push this platform&apos;s true
+              historian-derived weight toward ~51%, undoing the exact
+              over-reliance-on-C-SPAN problem the 50%&rarr;35% revision above was
+              built to avoid. Competence is removed entirely (2026-07) — same
+              standard as Independence/Follow-Through: no defensible live signal, no
+              fabricated one in its place. Its 16.25% is split evenly across the three
+              remaining mechanical dimensions (21.67% each); Coolidge drops from the
+              top 10 to #12, Harding to #26, McKinley to #17, while Lincoln and
+              Eisenhower both stay in the top 10 — the same qualitative target that
+              justified 35% still holds.
             </P>
 
             <div className="space-y-4 mt-4">
               <div>
-                <Label>Public Mandate (16.25%)</Label>
+                <Label>Public Mandate (21.67%)</Label>
                 <P>
                   Reflects approval trajectory and coalition retention. Gallup, this
                   platform&apos;s original approval source, ended presidential approval
@@ -697,7 +720,7 @@ export default function AboutPage() {
               </div>
 
               <div>
-                <Label>Effectiveness (16.25%)</Label>
+                <Label>Effectiveness (21.67%)</Label>
                 <P>
                   Measures tangible economic outcomes: GDP growth (60%) and job
                   creation (40%). GDP growth is computed for the full presidency —
@@ -714,25 +737,7 @@ export default function AboutPage() {
               </div>
 
               <div>
-                <Label>Competence (16.25%)</Label>
-                <P>
-                  Evaluates administrative execution quality via executive-order
-                  activity rate, now sourced from UCSB&apos;s own EO statistics table
-                  rather than the Federal Register API, whose machine-readable coverage
-                  is a hard wall at 1994 — UCSB covers the full presidency, Washington
-                  through the current term. The formula also defines court-success-rate
-                  and cabinet-stability components, but neither has a live source: no
-                  structured, machine-readable API links an executive order to its
-                  litigation outcomes (the same kind of unreliable text-matching that
-                  Follow-Through was removed for), and cabinet-tenure tracking hasn&apos;t
-                  been built yet. Both are simply excluded rather than defaulted —
-                  Competence currently runs on EO-activity-rate alone, renormalized to
-                  100% of the formula&apos;s weight.
-                </P>
-              </div>
-
-              <div>
-                <Label>Agency Alignment (16.25%)</Label>
+                <Label>Agency Alignment (21.67%)</Label>
                 <P>
                   Measures how well executive agency actions align with stated
                   presidential priorities, via Federal Register rulemaking data — the
@@ -750,10 +755,10 @@ export default function AboutPage() {
               <div>
                 <Label>Historical Legacy (35%)</Label>
                 <P>
-                  Covers what none of the other four dimensions can: crisis leadership,
+                  Covers what none of the other three dimensions can: crisis leadership,
                   moral authority, vision, and similar historical-consequence judgments
-                  that don&apos;t reduce to GDP growth, approval polling, EO-activity
-                  rate, or rulemaking volume. Sourced from C-SPAN&apos;s Presidential
+                  that don&apos;t reduce to GDP growth, approval polling, or rulemaking
+                  volume. Sourced from C-SPAN&apos;s Presidential
                   Historians Survey — ~142 professional historians in the 2021 cycle
                   (the most recent; the 2025 cycle was explicitly postponed by C-SPAN,
                   citing the risk of turning &ldquo;historical analysis&rdquo; into
@@ -1385,7 +1390,7 @@ export default function AboutPage() {
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-neon-yellow shrink-0">-</span>
-                    <span>Presidential scoring used to include two dimensions, Independence and Follow-Through, that were a one-time hand-set number for every president with no live formula behind them at all. We removed both entirely (2026-07) rather than keep presenting a hand-set number as a computed score, and rebuilt every remaining dimension — plus each president&apos;s identity data — on real live and historical datasets, with no seeded or hand-typed fallback left anywhere in the pipeline. See the Presidents methodology below for the full account. Competence&apos;s court-success and cabinet-turnover components still have no live source (no structured API links an executive order to its litigation outcomes, and cabinet-tenure tracking hasn&apos;t been built), so Competence currently runs on its EO-activity-rate component alone. Agency Alignment is genuinely inapplicable before the Federal Register Act of 1936 and shows N/A for those presidents rather than a proxy score.</span>
+                    <span>Presidential scoring used to include two dimensions, Independence and Follow-Through, that were a one-time hand-set number for every president with no live formula behind them at all. We removed both entirely (2026-07) rather than keep presenting a hand-set number as a computed score, and rebuilt every remaining dimension — plus each president&apos;s identity data — on real live and historical datasets, with no seeded or hand-typed fallback left anywhere in the pipeline. A third dimension, Competence, was later removed too: its only live component (executive-order activity rate) measured no relationship (Spearman 0.097) with real administrative-skill judgment. See the Presidents methodology below for the full account. Agency Alignment is genuinely inapplicable before the Federal Register Act of 1936 and shows N/A for those presidents rather than a proxy score.</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-neon-yellow shrink-0">-</span>

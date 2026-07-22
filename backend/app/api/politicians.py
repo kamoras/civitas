@@ -68,7 +68,7 @@ def _senator_overall(s) -> float | None:
 def _president_overall(p: President) -> float | None:
     scores = [
         p.score_public_mandate,
-        p.score_effectiveness, p.score_competence, p.score_agency_alignment,
+        p.score_effectiveness, p.score_agency_alignment,
     ]
     if all(v == 0.0 for v in scores):
         return None

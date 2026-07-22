@@ -388,7 +388,6 @@ class PresidentialScoreSchema(CamelModel):
     # compute_president_overall_score for the renormalization this drives.
     public_mandate: float | None
     effectiveness: float | None
-    competence: float | None
     agency_alignment: float | None
     # C-SPAN Presidential Historians Survey, z-scored (2026-07) — None for
     # any currently-serving or just-departed president (survey only rates
@@ -396,10 +395,10 @@ class PresidentialScoreSchema(CamelModel):
     historical_legacy: float | None
     # Backend-computed overall (president_scorer.compute_president_overall_score).
     overall: float = 0.0
-    # How many of the 5 possible dimensions actually have a score (0-5) —
+    # How many of the 4 possible dimensions actually have a score (0-4) —
     # see president_scorer.dimensions_available. A composite built from
     # fewer signals shouldn't be read with the same confidence as one
-    # built from all 5; this lets the UI disclose that plainly.
+    # built from all 4; this lets the UI disclose that plainly.
     dimensions_available: int = 0
 
 
@@ -416,8 +415,6 @@ class PresidentSchema(CamelModel):
     gdp_growth_avg: float | None = None
     jobs_created_millions: float | None = None
     eo_count: int | None = None
-    eo_court_success_pct: float | None = None
-    cabinet_turnover_pct: float | None = None
     # Election-margin percentage (average across this president's own
     # election win(s)) — the pre-polling-era Public Mandate proxy. See
     # app.pipeline.fetch.presidential_elections.

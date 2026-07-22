@@ -29,7 +29,6 @@ export interface SeedOnlyDimension {
 
 export interface PresidentScoreBreakdown {
   publicMandate: SeedOnlyDimension;
-  competence: ScoreBreakdownDimension | SeedOnlyDimension;
   effectiveness: ScoreBreakdownDimension | SeedOnlyDimension;
   agencyAlignment: ScoreBreakdownDimension | SeedOnlyDimension;
 }

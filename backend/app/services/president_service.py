@@ -10,9 +10,9 @@ dimensions this platform removed (below), so it was dropped rather than
 kept as unscored "informational" text (2026-07).
 
 Every SCORED dimension
-(Public Mandate, Effectiveness, Competence, Agency Alignment) is computed
-entirely by run_president_pipeline (president_pipeline.py) from real
-fetched data, never seeded:
+(Public Mandate, Effectiveness, Agency Alignment) is computed entirely by
+run_president_pipeline (president_pipeline.py) from real fetched data,
+never seeded:
   - Public Mandate: live approval polling (Truman-33 onward, UCSB
     American Presidency Project — Gallup's own tracking ended Feb 2026)
     or, for earlier presidents, historical election-margin data (also
@@ -22,12 +22,6 @@ fetched data, never seeded:
     MeasuringWorth's 1790-present historical series (earlier
     presidents) + BLS jobs data (1939 onward) — see
     app.pipeline.fetch.economic_data/historical_gdp.
-  - Competence: executive-order activity rate from UCSB's own EO
-    statistics table, covering the full presidency — see
-    app.pipeline.fetch.historical_executive_orders. Court-success-rate
-    and cabinet-turnover-rate have no live source yet (see
-    president_scorer.py's module docstring) and simply don't
-    contribute, rather than being backed by a guess.
   - Agency Alignment: Federal Register rulemaking data, Clinton onward
     only — the regulatory record-keeping mechanism this dimension
     measures didn't exist before Federal Register itself (1936).
@@ -36,9 +30,17 @@ fetched data, never seeded:
     (~142 professional historians in the 2021 cycle, the most recent;
     2025 was explicitly postponed by C-SPAN), covering crisis
     leadership, moral authority, and similar historical-consequence
-    judgments none of the other four dimensions can capture. Only rates
+    judgments none of the other three dimensions can capture. Only rates
     presidents whose terms were complete as of that cycle — see
     app.pipeline.fetch.cspan_historians_survey.
+
+Competence (executive-order activity rate) was removed entirely (2026-07):
+its only ever-populated component measured Spearman 0.097 (p=0.53)
+against C-SPAN's own "Administrative Skill" category — statistically no
+relationship to the real construct it claimed to represent. See
+PRESIDENT_SCORE_WEIGHTS's comment in config_definitions.py for the full
+account, including why C-SPAN's Administrative Skill score itself wasn't
+a clean substitute.
 
 A dimension's score is None, never a fabricated number or a neutral
 default, for any president it's genuinely inapplicable to (see each
@@ -83,7 +85,6 @@ def _build_response(p: President) -> PresidentSchema:
         score=PresidentialScoreSchema(
             public_mandate=p.score_public_mandate,
             effectiveness=p.score_effectiveness,
-            competence=p.score_competence,
             agency_alignment=p.score_agency_alignment,
             historical_legacy=p.score_historical_legacy,
             overall=compute_president_overall_score(p),
@@ -93,8 +94,6 @@ def _build_response(p: President) -> PresidentSchema:
         gdp_growth_avg=p.gdp_growth_avg,
         jobs_created_millions=p.jobs_created_millions,
         eo_count=p.eo_count,
-        eo_court_success_pct=p.eo_court_success_pct,
-        cabinet_turnover_pct=p.cabinet_turnover_pct,
         election_margin=p.election_margin,
         historical_legacy_score=p.historical_legacy_score,
         recent_avg_approval=p.recent_avg_approval,
@@ -127,7 +126,6 @@ def get_president_score_breakdown(db: Session, president_id: str) -> dict | None
     """
     from app.pipeline.analyze.president_scorer import (
         _agency_alignment_core,
-        _competence_core,
         _effectiveness_core,
         _historical_legacy_core,
         _public_mandate_core,
@@ -145,13 +143,6 @@ def get_president_score_breakdown(db: Session, president_id: str) -> dict | None
             avg_approval=p.avg_approval,
             approval_trend=p.approval_trend,
             election_margin=p.election_margin,
-        ),
-        "competence": _competence_core(
-            eo_count=p.eo_count,
-            eo_court_success_pct=p.eo_court_success_pct,
-            cabinet_turnover_pct=p.cabinet_turnover_pct,
-            term_years=term_years,
-            term_start_year=int(p.term_start[:4]),
         ),
         "effectiveness": _effectiveness_core(
             jobs_created_millions=p.jobs_created_millions,
@@ -182,7 +173,6 @@ def get_president_leaderboard(db: Session) -> list[PresidentLeaderboardEntry]:
         score = PresidentialScoreSchema(
             public_mandate=p.score_public_mandate,
             effectiveness=p.score_effectiveness,
-            competence=p.score_competence,
             agency_alignment=p.score_agency_alignment,
             historical_legacy=p.score_historical_legacy,
             overall=compute_president_overall_score(p),

@@ -1,16 +1,21 @@
 """Fetch executive-order counts for every president (Washington onward)
 from UCSB's American Presidency Project.
 
-Replaces Federal Register as the source for Competence's EO-activity-rate
-component. Federal Register's own machine-readable presidential-document
-coverage is a hard wall at 1994 (Clinton onward) — real for that source,
-but it left every earlier president with no live EO-rate signal at all.
+eo_count is informational only (2026-07) — Competence, the dimension it
+used to feed via an EO-activity-rate component, was removed entirely (see
+PRESIDENT_SCORE_WEIGHTS's comment in config_definitions.py: the component
+measured Spearman 0.097 against C-SPAN's own Administrative Skill
+category, no better than noise). This fetch is still run for two other
+reasons: eo_count is still shown as a raw stat on a president's profile,
+and this table's party-abbreviation tag is what presidential_roster.py's
+_sync_roster uses for each president's party (see _extract_party below),
+so the fetch stays even though its original scoring purpose is gone.
+
 UCSB maintains a single table ("Executive Orders by President, Average
 Per Years in Office") covering Washington through the current term in one
 place, actively updated (observed during development: "Current averages
 through July 20, 2026" — i.e. current within the current term, not just
-historical). One fetch replaces the Federal-Register-only, 1994-plus
-coverage with the full presidency.
+historical).
 
 No API/CSV — scrapes the rendered HTML table, same risk class as
 presidential_approval.py's UCSB scrape.

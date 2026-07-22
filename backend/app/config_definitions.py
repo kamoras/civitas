@@ -109,12 +109,37 @@ SCORE_WEIGHTS: dict[str, float] = {
 # This has no effect on how the currently-serving president is scored:
 # historicalLegacy is null for anyone without a completed, C-SPAN-rated
 # term, so compute_president_overall_score's renormalization already
-# falls back to the other four dimensions entirely in that case.
+# falls back to the other three dimensions entirely in that case.
+#
+# Competence (EO-activity-rate) removed entirely (2026-07), same
+# "no defensible live signal" standard as Independence/Follow-Through
+# above. A Coolidge-ranking review found EO-activity-rate — Competence's
+# only ever-populated component (court-success-rate and cabinet-turnover
+# have no fetch source, see president_scorer._competence_core's removed
+# docstring) — has essentially zero relationship with real administrative
+# competence: Spearman correlation of 0.097 (p=0.53, statistically no
+# different from noise) against C-SPAN's own "Administrative Skill"
+# category score across the same 44 historians-rated presidents. Coolidge
+# and Harding make the gap concrete — nearly identical EO-rates (~216/yr
+# each) but historians' actual administrative-skill judgment rates them
+# 596 vs. 334 (of 1000), almost as far apart as two presidents get.
+# Swapping in C-SPAN's Administrative Skill score directly (rather than
+# just disclosing EO-rate's weakness) was considered and rejected: it
+# isn't an independent data source, it's literally one of the ten
+# categories C-SPAN itself sums into the same Final Score already driving
+# historicalLegacy at 35% — folding it into a second, separate dimension
+# would push this platform's true historian-derived weight toward ~51%
+# (35% + Competence's share), undoing the exact over-reliance-on-C-SPAN
+# problem the 50%->35% revision above was calibrated to avoid. Competence's
+# 16.25% is redistributed evenly across the three remaining mechanical
+# dimensions (21.67% each) rather than reopened as a fresh full weight
+# search — verified this still hits the same qualitative target that
+# justified 35% (Lincoln and Eisenhower both stay in the top 10; Coolidge
+# drops from top-10 to #12, Harding to #26, McKinley to #17).
 PRESIDENT_SCORE_WEIGHTS: dict[str, float] = {
-    "publicMandate": 0.1625,
-    "effectiveness": 0.1625,
-    "competence": 0.1625,
-    "agencyAlignment": 0.1625,
+    "publicMandate": 0.2167,
+    "effectiveness": 0.2167,
+    "agencyAlignment": 0.2167,
     "historicalLegacy": 0.35,
 }
 

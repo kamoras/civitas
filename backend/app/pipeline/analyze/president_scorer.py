@@ -16,19 +16,15 @@ presenting a hand-set number as a computed score, they're gone, and their
 combined weight was redistributed (see PRESIDENT_SCORE_WEIGHTS in
 config_definitions.py) to the four dimensions below.
 
+Competence (EO-activity-rate) was removed entirely (2026-07) — see
+config_definitions.py's PRESIDENT_SCORE_WEIGHTS comment for the full
+account. In short: EO-activity-rate, the only component ever populated
+(court-success rate and cabinet-turnover rate never had a fetch source),
+measured Spearman 0.097 (p=0.53) against C-SPAN's own "Administrative
+Skill" category — statistically indistinguishable from no relationship
+to the real construct it claimed to represent.
+
 Metrics that can be dynamically computed:
-  - Competence: EO activity rate only (30% of the formula's nominal
-    weight — see calc_competence), scored relative to the president's own
-    era (see _eo_activity_rate_component) rather than one fixed scale —
-    "executive order" as a systematic governance tool is largely a
-    20th-century phenomenon, so a single absolute threshold implicitly
-    calibrated to modern volume misreads every pre-1901 president as
-    "inactive" almost by construction. Court-success rate and cabinet-
-    turnover rate are accepted as optional inputs for a future data
-    source, but nothing in this pipeline currently fetches them live, so
-    in practice they are never passed and Competence runs on EO-activity-
-    rate alone, renormalized to 100% of the measured weight (see
-    _blend_live_components).
   - Effectiveness: Derived from employment/GDP data — GDP growth uses a
     peak-relative CAGR instead of a plain term average when the term
     begins mid-recovery from a real contraction (see historical_gdp.
@@ -43,17 +39,6 @@ Metrics that can be dynamically computed:
     Pew/Verasight). Covers Truman-33 onward (15 presidents with a real
     UCSB approval-poll page); earlier presidents use the election-margin
     proxy instead (see calc_public_mandate) — never a seed value.
-
-Metrics that remain static (roadmap, not abandoned):
-  - Competence's cabinet-turnover-rate: Wikidata SPARQL (wdt:P39
-    position-held with date qualifiers) is a real, precedented candidate
-    — direct date math, not fuzzy matching. Not yet built.
-  - Competence's court-success-rate: deliberately not pursued. Matching
-    an EO to its litigation outcomes needs the same kind of fuzzy
-    text-matching that sank Follow-Through — CourtListener has the case
-    law but nothing connects "EO 14036" to "the lawsuits that challenged
-    it" without it. Treated the same as Independence/Follow-Through:
-    don't build an unreliable pipeline just to have a number.
 """
 
 import logging
@@ -70,8 +55,8 @@ def _blend_live_components(components: list[dict]) -> dict:
     """Combine weighted live-data components into a score — live data
     only, never a hand-set fallback.
 
-    Shared by _competence_core / _effectiveness_core / _agency_alignment_
-    core / _public_mandate_core, which each gather their own `components`
+    Shared by _effectiveness_core / _agency_alignment_core /
+    _public_mandate_core, which each gather their own `components`
     list of whatever sub-signals actually have live data this run.
 
     2026-07: this used to blend missing weight with a hand-set "editorial
@@ -121,7 +106,6 @@ def _blend_live_components(components: list[dict]) -> dict:
 _PRESIDENT_SCORE_FIELD_MAP = {
     "publicMandate": "score_public_mandate",
     "effectiveness": "score_effectiveness",
-    "competence": "score_competence",
     "agencyAlignment": "score_agency_alignment",
     "historicalLegacy": "score_historical_legacy",
 }
@@ -165,10 +149,10 @@ def compute_president_overall_score(entity) -> float:
 
 
 def dimensions_available(entity) -> int:
-    """How many of the 5 possible dimensions actually have a score for
-    this president (0-5) — surfaced to the reader so a composite built
+    """How many of the 4 possible dimensions actually have a score for
+    this president (0-4) — surfaced to the reader so a composite built
     from partial data isn't presented with the same implied confidence as
-    one built from all 5. A short-tenure or currently-serving president
+    one built from all 4. A short-tenure or currently-serving president
     (missing Effectiveness's GDP data, or Historical Legacy's not-yet-run
     C-SPAN survey) has a real, disclosed reason for a lower count, never
     padded to look complete.
@@ -185,9 +169,10 @@ def dimensions_available(entity) -> int:
 # change) — introduced here (2026-07) rather than retroactively for the
 # implicit original 6-dimension formula, since presidents only start
 # getting snapshotted at this version. v2 = the 4-dimension formula after
-# Independence/Follow-Through were removed and their weight redistributed
-# (see PRESIDENT_SCORE_WEIGHTS's own comment).
-PRESIDENT_ALGORITHM_VERSION = "v2"
+# Independence/Follow-Through were removed and their weight redistributed;
+# v3 = Competence also removed (see PRESIDENT_SCORE_WEIGHTS's own comment
+# for both), landing on today's 3-mechanical-dimensions-plus-survey formula.
+PRESIDENT_ALGORITHM_VERSION = "v3"
 
 
 # Full credit/deficit approached asymptotically at this many population
@@ -217,119 +202,6 @@ def _population_zscore_component(
         "score": round(50.0 + 50.0 * normalized, 1),
         "detail": detail,
     }
-
-
-# EO-activity-rate population statistics, split at 1901 (Theodore
-# Roosevelt) rather than one fixed "30-60/year is optimal" scale (this
-# component's original design, with no empirical basis found for why 50
-# specifically was the threshold). Computed 2026-07 from real UCSB EO-
-# count data across every president with a nonzero count: EO rate never
-# exceeds ~46/year before 1901 (mean=12.02, stdev=14.04, n=24); from
-# Theodore Roosevelt onward every single president is 34.5-310.5/year
-# (mean=117.25, stdev=86.10, n=22) — a roughly 10x regime shift, not a
-# gradual trend, matching the well-documented history that TR was the
-# first president to use executive orders as a systematic governance
-# tool. A single fixed absolute scale calibrated to modern EO volume
-# scored essentially every pre-TR president as "very low activity" almost
-# by construction (e.g. Lincoln's 12/year — right at his own era's
-# average — read as a weak 37 under the old scale), regardless of how
-# actively they governed relative to the tools and norms of their own
-# time. This also drops the old scale's "moderate is optimal, extreme is
-# penalized" shape: no empirical basis was found for treating unusually
-# high EO usage as evidence of worse administrative execution (as opposed
-# to a separate, more political judgment this dimension isn't designed to
-# make) — a saturating-but-monotonic population-relative score is more
-# defensible than an unvalidated "goldilocks zone."
-_EO_RATE_ERA_SPLIT_YEAR = 1901
-_EO_RATE_PRE_1901_MEAN = 12.02
-_EO_RATE_PRE_1901_STDEV = 14.04
-_EO_RATE_POST_1901_MEAN = 117.25
-_EO_RATE_POST_1901_STDEV = 86.10
-
-
-def _eo_activity_rate_component(eo_count: int, term_years: float, term_start_year: int) -> dict:
-    eo_per_year = eo_count / term_years
-    if term_start_year < _EO_RATE_ERA_SPLIT_YEAR:
-        mean, stdev, era_label = _EO_RATE_PRE_1901_MEAN, _EO_RATE_PRE_1901_STDEV, "pre-1901"
-    else:
-        mean, stdev, era_label = _EO_RATE_POST_1901_MEAN, _EO_RATE_POST_1901_STDEV, "1901-present"
-    return _population_zscore_component(
-        "EO activity rate", 0.30, eo_per_year, mean, stdev,
-        f"{eo_count} executive orders over {term_years:.1f} years = {eo_per_year:.1f}/year, "
-        f"vs. {era_label} population mean {mean:.1f}/year",
-    )
-
-
-def calc_competence(
-    eo_count: int | None,
-    eo_court_success_pct: float | None,
-    cabinet_turnover_pct: float | None,
-    term_years: float,
-    term_start_year: int,
-) -> int | None:
-    """Calculate competence score from live data only.
-
-    See _competence_core for the full component breakdown — this is a thin
-    wrapper kept for existing callers/tests that expect a bare int.
-    """
-    return _competence_core(
-        eo_count, eo_court_success_pct, cabinet_turnover_pct, term_years, term_start_year,
-    )["score"]
-
-
-def _competence_core(
-    eo_count: int | None,
-    eo_court_success_pct: float | None,
-    cabinet_turnover_pct: float | None,
-    term_years: float,
-    term_start_year: int,
-) -> dict:
-    """Same math as calc_competence, returning every intermediate value
-    alongside the final score.
-
-    Components (weighted):
-      - Court success rate (40%): Higher = more legally sound drafting.
-        No fetch source is wired up for this yet (2026-07 audit) — see
-        the "Metrics that remain static" note in this module's docstring
-        for why (CourtListener has case law but no structured EO-to-
-        litigation mapping) — so eo_court_success_pct is currently always
-        None and this component never contributes.
-      - Cabinet stability (30%): Lower turnover = better management. Same
-        — cabinet_turnover_pct has a real, identified candidate source
-        (Wikidata) but no fetcher built yet, so it's currently always None.
-      - EO activity rate (30%): scored relative to the president's own
-        era's real population (see _eo_activity_rate_component) rather
-        than a single fixed scale — this is the only component genuinely
-        computed from live data today (UCSB's EO-count table).
-
-    Any component whose input is None is simply excluded — the weight of
-    whatever IS live gets renormalized to 100% of what was measured (see
-    _blend_live_components). No hand-set fallback for the other two, ever
-    — a missing component means Competence is currently computed from
-    less than the full formula, disclosed as such, not papered over with
-    a fabricated number.
-    """
-    components: list[dict] = []
-
-    if eo_court_success_pct is not None:
-        components.append({
-            "label": "Court success rate", "weight": 0.40,
-            "score": round(eo_court_success_pct, 1),
-            "detail": "share of executive orders that survived legal challenge",
-        })
-
-    if cabinet_turnover_pct is not None:
-        stability_score = max(0, 100 - cabinet_turnover_pct * 1.3)
-        components.append({
-            "label": "Cabinet stability", "weight": 0.30,
-            "score": round(stability_score, 1),
-            "detail": f"{cabinet_turnover_pct:.0f}% cabinet turnover",
-        })
-
-    if eo_count and term_years > 0:
-        components.append(_eo_activity_rate_component(eo_count, term_years, term_start_year))
-
-    return _blend_live_components(components)
 
 
 def calc_effectiveness(
@@ -543,8 +415,8 @@ def calc_public_mandate(
     president (see _public_mandate_core).
 
     See _public_mandate_core for the full component breakdown — this is a
-    thin wrapper kept for the same reuse contract as calc_competence/
-    calc_effectiveness/calc_agency_alignment.
+    thin wrapper kept for the same reuse contract as calc_effectiveness/
+    calc_agency_alignment.
     """
     return _public_mandate_core(avg_approval, approval_trend, election_margin)["score"]
 
@@ -617,7 +489,7 @@ def calc_historical_legacy(historical_legacy_score: int | None) -> int | None:
     Historians Survey only.
 
     See _historical_legacy_core for the full component breakdown — this
-    is a thin wrapper kept for the same reuse contract as calc_competence/
+    is a thin wrapper kept for the same reuse contract as
     calc_effectiveness/calc_agency_alignment/calc_public_mandate.
     """
     return _historical_legacy_core(historical_legacy_score)["score"]
@@ -627,11 +499,11 @@ def _historical_legacy_core(historical_legacy_score: int | None) -> dict:
     """Same math as calc_historical_legacy, returning every intermediate
     value alongside the final score.
 
-    Covers what none of this platform's other four president dimensions
+    Covers what none of this platform's other three president dimensions
     can: crisis leadership, moral authority, vision, and similar
     historical-consequence judgments that don't reduce to GDP growth,
-    approval polling, EO-activity rate, or rulemaking volume (added
-    2026-07 after review found presidents like Lincoln landing in the
+    approval polling, or rulemaking volume (added 2026-07 after review
+    found presidents like Lincoln landing in the
     bottom half of the overall ranking — every individual number was
     defensible on its own terms, but nothing in the formula could credit
     "preserved the Union, ended slavery" at all).
@@ -663,49 +535,38 @@ def _historical_legacy_core(historical_legacy_score: int | None) -> dict:
 
 
 def recalculate_president_scores(
-    president_id: str, live_data: dict, term_years: float, term_start_year: int,
+    president_id: str, live_data: dict, term_years: float,
 ) -> dict:
     """Recalculate every dimension from live data only, for one president.
 
     2026-07: this used to bundle "the DYNAMIC_PRESIDENTS cohort's full
     recalculation" specifically, blending with a seed_scores fallback for
-    anything unfetched. Now that EO-rate (historical_executive_orders.py)
-    and GDP (historical_gdp.py) cover the full presidency rather than
-    just Federal-Register/BLS's 1994-plus and 1939/1947-plus windows,
-    every president goes through this same function — president_
-    pipeline.py calls it once per president in a single unified loop
-    rather than splitting DYNAMIC_PRESIDENTS/ECONOMICS_ONLY_PRESIDENTS
-    into separate partial-recalculation branches.
+    anything unfetched. Now that GDP (historical_gdp.py) covers the full
+    presidency rather than just BLS's 1939/1947-plus window, every
+    president goes through this same function — president_pipeline.py
+    calls it once per president in a single unified loop rather than
+    splitting DYNAMIC_PRESIDENTS/ECONOMICS_ONLY_PRESIDENTS into separate
+    partial-recalculation branches.
 
     Args:
         president_id: e.g. "obama-44"
-        live_data: Dict with keys eo_count, jobs_created_millions,
-            gdp_growth_avg, gdp_growth_adjusted, rulemaking_count,
-            rulemaking_finalized_pct, eo_court_success_pct,
-            cabinet_turnover_pct, avg_approval, approval_trend,
-            election_margin, historical_legacy_score — any subset may be
-            present; each calc_* function handles its own missing inputs.
-        term_start_year: needed by calc_competence to pick the right
-            EO-activity-rate era population (see _eo_activity_rate_component).
+        live_data: Dict with keys jobs_created_millions, gdp_growth_avg,
+            gdp_growth_adjusted, rulemaking_count, rulemaking_finalized_pct,
+            avg_approval, approval_trend, election_margin,
+            historical_legacy_score — any subset may be present; each
+            calc_* function handles its own missing inputs.
 
     Returns:
         Dict with keys score_public_mandate, score_effectiveness,
-        score_competence, score_agency_alignment, score_historical_legacy
-        — any value may be None (that dimension doesn't apply to this
-        president), never a hand-set fallback.
+        score_agency_alignment, score_historical_legacy — any value may
+        be None (that dimension doesn't apply to this president), never
+        a hand-set fallback.
     """
     return {
         "score_public_mandate": calc_public_mandate(
             avg_approval=live_data.get("avg_approval"),
             approval_trend=live_data.get("approval_trend"),
             election_margin=live_data.get("election_margin"),
-        ),
-        "score_competence": calc_competence(
-            eo_count=live_data.get("eo_count"),
-            eo_court_success_pct=live_data.get("eo_court_success_pct"),
-            cabinet_turnover_pct=live_data.get("cabinet_turnover_pct"),
-            term_years=term_years,
-            term_start_year=term_start_year,
         ),
         "score_effectiveness": calc_effectiveness(
             jobs_created_millions=live_data.get("jobs_created_millions"),

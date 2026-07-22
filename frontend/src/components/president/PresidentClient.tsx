@@ -22,10 +22,9 @@ function getPartyMeta(party: string) {
   return PARTY_META[party] ?? { label: party, color: "text-white/50", bg: "bg-white/10", border: "border-white/20" };
 }
 
-const METRIC_LABELS: { key: "publicMandate" | "effectiveness" | "competence" | "agencyAlignment" | "historicalLegacy"; label: string; desc: string }[] = [
+const METRIC_LABELS: { key: "publicMandate" | "effectiveness" | "agencyAlignment" | "historicalLegacy"; label: string; desc: string }[] = [
   { key: "publicMandate", label: "PUBLIC MANDATE", desc: "Approval polling (Truman onward) or, for earlier presidents, election-margin history. N/A for presidents who never won a presidential election." },
   { key: "effectiveness", label: "EFFECTIVENESS", desc: "GDP growth, job creation, and tangible outcomes for voters" },
-  { key: "competence", label: "COMPETENCE", desc: "Executive order activity rate and administrative execution. Court-success and cabinet-turnover rates have no live data source and are not currently part of this score." },
   { key: "agencyAlignment", label: "AGENCY ALIGNMENT", desc: "How effectively federal agencies execute the president's agenda through rulemaking. N/A before Federal Register data begins in 1936." },
   { key: "historicalLegacy", label: "HISTORICAL LEGACY", desc: "C-SPAN's Presidential Historians Survey — crisis leadership, moral authority, and vision, as assessed by ~142 professional historians. N/A for any currently-serving or just-departed president; the survey only rates a completed term." },
 ];
@@ -68,9 +67,9 @@ export function PresidentCard({ president }: { president: President }) {
             </div>
             <div
               className="text-[10px] text-matrix-green/40 mt-1"
-              title="How many of the 5 possible score dimensions have data for this president — a score built from fewer is based on less information, not a worse president."
+              title="How many of the 4 possible score dimensions have data for this president — a score built from fewer is based on less information, not a worse president."
             >
-              based on {president.score.dimensionsAvailable}/5 dimensions
+              based on {president.score.dimensionsAvailable}/4 dimensions
             </div>
           </div>
         </div>
@@ -197,16 +196,6 @@ export function PresidentCard({ president }: { president: President }) {
             <StatBox
               label="EXEC ORDERS"
               value={president.eoCount != null ? `${president.eoCount}` : null}
-            />
-            <StatBox
-              label="EO COURT WIN"
-              value={president.eoCourtSuccessPct != null ? `${president.eoCourtSuccessPct.toFixed(0)}` : null}
-              unit="%"
-            />
-            <StatBox
-              label="CABINET TURNOVER"
-              value={president.cabinetTurnoverPct != null ? `${president.cabinetTurnoverPct.toFixed(0)}` : null}
-              unit="%"
             />
             <StatBox
               label="C-SPAN SURVEY"

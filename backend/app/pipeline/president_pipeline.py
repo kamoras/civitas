@@ -9,11 +9,6 @@ cohorts. Both the seed fallback and the narrow cohorts are gone:
     layered under BEA/FRED's live 1930/1947-onward series for the modern
     era — same "average annual growth over the term" figure regardless
     of which source computed it.
-  - Competence's EO-activity-rate component now covers the full
-    presidency too (historical_executive_orders.py, UCSB's own EO
-    statistics table, actively updated through the current term) rather
-    than being capped at Federal Register's 1994-onward machine-readable
-    window.
   - Public Mandate now covers every president who ever won a
     presidential election (presidential_approval.py for Truman-33
     onward, presidential_elections.py's historical margins before that).
@@ -206,17 +201,13 @@ async def run_president_pipeline(db: Session) -> dict:
 
         live: dict = {}
 
+        # eo_count is informational only (2026-07) — Competence, the
+        # dimension it used to feed, was removed entirely (see
+        # PRESIDENT_SCORE_WEIGHTS's comment in config_definitions.py), so
+        # this no longer goes into `live`, just the profile's raw stat.
         eo = eo_data.get(president.id)
         if eo is not None:
-            live["eo_count"] = eo["total_orders"]
             president.eo_count = eo["total_orders"]
-        # eo_court_success_pct and cabinet_turnover_pct are never included
-        # here: no fetch source anywhere (live or historical) populates
-        # either one (see _competence_core's docstring on why —
-        # CourtListener has no structured EO-to-litigation mapping;
-        # Wikidata cabinet-tenure hasn't been built yet). Omitting them
-        # lets calc_competence correctly compute Competence from
-        # EO-activity-rate alone via _blend_live_components' renormalization.
 
         if president.id in rulemaking_data:
             live["rulemaking_count"] = rulemaking_data[president.id]["rulemaking_count"]
@@ -251,9 +242,8 @@ async def run_president_pipeline(db: Session) -> dict:
             live["historical_legacy_score"] = historical_legacy_data[president.id]
             president.historical_legacy_score = live["historical_legacy_score"]
 
-        new_scores = recalculate_president_scores(president.id, live, term_years, term_start_year)
+        new_scores = recalculate_president_scores(president.id, live, term_years)
         president.score_public_mandate = new_scores["score_public_mandate"]
-        president.score_competence = new_scores["score_competence"]
         president.score_effectiveness = new_scores["score_effectiveness"]
         president.score_agency_alignment = new_scores["score_agency_alignment"]
         president.score_historical_legacy = new_scores["score_historical_legacy"]
@@ -261,10 +251,9 @@ async def run_president_pipeline(db: Session) -> dict:
         updated += 1
 
         logger.info(
-            "  %s: mandate=%s competence=%s effectiveness=%s agency=%s legacy=%s",
+            "  %s: mandate=%s effectiveness=%s agency=%s legacy=%s",
             president.id,
             new_scores["score_public_mandate"],
-            new_scores["score_competence"],
             new_scores["score_effectiveness"],
             new_scores["score_agency_alignment"],
             new_scores["score_historical_legacy"],
@@ -311,7 +300,11 @@ def _record_president_snapshots(db: Session) -> None:
     president_overall_score's own renormalization already treats it as
     absent from the weighted average. The authoritative "does this apply"
     answer always lives on the President row's own nullable column, never
-    on the snapshot. score_5 = Historical Legacy (added 2026-07).
+    on the snapshot. score_5 = Historical Legacy (added 2026-07). score_3
+    = Competence until it was removed entirely (2026-07, see
+    PRESIDENT_SCORE_WEIGHTS's comment in config_definitions.py) — always
+    0.0 from that point on, the slot is simply retired rather than
+    reindexing every other dimension's historical snapshot data.
     """
     today = utcnow().date().isoformat()
     presidents = db.query(President).all()
@@ -331,7 +324,7 @@ def _record_president_snapshots(db: Session) -> None:
             existing.overall_score = overall
             existing.score_1 = p.score_public_mandate or 0.0
             existing.score_2 = p.score_effectiveness or 0.0
-            existing.score_3 = p.score_competence or 0.0
+            existing.score_3 = 0.0
             existing.score_4 = p.score_agency_alignment or 0.0
             existing.score_5 = p.score_historical_legacy or 0.0
         else:
@@ -342,7 +335,7 @@ def _record_president_snapshots(db: Session) -> None:
                 overall_score=overall,
                 score_1=p.score_public_mandate or 0.0,
                 score_2=p.score_effectiveness or 0.0,
-                score_3=p.score_competence or 0.0,
+                score_3=0.0,
                 score_4=p.score_agency_alignment or 0.0,
                 score_5=p.score_historical_legacy or 0.0,
                 algorithm_version=PRESIDENT_ALGORITHM_VERSION,

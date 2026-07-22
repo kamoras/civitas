@@ -24,6 +24,18 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "President v3",
+    date: "2026-07-22",
+    title: "Competence removed; Historical Legacy reweighted to 35%",
+    tldr: "A closer look at why Calvin Coolidge ranked so high found a real hole: Competence (executive-order signing rate) turned out to have no measurable relationship with real administrative skill, so it's removed entirely — the same standard already applied to Independence and Follow-Through. Historical Legacy's weight is also settled at 35% after two more data-checked revisions, and a real bug (Garfield incorrectly reading as the still-serving president) is fixed.",
+    changes: [
+      "Historical Legacy's weight went through two revisions after the initial equal-fifths 20%: raised to 50% first (20% let the four mechanical dimensions, which barely track historian judgment at all — Spearman 0.17 — outvote the one dimension that does, putting Coolidge/McKinley/Harding in the top 10 while Lincoln/Eisenhower fell out), then brought back to 35% (at 50%, this platform's ranking correlated 0.958 with simply using C-SPAN's own ranking alone — the mechanical dimensions were contributing almost nothing). 35% keeps the top of the ranking recognizable (FDR, Washington, Lincoln, T. Roosevelt, JFK, Eisenhower) while the mechanical dimensions still meaningfully move the rest (correlation to pure C-SPAN: 0.886, not 0.958).",
+      "Competence (executive-order activity rate) is removed entirely. A review of why Coolidge ranked so highly found Coolidge and Harding have nearly identical EO-rates (~216/year each) despite C-SPAN's historians rating their actual administrative skill 596 vs. 334 (of 1000) — almost as far apart as two presidents get. Checked across all 44 rated presidents: EO-rate correlates just 0.097 (p=0.53) with C-SPAN's own 'Administrative Skill' category, statistically no different from noise. Swapping in C-SPAN's Administrative Skill score directly was considered and rejected — it's one of the ten categories C-SPAN itself sums into the same Final Score already driving Historical Legacy, so using both would push this platform's true historian-derived weight toward ~51%, undoing the exact over-reliance-on-C-SPAN problem the 50%→35% revision was built to avoid. Competence's 16.25% is split evenly across the three remaining mechanical dimensions (21.67% each) — Coolidge drops from the top 10 to #12, Harding to #26, McKinley to #17, while Lincoln and Eisenhower both stay in the top 10.",
+      "Fixed a real bug: Garfield's UCSB page has no end date at all (he died in office, 1881), which left term_end=None and incorrectly flagged him as the still-serving president. Now backfilled from the next president's (Chester Arthur's) term_start — a generic fix for any future case of the same shape, not a Garfield-specific special case.",
+      "Added dimensionsAvailable (0-4) to every president's score: how many of the 4 possible dimensions actually have a value for that specific president, shown on their profile so a score built from partial data isn't read with the same confidence as one built from all 4.",
+    ],
+  },
+  {
     version: "President v2",
     date: "2026-07-21",
     title: "Presidential scoring rebuilt on real data — no more hand-set numbers",

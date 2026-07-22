@@ -60,7 +60,6 @@ def test_score_history_json_uses_president_dimension_labels(db_session):
     assert body["snapshots"][0]["scores"] == {
         "publicMandate": 60.0,
         "effectiveness": 55.0,
-        "competence": 50.0,
         "agencyAlignment": 65.0,
         "historicalLegacy": 72.0,
     }

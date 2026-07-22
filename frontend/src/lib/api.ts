@@ -915,7 +915,7 @@ export interface ScoreSnapshot {
   /** Dimension name -> score. Keys differ by entity type (senator/rep:
    * fundingIndependence/promisePersistence/independentVoting/
    * fundingDiversity/legislativeEffectiveness; president: publicMandate/
-   * effectiveness/competence/agencyAlignment) — untyped here since
+   * effectiveness/agencyAlignment/historicalLegacy) — untyped here since
    * ScoreTrend (the only consumer) only ever reads date/overallScore. */
   scores: Record<string, number>;
 }

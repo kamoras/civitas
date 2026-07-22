@@ -527,7 +527,6 @@ class President(Base):
     # completed yet — never as a stand-in for a real number.
     score_public_mandate: Mapped[float | None] = mapped_column(Float, nullable=True)
     score_effectiveness: Mapped[float | None] = mapped_column(Float, nullable=True)
-    score_competence: Mapped[float | None] = mapped_column(Float, nullable=True)
     score_agency_alignment: Mapped[float | None] = mapped_column(Float, nullable=True)
     # NULL for any currently-serving or just-departed president — C-SPAN's
     # Presidential Historians Survey only rates a completed term, and its
@@ -543,9 +542,11 @@ class President(Base):
     election_margin: Mapped[float | None] = mapped_column(Float, nullable=True)
     gdp_growth_avg: Mapped[float | None] = mapped_column(Float, nullable=True)
     jobs_created_millions: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Informational only (2026-07): no longer a scoring input — Competence
+    # (the dimension EO count used to feed) was removed entirely, see
+    # PRESIDENT_SCORE_WEIGHTS's comment in config_definitions.py. Still
+    # shown on a president's profile as a raw stat.
     eo_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    eo_court_success_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
-    cabinet_turnover_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Persisted so the on-demand score-breakdown endpoint can recompute
     # calc_effectiveness/calc_agency_alignment's exact inputs without a
     # live re-fetch from FRED/Federal Register — these were previously

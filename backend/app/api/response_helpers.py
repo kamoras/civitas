@@ -48,11 +48,13 @@ SENATOR_DIMENSION_LABELS = {
 }
 
 # score_5 = Historical Legacy (added 2026-07) — see
-# president_pipeline._record_president_snapshots.
+# president_pipeline._record_president_snapshots. score_3 (Competence) is
+# retired (2026-07, same place) — omitted here so trend charts simply
+# don't render a flat, always-0.0 line for it; old snapshot rows still
+# have real historical values in that column, just no longer surfaced.
 PRESIDENT_DIMENSION_LABELS = {
     "score_1": "publicMandate",
     "score_2": "effectiveness",
-    "score_3": "competence",
     "score_4": "agencyAlignment",
     "score_5": "historicalLegacy",
 }
