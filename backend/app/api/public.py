@@ -44,12 +44,27 @@ _rl_lock = threading.Lock()
 _rl_window: dict[str, deque] = defaultdict(deque)
 
 
+# Evict fully-idle IPs every N requests so the per-IP map can't grow
+# unboundedly on an unauthenticated endpoint (same pattern as
+# rate_limit.py's limiter, which already does this).
+_RL_EVICT_EVERY = 2000
+_rl_request_count = 0
+
+
 def _check_rate_limit(ip: str) -> tuple[bool, int, int]:
     """Return (allowed, remaining, reset_epoch)."""
+    global _rl_request_count
     now = time()
     cutoff = now - _RATE_PERIOD
     reset_at = int(now + _RATE_PERIOD)
     with _rl_lock:
+        _rl_request_count += 1
+        if _rl_request_count % _RL_EVICT_EVERY == 0:
+            stale = [
+                k for k, q in _rl_window.items() if not q or q[-1] < cutoff
+            ]
+            for k in stale:
+                del _rl_window[k]
         dq = _rl_window[ip]
         while dq and dq[0] < cutoff:
             dq.popleft()
@@ -317,9 +332,12 @@ def list_representatives(
     """
     if state:
         from app.services.representative_service import get_representatives_by_state
-        data = get_representatives_by_state(db, state, page=page, per_page=per_page).model_dump(by_alias=True)
-        if party:
-            data["entries"] = [e for e in data["entries"] if e.get("party") == party.upper()]
+        # party is pushed into the query so filtering happens BEFORE
+        # pagination — post-filtering the page made entry counts vary per
+        # page while total/totalPages described the unfiltered set.
+        data = get_representatives_by_state(
+            db, state, page=page, per_page=per_page, party=party,
+        ).model_dump(by_alias=True)
     else:
         from app.services.representative_service import get_rep_leaderboard
         data = get_rep_leaderboard(db, page=page, per_page=per_page, party=party)

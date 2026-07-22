@@ -28,9 +28,8 @@ SELECT name, state, party,
   round(score_independent_voting,1) iv,
   round(score_funding_diversity,1) fd,
   round(score_legislative_effectiveness,1) le,
-  round((score_funding_independence*0.25 + score_promise_persistence*0.20
-       + score_independent_voting*0.20 + score_funding_diversity*0.15
-       + score_legislative_effectiveness*0.20), 1) overall,  -- SCORE_WEIGHTS (config_definitions.py) — verify these match before trusting
+  round((score_funding_independence*0.33 + score_independent_voting*0.33
+       + score_legislative_effectiveness*0.34), 1) overall,  -- SCORE_WEIGHTS (config_definitions.py, v6.5+: PP/FD unweighted) — verify these match before trusting
   round(total_from_pacs/nullif(total_raised,0)*100, 2) pac_pct,
   round(total_raised/1e6, 2) raised_m
 FROM senators ORDER BY overall DESC

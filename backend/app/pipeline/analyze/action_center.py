@@ -1843,14 +1843,20 @@ def generate_period_summaries(today_str: str, db: "Session") -> None:
         .all()
     )
 
-    weeks: dict[int, list] = {}
+    # Group by the full ISO (year, week) pair, not week number alone:
+    # late-December dates can belong to ISO week 1 of the NEXT year (and
+    # early January to week 52/53 of the previous one), so keying on week
+    # number collided the year-end week with January's row of the same
+    # number — the year-end week was then silently never summarized.
+    weeks: dict[tuple[int, int], list] = {}
     for e in entries_this_year:
         d = datetime.strptime(e.date, "%Y-%m-%d").date()
-        wnum = d.isocalendar()[1]
-        weeks.setdefault(wnum, []).append(e)
+        iso = d.isocalendar()
+        weeks.setdefault((iso[0], iso[1]), []).append(e)
 
-    for wnum, week_entries in weeks.items():
-        if wnum == current_week_num:
+    current_iso_key = (today.isocalendar()[0], current_week_num)
+    for (wyear, wnum), week_entries in weeks.items():
+        if (wyear, wnum) == current_iso_key:
             continue  # current week is not complete yet
         # Compute Monday/Sunday for this week
         first_entry_date = datetime.strptime(week_entries[0].date, "%Y-%m-%d").date()
@@ -1861,7 +1867,7 @@ def generate_period_summaries(today_str: str, db: "Session") -> None:
 
         existing = (
             db.query(WeekSummary)
-            .filter(WeekSummary.year == current_year, WeekSummary.week_num == wnum)
+            .filter(WeekSummary.year == wyear, WeekSummary.week_num == wnum)
             .first()
         )
         if existing:
@@ -1877,11 +1883,11 @@ def generate_period_summaries(today_str: str, db: "Session") -> None:
         llm = _generate_period_summary(
             label=label,
             entries=week_entries,
-            cache_key={"period": "week", "year": current_year, "week": wnum},
+            cache_key={"period": "week", "year": wyear, "week": wnum},
             db=db,
         )
         db.add(WeekSummary(
-            year=current_year,
+            year=wyear,
             week_num=wnum,
             start_date=monday.strftime("%Y-%m-%d"),
             end_date=sunday.strftime("%Y-%m-%d"),
@@ -1890,7 +1896,7 @@ def generate_period_summaries(today_str: str, db: "Session") -> None:
             entry_count=len(week_entries),
         ))
         db.commit()
-        logger.info("Generated week-in-review for %s W%d", current_year, wnum)
+        logger.info("Generated week-in-review for %s W%d", wyear, wnum)
 
     # --- Month summaries ---
     # For each completed month (not current month) in current year
@@ -1988,7 +1994,7 @@ def _story_word_target(n_facts: int) -> tuple[int, int]:
     return low, high
 
 
-def _generate_full_story(issue) -> str | None:
+def _generate_full_story(issue, db_session: Session | None = None) -> str | None:
     """Generate a factual deep-dive for an action issue, length scaled to
     how many key facts actually support it (see ``_story_word_target``).
 
@@ -2090,7 +2096,10 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
             cache_key=(
                 f"full_story:{issue.id}:{issue.title[:80]}" if attempt == 0 else None
             ),
-            db_session=None,
+            # call_llm caches only when BOTH cache_key and db_session are
+            # set — passing None here silently disabled the first-attempt
+            # cache the cache_key above exists for.
+            db_session=db_session,
             max_tokens=2048,
             num_ctx=4096,
         )
@@ -2533,6 +2542,15 @@ def _merge_similar_monitors(monitors: list[NationalMonitor], model, db: Session)
                     keep, absorb = absorb, keep
                 _merge_monitors(keep, absorb, db)
                 merged_ids.add(absorb.id)
+                if absorb is monitors[a_idx]:
+                    # The swap deleted the OUTER monitor: stop pairing
+                    # against it. Continuing the inner loop used a deleted
+                    # row as a merge target — a later match could re-parent
+                    # a third monitor's updates onto the deleted parent and
+                    # destroy them via the delete-orphan cascade. (The
+                    # merged_ids guard only runs at the top of the outer
+                    # loop.)
+                    break
 
     return bool(merged_ids)
 
@@ -2670,12 +2688,17 @@ def _update_national_monitors(today: str, db: Session) -> None:
                     matched_issues.add(i)
                     continue
 
+                # Match against ANY of today's source URLs, not just the
+                # first: source ordering shifts between hourly runs as new
+                # articles arrive, so keying the duplicate check on
+                # source_urls[0] alone let the same story accrue a second
+                # same-day update whenever its leading source changed.
                 already_exists = (
                     db.query(MonitorUpdate)
                     .filter(
                         MonitorUpdate.monitor_id == monitor.id,
                         MonitorUpdate.date == today,
-                        MonitorUpdate.source_url == source_urls[0],
+                        MonitorUpdate.source_url.in_(source_urls),
                     )
                     .first()
                 )
@@ -3553,7 +3576,7 @@ def _run_refresh(db: Session) -> int:
     for i, issue in enumerate(story_issues):
         _set_refresh_state(stage_detail=f"{i + 1}/{_stories_total}")
         try:
-            story = _generate_full_story(issue)
+            story = _generate_full_story(issue, db_session=db)
             if story:
                 issue.full_story = story
                 _stories_done += 1

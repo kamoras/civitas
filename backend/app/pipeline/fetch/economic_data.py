@@ -56,7 +56,12 @@ async def fetch_employment_data(
     BLS limits: 20-year span per request, 25 requests/day without key.
     Returns list of {year, period, value} dicts.
     """
-    capped_end = min(end_year, 2026)
+    # Cap at the current year (BLS has no future data), never at a
+    # hardcoded year — a fixed cap silently froze the payroll series for
+    # any in-progress term once the calendar passed it.
+    from datetime import datetime, timezone
+
+    capped_end = min(end_year, datetime.now(timezone.utc).year)
 
     payload = {
         "seriesid": [NONFARM_SERIES],

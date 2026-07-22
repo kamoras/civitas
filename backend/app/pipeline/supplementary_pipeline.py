@@ -62,7 +62,12 @@ async def run_supplementary_pipeline() -> dict:
         try:
             from app.pipeline.explore_pipeline import run_explore_pipeline
             explore_result = await run_explore_pipeline(days_back=60)
-            total_docs = sum(v for v in explore_result.values() if isinstance(v, int))
+            # Count NEW documents per source — the old sum over all int
+            # values picked up total_embedded (historically the whole
+            # corpus), reporting "N ingested" when nothing new arrived.
+            total_docs = sum(
+                (explore_result.get("new_documents") or {}).values()
+            )
             run.explore_docs_ingested = total_docs
             logger.info("Explore pipeline ingested %d documents", total_docs)
             progress.complete("explore_documents", detail=f"{total_docs} ingested")

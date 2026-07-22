@@ -106,8 +106,11 @@ def _president_id_for_name(name: str) -> str | None:
 
 async def _backfill_presidential_bodies(
     db: Session, client: httpx.AsyncClient
-) -> int:
-    """Fetch body text for presidential documents that have empty body/summary."""
+) -> list[int]:
+    """Fetch body text for presidential documents that have empty body/summary.
+
+    Returns the ids of documents whose body changed, so the caller can
+    re-embed exactly those."""
     import asyncio
     import re
 
@@ -120,12 +123,12 @@ async def _backfill_presidential_bodies(
         .all()
     )
     if not docs:
-        return 0
+        return []
 
     logger.info("Backfilling body content for %d presidential documents...", len(docs))
 
     BATCH = 5
-    filled = 0
+    filled: list[int] = []
     async with httpx.AsyncClient() as backfill_client:
         for i in range(0, len(docs), BATCH):
             batch = docs[i : i + BATCH]
@@ -151,16 +154,19 @@ async def _backfill_presidential_bodies(
                     d.body = body_text
                     if not d.summary:
                         d.summary = body_text[:500]
-                    filled += 1
+                    filled.append(d.id)
 
     if filled:
         db.commit()
-        logger.info("Backfilled body content for %d presidential documents", filled)
+        logger.info("Backfilled body content for %d presidential documents", len(filled))
     return filled
 
 
-async def _backfill_rulemaking_bodies(db: Session) -> int:
-    """Fetch full body text for rulemaking docs that only have the abstract."""
+async def _backfill_rulemaking_bodies(db: Session) -> list[int]:
+    """Fetch full body text for rulemaking docs that only have the abstract.
+
+    Returns the ids of documents whose body changed, same contract as
+    _backfill_presidential_bodies."""
     import asyncio
     from sqlalchemy import func as sa_func
     from app.pipeline.fetch.fr_rulemaking import _fetch_body_text
@@ -179,12 +185,12 @@ async def _backfill_rulemaking_bodies(db: Session) -> int:
         .all()
     )
     if not docs:
-        return 0
+        return []
 
     logger.info("Backfilling body content for %d rulemaking documents...", len(docs))
 
     BATCH = 8
-    filled = 0
+    filled: list[int] = []
     async with httpx.AsyncClient() as backfill_client:
         for i in range(0, len(docs), BATCH):
             batch = docs[i : i + BATCH]
@@ -209,13 +215,13 @@ async def _backfill_rulemaking_bodies(db: Session) -> int:
             for d, body_text in zip(batch, bodies):
                 if body_text:
                     d.body = body_text
-                    filled += 1
+                    filled.append(d.id)
 
             await asyncio.sleep(0.3)
 
     if filled:
         db.commit()
-        logger.info("Backfilled body content for %d rulemaking documents", filled)
+        logger.info("Backfilled body content for %d rulemaking documents", len(filled))
     return filled
 
 
@@ -227,14 +233,14 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
     start = time.time()
     db: Session = SessionLocal()
 
-    cached_version = api_cache_get(db, "explore", "seed_version")
-    if cached_version == EXPLORE_SEED_VERSION:
-        existing = db.query(ExploreDocument.id).limit(1).first()
-        if existing:
-            logger.info("Explore pipeline: data is current (version %s), skipping", EXPLORE_SEED_VERSION)
-            db.close()
-            return {"status": "skipped", "reason": "already_current"}
-
+    # No same-version skip here anymore: the old seed_version gate rode on
+    # ApiCache's 72h TTL, so the "nightly" supplementary run actually
+    # ingested at most once every 3 days — no new executive orders, rules,
+    # or floor speeches on the other two nights — while reporting the skip
+    # as success. Bootstrap-on-restart is already guarded by main.py's own
+    # emptiness check, ingestion is incremental (external_id dedupe + each
+    # fetcher's own ApiCache), and the embed step below only encodes new or
+    # refreshed documents, so running every night is cheap.
     try:
         senator_map = _senator_lookup(db)
         stats = {"senate_floor": 0, "house_floor": 0, "presidential": 0, "scotus": 0, "fr_rulemaking": 0}
@@ -431,12 +437,27 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
                 db.rollback()
 
         # --- 6. Backfill docs missing body content ---
-        await _backfill_presidential_bodies(db, client)
-        await _backfill_rulemaking_bodies(db)
+        refreshed_ids = set(await _backfill_presidential_bodies(db, client))
+        refreshed_ids |= set(await _backfill_rulemaking_bodies(db))
 
-        # --- 7. Embed all documents into ChromaDB ---
+        # --- 7. Embed new/refreshed documents into ChromaDB ---
+        # Only documents not yet in the collection (plus ones whose body
+        # was just backfilled) are encoded — re-encoding the whole corpus
+        # every night is what made the old 72h skip gate look necessary.
         logger.info("Explore pipeline: embedding documents into vector store...")
         all_docs = db.query(ExploreDocument).all()
+        try:
+            from app.pipeline.vector_store import get_chroma_client
+            _collection = get_chroma_client().get_or_create_collection(
+                name="explore_documents",
+            )
+            _already_embedded = set(_collection.get(include=[])["ids"])
+        except Exception:
+            _already_embedded = set()
+        all_docs = [
+            d for d in all_docs
+            if str(d.id) not in _already_embedded or d.id in refreshed_ids
+        ]
         doc_dicts = [
             {
                 "id": d.id,

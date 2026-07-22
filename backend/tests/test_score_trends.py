@@ -72,3 +72,31 @@ def test_entity_types_are_isolated(db_session):
     house_result = compute_score_trend_map(db_session, "representative")
     assert set(senate_result.keys()) == {"S001"}
     assert set(house_result.keys()) == {"R001"}
+
+
+def test_latest_snapshot_need_not_be_today(db_session):
+    """The map must work off the most recent snapshot DATE, not literally
+    today — requiring date == today made every trend vanish whenever the
+    nightly pipeline hadn't run yet (early UTC hours) or had failed."""
+    yesterday = (utcnow().date() - timedelta(days=1)).isoformat()
+    eight_days_ago = (utcnow().date() - timedelta(days=8)).isoformat()
+    db_session.add(_snapshot("senator", "S001", eight_days_ago, 60.0))
+    db_session.add(_snapshot("senator", "S001", yesterday, 65.0))
+    db_session.commit()
+
+    result = compute_score_trend_map(db_session, "senator")
+    assert result["S001"] == {"direction": "up", "change": 5.0, "previousScore": 60.0}
+
+
+def test_young_history_falls_back_to_nearest_older_snapshot(db_session):
+    """With less than a week of history, a snapshot 1-6 days older than the
+    latest must be used as the prior instead of marking the member 'new'
+    (the fallback the old implementation documented but never executed)."""
+    today = utcnow().date().isoformat()
+    two_days_ago = (utcnow().date() - timedelta(days=2)).isoformat()
+    db_session.add(_snapshot("senator", "S001", two_days_ago, 60.0))
+    db_session.add(_snapshot("senator", "S001", today, 66.0))
+    db_session.commit()
+
+    result = compute_score_trend_map(db_session, "senator")
+    assert result["S001"] == {"direction": "up", "change": 6.0, "previousScore": 60.0}

@@ -52,9 +52,18 @@ class TestSupplementaryPipelineRunTracking:
     def test_creates_a_run_row_and_marks_it_completed(self, db_session):
         # Empty Justice table -> justices_missing=True -> always runs,
         # regardless of which day of the week the test happens to run on.
+        # Mirrors run_explore_pipeline's real return shape. total_embedded
+        # is deliberately huge: the ingested count must come from
+        # new_documents only, not from summing every int in the dict (the
+        # old behavior reported the entire embedded corpus as "ingested").
         result = _run(
             db_session,
-            explore_result={"docs": 12},
+            explore_result={
+                "status": "completed",
+                "new_documents": {"senate_floor": 5, "fr_rulemaking": 7},
+                "total_embedded": 9999,
+                "elapsed_seconds": 1.0,
+            },
             justice_result={"justices": 9},
             president_result={"updated": 1},
         )

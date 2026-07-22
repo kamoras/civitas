@@ -178,6 +178,7 @@ def build_rep_response(rep: Representative, _db: Session = None) -> Representati
                 "congress": sb.congress or 0,
                 "billType": sb.bill_type or "",
                 "isLaw": sb.is_law or False,
+                "stage": sb.stage or "",
             }
             for sb in sorted(rep.sponsored_bills, key=lambda x: x.introduced_date or "", reverse=True)
         ],
@@ -197,6 +198,7 @@ def get_representatives_by_state(
     state: str,
     page: int = 1,
     per_page: int = 10,
+    party: str | None = None,
 ) -> PaginatedRepresentativesSchema:
     base_q = (
         db.query(Representative)
@@ -204,6 +206,11 @@ def get_representatives_by_state(
         .filter(Representative.state == state.upper())
         .order_by(Representative.district)
     )
+    if party:
+        # Filter BEFORE pagination — filtering the returned page afterwards
+        # (the public API's old behavior) produced variable-length pages
+        # while total/totalPages still described the unfiltered set.
+        base_q = base_q.filter(Representative.party == party.upper())
     total = base_q.count()
     total_pages, page = paginate_bounds(total, page, per_page)
 
@@ -298,7 +305,10 @@ def get_rep_leaderboard(
 
     trend_map = _compute_rep_trend_map(db)
 
-    reps.sort(key=compute_overall_score, reverse=True)
+    # Name tiebreaker: overall scores tie often (int sub-scores), and
+    # Python's sort is stable over an UNORDERED query result — without
+    # a secondary key, tied members can swap ranks between requests.
+    reps.sort(key=lambda m: (-compute_overall_score(m), m.name))
 
     if party:
         reps = [r for r in reps if r.party == party.upper()]
@@ -440,6 +450,8 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
             date=v.get("date", ""),
             vote=v.get("vote", "Not Voting"),
             policy_area=v.get("policyArea", "PROCEDURAL"),
+            policy_areas=json.dumps(v.get("policyAreas") or []),
+            party_alignment_weight=v.get("partyAlignmentWeight") or 0.0,
             stance=v.get("stance", "neutral"),
             description=v.get("description", ""),
             party_leaning=v.get("partyLeaning"),
@@ -544,7 +556,8 @@ def get_rep_votes(
     total = query.count()
     total_pages, page = paginate_bounds(total, page, per_page)
 
-    votes_db = query.order_by(RepKeyVote.date.desc()).offset((page - 1) * per_page).limit(per_page).all()
+    # id tiebreaker — same rationale as the senator vote pagination.
+    votes_db = query.order_by(RepKeyVote.date.desc(), RepKeyVote.id.desc()).offset((page - 1) * per_page).limit(per_page).all()
 
     return {
         "votes": [
@@ -596,7 +609,7 @@ def get_rep_stock_trades(
     total_pages, page = paginate_bounds(total, page, per_page)
 
     trades_db = (
-        query.order_by(RepStockTrade.transaction_date.desc())
+        query.order_by(RepStockTrade.transaction_date.desc(), RepStockTrade.id.desc())
         .offset((page - 1) * per_page)
         .limit(per_page)
         .all()

@@ -82,7 +82,12 @@ from app.pipeline.transform.normalize_votes import (
 )
 
 # Analyze modules
-from app.pipeline.analyze.bill_analyzer import classify_all_bills, classify_recent_votes, clear_bill_embedding_cache
+from app.pipeline.analyze.bill_analyzer import (
+    classify_all_bills,
+    classify_recent_votes,
+    clear_bill_embedding_cache,
+    recent_roll_call_key,
+)
 from app.pipeline.analyze.bill_learning import clear_reference_cache
 from app.pipeline.analyze.party_platform import clear_platform_cache, initialize_platform_embeddings
 from app.pipeline.vector_store import (
@@ -844,10 +849,14 @@ async def run_senate_pipeline(
                 )
                 added = 0
                 for rc in session_rcs:
-                    rc_id = (
-                        rc.get("documentName")
-                        or f"Roll-{congress_num}-{session_num}-{rc.get('rollNumber', '')}"
-                    )
+                    # Dedupe by the unique roll-call identity, NOT by
+                    # documentName: the Senate votes on the same document
+                    # repeatedly (cloture + confirmation on one "PN"
+                    # nomination; motion-to-proceed + passage on one bill),
+                    # and keying on documentName silently discarded all but
+                    # the newest such vote (in a nomination-heavy session,
+                    # a large share of the recent-vote sample).
+                    rc_id = recent_roll_call_key(rc)
                     if rc_id not in seen_roll_ids:
                         seen_roll_ids.add(rc_id)
                         all_recent_roll_calls.append(rc)
@@ -860,16 +869,14 @@ async def run_senate_pipeline(
 
             recent_roll_calls = all_recent_roll_calls
 
-            # Build a map for recent roll calls keyed by document name
+            # Build a map for recent roll calls keyed by the unique roll-call
+            # key (congress-session-rollNumber) — same key stamped as
+            # "rcKey" on classify_recent_votes' output, so lookups below
+            # resolve the exact roll call even when several share one
+            # documentName.
             recent_rc_map: dict[str, dict] = {}
             for rc in recent_roll_calls:
-                congress_num_rc = rc.get("congress", settings.CURRENT_CONGRESS)
-                session_num_rc = rc.get("session", 1)
-                rc_id = (
-                    rc.get("documentName")
-                    or f"Roll-{congress_num_rc}-{session_num_rc}-{rc.get('rollNumber', '')}"
-                )
-                recent_rc_map[rc_id] = rc
+                recent_rc_map[recent_roll_call_key(rc)] = rc
             logger.info("Total unique recent roll calls: %d", len(recent_roll_calls))
             progress.complete("fetch_recent_rcs", detail=f"{len(recent_roll_calls)} unique")
 
@@ -1215,7 +1222,7 @@ async def run_senate_pipeline(
         # Uses the same blended approach as key bills: content analysis is
         # the primary signal, vote tallies validate or adjust.
         for rc in classified_recent:
-            rc_id = rc.get("billId", "")
+            rc_id = rc.get("rcKey") or rc.get("billId", "")
             roll_call_data = recent_rc_map.get(rc_id)
             if roll_call_data:
                 split = compute_party_vote_split(roll_call_data)
@@ -1326,7 +1333,7 @@ async def run_senate_pipeline(
                 # Also extract recent roll call votes into the same map so they
                 # contribute to stance breakdown in normalize_votes
                 for rc in classified_recent:
-                    rc_id = rc.get("billId", "")
+                    rc_id = rc.get("rcKey") or rc.get("billId", "")
                     roll_call_data = recent_rc_map.get(rc_id)
                     if roll_call_data:
                         vote = extract_senator_vote(

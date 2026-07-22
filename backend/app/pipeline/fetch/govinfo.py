@@ -63,8 +63,12 @@ async def fetch_bill_package(
 
     # GovInfo uses a specific package ID format for bills
     # BILLS-{congress}{type}{number}{version}
-    # Try enrolled version first, then engrossed, then introduced
-    versions = ["enr", "eas", "es", "eh", "is", "rs"]
+    # Try enrolled first, then engrossed, then reported, then introduced.
+    # Both chambers' versions are listed: the original list had "is"/"rs"
+    # (Senate introduced/reported) but no "ih"/"rh", so a House bill that
+    # hadn't passed a chamber never resolved to any package and got no
+    # full text at all — a systematic chamber asymmetry in classifier input.
+    versions = ["enr", "eas", "es", "eh", "rs", "rh", "is", "ih"]
     type_map = {"hr": "hr", "s": "s", "hjres": "hjres", "sjres": "sjres"}
     govinfo_type = type_map.get(bill_type, bill_type)
 

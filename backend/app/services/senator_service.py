@@ -196,6 +196,7 @@ def _build_sponsored_bills(sponsored_bills: list) -> list[SponsoredBillSchema]:
             congress=sb.congress or 0,
             bill_type=sb.bill_type or "",
             is_law=sb.is_law or False,
+            stage=sb.stage or "",
         ))
     result.sort(key=lambda x: x.introduced_date, reverse=True)
     return result
@@ -448,7 +449,10 @@ def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
 
     trend_map = _compute_trend_map(db)
 
-    senators.sort(key=compute_overall_score, reverse=True)
+    # Name tiebreaker: overall scores tie often (int sub-scores), and
+    # Python's sort is stable over an UNORDERED query result — without
+    # a secondary key, tied members can swap ranks between requests.
+    senators.sort(key=lambda m: (-compute_overall_score(m), m.name))
 
     # Party-relative ideology label thresholds over the full cohort (this
     # query is .all(), so no pagination skew) — keeps progressive/moderate/
@@ -659,7 +663,10 @@ def get_senator_votes(
     total = query.count()
     total_pages, page = paginate_bounds(total, page, per_page)
 
-    votes_db = query.order_by(KeyVote.date.desc()).offset((page - 1) * per_page).limit(per_page).all()
+    # id tiebreaker: many votes share one date string, and SQL row order
+    # among ties is unstable — without it the same vote can appear on two
+    # pages (or neither) across requests.
+    votes_db = query.order_by(KeyVote.date.desc(), KeyVote.id.desc()).offset((page - 1) * per_page).limit(per_page).all()
 
     def _build(v: KeyVote) -> KeyVoteSchema:
         raw_areas = []
@@ -729,7 +736,7 @@ def get_senator_stock_trades(
     total_pages, page = paginate_bounds(total, page, per_page)
 
     trades_db = (
-        query.order_by(StockTrade.transaction_date.desc())
+        query.order_by(StockTrade.transaction_date.desc(), StockTrade.id.desc())
         .offset((page - 1) * per_page)
         .limit(per_page)
         .all()

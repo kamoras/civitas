@@ -109,7 +109,12 @@ def get_representative(rep_id: str, db: Session = Depends(get_db)) -> JSONRespon
 def list_representatives(
     state: str = Query(..., min_length=2, max_length=2, description="Two-letter state code"),
     page: int = Query(1, ge=1),
-    per_page: int = Query(10, ge=1, le=50),
+    # le=60, not 50: the compare page requests per_page=60 to fetch a whole
+    # state's delegation in one call (CA has 52 districts). With the cap at
+    # 50, FastAPI 422'd every House state selection and the frontend's
+    # .catch() rendered an empty member list — House comparison was
+    # entirely unusable from the picker.
+    per_page: int = Query(10, ge=1, le=60),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     data = get_representatives_by_state(db, state, page=page, per_page=per_page)

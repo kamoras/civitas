@@ -141,6 +141,14 @@ def validate_senator(senator: dict) -> dict:
                 "pacSponsor": d.get("pacSponsor"),
                 "pacIndustry": d.get("pacIndustry"),
                 "pacAnalysis": d.get("pacAnalysis"),
+                # FEC committee_type ("Q"/"N" = capped PAC) feeds the
+                # PAC-utilization signal in _funding_independence_core.
+                # Dropping it here silently NULLed Donor.committee_type for
+                # every senator (the House path bypasses this validator and
+                # kept it), so the score-breakdown endpoint recomputed FI
+                # via the dollar-based fallback while the stored score used
+                # the utilization path.
+                "committeeType": d.get("committeeType"),
             }
             for d in (f.get("topDonors") or [])
         ],

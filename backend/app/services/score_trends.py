@@ -1,6 +1,6 @@
 """Shared score-trend computation for the Senate/House leaderboard endpoints."""
 
-from datetime import timedelta
+from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -14,36 +14,70 @@ TREND_THRESHOLD = 0.5
 def compute_score_trend_map(db: Session, entity_type: str) -> dict[str, dict]:
     """Compare latest snapshots to the best available prior snapshot.
 
-    Prefers a snapshot from ~TREND_LOOKBACK_DAYS ago; falls back to the
-    oldest available snapshot that is at least 1 day older than the latest.
-    Returns {entity_id: {"direction", "change", "previousScore"}}. Was
-    copy-pasted (down to the same lookback/threshold constants) between
+    "Latest" is the most recent snapshot DATE on record, not literally
+    today — requiring ``date == today`` made every leaderboard trend
+    silently disappear whenever the nightly pipeline hadn't run yet (early
+    UTC hours) or had failed, and the docstring's "falls back to the oldest
+    snapshot at least 1 day older" behavior was dead code (``min(target,
+    yesterday)`` always chose the 7-day target, so 1-6-day-old priors were
+    never used). Prefers a snapshot from ~TREND_LOOKBACK_DAYS before the
+    latest; falls back to the newest snapshot at least 1 day older than the
+    latest. Returns {entity_id: {"direction", "change", "previousScore"}}.
+    Was copy-pasted (down to the same lookback/threshold constants) between
     senator_service.py and representative_service.py's leaderboards.
     """
-    today = utcnow().date()
-    target_date = today - timedelta(days=TREND_LOOKBACK_DAYS)
+    latest_date_row = (
+        db.query(ScoreSnapshot.date)
+        .filter(ScoreSnapshot.entity_type == entity_type)
+        .order_by(ScoreSnapshot.date.desc())
+        .first()
+    )
+    if latest_date_row is None:
+        return {}
+    latest_date_str = latest_date_row[0]
 
     latest_snapshots = (
         db.query(ScoreSnapshot)
         .filter(
             ScoreSnapshot.entity_type == entity_type,
-            ScoreSnapshot.date == today.isoformat(),
+            ScoreSnapshot.date == latest_date_str,
         )
         .all()
     )
     if not latest_snapshots:
         return {}
 
-    yesterday = (today - timedelta(days=1)).isoformat()
+    try:
+        latest_date = date.fromisoformat(latest_date_str)
+    except ValueError:
+        latest_date = utcnow().date()
+    target_date = (latest_date - timedelta(days=TREND_LOOKBACK_DAYS)).isoformat()
+    day_before_latest = (latest_date - timedelta(days=1)).isoformat()
+
+    # Preferred: the newest snapshot at or before the 7-day target.
     older_snapshots = (
         db.query(ScoreSnapshot)
         .filter(
             ScoreSnapshot.entity_type == entity_type,
-            ScoreSnapshot.date <= min(target_date.isoformat(), yesterday),
+            ScoreSnapshot.date <= target_date,
         )
         .order_by(ScoreSnapshot.date.desc())
         .all()
     )
+    # Fallback for young snapshot histories: any snapshot at least 1 day
+    # older than the latest (the behavior the old docstring promised but
+    # never delivered), so members stop reading as "new" for their first
+    # week of history.
+    if not older_snapshots:
+        older_snapshots = (
+            db.query(ScoreSnapshot)
+            .filter(
+                ScoreSnapshot.entity_type == entity_type,
+                ScoreSnapshot.date <= day_before_latest,
+            )
+            .order_by(ScoreSnapshot.date.desc())
+            .all()
+        )
     older_map: dict[str, float] = {}
     for snap in older_snapshots:
         if snap.entity_id not in older_map:

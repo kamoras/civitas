@@ -279,3 +279,31 @@ class TestValidateSenator:
         result = validate_senator(senator)
         assert result["lobbyingMatches"] == []
 
+
+
+class TestCommitteeTypePreserved:
+    def test_committee_type_survives_validation(self):
+        """committeeType feeds the PAC-utilization signal in
+        _funding_independence_core and is persisted to Donor.committee_type.
+        The validator's donor rebuild used to drop it, silently NULLing the
+        column for every senator and desyncing the score-breakdown endpoint
+        from the stored score."""
+        senator = _make_senator(funding={
+            "totalRaised": 1_000_000,
+            "totalFromPACs": 200_000,
+            "smallDonorPercentage": 30,
+            "topDonors": [
+                {"name": "Good PAC", "total": 5_000, "type": "PAC",
+                 "industry": "PHARMA", "committeeType": "Q"},
+                {"name": "Small PAC", "total": 1_000, "type": "PAC",
+                 "industry": "TECH", "committeeType": "N"},
+                {"name": "Acme Corp", "total": 9_000, "type": "Org/Employees",
+                 "industry": "TECH"},
+            ],
+            "industryBreakdown": [],
+        })
+        result = validate_senator(senator)
+        donors = result["funding"]["topDonors"]
+        assert donors[0]["committeeType"] == "Q"
+        assert donors[1]["committeeType"] == "N"
+        assert donors[2]["committeeType"] is None

@@ -60,8 +60,11 @@ def _infer_caucus_from_votes(
         if not party_leaning or party_leaning == "bipartisan":
             continue
 
-        bill_id = bill.get("billId", "")
-        vote = senator_votes.get(bill_id, "")
+        # Recent roll calls carry a unique "rcKey" (congress-session-roll);
+        # senator_votes is keyed by it because billId (documentName) is not
+        # unique across multiple votes on the same document. Key bills have
+        # no rcKey and keep their billId key.
+        vote = senator_votes.get(bill.get("rcKey") or bill.get("billId", ""), "")
         vote_upper = vote.upper()
         is_yea = vote_upper in ("YEA", "AYE", "YES")
         is_nay = vote_upper in ("NAY", "NO")
@@ -232,7 +235,8 @@ def normalize_votes(
             )
 
     for bill in bill_classifications:
-        vote = senator_votes.get(bill.get("billId", ""))
+        # rcKey-first for the same reason as _analyze's lookup above.
+        vote = senator_votes.get(bill.get("rcKey") or bill.get("billId", ""))
         if not vote:
             continue
 
@@ -321,7 +325,10 @@ def normalize_recent_votes(
     votes = []
     for bill in classified_recent:
         bill_id = bill.get("billId", "")
-        roll_call = roll_call_data_map.get(bill_id)
+        # roll_call_data_map is keyed by the unique rcKey (congress-session-
+        # roll) since documentName repeats across multiple votes on the same
+        # measure; billId remains the display identifier.
+        roll_call = roll_call_data_map.get(bill.get("rcKey") or bill_id)
         if not roll_call:
             continue
 
@@ -559,7 +566,21 @@ def find_house_roll_call(actions: list[dict] | None) -> dict | None:
                 if rv.get("chamber") == "House" and rv.get("rollNumber"):
                     url = rv.get("url", "")
                     year_match = _re.search(r"/evs/(\d{4})/", url)
-                    year = int(year_match.group(1)) if year_match else 2025
+                    if year_match:
+                        year = int(year_match.group(1))
+                    else:
+                        # No year in the URL — fall back to the recorded
+                        # vote's or action's own date. Never guess a fixed
+                        # year: House Clerk roll numbers restart every year,
+                        # so a wrong year resolves to a REAL, different roll
+                        # call and silently attributes the wrong votes.
+                        date_match = _re.match(
+                            r"(\d{4})-",
+                            rv.get("date") or action.get("actionDate") or "",
+                        )
+                        if not date_match:
+                            continue
+                        year = int(date_match.group(1))
                     return {
                         "year": year,
                         "rollCallNumber": rv.get("rollNumber"),
