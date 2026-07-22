@@ -114,6 +114,25 @@ class TestRecalculatePresidentScores:
         assert "score_effectiveness" in result
         assert "score_agency_alignment" in result
 
+    def test_competence_reflects_the_live_eo_count(self):
+        """Beyond not-crashing: competence must actually move with the one
+        genuinely-live input (EO activity rate), or a regression that
+        silently collapsed it back to the pure seed would still pass the
+        do-not-crash test above."""
+        seed = {
+            "score_competence": 60, "score_effectiveness": 55,
+            "score_agency_alignment": 50,
+        }
+        low = recalculate_president_scores(
+            president_id="test-1", seed_scores=seed,
+            live_data={"eo_count": 2}, term_years=4.0,
+        )
+        high = recalculate_president_scores(
+            president_id="test-1", seed_scores=seed,
+            live_data={"eo_count": 160}, term_years=4.0,
+        )
+        assert low["score_competence"] != high["score_competence"]
+
 
 class TestComputePresidentOverallScore:
     def test_weighted_sum_matches_hand_computation(self):
