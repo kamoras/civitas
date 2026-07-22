@@ -949,6 +949,14 @@ def _record_if_possible(
             db_session, bill_id, text, policy_area, confidence, source="embedding",
         )
     except Exception:
+        # record_classification issues a Core execute with no internal
+        # rollback, so a failed write (e.g. "database is locked") leaves the
+        # shared session in a failed state; roll back here or the next bill's
+        # lookup_exact query raises PendingRollbackError.
+        try:
+            db_session.rollback()
+        except Exception:
+            pass
         logger.debug("Failed to record classification for bill %s", bill_id, exc_info=True)
 
 

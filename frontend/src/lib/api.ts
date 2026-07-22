@@ -441,11 +441,15 @@ function camelizeKeys(obj: unknown): unknown {
 }
 
 export async function fetchPresidentLeaderboard(): Promise<PresidentLeaderboardEntry[]> {
-  return requestJson(`${API_BASE}/presidents/leaderboard`, "Failed to load president leaderboard", { camelize: true });
+  // No camelize: the endpoint already serializes camelCase via model_dump(
+  // by_alias=True). Recursively re-camelizing is a no-op on scalar fields but
+  // would corrupt any data-keyed map field the moment one is added (see the
+  // justice agreementMatrix bug this pattern caused).
+  return requestJson(`${API_BASE}/presidents/leaderboard`, "Failed to load president leaderboard");
 }
 
 export async function fetchPresident(id: string): Promise<President> {
-  return requestJson(`${API_BASE}/presidents/${id}`, "President not found", { camelize: true });
+  return requestJson(`${API_BASE}/presidents/${id}`, "President not found");
 }
 
 export async function fetchJusticeLeaderboard(): Promise<JusticeLeaderboardEntry[]> {
@@ -453,7 +457,12 @@ export async function fetchJusticeLeaderboard(): Promise<JusticeLeaderboardEntry
 }
 
 export async function fetchJustice(id: string): Promise<Justice> {
-  return requestJson(`${API_BASE}/justices/${id}`, "Justice not found", { camelize: true });
+  // No camelize: the endpoint serializes camelCase via model_dump(by_alias=
+  // True). The response carries `agreementMatrix`, a map keyed by justice IDs
+  // ("sonia_sotomayor"); recursively camelizing rewrote those keys to
+  // "soniaSotomayor", which AgreementRow's `split("_")` then rendered as a
+  // run-together "SoniaSotomayor" on every justice profile.
+  return requestJson(`${API_BASE}/justices/${id}`, "Justice not found");
 }
 
 export interface ExploreResult {

@@ -747,6 +747,15 @@ async def run_house_pipeline() -> dict:
                     success_count += 1
 
                 except Exception as e:
+                    # Roll back first, exactly as the Senate loop does
+                    # (senate_pipeline.py). upsert_representative commits
+                    # internally, so a DB-level failure (IntegrityError, or
+                    # "database is locked" under concurrent writes) leaves the
+                    # session in a failed state; without this rollback the next
+                    # rep's first query raises PendingRollbackError and every
+                    # remaining rep in the batch fails too — one bad rep would
+                    # silently wipe out the rest of the run.
+                    db.rollback()
                     logger.error("Failed to process rep %s: %s", rep.get("name", "?"), e)
                     fail_count += 1
 
@@ -817,6 +826,14 @@ async def run_house_pipeline() -> dict:
     except Exception as e:
         logger.exception("House pipeline failed: %s", e)
         try:
+            # Roll back the poisoned session before writing the FAILED status
+            # (mirrors senate_pipeline.py). Without it, if the failure came
+            # from a DB error the session is invalid, this db.commit() also
+            # raises, the status is never persisted, and the run row is
+            # wedged in RUNNING forever — which makes the stock pipeline's
+            # "is House still running?" guard skip every future stock run
+            # until an admin clears it by hand.
+            db.rollback()
             house_run.status = PipelineStatus.FAILED
             house_run.completed_at = utcnow()
             house_run.elapsed_seconds = round(time.time() - start_time, 1)

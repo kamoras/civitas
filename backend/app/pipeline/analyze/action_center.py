@@ -1118,7 +1118,7 @@ def _find_related_senators(
         return {
             "id": s.id, "name": s.name, "state": s.state,
             "party": s.party, "overall_score": overall,
-            "leadership_score": round(s.leadership_score * 100) if s.leadership_score else None,
+            "leadership_score": round(s.leadership_score * 100) if s.leadership_score is not None else None,
             "chamber": chamber,
             "match_reason": match_reason,
             "contact_form_url": getattr(s, "contact_form_url", "") or "",

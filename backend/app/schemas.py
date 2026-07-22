@@ -501,6 +501,12 @@ class RelatedSenator(CamelModel):
     bipartisanship_score: float | None = None
     chamber: str = "senate"
     match_reason: str | None = None
+    # The action-center blob already stores these (action_center._make_entry);
+    # without declaring them here, RelatedSenator(**s) silently strips them and
+    # the issue card's per-member "CONTACT" button always fell back to a generic
+    # senate.gov link — wrong for House members in the list.
+    contact_form_url: str | None = None
+    website_url: str | None = None
 
 
 class ActionItemSchema(CamelModel):

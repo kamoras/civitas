@@ -36,6 +36,7 @@ Ideology (SVD/PCA, Poole & Rosenthal 1985):
 """
 
 import logging
+import statistics
 
 import numpy as np
 
@@ -550,8 +551,12 @@ def compute_bipartisanship_scores(
     if len(raw_rates) < 10:
         return {}
 
-    rates = sorted(raw_rates.values())
-    median = rates[len(rates) // 2]
+    # True median (averages the two central values for even-sized cohorts).
+    # `sorted(...)[len//2]` returned the upper-middle element, biasing the
+    # normalizer's anchor high — which pushed members whose crossing rate sits
+    # just above the real midpoint below the 0.5 Coalition-Breadth threshold
+    # and handed them the below-median seat-safety discount they shouldn't get.
+    median = statistics.median(raw_rates.values())
     if median <= 0:
         # Degenerate cohort (no observed crossing anywhere): fall back to
         # an absolute scale where 30% cross-party interactions = 1.0.
