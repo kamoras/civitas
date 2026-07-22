@@ -387,3 +387,163 @@ stored scores on an unchanged bench.
    shrinkage and window disclosure, and verify Oyez recusal shape live.
 4. **Grounding disclosure** (F4/F10): tighten cheap lexical holes now;
    scope an entailment gate for outbound (Bluesky) content separately.
+
+---
+
+## Action-center audit (data science + political science)
+
+Round 1 covered the action center's mechanics; this pass audits its
+statistics and its editorial/agenda-setting properties. Constants below
+are the *code's* values — note the README's own Action Center section
+still documents the old ones (monitor promotion "similarity > 0.50…
+min 3 days" vs. the actual `_MONITOR_HISTORY_SIM = 0.83`,
+`_MONITOR_MIN_DAYS = 5`, `_MONITOR_MIN_UNIQUE_SOURCES = 3`; ranking
+"0.4 coverage × 0.6 trending" in the module docstring vs. the actual
+0.40/0.35/0.25), a doc-drift finding in its own right.
+
+### A1. No right-of-center source exists anywhere in the pipeline, and the public disclosure misstates the source list — HIGH
+
+`news_feeds.py`: the eight feeds are AP (via the feedx mirror), NPR
+Politics, NPR World, PBS NewsHour, BBC World, The Hill, Politico, Roll
+Call — under AllSides/Ad-Fontes-style ratings a Center-to-Lean-Left mix
+with not one right-of-center outlet. A story right-leaning outlets cover
+heavily but the wire/center-left diet covers thinly can never become an
+issue, never accrue coverage breadth, and structurally can never become
+a National Monitor. Compounding: the About page tells users the sources
+are "AP News, NPR Politics, Reuters, PBS NewsHour — editorially
+independent, low-bias wire services" — **Reuters is not in the list**,
+and The Hill/Politico/Roll Call/BBC (half the diet) are undisclosed.
+Cheapest fixes: correct the About list immediately; consider adding at
+least one right-rated news desk (e.g. a WSJ news feed) with the same
+opinion-path filtering all feeds already get.
+
+### A2. Source breadth is the de-facto dominant ranking signal, with NPR double-counted — MEDIUM-HIGH
+
+Coverage = distinct `source_name` count normalized by the run max;
+realistically max ≈ 3–5 sources, so one source moves a cluster by
+~0.07–0.12 of final score — more than the entire effective spread of the
+trending component (A3). NPR Politics and NPR World are separate
+source_names, so one newsroom's dual syndication counts twice — both in
+ranking and toward the 3-unique-source monitor-promotion bar —
+systematically bonusing topics NPR runs on both feeds (foreign policy
+especially). Fix: collapse to one canonical source name for counting.
+
+### A3. The trending component is computed in raw embedding space and is nearly constant; traffic scores are fetched and never used — MEDIUM
+
+`_compute_trending_boost` uses raw (uncentered) cosine in the regime the
+file itself documents as floored at ~0.74 — after run-max normalization
+the component contributes a near-constant ~0.21–0.25 to every cluster.
+`traffic_score` (Google's "20,000+", Reddit upvotes, Bluesky's uniform
+1.0 — three incommensurable scales) is sorted on and then ignored. One
+narrow soundness note: a single viral Reddit post *cannot* dominate
+(top-3 mean, equal title weights). Either use or drop traffic_score, and
+center this similarity like every other one in the file.
+
+### A4. Surviving trending signal is r/politics-dominated, and Bluesky closes a distribution→input feedback loop — MEDIUM
+
+After the policy filter, Google Trends' sports/entertainment-heavy pool
+mostly drops out, leaving Reddit (r/politics, r/news, plus low-volume
+r/neutralpolitics — a good-faith mitigation) as the effective trending
+input; r/politics has a documented left lean. Meanwhile Bluesky is both
+the platform's **only** distribution channel and a trending *input*
+(uniform weight 1.0): post → left-leaning platform discourse → trending
+→ ranking. The loop's gain is small (0.25 weight × compressed range per
+A3) but real and undisclosed. Also: unauthenticated Reddit 403s just
+skip the sub silently, and total trending failure silently renormalizes
+the formula to coverage-dominance.
+
+### A5. The self-calibration size cap fragments genuinely dominant stories — MEDIUM
+
+The pass-2 loop tightens the merge threshold until the largest cluster
+≤ max(8, 20% of articles). On a day when one story legitimately *is*
+30–40% of coverage (war outbreak, election night), it splinters into
+fragments that each have fewer distinct sources — deflating exactly the
+breadth signal (A2) that should rank it #1, and letting mid-size stories
+outrank the day's biggest event. (Verified sound alongside: clustering
+is deterministic w.r.t. article order — pairs are globally sorted before
+greedy merging — and centroids are re-normalized after averaging.)
+
+### A6. Centered-space thresholds are batch-relative — MEDIUM
+
+Four sites each subtract a *different* batch-mean embedding before
+applying "absolute-looking" thresholds (0.40 cluster, 0.25 source floor,
+0.50 dedup): whether two articles cluster depends on what else was
+fetched that hour. Well-motivated centering, but the calibration
+comments hold only for batches resembling the calibration batch — worth
+disclosing at the constants and re-checking on atypical days.
+
+### A7. Issue identity runs in the acknowledged 0.78–0.88 ambiguity band; two dedup gates guard the same failure on incommensurable scales — MEDIUM
+
+`TOPIC_CHANGE_THRESHOLD = 0.82` (raw space) sits inside the file's own
+measured gap between "different topics" (0.72–0.78) and "same topic"
+(0.88–0.95) — the code documents a real hijack (a hospitalization row
+repurposed onto an obituary; the fix invalidates `full_story` but still
+silently repurposes the row and its Bluesky permalink identity), while
+LLM title paraphrase churn below 0.82 spawns duplicate rows + duplicate
+posts. Pre-LLM dedup (0.50 centered) and post-LLM dedup (0.92 raw)
+guard the same failure in incommensurable regimes — a pair distinct at
+0.50-centered can produce titles at 0.90-raw and both publish.
+
+### A8. Monitor promotion structurally favors wire-covered mega-stories; category-chaining can mint false monitors — MEDIUM
+
+Promotion requires top-4 rank on ≥5 distinct days in 14 at ≥0.83 title
+similarity + ≥3 unique sources + an LLM significance verdict. Missed
+promotions: title churn resets the day count, and a real ongoing issue
+ranked #5 daily never promotes — so combined with A1, only issues
+persistently salient to the center/left wire agenda can become "National
+Monitors." False promotions: `matched_dates` counts *any* past issue
+≥0.83, so a recurring category with formulaic headlines (successive
+distinct executive orders) can accumulate 5 days across genuinely
+different events. No disclosure anywhere that monitor existence is a
+function of the 8-feed source diet.
+
+### A9. "Actionability" (40% of rank) structurally down-ranks state-level issues; the president's bare-surname match floors most national stories at the same value — MEDIUM
+
+Half the boost is distinct tracked officials named — members need a full
+name or titled surname, but the president matches on *bare surname
+anywhere*, which in the current era appears in virtually every US
+politics story, so most clusters share the same floor and the component
+discriminates mainly on whether ≥2 members of Congress are name-checked.
+The other half is similarity to the last-400 explore documents — all
+federal. An issue whose action surface is state-level (abortion
+post-Dobbs — compounding P1 — or state election administration) names no
+tracked official, matches no federal document, and scores near zero on
+the highest-weighted ranking component. Partly by design ("act on it"),
+but the design choice is itself an agenda-setter and is undisclosed.
+
+### A10. The citizen-action repertoire is exclusively contact-Congress/track-a-bill — MEDIUM
+
+`_build_actions_from_data` (deliberately LLM-free — sound) emits only
+`track_legislation` and `contact_senator`. The platform already ingests
+Federal Register rulemaking with open comment periods, yet no issue ever
+surfaces "submit a public comment on this proposed rule" — the single
+highest-leverage individual action for regulatory stories, and the data
+is already there. No voting/registration action exists either, despite
+the Elections tab. The narrowness cuts across ideology but privileges
+citizens whose concerns route through Congress.
+
+### A11. Every neutrality gate targets hallucination or tone — none measures partisan framing or selection asymmetry — LOW-MEDIUM
+
+The machinery (hedge/editorializing fail-closed, role-reversal check,
+grounded numbers/names, geographic consistency) is all direction-blind:
+"non-partisan" is operationalized entirely as "no advocacy language,"
+which a slanted *selection* of neutral-toned issues passes trivially —
+and selection is exactly where A1/A2/A4/A9 enter. A periodic
+issue-selection audit (party-mention balance across a month of issues)
+would be a cheap live check.
+
+### Verified sound (keep-list)
+
+Elections tab is strictly factual; the timeline is a neutral daily-#1
+archive (though it inherits ranking bias as the permanent record of
+"what mattered"); the opinion/editorial URL-path filter removes the most
+partisan content class from all feeds symmetrically; the
+reasoning-contradicts-verdict override on the 1.2B verifier is an
+unusually honest safeguard; data-only actions can never hallucinate a
+call-to-action; and the grounding retry-then-fail-closed posture in
+full-story generation is the right default.
+
+**Cheapest high-impact fixes visible from code alone:** correct the
+About page's source list, collapse NPR's two feeds to one source name
+for breadth counting, use-or-drop `traffic_score`, and update the README
+Action Center constants to match the code.
