@@ -149,7 +149,13 @@ def _parse_roster(html: str) -> list[RosterEntry]:
     for i, (display_name, lookup_name, start, end) in enumerate(parsed, start=1):
         pid = _resolve_id(lookup_name)
         if pid is None:
-            logger.warning("Presidential roster: no id mapping for %r", lookup_name)
+            # Logs position, not the name itself — a name string reads as
+            # a person identifier to CodeQL's clear-text-logging
+            # heuristic even for public historical figures (see
+            # error_utils.py's docstring on this codebase's prior fights
+            # with the same query; position is enough to cross-reference
+            # against the raw page HTML when debugging a parse failure).
+            logger.warning("Presidential roster: no id mapping for row %d", i)
             continue
         entries.append(RosterEntry(id=pid, name=display_name, term_start=start, term_end=end, number=i))
     return entries

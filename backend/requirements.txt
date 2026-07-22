@@ -15,6 +15,7 @@ charset-normalizer==3.4.4
 chroma-hnswlib==0.7.3
 chromadb==0.4.24
 click==8.4.2
+cssselect==1.4.0
 cyclonedx-python-lib==11.6.0
 defusedxml==0.7.1
 distro==1.9.0

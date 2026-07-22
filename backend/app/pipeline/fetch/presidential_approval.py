@@ -179,20 +179,26 @@ async def fetch_president_approval_history(
     url = f"{BASE_URL}/{slug}"
     resp = await fetch_with_retry(
         client, _RATE_LIMITER, "GET", url,
-        log_label=f"UCSB approval ({president_id})",
+        log_label="UCSB approval",
     )
     if resp is None or resp.status_code != 200:
-        logger.warning("Failed to fetch UCSB approval data for %s (%s)", president_id, url)
+        # url (not president_id) identifies which president in these
+        # messages — a bare id like "obama-44" reads as a person
+        # identifier to CodeQL's clear-text-logging heuristic even though
+        # it's a public internal slug; the URL conveys the same info
+        # without that false-positive class (see error_utils.py's
+        # docstring on this codebase's prior fights with the same query).
+        logger.warning("Failed to fetch UCSB approval data (%s)", url)
         return None
 
     try:
         polls = _parse_approval_table(resp.text)
     except Exception:
-        logger.exception("Failed to parse UCSB approval table for %s", president_id)
+        logger.exception("Failed to parse UCSB approval table (%s)", url)
         return None
 
     if not polls:
-        logger.warning("UCSB approval page for %s parsed to zero rows — page structure may have changed", president_id)
+        logger.warning("UCSB approval page parsed to zero rows — page structure may have changed (%s)", url)
         return None
 
     api_cache_set(db, _CACHE_TIER, cache_key, {
