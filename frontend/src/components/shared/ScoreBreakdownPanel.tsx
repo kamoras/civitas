@@ -16,7 +16,7 @@ export type BreakdownEntityType = "senator" | "representative" | "president" | "
 interface ScoreBreakdownPanelProps {
   entityType: BreakdownEntityType;
   entityId: string;
-  /** Key into the fetched breakdown dict, e.g. "fundingIndependence", "competence", "consistency". */
+  /** Key into the fetched breakdown dict, e.g. "fundingIndependence", "agencyAlignment", "consistency". */
   dimensionKey: string;
   label: string;
 }

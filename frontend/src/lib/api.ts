@@ -453,6 +453,20 @@ export async function fetchPresident(id: string): Promise<President> {
   return requestJson(`${API_BASE}/presidents/${id}`, "President not found");
 }
 
+/** Null when no president is currently serving (excluded from
+ * /presidents/leaderboard — see the backend's get_president_leaderboard
+ * docstring) — a real, if brief, possible state (e.g. a same-day
+ * transition), not an error. */
+export async function fetchCurrentPresident(): Promise<President | null> {
+  const res = await fetch(`${API_BASE}/presidents/current`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Failed to load current president: ${res.status}`);
+  // No camelizeKeys: the endpoint serializes camelCase via model_dump(
+  // by_alias=True), same as fetchPresident above — see that function's
+  // comment for why re-camelizing is a data-keyed-map landmine.
+  return (await res.json()) as President;
+}
+
 export async function fetchJusticeLeaderboard(): Promise<JusticeLeaderboardEntry[]> {
   return requestJson(`${API_BASE}/justices/leaderboard`, "Failed to load justice leaderboard", { camelize: true });
 }
@@ -915,7 +929,7 @@ export interface ScoreSnapshot {
   /** Dimension name -> score. Keys differ by entity type (senator/rep:
    * fundingIndependence/promisePersistence/independentVoting/
    * fundingDiversity/legislativeEffectiveness; president: publicMandate/
-   * effectiveness/competence/agencyAlignment) — untyped here since
+   * effectiveness/agencyAlignment/historicalLegacy) — untyped here since
    * ScoreTrend (the only consumer) only ever reads date/overallScore. */
   scores: Record<string, number>;
 }

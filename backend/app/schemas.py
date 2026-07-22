@@ -380,12 +380,26 @@ class StateCountSchema(CamelModel):
 
 
 class PresidentialScoreSchema(CamelModel):
-    public_mandate: float
-    effectiveness: float
-    competence: float
-    agency_alignment: float
+    # Nullable (2026-07): None means this dimension is genuinely
+    # inapplicable for this president (e.g. Public Mandate for one who
+    # never won a presidential election, Agency Alignment before Federal
+    # Register existed) — never a hand-set fallback. See models.py
+    # President's comment and president_scorer.py's
+    # compute_president_overall_score for the renormalization this drives.
+    public_mandate: float | None
+    effectiveness: float | None
+    agency_alignment: float | None
+    # C-SPAN Presidential Historians Survey, z-scored (2026-07) — None for
+    # any currently-serving or just-departed president (survey only rates
+    # a completed term; the 2025 cycle was postponed entirely).
+    historical_legacy: float | None
     # Backend-computed overall (president_scorer.compute_president_overall_score).
     overall: float = 0.0
+    # How many of the 4 possible dimensions actually have a score (0-4) —
+    # see president_scorer.dimensions_available. A composite built from
+    # fewer signals shouldn't be read with the same confidence as one
+    # built from all 4; this lets the UI disclose that plainly.
+    dimensions_available: int = 0
 
 
 class PresidentSchema(CamelModel):
@@ -401,18 +415,18 @@ class PresidentSchema(CamelModel):
     gdp_growth_avg: float | None = None
     jobs_created_millions: float | None = None
     eo_count: int | None = None
-    eo_court_success_pct: float | None = None
-    cabinet_turnover_pct: float | None = None
-    # True when this president's Competence score actually blended in
-    # live EO-activity data (see calc_competence) rather than being pure
-    # seed. Court-success and cabinet-turnover rates are never live for
-    # any president (no fetch source exists), so even "live" Competence
-    # here is partial — this flag distinguishes "partially computed" from
-    # "entirely a one-time editorial estimate" for the frontend badge.
-    competence_has_live_data: bool = False
-    summary: str = ""
-    key_achievements: list[str] = []
-    key_failures: list[str] = []
+    # Election-margin percentage (average across this president's own
+    # election win(s)) — the pre-polling-era Public Mandate proxy. See
+    # app.pipeline.fetch.presidential_elections.
+    election_margin: float | None = None
+    # Raw C-SPAN 2021 Presidential Historians Survey point total (e.g.
+    # Lincoln=897) — see app.pipeline.fetch.cspan_historians_survey.
+    historical_legacy_score: int | None = None
+    # Average approval over a rolling last-90-days window rather than the
+    # full term — informational, not part of any scored dimension. Null
+    # once a president leaves office and no new polls populate it. See
+    # app.pipeline.fetch.presidential_approval.recent_polls.
+    recent_avg_approval: float | None = None
 
 
 class PresidentLeaderboardEntry(CamelModel):

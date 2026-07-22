@@ -1,11 +1,35 @@
-"""President data pipeline — fetches live data and recalculates scores.
+"""President data pipeline — fetches live/historical data and computes
+every scored dimension for every president in one unified pass.
 
-Live-data recalculation targets presidents from Clinton (#42) onward
-where Federal Register and BLS data are available. Older presidents keep
-their seed scores. Score-history snapshotting (_record_president_snapshots,
-2026-07) covers every president regardless — same as senators/reps, a
-historical president's unchanging score still gets a daily row so trend
-charts have a continuous line, not gaps.
+2026-07: rewritten from a two-cohort (DYNAMIC_PRESIDENTS/ECONOMICS_ONLY_
+PRESIDENTS) design with a hand-set seed fallback for anyone outside those
+cohorts. Both the seed fallback and the narrow cohorts are gone:
+  - Effectiveness's GDP component now covers the full presidency
+    (historical_gdp.py, MeasuringWorth's 1790-present real-GDP series)
+    layered under BEA/FRED's live 1930/1947-onward series for the modern
+    era — same "average annual growth over the term" figure regardless
+    of which source computed it.
+  - Public Mandate now covers every president who ever won a
+    presidential election (presidential_approval.py for Truman-33
+    onward, presidential_elections.py's historical margins before that).
+  - Jobs data (BLS, 1939 onward) and Agency Alignment (Federal Register
+    rulemaking, 1994 onward — the regulatory record-keeping mechanism it
+    measures didn't exist before Clinton's era in this platform's data)
+    remain genuinely limited to their real windows — not stale caps, real
+    data-availability walls. A dimension or component missing for a given
+    president is never defaulted; see president_scorer.py's
+    _blend_live_components and compute_president_overall_score.
+
+Every president gets every dimension recalculated on every run (not just
+a live-eligible subset) — the fetchers above make that correct now,
+where it wasn't before this rewrite.
+
+Identity data (name/party/term dates/number) is no longer hand-typed
+either: `_sync_roster` creates/updates every President row from
+presidential_roster.py's live UCSB fetch on every run, so a fresh/empty
+database gets fully populated by this pipeline's first pass rather than
+by a separate seed step (database.py's init_db creates zero president
+rows now).
 """
 
 import logging
@@ -20,30 +44,34 @@ from app.pipeline.analyze.president_scorer import (
     compute_president_overall_score,
     recalculate_president_scores,
 )
-from app.pipeline.fetch.economic_data import (
-    fetch_jobs_for_president,
-    fetch_gdp_by_year,
-    fetch_gdp_for_president,
+from app.pipeline.fetch.cspan_historians_survey import fetch_cspan_historians_survey
+from app.pipeline.fetch.economic_data import fetch_jobs_for_president
+from app.pipeline.fetch.federal_register import fetch_all_rulemaking_stats
+from app.pipeline.fetch.historical_executive_orders import fetch_historical_eo_counts
+from app.pipeline.fetch.historical_gdp import compute_term_gdp_growth, fetch_historical_real_gdp
+from app.pipeline.fetch.presidential_approval import (
+    PRESIDENT_APPROVAL_SLUGS,
+    fetch_president_approval_history,
+    recent_polls,
 )
-from app.pipeline.fetch.federal_register import fetch_all_eo_data, fetch_all_rulemaking_stats
+from app.pipeline.fetch.presidential_elections import fetch_election_margins
+from app.pipeline.fetch.presidential_roster import fetch_presidential_roster
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
-DYNAMIC_PRESIDENTS = [
-    "clinton-42", "gwbush-43", "obama-44",
-    "trump-45", "biden-46", "trump-47",
+# Rulemaking data (Agency Alignment) has no historical-proxy source (see
+# _agency_alignment_core's docstring on why this is a genuine conceptual
+# absence, not an unfetched dataset) — still gated to the presidents
+# Federal Register actually covers.
+RULEMAKING_ELIGIBLE_PRESIDENTS = [
+    "clinton-42", "gwbush-43", "obama-44", "trump-45", "biden-46", "trump-47",
 ]
 
-# Presidents for whom BLS employment data and FRED GDP data are available
-# but Federal Register / EO data are not.  Only score_effectiveness is
-# recalculated; all other sub-scores remain as seed values.
-# Data availability: BLS payroll series from 1939; FRED GDP from 1947.
-# References: Blinder & Watson (2016, AER 106(4)) for year-1 exclusion.
-ECONOMICS_ONLY_PRESIDENTS = [
-    "eisenhower-34", "jfk-35", "lbj-36", "nixon-37",
-    "ford-38", "carter-39", "reagan-40", "ghwbush-41",
-]
+# BLS payroll data starts 1939 — presidents whose full term falls after
+# that get a real jobs-created figure; earlier presidents' Effectiveness
+# is computed from GDP growth alone (see _effectiveness_core).
+_BLS_COVERAGE_START_YEAR = 1939
 
 
 def _term_years(start: str, end: str | None) -> float:
@@ -56,177 +84,232 @@ def _term_years(start: str, end: str | None) -> float:
     return max((e - s).days / 365.25, 0.1)
 
 
+def _sync_roster(db: Session, roster, eo_data: dict) -> int:
+    """Create/update each President row's identity fields (name, party,
+    term dates, number, is_current) from the live UCSB roster fetch —
+    replaces what used to be a hand-typed SEED_PRESIDENTS list (2026-07).
+    Party comes from historical_executive_orders.py's EO-table fetch
+    (already run this pipeline pass) rather than a second roster-page
+    scrape, since that table already lists it per-president.
+
+    Runs before the score-computation loop below so a fresh/empty DB
+    gets its president rows populated in the same pass that first
+    computes their scores — no separate seed step, no startup-time
+    network fetch (see database.py's init_db, which now creates zero
+    president rows and simply waits for this pipeline's first run).
+    """
+    synced = 0
+    for entry in roster:
+        p = db.query(President).filter(President.id == entry.id).first()
+        party = eo_data.get(entry.id, {}).get("party")
+        is_current = entry.term_end is None
+        if p is None:
+            p = President(id=entry.id)
+            db.add(p)
+        p.name = entry.name
+        if party:
+            p.party = party
+        p.number = entry.number
+        p.term_start = entry.term_start
+        p.term_end = entry.term_end
+        p.is_current = is_current
+        synced += 1
+    if synced:
+        db.commit()
+    return synced
+
+
 async def run_president_pipeline(db: Session) -> dict:
-    """Fetch live data and recalculate scores for recent presidents.
+    """Fetch live/historical data and recalculate every dimension for
+    every president.
 
     Returns summary dict with counts.
     """
     logger.info("Starting president pipeline...")
 
     async with httpx.AsyncClient() as client:
-        # 1. Fetch executive order data from Federal Register
-        logger.info("Fetching executive order data from Federal Register...")
-        eo_data = await fetch_all_eo_data(client)
+        logger.info("Fetching executive-order counts (UCSB, all presidents)...")
+        eo_data = await fetch_historical_eo_counts(client, db)
         logger.info("EO data fetched for %d presidents", len(eo_data))
 
-        # 2. Fetch employment data from BLS
-        logger.info("Fetching employment data from BLS...")
-        jobs_data: dict[str, float | None] = {}
-        all_economic_presidents = DYNAMIC_PRESIDENTS + ECONOMICS_ONLY_PRESIDENTS
-        for pid in all_economic_presidents:
-            jobs = await fetch_jobs_for_president(client, pid)
-            if jobs is not None:
-                jobs_data[pid] = jobs
-                logger.info("  %s: %+.1fM jobs", pid, jobs)
+        logger.info("Fetching presidential roster (UCSB)...")
+        roster = await fetch_presidential_roster(client, db)
+        synced = _sync_roster(db, roster, eo_data)
+        logger.info("Roster synced for %d presidents", synced)
 
-        # 3. Fetch annual GDP from FRED for year-1-excluded adjustment.
-        # Blinder & Watson (2016) show the first year's GDP reflects the
-        # prior administration; excluding it gives a fairer attribution.
-        logger.info("Fetching annual GDP data from FRED...")
-        gdp_by_year = await fetch_gdp_by_year(client) or {}
-        gdp_adj_data: dict[str, float] = {}
-        gdp_full_data: dict[str, float] = {}
-        for pid in all_economic_presidents:
-            gdp_full, gdp_adj = await fetch_gdp_for_president(client, pid, gdp_by_year)
-            if gdp_adj is not None:
-                gdp_adj_data[pid] = gdp_adj
-                logger.info("  %s: GDP full=%.1f%% adjusted(yr1-excl)=%.1f%%",
-                            pid, gdp_full or 0.0, gdp_adj)
-            elif gdp_full is not None:
-                gdp_full_data[pid] = gdp_full
+        presidents = db.query(President).all()
+        if not presidents:
+            logger.warning("No presidents in database and roster fetch found none — nothing to do")
+            return {"updated": 0}
 
-        # 4. Fetch rulemaking stats from Federal Register
         logger.info("Fetching agency rulemaking data from Federal Register...")
         rulemaking_data = await fetch_all_rulemaking_stats(client)
         logger.info("Rulemaking data fetched for %d presidents", len(rulemaking_data))
 
-    # 4. Update each president in the database
+        logger.info("Fetching real GDP series 1790-present (MeasuringWorth)...")
+        current_year = utcnow().year
+        gdp_by_year = await fetch_historical_real_gdp(client, db, 1790, current_year)
+        logger.info("GDP data fetched for %d years", len(gdp_by_year))
+
+        logger.info("Fetching BLS employment data (1939 onward)...")
+        jobs_data: dict[str, float] = {}
+        for p in presidents:
+            term_start_year = int(p.term_start[:4])
+            if term_start_year < _BLS_COVERAGE_START_YEAR:
+                continue
+            jobs = await fetch_jobs_for_president(client, p.id)
+            if jobs is not None:
+                jobs_data[p.id] = jobs
+
+        logger.info("Fetching approval-poll history from UCSB American Presidency Project...")
+        approval_avg_data: dict[str, float] = {}
+        approval_trend_data: dict[str, float] = {}
+        recent_avg_approval_data: dict[str, float] = {}
+        for pid in PRESIDENT_APPROVAL_SLUGS:
+            polls = await fetch_president_approval_history(client, db, pid)
+            if not polls:
+                continue
+            values = [poll.approving for poll in polls if poll.approving is not None]
+            if values:
+                approval_avg_data[pid] = sum(values) / len(values)
+                # Last-quartile-minus-first-quartile average approval —
+                # see calc_public_mandate's docstring for why this (not a
+                # linear regression slope) and why it's compared against
+                # the population's own average trend rather than zero.
+                q = max(1, len(values) // 4)
+                approval_trend_data[pid] = (sum(values[-q:]) / q) - (sum(values[:q]) / q)
+
+            recent = recent_polls(polls)
+            recent_values = [poll.approving for poll in recent if poll.approving is not None]
+            if recent_values:
+                recent_avg_approval_data[pid] = sum(recent_values) / len(recent_values)
+        logger.info("Approval data fetched for %d presidents", len(approval_avg_data))
+
+        logger.info("Fetching historical election-margin data (UCSB)...")
+        election_margin_data = await fetch_election_margins(client, db)
+        logger.info("Election-margin data fetched for %d presidents", len(election_margin_data))
+
+        logger.info("Fetching C-SPAN Presidential Historians Survey (2021 cycle)...")
+        historical_legacy_data = await fetch_cspan_historians_survey(client, db)
+        logger.info("Historians-survey data fetched for %d presidents", len(historical_legacy_data))
+
     updated = 0
-    for pid in DYNAMIC_PRESIDENTS:
-        president = db.query(President).filter(President.id == pid).first()
-        if not president:
-            logger.warning("President %s not found in database", pid)
-            continue
+    failed = 0
+    for president in presidents:
+        try:
+            term_years = _term_years(president.term_start, president.term_end)
+            term_start_year = int(president.term_start[:4])
+            term_end_year = int(president.term_end[:4]) if president.term_end else utcnow().year
 
-        term_years = _term_years(president.term_start, president.term_end)
+            live: dict = {}
 
-        # eo_court_success_pct and cabinet_turnover_pct are NOT included
-        # here: no fetch function anywhere populates them from a live
-        # source (there is no structured, machine-readable API for EO
-        # litigation outcomes or cabinet tenure this pipeline uses) — they
-        # are one-time editorial estimates set in the seed data and never
-        # updated. Passing the stored value back in as "live" would make
-        # calc_competence's court-success (40% weight) and cabinet-
-        # stability (30% weight) components look freshly computed on
-        # every run when they're actually frozen opinion (2026-07 audit).
-        # Omitting them here lets calc_competence's existing
-        # missing-component fallback correctly blend that 70% of weight
-        # with seed_score instead — the same honest "seed" treatment
-        # already applied to Independence, Follow-Through, and Public
-        # Mandate.
-        live = {
-            "gdp_growth_avg": president.gdp_growth_avg,
-            # Year-1-excluded GDP average (Blinder & Watson 2016)
-            "gdp_growth_adjusted": gdp_adj_data.get(pid),
-        }
-        # Persisted (not just kept in this local dict) so the on-demand
-        # score-breakdown endpoint can recompute calc_effectiveness's exact
-        # inputs later without a live re-fetch from FRED.
-        president.gdp_growth_adjusted = live["gdp_growth_adjusted"]
+            # eo_count is informational only (2026-07) — Competence, the
+            # dimension it used to feed, was removed entirely (see
+            # PRESIDENT_SCORE_WEIGHTS's comment in config_definitions.py), so
+            # this no longer goes into `live`, just the profile's raw stat.
+            eo = eo_data.get(president.id)
+            if eo is not None:
+                president.eo_count = eo["total_orders"]
 
-        # Overlay live Federal Register EO count
-        if pid in eo_data:
-            live["eo_count"] = eo_data[pid]["eo_count"]
-            president.eo_count = eo_data[pid]["eo_count"]
+            # Every stored field below is only OVERWRITTEN when this run's
+            # fetch actually returned something for this president; `live`
+            # is then built from the (possibly just-updated, possibly
+            # untouched) stored value. 2026-07 fix (#218 review B2): the
+            # previous version built `live` straight from this run's fetch
+            # results, so a single-night source outage (UCSB/Federal
+            # Register/C-SPAN down, cache past its TTL) wrote None over a
+            # real previously-computed score instead of just leaving it as
+            # last night's value — "couldn't fetch this run" must mean "keep
+            # what we had," never "score reads as inapplicable now."
+            if president.id in rulemaking_data:
+                president.rulemaking_count = rulemaking_data[president.id]["rulemaking_count"]
+                president.rulemaking_finalized_pct = rulemaking_data[president.id]["rulemaking_finalized_pct"]
+            if president.rulemaking_count is not None:
+                live["rulemaking_count"] = president.rulemaking_count
+                live["rulemaking_finalized_pct"] = president.rulemaking_finalized_pct
 
-        # Overlay live BLS jobs data
-        if pid in jobs_data:
-            live["jobs_created_millions"] = jobs_data[pid]
-            president.jobs_created_millions = jobs_data[pid]
+            gdp_growth = compute_term_gdp_growth(gdp_by_year, term_start_year, term_end_year)
+            if gdp_growth is not None:
+                president.gdp_growth_avg = gdp_growth
+            if president.gdp_growth_avg is not None:
+                live["gdp_growth_avg"] = president.gdp_growth_avg
 
-        # Overlay live rulemaking data — persisted for the same on-demand
-        # breakdown-recompute reason as gdp_growth_adjusted above.
-        if pid in rulemaking_data:
-            live["rulemaking_count"] = rulemaking_data[pid]["rulemaking_count"]
-            live["rulemaking_finalized_pct"] = rulemaking_data[pid]["rulemaking_finalized_pct"]
-            president.rulemaking_count = rulemaking_data[pid]["rulemaking_count"]
-            president.rulemaking_finalized_pct = rulemaking_data[pid]["rulemaking_finalized_pct"]
+            if president.id in jobs_data:
+                president.jobs_created_millions = jobs_data[president.id]
+            if president.jobs_created_millions is not None:
+                live["jobs_created_millions"] = president.jobs_created_millions
 
-        seed_scores = {
-            "score_public_mandate": president.score_public_mandate,
-            "score_effectiveness": president.score_effectiveness,
-            "score_competence": president.score_competence,
-            "score_agency_alignment": president.score_agency_alignment,
-        }
+            if president.id in approval_avg_data:
+                president.avg_approval = approval_avg_data[president.id]
+                president.approval_trend = approval_trend_data.get(president.id)
+            elif president.id not in PRESIDENT_APPROVAL_SLUGS and president.id in election_margin_data:
+                # Election margin is only ever the Public Mandate basis for
+                # a president with no approval-polling source at all
+                # (pre-Truman) — never a stand-in for a modern president
+                # whose approval fetch merely failed this run, which would
+                # silently flip that president's scoring basis night to
+                # night (#218 review B2).
+                president.election_margin = election_margin_data[president.id]
 
-        new_scores = recalculate_president_scores(
-            pid, seed_scores, live, term_years,
-        )
+            if president.avg_approval is not None:
+                live["avg_approval"] = president.avg_approval
+                live["approval_trend"] = president.approval_trend
+            elif president.election_margin is not None:
+                live["election_margin"] = president.election_margin
 
-        president.score_competence = new_scores["score_competence"]
-        president.score_effectiveness = new_scores["score_effectiveness"]
-        president.score_agency_alignment = new_scores["score_agency_alignment"]
-        president.updated_at = utcnow()
-        updated += 1
+            # Informational only — not part of any scored dimension. NULL
+            # (not stale) once a president leaves office and the recent-90-
+            # day window has no new polls to populate it.
+            president.recent_avg_approval = recent_avg_approval_data.get(president.id)
 
-        logger.info(
-            "  %s: competence=%d effectiveness=%d agency=%d (eo=%s jobs=%s rules=%s)",
-            pid,
-            new_scores["score_competence"],
-            new_scores["score_effectiveness"],
-            new_scores["score_agency_alignment"],
-            live.get("eo_count", "seed"),
-            live.get("jobs_created_millions", "seed"),
-            live.get("rulemaking_count", "seed"),
-        )
+            if president.id in historical_legacy_data:
+                president.historical_legacy_score = historical_legacy_data[president.id]
+            if president.historical_legacy_score is not None:
+                live["historical_legacy_score"] = president.historical_legacy_score
 
-    # Update economics-only presidents (Eisenhower through GHW Bush).
-    # Only recalculates score_effectiveness from GDP + jobs; all other
-    # sub-scores remain as seed values.
-    econ_updated = 0
-    for pid in ECONOMICS_ONLY_PRESIDENTS:
-        president = db.query(President).filter(President.id == pid).first()
-        if not president:
-            continue
+            new_scores = recalculate_president_scores(president.id, live, term_years)
+            president.score_public_mandate = new_scores["score_public_mandate"]
+            president.score_effectiveness = new_scores["score_effectiveness"]
+            president.score_agency_alignment = new_scores["score_agency_alignment"]
+            president.score_historical_legacy = new_scores["score_historical_legacy"]
+            president.updated_at = utcnow()
+            db.commit()
+            updated += 1
 
-        term_years = _term_years(president.term_start, president.term_end)
-        gdp_adj = gdp_adj_data.get(pid)
-        gdp_full = gdp_full_data.get(pid, president.gdp_growth_avg)
-        jobs = jobs_data.get(pid, president.jobs_created_millions)
+            logger.info(
+                "  %s: mandate=%s effectiveness=%s agency=%s legacy=%s",
+                president.id,
+                new_scores["score_public_mandate"],
+                new_scores["score_effectiveness"],
+                new_scores["score_agency_alignment"],
+                new_scores["score_historical_legacy"],
+            )
+        except Exception:
+            # Per-president isolation (matches senate_pipeline.py's
+            # per-member pattern, #218 review S5): a single bad roster row
+            # (e.g. an unparseable term_start) used to raise out of this
+            # loop entirely, leaving every later president unrecalculated
+            # for the night. Committing per-president above (rather than
+            # once after the whole loop) means this rollback only reverts
+            # the ONE president that failed, not everyone processed so far.
+            logger.exception("President pipeline failed for %s — leaving existing scores unchanged", president.id)
+            db.rollback()
+            failed += 1
 
-        if gdp_adj is None and gdp_full is None and jobs is None:
-            continue
-
-        from app.pipeline.analyze.president_scorer import calc_effectiveness
-        new_eff = calc_effectiveness(
-            jobs_created_millions=jobs,
-            gdp_growth_avg=gdp_full,
-            term_years=term_years,
-            seed_score=president.score_effectiveness,
-            gdp_growth_adjusted=gdp_adj,
-        )
-        president.score_effectiveness = new_eff
-        if jobs is not None:
-            president.jobs_created_millions = jobs
-        if gdp_full is not None and president.gdp_growth_avg is None:
-            president.gdp_growth_avg = gdp_full
-        president.gdp_growth_adjusted = gdp_adj
-        president.updated_at = utcnow()
-        econ_updated += 1
-        logger.info("  %s: effectiveness=%d (gdp_adj=%.1f%% jobs=%.1fM)",
-                    pid, new_eff, gdp_adj or 0.0, jobs or 0.0)
-
-    db.commit()
-    logger.info("President pipeline complete: %d dynamic + %d economics-only updated",
-                updated, econ_updated)
+    logger.info("President pipeline complete: %d presidents updated, %d failed", updated, failed)
 
     _record_president_snapshots(db)
 
     return {
-        "updated": updated + econ_updated,
+        "updated": updated,
+        "failed": failed,
         "eo_data_count": len(eo_data),
-        "jobs_data_count": len(jobs_data),
         "rulemaking_data_count": len(rulemaking_data),
+        "gdp_years_count": len(gdp_by_year),
+        "jobs_data_count": len(jobs_data),
+        "approval_data_count": len(approval_avg_data),
+        "election_margin_data_count": len(election_margin_data),
+        "historical_legacy_data_count": len(historical_legacy_data),
     }
 
 
@@ -236,17 +319,29 @@ def _record_president_snapshots(db: Session) -> None:
     ScoreSnapshot (models.py) is a generic table already shared by
     senators ("senator") and representatives ("representative") — this is
     the first writer for "president". Runs for every president, not just
-    DYNAMIC_PRESIDENTS/ECONOMICS_ONLY_PRESIDENTS: even a historical
-    president whose scores never change still gets a daily row, same as
-    how senators/reps are snapshotted regardless of whether their score
-    happened to move that day — the trend chart needs a continuous line,
-    not gaps wherever nothing changed.
+    a live-eligible subset: even a historical president whose scores
+    rarely change still gets a daily row, same as how senators/reps are
+    snapshotted regardless of whether their score happened to move that
+    day — the trend chart needs a continuous line, not gaps.
 
     Per-row upsert (not delete-then-insert): mirrors house_pipeline.py's
     _record_rep_snapshots rather than senate_pipeline.py's
     _record_score_snapshots, which briefly deletes the day's rows before
     reinserting — an upsert never leaves the table without today's data
     mid-write.
+
+    ScoreSnapshot's score_1..score_5 columns are NOT nullable (shared
+    schema with senators/reps) — a President dimension that's None
+    (genuinely inapplicable for that president, see president_scorer.py)
+    is stored as 0.0 in the snapshot specifically, same as how compute_
+    president_overall_score's own renormalization already treats it as
+    absent from the weighted average. The authoritative "does this apply"
+    answer always lives on the President row's own nullable column, never
+    on the snapshot. score_5 = Historical Legacy (added 2026-07). score_3
+    = Competence until it was removed entirely (2026-07, see
+    PRESIDENT_SCORE_WEIGHTS's comment in config_definitions.py) — always
+    0.0 from that point on, the slot is simply retired rather than
+    reindexing every other dimension's historical snapshot data.
     """
     today = utcnow().date().isoformat()
     presidents = db.query(President).all()
@@ -264,20 +359,22 @@ def _record_president_snapshots(db: Session) -> None:
         )
         if existing:
             existing.overall_score = overall
-            existing.score_1 = p.score_public_mandate
-            existing.score_2 = p.score_effectiveness
-            existing.score_3 = p.score_competence
-            existing.score_4 = p.score_agency_alignment
+            existing.score_1 = p.score_public_mandate or 0.0
+            existing.score_2 = p.score_effectiveness or 0.0
+            existing.score_3 = 0.0
+            existing.score_4 = p.score_agency_alignment or 0.0
+            existing.score_5 = p.score_historical_legacy or 0.0
         else:
             db.add(ScoreSnapshot(
                 entity_type="president",
                 entity_id=p.id,
                 date=today,
                 overall_score=overall,
-                score_1=p.score_public_mandate,
-                score_2=p.score_effectiveness,
-                score_3=p.score_competence,
-                score_4=p.score_agency_alignment,
+                score_1=p.score_public_mandate or 0.0,
+                score_2=p.score_effectiveness or 0.0,
+                score_3=0.0,
+                score_4=p.score_agency_alignment or 0.0,
+                score_5=p.score_historical_legacy or 0.0,
                 algorithm_version=PRESIDENT_ALGORITHM_VERSION,
             ))
             count += 1

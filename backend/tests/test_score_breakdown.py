@@ -29,11 +29,11 @@ from app.models import (
 )
 from app.pipeline.analyze.president_scorer import (
     _agency_alignment_core,
-    _competence_core,
     _effectiveness_core,
+    _historical_legacy_core,
     calc_agency_alignment,
-    calc_competence,
     calc_effectiveness,
+    calc_historical_legacy,
 )
 from app.pipeline.analyze.score_calculator import (
     _calc_constituent_alignment,
@@ -137,26 +137,25 @@ class TestSenatorCoreConsistency:
 
 
 class TestPresidentCoreConsistency:
-    def test_competence_core_matches_calc(self):
-        args = (48, None, None, 4.0, 60.0)
-        breakdown = _competence_core(*args)
-        assert breakdown["score"] == calc_competence(*args)
-
-    def test_competence_core_seed_only_when_no_live_data(self):
-        breakdown = _competence_core(None, None, None, 4.0, 55.0)
-        assert breakdown["score"] == 55
-        assert breakdown["components"] == []
-        assert "note" in breakdown
-
     def test_effectiveness_core_matches_calc(self):
-        args = (5.0, 3.5, 4.0, 50.0)
+        args = (5.0, 3.5, 4.0)
         breakdown = _effectiveness_core(*args)
         assert breakdown["score"] == calc_effectiveness(*args)
 
     def test_agency_alignment_core_matches_calc(self):
-        args = (1200, 65.0, 4.0, 50.0)
+        args = (1200, 65.0, 4.0)
         breakdown = _agency_alignment_core(*args)
         assert breakdown["score"] == calc_agency_alignment(*args)
+
+    def test_historical_legacy_core_matches_calc(self):
+        breakdown = _historical_legacy_core(897)
+        assert breakdown["score"] == calc_historical_legacy(897)
+
+    def test_historical_legacy_core_none_when_no_live_data(self):
+        breakdown = _historical_legacy_core(None)
+        assert breakdown["score"] is None
+        assert breakdown["components"] == []
+        assert "note" in breakdown
 
 
 class TestJusticeBreakdownEnrichment:
@@ -258,13 +257,10 @@ class TestRepresentativeScoreBreakdownService:
 
 
 class TestPresidentScoreBreakdownService:
-    def test_dynamic_president_gets_live_breakdown(self, db_session):
-        # obama-44 is in DYNAMIC_PRESIDENTS
+    def test_president_with_live_data_gets_a_real_breakdown(self, db_session):
         p = President(
             id="obama-44", name="Barack Obama", party="D", number=44,
             term_start="2009-01-20", term_end="2017-01-20",
-            score_public_mandate=65,
-            score_competence=58, score_effectiveness=62, score_agency_alignment=59,
             eo_count=276, gdp_growth_avg=2.1, jobs_created_millions=11.6,
             gdp_growth_adjusted=2.3, rulemaking_count=1800, rulemaking_finalized_pct=68.0,
         )
@@ -274,20 +270,16 @@ class TestPresidentScoreBreakdownService:
         breakdown = get_president_score_breakdown(db_session, "obama-44")
         assert "independence" not in breakdown
         assert "followThrough" not in breakdown
-        assert breakdown["publicMandate"]["seedOnly"] is True
-        assert "seedOnly" not in breakdown["competence"]
-        assert len(breakdown["competence"]["components"]) >= 1
-        assert "seedOnly" not in breakdown["effectiveness"]
-        assert "seedOnly" not in breakdown["agencyAlignment"]
+        assert "competence" not in breakdown  # removed dimension, no bar to explain
+        assert breakdown["publicMandate"]["score"] is None  # no approval/election data stored
+        assert breakdown["effectiveness"]["score"] is not None
+        assert breakdown["agencyAlignment"]["score"] is not None
+        assert breakdown["historicalLegacy"]["score"] is None  # no C-SPAN score stored
 
-    def test_historical_president_is_fully_seed_only(self, db_session):
-        # Not in DYNAMIC_PRESIDENTS or ECONOMICS_ONLY_PRESIDENTS.
+    def test_president_with_no_stored_data_is_fully_none(self, db_session):
         p = President(
             id="lincoln-16", name="Abraham Lincoln", party="R", number=16,
             term_start="1861-03-04", term_end="1865-04-15",
-            score_public_mandate=80,
-            score_competence=75, score_effectiveness=50, score_agency_alignment=50,
-            eo_count=48,  # seeded informational value — must NOT trigger a live formula
         )
         db_session.add(p)
         db_session.commit()
@@ -295,8 +287,9 @@ class TestPresidentScoreBreakdownService:
         breakdown = get_president_score_breakdown(db_session, "lincoln-16")
         assert "independence" not in breakdown
         assert "followThrough" not in breakdown
-        for dim in ("publicMandate", "competence", "effectiveness", "agencyAlignment"):
-            assert breakdown[dim]["seedOnly"] is True, f"{dim} should be seed-only for a historical president"
+        assert "competence" not in breakdown  # removed dimension, no bar to explain
+        for dim in ("publicMandate", "effectiveness", "agencyAlignment", "historicalLegacy"):
+            assert breakdown[dim]["score"] is None, f"{dim} should be None with no stored data"
 
     def test_returns_none_for_missing_president(self, db_session):
         assert get_president_score_breakdown(db_session, "nope") is None

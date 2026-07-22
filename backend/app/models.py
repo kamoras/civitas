@@ -510,17 +510,43 @@ class President(Base):
     term_end: Mapped[str | None] = mapped_column(String, nullable=True)
     is_current: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    score_public_mandate: Mapped[float] = mapped_column(Float, default=0.0)
-    score_effectiveness: Mapped[float] = mapped_column(Float, default=0.0)
-    score_competence: Mapped[float] = mapped_column(Float, default=0.0)
-    score_agency_alignment: Mapped[float] = mapped_column(Float, default=0.0)
+    # Nullable, no default (2026-07): these used to default to 0.0 and get
+    # filled from a hand-set seed value for any president without live
+    # data. Both are gone — a hand-set number presented as a computed
+    # score undermined this platform's core promise (see president_
+    # service.py's module docstring for the full account), and 0.0 was
+    # actively misleading as a "no data yet" placeholder (it reads as the
+    # worst possible score, not "unknown"). NULL means "not computed for
+    # this president" — compute_president_overall_score renormalizes the
+    # weighted sum over whichever dimensions are actually present per
+    # president, the same pattern score_calculator.py already uses when a
+    # senator/rep is missing a signal (e.g. Coalition Breadth's
+    # breadth_weight=0). A dimension is only ever NULL when it is
+    # genuinely inapplicable for that president (e.g. Public Mandate for
+    # the five who never won a presidential election) or a fetch hasn't
+    # completed yet — never as a stand-in for a real number.
+    score_public_mandate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    score_effectiveness: Mapped[float | None] = mapped_column(Float, nullable=True)
+    score_agency_alignment: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # NULL for any currently-serving or just-departed president — C-SPAN's
+    # Presidential Historians Survey only rates a completed term, and its
+    # 2025 cycle was postponed entirely (see app.pipeline.fetch.
+    # cspan_historians_survey). Genuinely unrated, not unmeasured.
+    score_historical_legacy: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     avg_approval: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Average election-margin percentage across a president's own election
+    # win(s) — the pre-polling-era (pre-Truman) Public Mandate proxy, see
+    # app.pipeline.fetch.presidential_elections. NULL for the five
+    # presidents who never won a presidential election in their own right.
+    election_margin: Mapped[float | None] = mapped_column(Float, nullable=True)
     gdp_growth_avg: Mapped[float | None] = mapped_column(Float, nullable=True)
     jobs_created_millions: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Informational only (2026-07): no longer a scoring input — Competence
+    # (the dimension EO count used to feed) was removed entirely, see
+    # PRESIDENT_SCORE_WEIGHTS's comment in config_definitions.py. Still
+    # shown on a president's profile as a raw stat.
     eo_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    eo_court_success_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
-    cabinet_turnover_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Persisted so the on-demand score-breakdown endpoint can recompute
     # calc_effectiveness/calc_agency_alignment's exact inputs without a
     # live re-fetch from FRED/Federal Register — these were previously
@@ -529,10 +555,28 @@ class President(Base):
     gdp_growth_adjusted: Mapped[float | None] = mapped_column(Float, nullable=True)
     rulemaking_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     rulemaking_finalized_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Last-quartile-minus-first-quartile average approval across the term
+    # (see calc_public_mandate) — persisted for the same on-demand
+    # score-breakdown-recompute reason as gdp_growth_adjusted above.
+    approval_trend: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Raw C-SPAN 2021 Presidential Historians Survey point total (e.g.
+    # Lincoln=897) — persisted alongside the normalized score_
+    # historical_legacy for the same on-demand-recompute reason as
+    # gdp_growth_adjusted/rulemaking_count above.
+    historical_legacy_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    summary: Mapped[str] = mapped_column(Text, default="")
-    key_achievements: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
-    key_failures: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
+    # Same figure as avg_approval, but averaged only over the last 90 days
+    # of polling rather than the full term — a rolling "how is this
+    # changing lately" view, most meaningful for the currently-serving
+    # president. NULL, not stale, once a president leaves office and no
+    # new polls exist to populate the window. (A by-party version of this
+    # — a "partisan approval gap" — was deliberately not built: the
+    # number can't be attributed to the president's own conduct vs.
+    # opposition messaging/media environment, so placing it on a
+    # president's own page would imply a causal claim the data can't
+    # support, however it's labeled — see presidential_approval.py's
+    # module docstring for the full account.)
+    recent_avg_approval: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)

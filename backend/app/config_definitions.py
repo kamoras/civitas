@@ -64,17 +64,109 @@ SCORE_WEIGHTS: dict[str, float] = {
 # need the same platform-text-vs-action embedding match already tried and
 # abandoned 4x for senators' Promise Persistence (config_definitions.py's
 # v6.0 note, above). Same precedent as that removal: rather than keep
-# presenting a hand-set number as a computed score, drop it and
-# redistribute the freed weight proportionally across the remaining
-# dimensions — combined 35% split by each dimension's prior share of the
-# remaining 65%: publicMandate 15->23%, effectiveness 20->31%,
-# competence 15->23%, agencyAlignment 15->23%. See
-# president_service.py's module docstring for the full account.
+# presenting a hand-set number as a computed score, drop it. Their
+# combined weight first redistributed proportionally across the
+# remaining four (publicMandate 15->23%, effectiveness 20->31%,
+# competence 15->23%, agencyAlignment 15->23%), then a fifth dimension —
+# historicalLegacy — was added (2026-07) to cover what none of the other
+# four can: crisis leadership, moral authority, and similar historical-
+# consequence judgments that don't reduce to GDP growth, approval
+# polling, EO rate, or rulemaking volume (see president_scorer.
+# calc_historical_legacy's docstring — sourced from C-SPAN's Presidential
+# Historians Survey, a real external expert-consensus survey, not a
+# hand-set number).
+#
+# historicalLegacy's weight went through two revisions after the initial
+# equal-fifths 20% (both 2026-07, both verified against the real
+# 47-president dataset, not picked by eye):
+#
+# 1. Raised to 50%: the other four dimensions were never going to
+#    reconstruct "historical greatness" on their own (a booming economy
+#    or high EO-activity rate doesn't reliably track what historians
+#    actually weigh), so at 20% four dimensions that don't individually
+#    track greatness could outvote the one that does — Coolidge,
+#    McKinley, and Harding all landed in the top 10 while Lincoln and
+#    Eisenhower fell out of it.
+# 2. Brought back down to 35%: at 50%, the Spearman rank correlation
+#    between this platform's overall ranking and a pure 100%-
+#    historicalLegacy ranking (i.e. just C-SPAN's own answer) measured
+#    0.958 — the other four dimensions were contributing almost nothing
+#    of their own. The four mechanical dimensions ALONE (0% weight)
+#    correlate only 0.172 with C-SPAN — near-zero, meaning they measure
+#    something genuinely different from historical-greatness judgment,
+#    not a noisy/broken attempt at the same thing, so drowning them out
+#    entirely wasn't defensible either. 35% is the point where the top
+#    of the ranking is already recognizable (FDR, Washington, Lincoln,
+#    Theodore Roosevelt, JFK, Eisenhower) while the four mechanical
+#    dimensions still meaningfully move the rest of the ranking
+#    (correlation to pure C-SPAN only 0.886, not 0.96) — a real,
+#    disclosed compromise between two only loosely correlated kinds of
+#    judgment, not a weight tuned until the result looked acceptable.
+#    Coolidge and McKinley still edge into the bottom of the top 10 at
+#    this weight; that's an honest, arguable disagreement with C-SPAN's
+#    own ranking, not something further weight-tuning should paper over.
+#
+# This has no effect on how the currently-serving president is scored:
+# historicalLegacy is null for anyone without a completed, C-SPAN-rated
+# term, so compute_president_overall_score's renormalization already
+# falls back to the other three dimensions entirely in that case.
+#
+# Competence (EO-activity-rate) removed entirely (2026-07), same
+# "no defensible live signal" standard as Independence/Follow-Through
+# above. A Coolidge-ranking review found EO-activity-rate — Competence's
+# only ever-populated component (court-success-rate and cabinet-turnover
+# have no fetch source, see president_scorer._competence_core's removed
+# docstring) — has essentially zero relationship with real administrative
+# competence: Spearman correlation of 0.097 (p=0.53, statistically no
+# different from noise) against C-SPAN's own "Administrative Skill"
+# category score across the same 44 historians-rated presidents. Coolidge
+# and Harding make the gap concrete — nearly identical EO-rates (~216/yr
+# each) but historians' actual administrative-skill judgment rates them
+# 596 vs. 334 (of 1000), almost as far apart as two presidents get.
+# Swapping in C-SPAN's Administrative Skill score directly (rather than
+# just disclosing EO-rate's weakness) was considered and rejected: it
+# isn't an independent data source, it's literally one of the ten
+# categories C-SPAN itself sums into the same Final Score already driving
+# historicalLegacy at 35% — folding it into a second, separate dimension
+# would push this platform's true historian-derived weight toward ~51%
+# (35% + Competence's share), undoing the exact over-reliance-on-C-SPAN
+# problem the 50%->35% revision above was calibrated to avoid. Competence's
+# 16.25% is redistributed evenly across the three remaining mechanical
+# dimensions (21.67% each) rather than reopened as a fresh full weight
+# search — verified this still hits the same qualitative target that
+# justified 35% (Lincoln and Eisenhower both stay in the top 10; Coolidge
+# drops from top-10 to #12, Harding to #26, McKinley to #17).
+#
+# Renormalization redesigned (2026-07, v4): the weights below are nominal
+# — until this fix, compute_president_overall_score renormalized flatly
+# over whatever dimensions were present, which let historicalLegacy's
+# EFFECTIVE weight balloon well past 35% for anyone missing mechanical
+# data: ~44.7% for the ~36 presidents missing only agencyAlignment
+# (everyone before Clinton), ~61.8% for the four non-elected successors
+# (Tyler, Fillmore, Arthur, Andrew Johnson) missing agencyAlignment AND
+# publicMandate too. 35% was the operative number for only 4 of 47
+# presidents. Now historicalLegacy is held at exactly the configured
+# weight whenever >=2 mechanical dimensions are present (see
+# compute_president_overall_score's docstring for the full mechanism and
+# the flat-renormalization fallback below that floor — needed because a
+# single mechanical number otherwise dominates: Fillmore's Effectiveness
+# is 100/100 purely from a Gold-Rush-era GDP boom he had little to do
+# with, which would swap a near-bottom 19/100 historian rating for a
+# top-10 placement if held to a flat 65% share). Re-verified against the
+# real dataset under this new scheme: 35% still lands Lincoln/Eisenhower
+# in the top 10 and Coolidge/Harding/McKinley out of it, so the number
+# itself didn't need to change — only how it's applied.
 PRESIDENT_SCORE_WEIGHTS: dict[str, float] = {
-    "publicMandate": 0.23,
-    "effectiveness": 0.31,
-    "competence": 0.23,
-    "agencyAlignment": 0.23,
+    # The three mechanical dimensions split 0.65 three ways (0.65/3 =
+    # 0.21666...) — 0.2167 is that value rounded to 4 places, so the
+    # total is 1.0001, not exactly 1.0. Harmless: every consumer
+    # (compute_president_overall_score, _blend_live_components)
+    # renormalizes over whatever's actually present rather than assuming
+    # the nominal weights already sum to 1.
+    "publicMandate": 0.2167,
+    "effectiveness": 0.2167,
+    "agencyAlignment": 0.2167,
+    "historicalLegacy": 0.35,
 }
 
 # Supreme Court impartiality-score weights. Single source of truth shared by

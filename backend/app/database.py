@@ -174,6 +174,11 @@ def _migrate_columns() -> None:
         ("stock_trades_pipeline_runs", "progress_detail", "TEXT"),
         ("key_votes", "opposing_party_unity_pct", "REAL"),
         ("rep_key_votes", "opposing_party_unity_pct", "REAL"),
+        ("presidents", "election_margin", "REAL"),
+        ("presidents", "approval_trend", "REAL"),
+        ("presidents", "recent_avg_approval", "REAL"),
+        ("presidents", "historical_legacy_score", "INTEGER"),
+        ("presidents", "score_historical_legacy", "REAL"),
     ]
 
     drops: list[tuple[str, str]] = [
@@ -200,6 +205,18 @@ def _migrate_columns() -> None:
         # then crash-looped on this exact constraint instead of reseeding.
         ("presidents", "score_independence"),
         ("presidents", "score_follow_through"),
+        # 2026-07 (#218 review): defensive backstop for the same four
+        # legacy columns _migrate_presidents_schema_rebuild handles via a
+        # full table rebuild (see that function's docstring for why a
+        # rebuild, not a plain drop, is the primary mechanism — these
+        # entries only matter if that rebuild's trigger condition is ever
+        # bypassed, e.g. a hand-edited schema missing score_competence).
+        ("presidents", "score_competence"),
+        ("presidents", "eo_court_success_pct"),
+        ("presidents", "cabinet_turnover_pct"),
+        ("presidents", "summary"),
+        ("presidents", "key_achievements"),
+        ("presidents", "key_failures"),
     ]
 
     with engine.begin() as conn:
@@ -224,6 +241,101 @@ def _migrate_columns() -> None:
             if column in existing:
                 logger.info("Dropping legacy column %s.%s", table, column)
                 conn.execute(text(f"ALTER TABLE {table} DROP COLUMN {column}"))
+
+
+def _migrate_presidents_schema_rebuild() -> None:
+    """#218 makes score_public_mandate/score_effectiveness/
+    score_agency_alignment nullable (previously NOT NULL DEFAULT 0.0) and
+    drops score_competence/summary/key_achievements/key_failures
+    entirely. SQLite has no ALTER COLUMN to relax a NOT NULL constraint,
+    so an existing database still on the old schema would otherwise raise
+    IntegrityError the moment the pipeline writes a legitimate None to
+    one of those three now-nullable columns, or _sync_roster inserts a
+    new president row without the four now-removed ones. Every
+    president's scores are recomputed nightly from live sources — there
+    is no user-entered data in this table worth preserving through a
+    migration — so the simplest correct fix is to drop the whole table
+    when the old shape is detected and let the next run_president_
+    pipeline call repopulate it from scratch.
+
+    Must run before create_all (which only creates tables that don't
+    already exist) and after _migrate_president_ids (so a pending
+    bush-41 rename isn't skipped by an empty table — see that function).
+    """
+    inspector = inspect(engine)
+    if not inspector.has_table("presidents"):
+        return
+    existing = {c["name"] for c in inspector.get_columns("presidents")}
+    if "score_competence" not in existing:
+        return  # already on the current schema
+    logger.warning(
+        "Legacy presidents schema detected (score_competence still present) — "
+        "dropping table for a full rebuild by the next president pipeline run"
+    )
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE presidents"))
+
+
+def _migrate_president_ids() -> None:
+    """One-off id rename: George H.W. Bush's president_id changes from
+    "bush-41" to "ghwbush-41" (2026-07).
+
+    Every new UCSB-derived fetcher this platform's president pipeline
+    uses (historical_executive_orders.py, presidential_elections.py,
+    presidential_approval.py) — and economic_data.py, which pre-dates
+    this rewrite — all independently converged on "ghwbush-41" to avoid
+    ambiguity with George W. Bush's "gwbush-43". Only the now-removed
+    hand-typed SEED_PRESIDENTS list used "bush-41". Without this rename,
+    a production database seeded under the old id would get a second,
+    duplicate president row from _sync_roster (president_pipeline.py)
+    instead of updating the existing one, and orphan that row's score
+    history. Idempotent and a no-op on a fresh database that never had
+    "bush-41" to begin with.
+    """
+    inspector = inspect(engine)
+    if not inspector.has_table("presidents"):
+        return
+    with engine.begin() as conn:
+        old_exists = conn.execute(
+            text("SELECT 1 FROM presidents WHERE id = 'bush-41'"),
+        ).first()
+        if not old_exists:
+            return
+        new_exists = conn.execute(
+            text("SELECT 1 FROM presidents WHERE id = 'ghwbush-41'"),
+        ).first()
+        if new_exists:
+            # Both rows exist (shouldn't happen outside a bad manual
+            # edit) — drop the stale one rather than guess which to keep.
+            logger.warning("Both bush-41 and ghwbush-41 exist — merging bush-41's score history into ghwbush-41 and dropping the stale row")
+            conn.execute(text("DELETE FROM presidents WHERE id = 'bush-41'"))
+            if inspector.has_table("score_snapshots"):
+                # Move any bush-41 snapshot whose date doesn't already have
+                # a ghwbush-41 row (2026-07 fix: this branch used to drop
+                # bush-41's score_snapshots rows entirely, permanently
+                # orphaning that trend data — the single-row rename path
+                # below already migrates them, this branch just hadn't). A
+                # date with both is a genuine duplicate, dropped under
+                # bush-41 afterward.
+                conn.execute(text(
+                    "UPDATE score_snapshots SET entity_id = 'ghwbush-41' "
+                    "WHERE entity_type = 'president' AND entity_id = 'bush-41' "
+                    "AND date NOT IN ("
+                    "  SELECT date FROM score_snapshots "
+                    "  WHERE entity_type = 'president' AND entity_id = 'ghwbush-41'"
+                    ")"
+                ))
+                conn.execute(text(
+                    "DELETE FROM score_snapshots WHERE entity_type = 'president' AND entity_id = 'bush-41'"
+                ))
+            return
+        logger.info("Renaming president id bush-41 -> ghwbush-41")
+        conn.execute(text("UPDATE presidents SET id = 'ghwbush-41' WHERE id = 'bush-41'"))
+        if inspector.has_table("score_snapshots"):
+            conn.execute(text(
+                "UPDATE score_snapshots SET entity_id = 'ghwbush-41' "
+                "WHERE entity_type = 'president' AND entity_id = 'bush-41'"
+            ))
 
 
 def _ensure_indexes() -> None:
@@ -315,20 +427,19 @@ def init_db() -> None:
     """Create all tables defined in models and apply lightweight migrations."""
     from app import models  # noqa: F401
 
+    _migrate_president_ids()
+    _migrate_presidents_schema_rebuild()
     Base.metadata.create_all(bind=engine)
     VisitsBase.metadata.create_all(bind=visits_engine)
     _migrate_columns()
     _ensure_indexes()
     _migrate_visits_data_to_own_db()
 
-    # Seed president data if the table is empty
-    from app.services.president_service import seed_presidents
-
-    db = SessionLocal()
-    try:
-        seed_presidents(db)
-    finally:
-        db.close()
+    # President rows are no longer seeded here — run_president_pipeline
+    # (president_pipeline.py) creates/updates them from a live UCSB
+    # roster fetch on every run, so a fresh database is populated by that
+    # pipeline's first pass instead of a separate hand-typed seed step
+    # (2026-07, see president_pipeline.py's module docstring).
 
 
 def reset_all_data() -> dict:
@@ -395,14 +506,9 @@ def reset_all_data() -> dict:
         logger.warning("ChromaDB reset failed: %s", exc)
         summary["chromadb_error"] = "reset failed — see server logs"
 
-    from app.services.president_service import seed_presidents
-    db = SessionLocal()
-    try:
-        seed_presidents(db)
-    finally:
-        db.close()
-
     logger.info("Full data reset complete: %s", summary)
+    # President rows will be recreated by the next run_president_pipeline
+    # run (live UCSB roster fetch) — see init_db's comment above.
     return summary
 
 
