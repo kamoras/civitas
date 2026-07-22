@@ -24,6 +24,17 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "President v4",
+    date: "2026-07-22",
+    title: "Historical Legacy's weight held constant — it was never actually 35% for most presidents",
+    tldr: "The 35% Historical Legacy weight only applied flatly when every dimension was present. For any president missing mechanical data (nearly everyone before Clinton), the renormalization silently let it rise to 45-62%. Now it's held at exactly 35% whenever there's enough mechanical data to renormalize fairly, with a fallback for the handful of presidents thin enough on data that a single mechanical number would otherwise swamp their real historian rating.",
+    changes: [
+      "compute_president_overall_score used to renormalize flatly across whichever dimensions had data — so a president missing Agency Alignment (everyone before Clinton, ~36 of 47 presidents) had Historical Legacy's effective weight rise to ~44.7%, and the four non-elected successors missing both Agency Alignment and Public Mandate (Tyler, Fillmore, Arthur, Andrew Johnson) had it rise to ~61.8%. 35% was the true operative weight for only 4 of 47 presidents. Now Historical Legacy is held at exactly its configured weight whenever at least two mechanical dimensions are present, with the mechanical dimensions renormalizing only among themselves for the rest.",
+      "Below that two-mechanical-dimension floor, falls back to the old flat renormalization instead of the fixed split — a single mechanical number isn't reliable enough to carry 65% of a score alone. Concretely: Fillmore's only present mechanical dimension, Effectiveness, is 100/100 purely from a Gold-Rush-era GDP boom unrelated to his own governance, while C-SPAN rates him 19/100 — a near-bottom historian reputation. A flat 35%/65% split would have handed him a top-10 placement off that one number; the fallback keeps him where the old (accidentally correct, for the wrong reason) scheme already had him.",
+      "Re-verified against the real dataset under the corrected scheme: 35% still keeps Lincoln and Eisenhower in the top 10 and Coolidge/Harding/McKinley out of it — the headline weight didn't need to change, only how consistently it's applied.",
+    ],
+  },
+  {
     version: "President v3",
     date: "2026-07-22",
     title: "Competence removed; Historical Legacy reweighted to 35%",

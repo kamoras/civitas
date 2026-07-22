@@ -696,6 +696,29 @@ export default function AboutPage() {
               Eisenhower both stay in the top 10 — the same qualitative target that
               justified 35% still holds.
             </P>
+            <P>
+              A closer look at how that 35% actually gets applied found it wasn&apos;t
+              the real operative number for most presidents. The renormalization used
+              to spread flatly across whichever dimensions had data — so a president
+              missing Agency Alignment (everyone before Clinton, ~36 of 47) had
+              Historical Legacy&apos;s EFFECTIVE weight rise to ~44.7%, and the four
+              non-elected successors missing both Agency Alignment and Public Mandate
+              (Tyler, Fillmore, Arthur, Andrew Johnson) had it rise to ~61.8%. 35% was
+              only the true weight for 4 of 47 presidents. This is fixed (2026-07):
+              Historical Legacy is now held at exactly 35% whenever at least two
+              mechanical dimensions are present, with the mechanical dimensions
+              renormalizing only among themselves for the rest. Below that floor — a
+              single mechanical dimension alone — it falls back to the old flat
+              renormalization instead, since one number isn&apos;t reliable enough to
+              carry 65% of a score by itself: Fillmore&apos;s Effectiveness is 100/100
+              purely from a Gold-Rush-era GDP boom he had little to do with, which
+              would have swapped his real (near-bottom, 19/100) historian rating for a
+              top-10 placement under a flat 65% share. Re-checked against the real
+              dataset under this corrected scheme: 35% still keeps Lincoln and
+              Eisenhower in the top 10 and Coolidge/Harding/McKinley out of it, so the
+              headline number didn&apos;t need to change — only how consistently it
+              gets applied.
+            </P>
 
             <div className="space-y-4 mt-4">
               <div>

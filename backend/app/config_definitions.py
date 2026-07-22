@@ -136,6 +136,26 @@ SCORE_WEIGHTS: dict[str, float] = {
 # search — verified this still hits the same qualitative target that
 # justified 35% (Lincoln and Eisenhower both stay in the top 10; Coolidge
 # drops from top-10 to #12, Harding to #26, McKinley to #17).
+#
+# Renormalization redesigned (2026-07, v4): the weights below are nominal
+# — until this fix, compute_president_overall_score renormalized flatly
+# over whatever dimensions were present, which let historicalLegacy's
+# EFFECTIVE weight balloon well past 35% for anyone missing mechanical
+# data: ~44.7% for the ~36 presidents missing only agencyAlignment
+# (everyone before Clinton), ~61.8% for the four non-elected successors
+# (Tyler, Fillmore, Arthur, Andrew Johnson) missing agencyAlignment AND
+# publicMandate too. 35% was the operative number for only 4 of 47
+# presidents. Now historicalLegacy is held at exactly the configured
+# weight whenever >=2 mechanical dimensions are present (see
+# compute_president_overall_score's docstring for the full mechanism and
+# the flat-renormalization fallback below that floor — needed because a
+# single mechanical number otherwise dominates: Fillmore's Effectiveness
+# is 100/100 purely from a Gold-Rush-era GDP boom he had little to do
+# with, which would swap a near-bottom 19/100 historian rating for a
+# top-10 placement if held to a flat 65% share). Re-verified against the
+# real dataset under this new scheme: 35% still lands Lincoln/Eisenhower
+# in the top 10 and Coolidge/Harding/McKinley out of it, so the number
+# itself didn't need to change — only how it's applied.
 PRESIDENT_SCORE_WEIGHTS: dict[str, float] = {
     "publicMandate": 0.2167,
     "effectiveness": 0.2167,

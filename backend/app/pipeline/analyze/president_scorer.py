@@ -111,6 +111,26 @@ _PRESIDENT_SCORE_FIELD_MAP = {
 }
 
 
+_HISTORICAL_LEGACY_KEY = "historicalLegacy"
+
+# The fixed-Legacy-weight tier (see compute_president_overall_score) only
+# applies with at least this many mechanical dimensions present. Below
+# this, a single mechanical data point isn't reliable enough to anchor
+# 65% of a score on its own — verified concretely on Fillmore: his only
+# present mechanical dimension, Effectiveness, is 100/100 purely from a
+# ~9.6%/year GDP boom (Gold Rush-era antebellum expansion, not clearly
+# attributable to his own governance), while C-SPAN's historians rate him
+# 19/100 — one of the worst-regarded presidents. A flat "Legacy always
+# 35%" rule would let that single GDP number override his actual
+# reputation entirely (Fillmore jumped to #8 in testing). Below this
+# threshold, falls back to flat renormalization across whatever combo of
+# Legacy + mechanical IS present (the pre-2026-07 behavior) — for
+# Fillmore/Tyler/Arthur/Andrew Johnson specifically, that means Legacy
+# effectively carries ~62%, diluting the single noisy mechanical signal
+# rather than being swamped by it.
+_MIN_MECHANICAL_DIMENSIONS_FOR_FIXED_LEGACY_WEIGHT = 2
+
+
 def compute_president_overall_score(entity) -> float:
     """Weighted overall score from a scored President row, renormalized
     per-president over whichever dimensions actually have a value.
@@ -124,24 +144,55 @@ def compute_president_overall_score(entity) -> float:
     President's comment) — a dimension is None when it's genuinely
     inapplicable for that specific president (e.g. Public Mandate for a
     president who never won an election; Agency Alignment for anyone
-    before the Federal Register existed in 1936), never a hand-set
-    fallback. Renormalizing PRESIDENT_SCORE_WEIGHTS over just the
-    present dimensions is the same "redistribute onto what's actually
-    measured" pattern score_calculator.compute_overall_score already uses
-    for senators/reps (and the same pattern this file's own
-    _blend_live_components uses one level down, within a single
-    dimension's components) — applied here one level up, across
-    dimensions. A president with zero computable dimensions (should not
-    happen given the coverage of the fetchers wired into president_
-    pipeline.py, but defensive) returns 0.0 rather than raising.
+    before this platform's real government sources have machine-readable
+    rulemaking data), never a hand-set fallback.
+
+    Two-tier renormalization (2026-07, replacing a flat single-tier
+    renormalize-over-everything-present scheme): when at least
+    _MIN_MECHANICAL_DIMENSIONS_FOR_FIXED_LEGACY_WEIGHT mechanical
+    dimensions are present alongside Legacy, Legacy is held at its
+    configured weight (35%) exactly — the mechanical dimensions
+    renormalize only among THEMSELVES for the remaining 65%. The old flat
+    scheme let Legacy's EFFECTIVE weight balloon well past its documented
+    35% for any president missing a mechanical dimension — verified
+    against the real 47-president dataset: ~44.7% for the ~36 presidents
+    missing only Agency Alignment (everyone before Clinton). 35% was
+    never actually the operative number for most presidents under the old
+    scheme; this fixes that silently-drifting weight rather than just
+    disclosing it. Below the mechanical-dimension floor (see that
+    constant's own comment — Fillmore's case), falls back to the old flat
+    renormalization instead, since a single mechanical number isn't a
+    reliable enough anchor for a fixed 65% share. When Legacy itself is
+    absent (any currently-serving or just-departed president), this has
+    no effect either way: the mechanical dimensions renormalize to 100%
+    of whatever's present, same as always. A president with zero
+    computable dimensions (should not happen given the coverage of the
+    fetchers wired into president_pipeline.py, but defensive) returns 0.0
+    rather than raising.
     """
     from app.config_definitions import PRESIDENT_SCORE_WEIGHTS
 
-    present = [
+    legacy_weight = PRESIDENT_SCORE_WEIGHTS[_HISTORICAL_LEGACY_KEY]
+    legacy_score = getattr(entity, _PRESIDENT_SCORE_FIELD_MAP[_HISTORICAL_LEGACY_KEY])
+
+    mechanical_present = [
         (weight, getattr(entity, _PRESIDENT_SCORE_FIELD_MAP[key]))
         for key, weight in PRESIDENT_SCORE_WEIGHTS.items()
-        if getattr(entity, _PRESIDENT_SCORE_FIELD_MAP[key]) is not None
+        if key != _HISTORICAL_LEGACY_KEY
+        and getattr(entity, _PRESIDENT_SCORE_FIELD_MAP[key]) is not None
     ]
+
+    if legacy_score is not None and len(mechanical_present) >= _MIN_MECHANICAL_DIMENSIONS_FOR_FIXED_LEGACY_WEIGHT:
+        mechanical_weight_sum = sum(w for w, _ in mechanical_present)
+        mechanical_component = sum(w * score for w, score in mechanical_present) / mechanical_weight_sum
+        return round(legacy_weight * legacy_score + (1 - legacy_weight) * mechanical_component, 2)
+
+    # Flat renormalization fallback: Legacy absent, or fewer than
+    # _MIN_MECHANICAL_DIMENSIONS_FOR_FIXED_LEGACY_WEIGHT mechanical
+    # dimensions present alongside it.
+    present = list(mechanical_present)
+    if legacy_score is not None:
+        present.append((legacy_weight, legacy_score))
     total_weight = sum(w for w, _ in present)
     if total_weight <= 0:
         return 0.0
@@ -171,8 +222,11 @@ def dimensions_available(entity) -> int:
 # getting snapshotted at this version. v2 = the 4-dimension formula after
 # Independence/Follow-Through were removed and their weight redistributed;
 # v3 = Competence also removed (see PRESIDENT_SCORE_WEIGHTS's own comment
-# for both), landing on today's 3-mechanical-dimensions-plus-survey formula.
-PRESIDENT_ALGORITHM_VERSION = "v3"
+# for both); v4 = two-tier renormalization holds Historical Legacy at its
+# configured 35% instead of letting it silently float up to ~45%/~62% for
+# presidents missing mechanical data (see compute_president_overall_score's
+# docstring).
+PRESIDENT_ALGORITHM_VERSION = "v4"
 
 
 # Full credit/deficit approached asymptotically at this many population
