@@ -137,12 +137,12 @@ class TestBioguideCrosswalkTakesPriority:
         ), patch(
             "app.pipeline.fetch.fec._fetch_with_retry", new_callable=AsyncMock
         ) as mock_fetch:
-            mock_fetch.return_value = {"results": [_candidate("CASSIDY, WILLIAM M.", "S4LA00107", "")]}
+            mock_fetch.return_value = {"results": [_candidate("RISCH, JAMES E MR.", "S8ID00092", "")]}
             result = await find_candidate(
-                None, db_session, "Bill Cassidy", "LA", office="S", bioguide_id="Z999999",
+                None, db_session, "James E. Risch", "ID", office="S", bioguide_id="Z999999",
             )
         assert result is not None
-        assert result["candidate_id"] == "S4LA00107"
+        assert result["candidate_id"] == "S8ID00092"
         mock_fetch.assert_called_once()  # crosswalk missed — fell back to name search
 
     @pytest.mark.asyncio
@@ -152,15 +152,15 @@ class TestBioguideCrosswalkTakesPriority:
         # than returning the wrong-chamber id.
         with patch(
             "app.pipeline.fetch.fec.fetch_bioguide_to_fec_ids",
-            new=AsyncMock(return_value={"C001075": ["H8LA00017"]}),
+            new=AsyncMock(return_value={"R000584": ["H8ID00017"]}),
         ), patch(
             "app.pipeline.fetch.fec._fetch_with_retry", new_callable=AsyncMock
         ) as mock_fetch:
-            mock_fetch.return_value = {"results": [_candidate("CASSIDY, WILLIAM M.", "S4LA00107", "")]}
+            mock_fetch.return_value = {"results": [_candidate("RISCH, JAMES E MR.", "S8ID00092", "")]}
             result = await find_candidate(
-                None, db_session, "Bill Cassidy", "LA", office="S", bioguide_id="C001075",
+                None, db_session, "James E. Risch", "ID", office="S", bioguide_id="R000584",
             )
-        assert result["candidate_id"] == "S4LA00107"
+        assert result["candidate_id"] == "S8ID00092"
         mock_fetch.assert_called_once()
 
     @pytest.mark.asyncio
@@ -170,24 +170,31 @@ class TestBioguideCrosswalkTakesPriority:
         ) as mock_crosswalk, patch(
             "app.pipeline.fetch.fec._fetch_with_retry", new_callable=AsyncMock
         ) as mock_fetch:
-            mock_fetch.return_value = {"results": [_candidate("CASSIDY, WILLIAM M.", "S4LA00107", "")]}
-            result = await find_candidate(None, db_session, "Bill Cassidy", "LA", office="S")
-        assert result["candidate_id"] == "S4LA00107"
+            mock_fetch.return_value = {"results": [_candidate("RISCH, JAMES E MR.", "S8ID00092", "")]}
+            result = await find_candidate(None, db_session, "James E. Risch", "ID", office="S")
+        assert result["candidate_id"] == "S8ID00092"
         mock_crosswalk.assert_not_called()
 
 
-class TestNicknameAndMiddleInitialFallback:
+class TestMiddleInitialFallback:
     """2026-07 audit: 28 of 100 sitting senators had zero FEC donor data
     because FEC files under the legal name/format (nickname, no/spelled-
     out middle initial), which never satisfies the strict all-parts
-    match above — Bill Cassidy is FEC's "CASSIDY, WILLIAM M.", Chuck
-    Grassley is "GRASSLEY, CHARLES E". The fallback must still reject a
-    genuinely different first name sharing a surname (Darline vs. Lindsey
-    Graham — covered by test_primary_search_requires_genuine_name_match
-    above, which continues to pass unchanged)."""
+    match above. The fallback resolves the middle-initial/punctuation
+    class only ("James E. Risch" vs FEC's "RISCH, JAMES E") — nickname
+    resolution ("Bill" -> "CASSIDY, WILLIAM M.") is deliberately NOT
+    name-matched; it's the bioguide crosswalk's job (see
+    TestBioguideCrosswalkTakesPriority above), since any hand-maintained
+    alias table silently misses the next new nickname. The fallback must
+    still reject a genuinely different first name sharing a surname
+    (Darline vs. Lindsey Graham — covered by
+    test_primary_search_requires_genuine_name_match above)."""
 
     @pytest.mark.asyncio
-    async def test_nickname_matches_legal_first_name(self, db_session):
+    async def test_nickname_without_crosswalk_is_not_guessed(self, db_session):
+        # "Bill" vs FEC's "WILLIAM" with no bioguide crosswalk entry:
+        # correctly returns nothing rather than guessing the alias —
+        # every sitting member resolves via the crosswalk instead.
         with patch(
             "app.pipeline.fetch.fec._fetch_with_retry", new_callable=AsyncMock
         ) as mock_fetch:
@@ -195,8 +202,7 @@ class TestNicknameAndMiddleInitialFallback:
                 "results": [_candidate("CASSIDY, WILLIAM M.", "S4LA00107", "")]
             }
             result = await find_candidate(None, db_session, "Bill Cassidy", "LA", office="S")
-        assert result is not None
-        assert result["candidate_id"] == "S4LA00107"
+        assert result is None
 
     @pytest.mark.asyncio
     async def test_middle_initial_mismatch_does_not_block_match(self, db_session):

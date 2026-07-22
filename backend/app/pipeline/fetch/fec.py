@@ -64,46 +64,6 @@ async def _fetch_with_retry(
     return resp.json() if resp is not None else None
 
 
-# Common English nicknames that don't share a derivable spelling with
-# their legal first name (Bill/William, Jack/John, Al/Alexander) — FEC
-# candidate records are filed under the legal name, so a strict
-# character-level match on our stored (commonly-used) name never finds
-# these. Scoped to nicknames actually seen among sitting members of
-# Congress (2026-07 audit) rather than an exhaustive general-purpose
-# list — add to it as new cases surface.
-_NICKNAME_TO_LEGAL_FIRST_NAMES: dict[str, frozenset[str]] = {
-    "AL": frozenset({"ALEXANDER", "ALBERT", "ALAN", "ALLEN", "ALFRED"}),
-    "BILL": frozenset({"WILLIAM"}),
-    "BILLY": frozenset({"WILLIAM"}),
-    "BOB": frozenset({"ROBERT"}),
-    "BOBBY": frozenset({"ROBERT"}),
-    "CHUCK": frozenset({"CHARLES"}),
-    "DAN": frozenset({"DANIEL"}),
-    "DANNY": frozenset({"DANIEL"}),
-    "DAVE": frozenset({"DAVID"}),
-    "DICK": frozenset({"RICHARD"}),
-    "DOUG": frozenset({"DOUGLAS"}),
-    "ED": frozenset({"EDWARD", "EDWIN"}),
-    "GREG": frozenset({"GREGORY"}),
-    "JACK": frozenset({"JOHN"}),
-    "JIM": frozenset({"JAMES"}),
-    "JIMMY": frozenset({"JAMES"}),
-    "JOE": frozenset({"JOSEPH"}),
-    "KEN": frozenset({"KENNETH"}),
-    "LARRY": frozenset({"LAWRENCE"}),
-    "MATT": frozenset({"MATTHEW"}),
-    "MIKE": frozenset({"MICHAEL"}),
-    "NED": frozenset({"EDWARD"}),
-    "PEGGY": frozenset({"MARGARET"}),
-    "PETE": frozenset({"PETER"}),
-    "RON": frozenset({"RONALD"}),
-    "STEVE": frozenset({"STEVEN", "STEPHEN"}),
-    "TED": frozenset({"THEODORE", "EDWARD"}),
-    "TOM": frozenset({"THOMAS"}),
-    "TOMMY": frozenset({"THOMAS"}),
-}
-
-
 def _fec_first_name(c_name: str) -> str:
     """FEC's `name` field is formatted "LAST, FIRST MIDDLE ..." — returns
     just the first-name token, or "" if the field has no comma at all
@@ -113,17 +73,6 @@ def _fec_first_name(c_name: str) -> str:
         return ""
     parts = rest.strip().split()
     return parts[0] if parts else ""
-
-
-def _first_names_plausibly_match(ours: str, fec_first: str) -> bool:
-    """True if `ours` (the first name we searched with) and `fec_first`
-    (FEC's filed first name) are the same real first name, allowing for a
-    known nickname/legal-name pair — never a fuzzy/partial match, since a
-    false positive here is exactly the misattribution risk find_candidate
-    guards against."""
-    if ours == fec_first:
-        return True
-    return fec_first in _NICKNAME_TO_LEGAL_FIRST_NAMES.get(ours, frozenset())
 
 
 async def find_candidate(
@@ -214,30 +163,32 @@ async def find_candidate(
 
     if match is None:
         # 2026-07 fix: the strict all-parts check above requires every
-        # token of our stored name — including middle initials and the
-        # exact first-name spelling — to literally appear in FEC's name
-        # string, but FEC files under the legal name/format, which
-        # routinely differs from what a member actually goes by: "Bill"
-        # Cassidy is FEC's "CASSIDY, WILLIAM M."; "Chuck" Grassley is
-        # "GRASSLEY, CHARLES E"; "James E. Risch" never matches FEC's
-        # unpunctuated "RISCH, JAMES E". Audited live against the FEC API:
-        # 28 of 100 sitting senators had zero donor/committee data purely
-        # from this false negative, which then floors their funding-
-        # independence/diversity scores at score_calculator's neutral-50
-        # default — not "genuinely unmeasurable," just never fetched, and
-        # that neutral default can outrank a peer's real (often lower)
-        # funding-independence number.
+        # token of our stored name — including middle initials with their
+        # punctuation — to literally appear in FEC's name string, but FEC
+        # files under the legal format: "James E. Risch" never matches
+        # FEC's unpunctuated "RISCH, JAMES E". Audited live against the
+        # FEC API: 28 of 100 sitting senators had zero donor/committee
+        # data from this class of false negative, flooring their funding
+        # scores at score_calculator's neutral-50 default — not
+        # "genuinely unmeasurable," just never fetched.
         #
-        # Fall back to just last-name + first-name (exact, or a known
-        # nickname/legal-name pair) — still rejects a same-surname
-        # different person (e.g. "Darline Graham" vs. FEC's "GRAHAM,
-        # LINDSEY O" — different first names, no alias, no match) since
-        # that's the actual misattribution risk this function guards
-        # against, not the middle name or a nickname spelling.
+        # Fall back to last-name + EXACT first-name — still rejects a
+        # same-surname different person (e.g. "Darline Graham" vs. FEC's
+        # "GRAHAM, LINDSEY O"), which is the actual misattribution risk
+        # this function guards against; the middle name is what stops
+        # mattering. Deliberately NO nickname aliasing here ("Bill" ->
+        # WILLIAM): nickname resolution is the bioguide crosswalk's job
+        # (checked first, covers every sitting member — see
+        # congress_legislators.py), and a hand-maintained alias table
+        # would silently miss the next new nickname anyway. A member both
+        # missing from the crosswalk AND FEC-filed under a different
+        # first name than we store gets no FEC data until the crosswalk
+        # picks them up — correct behavior, not a gap: no guessed
+        # attribution is better than a plausible-but-unverified one.
         our_first, our_last = name_parts[0].upper(), name_parts[-1].upper()
         for c in results:
             c_name = (c.get("name") or "").upper()
-            if our_last in c_name and _first_names_plausibly_match(our_first, _fec_first_name(c_name)):
+            if our_last in c_name and our_first == _fec_first_name(c_name):
                 match = c
                 break
 
