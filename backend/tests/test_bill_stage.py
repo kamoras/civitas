@@ -8,6 +8,7 @@ embedding model involved.
 
 import pytest
 
+from app.config_definitions import BillStage
 from app.pipeline.analyze.bill_stage import classify_bill_stage_from_actions
 
 
@@ -40,7 +41,7 @@ class TestActionCodeLookup:
         "action_type, action_code, text, expected",
         [
             pytest.param("IntroReferral", "1000", "Introduced in House", "INTRODUCED", id="introduced"),
-            pytest.param("IntroReferral", "H11100", "Referred to the House Committee on Ways and Means.", "IN_COMMITTEE", id="referred_to_committee"),
+            pytest.param("IntroReferral", "H11100", "Referred to the House Committee on Ways and Means.", "REFERRED", id="referred_to_committee"),
             pytest.param("Committee", "H15001", "Committee Consideration and Mark-up Session Held", "IN_COMMITTEE", id="committee_markup_held"),
             pytest.param("Calendars", "H12410", "Placed on the Union Calendar, Calendar No. 508.", "IN_COMMITTEE", id="placed_on_union_calendar"),
             pytest.param("Floor", "17000", "Passed/agreed to in Senate.", "PASSED_CHAMBER", id="passed_senate"),
@@ -73,8 +74,8 @@ class TestTypeAndTextFallback:
     @pytest.mark.parametrize(
         "action_type, action_code, text, expected",
         [
-            pytest.param("IntroReferral", None, "Read twice and referred to the Committee on the Judiciary.", "IN_COMMITTEE", id="senate_combined_read_and_refer_has_no_action_code"),
-            pytest.param("IntroReferral", None, "Received in the Senate and Read twice and referred to the Committee on Finance.", "IN_COMMITTEE", id="senate_receipt_combined_with_referral_has_no_action_code"),
+            pytest.param("IntroReferral", None, "Read twice and referred to the Committee on the Judiciary.", "REFERRED", id="senate_combined_read_and_refer_has_no_action_code"),
+            pytest.param("IntroReferral", None, "Received in the Senate and Read twice and referred to the Committee on Finance.", "REFERRED", id="senate_receipt_combined_with_referral_has_no_action_code"),
             pytest.param("IntroReferral", None, "Introduced in Senate", "INTRODUCED", id="bare_introduction_with_no_action_code"),
             pytest.param("Committee", None, "Ordered to be reported.", "IN_COMMITTEE", id="committee_type_with_no_action_code"),
             pytest.param("Calendars", None, "Placed on Senate Legislative Calendar under General Orders.", "IN_COMMITTEE", id="calendars_type_with_no_action_code"),
@@ -90,9 +91,6 @@ class TestTypeAndTextFallback:
     def test_type_and_text_fallback(self, action_type, action_code, text, expected):
         actions = [_action(action_type, action_code, text)]
         assert classify_bill_stage_from_actions(actions) == expected
-
-
-from app.config_definitions import BillStage
 
 
 class TestMaxOverHistory:
@@ -121,9 +119,64 @@ class TestMaxOverHistory:
         ]
         assert classify_bill_stage_from_actions(actions) == BillStage.VETOED
 
-    def test_referral_before_passage_stays_committee(self):
+    def test_mere_referral_with_nothing_else_stays_referred(self):
+        # 2026-07 fix: automatic referral alone (no hearing, markup, or
+        # report) is REFERRED, not IN_COMMITTEE — see module docstring.
         actions = [
             {"actionCode": "H11100", "type": "IntroReferral", "text": "Referred to committee."},
             {"actionCode": "1000", "type": "IntroReferral", "text": "Introduced in House"},
+        ]
+        assert classify_bill_stage_from_actions(actions) == BillStage.REFERRED
+
+    def test_genuine_committee_action_after_referral_outranks_it(self):
+        actions = [
+            {"type": "Committee", "text": "Ordered to be reported."},
+            {"actionCode": "H11100", "type": "IntroReferral", "text": "Referred to committee."},
+            {"actionCode": "1000", "type": "IntroReferral", "text": "Introduced in House"},
+        ]
+        assert classify_bill_stage_from_actions(actions) == BillStage.IN_COMMITTEE
+
+
+class TestReferredVsInCommitteeRealData:
+    """2026-07 audit of live production data: every one of a sample of
+    Senate bills classified IN_COMMITTEE under the old scheme had exactly
+    two actions ever — introduction and the automatic referral — nothing
+    else (real example below, verbatim). Compared against real Senate
+    bills that DID get genuine committee action (also verbatim, from the
+    same audit) to confirm the two are now distinguishable."""
+
+    def test_real_senate_bill_with_only_automatic_referral(self):
+        # Real action history for a Blackburn-sponsored bill stuck with
+        # zero engagement beyond the automatic first step.
+        actions = [
+            {"actionCode": None, "type": "IntroReferral",
+             "text": "Read twice and referred to the Committee on the Judiciary."},
+            {"actionCode": "10000", "type": "IntroReferral", "text": "Introduced in Senate"},
+        ]
+        assert classify_bill_stage_from_actions(actions) == BillStage.REFERRED
+
+    def test_real_senate_bill_reported_out_of_committee(self):
+        # Real action history for a bill that was actually reported out
+        # of committee and calendared — genuine, non-automatic progress.
+        actions = [
+            {"actionCode": None, "type": "Calendars",
+             "text": "Placed on Senate Legislative Calendar under General Orders. Calendar No. 43."},
+            {"actionCode": "14000", "type": "Committee",
+             "text": "Committee on the Judiciary. Reported by Senator Grassley with an amendment."},
+            {"actionCode": None, "type": "Committee",
+             "text": "Committee on the Judiciary. Ordered to be reported with an amendment favorably."},
+            {"actionCode": None, "type": "IntroReferral",
+             "text": "Read twice and referred to the Committee on the Judiciary."},
+            {"actionCode": "10000", "type": "IntroReferral", "text": "Introduced in Senate"},
+        ]
+        assert classify_bill_stage_from_actions(actions) == BillStage.IN_COMMITTEE
+
+    def test_real_senate_bill_discharged_by_unanimous_consent(self):
+        actions = [
+            {"actionCode": "14500", "type": "Committee",
+             "text": "Senate Committee on Energy and Natural Resources discharged by Unanimous Consent."},
+            {"actionCode": None, "type": "IntroReferral",
+             "text": "Read twice and referred to the Committee on Energy and Natural Resources."},
+            {"actionCode": "10000", "type": "IntroReferral", "text": "Introduced in Senate"},
         ]
         assert classify_bill_stage_from_actions(actions) == BillStage.IN_COMMITTEE

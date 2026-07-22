@@ -4,6 +4,7 @@ import { useConfig } from "@/hooks/useConfig";
 
 export const MAIN_FLOW_STAGES = [
   "INTRODUCED",
+  "REFERRED",
   "IN_COMMITTEE",
   "PASSED_CHAMBER",
   "IN_OTHER_CHAMBER",

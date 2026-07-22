@@ -2521,6 +2521,15 @@ def _zero_bill_component_score(years_in_office: float | None) -> tuple[float, st
 
 _LES_STAGE_ORDER: dict[str, int] = {
     "INTRODUCED": 1,
+    # 2026-07 fix: REFERRED (bill_stage.py) is the automatic, universal
+    # first step every bill gets within days of introduction — same
+    # credit as bare introduction, not stage 2. The old scheme gave every
+    # bill that had merely been referred (virtually all of them) the same
+    # V&W "received action in committee" credit as one that actually got
+    # a hearing, markup, or was reported out — see bill_stage.py's module
+    # docstring for the live audit that found this (one senator's
+    # sponsored-bills summary reading "135 bills, 123 advancing").
+    "REFERRED": 1,
     "IN_COMMITTEE": 2,
     "PASSED_CHAMBER": 3,
     "IN_OTHER_CHAMBER": 3,  # already passed its own chamber; no separate V&W stage for this

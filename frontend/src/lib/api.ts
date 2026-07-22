@@ -313,12 +313,13 @@ const DEFAULT_CONFIG: AppConfig = {
   policyAreas: [],
   billStages: {
     INTRODUCED: { name: "Introduced", color: "#6b7280", order: 1 },
-    IN_COMMITTEE: { name: "In Committee", color: "#3b82f6", order: 2 },
-    PASSED_CHAMBER: { name: "Passed Chamber", color: "#8b5cf6", order: 3 },
-    IN_OTHER_CHAMBER: { name: "In Other Chamber", color: "#f59e0b", order: 4 },
-    TO_PRESIDENT: { name: "To President", color: "#ec4899", order: 5 },
-    ENACTED: { name: "Enacted", color: "#00ff41", order: 6 },
-    VETOED: { name: "Vetoed", color: "#ef4444", order: 7 },
+    REFERRED: { name: "Referred to Committee", color: "#60a5fa", order: 2 },
+    IN_COMMITTEE: { name: "In Committee", color: "#3b82f6", order: 3 },
+    PASSED_CHAMBER: { name: "Passed Chamber", color: "#8b5cf6", order: 4 },
+    IN_OTHER_CHAMBER: { name: "In Other Chamber", color: "#f59e0b", order: 5 },
+    TO_PRESIDENT: { name: "To President", color: "#ec4899", order: 6 },
+    ENACTED: { name: "Enacted", color: "#00ff41", order: 7 },
+    VETOED: { name: "Vetoed", color: "#ef4444", order: 8 },
   },
 };
 

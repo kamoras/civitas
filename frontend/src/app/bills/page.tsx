@@ -59,8 +59,12 @@ function BillsPageContent() {
   const partyParam = party === "ALL" ? undefined : party;
   const qParam = debouncedSearch || undefined;
 
+  // REFERRED (2026-07) is the automatic, universal first step every bill
+  // gets within days of introduction — not evidence anyone's done
+  // anything with it, so it's excluded from "in motion" the same as
+  // INTRODUCED (see bill_stage.py's module docstring).
   const totalMoving = Object.entries(stageCounts)
-    .filter(([code]) => code !== "INTRODUCED")
+    .filter(([code]) => code !== "INTRODUCED" && code !== "REFERRED")
     .reduce((sum, [, count]) => sum + count, 0);
 
   return (

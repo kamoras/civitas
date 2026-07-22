@@ -156,12 +156,21 @@ VALID_INDUSTRIES = set(INDUSTRIES.keys())
 # app.pipeline.analyze.bill_stage.classify_bill_stage_from_actions.
 BILL_STAGES: dict[str, dict] = {
     "INTRODUCED":       {"name": "Introduced",        "color": "#6b7280", "order": 1},
-    "IN_COMMITTEE":     {"name": "In Committee",       "color": "#3b82f6", "order": 2},
-    "PASSED_CHAMBER":   {"name": "Passed Chamber",     "color": "#8b5cf6", "order": 3},
-    "IN_OTHER_CHAMBER": {"name": "In Other Chamber",   "color": "#f59e0b", "order": 4},
-    "TO_PRESIDENT":     {"name": "To President",       "color": "#ec4899", "order": 5},
-    "ENACTED":          {"name": "Enacted",            "color": "#00ff41", "order": 6},
-    "VETOED":           {"name": "Vetoed",             "color": "#ef4444", "order": 7},
+    # 2026-07 fix: split out from IN_COMMITTEE. Automatic referral is the
+    # default first step for virtually every bill (see bill_stage.py's
+    # module docstring) — it isn't evidence anyone did anything with it,
+    # and collapsing it into the same bucket as a genuine hearing/markup
+    # made "in committee" (and, downstream, Legislative Effectiveness's
+    # stage-2 credit) mean almost nothing: live audit found one senator's
+    # sponsored-bills summary reading "135 bills, 123 advancing" purely
+    # because nearly all of them simply hadn't died yet.
+    "REFERRED":         {"name": "Referred to Committee", "color": "#60a5fa", "order": 2},
+    "IN_COMMITTEE":     {"name": "In Committee",       "color": "#3b82f6", "order": 3},
+    "PASSED_CHAMBER":   {"name": "Passed Chamber",     "color": "#8b5cf6", "order": 4},
+    "IN_OTHER_CHAMBER": {"name": "In Other Chamber",   "color": "#f59e0b", "order": 5},
+    "TO_PRESIDENT":     {"name": "To President",       "color": "#ec4899", "order": 6},
+    "ENACTED":          {"name": "Enacted",            "color": "#00ff41", "order": 7},
+    "VETOED":           {"name": "Vetoed",             "color": "#ef4444", "order": 8},
 }
 
 # Derived from BILL_STAGES's keys rather than listed separately, so a code

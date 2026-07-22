@@ -9,6 +9,10 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
+from app.pipeline.fetch.congress_legislators import (
+    fetch_bioguide_to_fec_ids,
+    select_fec_id_for_office,
+)
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S, fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 from app.time_utils import utcnow
@@ -60,9 +64,20 @@ async def _fetch_with_retry(
     return resp.json() if resp is not None else None
 
 
+def _fec_first_name(c_name: str) -> str:
+    """FEC's `name` field is formatted "LAST, FIRST MIDDLE ..." — returns
+    just the first-name token, or "" if the field has no comma at all
+    (unexpected format; safely matches nothing rather than guessing)."""
+    _, sep, rest = c_name.partition(",")
+    if not sep:
+        return ""
+    parts = rest.strip().split()
+    return parts[0] if parts else ""
+
+
 async def find_candidate(
     client: httpx.AsyncClient, db: Session, name: str, state: str,
-    office: str = "S", district: str | None = None,
+    office: str = "S", district: str | None = None, bioguide_id: str | None = None,
 ) -> dict | None:
     """Search for a candidate in FEC data.
 
@@ -71,6 +86,15 @@ async def find_candidate(
         state: Two-letter state code
         office: "S" for Senate, "H" for House
         district: Two-digit district code (House only)
+        bioguide_id: When provided, checked FIRST against the
+            congress-legislators bioguide->FEC crosswalk (see
+            congress_legislators.py) — an authoritative ID match with no
+            name-matching guesswork at all, immune to the next nickname
+            or legal-name variant nobody's added to the fallback table
+            below yet. The name-based search only runs when this misses
+            (no bioguide_id given, or the member isn't in that crosswalk
+            — e.g. a brand-new special-election winner not yet added
+            upstream).
 
     Returns:
         Best matching candidate record, or None.
@@ -80,6 +104,15 @@ async def find_candidate(
     cached = api_cache_get(db, "fec", cache_key)
     if cached is not None:
         return cached
+
+    if bioguide_id:
+        crosswalk = await fetch_bioguide_to_fec_ids(client, db)
+        fec_ids = crosswalk.get(bioguide_id)
+        fec_id = select_fec_id_for_office(fec_ids, office) if fec_ids else None
+        if fec_id:
+            match = {"candidate_id": fec_id}
+            api_cache_set(db, "fec", cache_key, match)
+            return match
 
     name_parts = name.split()
     last_name = name_parts[-1] if name_parts else name
@@ -127,6 +160,37 @@ async def find_candidate(
         if all(part.upper() in c_name for part in name_parts):
             match = c
             break
+
+    if match is None:
+        # 2026-07 fix: the strict all-parts check above requires every
+        # token of our stored name — including middle initials with their
+        # punctuation — to literally appear in FEC's name string, but FEC
+        # files under the legal format: "James E. Risch" never matches
+        # FEC's unpunctuated "RISCH, JAMES E". Audited live against the
+        # FEC API: 28 of 100 sitting senators had zero donor/committee
+        # data from this class of false negative, flooring their funding
+        # scores at score_calculator's neutral-50 default — not
+        # "genuinely unmeasurable," just never fetched.
+        #
+        # Fall back to last-name + EXACT first-name — still rejects a
+        # same-surname different person (e.g. "Darline Graham" vs. FEC's
+        # "GRAHAM, LINDSEY O"), which is the actual misattribution risk
+        # this function guards against; the middle name is what stops
+        # mattering. Deliberately NO nickname aliasing here ("Bill" ->
+        # WILLIAM): nickname resolution is the bioguide crosswalk's job
+        # (checked first, covers every sitting member — see
+        # congress_legislators.py), and a hand-maintained alias table
+        # would silently miss the next new nickname anyway. A member both
+        # missing from the crosswalk AND FEC-filed under a different
+        # first name than we store gets no FEC data until the crosswalk
+        # picks them up — correct behavior, not a gap: no guessed
+        # attribution is better than a plausible-but-unverified one.
+        our_first, our_last = name_parts[0].upper(), name_parts[-1].upper()
+        for c in results:
+            c_name = (c.get("name") or "").upper()
+            if our_last in c_name and our_first == _fec_first_name(c_name):
+                match = c
+                break
 
     if match is None:
         # Don't fall back to the top same-surname/state/office hit — that
