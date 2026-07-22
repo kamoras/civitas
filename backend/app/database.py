@@ -187,6 +187,19 @@ def _migrate_columns() -> None:
         ("key_votes", "pro_business_vote"),
         ("key_votes", "affected_industries"),
         ("senators", "punk_nickname"),
+        # 2026-07 incident: #215 removed Independence/Follow-Through from
+        # the President model, but never added the matching drops here —
+        # the two columns stayed in the live schema as NOT NULL, so any
+        # INSERT built from the current (post-#215) seed_presidents code,
+        # which no longer supplies them, violated the constraint. Harmless
+        # on a database that already has presidents rows (this only
+        # matters for a fresh INSERT), but fatal — a startup-time crash,
+        # not just a failed request — the moment presidents ever needs to
+        # re-seed: confirmed live when the table had been emptied by an
+        # unrelated reset_all_data() call and a routine backend restart
+        # then crash-looped on this exact constraint instead of reseeding.
+        ("presidents", "score_independence"),
+        ("presidents", "score_follow_through"),
     ]
 
     with engine.begin() as conn:
