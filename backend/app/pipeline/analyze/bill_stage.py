@@ -30,6 +30,27 @@ and read off which (type, actionCode) pairs actually occur as the *latest*
 action (see PR discussion). Codes not in the table fall back to a
 type + text check, and failing that, to _FALLBACK_STAGE — never a
 confident wrong answer.
+
+REFERRED vs. IN_COMMITTEE (2026-07 fix)
+----------------------------------------
+Being referred to committee is the automatic, universal first step for
+essentially every bill — Congress.gov logs it (often bundled with the
+introduction itself, e.g. the Senate's "Read twice and referred to the
+Committee on X") within days of introduction, before any human has done
+anything with the bill at all. A live audit of production data confirmed
+this empirically: every one of a sample of Senate bills stuck at what
+used to be classified IN_COMMITTEE had exactly two actions ever —
+"Introduced in Senate" and the automatic referral — nothing else.
+Treating that the same as a bill that actually got a hearing, a markup,
+or was reported out of committee (real, non-automatic institutional
+engagement) collapsed a meaningful distinction: a sponsor with 100 bills
+that all just sit where they were automatically dropped looks identical,
+under the old single IN_COMMITTEE bucket, to one whose bills are
+genuinely getting worked. REFERRED now captures the former (no credit
+beyond bare introduction — see score_calculator.py's _LES_STAGE_ORDER);
+IN_COMMITTEE is reserved for confirmed real committee action: a hearing,
+a markup, being ordered reported, discharged, or placed on a calendar
+(which only happens once committee has already reported the bill out).
 """
 
 from app.config_definitions import BillStage
@@ -45,9 +66,10 @@ _ACTION_CODE_STAGE: dict[str, BillStage] = {
     "10000": BillStage.INTRODUCED,      # Introduced in Senate
     "Intro-H": BillStage.INTRODUCED,    # Introduced in House (House-system code)
     "B00100": BillStage.INTRODUCED,     # Sponsor introductory remarks on measure
-    # Committee
-    "H11100": BillStage.IN_COMMITTEE,   # Referred to committee
-    "H11000": BillStage.IN_COMMITTEE,   # Referred to subcommittee
+    # Referred — automatic, universal, not evidence of real engagement.
+    "H11100": BillStage.REFERRED,       # Referred to committee
+    "H11000": BillStage.REFERRED,       # Referred to subcommittee
+    # Genuine committee action
     "H12410": BillStage.IN_COMMITTEE,   # Placed on the Union Calendar
     "H19000": BillStage.IN_COMMITTEE,   # Ordered to be reported (by yeas/nays)
     "H21000": BillStage.IN_COMMITTEE,   # Subcommittee hearings held
@@ -95,8 +117,19 @@ def _stage_from_type_and_text(action_type: str | None, text: str) -> BillStage |
         # referral into one action with no actionCode, e.g. "Read twice
         # and referred to the Committee on ..." or "Received in the
         # Senate and Read twice and referred to the Committee on ...".
-        return BillStage.IN_COMMITTEE if "referred" in text_lower else BillStage.INTRODUCED
+        # REFERRED, not IN_COMMITTEE (2026-07 fix, see module docstring):
+        # this is the automatic first step, never evidence of real
+        # committee engagement — a live audit found Senate bills whose
+        # ENTIRE action history was "Introduced in Senate" followed by
+        # exactly this, nothing else, ever.
+        return BillStage.REFERRED if "referred" in text_lower else BillStage.INTRODUCED
     if action_type in ("Committee", "Calendars"):
+        # Unlike IntroReferral above, a bare automatic referral is never
+        # typed "Committee" or "Calendars" in practice (confirmed against
+        # real Senate action data) — every actual occurrence of either is
+        # genuine post-referral action: a committee reporting the bill
+        # out, being discharged, or being placed on a calendar (which can
+        # only happen once committee has already reported it out).
         return BillStage.IN_COMMITTEE
     return None
 
@@ -108,12 +141,13 @@ def _stage_from_type_and_text(action_type: str | None, text: str) -> BillStage |
 # short-circuit, or a later BecameLaw action).
 _STAGE_RANK: dict[BillStage, int] = {
     BillStage.INTRODUCED: 1,
-    BillStage.IN_COMMITTEE: 2,
-    BillStage.PASSED_CHAMBER: 3,
-    BillStage.IN_OTHER_CHAMBER: 4,
-    BillStage.TO_PRESIDENT: 5,
-    BillStage.VETOED: 6,
-    BillStage.ENACTED: 7,
+    BillStage.REFERRED: 2,
+    BillStage.IN_COMMITTEE: 3,
+    BillStage.PASSED_CHAMBER: 4,
+    BillStage.IN_OTHER_CHAMBER: 5,
+    BillStage.TO_PRESIDENT: 6,
+    BillStage.VETOED: 7,
+    BillStage.ENACTED: 8,
 }
 
 
@@ -157,7 +191,7 @@ def classify_bill_stage_from_actions(actions: list[dict], is_law: bool = False) 
             continue
         if stage == BillStage.PASSED_CHAMBER:
             passed_seen = True
-        elif passed_seen and stage in (BillStage.INTRODUCED, BillStage.IN_COMMITTEE):
+        elif passed_seen and stage in (BillStage.INTRODUCED, BillStage.REFERRED, BillStage.IN_COMMITTEE):
             stage = BillStage.IN_OTHER_CHAMBER
         if best is None or _STAGE_RANK[stage] > _STAGE_RANK[best]:
             best = stage

@@ -1298,6 +1298,7 @@ class TestLegislativeEffectiveness:
 
         expected = {
             BillStage.INTRODUCED.value: 1,
+            BillStage.REFERRED.value: 1,
             BillStage.IN_COMMITTEE.value: 2,
             BillStage.PASSED_CHAMBER.value: 3,
             BillStage.IN_OTHER_CHAMBER.value: 3,
