@@ -90,3 +90,40 @@ class TestTypeAndTextFallback:
     def test_type_and_text_fallback(self, action_type, action_code, text, expected):
         actions = [_action(action_type, action_code, text)]
         assert classify_bill_stage_from_actions(actions) == expected
+
+
+from app.config_definitions import BillStage
+
+
+class TestMaxOverHistory:
+    """2026-07 fix: stage = furthest reached, not latest action."""
+
+    def test_second_chamber_referral_does_not_regress(self):
+        # Newest-first: passed the House, then referred in the Senate —
+        # the normal path for EVERY bill that passes its origin chamber.
+        # Latest-action classification regressed this to IN_COMMITTEE,
+        # docking LES credit exactly when the bill advanced.
+        actions = [
+            {"type": "IntroReferral",
+             "text": "Received in the Senate and Read twice and referred to the Committee on Finance."},
+            {"actionCode": "8000", "type": "Floor", "text": "Passed/agreed to in House."},
+            {"actionCode": "H11100", "type": "IntroReferral", "text": "Referred to committee."},
+            {"actionCode": "1000", "type": "IntroReferral", "text": "Introduced in House"},
+        ]
+        assert classify_bill_stage_from_actions(actions) == BillStage.IN_OTHER_CHAMBER
+
+    def test_failed_override_does_not_regress_veto(self):
+        actions = [
+            {"type": "Floor", "text": "Two-thirds not in favor, override of the veto failed."},
+            {"type": "President", "text": "Vetoed by President."},
+            {"actionCode": "28000", "type": "President", "text": "Presented to President."},
+            {"actionCode": "17000", "type": "Floor", "text": "Passed/agreed to in Senate."},
+        ]
+        assert classify_bill_stage_from_actions(actions) == BillStage.VETOED
+
+    def test_referral_before_passage_stays_committee(self):
+        actions = [
+            {"actionCode": "H11100", "type": "IntroReferral", "text": "Referred to committee."},
+            {"actionCode": "1000", "type": "IntroReferral", "text": "Introduced in House"},
+        ]
+        assert classify_bill_stage_from_actions(actions) == BillStage.IN_COMMITTEE

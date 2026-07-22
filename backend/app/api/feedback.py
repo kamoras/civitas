@@ -66,19 +66,41 @@ class FeedbackResponse(CamelModel):
     issue_url: str | None = None
 
 
+def _fence(text: str) -> str:
+    """Wrap untrusted visitor text in a fenced code block so GitHub renders
+    it as literal text — no @mention notifications, no clickable phishing
+    links, no load-on-render image beacons in the maintainer's own issue
+    tracker. The fence is one backtick longer than the longest backtick run
+    in the text so the visitor can't close it early to break out.
+    """
+    import re
+    longest = max((len(m) for m in re.findall(r"`+", text)), default=0)
+    fence = "`" * max(3, longest + 1)
+    return f"{fence}\n{text}\n{fence}"
+
+
+def _sanitize_field(text: str) -> str:
+    """Neutralize @mentions and #issue-refs in a short single-line field
+    (page URL, contact) that is shown inline rather than fenced."""
+    return text.replace("@", "@​").replace("#", "#​")
+
+
 def _build_issue_body(body: FeedbackRequest) -> str:
     lines = [
-        body.message,
+        _fence(body.message),
         "",
         "---",
         f"**Category:** {_CATEGORY_LABELS.get(body.category, body.category)}",
     ]
     if body.page_url:
-        lines.append(f"**Page:** {body.page_url}")
+        lines.append(f"**Page:** {_sanitize_field(body.page_url)}")
     if body.email:
+        # Regex-validated to a real address; its "@" is not at a word
+        # boundary (it follows the local part), so GitHub doesn't render it
+        # as a mention — shown verbatim so the contact stays usable.
         lines.append(f"**Contact:** {body.email}")
     lines.append("")
-    lines.append("_Submitted via the site feedback form._")
+    lines.append("_Submitted via the site feedback form. Message body is quoted verbatim; treat links with caution._")
     return "\n".join(lines)
 
 

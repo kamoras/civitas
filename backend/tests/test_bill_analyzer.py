@@ -814,3 +814,44 @@ class TestUninformativeNameClassification:
         assert result["overall"] in ("D", "bipartisan"), (
             f"ARMAS Act aligned as '{result['overall']}', expected 'D' or 'bipartisan'"
         )
+
+
+class TestPromiseVoteScaleFix:
+    """2026-07 fix: promises are per-area, vote-scaled, and can only fill
+    areas with no vote data — never dilute the vote signal."""
+
+    def test_promises_cannot_override_vote_signal(self, monkeypatch):
+        from app.pipeline.analyze import party_platform as pp
+
+        votes = []
+        for area in ("HEALTHCARE", "TAXES"):
+            for _ in range(4):
+                votes.append({
+                    "vote": "Yea", "policyArea": area, "partyLeaning": "D",
+                    "policyAreas": [],
+                })
+        record = {"keyVotes": votes, "recentVotes": []}
+
+        # Promise-derived alignments: near-zero entries for the SAME areas
+        # the votes already cover (must be ignored), plus one new area
+        # (must extend coverage).
+        promise_out = [
+            {"area": "HEALTHCARE", "alignment": "bipartisan", "strength": 0.0, "lean": 0.01},
+            {"area": "TAXES", "alignment": "bipartisan", "strength": 0.0, "lean": -0.02},
+            {"area": "GUNS", "alignment": "R", "strength": 0.2, "lean": 0.2},
+        ]
+        monkeypatch.setattr(pp, "_alignments_from_promises", lambda p: promise_out)
+
+        result = pp.analyze_partisan_depth(
+            promises=[{"promiseText": "a promise long enough to count"}],
+            senator_party="D",
+            voting_record=record,
+            ideology_score=None,
+        )
+        # Two vote areas (lean -1.0 each) + one promise-only area (+0.2):
+        # mean = (-1 - 1 + 0.2) / 3 = -0.6 — the strong vote signal
+        # survives; under the old per-promise averaging the same senator
+        # with many near-zero promise margins read as "centrist".
+        assert result["totalPositions"] == 3
+        assert result["overallLean"] < -0.5
+        assert result["overallParty"] == "D"

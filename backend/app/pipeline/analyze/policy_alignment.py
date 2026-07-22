@@ -89,7 +89,7 @@ INDUSTRY_ANCHORS: dict[str, str] = {
     "TRANSPORT": "transportation airline aviation railroad shipping trucking logistics",
     "CONSTRUCTION": "construction building contractor engineering infrastructure",
     "LAWYERS": "law firm attorney legal litigation counsel",
-    "GUNS": "firearm gun rifle ammunition weapons second amendment NRA",
+    "GUNS": "firearm gun rifle ammunition weapons second amendment gun safety NRA Everytown",
     "TOBACCO": "tobacco cigarette vaping nicotine smoking",
     "CRYPTO": "cryptocurrency bitcoin blockchain digital currency",
     "PRIVATE_PRISON": "prison corrections incarceration detention correctional",

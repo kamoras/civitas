@@ -116,9 +116,16 @@ INDUSTRY_DESCRIPTIONS: dict[str, str] = {
         "Akin Gump Squire Patton Boggs BGR Group Invariant LLC Holland Knight lobbying firm"
     ),
     "GAMBLING": "casino gambling gaming sports betting lottery wagering Las Vegas Sands MGM Wynn Caesars",
+    # Both sides of firearms-issue advocacy are anchored (2026-07 fix):
+    # anchoring only the gun-rights orgs made the donor-vote influence
+    # penalty reachable for one side's donor base on gun votes and
+    # structurally unreachable for the other's (gun-safety org money fell
+    # to POLITICAL/OTHER and never matched the GUNS policy area).
     "GUNS": (
-        "firearm gun rifle ammunition weapons manufacturer second amendment. "
-        "NRA National Rifle Association Gun Owners of America Smith & Wesson Remington"
+        "firearm gun rifle ammunition weapons manufacturer second amendment "
+        "gun safety gun violence prevention. "
+        "NRA National Rifle Association Gun Owners of America Smith & Wesson "
+        "Remington Everytown for Gun Safety Giffords Brady Campaign"
     ),
     "TOBACCO": "tobacco cigarette vaping e-cigarette nicotine smoking Altria Philip Morris Reynolds JUUL",
     "CRYPTO": "cryptocurrency bitcoin blockchain digital currency decentralized finance web3 Coinbase Binance",

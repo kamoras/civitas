@@ -17,6 +17,7 @@ Notes on interpretation:
   (a few hundred unique names) are ever queried.
 """
 
+import hashlib
 import logging
 
 import httpx
@@ -68,32 +69,49 @@ async def fetch_lobbying_spend(
     if len(org_key) < 3:
         return 0.0
 
-    cache_key = f"lda-spend-{year}-{org_key[:80]}"
+    # Include a stable hash of the full org key so two different orgs that
+    # share an 80-char prefix (e.g. federal vs. state PAC variants of one
+    # sponsor) can't collide onto one cached spend figure.
+    key_hash = hashlib.sha256(org_key.encode()).hexdigest()[:12]
+    cache_key = f"lda-spend-{year}-{org_key[:60]}-{key_hash}"
     cached = api_cache_get(db, "lda", cache_key)
     if cached is not None:
         return float(cached.get("total", 0.0))
 
-    await _rate_limiter.acquire()
+    # Follow pagination: a heavy-lobbying client can file dozens to
+    # low-hundreds of filings a year (multiple outside firms × quarterly
+    # reports + in-house). Summing only the first page systematically
+    # UNDERcounted exactly the biggest spenders — and the figure is shown
+    # verbatim in user-facing text. Bounded to keep one pathological org
+    # from stalling the enrichment loop; the cap is logged if hit so a
+    # silent truncation can't masquerade as a complete total.
+    _MAX_PAGES = 10
+    total = 0.0
+    url: str | None = f"{LDA_API_BASE}/filings/"
+    params: dict | None = {"client_name": org_key, "filing_year": year, "page_size": 25}
+    pages = 0
     try:
-        resp = await client.get(
-            f"{LDA_API_BASE}/filings/",
-            params={
-                "client_name": org_key,
-                "filing_year": year,
-                "page_size": 25,
-            },
-            timeout=DEFAULT_FETCH_TIMEOUT_S,
-        )
-        if resp.status_code == 429:
-            logger.warning("LDA rate limited for %s — skipping (uncached)", org_key)
-            return 0.0
-        resp.raise_for_status()
-        data = resp.json()
+        while url and pages < _MAX_PAGES:
+            await _rate_limiter.acquire()
+            resp = await client.get(url, params=params, timeout=DEFAULT_FETCH_TIMEOUT_S)
+            if resp.status_code == 429:
+                logger.warning("LDA rate limited for %s — skipping (uncached)", org_key)
+                return 0.0
+            resp.raise_for_status()
+            data = resp.json()
+            total += _sum_filing_amounts(data.get("results", []))
+            url = data.get("next")  # absolute URL from the API, or None
+            params = None  # `next` already encodes the query
+            pages += 1
+        if url and pages >= _MAX_PAGES:
+            logger.warning(
+                "LDA spend for %s (%d) hit the %d-page cap — total may be a lower bound",
+                org_key, year, _MAX_PAGES,
+            )
     except Exception as exc:
         logger.warning("LDA fetch failed for %s: %s", org_key, exc)
         return 0.0
 
-    total = _sum_filing_amounts(data.get("results", []))
     api_cache_set(db, "lda", cache_key, {"total": round(total, 2)})
     return total
 

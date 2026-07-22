@@ -155,3 +155,24 @@ class TestRealCacheKeyStillCaches:
             )
         assert first == {"result": "A"}
         assert second == {"result": "B"}
+
+
+class TestExtractJsonRobustness:
+    def test_stray_bracket_prefix_before_object(self):
+        from app.pipeline.analyze.ollama_client import extract_json
+        out = extract_json('[Note] Here is the result: {"summary": "ok", "keyPoints": ["a"]}')
+        assert out == {"summary": "ok", "keyPoints": ["a"]}
+
+    def test_unterminated_think_block_stripped(self):
+        from app.pipeline.analyze.ollama_client import extract_json
+        # A length-truncated reasoning trace never closes its <think> tag.
+        out = extract_json('<think>reasoning that got cut off {"a": 1')
+        assert out is None  # no complete JSON, but doesn't crash
+
+    def test_plain_object_still_parses(self):
+        from app.pipeline.analyze.ollama_client import extract_json
+        assert extract_json('{"x": 1}') == {"x": 1}
+
+    def test_array_still_parses(self):
+        from app.pipeline.analyze.ollama_client import extract_json
+        assert extract_json('prefix [1, 2, 3] suffix') == [1, 2, 3]

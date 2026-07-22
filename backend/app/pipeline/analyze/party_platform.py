@@ -92,6 +92,18 @@ ENTITY_PARTY_ALIGNMENT = "party_alignment"
 # accumulates real congressional bills with known party_leaning, the Bayesian
 # posterior centroids converge toward the observed data (see _bayesian_blend).
 
+# Seed content refreshed 2026-07 (platform review round 2, P1-P7): each
+# party's positions are written in that party's OWN framing (no plank is
+# phrased the way its opponents would describe it), updated to the
+# 2024-26 platforms (the prior text was a ~2019-20 snapshot with several
+# inverted-by-now positions), and an ABORTION area was added — the most
+# party-predictive issue domain of this era was previously absent from
+# the entire construct space. Seeds remain the Bayesian PRIOR only:
+# sponsor-party supervised refinement and vote-tally blending still
+# correct residual content errors as real bill data accumulates, and the
+# pipeline's analysis-code fingerprint clears cached classifications so
+# these take effect cleanly. Validated downstream by ground_truth.py's
+# reference ranges + population-stdev floors on the next full run.
 R_PLATFORM_POSITIONS: dict[str, str] = {
     "TAXES": (
         "reduce taxes, cut tax rates, lower corporate tax, repeal estate tax, "
@@ -99,7 +111,7 @@ R_PLATFORM_POSITIONS: dict[str, str] = {
         "preserve low tax rates, supply-side economics, reduce deficit through cuts"
     ),
     "HEALTHCARE": (
-        "market-based healthcare reform, health savings accounts, repeal ACA mandates, "
+        "market-based healthcare reform, health savings accounts, price transparency in healthcare, "
         "reduce healthcare regulation, competition across state lines, "
         "voluntary private insurance, patient choice, "
         "reduce prescription drug regulation, tort reform"
@@ -111,11 +123,14 @@ R_PLATFORM_POSITIONS: dict[str, str] = {
         "withdraw from climate agreements, support fossil fuel industry"
     ),
     "DEFENSE": (
-        "increase defense spending, strong military readiness, missile defense, "
-        "support veterans benefits, military modernization, "
-        "maintain defense budget, strengthen national security, "
-        "counter China and Russia, expand military capability, "
-        "support arms sales to allies, streamline defense exports"
+        "peace through strength, increase defense spending, strong military "
+        "readiness, missile defense, support veterans benefits, military "
+        "modernization, strengthen national security, "
+        "prioritize countering China in the Indo-Pacific, "
+        "demand NATO allies pay their fair share of defense, "
+        "skeptical of open-ended foreign military aid commitments, "
+        "support arms sales to allies, streamline defense exports, "
+        "border security as national security"
     ),
     "GUNS": (
         "protect second amendment rights, defend gun ownership and access to firearms, "
@@ -149,10 +164,12 @@ R_PLATFORM_POSITIONS: dict[str, str] = {
     "JUSTICE": (
         "tough on crime, support law enforcement funding, back the blue, "
         "mandatory minimum sentences, support death penalty, "
-        "keep cash bail, expand executive authority"
+        "oppose cashless bail policies, appoint constitutionalist judges, "
+        "election integrity safeguards, voter ID requirements, "
+        "secure elections and accurate voter rolls"
     ),
     "TRADE": (
-        "fair trade enforcement, tariffs on China, renegotiate trade deals, "
+        "fair trade enforcement, tariffs to protect American industry, reciprocal tariffs, renegotiate trade deals, "
         "protect domestic manufacturing, trade reciprocity, "
         "bilateral trade agreements, support defense exports to allies"
     ),
@@ -162,14 +179,23 @@ R_PLATFORM_POSITIONS: dict[str, str] = {
         "block-grant federal programs to states, self-sufficiency over dependency"
     ),
     "LABOR": (
-        "right-to-work legislation, reduce union power, "
+        "right-to-work legislation, worker freedom to choose union membership, "
         "market-determined wages, reduce workplace regulation, "
         "voluntary employer benefits, support gig economy flexibility"
     ),
+    "ABORTION": (
+        "protect unborn life, pro-life protections for the unborn, "
+        "restrict late-term abortion, oppose taxpayer funding of abortion, "
+        "support the Hyde Amendment, parental notification requirements, "
+        "support pregnancy resource centers, "
+        "conscience protections for healthcare providers"
+    ),
     "TECH": (
-        "reduce tech regulation, maintain platform liability protections, "
-        "support innovation, limit government digital overreach, "
-        "reduce data privacy mandates, support AI development"
+        "hold Big Tech accountable, reform Section 230 platform liability, "
+        "combat online censorship of political speech, "
+        "antitrust scrutiny of dominant tech platforms, "
+        "protect children online, support American AI leadership, "
+        "support innovation, oppose government-directed content moderation"
     ),
 }
 
@@ -188,16 +214,17 @@ D_PLATFORM_POSITIONS: dict[str, str] = {
     ),
     "ENVIRONMENT": (
         "climate action, clean energy investment, emissions reduction targets, "
-        "strengthen EPA enforcement, rejoin Paris Agreement, "
-        "Green New Deal, renewable energy subsidies, "
-        "environmental justice, ban new fossil fuel leases, "
+        "strengthen EPA enforcement, defend clean energy tax credits, "
+        "renewable energy incentives, methane emissions regulation, "
+        "environmental justice, limit new fossil fuel leases, "
         "electric vehicle incentives"
     ),
     "DEFENSE": (
-        "responsible military spending, diplomacy first, "
-        "reduce nuclear weapons, support veterans, "
-        "oppose unnecessary military interventions, "
-        "close overseas bases, end forever wars, "
+        "support NATO and defense alliances, "
+        "support Ukraine's defense against Russian invasion, "
+        "enforce sanctions on Russia, honor security commitments to allies, "
+        "responsible military spending with oversight, diplomacy alongside "
+        "strength, arms control agreements, support veterans, "
         "military sexual assault reform, "
         "regulate arms sales and exports, arms trade oversight, "
         "human rights conditions on military transfers"
@@ -232,12 +259,13 @@ D_PLATFORM_POSITIONS: dict[str, str] = {
         "renewable energy mandates, solar and wind investment, "
         "phase out fossil fuel subsidies, clean energy jobs, "
         "modernize power grid, community solar programs, "
-        "support Green New Deal, oppose new pipelines"
+        "clean energy manufacturing incentives, oppose new pipelines"
     ),
     "JUSTICE": (
         "criminal justice reform, police reform, end qualified immunity, "
         "ban chokeholds, reduce mandatory minimums, "
-        "expand voting rights, abolish private prisons, "
+        "expand voting rights, protect access to the ballot, "
+        "early voting and vote by mail access, abolish private prisons, "
         "end cash bail, decriminalize marijuana"
     ),
     "TRADE": (
@@ -248,7 +276,7 @@ D_PLATFORM_POSITIONS: dict[str, str] = {
     ),
     "WELFARE": (
         "expand social safety net, increase SNAP benefits, "
-        "expand Social Security, universal basic income, "
+        "expand Social Security, affordable childcare, "
         "increase minimum wage, expand housing assistance, "
         "child tax credit expansion, paid family leave"
     ),
@@ -257,6 +285,14 @@ D_PLATFORM_POSITIONS: dict[str, str] = {
         "expand collective bargaining, paid family leave mandate, "
         "strengthen OSHA, close gender pay gap, "
         "expand overtime protections, gig worker protections"
+    ),
+    "ABORTION": (
+        "protect abortion access and reproductive freedom, "
+        "restore and codify Roe v. Wade protections, "
+        "defend access to contraception and IVF, "
+        "oppose state and national abortion bans, "
+        "protect patients and doctors from criminalization, "
+        "repeal the Hyde Amendment, fund family planning services"
     ),
     "TECH": (
         "regulate big tech, antitrust enforcement, "
@@ -824,7 +860,20 @@ def analyze_partisan_depth(
     """
     area_alignments = _alignments_from_votes(voting_record or {})
 
-    promise_alignments = _alignments_from_promises(promises or [])
+    # Promises are the SECONDARY signal (docstring: they "enrich the
+    # profile but cannot override the vote signal") — implemented
+    # literally (2026-07 fix): a promise-derived area alignment is used
+    # only for areas with NO vote-derived alignment, extending coverage
+    # without ever outvoting behavioral observations. Previously
+    # per-promise entries (one per promise, raw cosine-margin leans)
+    # were appended alongside per-area vote entries and averaged
+    # together, so many near-zero promise margins numerically dragged a
+    # reliably partisan voting record toward "centrist".
+    vote_areas = {a["area"] for a in area_alignments}
+    promise_alignments = [
+        a for a in _alignments_from_promises(promises or [])
+        if a["area"] not in vote_areas
+    ]
     if promise_alignments:
         area_alignments.extend(promise_alignments)
 
@@ -1030,7 +1079,21 @@ def _alignments_from_votes(voting_record: dict) -> list[dict]:
 
 
 def _alignments_from_promises(promises: list[dict]) -> list[dict]:
-    """Derive partisan alignments from campaign promise text via embedding similarity."""
+    """Derive per-policy-area partisan alignments from campaign promise text
+    via embedding similarity.
+
+    Returns ONE aggregated entry per policy area (2026-07 fix), on the same
+    [-1, +1] lean scale as _alignments_from_votes. Previously this returned
+    one entry PER PROMISE with `lean` set to the raw embedding cosine margin
+    (empirically |margin| <~ 0.15) — two incompatibilities that together
+    let a senator with 25 promises and 4 vote-areas have a reliably
+    partisan voting record (per-area leans around +-0.8) numerically
+    dragged toward 0 by 25 near-zero raw margins in one unweighted average,
+    reading "centrist". Each promise's margin is rescaled through the same
+    0.15 saturation the strength field already used (so scaled lean =
+    signed strength), then averaged within its area; the alignment/strength
+    labels use the same |lean| < 0.10 bipartisan convention as the vote
+    side so the two sources are directly comparable."""
     if not promises:
         return []
 
@@ -1040,7 +1103,7 @@ def _alignments_from_promises(promises: list[dict]) -> list[dict]:
     from app.pipeline.analyze.bill_analyzer import classify_policy_area
     model = get_embedding_model()
 
-    alignments: list[dict] = []
+    area_leans: dict[str, list[float]] = {}
 
     for p in promises:
         text = p.get("promiseText", "")
@@ -1068,21 +1131,29 @@ def _alignments_from_promises(promises: list[dict]) -> list[dict]:
             d_score = float(np.dot(query_emb, _platform_cache.d_aggregate))
 
         margin = r_score - d_score
-        if abs(margin) < 0.03:
+        # Rescale the raw cosine margin onto the vote-lean [-1, +1] scale
+        # via the same 0.15 saturation the old per-promise strength used.
+        scaled_lean = max(-1.0, min(margin / 0.15, 1.0))
+        area_leans.setdefault(policy_area, []).append(scaled_lean)
+
+    alignments: list[dict] = []
+    for area, leans_list in area_leans.items():
+        lean = sum(leans_list) / len(leans_list)
+        # Same alignment/strength conventions as _alignments_from_votes.
+        if abs(lean) < 0.10:
             alignment = "bipartisan"
             strength = 0.0
-        elif margin > 0:
+        elif lean > 0:
             alignment = "R"
-            strength = min(margin / 0.15, 1.0)
+            strength = min(abs(lean), 1.0)
         else:
             alignment = "D"
-            strength = min(abs(margin) / 0.15, 1.0)
-
+            strength = min(abs(lean), 1.0)
         alignments.append({
-            "area": policy_area,
+            "area": area,
             "alignment": alignment,
             "strength": round(strength, 2),
-            "lean": round(margin, 4),
+            "lean": round(lean, 4),
         })
 
     return alignments
@@ -1105,6 +1176,7 @@ _CATEGORY_POLICY_MAP: dict[str, str] = {
     "WELFARE": "WELFARE",
     "INFRASTRUCTURE": "WELFARE",
     "CIVIL RIGHTS": "JUSTICE",
+    "ABORTION": "ABORTION",
     "FOREIGN POLICY": "DEFENSE",
 }
 

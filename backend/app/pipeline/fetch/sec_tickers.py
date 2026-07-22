@@ -25,17 +25,26 @@ TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 _HEADERS = {"User-Agent": "Civitas civic-transparency-platform contact@civitas-research.org"}
 
 _ticker_map_cache: dict[str, str] | None = None
+_ticker_map_cache_at: float = 0.0
+# Re-consult the TTL'd DB cache after this long even though the module
+# global is populated — the stock pipeline runs inside the long-lived
+# scheduler process, so a process-lifetime global would freeze the map
+# until restart, resolving new IPOs / ticker changes to nothing (trades
+# land UNCLASSIFIED) indefinitely. Matches the DB cache's own 7-day TTL.
+_TICKER_MAP_MAX_AGE_S = 24 * 7 * 3600
 
 
 async def _fetch_ticker_map(client: httpx.AsyncClient, db: Session) -> dict[str, str]:
     """Fetch + cache the full ticker -> company name map (all US-listed issuers)."""
-    global _ticker_map_cache
-    if _ticker_map_cache is not None:
+    global _ticker_map_cache, _ticker_map_cache_at
+    import time as _time
+    if _ticker_map_cache is not None and (_time.time() - _ticker_map_cache_at) < _TICKER_MAP_MAX_AGE_S:
         return _ticker_map_cache
 
     cached = api_cache_get(db, "sec_tickers", "company_tickers", max_age_hours=24 * 7)
     if cached is not None:
         _ticker_map_cache = cached
+        _ticker_map_cache_at = _time.time()
         return cached
 
     try:
@@ -54,6 +63,7 @@ async def _fetch_ticker_map(client: httpx.AsyncClient, db: Session) -> dict[str,
     }
     api_cache_set(db, "sec_tickers", "company_tickers", ticker_map)
     _ticker_map_cache = ticker_map
+    _ticker_map_cache_at = _time.time()
     return ticker_map
 
 

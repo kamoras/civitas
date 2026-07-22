@@ -370,7 +370,7 @@ Every hour at :15
        │         Select top 4 clusters (MAX_ISSUES)
        ▼
   5. LLM ───── Per cluster: neutral summary + key facts + citizen actions
-       │         Post-generation title deduplication (cosine_sim > 0.82)
+       │         Post-generation title deduplication (cosine_sim > 0.92)
        ▼
   6. PERSIST ─ Topic-keyed matching: each unique story maps to one permanent
        │         DB row regardless of rank changes or brief displacement.
@@ -381,8 +381,9 @@ Every hour at :15
   7. ENRICH ── ChromaDB semantic search → link related bills/senators
        │         Resolve bill IDs mentioned in article text
        ▼
-  8. MONITORS ─ Detect cross-day recurring topics (similarity > 0.50)
-       │          Create/update NationalMonitor records (min 3 days)
+  8. MONITORS ─ Detect cross-day recurring topics (title similarity ≥ 0.83)
+       │          Create/update NationalMonitor records (min 5 distinct
+       │          days in 14, ≥3 unique sources, LLM significance gate)
        │          Re-merge duplicate monitors (title OR full sim > 0.50)
        ▼
   9. TIMELINE ─ Record daily TimelineEntry
@@ -398,9 +399,7 @@ Every hour at :15
 
 **Why filter at 0.22 cosine similarity?** The policy prototype filter is deliberately permissive. False negatives (dropping a real policy story) are worse than false positives. The LLM step handles borderline cases through its non-partisan framing constraint.
 
-**Why a 3-day monitor threshold?** A topic appearing on 3+ distinct days is structurally different from a one-day news spike — it indicates a developing situation citizens may need to track. A 2-day threshold creates too many ephemeral monitors.
-
-**Why post-LLM title deduplication?** Article clusters with overlapping coverage (different outlets, slightly different angles) can have pre-LLM embedding similarity below the merge threshold (< 0.40), yet the LLM generates near-identical titles for both. A post-generation cosine similarity check at 0.82 on title embeddings catches these cases and drops the duplicate before it reaches the database.
+**Why a 5-day monitor threshold?** A topic appearing in the top issues on 5+ distinct days within two weeks is structurally different from a one-day news spike — it indicates a developing situation citizens may need to track. Shorter thresholds created too many ephemeral monitors.
 
 **Why topic-keyed matching instead of rank-slot matching?** The original design keyed issues by `(date, rank)`. When the same story briefly fell off the top 4 and returned, a new row was created with `bsky_posted_at=None`, triggering a duplicate Bluesky post. Topic-keyed matching (2-day lookback by cosine similarity) ensures the same story always maps to the same row. New articles advance `primary_article_date` and allow a repost; more outlets covering the same event do not.
 

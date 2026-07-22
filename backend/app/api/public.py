@@ -413,24 +413,55 @@ async def search(
     _rl: RateLimit,
     request: Request,
     q: str = Query(..., min_length=2, max_length=200, description="Search query"),
-    chamber: str | None = Query(None, pattern="^(senate|house)$", description="Filter by chamber"),
-    doc_type: str | None = Query(None, description="Document type filter (e.g. bill, lobbying, federal_register)"),
-    politician_id: str | None = Query(None, description="Filter by politician ID"),
+    chamber: str | None = Query(
+        None,
+        pattern="^(?:[Ss]enate|[Hh]ouse|[Ee]xecutive|[Jj]udicial|[Rr]egulatory)$",
+        description="Filter by chamber: senate, house, executive, judicial, or regulatory",
+    ),
+    doc_type: str | None = Query(
+        None,
+        description=(
+            "Document type filter. Valid values: 'Senate Floor Speech', "
+            "'House Floor Speech', 'Executive Order', 'Proclamation', "
+            "'Presidential Memorandum', 'Supreme Court Opinion', 'Final Rule', "
+            "'Proposed Rule', 'Notice'."
+        ),
+    ),
+    politician_id: str | None = Query(None, description="Filter by politician ID (exact match)"),
     limit: int = Query(20, ge=1, le=50, description="Max results"),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
-    """Semantic search over federal documents, bills, and lobbying records."""
+    """Semantic search over government activity documents — floor speeches,
+    presidential actions, Supreme Court opinions, and Federal Register
+    rulemaking (not bill text or lobbying records)."""
+    from app.api.explore import VALID_DOC_TYPES, _CHAMBER_CANONICAL
     from app.pipeline.vector_store import search_explore_documents
+
+    if doc_type is not None and doc_type not in VALID_DOC_TYPES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown doc_type. Valid values: {sorted(VALID_DOC_TYPES)}",
+        )
+    # Normalize chamber to the stored casing (ChromaDB equality is
+    # case-sensitive) so a lowercase filter actually matches.
+    canonical_chamber = _CHAMBER_CANONICAL.get(chamber.lower()) if chamber else None
 
     results = await asyncio.to_thread(
         search_explore_documents,
         query=q,
         n_results=limit,
         doc_type=doc_type,
-        chamber=chamber,
+        chamber=canonical_chamber,
+        politician_id=politician_id,
     )
+    if results is None:
+        return _pub_json(
+            {"query": q, "results": [], "count": 0, "indexEmpty": True},
+            request, max_age=0,
+        )
 
     doc_ids = [r["id"] for r in results if r.get("id")]
+    doc_map: dict = {}
     if doc_ids:
         docs = (
             db.query(
@@ -451,13 +482,7 @@ async def search(
                 result["summary"] = doc.summary or result.get("snippet", "")
                 result["agencyName"] = doc.agency_name or ""
 
-    if politician_id:
-        matching_ids = {
-            row[0]
-            for row in db.query(ExploreDocument.id)
-            .filter(ExploreDocument.id.in_(doc_ids), ExploreDocument.politician_id == politician_id)
-            .all()
-        }
-        results = [r for r in results if r.get("id") in matching_ids]
+    # Drop hits with no surviving DB row (partial-reset orphans).
+    results = [r for r in results if r.get("id") in doc_map]
 
     return _pub_json({"query": q, "results": results[:limit], "count": len(results[:limit])}, request, max_age=CACHE_TTL_SEARCH_S)

@@ -274,11 +274,18 @@ def search_explore_documents(
     n_results: int = 20,
     doc_type: str | None = None,
     chamber: str | None = None,
-) -> list[dict]:
+    politician_id: str | None = None,
+) -> list[dict] | None:
     """Semantic search over explore documents.
 
     Returns list of dicts with id, title, date, doc_type, source,
-    politician_name, politician_id, chamber, distance.
+    politician_name, politician_id, chamber, distance — or None when the
+    index does not exist yet (e.g. after an admin reset, before the next
+    pipeline run), so callers can tell "index not ready" apart from
+    "genuinely no matches" (an empty list). politician_id, when given, is
+    pushed into the vector query rather than post-filtered, so a
+    member-scoped search returns that member's real matches instead of the
+    global top-k intersected down to near-empty.
     """
     client = get_chroma_client()
     model = get_embedding_model()
@@ -287,7 +294,7 @@ def search_explore_documents(
         collection = client.get_collection(name="explore_documents")
     except Exception:
         logger.warning("explore_documents collection not found")
-        return []
+        return None
 
     query_embedding = model.encode([query], prompt_name="query", show_progress_bar=False)[0].tolist()
 
@@ -297,6 +304,8 @@ def search_explore_documents(
         conditions.append({"doc_type": doc_type})
     if chamber:
         conditions.append({"chamber": chamber})
+    if politician_id:
+        conditions.append({"politician_id": politician_id})
     if len(conditions) == 1:
         where_clause = conditions[0]
     elif len(conditions) > 1:
