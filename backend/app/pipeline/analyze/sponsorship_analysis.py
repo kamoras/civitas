@@ -260,10 +260,27 @@ def compute_ideology_scores(
         if row_to_id.get(i) in senator_parties
         and senator_parties[row_to_id[i]] == "R"
     ]
+    # SVD leaves the sign of each singular vector arbitrary, so pin it:
+    # orient the axis so the Republican cohort mean is positive. If there is
+    # no usable R cohort (empty, or a near-zero mean in a party-balanced
+    # projection), fall back to a deterministic anchor — the first
+    # bioguide-sorted member with a non-negligible coordinate — so the axis
+    # orientation is reproducible across environments instead of flipping
+    # with SVD's implementation-defined sign (which would flip the v6.7
+    # position-mismatch discount that reads party_ideology_bounds.json).
+    sign = 0.0
     if r_scores:
         r_mean = sum(r_scores) / len(r_scores)
         if abs(r_mean) > 1e-9:
-            spectrum = spectrum * (r_mean / abs(r_mean))
+            sign = r_mean / abs(r_mean)
+    if sign == 0.0:
+        for bid in sorted(senator_bioguide_ids):
+            i = id_to_row.get(bid)
+            if i is not None and abs(spectrum[i]) > 1e-9:
+                sign = spectrum[i] / abs(spectrum[i])
+                break
+    if sign != 0.0:
+        spectrum = spectrum * sign
 
     scores = _rescale(spectrum)
 

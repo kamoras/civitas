@@ -99,9 +99,13 @@ def compute_president_overall_score(entity) -> float:
         "competence": "score_competence",
         "agencyAlignment": "score_agency_alignment",
     }
+    # `or 0` guards the present-but-None case: getattr's default only fires
+    # when the attribute is absent, so a nullable column that is present and
+    # None would otherwise raise `None * weight` and 500 the endpoint. Scores
+    # are in [0, 100], so coercing a null (or a genuine 0) to 0 is correct.
     return round(
         sum(
-            getattr(entity, _FIELD_MAP[key], 0) * weight
+            (getattr(entity, _FIELD_MAP[key], 0) or 0) * weight
             for key, weight in PRESIDENT_SCORE_WEIGHTS.items()
         ),
         2,

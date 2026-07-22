@@ -410,9 +410,19 @@ def _compute_analysis_code_hash() -> str:
     vector_store, cache) and config_definitions.py (weights, prototypes,
     industry codes).  Excludes fetch modules — raw data retrieval does not
     affect how that data is classified or scored.
+
+    Also folds in the resolved generative-model identity (backend + model
+    id). Those live in config.py (env-driven), not in any hashed .py source,
+    so without this an operator swapping OLLAMA_MODEL/LLM_BACKEND would leave
+    every cached LLM classification labelled by the previous model
+    indefinitely — the fingerprint wouldn't change and the cache wouldn't
+    clear. (The embedding model is already covered: EMBEDDING_MODEL_NAME is a
+    literal in vector_store.py, which is hashed above.)
     """
     import hashlib
     import pathlib
+
+    from app.config import settings
 
     app_dir = pathlib.Path(__file__).resolve().parent.parent  # app/
     paths: list[pathlib.Path] = []
@@ -426,6 +436,10 @@ def _compute_analysis_code_hash() -> str:
     h = hashlib.sha256()
     for p in sorted(paths):
         h.update(p.read_bytes())
+    h.update(b"\x00llm:")
+    h.update((settings.LLM_BACKEND or "").encode())
+    h.update(b"\x00")
+    h.update((settings.OLLAMA_MODEL or "").encode())
     return h.hexdigest()[:16]
 
 

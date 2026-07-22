@@ -7,10 +7,13 @@ value back in as if freshly computed made Competence look far more
 data-derived than it actually is.
 """
 
+from types import SimpleNamespace
+
 from app.pipeline.analyze.president_scorer import (
     calc_agency_alignment,
     calc_competence,
     calc_effectiveness,
+    compute_president_overall_score,
     recalculate_president_scores,
 )
 
@@ -110,3 +113,53 @@ class TestRecalculatePresidentScores:
         assert "score_competence" in result
         assert "score_effectiveness" in result
         assert "score_agency_alignment" in result
+
+
+class TestComputePresidentOverallScore:
+    def test_weighted_sum_matches_hand_computation(self):
+        from app.config_definitions import PRESIDENT_SCORE_WEIGHTS
+
+        entity = SimpleNamespace(
+            score_public_mandate=80, score_effectiveness=60,
+            score_competence=40, score_agency_alignment=20,
+        )
+        expected = round(
+            80 * PRESIDENT_SCORE_WEIGHTS["publicMandate"]
+            + 60 * PRESIDENT_SCORE_WEIGHTS["effectiveness"]
+            + 40 * PRESIDENT_SCORE_WEIGHTS["competence"]
+            + 20 * PRESIDENT_SCORE_WEIGHTS["agencyAlignment"],
+            2,
+        )
+        assert compute_president_overall_score(entity) == expected
+
+    def test_present_but_none_dimension_does_not_crash(self):
+        """A nullable score column that is present-but-None must coerce to
+        0, never raise `None * weight`. getattr's default only fires for an
+        ABSENT attribute, so this is the regression guard for the 500 that
+        a not-yet-scored / freshly-migrated dimension would otherwise cause
+        on the leaderboard and detail endpoints."""
+        with_none = SimpleNamespace(
+            score_public_mandate=None, score_effectiveness=60,
+            score_competence=50, score_agency_alignment=40,
+        )
+        zeroed = SimpleNamespace(
+            score_public_mandate=0, score_effectiveness=60,
+            score_competence=50, score_agency_alignment=40,
+        )
+        result = compute_president_overall_score(with_none)
+        assert isinstance(result, float)
+        assert result == compute_president_overall_score(zeroed)
+
+    def test_absent_attribute_also_defaults_to_zero(self):
+        # Belt-and-suspenders: a dict-like row missing the attribute
+        # entirely (getattr default path) behaves the same as an explicit 0.
+        missing = SimpleNamespace(
+            score_effectiveness=60, score_competence=50,
+            score_agency_alignment=40,
+        )  # no score_public_mandate at all
+        zeroed = SimpleNamespace(
+            score_public_mandate=0, score_effectiveness=60,
+            score_competence=50, score_agency_alignment=40,
+        )
+        assert compute_president_overall_score(missing) == \
+            compute_president_overall_score(zeroed)
