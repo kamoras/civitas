@@ -1960,6 +1960,7 @@ def _constituent_alignment_core(
 
     voted_with = 0.0
     voted_against = 0.0
+    n_party = 0  # raw count of usable party-labeled votes, for the data gate
     crossing_unity_sum = 0.0
     crossing_unity_weight = 0.0
     for v in all_votes:
@@ -1990,8 +1991,10 @@ def _constituent_alignment_core(
 
         if wp is True:
             voted_with += weight
+            n_party += 1
         elif wp is False:
             voted_against += weight
+            n_party += 1
             unity = v.get("opposingPartyUnityPct") if isinstance(v, dict) else None
             if unity is not None:
                 crossing_unity_sum += unity * weight
@@ -2012,7 +2015,12 @@ def _constituent_alignment_core(
         expected = 0.08 + 0.12 * (-alignment)
 
     position_mismatch = 0.0
-    if party_total >= 3.0:
+    # Gate on the RAW vote count, not the confidence-weighted sum: party_total
+    # accumulates per-vote weights in ~(0.5, 1.0], so a member with 5 genuine
+    # multi-area votes could sum below 3.0 and be wrongly dropped to a flat 50
+    # and labeled "fewer than 3 votes." The weighted sums are still used for
+    # the rate itself (against_pct); only the data-sufficiency test is by count.
+    if n_party >= 3:
         against_pct = voted_against / party_total
         if against_pct >= expected:
             # Crossing beyond the seat's expectation earns credit ONLY to

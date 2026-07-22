@@ -361,6 +361,32 @@ class TestConstituentAlignment:
         )
         assert score >= 70
 
+    def test_weighted_votes_below_count_threshold_are_still_scored(self):
+        """Data-sufficiency gate is on the RAW vote count, not the
+        confidence-weighted sum. Five genuine crossing votes each carrying a
+        low multi-area weight (~0.55) sum to ~2.75 < 3.0; the old gate
+        treated that as "fewer than 3 votes" and pinned the member to a flat
+        neutral 50, even though they have five real votes and a 60% crossing
+        rate. They must now be scored on that record instead."""
+        votes = []
+        for _ in range(2):
+            votes.append({
+                "votedWithParty": True, "policyArea": "JUSTICE",
+                "vote": "Yea", "partyAlignmentWeight": 0.55,
+            })
+        for _ in range(3):
+            votes.append({
+                "votedWithParty": False, "policyArea": "JUSTICE",
+                "vote": "Yea", "partyAlignmentWeight": 0.55,
+            })
+        record = {"keyVotes": votes, "recentVotes": []}
+        funding = {"totalRaised": 1_000_000, "totalFromPACs": 0}
+        score = _calc_constituent_alignment(record, [], funding)
+        # 3/5 = 60% crossing is far above any seat's expected break rate, so
+        # the party component pushes the score above the neutral 50 it was
+        # previously (wrongly) pinned to.
+        assert score > 55
+
     def test_low_unity_crossings_score_at_least_as_high_as_high_unity(self):
         """2026-07 crossing-quality fix: at the same crossing rate, a
         member whose crossings landed on barely-partisan votes (opposing
