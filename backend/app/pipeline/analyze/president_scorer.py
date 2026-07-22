@@ -164,6 +164,21 @@ def compute_president_overall_score(entity) -> float:
     return round(sum(w * score for w, score in present) / total_weight, 2)
 
 
+def dimensions_available(entity) -> int:
+    """How many of the 5 possible dimensions actually have a score for
+    this president (0-5) — surfaced to the reader so a composite built
+    from partial data isn't presented with the same implied confidence as
+    one built from all 5. A short-tenure or currently-serving president
+    (missing Effectiveness's GDP data, or Historical Legacy's not-yet-run
+    C-SPAN survey) has a real, disclosed reason for a lower count, never
+    padded to look complete.
+    """
+    return sum(
+        1 for field in _PRESIDENT_SCORE_FIELD_MAP.values()
+        if getattr(entity, field) is not None
+    )
+
+
 # Presidential scoring formula version, same purpose as score_calculator.
 # ALGORITHM_VERSION for senators/reps (tags each ScoreSnapshot so trend
 # charts can mark a formula change instead of reading it as a behavior

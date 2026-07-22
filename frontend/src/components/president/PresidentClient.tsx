@@ -66,6 +66,12 @@ export function PresidentCard({ president }: { president: President }) {
             <div className={`text-xs tracking-widest ${getScoreColor(overall)}`}>
               {getPresidentLabel(overall)}
             </div>
+            <div
+              className="text-[10px] text-matrix-green/40 mt-1"
+              title="How many of the 5 possible score dimensions have data for this president — a score built from fewer is based on less information, not a worse president."
+            >
+              based on {president.score.dimensionsAvailable}/5 dimensions
+            </div>
           </div>
         </div>
 

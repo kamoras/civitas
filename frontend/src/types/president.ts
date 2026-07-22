@@ -13,6 +13,11 @@ export interface PresidentialScore {
   /** Backend-computed weighted total, renormalized over whichever
    * dimensions are non-null — never recompute this client-side. */
   overall: number;
+  /** How many of the 5 possible dimensions actually have a score (0-5).
+   * A composite built from fewer signals (a short-tenure or currently-
+   * serving president) shouldn't be read with the same confidence as one
+   * built from all 5 — surfaced so that's never implied silently. */
+  dimensionsAvailable: number;
 }
 
 export interface President {

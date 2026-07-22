@@ -158,6 +158,19 @@ def _parse_roster(html: str) -> list[RosterEntry]:
             logger.warning("Presidential roster: no id mapping for row %d", i)
             continue
         entries.append(RosterEntry(id=pid, name=display_name, term_start=start, term_end=end, number=i))
+
+    # UCSB's page has no end date at all for a president who died in
+    # office (Garfield, W.H. Harrison — a single dc:date span, verified
+    # live 2026-07, not a "died within a day" special case as originally
+    # assumed). Not a data gap this platform needs a second source for:
+    # presidential succession has no gap, so the next president's own
+    # term_start IS this one's term_end, derivable from data already
+    # fetched rather than hand-typed. Only the actual current president
+    # (no successor yet in this list) legitimately keeps term_end=None.
+    for i in range(len(entries) - 1):
+        if entries[i].term_end is None:
+            entries[i].term_end = entries[i + 1].term_start
+
     return entries
 
 

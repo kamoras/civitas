@@ -61,7 +61,7 @@ import logging
 from sqlalchemy.orm import Session
 
 from app.models import President
-from app.pipeline.analyze.president_scorer import compute_president_overall_score
+from app.pipeline.analyze.president_scorer import compute_president_overall_score, dimensions_available
 from app.schemas import (
     PresidentialScoreSchema,
     PresidentLeaderboardEntry,
@@ -87,6 +87,7 @@ def _build_response(p: President) -> PresidentSchema:
             agency_alignment=p.score_agency_alignment,
             historical_legacy=p.score_historical_legacy,
             overall=compute_president_overall_score(p),
+            dimensions_available=dimensions_available(p),
         ),
         avg_approval=p.avg_approval,
         gdp_growth_avg=p.gdp_growth_avg,
@@ -185,6 +186,7 @@ def get_president_leaderboard(db: Session) -> list[PresidentLeaderboardEntry]:
             agency_alignment=p.score_agency_alignment,
             historical_legacy=p.score_historical_legacy,
             overall=compute_president_overall_score(p),
+            dimensions_available=dimensions_available(p),
         )
         entries.append(PresidentLeaderboardEntry(
             id=p.id,

@@ -647,15 +647,36 @@ export default function AboutPage() {
               2026-07, following review that found presidents like Lincoln landing in
               the bottom half of the ranking despite every individual number being
               defensible on its own terms: nothing in the first four dimensions could
-              credit &ldquo;preserved the Union, ended slavery&rdquo; at all). Weights
-              reset to equal fifths (20% each) rather than another proportional split —
-              Historical Legacy isn&apos;t a fragment of an existing dimension&apos;s
-              territory the way the two removed ones were.
+              credit &ldquo;preserved the Union, ended slavery&rdquo; at all).
+            </P>
+            <P>
+              Historical Legacy&apos;s weight went through two revisions before landing
+              at 35%, both checked against the real 47-president dataset rather than
+              picked by eye. Equal fifths (20%) let the other four dimensions — which
+              individually barely correlate with historian judgment at all (Spearman
+              0.17 between the four mechanical dimensions alone and C-SPAN&apos;s own
+              ranking) — outvote the one dimension that actually tracks it, putting
+              Coolidge, McKinley, and Harding in the top 10 while Lincoln and
+              Eisenhower fell out of it. Raising Historical Legacy to 50% fixed that,
+              but introduced a different problem: at 50%, this platform&apos;s overall
+              ranking correlated 0.96 with simply using C-SPAN&apos;s own ranking
+              alone — the four mechanical dimensions were contributing almost nothing
+              of their own. 35% is the point where the top of the ranking is already
+              recognizable (FDR, Washington, Lincoln, Theodore Roosevelt, JFK,
+              Eisenhower) while the mechanical dimensions still meaningfully move the
+              rest of the list (correlation to a pure C-SPAN ranking: 0.89, not 0.96).
+              Coolidge and McKinley still edge into the bottom of the top 10 at this
+              weight — a disclosed, arguable disagreement with C-SPAN&apos;s own
+              ranking, not something we kept tuning the weight to paper over. Each
+              president&apos;s page also shows how many of the 5 dimensions actually
+              have a score for them (as few as 2, for a short-tenure or currently-
+              serving president) — a score built from partial data is not shown with
+              the same implied confidence as one built from all 5.
             </P>
 
             <div className="space-y-4 mt-4">
               <div>
-                <Label>Public Mandate (20%)</Label>
+                <Label>Public Mandate (16.25%)</Label>
                 <P>
                   Reflects approval trajectory and coalition retention. Gallup, this
                   platform&apos;s original approval source, ended presidential approval
@@ -676,7 +697,7 @@ export default function AboutPage() {
               </div>
 
               <div>
-                <Label>Effectiveness (20%)</Label>
+                <Label>Effectiveness (16.25%)</Label>
                 <P>
                   Measures tangible economic outcomes: GDP growth (60%) and job
                   creation (40%). GDP growth is computed for the full presidency —
@@ -693,7 +714,7 @@ export default function AboutPage() {
               </div>
 
               <div>
-                <Label>Competence (20%)</Label>
+                <Label>Competence (16.25%)</Label>
                 <P>
                   Evaluates administrative execution quality via executive-order
                   activity rate, now sourced from UCSB&apos;s own EO statistics table
@@ -711,7 +732,7 @@ export default function AboutPage() {
               </div>
 
               <div>
-                <Label>Agency Alignment (20%)</Label>
+                <Label>Agency Alignment (16.25%)</Label>
                 <P>
                   Measures how well executive agency actions align with stated
                   presidential priorities, via Federal Register rulemaking data — the
@@ -727,7 +748,7 @@ export default function AboutPage() {
               </div>
 
               <div>
-                <Label>Historical Legacy (20%)</Label>
+                <Label>Historical Legacy (35%)</Label>
                 <P>
                   Covers what none of the other four dimensions can: crisis leadership,
                   moral authority, vision, and similar historical-consequence judgments
@@ -747,6 +768,21 @@ export default function AboutPage() {
                   presidents whose terms were complete as of the 2021 cycle — every
                   currently-serving or just-departed president shows N/A here, genuinely
                   unrated by the survey&apos;s own cadence, not a fetch gap.
+                </P>
+                <P>
+                  Being real, external, and methodologically documented does not make
+                  this survey unbiased, and we don&apos;t present it as neutral ground
+                  truth. Political scientists who study these historian-ranking surveys
+                  have documented real, specific patterns in them: professional
+                  historians as a field skew toward favoring presidents who expanded
+                  federal/executive power, which plausibly inflates FDR, Wilson, and LBJ
+                  relative to how a more ideologically mixed panel might rate them; and
+                  historians are reluctant to rank very recent presidents at all until
+                  enough distance has passed to assess their legacy, which is the direct
+                  reason Obama and George W. Bush&apos;s scores may still be unsettled
+                  and Biden and the current president have none. Weighting this survey
+                  at 35% means this platform&apos;s ranking inherits those biases at
+                  roughly that same strength, not zero.
                 </P>
               </div>
             </div>

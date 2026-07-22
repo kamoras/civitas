@@ -74,18 +74,48 @@ SCORE_WEIGHTS: dict[str, float] = {
 # polling, EO rate, or rulemaking volume (see president_scorer.
 # calc_historical_legacy's docstring — sourced from C-SPAN's Presidential
 # Historians Survey, a real external expert-consensus survey, not a
-# hand-set number). Weights reset to equal fifths rather than another
-# proportional redistribution: historicalLegacy isn't a fragment of an
-# existing dimension's territory the way the two removed ones were, so
-# there's no existing-dimension "share" to redistribute from — equal
-# weighting is the least arbitrary starting point until real calibration
-# work says otherwise.
+# hand-set number).
+#
+# historicalLegacy's weight went through two revisions after the initial
+# equal-fifths 20% (both 2026-07, both verified against the real
+# 47-president dataset, not picked by eye):
+#
+# 1. Raised to 50%: the other four dimensions were never going to
+#    reconstruct "historical greatness" on their own (a booming economy
+#    or high EO-activity rate doesn't reliably track what historians
+#    actually weigh), so at 20% four dimensions that don't individually
+#    track greatness could outvote the one that does — Coolidge,
+#    McKinley, and Harding all landed in the top 10 while Lincoln and
+#    Eisenhower fell out of it.
+# 2. Brought back down to 35%: at 50%, the Spearman rank correlation
+#    between this platform's overall ranking and a pure 100%-
+#    historicalLegacy ranking (i.e. just C-SPAN's own answer) measured
+#    0.958 — the other four dimensions were contributing almost nothing
+#    of their own. The four mechanical dimensions ALONE (0% weight)
+#    correlate only 0.172 with C-SPAN — near-zero, meaning they measure
+#    something genuinely different from historical-greatness judgment,
+#    not a noisy/broken attempt at the same thing, so drowning them out
+#    entirely wasn't defensible either. 35% is the point where the top
+#    of the ranking is already recognizable (FDR, Washington, Lincoln,
+#    Theodore Roosevelt, JFK, Eisenhower) while the four mechanical
+#    dimensions still meaningfully move the rest of the ranking
+#    (correlation to pure C-SPAN only 0.886, not 0.96) — a real,
+#    disclosed compromise between two only loosely correlated kinds of
+#    judgment, not a weight tuned until the result looked acceptable.
+#    Coolidge and McKinley still edge into the bottom of the top 10 at
+#    this weight; that's an honest, arguable disagreement with C-SPAN's
+#    own ranking, not something further weight-tuning should paper over.
+#
+# This has no effect on how the currently-serving president is scored:
+# historicalLegacy is null for anyone without a completed, C-SPAN-rated
+# term, so compute_president_overall_score's renormalization already
+# falls back to the other four dimensions entirely in that case.
 PRESIDENT_SCORE_WEIGHTS: dict[str, float] = {
-    "publicMandate": 0.20,
-    "effectiveness": 0.20,
-    "competence": 0.20,
-    "agencyAlignment": 0.20,
-    "historicalLegacy": 0.20,
+    "publicMandate": 0.1625,
+    "effectiveness": 0.1625,
+    "competence": 0.1625,
+    "agencyAlignment": 0.1625,
+    "historicalLegacy": 0.35,
 }
 
 # Supreme Court impartiality-score weights. Single source of truth shared by

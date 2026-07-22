@@ -396,6 +396,11 @@ class PresidentialScoreSchema(CamelModel):
     historical_legacy: float | None
     # Backend-computed overall (president_scorer.compute_president_overall_score).
     overall: float = 0.0
+    # How many of the 5 possible dimensions actually have a score (0-5) —
+    # see president_scorer.dimensions_available. A composite built from
+    # fewer signals shouldn't be read with the same confidence as one
+    # built from all 5; this lets the UI disclose that plainly.
+    dimensions_available: int = 0
 
 
 class PresidentSchema(CamelModel):

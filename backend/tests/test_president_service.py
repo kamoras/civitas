@@ -42,6 +42,22 @@ class TestGetPresident:
         assert result.score.public_mandate is None
         assert result.score.overall == 70.0
 
+    def test_dimensions_available_counts_only_non_null_scores(self, db_session):
+        db_session.add(_make_president(
+            "test-4", score_competence=70.0, score_effectiveness=50.0,
+        ))
+        db_session.commit()
+
+        result = get_president(db_session, "test-4")
+        assert result.score.dimensions_available == 2
+
+    def test_dimensions_available_is_zero_with_no_scores(self, db_session):
+        db_session.add(_make_president("test-5"))
+        db_session.commit()
+
+        result = get_president(db_session, "test-5")
+        assert result.score.dimensions_available == 0
+
 
 class TestGetPresidentScoreBreakdown:
     def test_missing_president_returns_none(self, db_session):

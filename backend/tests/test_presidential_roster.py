@@ -5,7 +5,13 @@ right: Trump's two non-consecutive terms (labelled "(1st/2nd Term)" on
 this page, must not leak into the display name), Grover Cleveland's two
 terms (rendered with *identical* text, disambiguated only by page order),
 Garfield/Truman's name-punctuation mismatches against NAME_TO_ID's keys
-(sourced from a different UCSB table with slightly different formatting).
+(sourced from a different UCSB table with slightly different formatting),
+and Garfield's term_end backfill (UCSB's page has no end date at all for
+a president who died in office — derived from the next president's
+term_start instead, since succession has no gap). Chester Arthur (who
+actually succeeded Garfield) is included specifically so this fixture's
+succession chain has no artificial gap that would make the backfill
+derive a wrong date.
 
 Fixture HTML is a trimmed real excerpt (div/span structure copied
 verbatim from a live fetch, 2026-07) rather than a full 47-row page.
@@ -36,6 +42,9 @@ _FIXTURE_HTML = """
 <span class="field-content"><a href="/people/president/grover-cleveland">Grover Cleveland<span class="date-display-range"><span property="dc:date" datatype="xsd:dateTime" content="1885-03-04T00:00:00+00:00" class="date-display-start">1885</span> to <span property="dc:date" datatype="xsd:dateTime" content="1889-03-04T23:59:00+00:00" class="date-display-end">1889</span></span></a></span>
 </div></div>
 <div class="views-row"><div class="views-field views-field-title">
+<span class="field-content"><a href="/people/president/chester-arthur">Chester A. Arthur<span class="date-display-range"><span property="dc:date" datatype="xsd:dateTime" content="1881-09-20T00:00:00+00:00" class="date-display-start">1881</span> to <span property="dc:date" datatype="xsd:dateTime" content="1885-03-04T23:59:00+00:00" class="date-display-end">1885</span></span></a></span>
+</div></div>
+<div class="views-row"><div class="views-field views-field-title">
 <span class="field-content"><a href="/people/president/james-garfield">James A. Garfield<span property="dc:date" datatype="xsd:dateTime" content="1881-03-04T00:00:00+00:00" class="date-display-single">1881</span></a></span>
 </div></div>
 </div></body></html>
@@ -48,7 +57,7 @@ def test_roster_parser_edge_cases():
 
     assert set(by_id) == {
         "trump-45", "trump-47", "truman-33", "cleveland-22",
-        "cleveland-24", "bharrison-23", "garfield-20",
+        "cleveland-24", "bharrison-23", "garfield-20", "arthur-21",
     }
 
     # Trump: display name must not leak the "(1st/2nd Term)" disambiguator.
@@ -74,6 +83,14 @@ def test_roster_parser_edge_cases():
     # stripping must reconcile.
     assert by_id["garfield-20"].name == "James A. Garfield"
     assert by_id["truman-33"].name == "Harry S Truman"
+
+    # Garfield's page has no end date at all (died in office) — backfilled
+    # from Arthur's real term_start, not left None (which would incorrectly
+    # read as "still serving").
+    assert by_id["garfield-20"].term_end == "1881-09-20"
+    # The actual current president (no successor in the data) correctly
+    # keeps term_end=None — the backfill must not run off the end of the list.
+    assert by_id["trump-47"].term_end is None
 
 
 if __name__ == "__main__":
