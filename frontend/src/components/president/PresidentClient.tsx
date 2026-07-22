@@ -61,10 +61,23 @@ export function PresidentCard({ president }: { president: President }) {
             </div>
           </div>
           <div className="text-right">
-            <div className={`text-4xl font-bold tabular-nums ${getScoreColor(overall)}`}>{overall}</div>
-            <div className={`text-xs tracking-widest ${getScoreColor(overall)}`}>
-              {getPresidentLabel(overall)}
-            </div>
+            {president.score.dimensionsAvailable === 0 ? (
+              // A president with zero scored dimensions has no overall
+              // score to show at all — compute_president_overall_score's
+              // backend fallback of 0.0 exists so downstream sorting/math
+              // never sees null, but 0 + getPresidentLabel(0)'s "FAILING"
+              // reads as an actual (and the worst possible) score, not
+              // "no data yet." Most common for a just-inaugurated
+              // president before the first pipeline run.
+              <div className="text-2xl font-bold text-matrix-green/40">NOT YET CALCULATED</div>
+            ) : (
+              <>
+                <div className={`text-4xl font-bold tabular-nums ${getScoreColor(overall)}`}>{overall}</div>
+                <div className={`text-xs tracking-widest ${getScoreColor(overall)}`}>
+                  {getPresidentLabel(overall)}
+                </div>
+              </>
+            )}
             <div
               className="text-[10px] text-matrix-green/40 mt-1"
               title="How many of the 4 possible score dimensions have data for this president — a score built from fewer is based on less information, not a worse president."
