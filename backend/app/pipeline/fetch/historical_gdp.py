@@ -95,17 +95,71 @@ async def fetch_historical_real_gdp(
     return data
 
 
+_RECOVERY_TRIGGER_PCT = 0.97  # term-start GDP >3% below a recent peak
+_RECOVERY_LOOKBACK_YEARS = 5
+
+
+def _recent_peak(gdp_by_year: dict[int, float], term_start_year: int) -> tuple[int, float] | None:
+    """Most recent local peak in the `_RECOVERY_LOOKBACK_YEARS` before (and
+    including) term_start_year, or None if no data in that window."""
+    candidates = [
+        y for y in range(term_start_year - _RECOVERY_LOOKBACK_YEARS, term_start_year + 1)
+        if y in gdp_by_year
+    ]
+    if not candidates:
+        return None
+    peak_year = max(candidates, key=lambda y: gdp_by_year[y])
+    return peak_year, gdp_by_year[peak_year]
+
+
 def compute_term_gdp_growth(
     gdp_by_year: dict[int, float], term_start_year: int, term_end_year: int,
 ) -> float | None:
     """Average annual real-GDP growth rate (%) across a president's term,
     computed from the shared year->GDP series.
 
-    Mirrors economic_data.calculate_gdp_adjusted's year-1-exclusion
-    reasoning (Blinder & Watson 2016) where enough years are available —
-    a term shorter than 3 calendar years (e.g. a partial/ongoing term)
-    just uses the years it has rather than excluding down to nothing.
+    Two paths, chosen by whether the term begins in the middle of a
+    contraction's rebound:
+
+    Peak-relative CAGR (recession-rebound case): a term whose starting
+    GDP is already >3% below a real peak within the preceding 5 years
+    begins mid-recovery. Averaging this term's own year-over-year growth
+    rewards the mathematical artifact of computing % change off a
+    depressed base, not managed prosperity — confirmed empirically
+    (2026-07): Harding's 1921-23 term and FDR's 1933-45 term produce
+    near-identical average YoY growth (9.36% / 9.19%) purely because both
+    begin at a depression trough, even though the real economic stories
+    are very different (a mild ~3% post-WWI dip vs. the ~26% Depression
+    collapse). Computing CAGR from the pre-contraction PEAK year through
+    term-end instead measures "did the economy end up ahead of where it
+    stood before the crash, and by how much" — a well-established way to
+    benchmark recovery-era performance (comparable to how economic
+    historians measure a recession by time-to-regain-previous-peak)
+    rather than crediting the rebound's own arithmetic.
+
+    Standard average (the normal case): mirrors economic_data.
+    calculate_gdp_adjusted's year-1-exclusion reasoning (Blinder & Watson
+    2016) where enough years are available — a term shorter than 3
+    calendar years (e.g. a partial/ongoing term) just uses the years it
+    has rather than excluding down to nothing.
     """
+    peak = _recent_peak(gdp_by_year, term_start_year)
+    start_value = gdp_by_year.get(term_start_year)
+    if peak is not None and start_value is not None and peak[1] > 0 and start_value < peak[1] * _RECOVERY_TRIGGER_PCT:
+        peak_year, peak_value = peak
+        end_value = gdp_by_year.get(term_end_year)
+        if end_value is None:
+            # Term-end year missing from the series (e.g. a death mid-year
+            # ahead of the source's coverage) — fall back to the latest
+            # available year at or before term_end_year.
+            fallback_years = [y for y in gdp_by_year if peak_year < y <= term_end_year]
+            if fallback_years:
+                term_end_year = max(fallback_years)
+                end_value = gdp_by_year[term_end_year]
+        years_elapsed = term_end_year - peak_year
+        if end_value is not None and years_elapsed > 0 and end_value > 0:
+            return (((end_value / peak_value) ** (1 / years_elapsed)) - 1) * 100
+
     years = [y for y in range(term_start_year, term_end_year + 1) if y in gdp_by_year]
     if len(years) >= 4:
         years = years[1:]  # exclude year 1 (prior administration's inherited economy)

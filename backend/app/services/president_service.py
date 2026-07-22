@@ -138,6 +138,7 @@ def get_president_score_breakdown(db: Session, president_id: str) -> dict | None
             eo_court_success_pct=p.eo_court_success_pct,
             cabinet_turnover_pct=p.cabinet_turnover_pct,
             term_years=term_years,
+            term_start_year=int(p.term_start[:4]),
         ),
         "effectiveness": _effectiveness_core(
             jobs_created_millions=p.jobs_created_millions,

@@ -231,7 +231,7 @@ async def run_president_pipeline(db: Session) -> dict:
             live["election_margin"] = election_margin_data[president.id]
             president.election_margin = live["election_margin"]
 
-        new_scores = recalculate_president_scores(president.id, live, term_years)
+        new_scores = recalculate_president_scores(president.id, live, term_years, term_start_year)
         president.score_public_mandate = new_scores["score_public_mandate"]
         president.score_competence = new_scores["score_competence"]
         president.score_effectiveness = new_scores["score_effectiveness"]

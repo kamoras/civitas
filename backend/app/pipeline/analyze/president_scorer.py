@@ -18,13 +18,22 @@ config_definitions.py) to the four dimensions below.
 
 Metrics that can be dynamically computed:
   - Competence: EO activity rate only (30% of the formula's nominal
-    weight — see calc_competence). Court-success rate and cabinet-
+    weight — see calc_competence), scored relative to the president's own
+    era (see _eo_activity_rate_component) rather than one fixed scale —
+    "executive order" as a systematic governance tool is largely a
+    20th-century phenomenon, so a single absolute threshold implicitly
+    calibrated to modern volume misreads every pre-1901 president as
+    "inactive" almost by construction. Court-success rate and cabinet-
     turnover rate are accepted as optional inputs for a future data
     source, but nothing in this pipeline currently fetches them live, so
     in practice they are never passed and Competence runs on EO-activity-
     rate alone, renormalized to 100% of the measured weight (see
     _blend_live_components).
-  - Effectiveness: Derived from employment/GDP data
+  - Effectiveness: Derived from employment/GDP data — GDP growth uses a
+    peak-relative CAGR instead of a plain term average when the term
+    begins mid-recovery from a real contraction (see historical_gdp.
+    compute_term_gdp_growth), so a depression-rebound's own arithmetic
+    isn't mistaken for sustained economic management.
   - Public Mandate (2026-07): average approval + trend, computed from
     real polling data scraped from UCSB's American Presidency Project
     (see app.pipeline.fetch.presidential_approval) — Gallup, this
@@ -32,7 +41,8 @@ Metrics that can be dynamically computed:
     entirely in Feb 2026; UCSB is the replacement, still updated for the
     sitting president post-Gallup (aggregating AP-NORC/CNN-SSRS/Marist/
     Pew/Verasight). Covers Truman-33 onward (15 presidents with a real
-    UCSB approval-poll page); earlier presidents keep their seed value.
+    UCSB approval-poll page); earlier presidents use the election-margin
+    proxy instead (see calc_public_mandate) — never a seed value.
 
 Metrics that remain static (roadmap, not abandoned):
   - Competence's cabinet-turnover-rate: Wikidata SPARQL (wdt:P39
@@ -47,6 +57,7 @@ Metrics that remain static (roadmap, not abandoned):
 """
 
 import logging
+import math
 
 logger = logging.getLogger(__name__)
 
@@ -163,11 +174,82 @@ def compute_president_overall_score(entity) -> float:
 PRESIDENT_ALGORITHM_VERSION = "v2"
 
 
+# Full credit/deficit approached asymptotically at this many population
+# standard deviations from the mean, via tanh (smooth saturation — see
+# _population_zscore_component) rather than a hard clamp. A hard clamp
+# (this file's original design) makes every value beyond the threshold
+# read identically, which loses real information: computed 2026-07 from
+# real election-margin data, Washington (z=3.44), Monroe (z=2.58),
+# Harding (z=1.62), and Coolidge (z=1.52) all clamped to the exact same
+# 100 under a hard cutoff, flattening a genuinely wide range of landslide
+# magnitudes into one indistinguishable ceiling score. tanh still favors
+# the biggest landslides (Washington still scores highest) without
+# erasing the gap between "historically exceptional" and "merely very
+# good." Same "~1.5x stdev" shape as score_calculator.py's
+# _LES_CREDIT_SATURATION, now smoothed rather than hard-clamped.
+_ZSCORE_SATURATION_STDEV = 1.5
+
+
+def _population_zscore_component(
+    label: str, weight: float, value: float, population_mean: float,
+    population_stdev: float, detail: str,
+) -> dict:
+    z = (value - population_mean) / population_stdev if population_stdev else 0.0
+    normalized = math.tanh(z / _ZSCORE_SATURATION_STDEV)
+    return {
+        "label": label, "weight": weight,
+        "score": round(50.0 + 50.0 * normalized, 1),
+        "detail": detail,
+    }
+
+
+# EO-activity-rate population statistics, split at 1901 (Theodore
+# Roosevelt) rather than one fixed "30-60/year is optimal" scale (this
+# component's original design, with no empirical basis found for why 50
+# specifically was the threshold). Computed 2026-07 from real UCSB EO-
+# count data across every president with a nonzero count: EO rate never
+# exceeds ~46/year before 1901 (mean=12.02, stdev=14.04, n=24); from
+# Theodore Roosevelt onward every single president is 34.5-310.5/year
+# (mean=117.25, stdev=86.10, n=22) — a roughly 10x regime shift, not a
+# gradual trend, matching the well-documented history that TR was the
+# first president to use executive orders as a systematic governance
+# tool. A single fixed absolute scale calibrated to modern EO volume
+# scored essentially every pre-TR president as "very low activity" almost
+# by construction (e.g. Lincoln's 12/year — right at his own era's
+# average — read as a weak 37 under the old scale), regardless of how
+# actively they governed relative to the tools and norms of their own
+# time. This also drops the old scale's "moderate is optimal, extreme is
+# penalized" shape: no empirical basis was found for treating unusually
+# high EO usage as evidence of worse administrative execution (as opposed
+# to a separate, more political judgment this dimension isn't designed to
+# make) — a saturating-but-monotonic population-relative score is more
+# defensible than an unvalidated "goldilocks zone."
+_EO_RATE_ERA_SPLIT_YEAR = 1901
+_EO_RATE_PRE_1901_MEAN = 12.02
+_EO_RATE_PRE_1901_STDEV = 14.04
+_EO_RATE_POST_1901_MEAN = 117.25
+_EO_RATE_POST_1901_STDEV = 86.10
+
+
+def _eo_activity_rate_component(eo_count: int, term_years: float, term_start_year: int) -> dict:
+    eo_per_year = eo_count / term_years
+    if term_start_year < _EO_RATE_ERA_SPLIT_YEAR:
+        mean, stdev, era_label = _EO_RATE_PRE_1901_MEAN, _EO_RATE_PRE_1901_STDEV, "pre-1901"
+    else:
+        mean, stdev, era_label = _EO_RATE_POST_1901_MEAN, _EO_RATE_POST_1901_STDEV, "1901-present"
+    return _population_zscore_component(
+        "EO activity rate", 0.30, eo_per_year, mean, stdev,
+        f"{eo_count} executive orders over {term_years:.1f} years = {eo_per_year:.1f}/year, "
+        f"vs. {era_label} population mean {mean:.1f}/year",
+    )
+
+
 def calc_competence(
     eo_count: int | None,
     eo_court_success_pct: float | None,
     cabinet_turnover_pct: float | None,
     term_years: float,
+    term_start_year: int,
 ) -> int | None:
     """Calculate competence score from live data only.
 
@@ -175,7 +257,7 @@ def calc_competence(
     wrapper kept for existing callers/tests that expect a bare int.
     """
     return _competence_core(
-        eo_count, eo_court_success_pct, cabinet_turnover_pct, term_years,
+        eo_count, eo_court_success_pct, cabinet_turnover_pct, term_years, term_start_year,
     )["score"]
 
 
@@ -184,6 +266,7 @@ def _competence_core(
     eo_court_success_pct: float | None,
     cabinet_turnover_pct: float | None,
     term_years: float,
+    term_start_year: int,
 ) -> dict:
     """Same math as calc_competence, returning every intermediate value
     alongside the final score.
@@ -198,10 +281,10 @@ def _competence_core(
       - Cabinet stability (30%): Lower turnover = better management. Same
         — cabinet_turnover_pct has a real, identified candidate source
         (Wikidata) but no fetcher built yet, so it's currently always None.
-      - EO activity rate (30%): Moderate rate is ideal; very high or
-        very low rates suggest either overreliance on EOs or inaction.
-        This is the only component genuinely computed from live data
-        today (Federal Register EO counts).
+      - EO activity rate (30%): scored relative to the president's own
+        era's real population (see _eo_activity_rate_component) rather
+        than a single fixed scale — this is the only component genuinely
+        computed from live data today (UCSB's EO-count table).
 
     Any component whose input is None is simply excluded — the weight of
     whatever IS live gets renormalized to 100% of what was measured (see
@@ -228,17 +311,7 @@ def _competence_core(
         })
 
     if eo_count and term_years > 0:
-        eo_per_year = eo_count / term_years
-        # Moderate rate (30-60/year) scores highest; extremes penalized
-        if eo_per_year <= 50:
-            rate_score = min(eo_per_year / 50 * 70, 70) + 20
-        else:
-            rate_score = max(90 - (eo_per_year - 50) * 0.3, 30)
-        components.append({
-            "label": "EO activity rate", "weight": 0.30,
-            "score": round(rate_score, 1),
-            "detail": f"{eo_count} executive orders over {term_years:.1f} years = {eo_per_year:.1f}/year",
-        })
+        components.append(_eo_activity_rate_component(eo_count, term_years, term_start_year))
 
     return _blend_live_components(components)
 
@@ -427,17 +500,11 @@ _PUBLIC_MANDATE_AVG_APPROVAL_STDEV = 9.06
 _PUBLIC_MANDATE_TREND_MEAN = -13.72
 _PUBLIC_MANDATE_TREND_STDEV = 14.65
 
-# Full credit/deficit at 1.5 population standard deviations from the mean
-# — same saturation shape (and same "~1.5x stdev" reasoning) as
-# score_calculator.py's _LES_CREDIT_SATURATION, so an unusually large but
-# real value doesn't need an arbitrary separate cap.
-_PUBLIC_MANDATE_SATURATION_STDEV = 1.5
-
 # Pre-polling-era (pre-Truman) proxy: average margin of victory (%) across
 # a president's own election win(s) — see
 # app.pipeline.fetch.presidential_elections. Population stats computed
 # 2026-07 from real fetched data across the 42 presidents who won at
-# least one presidential election (n=42, mean=9.44, stdev=10.34) — same
+# least one presidential election (n=42, mean=9.44, stdev=10.46) — same
 # fit-against-real-data discipline as every constant in this file. The
 # five presidents who never won a presidential election in their own
 # right (succeeded via a predecessor's death, or — Ford — appointed VP
@@ -446,20 +513,7 @@ _PUBLIC_MANDATE_SATURATION_STDEV = 1.5
 # them (see compute_president_overall_score's renormalization), not
 # defaulted.
 _PUBLIC_MANDATE_ELECTION_MARGIN_MEAN = 9.44
-_PUBLIC_MANDATE_ELECTION_MARGIN_STDEV = 10.34
-
-
-def _public_mandate_zscore_component(
-    label: str, weight: float, value: float, population_mean: float,
-    population_stdev: float, detail: str,
-) -> dict:
-    z = (value - population_mean) / population_stdev if population_stdev else 0.0
-    normalized = max(-1.0, min(z / _PUBLIC_MANDATE_SATURATION_STDEV, 1.0))
-    return {
-        "label": label, "weight": weight,
-        "score": round(50.0 + 50.0 * normalized, 1),
-        "detail": detail,
-    }
+_PUBLIC_MANDATE_ELECTION_MARGIN_STDEV = 10.46
 
 
 def calc_public_mandate(
@@ -506,14 +560,14 @@ def _public_mandate_core(
     components: list[dict] = []
 
     if avg_approval is not None:
-        components.append(_public_mandate_zscore_component(
+        components.append(_population_zscore_component(
             "Average approval", 0.70, avg_approval,
             _PUBLIC_MANDATE_AVG_APPROVAL_MEAN, _PUBLIC_MANDATE_AVG_APPROVAL_STDEV,
             f"{avg_approval:.1f}% average approval over the term vs. "
             f"population mean {_PUBLIC_MANDATE_AVG_APPROVAL_MEAN:.1f}%",
         ))
         if approval_trend is not None:
-            components.append(_public_mandate_zscore_component(
+            components.append(_population_zscore_component(
                 "Approval trend", 0.30, approval_trend,
                 _PUBLIC_MANDATE_TREND_MEAN, _PUBLIC_MANDATE_TREND_STDEV,
                 f"{approval_trend:+.1f}pt change from term-start to term-end vs. "
@@ -521,7 +575,7 @@ def _public_mandate_core(
                 "(most presidents' approval declines over a term)",
             ))
     elif election_margin is not None:
-        components.append(_public_mandate_zscore_component(
+        components.append(_population_zscore_component(
             "Election margin (pre-polling-era proxy)", 1.0, election_margin,
             _PUBLIC_MANDATE_ELECTION_MARGIN_MEAN, _PUBLIC_MANDATE_ELECTION_MARGIN_STDEV,
             f"{election_margin:+.1f}pt average margin of victory across this president's "
@@ -533,7 +587,9 @@ def _public_mandate_core(
     return _blend_live_components(components)
 
 
-def recalculate_president_scores(president_id: str, live_data: dict, term_years: float) -> dict:
+def recalculate_president_scores(
+    president_id: str, live_data: dict, term_years: float, term_start_year: int,
+) -> dict:
     """Recalculate every dimension from live data only, for one president.
 
     2026-07: this used to bundle "the DYNAMIC_PRESIDENTS cohort's full
@@ -554,6 +610,8 @@ def recalculate_president_scores(president_id: str, live_data: dict, term_years:
             cabinet_turnover_pct, avg_approval, approval_trend,
             election_margin — any subset may be present; each calc_*
             function handles its own missing inputs.
+        term_start_year: needed by calc_competence to pick the right
+            EO-activity-rate era population (see _eo_activity_rate_component).
 
     Returns:
         Dict with keys score_public_mandate, score_effectiveness,
@@ -572,6 +630,7 @@ def recalculate_president_scores(president_id: str, live_data: dict, term_years:
             eo_court_success_pct=live_data.get("eo_court_success_pct"),
             cabinet_turnover_pct=live_data.get("cabinet_turnover_pct"),
             term_years=term_years,
+            term_start_year=term_start_year,
         ),
         "score_effectiveness": calc_effectiveness(
             jobs_created_millions=live_data.get("jobs_created_millions"),

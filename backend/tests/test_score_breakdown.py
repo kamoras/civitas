@@ -138,12 +138,12 @@ class TestSenatorCoreConsistency:
 
 class TestPresidentCoreConsistency:
     def test_competence_core_matches_calc(self):
-        args = (48, None, None, 4.0)
+        args = (48, None, None, 4.0, 2000)
         breakdown = _competence_core(*args)
         assert breakdown["score"] == calc_competence(*args)
 
     def test_competence_core_none_when_no_live_data(self):
-        breakdown = _competence_core(None, None, None, 4.0)
+        breakdown = _competence_core(None, None, None, 4.0, 2000)
         assert breakdown["score"] is None
         assert breakdown["components"] == []
         assert "note" in breakdown
