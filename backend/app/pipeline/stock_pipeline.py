@@ -102,11 +102,24 @@ def _match_representative(db: Session, last: str, first: str, state_district: st
     if not last:
         return None
     state = state_district[:2] if state_district else None
+    # The House FD index supplies the FULL district ("CA27"), and
+    # Representative.district exists — so filter on it. Previously only the
+    # state was used, leaving same-state same-surname pairs to a fragile
+    # first-name substring match that silently skipped the filing every run
+    # whenever the formal filing name differed from the display name
+    # ("Michael" vs "Mike"). District makes the match exact for all 435
+    # voting seats.
+    district: int | None = None
+    if state_district and len(state_district) > 2 and state_district[2:].isdigit():
+        district = int(state_district[2:])
+
     query = db.query(Representative).filter(
         Representative.is_current == True, Representative.name.ilike(f"%{last}%")  # noqa: E712
     )
     if state:
         query = query.filter(Representative.state == state)
+    if district is not None:
+        query = query.filter(Representative.district == district)
     candidates = query.all()
     if len(candidates) == 1:
         return candidates[0]
@@ -268,6 +281,12 @@ async def run_stock_trades_pipeline() -> dict:
                 progress.complete("house_ptr", detail=f"{house_count} rows")
             except Exception:
                 logger.exception("House PTR ingestion failed")
+                # Roll back the failed chamber's partial transaction so the
+                # session is clean for the Senate phase — without this, a
+                # House flush error leaves the session in a failed state and
+                # the Senate phase's first query raises PendingRollbackError,
+                # so the "best-effort per chamber" design failed BOTH.
+                db.rollback()
                 error_parts.append("House: failed — see server logs")
                 progress.fail("house_ptr")
             progress.begin("senate_ptr")
@@ -276,6 +295,7 @@ async def run_stock_trades_pipeline() -> dict:
                 progress.complete("senate_ptr", detail=f"{senate_count} rows")
             except Exception:
                 logger.exception("Senate PTR ingestion failed")
+                db.rollback()
                 error_parts.append("Senate: failed — see server logs")
                 progress.fail("senate_ptr")
 

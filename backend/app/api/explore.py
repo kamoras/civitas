@@ -18,6 +18,25 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/explore")
 
+# Canonical chamber metadata values as stored in ChromaDB (explore_pipeline
+# writes these exact strings). ChromaDB `where` equality is case-sensitive,
+# so a lowercase "senate" filter matched nothing — user input is mapped
+# through this before querying. None of the four non-legislative chambers
+# was reachable at all before this map existed.
+_CHAMBER_CANONICAL = {
+    "senate": "Senate", "house": "House", "executive": "Executive",
+    "judicial": "Judicial", "regulatory": "Regulatory",
+}
+
+# Real doc_type values in the index (explore_pipeline). Used to validate the
+# public API's doc_type filter — an unknown value is an exact-match miss
+# that silently returns zero results, so it's rejected with 422 instead.
+VALID_DOC_TYPES = {
+    "Senate Floor Speech", "House Floor Speech", "Executive Order",
+    "Proclamation", "Presidential Memorandum", "Supreme Court Opinion",
+    "Final Rule", "Proposed Rule", "Notice",
+}
+
 
 @router.get("")
 async def search_explore(
@@ -34,16 +53,42 @@ async def search_explore(
 
     Returns matching documents ranked by relevance (default) or date.
     """
-    fetch_limit = limit * 3 if commentable else limit
+    # Normalize the chamber filter to the canonical stored casing so a
+    # lowercase "senate" actually matches (ChromaDB equality is
+    # case-sensitive). "commentable" only ever applies to Regulatory docs,
+    # so scope the vector query to that chamber rather than 3x-oversampling
+    # and hoping enough regulatory hits survive the post-filter.
+    effective_chamber = chamber
+    if commentable and not chamber:
+        effective_chamber = "Regulatory"
+    canonical_chamber = (
+        _CHAMBER_CANONICAL.get(effective_chamber.lower(), effective_chamber)
+        if effective_chamber else None
+    )
+
     results = await asyncio.to_thread(
         search_explore_documents,
         query=q,
-        n_results=fetch_limit,
+        n_results=limit,
         doc_type=doc_type,
-        chamber=chamber,
+        chamber=canonical_chamber,
+        politician_id=politician_id,
     )
 
+    # None (not []) means the index doesn't exist yet — e.g. after an admin
+    # reset, before the next pipeline run. Surface that distinctly so the
+    # UI can say "still indexing" instead of the misleading "no matches"
+    # (the SQL-based stats header may simultaneously report thousands of
+    # documents, which reset only the vector store).
+    if results is None:
+        return JSONResponse(
+            status_code=503,
+            content={"query": q, "results": [], "count": 0, "indexEmpty": True},
+            headers={"Cache-Control": "no-store"},
+        )
+
     doc_ids = [r["id"] for r in results if r.get("id")]
+    doc_map: dict = {}
     if doc_ids:
         docs = (
             db.query(
@@ -67,17 +112,10 @@ async def search_explore(
                 result["commentUrl"] = doc.comment_url or ""
                 result["commentsCloseOn"] = doc.comments_close_on or ""
 
-    if politician_id:
-        matching_doc_ids = set(
-            row[0] for row in
-            db.query(ExploreDocument.id)
-            .filter(
-                ExploreDocument.id.in_(doc_ids),
-                ExploreDocument.politician_id == politician_id,
-            )
-            .all()
-        )
-        results = [r for r in results if r.get("id") in matching_doc_ids]
+    # Drop vector hits with no surviving DB row — after a partial reset
+    # (DB cleared, Chroma reset swallowed) these render as snippet-only
+    # cards whose "view details" link 404s.
+    results = [r for r in results if r.get("id") in doc_map]
 
     if commentable:
         from datetime import date as date_type
@@ -85,7 +123,7 @@ async def search_explore(
         results = [
             r for r in results
             if r.get("commentUrl") and r.get("commentsCloseOn", "") >= today_str
-        ][:limit]
+        ]
 
     if sort == "date":
         results.sort(key=lambda r: r.get("date", ""), reverse=True)
@@ -312,6 +350,11 @@ async def get_explore_document_summary(
         system_prompt=prompt["systemPrompt"],
         user_prompt=prompt["userPrompt"],
         cache_key={"doc_id": doc_id, "v": 3},
+        # call_llm caches only when BOTH cache_key and db_session are set —
+        # omitting db_session silently disabled the versioned cache, so
+        # every view past the 30s cooldown re-ran a full ~512-token
+        # generation and serialized on the single LLM backend.
+        db_session=db,
         max_tokens=512,
     )
 

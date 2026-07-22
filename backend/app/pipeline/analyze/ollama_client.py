@@ -108,7 +108,12 @@ def _strip_thinking_tokens(text: str) -> str:
     sibling LFM2.5-1.2B-Thinking, deliberately not used here; see the
     2026-07 model evaluation for why).
     """
-    return re.sub(r"<think>[\s\S]*?</think>", "", text, flags=re.IGNORECASE).strip()
+    # Strip closed <think>...</think> blocks, then also drop an UNTERMINATED
+    # trailing <think> (a length-truncated reasoning trace never emits its
+    # closing tag, and would otherwise poison the JSON extraction below).
+    text = re.sub(r"<think>[\s\S]*?</think>", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"<think>[\s\S]*$", "", text, flags=re.IGNORECASE)
+    return text.strip()
 
 
 def extract_json(text: str) -> Any | None:
@@ -126,14 +131,19 @@ def extract_json(text: str) -> Any | None:
         except (json.JSONDecodeError, ValueError):
             pass
 
-    # Greedy match — finds the maximal JSON span (first { to last }).
-    # Think-token stripping above ensures no spurious { before the JSON.
-    json_match = re.search(r"(\[[\s\S]*\]|\{[\s\S]*\})", text)
-    if json_match:
-        try:
-            return json.loads(json_match.group(1))
-        except (json.JSONDecodeError, ValueError):
-            pass
+    # Try the object span and the array span INDEPENDENTLY, each first-to-
+    # last of its own bracket type. A single greedy alternation matched
+    # leftmost-first, so a stray "[Note]" before a real JSON object made
+    # the match run from that "[" to the last "]" (inside the object) and
+    # fail with no second chance. Prefer whichever span parses; try the
+    # object first since these prompts return objects.
+    for pattern in (r"\{[\s\S]*\}", r"\[[\s\S]*\]"):
+        m = re.search(pattern, text)
+        if m:
+            try:
+                return json.loads(m.group(0))
+            except (json.JSONDecodeError, ValueError):
+                continue
 
     return None
 

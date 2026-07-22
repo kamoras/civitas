@@ -125,3 +125,34 @@ class TestSubmitFeedback:
         assert "Bug report" in body
         assert "https://civitas-research.org/bills" in body
         assert "user@example.com" in body
+
+
+class TestFeedbackInjectionHardening:
+    def test_message_is_fenced_so_mentions_and_links_are_inert(self):
+        from app.api.feedback import _build_issue_body, FeedbackRequest
+        body = FeedbackRequest(
+            message="@torvalds see http://phish ![](http://track/x.png)",
+            category="bug", pageUrl=None, email=None,
+        )
+        out = _build_issue_body(body)
+        # The message is inside a fenced code block, so none of it renders.
+        assert "```\n@torvalds see http://phish" in out
+
+    def test_fence_extends_past_backticks_in_message(self):
+        from app.api.feedback import _build_issue_body, FeedbackRequest
+        body = FeedbackRequest(
+            message="here is ``` a fence break attempt",
+            category="bug", pageUrl=None, email=None,
+        )
+        out = _build_issue_body(body)
+        # Opening fence must be longer than any backtick run in the body.
+        assert out.startswith("````\n")
+
+    def test_page_url_mentions_neutralized(self):
+        from app.api.feedback import _build_issue_body, FeedbackRequest
+        body = FeedbackRequest(
+            message="a valid feedback message",
+            category="bug", pageUrl="http://x/@evil#1", email=None,
+        )
+        out = _build_issue_body(body)
+        assert "@evil" not in out  # zero-width space inserted after @/#

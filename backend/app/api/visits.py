@@ -192,8 +192,16 @@ def _hash_key() -> bytes:
     return hashlib.sha256(f"{token}:visitor-salt".encode()).digest()
 
 
-def _visitor_hash(ip: str, user_agent: str, date: str) -> str:
-    msg = f"{ip}:{user_agent}:{date}".encode()
+def _visitor_hash(ip: str, date: str) -> str:
+    # Keyed on IP + date only (2026-07): the User-Agent used to be in this
+    # key, which meant one client rotating the User-Agent header produced
+    # unlimited distinct hashes — a new SiteVisit row per request, i.e. a
+    # disk-fill vector on an unauthenticated endpoint. Dropping it bounds
+    # daily rows to distinct source IPs (the natural unique-visitor unit),
+    # which is what the daily-uniques metric wants anyway. Browser/OS/
+    # device breakdowns still come from the raw User-Agent below; only the
+    # dedup identity no longer depends on it.
+    msg = f"{ip}:{date}".encode()
     return hmac.new(_hash_key(), msg, hashlib.sha256).hexdigest()[:32]
 
 
@@ -268,7 +276,7 @@ async def track_visit(request: Request, path: str = Query("/")) -> None:
 
     event = _VisitEvent(
         date=date,
-        visitor_hash=_visitor_hash(ip, user_agent, date),
+        visitor_hash=_visitor_hash(ip, date),
         browser=_parse_browser(user_agent),
         os=_parse_os(user_agent),
         device_type=_parse_device(user_agent),
