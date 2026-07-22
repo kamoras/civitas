@@ -626,8 +626,12 @@ async def get_my_reps(
                 "legislativeEffectiveness": round(s.score_legislative_effectiveness, 1),
                 "overall": overall,
             },
-            "leadershipScore": round(s.leadership_score, 1) if s.leadership_score else None,
-            "ideologyScore": round(s.ideology_score, 1) if s.ideology_score else None,
+            # `is not None`, not truthiness: ideology_score is SVD-rescaled to
+            # [0,1] where 0.0 is the most-progressive member, and leadership is
+            # log-rescaled centrality where 0.0 is the lowest — both legitimate
+            # computed values. `if x else None` hid those extremes as "no data".
+            "leadershipScore": round(s.leadership_score, 1) if s.leadership_score is not None else None,
+            "ideologyScore": round(s.ideology_score, 1) if s.ideology_score is not None else None,
             "yearsInOffice": s.years_in_office,
             "contactFormUrl": s.contact_form_url or None,
             "officePhone": s.office_phone or None,
@@ -653,8 +657,8 @@ async def get_my_reps(
                 "legislativeEffectiveness": round(r.score_legislative_effectiveness, 1),
                 "overall": overall,
             },
-            "leadershipScore": round(r.leadership_score, 1) if r.leadership_score else None,
-            "ideologyScore": round(r.ideology_score, 1) if r.ideology_score else None,
+            "leadershipScore": round(r.leadership_score, 1) if r.leadership_score is not None else None,
+            "ideologyScore": round(r.ideology_score, 1) if r.ideology_score is not None else None,
             "yearsInOffice": r.years_in_office,
             "contactFormUrl": r.contact_form_url or None,
             "officePhone": r.office_phone or None,
@@ -736,7 +740,7 @@ async def get_election_info(response: Response, db: Session = Depends(get_db)):
         entry = {
             "id": s.id, "name": s.name, "state": s.state, "party": s.party,
             "overallScore": overall,
-            "leadershipScore": round(s.leadership_score, 1) if s.leadership_score else None,
+            "leadershipScore": round(s.leadership_score, 1) if s.leadership_score is not None else None,
             "yearsInOffice": s.years_in_office,
             "upForElection": s.state in seats_up,
         }
