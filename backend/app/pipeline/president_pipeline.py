@@ -57,6 +57,7 @@ from app.pipeline.fetch.historical_gdp import compute_term_gdp_growth, fetch_his
 from app.pipeline.fetch.presidential_approval import (
     PRESIDENT_APPROVAL_SLUGS,
     fetch_president_approval_history,
+    recent_polls,
 )
 from app.pipeline.fetch.presidential_elections import fetch_election_margins
 from app.pipeline.fetch.presidential_roster import fetch_presidential_roster
@@ -168,20 +169,25 @@ async def run_president_pipeline(db: Session) -> dict:
         logger.info("Fetching approval-poll history from UCSB American Presidency Project...")
         approval_avg_data: dict[str, float] = {}
         approval_trend_data: dict[str, float] = {}
+        recent_avg_approval_data: dict[str, float] = {}
         for pid in PRESIDENT_APPROVAL_SLUGS:
             polls = await fetch_president_approval_history(client, db, pid)
             if not polls:
                 continue
             values = [poll.approving for poll in polls if poll.approving is not None]
-            if not values:
-                continue
-            approval_avg_data[pid] = sum(values) / len(values)
-            # Last-quartile-minus-first-quartile average approval — see
-            # calc_public_mandate's docstring for why this (not a linear
-            # regression slope) and why it's compared against the
-            # population's own average trend rather than zero.
-            q = max(1, len(values) // 4)
-            approval_trend_data[pid] = (sum(values[-q:]) / q) - (sum(values[:q]) / q)
+            if values:
+                approval_avg_data[pid] = sum(values) / len(values)
+                # Last-quartile-minus-first-quartile average approval —
+                # see calc_public_mandate's docstring for why this (not a
+                # linear regression slope) and why it's compared against
+                # the population's own average trend rather than zero.
+                q = max(1, len(values) // 4)
+                approval_trend_data[pid] = (sum(values[-q:]) / q) - (sum(values[:q]) / q)
+
+            recent = recent_polls(polls)
+            recent_values = [poll.approving for poll in recent if poll.approving is not None]
+            if recent_values:
+                recent_avg_approval_data[pid] = sum(recent_values) / len(recent_values)
         logger.info("Approval data fetched for %d presidents", len(approval_avg_data))
 
         logger.info("Fetching historical election-margin data (UCSB)...")
@@ -235,6 +241,11 @@ async def run_president_pipeline(db: Session) -> dict:
         elif president.id in election_margin_data:
             live["election_margin"] = election_margin_data[president.id]
             president.election_margin = live["election_margin"]
+
+        # Informational only — not part of any scored dimension. NULL
+        # (not stale) once a president leaves office and the recent-90-
+        # day window has no new polls to populate it.
+        president.recent_avg_approval = recent_avg_approval_data.get(president.id)
 
         if president.id in historical_legacy_data:
             live["historical_legacy_score"] = historical_legacy_data[president.id]

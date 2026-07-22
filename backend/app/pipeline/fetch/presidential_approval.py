@@ -28,12 +28,28 @@ formatting) — hardcoded per-president below, each verified live against
 presidency.ucsb.edu during development (2026-07). Only presidents with
 real polling-era coverage are included (Truman #33 onward, matching this
 platform's existing "modern presidents" framing) — pre-Truman presidents
-have no live source and keep their seed Public Mandate value.
+have no live source; their Public Mandate uses the election-margin
+historical proxy instead (see presidential_elections.py), never a seed
+value.
+
+Some newer pages (Trump's 2nd term onward) also publish a by-party
+approval breakdown (Republicans/Independents/Democrats Approving).
+Deliberately not parsed or used anywhere in this pipeline (2026-07): a
+"partisan approval gap" computed from it can't be attributed to the
+president's own conduct — the same gap could reflect a stand one party
+was always going to oppose regardless of merit, or be driven almost
+entirely by opposition messaging/media coverage having nothing to do
+with what the president actually did. Placing a number like that on a
+president's own profile page implies an attribution the data can't
+support, no matter how the label is worded — the same standard that
+kept Independence/Follow-Through out of this pipeline as hand-set
+scores. recent_polls below (a plain rolling time window, no party
+crosstabs) is the only piece of that exploration that survived.
 """
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import httpx
 from lxml import html as lxml_html
@@ -107,11 +123,10 @@ def _parse_approval_table(html: str) -> list[ApprovalPoll]:
     Column order (verified against several live pages, 2026-07): Start
     date, End Date, Approving, Disapproving, Unsure/NoData, [blank
     spacer], then either Source directly (older single-president pages)
-    or Republicans/Independents/Democrats Approving + Source (newer
-    multi-term pages, e.g. Trump's 2nd-term page). Only the first 5
-    columns + a best-effort Source (last non-blank cell) are extracted —
-    the by-party breakdown isn't used by this platform's formula and is
-    frequently blank even when present as a column.
+    or a by-party breakdown (Republicans/Independents/Democrats
+    Approving, not parsed — see this module's docstring) + Source (newer
+    multi-term pages). Only the first 5 columns + a best-effort Source
+    (last non-blank cell) are extracted.
     """
     doc = lxml_html.fromstring(html)
     tables = doc.cssselect("table")
@@ -212,3 +227,22 @@ async def fetch_president_approval_history(
         ],
     })
     return polls
+
+
+def recent_polls(polls: list[ApprovalPoll], days: int = 90, as_of: datetime | None = None) -> list[ApprovalPoll]:
+    """Polls whose start_date falls within the last `days` days of `as_of`
+    (defaults to now) — a rolling recent window distinct from Public
+    Mandate's own full-term average, for a "how is this changing lately"
+    view of the currently-serving president specifically. Any poll with
+    an unparseable date is excluded rather than guessed into the window."""
+    as_of = as_of or datetime.utcnow()
+    cutoff = as_of - timedelta(days=days)
+    result = []
+    for p in polls:
+        try:
+            d = datetime.strptime(p.start_date, "%m/%d/%Y")
+        except ValueError:
+            continue
+        if d >= cutoff:
+            result.append(p)
+    return result

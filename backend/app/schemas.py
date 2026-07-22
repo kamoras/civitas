@@ -420,6 +420,11 @@ class PresidentSchema(CamelModel):
     # Raw C-SPAN 2021 Presidential Historians Survey point total (e.g.
     # Lincoln=897) — see app.pipeline.fetch.cspan_historians_survey.
     historical_legacy_score: int | None = None
+    # Average approval over a rolling last-90-days window rather than the
+    # full term — informational, not part of any scored dimension. Null
+    # once a president leaves office and no new polls populate it. See
+    # app.pipeline.fetch.presidential_approval.recent_polls.
+    recent_avg_approval: float | None = None
 
 
 class PresidentLeaderboardEntry(CamelModel):

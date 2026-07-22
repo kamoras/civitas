@@ -165,6 +165,11 @@ export function PresidentCard({ president }: { president: President }) {
               unit="%"
             />
             <StatBox
+              label="RECENT APPROVAL (90D)"
+              value={president.recentAvgApproval != null ? `${president.recentAvgApproval.toFixed(0)}` : null}
+              unit="%"
+            />
+            <StatBox
               label="ELECTION MARGIN"
               value={president.electionMargin != null ? `${president.electionMargin.toFixed(1)}` : null}
               unit="pt"

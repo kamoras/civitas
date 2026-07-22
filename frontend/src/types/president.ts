@@ -37,6 +37,10 @@ export interface President {
   electionMargin: number | null;
   /** Raw C-SPAN 2021 Presidential Historians Survey point total. */
   historicalLegacyScore: number | null;
+  /** Average approval over a rolling last-90-days window rather than the
+   * full term — informational, not part of any scored dimension. Null
+   * once a president leaves office and no new polls populate it. */
+  recentAvgApproval: number | null;
 }
 
 export interface PresidentLeaderboardEntry {

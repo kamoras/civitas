@@ -564,6 +564,19 @@ class President(Base):
     # gdp_growth_adjusted/rulemaking_count above.
     historical_legacy_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    # Same figure as avg_approval, but averaged only over the last 90 days
+    # of polling rather than the full term — a rolling "how is this
+    # changing lately" view, most meaningful for the currently-serving
+    # president. NULL, not stale, once a president leaves office and no
+    # new polls exist to populate the window. (A by-party version of this
+    # — a "partisan approval gap" — was deliberately not built: the
+    # number can't be attributed to the president's own conduct vs.
+    # opposition messaging/media environment, so placing it on a
+    # president's own page would imply a causal claim the data can't
+    # support, however it's labeled — see presidential_approval.py's
+    # module docstring for the full account.)
+    recent_avg_approval: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
 

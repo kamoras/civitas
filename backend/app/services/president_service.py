@@ -96,6 +96,7 @@ def _build_response(p: President) -> PresidentSchema:
         cabinet_turnover_pct=p.cabinet_turnover_pct,
         election_margin=p.election_margin,
         historical_legacy_score=p.historical_legacy_score,
+        recent_avg_approval=p.recent_avg_approval,
     )
 
 
