@@ -46,6 +46,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Full history: the diff-coverage gate below compares against
+          # origin/main, which a depth-1 checkout doesn't have.
+          fetch-depth: 0
 
       - name: Install system dependencies
         run: |
@@ -65,25 +69,40 @@ jobs:
           pip install ruff
           ruff check app/
 
-      # Coverage gate: measured 47.6% when introduced (2026-07-22); the
-      # threshold sits ~1.5pt under the real number so ordinary
-      # fluctuation doesn't break CI, and should be RATCHETED UP (never
-      # down) as coverage genuinely improves — raise it to (current - 1)
-      # whenever a PR meaningfully lifts the number. Gate covers the fast
-      # suite only; the embedding job is main-only and adds little line
-      # coverage.
-      - name: Run fast tests with coverage gate (no embedding model)
+      # Two-part coverage gate:
+      #   1. TOTAL floor (--cov-fail-under=46): a regression backstop only
+      #      — measured 47.6% when introduced (2026-07-22). It stops
+      #      test deletion; it is not the mechanism that raises coverage.
+      #   2. CHANGED-LINES gate (diff-cover, next step): the driver. Every
+      #      PR's new/modified lines must be 60%+ covered — above the
+      #      ~48% total, so each merge mathematically pulls the total UP.
+      #      60 was calibrated against this repo's own recent well-tested
+      #      work (the last 8 commits measured 62% patch coverage —
+      #      pipeline orchestration loops resist unit testing), per the
+      #      repo's fit-thresholds-against-real-data convention, not an
+      #      aspirational number that routine fixes can't meet. Ratchet
+      #      it up (60 -> 70 -> 80) as testing culture matures; when the
+      #      total rises meaningfully, drag the floor up behind it.
+      - name: Run fast tests with total-coverage floor (no embedding model)
         run: >
           python -m pytest tests/ -v -m "not slow"
-          --cov=app --cov-report=term --cov-report=html
+          --cov=app --cov-report=term --cov-report=html --cov-report=xml
           --cov-fail-under=46
 
-      # The per-file coverage table on the Actions run summary page — the
-      # canonical "where does coverage stand" report, no external service.
-      - name: Publish coverage report to job summary
+      - name: Changed-lines coverage gate (diff-cover)
+        run: >
+          diff-cover coverage.xml --compare-branch=origin/main
+          --fail-under=60 --markdown-report diff_coverage.md
+
+      # Both reports on the Actions run summary page — the canonical
+      # "where does coverage stand" view, no external service.
+      - name: Publish coverage reports to job summary
         if: always()
         run: |
-          echo "## Backend coverage" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Changed-lines coverage (gate: 60%)" >> "$GITHUB_STEP_SUMMARY"
+          cat diff_coverage.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "_no diff coverage report generated_" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Total backend coverage (floor: 46%)" >> "$GITHUB_STEP_SUMMARY"
           coverage report --format=markdown --skip-empty >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Upload HTML coverage report
