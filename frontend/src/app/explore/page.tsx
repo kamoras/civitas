@@ -183,7 +183,14 @@ function ExplorePageInner() {
           sort,
           politicianId,
         });
-        setResults(resp.results);
+        if (resp.indexEmpty) {
+          setError(
+            "The search index is still being built. This happens right after a data refresh — please check back in a few minutes.",
+          );
+          setResults([]);
+        } else {
+          setResults(resp.results);
+        }
       } catch (e) {
         setError(
           e instanceof Error ? e.message : "Search failed. The explore pipeline may still be ingesting data.",

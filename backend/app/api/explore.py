@@ -8,6 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, 
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from app.api.public import RateLimit
 from app.api.rate_limit import WriteRateLimit
 from app.config import settings
 from app.database import get_db
@@ -40,6 +41,7 @@ VALID_DOC_TYPES = {
 
 @router.get("")
 async def search_explore(
+    _rl: RateLimit,
     q: str = Query(..., min_length=2, max_length=200, description="Search query"),
     doc_type: str | None = Query(None, description="Filter by document type"),
     chamber: str | None = Query(None, description="Filter by chamber"),

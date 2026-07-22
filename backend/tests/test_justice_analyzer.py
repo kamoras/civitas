@@ -97,3 +97,79 @@ class TestBlocDerivation:
         )
         assert result["score_consistency"] == 50.0
         assert result["score_independence"] == 50.0
+
+
+class TestConsistencyUnclamp:
+    """2026-07: a systematically counter-partisan justice must NOT score a
+    perfect consistency (the old max(0, own-opp) clamped it to 100)."""
+
+    def _counter_partisan_court(self, n_cases):
+        # r1 (R-appointed) always joins the D side; R bloc is the majority.
+        all_case_votes = {}
+        per_justice = {jid: [] for jid in PARTY_MAP}
+        for i in range(n_cases):
+            votes = {}
+            for jid, party in PARTY_MAP.items():
+                if jid == "r1":
+                    votes[jid] = "minority"  # always with D
+                else:
+                    votes[jid] = "majority" if party == "R" else "minority"
+            records = _case(f"c{i}", votes)
+            all_case_votes[f"c{i}"] = records
+            for rec in records:
+                per_justice[rec["justice_id"]].append(rec)
+        return all_case_votes, per_justice
+
+    def test_counter_partisan_is_not_perfect_consistency(self):
+        all_votes, per_justice = self._counter_partisan_court(30)
+        result = analyze_justice_votes(
+            justice_id="r1", appointing_party="R",
+            votes=per_justice["r1"], all_case_votes=all_votes, party_map=PARTY_MAP,
+        )
+        # Perfectly party-predictable (just inverted) → low consistency,
+        # not the spurious 100 the old clamp produced.
+        assert result["score_consistency"] <= 20
+
+
+class TestSmallSampleShrinkage:
+    """2026-07: bloc rates from very few cases shrink toward neutral 50."""
+
+    def test_one_split_decision_does_not_yield_extreme_independence(self):
+        # A single split decision in which r1 crosses would raw-score
+        # independence at 100; shrinkage must pull it well toward 50.
+        votes = {jid: ("majority" if p == "R" else "minority") for jid, p in PARTY_MAP.items()}
+        votes["r1"] = "minority"  # r1 crosses to the D side
+        records = _case("c0", votes)
+        all_votes = {"c0": records}
+        per_justice = [r for r in records if r["justice_id"] == "r1"]
+        result = analyze_justice_votes(
+            justice_id="r1", appointing_party="R",
+            votes=per_justice, all_case_votes=all_votes, party_map=PARTY_MAP,
+        )
+        # raw would be 100; with n=1 and threshold 15, conf≈0.067 →
+        # 100*0.067 + 50*0.933 ≈ 53.3
+        assert 50 <= result["score_independence"] <= 60
+
+
+class TestRecusalNotCountedAsAgreement:
+    def test_recused_other_justice_excluded_from_agreement(self):
+        # d1 recused (non-participation value); must not count as agreeing
+        # with r1 nor sit in the denominator.
+        votes = {"r1": "majority", "r2": "majority", "r3": "majority",
+                 "d1": "recused", "d2": "minority", "d3": "minority"}
+        records = []
+        n_maj = 3
+        n_min = 2  # d2, d3 (d1 recused, excluded from tallies here)
+        for jid, side in votes.items():
+            records.append({
+                "case_id": "c0", "justice_id": jid, "vote": side,
+                "opinion_type": "none", "is_unanimous": False, "is_close": False,
+                "majority_votes": n_maj, "minority_votes": n_min,
+            })
+        result = analyze_justice_votes(
+            justice_id="r1", appointing_party="R",
+            votes=[r for r in records if r["justice_id"] == "r1"],
+            all_case_votes={"c0": records}, party_map=PARTY_MAP,
+        )
+        # d1 must be absent from the agreement matrix (never a real pairing).
+        assert "d1" not in result["agreement_matrix"]

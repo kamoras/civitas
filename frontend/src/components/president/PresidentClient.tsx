@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import { fetchPresident, fetchPresidentLeaderboard } from "@/lib/api";
-import { getScoreColor, getScoreLabel } from "@/lib/representation";
+import { getScoreColor, getPresidentLabel } from "@/lib/representation";
 import { MetricBar, StatBox } from "@/components/shared/ScoreMetric";
 import ScoreTrendSection from "@/components/checker/ScoreTrendSection";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
@@ -63,7 +63,7 @@ export function PresidentCard({ president }: { president: President }) {
           <div className="text-right">
             <div className={`text-4xl font-bold tabular-nums ${getScoreColor(overall)}`}>{overall}</div>
             <div className={`text-xs tracking-widest ${getScoreColor(overall)}`}>
-              {getScoreLabel(overall)}
+              {getPresidentLabel(overall)}
             </div>
           </div>
         </div>

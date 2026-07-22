@@ -11,9 +11,14 @@ Consistency (Ideological Independence)
     ones (8-1), matching the IRT insight that a case's discrimination is highest
     near the ideological center of the court (Martin & Quinn, 2002).
 
-    score = (1 − (own_rate − opp_rate)) × 100
-    A differential of 0 → 100 (equal agreement with both sides).
-    A differential of 1 → 0   (only agrees with own side).
+    score = (1 − |own_rate − opp_rate|) × 100
+    An absolute differential of 0 → 100 (agrees with both sides equally;
+      votes uncorrelated with appointing party = maximally independent).
+    An absolute differential of 1 → 0 (perfectly party-predictable in
+      EITHER direction — a systematically counter-partisan justice is as
+      predictable as a loyalist, and now scores accordingly rather than a
+      spurious 100). All three bloc-based scores are shrunk toward the
+      neutral 50 when backed by few cases (count-confidence).
 
 Independence
     Cross-bloc voting rate across all non-unanimous decisions — how often the
@@ -86,6 +91,28 @@ def _fisher_weight(majority_votes: int, minority_votes: int) -> float:
         return 0.0
     p = minority_votes / total
     return p * (1.0 - p)
+
+
+# A "vote" that isn't a real participation on the merits (recusal,
+# non-participation) — excluded from pairwise agreement so a shared
+# non-vote value can't read as two justices "agreeing", and so recusals
+# don't sit in an agreement denominator.
+_PARTICIPATION_VOTES = ("majority", "minority")
+
+# Cases needed for a bloc-behavior rate to be trusted at full strength;
+# below it the rate is shrunk toward the neutral 50 midpoint. Ports the
+# senator-side count-confidence pattern (min(n/threshold, 1.0)). Without
+# it, one cross-bloc vote in one split decision produced independence=100
+# on a 30%-weighted dimension. ~two terms of non-unanimous cases.
+_MIN_CASES_FULL_CONFIDENCE = 15
+
+
+def _shrink_to_neutral(score: float, n: int, threshold: int = _MIN_CASES_FULL_CONFIDENCE) -> float:
+    """Shrink a rate-derived score toward 50 when it rests on few cases."""
+    if threshold <= 0:
+        return score
+    conf = min(n / threshold, 1.0)
+    return score * conf + 50.0 * (1.0 - conf)
 
 
 def analyze_justice_votes(
@@ -161,10 +188,21 @@ def analyze_justice_votes(
 
         w = _fisher_weight(v["majority_votes"], v["minority_votes"])
 
+        # A recusal / non-participation on this justice's own side can't
+        # meaningfully agree or disagree with anyone — skip the whole
+        # pairwise pass for it rather than treat it as a merits vote.
+        if this_side not in _PARTICIPATION_VOTES:
+            continue
+
         # --- Pairwise agreement (all cases) + Fisher-weighted bloc rates ---
         for other in case_votes:
             oid = other["justice_id"]
             if oid == justice_id or oid not in all_active:
+                continue
+            # Skip a recused/non-participating other justice: without this,
+            # two justices sharing a non-vote value compare as "agreeing",
+            # and a recusal sits in the agreement denominator.
+            if other["vote"] not in _PARTICIPATION_VOTES:
                 continue
 
             same_side = other["vote"] == this_side
@@ -200,14 +238,25 @@ def analyze_justice_votes(
                     cross_bloc_count += 1
 
     # --- Score: Consistency (Ideological Independence) ---
-    # Agreement-rate differential weighted by Fisher information.
-    # Differential = 0 → score 100 (equal agreement with both sides).
-    # Differential = 1 → score 0   (only agrees with own side).
+    # ABSOLUTE agreement-rate differential weighted by Fisher information.
+    # |differential| = 0 → score 100 (agrees with both sides equally: votes
+    #   are uncorrelated with appointing party — maximally independent).
+    # |differential| = 1 → score 0 (perfectly party-predictable).
+    #
+    # The differential is now absolute (2026-07 fix): it used to be
+    # max(0, own_rate - opp_rate), which clamped the case where a justice
+    # agrees MORE with the OPPOSING bloc to 0 → consistency 100 — scoring a
+    # systematically counter-partisan justice identically to a genuinely
+    # balanced one and hiding the inversion. Party-predictability in EITHER
+    # direction is a lack of independence from party, so both tails now
+    # lower the score.
+    non_unanimous = total - unanimous_count
     if own_weighted_total > 0 and opp_weighted_total > 0 and expected_bloc:
         own_rate = own_weighted_agree / own_weighted_total
         opp_rate = opp_weighted_agree / opp_weighted_total
-        differential = max(0.0, own_rate - opp_rate)
-        consistency = max(0.0, min(100.0, (1.0 - differential) * 100))
+        differential = abs(own_rate - opp_rate)
+        raw_consistency = max(0.0, min(100.0, (1.0 - differential) * 100))
+        consistency = _shrink_to_neutral(raw_consistency, non_unanimous)
     else:
         own_rate = None
         opp_rate = None
@@ -216,9 +265,11 @@ def analyze_justice_votes(
 
     # --- Score: Independence ---
     # Cross-bloc voting rate across all split decisions.
-    # A 50% cross-bloc rate → score 100 (truly case-by-case).
+    # A 50% cross-bloc rate → score 100 (truly case-by-case), shrunk toward
+    # neutral when few split decisions back it (2026-07).
     if split_decisions > 0:
-        independence = min(100.0, (cross_bloc_count / split_decisions) * 200)
+        raw_independence = min(100.0, (cross_bloc_count / split_decisions) * 200)
+        independence = _shrink_to_neutral(raw_independence, split_decisions)
     else:
         independence = 50.0
 
@@ -229,7 +280,14 @@ def analyze_justice_votes(
     # Kagan gets 200 votes, not equal weight with a 3-case pairing against Jackson.
     bipartisan_total_cases = sum(agreement_totals.get(oid, 0) for oid in opp_bloc)
     bipartisan_total_agree = sum(agreement_counts.get(oid, 0) for oid in opp_bloc)
-    bipartisan = (bipartisan_total_agree / bipartisan_total_cases * 100) if bipartisan_total_cases > 0 else 50.0
+    if bipartisan_total_cases > 0:
+        raw_bipartisan = bipartisan_total_agree / bipartisan_total_cases * 100
+        # Shrink on the number of CASES the justice sat in (not pairings)
+        # so a justice with only a handful of shared cases isn't scored at
+        # full confidence off a tiny sample (2026-07).
+        bipartisan = _shrink_to_neutral(raw_bipartisan, total)
+    else:
+        bipartisan = 50.0
 
     # --- Score: Judicial Restraint ---
     #

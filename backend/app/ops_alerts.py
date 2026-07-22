@@ -135,6 +135,38 @@ def _send_ntfy(subject: str, body: str) -> None:
         logger.exception("ntfy alert failed")
 
 
+def check_current_congress_staleness() -> None:
+    """Alert when the CURRENT_CONGRESS config constant has fallen behind the
+    calendar — the silent time bomb the round-4 audit flagged.
+
+    Senate roll-call windows are pinned to settings.CURRENT_CONGRESS while
+    the House window is derived from the wall-clock year, so once a new
+    Congress convenes (Jan 3 of each odd year) and the constant isn't
+    bumped, the two chambers score against *different* Congresses and the
+    Senate keeps scoring a dead one indefinitely — with nothing to notice.
+    This turns that into a loud, deduped operator alert telling them exactly
+    what to change. It does NOT auto-advance the constant: the scored
+    windows intentionally key off config so an archived-DB re-run stays
+    reproducible, so bumping it is a deliberate one-line operator action.
+    """
+    from app.pipeline.fetch.congress import expected_current_congress
+
+    configured = settings.CURRENT_CONGRESS
+    expected = expected_current_congress()
+    if expected > configured:
+        send_ops_alert(
+            "CURRENT_CONGRESS is stale",
+            f"CURRENT_CONGRESS is set to {configured}, but the {expected}th "
+            f"Congress is now in session. The Senate pipeline pins its "
+            f"roll-call window to CURRENT_CONGRESS while the House derives "
+            f"its window from the calendar year, so they are now scoring "
+            f"different Congresses and the Senate is scoring a dead one. "
+            f"Bump CURRENT_CONGRESS to {expected} (env or config) and re-run "
+            f"the pipeline.",
+            dedupe_key=f"stale-congress-{expected}",
+        )
+
+
 def check_pipeline_overrun() -> None:
     """Watchdog: alert once per run when a pipeline exceeds the budget.
 

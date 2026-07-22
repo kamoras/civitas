@@ -1259,6 +1259,35 @@ class TestLegislativeEffectiveness:
         assert _les_bill_stage({"stage": "IN_COMMITTEE", "latestAction": "Introduced"}) == 2
         assert _les_bill_stage({"stage": "ENACTED", "latestAction": "Introduced"}) == 4
 
+    def test_les_bill_stage_covers_every_stage_string(self):
+        """Every BillStage the max-over-history classifier can now store
+        must map to a rank — including IN_OTHER_CHAMBER / TO_PRESIDENT /
+        VETOED, which the 2026-07 max-over-history change made reachable
+        for the first time. A typo or reorder in _LES_STAGE_ORDER that
+        pushed, say, VETOED below committee would silently change cumulative
+        credit for every vetoed/cross-chamber bill, and no prior test
+        exercised these three. The text fallback is disabled here (a real
+        `stage` is always present) so this pins the table, not the keywords."""
+        from app.config_definitions import BillStage
+
+        expected = {
+            BillStage.INTRODUCED.value: 1,
+            BillStage.IN_COMMITTEE.value: 2,
+            BillStage.PASSED_CHAMBER.value: 3,
+            BillStage.IN_OTHER_CHAMBER.value: 3,
+            BillStage.TO_PRESIDENT.value: 3,
+            BillStage.ENACTED.value: 4,
+            BillStage.VETOED.value: 3,
+        }
+        # Guard against a stage being added to the enum without a rank here.
+        assert {s.value for s in BillStage} == set(expected)
+        for stage_value, rank in expected.items():
+            assert _les_bill_stage({"stage": stage_value}) == rank, stage_value
+        # Cumulative credit tracks rank x significance weight, so a rank
+        # regression on any of these flows straight through.
+        assert _les_bill_stage({"stage": BillStage.ENACTED.value}) > \
+            _les_bill_stage({"stage": BillStage.IN_COMMITTEE.value})
+
     def test_les_significance_weight(self):
         """Commemorative resolutions weight 1x, substantive bills 5x —
         V&W's real 2-tier split this platform implements (their 3rd tier,

@@ -73,6 +73,31 @@ def congress_first_year(congress: int) -> int:
     """First calendar year of the given Congress (the 1st Congress convened 1789)."""
     return 1789 + (congress - 1) * 2
 
+
+def congress_for_year(year: int) -> int:
+    """Inverse of congress_first_year: the Congress in session during `year`.
+
+    A new Congress convenes on Jan 3 of each odd year, so within the ~2 days
+    before that in an odd January this is off by one — immaterial for the
+    staleness guard it backs (advisory ops alert), but do not use it as a
+    scored input without accounting for the convening date.
+    """
+    return 1 + (year - 1789) // 2
+
+
+def expected_current_congress(now=None) -> int:
+    """The Congress that should be current given the wall clock.
+
+    Used only to detect when the CURRENT_CONGRESS config constant has gone
+    stale (see ops_alerts.check_current_congress_staleness) — the scored
+    windows still key off the config value so an archived DB re-run stays
+    reproducible when the operator pins CURRENT_CONGRESS.
+    """
+    from app.time_utils import utcnow
+
+    year = (now or utcnow()).year
+    return congress_for_year(year)
+
 async def fetch_significant_bills(
     client: httpx.AsyncClient,
     db: Session,

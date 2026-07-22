@@ -1,6 +1,7 @@
 """Tests for president_pipeline.py's score-history snapshotting."""
 
 from app.models import President, ScoreSnapshot
+from app.pipeline.analyze.president_scorer import PRESIDENT_ALGORITHM_VERSION
 from app.pipeline.president_pipeline import _record_president_snapshots
 
 
@@ -45,7 +46,10 @@ class TestRecordPresidentSnapshots:
         assert snap.score_2 == 55.0  # effectiveness
         assert snap.score_3 == 50.0  # competence
         assert snap.score_4 == 65.0  # agencyAlignment
-        assert snap.algorithm_version is not None
+        # Pin the exact version, not just non-null: trend charts key formula-
+        # change markers off this string, so a wrong stamp (e.g. the senator
+        # ALGORITHM_VERSION copy-pasted in) must fail here.
+        assert snap.algorithm_version == PRESIDENT_ALGORITHM_VERSION
 
     def test_rerunning_same_day_upserts_not_duplicates(self, db_session):
         p = _make_president()

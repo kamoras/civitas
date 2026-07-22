@@ -43,7 +43,10 @@ def _nightly_pipeline() -> None:
     a database-level lock and skips if another instance is already running.
     """
     def _run():
-        from app.ops_alerts import send_ops_alert
+        from app.ops_alerts import check_current_congress_staleness, send_ops_alert
+        # Loud, deduped alert if CURRENT_CONGRESS has fallen behind the
+        # calendar before we score another day against a possibly-dead one.
+        check_current_congress_staleness()
         loop = asyncio.new_event_loop()
         try:
             result = loop.run_until_complete(run_senate_pipeline())

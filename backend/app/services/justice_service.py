@@ -26,6 +26,10 @@ def _build_score(j: Justice) -> JusticeScoreSchema:
         + j.score_bipartisan_agreement * JUSTICE_SCORE_WEIGHTS["bipartisan_agreement"]
         + j.score_judicial_restraint * JUSTICE_SCORE_WEIGHTS["judicial_restraint"]
     )
+    # Round to match every other scorer's serializer (senators/reps/presidents
+    # all round(...,2)); without this the raw float reaches the UI verbatim as
+    # e.g. 62.165000000000006 on the SCOTUS leaderboard and profile card.
+    overall = round(overall, 2)
     return JusticeScoreSchema(
         consistency=j.score_consistency,
         independence=j.score_independence,
