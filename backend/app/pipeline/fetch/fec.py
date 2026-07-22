@@ -9,6 +9,10 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
+from app.pipeline.fetch.congress_legislators import (
+    fetch_bioguide_to_fec_ids,
+    select_fec_id_for_office,
+)
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S, fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 from app.time_utils import utcnow
@@ -124,7 +128,7 @@ def _first_names_plausibly_match(ours: str, fec_first: str) -> bool:
 
 async def find_candidate(
     client: httpx.AsyncClient, db: Session, name: str, state: str,
-    office: str = "S", district: str | None = None,
+    office: str = "S", district: str | None = None, bioguide_id: str | None = None,
 ) -> dict | None:
     """Search for a candidate in FEC data.
 
@@ -133,6 +137,15 @@ async def find_candidate(
         state: Two-letter state code
         office: "S" for Senate, "H" for House
         district: Two-digit district code (House only)
+        bioguide_id: When provided, checked FIRST against the
+            congress-legislators bioguide->FEC crosswalk (see
+            congress_legislators.py) — an authoritative ID match with no
+            name-matching guesswork at all, immune to the next nickname
+            or legal-name variant nobody's added to the fallback table
+            below yet. The name-based search only runs when this misses
+            (no bioguide_id given, or the member isn't in that crosswalk
+            — e.g. a brand-new special-election winner not yet added
+            upstream).
 
     Returns:
         Best matching candidate record, or None.
@@ -142,6 +155,15 @@ async def find_candidate(
     cached = api_cache_get(db, "fec", cache_key)
     if cached is not None:
         return cached
+
+    if bioguide_id:
+        crosswalk = await fetch_bioguide_to_fec_ids(client, db)
+        fec_ids = crosswalk.get(bioguide_id)
+        fec_id = select_fec_id_for_office(fec_ids, office) if fec_ids else None
+        if fec_id:
+            match = {"candidate_id": fec_id}
+            api_cache_set(db, "fec", cache_key, match)
+            return match
 
     name_parts = name.split()
     last_name = name_parts[-1] if name_parts else name

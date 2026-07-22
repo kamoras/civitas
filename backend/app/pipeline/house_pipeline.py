@@ -629,7 +629,7 @@ async def run_house_pipeline() -> dict:
                     district_str = str(rep_district).zfill(2) if rep_district else None
                     fec_candidate = await find_candidate(
                         client, db, rep_name, rep_state,
-                        office="H", district=district_str,
+                        office="H", district=district_str, bioguide_id=bio_id,
                     )
 
                     if fec_candidate:

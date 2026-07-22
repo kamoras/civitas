@@ -1030,7 +1030,8 @@ async def run_senate_pipeline(
             fec_data: dict[str, dict] = {}
             for fec_idx, senator in enumerate(senators):
                 candidate = await find_candidate(
-                    client, db, senator["name"], senator["state"]
+                    client, db, senator["name"], senator["state"],
+                    bioguide_id=senator.get("bioguideId"),
                 )
                 if not candidate or not candidate.get("candidate_id"):
                     logger.warning(
