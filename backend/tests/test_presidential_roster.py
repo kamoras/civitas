@@ -17,7 +17,11 @@ Fixture HTML is a trimmed real excerpt (div/span structure copied
 verbatim from a live fetch, 2026-07) rather than a full 47-row page.
 """
 
-from app.pipeline.fetch.presidential_roster import _parse_roster
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from app.pipeline.fetch.presidential_roster import _parse_roster, fetch_presidential_roster
 
 # Newest-first, matching the real page's order. Row structure copied
 # verbatim from a live fetch of https://www.presidency.ucsb.edu/presidents.
@@ -91,6 +95,27 @@ def test_roster_parser_edge_cases():
     # The actual current president (no successor in the data) correctly
     # keeps term_end=None — the backfill must not run off the end of the list.
     assert by_id["trump-47"].term_end is None
+
+
+class TestFetchPresidentialRosterSanityFloor:
+    """2026-07 (#218 review S1): below the 40-row sanity floor, the fetcher
+    used to still return the partial list (`entries or []`) — since
+    `number` is pure list position, even one silently-dropped row
+    mis-numbers every later president, and _sync_roster would persist that
+    wrong numbering to the DB. Below the floor, nothing beats something
+    wrong: return empty and let the prior DB rows stand."""
+
+    @pytest.mark.asyncio
+    async def test_below_floor_returns_empty_not_partial(self, db_session):
+        response = MagicMock()
+        response.status_code = 200
+        response.text = _FIXTURE_HTML  # 8 rows — well under the 40-row floor
+        with patch(
+            "app.pipeline.fetch.presidential_roster.fetch_with_retry",
+            new=AsyncMock(return_value=response),
+        ):
+            entries = await fetch_presidential_roster(AsyncMock(), db_session)
+        assert entries == []
 
 
 if __name__ == "__main__":

@@ -161,11 +161,18 @@ def compute_term_gdp_growth(
             return (((end_value / peak_value) ** (1 / years_elapsed)) - 1) * 100
 
     years = [y for y in range(term_start_year, term_end_year + 1) if y in gdp_by_year]
-    if len(years) >= 4:
-        years = years[1:]  # exclude year 1 (prior administration's inherited economy)
     if len(years) < 2:
         return None
     growth_rates = []
+    # `years[1:]` below already excludes year 1's own growth (comparing
+    # the prior administration's final year to this president's first —
+    # never computed, since the first `y` iterated is years[1]/term_start
+    # +1). 2026-07 fix (#218 review S2): this used to ALSO trim `years`
+    # itself down to years[1:] before this loop, excluding a second year
+    # (year-2's growth, the president's own first full year under
+    # Blinder-Watson) that should have counted — a 4-year term produced
+    # only 2 growth observations instead of the correct 3, attributing
+    # year-1-to-2 growth to nobody.
     for y in years[1:]:
         prev = gdp_by_year.get(y - 1)
         cur = gdp_by_year.get(y)

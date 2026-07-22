@@ -157,6 +157,12 @@ SCORE_WEIGHTS: dict[str, float] = {
 # in the top 10 and Coolidge/Harding/McKinley out of it, so the number
 # itself didn't need to change — only how it's applied.
 PRESIDENT_SCORE_WEIGHTS: dict[str, float] = {
+    # The three mechanical dimensions split 0.65 three ways (0.65/3 =
+    # 0.21666...) — 0.2167 is that value rounded to 4 places, so the
+    # total is 1.0001, not exactly 1.0. Harmless: every consumer
+    # (compute_president_overall_score, _blend_live_components)
+    # renormalizes over whatever's actually present rather than assuming
+    # the nominal weights already sum to 1.
     "publicMandate": 0.2167,
     "effectiveness": 0.2167,
     "agencyAlignment": 0.2167,

@@ -191,5 +191,11 @@ def get_president_leaderboard(db: Session) -> list[PresidentLeaderboardEntry]:
             gdp_growth_avg=p.gdp_growth_avg,
         ))
 
-    entries.sort(key=lambda e: e.score.overall, reverse=True)
+    # Number tiebreaker (2026-07, #218 review minor): overall scores tie
+    # often, and Python's sort is stable over an UNORDERED query result —
+    # without a secondary key, tied presidents can swap ranks between
+    # requests (same nondeterminism class #221 fixed for senators/reps,
+    # which use name as their tiebreaker since alphabetical is their only
+    # natural order; a president's own number is more meaningful here).
+    entries.sort(key=lambda e: (-e.score.overall, e.number))
     return entries

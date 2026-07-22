@@ -51,3 +51,21 @@ class TestComputeTermGdpGrowth:
         gdp = {2020: 100.0, 2021: 105.0}
         growth = compute_term_gdp_growth(gdp, 2021, 2021)
         assert growth is None
+
+    def test_four_year_term_excludes_only_year_one_not_year_two(self):
+        # 2026-07 (#218 review S2): a prior bug trimmed `years` down to
+        # years[1:] AND started the growth loop at years[1:], excluding
+        # two years' growth instead of one. A full 4-year term (2001-2004)
+        # with distinct YoY rates should yield exactly 3 growth
+        # observations (2001->02, 02->03, 03->04) — year-1's own growth
+        # (2000->01, before the term even starts) is correctly never
+        # computed at all, but year-2's growth (2001->02, the president's
+        # own first full year under Blinder-Watson) must be counted.
+        gdp = {2000: 100.0, 2001: 110.0, 2002: 100.0, 2003: 200.0, 2004: 400.0}
+        growth = compute_term_gdp_growth(gdp, 2001, 2004)
+        # Plain average of the 3 real observations: 2001->02 = -9.09%,
+        # 2002->03 = +100%, 2003->04 = +100% => mean ~63.6%. If year-2's
+        # growth were still wrongly excluded, only the last two (+100%,
+        # +100%) would average to exactly 100%.
+        assert growth is not None
+        assert 60.0 <= growth <= 65.0

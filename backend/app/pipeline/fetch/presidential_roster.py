@@ -202,7 +202,13 @@ async def fetch_presidential_roster(client: httpx.AsyncClient, db: Session) -> l
             "UCSB presidential roster parsed to only %d entries — page structure may have changed",
             len(entries),
         )
-        return entries or []
+        # 2026-07 (#218 review S1): used to return the partial list anyway
+        # (`entries or []`). `number` is pure list position, so even one
+        # silently-dropped row (e.g. 47->46) mis-numbers every president
+        # after it — and _sync_roster would still write that wrong
+        # numbering to the DB. Below the sanity floor, a partial parse is
+        # worse than none: return nothing and let the prior DB rows stand.
+        return []
 
     api_cache_set(db, _CACHE_TIER, _CACHE_KEY, {
         "entries": [

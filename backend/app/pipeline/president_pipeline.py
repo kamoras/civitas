@@ -194,78 +194,115 @@ async def run_president_pipeline(db: Session) -> dict:
         logger.info("Historians-survey data fetched for %d presidents", len(historical_legacy_data))
 
     updated = 0
+    failed = 0
     for president in presidents:
-        term_years = _term_years(president.term_start, president.term_end)
-        term_start_year = int(president.term_start[:4])
-        term_end_year = int(president.term_end[:4]) if president.term_end else utcnow().year
+        try:
+            term_years = _term_years(president.term_start, president.term_end)
+            term_start_year = int(president.term_start[:4])
+            term_end_year = int(president.term_end[:4]) if president.term_end else utcnow().year
 
-        live: dict = {}
+            live: dict = {}
 
-        # eo_count is informational only (2026-07) — Competence, the
-        # dimension it used to feed, was removed entirely (see
-        # PRESIDENT_SCORE_WEIGHTS's comment in config_definitions.py), so
-        # this no longer goes into `live`, just the profile's raw stat.
-        eo = eo_data.get(president.id)
-        if eo is not None:
-            president.eo_count = eo["total_orders"]
+            # eo_count is informational only (2026-07) — Competence, the
+            # dimension it used to feed, was removed entirely (see
+            # PRESIDENT_SCORE_WEIGHTS's comment in config_definitions.py), so
+            # this no longer goes into `live`, just the profile's raw stat.
+            eo = eo_data.get(president.id)
+            if eo is not None:
+                president.eo_count = eo["total_orders"]
 
-        if president.id in rulemaking_data:
-            live["rulemaking_count"] = rulemaking_data[president.id]["rulemaking_count"]
-            live["rulemaking_finalized_pct"] = rulemaking_data[president.id]["rulemaking_finalized_pct"]
-            president.rulemaking_count = live["rulemaking_count"]
-            president.rulemaking_finalized_pct = live["rulemaking_finalized_pct"]
+            # Every stored field below is only OVERWRITTEN when this run's
+            # fetch actually returned something for this president; `live`
+            # is then built from the (possibly just-updated, possibly
+            # untouched) stored value. 2026-07 fix (#218 review B2): the
+            # previous version built `live` straight from this run's fetch
+            # results, so a single-night source outage (UCSB/Federal
+            # Register/C-SPAN down, cache past its TTL) wrote None over a
+            # real previously-computed score instead of just leaving it as
+            # last night's value — "couldn't fetch this run" must mean "keep
+            # what we had," never "score reads as inapplicable now."
+            if president.id in rulemaking_data:
+                president.rulemaking_count = rulemaking_data[president.id]["rulemaking_count"]
+                president.rulemaking_finalized_pct = rulemaking_data[president.id]["rulemaking_finalized_pct"]
+            if president.rulemaking_count is not None:
+                live["rulemaking_count"] = president.rulemaking_count
+                live["rulemaking_finalized_pct"] = president.rulemaking_finalized_pct
 
-        gdp_growth = compute_term_gdp_growth(gdp_by_year, term_start_year, term_end_year)
-        if gdp_growth is not None:
-            live["gdp_growth_avg"] = gdp_growth
-            president.gdp_growth_avg = gdp_growth
+            gdp_growth = compute_term_gdp_growth(gdp_by_year, term_start_year, term_end_year)
+            if gdp_growth is not None:
+                president.gdp_growth_avg = gdp_growth
+            if president.gdp_growth_avg is not None:
+                live["gdp_growth_avg"] = president.gdp_growth_avg
 
-        if president.id in jobs_data:
-            live["jobs_created_millions"] = jobs_data[president.id]
-            president.jobs_created_millions = jobs_data[president.id]
+            if president.id in jobs_data:
+                president.jobs_created_millions = jobs_data[president.id]
+            if president.jobs_created_millions is not None:
+                live["jobs_created_millions"] = president.jobs_created_millions
 
-        if president.id in approval_avg_data:
-            live["avg_approval"] = approval_avg_data[president.id]
-            live["approval_trend"] = approval_trend_data.get(president.id)
-            president.avg_approval = live["avg_approval"]
-            president.approval_trend = live["approval_trend"]
-        elif president.id in election_margin_data:
-            live["election_margin"] = election_margin_data[president.id]
-            president.election_margin = live["election_margin"]
+            if president.id in approval_avg_data:
+                president.avg_approval = approval_avg_data[president.id]
+                president.approval_trend = approval_trend_data.get(president.id)
+            elif president.id not in PRESIDENT_APPROVAL_SLUGS and president.id in election_margin_data:
+                # Election margin is only ever the Public Mandate basis for
+                # a president with no approval-polling source at all
+                # (pre-Truman) — never a stand-in for a modern president
+                # whose approval fetch merely failed this run, which would
+                # silently flip that president's scoring basis night to
+                # night (#218 review B2).
+                president.election_margin = election_margin_data[president.id]
 
-        # Informational only — not part of any scored dimension. NULL
-        # (not stale) once a president leaves office and the recent-90-
-        # day window has no new polls to populate it.
-        president.recent_avg_approval = recent_avg_approval_data.get(president.id)
+            if president.avg_approval is not None:
+                live["avg_approval"] = president.avg_approval
+                live["approval_trend"] = president.approval_trend
+            elif president.election_margin is not None:
+                live["election_margin"] = president.election_margin
 
-        if president.id in historical_legacy_data:
-            live["historical_legacy_score"] = historical_legacy_data[president.id]
-            president.historical_legacy_score = live["historical_legacy_score"]
+            # Informational only — not part of any scored dimension. NULL
+            # (not stale) once a president leaves office and the recent-90-
+            # day window has no new polls to populate it.
+            president.recent_avg_approval = recent_avg_approval_data.get(president.id)
 
-        new_scores = recalculate_president_scores(president.id, live, term_years)
-        president.score_public_mandate = new_scores["score_public_mandate"]
-        president.score_effectiveness = new_scores["score_effectiveness"]
-        president.score_agency_alignment = new_scores["score_agency_alignment"]
-        president.score_historical_legacy = new_scores["score_historical_legacy"]
-        president.updated_at = utcnow()
-        updated += 1
+            if president.id in historical_legacy_data:
+                president.historical_legacy_score = historical_legacy_data[president.id]
+            if president.historical_legacy_score is not None:
+                live["historical_legacy_score"] = president.historical_legacy_score
 
-        logger.info(
-            "  %s: mandate=%s effectiveness=%s agency=%s legacy=%s",
-            president.id,
-            new_scores["score_public_mandate"],
-            new_scores["score_effectiveness"],
-            new_scores["score_agency_alignment"],
-            new_scores["score_historical_legacy"],
-        )
+            new_scores = recalculate_president_scores(president.id, live, term_years)
+            president.score_public_mandate = new_scores["score_public_mandate"]
+            president.score_effectiveness = new_scores["score_effectiveness"]
+            president.score_agency_alignment = new_scores["score_agency_alignment"]
+            president.score_historical_legacy = new_scores["score_historical_legacy"]
+            president.updated_at = utcnow()
+            db.commit()
+            updated += 1
 
-    db.commit()
-    logger.info("President pipeline complete: %d presidents updated", updated)
+            logger.info(
+                "  %s: mandate=%s effectiveness=%s agency=%s legacy=%s",
+                president.id,
+                new_scores["score_public_mandate"],
+                new_scores["score_effectiveness"],
+                new_scores["score_agency_alignment"],
+                new_scores["score_historical_legacy"],
+            )
+        except Exception:
+            # Per-president isolation (matches senate_pipeline.py's
+            # per-member pattern, #218 review S5): a single bad roster row
+            # (e.g. an unparseable term_start) used to raise out of this
+            # loop entirely, leaving every later president unrecalculated
+            # for the night. Committing per-president above (rather than
+            # once after the whole loop) means this rollback only reverts
+            # the ONE president that failed, not everyone processed so far.
+            logger.exception("President pipeline failed for %s — leaving existing scores unchanged", president.id)
+            db.rollback()
+            failed += 1
+
+    logger.info("President pipeline complete: %d presidents updated, %d failed", updated, failed)
 
     _record_president_snapshots(db)
 
     return {
         "updated": updated,
+        "failed": failed,
         "eo_data_count": len(eo_data),
         "rulemaking_data_count": len(rulemaking_data),
         "gdp_years_count": len(gdp_by_year),

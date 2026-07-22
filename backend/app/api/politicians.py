@@ -67,10 +67,18 @@ def _senator_overall(s) -> float | None:
 
 def _president_overall(p: President) -> float | None:
     scores = [
-        p.score_public_mandate,
-        p.score_effectiveness, p.score_agency_alignment,
+        p.score_public_mandate, p.score_effectiveness,
+        p.score_agency_alignment, p.score_historical_legacy,
     ]
-    if all(v == 0.0 for v in scores):
+    # 2026-07 (#218 review S4): these four columns are nullable — a
+    # dimension that's genuinely inapplicable or not-yet-computed for
+    # this president is None, never 0.0 (see models.py's President
+    # comment). `v == 0.0` never matches None, so a fully-unscored
+    # president (fresh DB, before the first pipeline run) used to pass
+    # this guard and rank at compute_president_overall_score's defensive
+    # 0.0 fallback instead of being excluded; score_historical_legacy
+    # wasn't even in the checked list at all.
+    if all(v is None for v in scores):
         return None
     return round(compute_president_overall_score(p), 1)
 

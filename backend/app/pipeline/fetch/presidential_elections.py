@@ -156,6 +156,20 @@ def _parse_mandates_table(html: str) -> dict[str, list[float]]:
         # decisively a president won — cells[3]/cells[5], not cells[2]/[4].
         popular_margin = _to_float(cells[3].text_content())
         electoral_margin = _to_float(cells[5].text_content())
+        # KNOWN LIMITATION (2026-07, #218 review S3, deliberately not
+        # fixed here): when popular vote is "nd" (the earliest elections
+        # in this table, before it was uniformly tabulated), this falls
+        # back to the raw electoral-vote margin — a much larger-magnitude
+        # scale (the electoral college exaggerates margins; tens of
+        # points vs. single-digit popular margins) mixed into the same
+        # list as genuine popular margins AND the separate pre-1824
+        # electoral-share heuristic below, then all z-scored together
+        # against one population mean/stdev. This structurally inflates
+        # Public Mandate for the small number of earliest presidents this
+        # fallback applies to. Fixing it correctly needs its own
+        # rescaling constant fit against real data (same discipline as
+        # every other calibration constant in this file) before shipping,
+        # not an invented ad hoc adjustment — a follow-up, not silent.
         margin = popular_margin if popular_margin is not None else electoral_margin
         if margin is not None:
             result.setdefault(current_id, []).append(margin)
@@ -208,6 +222,7 @@ async def fetch_election_margins(
         return cached["data"]
 
     margins_by_id: dict[str, list[float]] = {}
+    mandates_table_ok = False
 
     resp = await fetch_with_retry(
         client, _RATE_LIMITER, "GET", MANDATES_URL, log_label="UCSB election mandates",
@@ -215,6 +230,7 @@ async def fetch_election_margins(
     if resp is not None and resp.status_code == 200:
         try:
             margins_by_id = _parse_mandates_table(resp.text)
+            mandates_table_ok = True
         except Exception:
             logger.exception("Failed to parse UCSB election-mandates table")
     else:
@@ -246,5 +262,17 @@ async def fetch_election_margins(
         return {}
 
     result = {pid: sum(vals) / len(vals) for pid, vals in margins_by_id.items()}
-    api_cache_set(db, _CACHE_TIER, cache_key, {"data": result})
+    if mandates_table_ok:
+        api_cache_set(db, _CACHE_TIER, cache_key, {"data": result})
+    else:
+        # 2026-07 (#218 review S1): the mandates table covers 1824-present
+        # (the vast majority of presidents); only total failure used to
+        # skip caching, so a mandates-table outage with the nine pre-1824
+        # year-pages still succeeding cached a 5-president dataset for 30
+        # days, nulling Public Mandate for every post-1824 pre-Truman
+        # president for a month. Still return this run's real (if
+        # partial) data — B2's fallback-to-stored-value in
+        # president_pipeline.py covers anyone missing here — just don't
+        # lock it into the cache; next run retries the mandates table.
+        logger.warning("UCSB election-mandates table fetch failed this run — not caching partial results")
     return result
