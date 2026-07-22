@@ -24,18 +24,25 @@ const INITIAL_VISIBLE = 8;
 // on the same card.
 const SUBSTANTIVE_BILL_TYPES = new Set(["s", "hr", "sjres", "hjres"]);
 
-// Matches MAIN_FLOW_STAGES in BillStageFlow.tsx minus INTRODUCED/ENACTED —
-// "advancing" means past the starting line and short of the finish, same
-// definition the site-wide /bills stage funnel uses.
-const ADVANCING_STAGES = new Set(["IN_COMMITTEE", "PASSED_CHAMBER", "IN_OTHER_CHAMBER", "TO_PRESIDENT"]);
+// Deliberately excludes IN_COMMITTEE, unlike MAIN_FLOW_STAGES in
+// BillStageFlow.tsx (the site-wide /bills funnel, which correctly shows
+// it as a real, factual current status). 2026-07 fix: backend/app/
+// pipeline/analyze/bill_stage.py assigns IN_COMMITTEE the moment a bill
+// is automatically referred to committee — the default first step for
+// essentially every bill, not a sign anyone did anything — and can't yet
+// distinguish that from a bill that actually got a hearing or markup
+// (both collapse into the same stage). Counting it as "advancing" made
+// "past the starting line" describe the starting line itself: audited
+// live, one senator's sponsored-bills summary read "135 bills, 123
+// advancing" — 91% of her substantive bills, because nearly all of them
+// simply hadn't died yet, not because they were unusually far along.
+const ADVANCING_STAGES = new Set(["PASSED_CHAMBER", "IN_OTHER_CHAMBER", "TO_PRESIDENT"]);
 
 // `stage` (BILL_STAGES taxonomy, backend/app/config_definitions.py) is the
-// more reliable signal when present, but live data currently has it empty
-// for every sponsored bill (the field was added to the pipeline after most
-// rows were last written — it backfills on the next full run). Falling
-// back to the original latestAction string-match keeps "advancing" working
-// today instead of silently reporting 0 for everyone until that backfill
-// lands; once `stage` is populated for a bill this prefers it outright.
+// more reliable signal when present. Falling back to the original
+// latestAction string-match covers any sponsored bill from before the
+// `stage` backfill (or a future edge case where classification fails) —
+// once `stage` is populated for a bill this prefers it outright.
 function isAdvancing(b: SponsoredBill): boolean {
   if (b.isLaw) return false;
   if (b.stage) return ADVANCING_STAGES.has(b.stage);

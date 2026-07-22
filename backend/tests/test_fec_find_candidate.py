@@ -106,6 +106,70 @@ async def test_primary_search_requires_genuine_name_match(db_session):
         assert result is None
 
 
+class TestNicknameAndMiddleInitialFallback:
+    """2026-07 audit: 28 of 100 sitting senators had zero FEC donor data
+    because FEC files under the legal name/format (nickname, no/spelled-
+    out middle initial), which never satisfies the strict all-parts
+    match above — Bill Cassidy is FEC's "CASSIDY, WILLIAM M.", Chuck
+    Grassley is "GRASSLEY, CHARLES E". The fallback must still reject a
+    genuinely different first name sharing a surname (Darline vs. Lindsey
+    Graham — covered by test_primary_search_requires_genuine_name_match
+    above, which continues to pass unchanged)."""
+
+    @pytest.mark.asyncio
+    async def test_nickname_matches_legal_first_name(self, db_session):
+        with patch(
+            "app.pipeline.fetch.fec._fetch_with_retry", new_callable=AsyncMock
+        ) as mock_fetch:
+            mock_fetch.return_value = {
+                "results": [_candidate("CASSIDY, WILLIAM M.", "S4LA00107", "")]
+            }
+            result = await find_candidate(None, db_session, "Bill Cassidy", "LA", office="S")
+        assert result is not None
+        assert result["candidate_id"] == "S4LA00107"
+
+    @pytest.mark.asyncio
+    async def test_middle_initial_mismatch_does_not_block_match(self, db_session):
+        with patch(
+            "app.pipeline.fetch.fec._fetch_with_retry", new_callable=AsyncMock
+        ) as mock_fetch:
+            mock_fetch.return_value = {
+                "results": [_candidate("RISCH, JAMES E MR.", "S8ID00092", "")]
+            }
+            result = await find_candidate(None, db_session, "James E. Risch", "ID", office="S")
+        assert result is not None
+        assert result["candidate_id"] == "S8ID00092"
+
+    @pytest.mark.asyncio
+    async def test_different_first_name_same_surname_still_rejected(self, db_session):
+        with patch(
+            "app.pipeline.fetch.fec._fetch_with_retry", new_callable=AsyncMock
+        ) as mock_fetch:
+            mock_fetch.return_value = {
+                "results": [_candidate("GRASSLEY, BARBARA", "S0IA00099", "")]
+            }
+            result = await find_candidate(None, db_session, "Chuck Grassley", "IA", office="S")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_disambiguates_among_multiple_same_surname_results(self, db_session):
+        # Two real, different Warners on file for VA Senate across eras —
+        # must pick the one whose first name actually matches, not just
+        # the first result.
+        with patch(
+            "app.pipeline.fetch.fec._fetch_with_retry", new_callable=AsyncMock
+        ) as mock_fetch:
+            mock_fetch.return_value = {
+                "results": [
+                    _candidate("WARNER, JOHN WILLIAM", "S8VA00107", ""),
+                    _candidate("WARNER, MARK ROBERT", "S6VA00093", ""),
+                ]
+            }
+            result = await find_candidate(None, db_session, "Mark R. Warner", "VA", office="S")
+        assert result is not None
+        assert result["candidate_id"] == "S6VA00093"
+
+
 @pytest.mark.asyncio
 async def test_both_searches_empty_returns_none(db_session):
     with patch(
