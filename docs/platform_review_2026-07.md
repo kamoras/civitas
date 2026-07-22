@@ -144,6 +144,29 @@ run, or genuine design decisions for the maintainer).
 20. **`_generate_full_story` passed `db_session=None` with a `cache_key`**,
     silently disabling the first-attempt LLM cache it was built for.
 
+### Follow-up batch (same PR, second commit)
+
+22. **Senate eFD PTR search now paginates** (was one 100-row page treated
+    as complete, with the incremental anchor permanently skipping dropped
+    filings) and **electronic filings' `disclosure_date` now comes from
+    the search result's filed date** (the transactions table has no
+    notification column, so every electronic Senate trade scored as
+    disclosed in 0 days). **PTR column binding is exact-match-first**, so
+    an "Asset Type" column can no longer shadow "Type" and silently drop
+    whole filings. (Was O13 a-c.)
+
+23. **Nightly cron pinned to UTC** (previously fired in container-local
+    time, floating against the action center's date labels). (Was the
+    timezone half of O15; the lock-atomicity half remains open.)
+
+24. **Drift-report Spearman is now exact under ties** (Pearson of average
+    ranks; the 6·Σd² shortcut is biased when clamped integer scores tie).
+    (Was O20.)
+
+25. **Ground-truth reference lookup is deterministic** — an ambiguous name
+    fragment now skips with a loud warning instead of checking whichever
+    row SQLite returned first. (Was O19.)
+
 ### Documentation
 
 21. **README displayed the pre-v6.0 five-dimension overall formula**
@@ -281,17 +304,14 @@ population first) or is a genuine design tradeoff.
 
 ### Fetch / infrastructure
 
-- **O13. Senate PTR ingestion**: (a) the eFD search never paginates
-  (`start=0, length=100`) and the incremental anchor advances past dropped
-  rows, so truncated filings are lost *permanently*; (b) electronic PTRs
-  get `disclosure_date = transaction_date` (the HTML table has no
-  notification-date column and the search row's `filed_date` is discarded),
-  so every Senate trade scores as disclosed in 0 days — the STOCK-Act
-  timeliness metric is fiction for the Senate; (c) `_find_col`'s first-
-  contains-keyword binding can bind "Type" to an "Asset Type" column and
-  silently ingest zero trades; (d) the filer→member match has no state
-  disambiguation (two Scotts) and uses substring first-name matching.
-  This subsystem needs a dedicated pass with live eFD HTML fixtures.
+- **O13. Senate PTR ingestion** — (a)-(c) fixed in this PR's second
+  commit (see #22 above). Still open: (d) the filer→member match has no
+  state disambiguation (two Scotts) and uses substring first-name
+  matching — the search result's office/state column is discarded before
+  matching. The module's own docstring also still requires live
+  verification of the eFD field names/report-type codes before the
+  parsed output is trusted; run a handful of real filings through it and
+  diff against the filed reports.
 
 - **O14. FEC candidate matching requires every display-name token verbatim
   in FEC's registered name** — "Katie Boyd Britt" vs "BRITT, KATIE" fails,
@@ -306,9 +326,9 @@ population first) or is a genuine design tradeoff.
   "stale" override starts a second thread without stopping the first. The
   nightly `_acquire_pipeline_lock` is check-then-insert without a unique
   constraint or `BEGIN IMMEDIATE`, so its docstring's atomicity claim
-  doesn't hold at the 03:00 tick. The scheduler's `CronTrigger` also has
-  no explicit timezone, so the nightly run floats with container TZ while
-  the action center dates by `America/New_York`.
+  doesn't hold at the 03:00 tick. (The CronTrigger timezone half of this
+  finding was fixed in this PR's second commit — the nightly job is now
+  pinned to UTC.)
 
 - **O16. Prompt injection surface**: third-party RSS text (including
   `feedx.net`, an unofficial AP mirror — a single-point supply-chain risk
@@ -333,17 +353,14 @@ population first) or is a genuine design tradeoff.
   item is not evidence of recency; consider dropping items with no
   parseable date.
 
-- **O19. `check_ground_truth` matches reference senators with
-  `name LIKE '%fragment%'` and `.first()`** with no ordering — fragile to
-  same-surname collisions and nondeterministic if two rows match. Consider
-  bioguide-anchored references.
+- **O19. Ground-truth name-fragment matching** — nondeterminism fixed in
+  this PR's second commit (ambiguous fragments skip loudly). Longer-term,
+  bioguide-anchored references would remove the fragility entirely.
 
 ### Statistics, minor
 
-- **O20. `score_calibration._spearman_rho`** uses the `1 − 6Σd²/(n(n²−1))`
-  formula with average ranks — approximate under heavy ties (clamped int
-  scores tie often); the Pearson-of-ranks form is exact. Drift detection
-  only, not scores.
+- **O20. Drift-report Spearman under ties** — fixed in this PR's second
+  commit (exact Pearson-of-ranks).
 
 ---
 
