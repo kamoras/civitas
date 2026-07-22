@@ -58,16 +58,20 @@ def test_drops_legacy_president_columns_and_keeps_data(patched_engine):
     eng = patched_engine
     # The exact shape behind the #220 crash-loop: presidents still carrying
     # the retired score_independence / score_follow_through columns.
+    # score_competence joined the retired list in #218 (Competence removed
+    # as a dimension), so it's now asserted dropped too; avg_approval
+    # stands in as the "unrelated data survives" column instead.
     with eng.begin() as conn:
         conn.execute(text(
             "CREATE TABLE presidents ("
             " id TEXT PRIMARY KEY, score_independence REAL,"
-            " score_follow_through REAL, score_competence REAL)"
+            " score_follow_through REAL, score_competence REAL,"
+            " avg_approval REAL)"
         ))
         conn.execute(text(
             "INSERT INTO presidents"
-            " (id, score_independence, score_follow_through, score_competence)"
-            " VALUES ('p1', 10, 20, 60)"
+            " (id, score_independence, score_follow_through, score_competence, avg_approval)"
+            " VALUES ('p1', 10, 20, 60, 47)"
         ))
 
     database._migrate_columns()
@@ -75,11 +79,12 @@ def test_drops_legacy_president_columns_and_keeps_data(patched_engine):
     cols = {c["name"] for c in inspect(eng).get_columns("presidents")}
     assert "score_independence" not in cols
     assert "score_follow_through" not in cols
+    assert "score_competence" not in cols
     with eng.begin() as conn:
         row = conn.execute(
-            text("SELECT id, score_competence FROM presidents WHERE id = 'p1'")
+            text("SELECT id, avg_approval FROM presidents WHERE id = 'p1'")
         ).fetchone()
-    assert row.score_competence == 60  # non-dropped data untouched
+    assert row.avg_approval == 47  # non-dropped data untouched
 
 
 def test_absent_tables_are_skipped_not_errored(patched_engine):

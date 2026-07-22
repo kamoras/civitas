@@ -461,7 +461,10 @@ export async function fetchCurrentPresident(): Promise<President | null> {
   const res = await fetch(`${API_BASE}/presidents/current`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Failed to load current president: ${res.status}`);
-  return camelizeKeys(await res.json()) as President;
+  // No camelizeKeys: the endpoint serializes camelCase via model_dump(
+  // by_alias=True), same as fetchPresident above — see that function's
+  // comment for why re-camelizing is a data-keyed-map landmine.
+  return (await res.json()) as President;
 }
 
 export async function fetchJusticeLeaderboard(): Promise<JusticeLeaderboardEntry[]> {
