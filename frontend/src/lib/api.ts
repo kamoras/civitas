@@ -478,6 +478,11 @@ export interface ExploreResponse {
   query: string;
   results: ExploreResult[];
   count: number;
+  // Set when the vector index doesn't exist yet (e.g. right after an admin
+  // reset, before the next pipeline run). The backend returns HTTP 503 with
+  // this flag so the UI can show an honest "still indexing" state instead of
+  // "no results found" while the stats header still claims thousands of docs.
+  indexEmpty?: boolean;
 }
 
 export interface ExploreStats {
@@ -499,7 +504,25 @@ export async function searchExplore(
   if (options?.sort) params.set("sort", options.sort);
   if (options?.politicianId) params.set("politician_id", options.politicianId);
 
-  return requestJson(`${API_BASE}/explore?${params}`, "Explore search failed");
+  // Can't route through requestJson: it throws on any !res.ok and discards
+  // the body, which would turn the 503 "index still building" contract into a
+  // bare "Explore search failed: 503" and never let the page show the
+  // friendlier indexing state.
+  const res = await fetch(`${API_BASE}/explore?${params}`);
+  if (res.status === 503) {
+    let body: { indexEmpty?: boolean } = {};
+    try {
+      body = await res.json();
+    } catch {
+      /* non-JSON 503 (proxy/gateway) — fall through to the generic error */
+    }
+    if (body?.indexEmpty) {
+      return { query, results: [], count: 0, indexEmpty: true };
+    }
+    throw new Error("Explore search failed: 503");
+  }
+  if (!res.ok) throw new Error(`Explore search failed: ${res.status}`);
+  return (await res.json()) as ExploreResponse;
 }
 
 export interface ExploreDocumentDetail {

@@ -1,14 +1,20 @@
 export function formatCurrency(amount: number): string {
-  if (amount >= 1_000_000_000) {
-    return `$${(amount / 1_000_000_000).toFixed(1)}B`;
+  // Compact on magnitude, then re-attach the sign OUTSIDE the "$" so a
+  // negative reads "-$1.0M", not "$-1,000,000". Operating on the raw value
+  // skipped every threshold for negatives and fell through to the plain
+  // toLocaleString branch (e.g. a negative million rendered "$-1,000,000").
+  const sign = amount < 0 ? "-" : "";
+  const abs = Math.abs(amount);
+  if (abs >= 1_000_000_000) {
+    return `${sign}$${(abs / 1_000_000_000).toFixed(1)}B`;
   }
-  if (amount >= 1_000_000) {
-    return `$${(amount / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000_000) {
+    return `${sign}$${(abs / 1_000_000).toFixed(1)}M`;
   }
-  if (amount >= 1_000) {
-    return `$${(amount / 1_000).toFixed(0)}K`;
+  if (abs >= 1_000) {
+    return `${sign}$${(abs / 1_000).toFixed(0)}K`;
   }
-  return `$${amount.toLocaleString()}`;
+  return `${sign}$${abs.toLocaleString()}`;
 }
 
 /** Returns the local date as "YYYY-MM-DD" — never UTC, so it matches the user's calendar. */

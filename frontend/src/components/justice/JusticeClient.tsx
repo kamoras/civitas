@@ -31,7 +31,7 @@ const METRIC_LABELS: { key: keyof JusticeScore; label: string; desc: string }[] 
   {
     key: "bipartisanAgreement",
     label: "BIPARTISAN AGREEMENT",
-    desc: "Fraction of cases decided unanimously or near-unanimously — reflects jurisprudential pragmatism.",
+    desc: "How often this justice sides with justices appointed by the opposing party, across the cases they hear together — reflects jurisprudential pragmatism.",
   },
   {
     key: "judicialRestraint",
