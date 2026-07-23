@@ -1,12 +1,16 @@
 """Calibrate CROSSING_QUALITY_DISCOUNT (score_calculator.py) via grid
-search against GROUND_TRUTH and the population stdev floor.
+search against the derived consistency gate.
 
 No natural continuous target exists for "how partisan was this crossing"
 (unlike the FI small-donor baseline, which fits an OLS regression against
 a real percentage), so this grid-searches candidate discount values and
-reports a pass/fail matrix instead of fitting a formula — same
-grid-search-against-ground-truth approach this file's own calibration
-history uses whenever no continuous target is available.
+reports a pass/fail matrix instead of fitting a formula. Each candidate
+is judged by the same population-level checks the pipeline runs
+(app/pipeline/analyze/ground_truth.py): recomputed IV scores must still
+rank-track the observed break rate, the extreme deciles must still land
+on the right side of the population, and the distribution must not
+collapse toward a point mass — no named reference senators, no
+hand-typed ranges (AGENTS.md 1/3a).
 
 REQUIRES a full pipeline run to have populated opposing_party_unity_pct
 on KeyVote/RepKeyVote rows first (see CROSSING_QUALITY_DISCOUNT's
@@ -25,24 +29,19 @@ CROSSING_QUALITY_DISCOUNT in score_calculator.py with a comment citing
 this script and the date, matching this file's existing convention.
 """
 
+import copy
 import statistics
 
 from app.database import SessionLocal
 from app.models import KeyVote, Senator
 from app.pipeline.analyze import score_calculator
-from app.pipeline.analyze.ground_truth import GROUND_TRUTH, MIN_STDEV
+from app.pipeline.analyze.ground_truth import _member_records, evaluate_derived_checks
 from app.services.senator_service import get_senator_score_breakdown
 
 # The 0.65-1.0 unity band is fixed by compute_party_vote_split's 65/35
 # labeling threshold, not a free parameter — only the discount magnitude
 # is swept. 0.0 is included as the current/no-op anchor.
 CANDIDATE_DISCOUNTS = [0.0, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8]
-
-IV_GROUND_TRUTH = [
-    (fragment, lo, hi, rationale)
-    for fragment, dim, (lo, hi), rationale in GROUND_TRUTH
-    if dim == "score_independent_voting"
-]
 
 
 def main() -> None:
@@ -60,40 +59,28 @@ def main() -> None:
         return
     print(f"{populated} key_votes rows have opposing_party_unity_pct populated.\n")
 
-    gt_senators = []
-    for fragment, lo, hi, rationale in IV_GROUND_TRUTH:
-        senator = db.query(Senator).filter(Senator.name.like(f"%{fragment}%")).first()
-        if senator is None:
-            print(f"SKIP: ground-truth senator {fragment!r} not found")
-            continue
-        gt_senators.append((senator.id, senator.name, lo, hi, rationale))
+    base_records = _member_records(db, Senator)
 
-    all_senator_ids = [s.id for s in db.query(Senator).all()]
-    floor = MIN_STDEV["score_independent_voting"]
-
-    print(f"{'discount':>8}  {'gt pass':>8}  {'stdev':>8}  {'verdict'}")
+    print(f"{'discount':>8}  {'iv checks':>9}  {'stdev':>8}  {'verdict'}")
     results = []
     for discount in CANDIDATE_DISCOUNTS:
         score_calculator.CROSSING_QUALITY_DISCOUNT = discount
 
-        failures = []
-        for sid, name, lo, hi, rationale in gt_senators:
-            breakdown = get_senator_score_breakdown(db, sid)
-            iv = breakdown["independentVoting"]["score"]
-            if not (lo <= iv <= hi):
-                failures.append((name, iv, lo, hi, rationale))
+        records = copy.deepcopy(base_records)
+        for r in records:
+            breakdown = get_senator_score_breakdown(db, r["id"])
+            r["scores"]["score_independent_voting"] = breakdown["independentVoting"]["score"]
 
-        all_scores = [
-            get_senator_score_breakdown(db, sid)["independentVoting"]["score"]
-            for sid in all_senator_ids
-        ]
+        report = evaluate_derived_checks(records, "senators")
+        failures = [f for f in report["failures"] if f["dimension"] == "IV"]
+
+        all_scores = [r["scores"]["score_independent_voting"] for r in records]
         stdev = statistics.pstdev(all_scores)
 
-        gt_pass = len(gt_senators) - len(failures)
-        verdict = "PASS" if not failures and stdev >= floor else "FAIL"
-        print(f"{discount:>8.2f}  {gt_pass:>4}/{len(gt_senators):<3}  {stdev:>8.2f}  {verdict}")
-        for name, iv, lo, hi, rationale in failures:
-            print(f"           - {name}: IV={iv:.0f} outside [{lo},{hi}] ({rationale})")
+        verdict = "PASS" if not failures else "FAIL"
+        print(f"{discount:>8.2f}  {len(failures):>4} fail  {stdev:>8.2f}  {verdict}")
+        for f in failures:
+            print(f"           - {f['senator']}: {f['rationale']}")
         results.append((discount, verdict))
 
     passing = [d for d, v in results if v == "PASS"]
@@ -103,7 +90,7 @@ def main() -> None:
         print(
             "\nNo candidate discount passed every check — do not ship a "
             "nonzero discount until this is resolved; bring the failures "
-            "back for a design review rather than loosening ground truth."
+            "back for a design review rather than weakening the gate."
         )
 
     db.close()

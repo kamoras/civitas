@@ -338,10 +338,12 @@ congress reads as intentional, not a bug.
 Narrower windows mean less data backs each dimension by design, not because
 coverage got worse — `calculate_confidence`'s vote/bill thresholds are
 recalibrated accordingly (see `score_calculator.py`), and `ground_truth.py`'s
-population-stdev floor is the backstop that would catch a real collapse.
-House has no named ground-truth reference cases (`GROUND_TRUTH` is
-Senate-only) — `check_score_distribution` is House's only automated
-regression gate, wired into `house_pipeline.py` alongside Senate's.
+population-distribution checks are the backstop that would catch a real
+collapse. The gate derives every expectation from the current population's
+own raw data (rank consistency against FEC/roll-call metrics, point-mass and
+snapshot-history distribution checks — no named reference members, no
+hand-typed score ranges, per principle 1/3a), so the identical checks run
+for both chambers in `senate_pipeline.py` and `house_pipeline.py`.
 
 ## Data Pipeline
 

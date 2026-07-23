@@ -99,8 +99,8 @@ def main() -> None:
     # Saturation constant: full credit/deficit at ~1.5 residual-stdevs
     # past the baseline, the same "roughly one meaningful standard
     # deviation of real spread" reasoning used elsewhere in this file's
-    # calibration constants (see MIN_STDEV's docstring in ground_truth.py
-    # for the same style of justification).
+    # calibration constants (the retired MIN_STDEV table in
+    # ground_truth.py's git history used the same style of justification).
     saturation = round(1.5 * resid_stdev, 1)
     print(f"Saturation (full credit/deficit at this many points past baseline): {saturation}")
 

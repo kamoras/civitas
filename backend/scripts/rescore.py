@@ -15,7 +15,9 @@ first on PYTHONPATH:
 
 Outputs per-senator old→new comparisons, distribution statistics,
 dimension correlations, party means, the FI-vs-fundraising-scale
-correlation (watch for scale bias), and the ground-truth reference table.
+correlation (watch for scale bias), and the derived consistency gate
+(the same population-level checks the pipeline runs — see
+app/pipeline/analyze/ground_truth.py).
 
 Origin: the 2026-07 score audits used this approach to validate the v4
 and v4.1 algorithm changes against all 100 senators before deploying.
@@ -40,25 +42,15 @@ import sys
 if "/app" not in sys.path:
     sys.path.append("/app")
 
+from app.pipeline.analyze.ground_truth import (  # noqa: E402
+    MIN_LABELED_VOTES,
+    evaluate_derived_checks,
+)
 from app.pipeline.analyze.score_calculator import calculate_scores  # noqa: E402
 from app.pipeline.fetch.fec import select_recent_elections  # noqa: E402
 from app.pipeline.transform.candidate_names import is_candidate_self_donor  # noqa: E402
 
 DB = "file:/data/civitas.db?mode=ro"
-
-# Keep in sync with app/pipeline/analyze/ground_truth.py
-# (v4.2 Constituent Alignment ranges, 2026-07-04)
-GROUND_TRUTH = [
-    ("Collins",   "iv", 70, 100), ("Murkowski", "iv", 70, 100),
-    ("Sanders",   "iv", 35, 75),  ("Sanders",   "fi", 70, 100),
-    ("Warren",    "iv", 35, 70),  ("Warren",    "fi", 70, 100),
-    ("Cruz",      "iv", 30, 60),  ("Cruz",      "fi", 50, 95),
-    ("McConnell", "iv", 30, 60),  ("McConnell", "fi", 30, 90),
-    ("Paul",      "iv", 55, 95),  ("Paul",      "fi", 60, 100),
-    ("Klobuchar", "iv", 40, 70),  ("Klobuchar", "fi", 35, 75),
-    ("Ossoff",    "iv", 28, 50),  ("Thune",     "iv", 38, 62),
-    ("Fetterman", "iv", 50, 85),
-]
 
 DIM_KEYS = ["fi", "pp", "iv", "fd", "le"]
 OVERALL_WEIGHTS = [("fi", .25), ("pp", .20), ("iv", .20), ("fd", .15), ("le", .20)]
@@ -221,7 +213,28 @@ def main() -> int:
     for s in senators:
         payload = build_payload(cur, s, search, fin)
         new = calculate_scores(payload)
+        funding = payload["funding"]
+        raised = funding["totalRaised"] or 0
+        labeled = [
+            v["votedWithParty"]
+            for v in payload["votingRecord"]["keyVotes"]
+            if v["votedWithParty"] is not None
+        ]
+        metrics = {
+            "pac_ratio": funding["totalFromPACs"] / raised if raised > 0 else None,
+            "small_donor_pct": funding["smallDonorPercentage"] if raised > 0 else None,
+            "party_break_rate": (
+                labeled.count(False) / len(labeled)
+                if len(labeled) >= MIN_LABELED_VOTES else None
+            ),
+        }
         results.append({
+            "metrics": metrics,
+            "raw": {
+                "total_raised": raised,
+                "total_from_pacs": funding["totalFromPACs"],
+                "labeled_votes": len(labeled),
+            },
             "name": s["name"], "state": s["state"], "party": s["party"],
             "raised": payload["funding"]["totalRaised"] or 0,
             "old": {
@@ -254,19 +267,25 @@ def main() -> int:
               f"min={min(nv):3.0f} max={max(nv):3.0f}  |  "
               f"old mean={statistics.mean(ov):5.1f} stdev={statistics.stdev(ov):4.1f}")
 
-    print("\nGROUND TRUTH (new scores)")
-    fails = 0
-    for frag, dim, lo, hi in GROUND_TRUTH:
-        match = next((r for r in results if frag in r["name"]), None)
-        if not match:
-            print(f"  {frag}: NOT FOUND")
-            continue
-        v = match["new"][dim]
-        ok = lo <= v <= hi
-        fails += 0 if ok else 1
-        print(f"  {'PASS' if ok else 'FAIL':<5} {frag:<12} {dim.upper()}={v:>3.0f}  "
-              f"expected [{lo},{hi}]  (old={match['old'][dim] or 0:.0f})")
-    print(f"\n{fails} ground-truth failures")
+    print("\nDERIVED CONSISTENCY GATE (new scores)")
+    members = [
+        {
+            "name": r["name"],
+            "scores": {
+                "score_funding_independence": r["new"]["fi"],
+                "score_independent_voting": r["new"]["iv"],
+                "score_funding_diversity": r["new"]["fd"],
+                "score_legislative_effectiveness": r["new"]["le"],
+            },
+            "metrics": r["metrics"],
+            "raw": r["raw"],
+        }
+        for r in results
+    ]
+    report = evaluate_derived_checks(members, "senators")
+    for f in report["failures"]:
+        print(f"  FAIL  {f['senator']} {f['dimension']}: {f['rationale']}")
+    print(f"\n{len(report['failures'])} of {report['checked']} derived checks failed")
 
     print("\nPARTY MEANS")
     for party in ("D", "R"):

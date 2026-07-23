@@ -1868,14 +1868,12 @@ async def run_senate_pipeline(
             gt_report = check_ground_truth(db)
             # Persist on the run record so failures surface in the admin
             # dashboard instead of living only in logs (the 2026-06 audit
-            # found reference senators failing across two algorithm
+            # found scores drifting from raw records across two algorithm
             # versions with no automated alarm).
             gt_failures = gt_report.get("failures", [])
-            # Population-level distribution check (e.g. Promise Persistence
-            # collapsing toward a neutral prior) — no individual senator's
-            # promise record is independently verifiable, so this can't be
-            # a named-reference check, but it catches the failure mode
-            # those checks can't: everyone converging to the same score.
+            # Population-level distribution check — catches the failure
+            # mode the per-metric checks can't: everyone converging to
+            # the same score.
             gt_failures += check_score_distribution(db)
             lines = "\n".join(
                 f"- {f.get('senator', '?')} {f.get('dimension', '?')}="
@@ -1886,7 +1884,7 @@ async def run_senate_pipeline(
                 db, pipeline_run, gt_failures,
                 alert_title=f"Ground-truth gate failed ({len(gt_failures)})",
                 alert_body=(
-                    f"Reference senators outside expected score ranges "
+                    f"Derived score-consistency checks failed "
                     f"(run #{pipeline_run.id}):\n{lines}"
                 ),
                 dedupe_key=f"ground-truth-run-{pipeline_run.id}",

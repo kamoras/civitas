@@ -491,18 +491,19 @@ validity problem instead, which recalibration cannot fix.
   range passed, so 25.0 was chosen by reusing this file's own existing
   magnitude for the symmetric surplus-crossing case rather than an arbitrary
   passing value. Re-run the grid search after any pipeline run meaningfully
-  shifts the ideology_score distribution or once GROUND_TRUTH gains a
-  reference senator inside this branch's flagged set.
+  shifts the ideology_score distribution. (The GROUND_TRUTH ranges it was
+  originally checked against were since replaced by ground_truth.py's
+  derived consistency gate — validate against that gate now.)
 
   Validation posture: the discount's TRIGGER condition (extreme tercile +
   unsafe seat) and its scaling (seat-direction discount) are deterministic
   and unit-tested, same as v6.6's floor. Its MAGNITUDE was fit against live
-  data per the above, and should be re-validated (ground_truth.py + the IV
-  stdev floor) after every pipeline run the same way v6.6's floor already
-  requires — flooring/discounting removes or redistributes spread the old
-  formula manufactured differently, so IV population stdev against
-  ground_truth.MIN_STDEV is the standing post-run check for any change to
-  this branch, not just this one.
+  data per the above, and should be re-validated (ground_truth.py's derived
+  consistency + distribution checks) after every pipeline run the same way
+  v6.6's floor already requires — flooring/discounting removes or
+  redistributes spread the old formula manufactured differently, so the IV
+  distribution checks in ground_truth.check_score_distribution are the
+  standing post-run gate for any change to this branch, not just this one.
 
 Changes from v6.7 -> v6.8 (2026-07-21): fairness audit of the first full
 pipeline run under v6.7 (2026-07-21 population, 99 scored D/R senators),
@@ -1823,7 +1824,7 @@ def _signed_state_alignment(
 # shipping (the FI small-donor baseline, LE volume ceilings, ...) — this
 # one can't be, yet. Once a pipeline run has populated real unity data,
 # run scripts/calibrate_crossing_quality.py (grid search against
-# GROUND_TRUTH and the population stdev floor — there's no natural
+# ground_truth.py's derived consistency gate — there's no natural
 # continuous target to fit against, unlike e.g. the FI baseline's OLS
 # regression) and raise this from 0.0 to the largest value that still
 # passes every check.
@@ -2705,9 +2706,10 @@ _LES_AVG_BASELINE_HOUSE = 0.0444
 # zero, never a runaway score from one outlier bill" shape as every other
 # saturation constant in this file (e.g. Constituent Alignment's
 # surplus/0.25). Same calibration script: ~1.5x the mean chamber stdev of
-# real per-congress credit, checked against the population stdev floor —
-# LE has no per-senator GROUND_TRUTH entries to check against
-# (ground_truth.py). Re-run 2026-07-23 alongside the medians above (post-
+# real per-congress credit, checked against the population distribution
+# checks — LE has no raw-metric consistency check in ground_truth.py, so
+# the distribution gate is its only backstop.
+# Re-run 2026-07-23 alongside the medians above (post-
 # reclassification audit: Senate stdev 178.37, House stdev 88.12 -> 199.87).
 _LES_CREDIT_SATURATION = 199.87
 

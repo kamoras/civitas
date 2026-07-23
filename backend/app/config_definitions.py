@@ -42,8 +42,9 @@ from enum import StrEnum
 # generic platform language that embedding-based matching against specific
 # vote/bill text structurally can't bridge (see
 # policy_alignment.compute_promise_vote_alignment's docstring, which
-# documents three prior fix attempts that didn't resolve it, and
-# ground_truth.py's MIN_STDEV comment documenting the same collapse). The
+# documents three prior fix attempts that didn't resolve it, and the
+# historical MIN_STDEV notes in ground_truth.py's git history documenting
+# the same collapse — the gate's point-mass check now catches it). The
 # underlying promise extraction/alignment pipeline and its "kept/broken/
 # partial" display keep running unchanged — only the scoring weight is
 # gone. Its 25% redistributed proportionally (each remaining weight ×4/3)
