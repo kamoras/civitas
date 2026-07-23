@@ -374,6 +374,22 @@ def _ensure_indexes() -> None:
                     f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table} ({column})"
                 ))
 
+        # At most ONE running row per pipeline-run table, enforced by the
+        # database (2026-07, platform-review O15): _acquire_pipeline_lock
+        # was check-then-insert with no constraint, so its docstring's
+        # atomicity claim didn't hold — two containers hitting the 03:00
+        # tick during a blue/green overlap could both pass the check and
+        # both start a full pipeline. A partial UNIQUE index turns the
+        # second insert into an IntegrityError the acquirer handles
+        # (insert-then-catch), which is race-free without transaction-
+        # isolation gymnastics. Partial (WHERE status = 'running') so the
+        # unbounded history of completed/failed/stale rows is unaffected.
+        if inspector.has_table("pipeline_runs"):
+            conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ux_pipeline_runs_one_running "
+                "ON pipeline_runs (status) WHERE status = 'running'"
+            ))
+
 
 def _migrate_visits_data_to_own_db() -> None:
     """One-time copy of any pre-split SiteVisit/PageView rows out of the

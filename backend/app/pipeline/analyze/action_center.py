@@ -3268,6 +3268,62 @@ def _check_summary_roles(summary: str, articles_text: str, db: Session) -> tuple
     return False, str(result.get("reason", "role reversal suspected"))[:200]
 
 
+# How long a held refresh lock is honored before being treated as
+# abandoned (a crashed container never deletes its lock row). Generous
+# vs. the observed refresh duration; matches the pre-existing 4-hour
+# stale-override convention for the in-process guard.
+_REFRESH_LOCK_STALE_S = 4 * 3600
+
+
+def _acquire_refresh_lock(db: Session) -> bool:
+    """Cross-container refresh lock (2026-07, platform-review O15): the
+    hourly refresh previously had only a process-local guard, so during a
+    blue/green deploy overlap two containers could both run it —
+    duplicate Bluesky posts and contended SQLite writes. The lock is a
+    plain INSERT into api_cache, whose (tier, cache_key) PRIMARY KEY
+    makes the second acquirer's insert fail atomically — no
+    check-then-insert race, no schema changes. A crashed holder's row is
+    taken over once it exceeds _REFRESH_LOCK_STALE_S.
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    from app.models import ApiCache
+
+    now = utcnow()
+    stale_cutoff = now - timedelta(seconds=_REFRESH_LOCK_STALE_S)
+    db.query(ApiCache).filter(
+        ApiCache.tier == "action-refresh-lock",
+        ApiCache.cache_key == "lock",
+        ApiCache.cached_at < stale_cutoff,
+    ).delete()
+    db.commit()
+
+    try:
+        db.add(ApiCache(
+            tier="action-refresh-lock", cache_key="lock",
+            data_json="{}", cached_at=now,
+        ))
+        db.commit()
+        return True
+    except IntegrityError:
+        db.rollback()
+        return False
+
+
+def _release_refresh_lock(db: Session) -> None:
+    from app.models import ApiCache
+
+    try:
+        db.query(ApiCache).filter(
+            ApiCache.tier == "action-refresh-lock",
+            ApiCache.cache_key == "lock",
+        ).delete()
+        db.commit()
+    except Exception:
+        logger.exception("Failed to release action refresh lock (will expire as stale)")
+        db.rollback()
+
+
 def refresh_action_issues(db: Session | None = None) -> int:
     """Run the full action center pipeline. Returns number of issues created."""
     own_session = db is None
@@ -3275,7 +3331,13 @@ def refresh_action_issues(db: Session | None = None) -> int:
         db = SessionLocal()
 
     try:
-        return _run_refresh(db)
+        if not _acquire_refresh_lock(db):
+            logger.info("Action refresh lock held by another container — skipping this run")
+            return 0
+        try:
+            return _run_refresh(db)
+        finally:
+            _release_refresh_lock(db)
     finally:
         if own_session:
             db.close()

@@ -375,11 +375,16 @@ def _record_score_snapshots(db: Session) -> None:
 
 
 def _acquire_pipeline_lock(db: Session) -> PipelineRun | None:
-    """Atomically check for a running pipeline and create a new locked run.
+    """Atomically create a new locked run, or return None if one is running.
 
     Uses the shared SQLite database so the lock works across blue/green
-    containers.  Returns the new PipelineRun if the lock was acquired,
-    or None if another pipeline is already running.
+    containers. Atomicity is enforced by the database itself (2026-07,
+    platform-review O15): a partial UNIQUE index allows at most one
+    status='running' row (see database._ensure_indexes), so the INSERT —
+    not a check racing ahead of it — is the lock acquisition. The old
+    check-then-insert shape meant two containers hitting the 03:00 tick
+    during a blue/green overlap could both pass the check and both start
+    a full pipeline run.
     """
     running = (
         db.query(PipelineRun)
@@ -397,9 +402,18 @@ def _acquire_pipeline_lock(db: Session) -> PipelineRun | None:
         else:
             return None
 
+    from sqlalchemy.exc import IntegrityError
+
     pipeline_run = PipelineRun(started_at=utcnow(), status=PipelineStatus.RUNNING)
     db.add(pipeline_run)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Another container inserted its running row between our check
+        # and our commit — it holds the lock.
+        db.rollback()
+        logger.info("Pipeline lock held by another container — skipping this run")
+        return None
     return pipeline_run
 
 
