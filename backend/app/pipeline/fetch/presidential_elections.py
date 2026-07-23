@@ -110,6 +110,14 @@ _RATE_LIMITER = RateLimiter(rps=1.0)
 _CACHE_TIER = "historical-elections"
 _CACHE_MAX_AGE_HOURS = 24 * 30  # historical results never change
 
+# Scale-consistency constants (2026-07, #218 review S3), fit on the 50
+# elections in the mandates table where both figures exist — see the two
+# call sites for the regression details. Refit alongside president_scorer's
+# _PUBLIC_MANDATE_ELECTION_MARGIN_MEAN/STDEV if UCSB's table changes.
+_ELECTORAL_TO_POPULAR_MARGIN_SLOPE = 0.211
+_ELECTORAL_SHARE_TO_POPULAR_SLOPE = 0.3925
+_ELECTORAL_SHARE_TO_POPULAR_INTERCEPT = -18.67
+
 
 def _normalize_name(text: str) -> str:
     # Strips a trailing single-token party-code parenthetical like "(D)"
@@ -156,21 +164,25 @@ def _parse_mandates_table(html: str) -> dict[str, list[float]]:
         # decisively a president won — cells[3]/cells[5], not cells[2]/[4].
         popular_margin = _to_float(cells[3].text_content())
         electoral_margin = _to_float(cells[5].text_content())
-        # KNOWN LIMITATION (2026-07, #218 review S3, deliberately not
-        # fixed here): when popular vote is "nd" (the earliest elections
-        # in this table, before it was uniformly tabulated), this falls
-        # back to the raw electoral-vote margin — a much larger-magnitude
-        # scale (the electoral college exaggerates margins; tens of
-        # points vs. single-digit popular margins) mixed into the same
-        # list as genuine popular margins AND the separate pre-1824
-        # electoral-share heuristic below, then all z-scored together
-        # against one population mean/stdev. This structurally inflates
-        # Public Mandate for the small number of earliest presidents this
-        # fallback applies to. Fixing it correctly needs its own
-        # rescaling constant fit against real data (same discipline as
-        # every other calibration constant in this file) before shipping,
-        # not an invented ad hoc adjustment — a follow-up, not silent.
-        margin = popular_margin if popular_margin is not None else electoral_margin
+        # When popular vote is "nd" (the earliest elections in this
+        # table, before it was uniformly tabulated), rescale the
+        # electoral-vote margin onto the popular-margin scale instead of
+        # mixing the raw value in (2026-07 fix, #218 review S3: the
+        # electoral college exaggerates margins ~5x — tens of points vs.
+        # single digits — so the raw fallback structurally inflated the
+        # earliest presidents' Public Mandate). Rescale fit on the 50
+        # elections in this same table where BOTH margins exist:
+        # popular ≈ 0.211 x electoral (through-origin least squares,
+        # R²=0.56; origin-anchored because a 0-margin election is a
+        # 0-margin election on either scale).
+        margin = (
+            popular_margin
+            if popular_margin is not None
+            else (
+                electoral_margin * _ELECTORAL_TO_POPULAR_MARGIN_SLOPE
+                if electoral_margin is not None else None
+            )
+        )
         if margin is not None:
             result.setdefault(current_id, []).append(margin)
     return result
@@ -250,12 +262,21 @@ async def fetch_election_margins(
             logger.exception("Failed to parse UCSB %d election page", year)
             continue
         if pct is not None:
-            # Pre-1824 pages report the winner's raw electoral vote share,
-            # not a margin vs. the runner-up (unlike the mandates table) —
-            # rescale around the ~55% typical-winner electoral share so
-            # this is roughly comparable in shape to the mandates table's
-            # margin figures rather than mixing two different scales.
-            margins_by_id.setdefault(pid, []).append(pct - 55.0)
+            # Pre-1824 pages report the winner's raw electoral vote SHARE,
+            # not a margin vs. the runner-up. Map share onto the popular-
+            # margin scale via the relationship fit on the 50 mandates-
+            # table elections where both electoral share and popular
+            # margin exist: popular ≈ 0.3925 x share − 18.67 (least
+            # squares, R²=0.52). Replaces the previous ad-hoc `pct − 55.0`
+            # heuristic (2026-07, #218 review S3), which had no empirical
+            # basis and produced values on yet a third scale — e.g.
+            # Monroe's 98.3% share mapped to +43.3 under the heuristic
+            # (double any real popular margin ever recorded) vs. +19.9
+            # under the fitted line.
+            margins_by_id.setdefault(pid, []).append(
+                _ELECTORAL_SHARE_TO_POPULAR_SLOPE * pct
+                + _ELECTORAL_SHARE_TO_POPULAR_INTERCEPT
+            )
 
     if not margins_by_id:
         logger.warning("No election-margin data fetched for any president this run")

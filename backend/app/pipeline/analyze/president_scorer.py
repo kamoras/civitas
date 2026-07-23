@@ -339,7 +339,15 @@ def _effectiveness_core(
         })
 
     if jobs_created_millions is not None and term_years > 0:
-        jobs_per_year = jobs_created_millions / term_years
+        # The jobs figure is measured from January of the term's SECOND
+        # year (Blinder & Watson year-1 exclusion — see economic_data.
+        # calculate_jobs_created, 2026-07 O9 fix), so the per-year rate
+        # divides by that attributed window, not the full term — dividing
+        # a 7-year jobs change by 8 term years would understate every
+        # completed term's rate, short terms worst. Floor keeps a young
+        # in-progress term from dividing by ~zero.
+        jobs_window_years = max(term_years - 1.0, 0.5)
+        jobs_per_year = jobs_created_millions / jobs_window_years
         # 2.5M/year = strong (75), negative = very low
         if jobs_per_year >= 0:
             job_score = min(30 + jobs_per_year / 3.0 * 50, 95)
@@ -347,7 +355,11 @@ def _effectiveness_core(
             job_score = max(30 + jobs_per_year * 15, 5)
         components.append({
             "label": "Jobs created", "weight": 0.40, "score": round(job_score, 1),
-            "detail": f"{jobs_created_millions:.1f}M jobs over {term_years:.1f} years = {jobs_per_year:.2f}M/year",
+            "detail": (
+                f"{jobs_created_millions:.1f}M jobs over the {jobs_window_years:.1f} "
+                "attributed years (term minus the Blinder-Watson year-1 lag) "
+                f"= {jobs_per_year:.2f}M/year"
+            ),
         })
 
     return _blend_live_components(components)
@@ -451,18 +463,20 @@ _PUBLIC_MANDATE_TREND_STDEV = 14.65
 
 # Pre-polling-era (pre-Truman) proxy: average margin of victory (%) across
 # a president's own election win(s) — see
-# app.pipeline.fetch.presidential_elections. Population stats computed
-# 2026-07 from real fetched data across the 42 presidents who won at
-# least one presidential election (n=42, mean=9.44, stdev=10.46) — same
-# fit-against-real-data discipline as every constant in this file. The
-# five presidents who never won a presidential election in their own
-# right (succeeded via a predecessor's death, or — Ford — appointed VP
-# under the 25th Amendment and never elected to anything nationally) have
-# neither this nor approval data; Public Mandate is fully excluded for
-# them (see compute_president_overall_score's renormalization), not
-# defaulted.
-_PUBLIC_MANDATE_ELECTION_MARGIN_MEAN = 9.44
-_PUBLIC_MANDATE_ELECTION_MARGIN_STDEV = 10.46
+# app.pipeline.fetch.presidential_elections. Population stats refit
+# 2026-07-22 through the real fetch path after the S3 scale-consistency
+# fix (electoral margins and pre-1824 electoral shares are now RESCALED
+# onto the popular-margin scale instead of mixed in raw — see that
+# module's calibration constants): n=42, mean=8.39, stdev=7.51. The
+# previous constants (9.44/10.46) were fit on the old mixed-scale data
+# and are invalid against the rescaled inputs. The five presidents who
+# never won a presidential election in their own right (succeeded via a
+# predecessor's death, or — Ford — appointed VP under the 25th Amendment
+# and never elected to anything nationally) have neither this nor
+# approval data; Public Mandate is fully excluded for them (see
+# compute_president_overall_score's renormalization), not defaulted.
+_PUBLIC_MANDATE_ELECTION_MARGIN_MEAN = 8.39
+_PUBLIC_MANDATE_ELECTION_MARGIN_STDEV = 7.51
 
 
 def calc_public_mandate(
