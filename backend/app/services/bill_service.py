@@ -7,6 +7,8 @@ the cross-chamber counterpart to how politicians.py unions Senator/
 Representative/President/Justice into one directory.
 """
 import json
+import logging
+import threading
 import time
 from dataclasses import dataclass
 
@@ -23,18 +25,24 @@ from app.schemas import (
     RelatedIssueSchema,
 )
 
-# _collect_bills rebuilds ~17k rows (query + join + Pydantic construction)
-# from scratch on every call — ~1.3-1.7s measured in production, even for a
-# perPage=1 request, because none of that cost is in the pagination. Every
-# filter/sort combination starts from the same unfiltered base set, so
-# caching that base set for a short window (matching the 120s the API
-# already promises callers via Cache-Control) turns every call after the
-# first into an in-memory filter/sort instead of a fresh DB round trip —
-# without this, a page that fires several of these concurrently (e.g. one
-# per stage group in the grouped bills view) serializes into many seconds
-# of wait on the single-worker Pi backend.
+logger = logging.getLogger(__name__)
+
+# _build_rows materializes ~17k rows (query + join + Pydantic construction)
+# from scratch — over a second on the production Pi, even for a perPage=1
+# request, because none of that cost is in the pagination. Every filter/sort
+# combination starts from the same unfiltered base set, so that base set is
+# cached at module scope and served STALE-WHILE-REVALIDATE: a request that
+# finds the cache older than the TTL still answers from it instantly and
+# kicks off a background rebuild, so no user request ever blocks on the
+# rebuild once the cache has been populated (startup pre-warms it — see
+# main.py's lifespan). The TTL matches the 120s the API already promises
+# callers via Cache-Control; writers that change the underlying data
+# (hourly bill-status refresh, action-center refresh, nightly pipeline)
+# call warm_bill_collection_cache() to swap in fresh data sooner.
 _COLLECT_CACHE_TTL_SECONDS = 120
 _collect_cache: tuple[float, list["_Row"]] | None = None
+_refresh_state_lock = threading.Lock()
+_refresh_in_progress = False
 
 
 def _bioguide_photo(bioguide_id: str | None) -> str | None:
@@ -79,84 +87,138 @@ class _Row:
     mention_count: int
 
 
-def _collect_bills(db: Session) -> list[_Row]:
-    global _collect_cache
-    now = time.monotonic()
-    if _collect_cache is not None and (now - _collect_cache[0]) < _COLLECT_CACHE_TTL_SECONDS:
-        # A fresh list every call — callers (get_bills_in_flight) sort this
-        # in place, and when no filter is active that's the very list we'd
-        # be handing back out of the cache on the next call too.
-        return list(_collect_cache[1])
+def _build_rows(db: Session) -> list[_Row]:
+    """The uncached rebuild: every current-member sponsored bill across both
+    chambers, as _Row objects ready for filtering/sorting.
 
+    Selects explicit columns rather than (SponsoredBill, Senator) entity
+    pairs: full ORM hydration also loads columns this feed never shows
+    (policy_areas JSON blobs, party_leaning) and pays per-instance identity-
+    map bookkeeping for ~17k throwaway objects — measured as a large share
+    of the rebuild cost on the Pi.
+    """
     rows: list[_Row] = []
     min_congress = settings.CURRENT_CONGRESS
     mention_counts = _bill_mention_counts(db)
 
-    senate_query = (
-        db.query(SponsoredBill, Senator)
-        .join(Senator, SponsoredBill.senator_id == Senator.id)
-        .filter(SponsoredBill.congress >= min_congress)
-        .filter(Senator.is_current == True)  # noqa: E712
-    )
-    for sp, senator in senate_query.all():
-        mention_count = mention_counts.get(sp.bill_id, 0)
-        rows.append(_Row(
-            bill=BillInFlightSchema(
-                bill_id=sp.bill_id,
-                title=sp.title,
-                chamber="senate",
-                sponsor_id=senator.id,
-                sponsor_name=senator.name,
-                sponsor_party=senator.party,
-                sponsor_state=senator.state,
-                sponsor_thumbnail_url=_bioguide_photo(senator.bioguide_id),
-                introduced_date=sp.introduced_date,
-                latest_action=sp.latest_action,
-                latest_action_date=sp.latest_action_date,
-                stage=sp.stage or BillStage.INTRODUCED,
-                policy_area=sp.policy_area,
-                congress=sp.congress,
-                bill_type=sp.bill_type,
-                is_law=sp.is_law,
+    chamber_queries = [
+        (
+            "senate",
+            db.query(
+                SponsoredBill.bill_id, SponsoredBill.title, SponsoredBill.introduced_date,
+                SponsoredBill.latest_action, SponsoredBill.latest_action_date,
+                SponsoredBill.stage, SponsoredBill.policy_area, SponsoredBill.congress,
+                SponsoredBill.bill_type, SponsoredBill.is_law,
+                Senator.id, Senator.name, Senator.party, Senator.state, Senator.bioguide_id,
+            )
+            .join(Senator, SponsoredBill.senator_id == Senator.id)
+            .filter(SponsoredBill.congress >= min_congress)
+            .filter(Senator.is_current == True),  # noqa: E712
+        ),
+        (
+            "house",
+            db.query(
+                RepSponsoredBill.bill_id, RepSponsoredBill.title, RepSponsoredBill.introduced_date,
+                RepSponsoredBill.latest_action, RepSponsoredBill.latest_action_date,
+                RepSponsoredBill.stage, RepSponsoredBill.policy_area, RepSponsoredBill.congress,
+                RepSponsoredBill.bill_type, RepSponsoredBill.is_law,
+                Representative.id, Representative.name, Representative.party,
+                Representative.state, Representative.bioguide_id,
+            )
+            .join(Representative, RepSponsoredBill.representative_id == Representative.id)
+            .filter(RepSponsoredBill.congress >= min_congress)
+            .filter(Representative.is_current == True),  # noqa: E712
+        ),
+    ]
+    for chamber, query in chamber_queries:
+        for (
+            bill_id, title, introduced_date, latest_action, latest_action_date,
+            stage, policy_area, congress, bill_type, is_law,
+            member_id, member_name, member_party, member_state, bioguide_id,
+        ) in query.all():
+            mention_count = mention_counts.get(bill_id, 0)
+            rows.append(_Row(
+                bill=BillInFlightSchema(
+                    bill_id=bill_id,
+                    title=title,
+                    chamber=chamber,
+                    sponsor_id=member_id,
+                    sponsor_name=member_name,
+                    sponsor_party=member_party,
+                    sponsor_state=member_state,
+                    sponsor_thumbnail_url=_bioguide_photo(bioguide_id),
+                    introduced_date=introduced_date,
+                    latest_action=latest_action,
+                    latest_action_date=latest_action_date,
+                    stage=stage or BillStage.INTRODUCED,
+                    policy_area=policy_area,
+                    congress=congress,
+                    bill_type=bill_type,
+                    is_law=is_law,
+                    mention_count=mention_count,
+                ),
+                latest_action_date=latest_action_date,
                 mention_count=mention_count,
-            ),
-            latest_action_date=sp.latest_action_date,
-            mention_count=mention_count,
-        ))
+            ))
+    return rows
 
-    house_query = (
-        db.query(RepSponsoredBill, Representative)
-        .join(Representative, RepSponsoredBill.representative_id == Representative.id)
-        .filter(RepSponsoredBill.congress >= min_congress)
-        .filter(Representative.is_current == True)  # noqa: E712
-    )
-    for sp, rep in house_query.all():
-        mention_count = mention_counts.get(sp.bill_id, 0)
-        rows.append(_Row(
-            bill=BillInFlightSchema(
-                bill_id=sp.bill_id,
-                title=sp.title,
-                chamber="house",
-                sponsor_id=rep.id,
-                sponsor_name=rep.name,
-                sponsor_party=rep.party,
-                sponsor_state=rep.state,
-                sponsor_thumbnail_url=_bioguide_photo(rep.bioguide_id),
-                introduced_date=sp.introduced_date,
-                latest_action=sp.latest_action,
-                latest_action_date=sp.latest_action_date,
-                stage=sp.stage or BillStage.INTRODUCED,
-                policy_area=sp.policy_area,
-                congress=sp.congress,
-                bill_type=sp.bill_type,
-                is_law=sp.is_law,
-                mention_count=mention_count,
-            ),
-            latest_action_date=sp.latest_action_date,
-            mention_count=mention_count,
-        ))
 
-    _collect_cache = (now, rows)
+def _refresh_cache_in_background() -> None:
+    """Rebuild the collection on a daemon thread (own DB session) and swap
+    it into the cache atomically. At most one rebuild runs at a time; extra
+    triggers while one is in flight are dropped, not queued."""
+    global _refresh_in_progress
+    with _refresh_state_lock:
+        if _refresh_in_progress:
+            return
+        _refresh_in_progress = True
+
+    def _run() -> None:
+        global _collect_cache, _refresh_in_progress
+        try:
+            from app.database import session_scope
+            with session_scope() as db:
+                rows = _build_rows(db)
+            _collect_cache = (time.monotonic(), rows)
+        except Exception:
+            logger.exception("Background bill-collection rebuild failed — serving the previous snapshot")
+        finally:
+            with _refresh_state_lock:
+                _refresh_in_progress = False
+
+    threading.Thread(target=_run, daemon=True, name="bill-cache-refresh").start()
+
+
+def warm_bill_collection_cache() -> None:
+    """Rebuild the collection cache in the background regardless of TTL.
+
+    Called at startup (so the first /api/bills request after a deploy is a
+    cache hit) and after anything that changes the underlying data — the
+    hourly bill-status refresh, the action-center refresh (mention counts
+    feed the "hot" sort), and the nightly pipeline. Unlike
+    clear_bill_collection_cache this never leaves the cache empty, so no
+    request ever pays the cold-rebuild cost because data got fresher.
+    """
+    _refresh_cache_in_background()
+
+
+def _collect_bills(db: Session) -> list[_Row]:
+    global _collect_cache
+    cached = _collect_cache
+    if cached is not None:
+        if (time.monotonic() - cached[0]) >= _COLLECT_CACHE_TTL_SECONDS:
+            # Stale-while-revalidate: answer from the stale snapshot now,
+            # rebuild behind the scenes for the next caller.
+            _refresh_cache_in_background()
+        # A fresh list every call — callers (get_bills_in_flight) sort this
+        # in place, and when no filter is active that's the very list we'd
+        # be handing back out of the cache on the next call too.
+        return list(cached[1])
+
+    # Cold start (first request before the startup warm finishes, or right
+    # after clear_bill_collection_cache): nothing to serve, build inline.
+    rows = _build_rows(db)
+    _collect_cache = (time.monotonic(), rows)
     return list(rows)
 
 
@@ -203,8 +265,9 @@ def get_bill_detail(db: Session, bill_id: str) -> BillDetailSchema | None:
     current senators' and representatives' sponsored bills.
 
     Queried directly rather than through _collect_bills' cache — a single
-    indexed-column lookup is cheaper than scanning the ~17k-row cache, and
-    this endpoint is hit far less often than the list view.
+    lookup on the indexed bill_id column (ix_*_bill_id, database.py) is
+    cheaper than scanning the ~17k-row cache, and this endpoint is hit far
+    less often than the list view.
     """
     bill_id = bill_id.upper()
 
@@ -274,13 +337,7 @@ def get_bills_in_flight(
 ) -> PaginatedBillsSchema:
     all_rows = _collect_bills(db)
 
-    stage_counts: dict[str, int] = {}
-    for row in all_rows:
-        stage_counts[row.bill.stage] = stage_counts.get(row.bill.stage, 0) + 1
-
     filtered = all_rows
-    if stage:
-        filtered = [r for r in filtered if r.bill.stage == stage]
     if chamber:
         filtered = [r for r in filtered if r.bill.chamber == chamber]
     if party:
@@ -293,6 +350,18 @@ def get_bills_in_flight(
             or q_lower in r.bill.sponsor_name.lower()
             or q_lower in r.bill.bill_id.lower()
         ]
+
+    # Per-stage counts with every filter EXCEPT stage applied: an unfiltered
+    # call still describes the whole pipeline (the funnel viz), and a
+    # chamber/party/q-filtered call yields the header count for every stage
+    # group in one response — so the grouped bills view doesn't need a
+    # separate count request per stage.
+    stage_counts: dict[str, int] = {}
+    for row in filtered:
+        stage_counts[row.bill.stage] = stage_counts.get(row.bill.stage, 0) + 1
+
+    if stage:
+        filtered = [r for r in filtered if r.bill.stage == stage]
 
     if sort == "hot":
         # "Active in Congress right now" — bills currently referenced by a

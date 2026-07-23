@@ -205,25 +205,29 @@ function AllBillsGroups({
   party?: "D" | "R" | "I";
   q?: string;
 }) {
-  const [anyResults, setAnyResults] = useState<boolean | null>(null);
+  // One request supplies every group's header: the response's stageCounts
+  // already reflects the chamber/party/q filters server-side, so the
+  // groups no longer each probe for their own count (which used to fan
+  // out ~8 parallel requests per filter change).
+  const [stageTotals, setStageTotals] = useState<Record<string, number> | "loading" | "error">("loading");
 
   useEffect(() => {
     let cancelled = false;
-    setAnyResults(null);
+    setStageTotals("loading");
     fetchBillsInFlight({ chamber, party, q, sort: "recent", page: 1, perPage: 1 })
-      .then((res) => { if (!cancelled) setAnyResults(res.total > 0); })
-      .catch(() => { if (!cancelled) setAnyResults(true); }); // fail open — let the groups themselves surface the error
+      .then((res) => { if (!cancelled) setStageTotals(res.stageCounts); })
+      .catch(() => { if (!cancelled) setStageTotals("error"); }); // fail open — groups fall back to probing their own counts
     return () => { cancelled = true; };
   }, [chamber, party, q]);
 
-  if (anyResults === null) {
+  if (stageTotals === "loading") {
     return (
       <div className="text-center py-16 font-mono text-xs text-matrix-green/30 tracking-widest animate-pulse">
         LOADING...
       </div>
     );
   }
-  if (!anyResults) {
+  if (stageTotals !== "error" && ALL_STAGE_CODES.every((code) => !(stageTotals[code] > 0))) {
     return (
       <div className="text-center py-16 font-mono text-xs text-matrix-green/30 tracking-widest">
         NO RESULTS
@@ -234,7 +238,14 @@ function AllBillsGroups({
   return (
     <div className="flex flex-col gap-2">
       {ALL_STAGE_CODES.map((code) => (
-        <BillStageGroup key={code} stageCode={code} chamber={chamber} party={party} q={q} />
+        <BillStageGroup
+          key={code}
+          stageCode={code}
+          count={stageTotals === "error" ? undefined : (stageTotals[code] ?? 0)}
+          chamber={chamber}
+          party={party}
+          q={q}
+        />
       ))}
     </div>
   );
