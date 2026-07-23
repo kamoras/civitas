@@ -87,3 +87,84 @@ class TestActionRefreshLock:
         ))
         db_session.commit()
         assert _acquire_refresh_lock(db_session) is False
+
+
+class TestEnsureIndexesCreatesPartialUnique:
+    def test_partial_unique_index_created(self, monkeypatch):
+        import os
+        import tempfile
+
+        from sqlalchemy import create_engine, inspect
+
+        from app import database
+
+        fd, path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        eng = create_engine(f"sqlite:///{path}", connect_args={"check_same_thread": False})
+        monkeypatch.setattr(database, "engine", eng)
+        database.Base.metadata.create_all(bind=eng)
+
+        database._ensure_indexes()
+
+        names = {i["name"] for i in inspect(eng).get_indexes("pipeline_runs")}
+        assert "ux_pipeline_runs_one_running" in names
+
+
+class TestAcquirePipelineLock:
+    def test_acquires_when_free_and_blocks_second_caller(self, db_session):
+        from app.pipeline.senate_pipeline import _acquire_pipeline_lock
+
+        run = _acquire_pipeline_lock(db_session)
+        assert run is not None
+        assert run.status == PipelineStatus.RUNNING
+        # Second caller sees the running row and yields (early-return path).
+        assert _acquire_pipeline_lock(db_session) is None
+
+    def test_integrity_error_on_commit_yields_gracefully(self, db_session, monkeypatch):
+        # The race window the DB constraint closes: another container
+        # commits its running row between our check and our commit — the
+        # acquirer must roll back and yield, not crash the nightly job.
+        from sqlalchemy.exc import IntegrityError
+
+        from app.pipeline import senate_pipeline
+
+        real_commit = db_session.commit
+        calls = {"n": 0}
+
+        def racing_commit():
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise IntegrityError("UNIQUE constraint failed", None, Exception())
+            return real_commit()
+
+        monkeypatch.setattr(db_session, "commit", racing_commit)
+        assert senate_pipeline._acquire_pipeline_lock(db_session) is None
+
+
+class TestRefreshActionIssuesLockWrapper:
+    def test_lock_held_skips_run(self, db_session, monkeypatch):
+        from app.pipeline.analyze import action_center
+
+        assert _acquire_refresh_lock(db_session) is True  # simulate other container
+        called = {"n": 0}
+        monkeypatch.setattr(action_center, "_run_refresh", lambda db: called.__setitem__("n", called["n"] + 1) or 99)
+
+        assert action_center.refresh_action_issues(db_session) == 0
+        assert called["n"] == 0
+
+    def test_lock_free_runs_and_releases(self, db_session, monkeypatch):
+        from app.pipeline.analyze import action_center
+
+        monkeypatch.setattr(action_center, "_run_refresh", lambda db: 7)
+        assert action_center.refresh_action_issues(db_session) == 7
+        # Released in the finally — immediately reacquirable.
+        assert _acquire_refresh_lock(db_session) is True
+
+    def test_release_failure_is_swallowed(self, db_session, monkeypatch):
+        # A failed release must not raise out of the refresh — the row
+        # expires via the stale window instead.
+        def boom(*a, **k):
+            raise RuntimeError("db gone")
+
+        monkeypatch.setattr(db_session, "query", boom)
+        _release_refresh_lock(db_session)  # must not raise
