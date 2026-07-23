@@ -512,6 +512,12 @@ async def run_house_pipeline() -> dict:
                 )
                 from app.pipeline.analyze.score_calculator import write_party_ideology_bounds
                 write_party_ideology_bounds("house", ideology_bounds_by_party)
+                # Refresh this chamber's DW-NOMINATE ideal points from
+                # Voteview (position-congruence component, score_calculator
+                # v6.11). Best-effort: never raises; a fetch/gate failure
+                # keeps the last good /data/member_ideal_points.json section.
+                from app.pipeline.fetch.voteview import refresh_member_ideal_points
+                await refresh_member_ideal_points("house", settings.CURRENT_CONGRESS)
                 logger.info(
                     "Sponsorship analysis: %d leadership scores, %d ideology scores",
                     len(leadership_scores), len(ideology_scores),

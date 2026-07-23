@@ -538,10 +538,11 @@ export default function AboutPage() {
               reduced the double-count; v6.11 removes its structural basis: coalition breadth
               has left Constituent Alignment entirely (it now scores legislative effectiveness,
               where the evidence supports it), and the position signal is measured from
-              roll-call ideal points (DW-NOMINATE via Voteview) — the genuinely independent
-              second signal this disclosure previously said wasn&apos;t available — whenever that
-              generated dataset is present, with the cosponsorship-SVD discount surviving only
-              as a fallback. The residual: within Legislative Effectiveness, the leadership
+              roll-call ideal points (DW-NOMINATE via Voteview, ingested automatically every
+              pipeline run behind ingestion gates) — the genuinely independent
+              second signal this disclosure previously said wasn&apos;t available — with the
+              cosponsorship-SVD discount surviving only as a fallback for members the
+              ideal-point data doesn&apos;t yet cover. The residual: within Legislative Effectiveness, the leadership
               component (cosponsorship PageRank) and the new bipartisan-coalition-attraction
               component are both computed from the cosponsorship network (network centrality
               vs. cross-party share — related data, different measures). Their combined weight
