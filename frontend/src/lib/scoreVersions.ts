@@ -24,6 +24,17 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.10",
+    date: "2026-07-23",
+    title: "Legislative Effectiveness — closing the last below-neutral tilt",
+    tldr: "v6.9 fixed the House/Senate gap but noted a smaller leftover: even within each chamber, slightly more than half of members still landed below the neutral midpoint. That was because members were measured against their chamber's average, and a handful of unusually prolific bill sponsors pull that average above where the typical member sits. This measures everyone against the chamber's midpoint (median) instead, so a typical member now scores near neutral rather than just below it.",
+    changes: [
+      "v6.9 flagged a residual imbalance it deliberately didn't fix: after the House/Senate correction, both chambers still had slightly more than half of their members scoring below the neutral midpoint on Legislative Effectiveness. This addresses that leftover. It was never a House-vs-Senate problem — it showed up symmetrically in both chambers — but an artifact of the yardstick itself: each member's bill-advancement credit was compared against their chamber's population MEAN, and that distribution is right-skewed. A minority of exceptionally prolific sponsors pull the mean well above where most members sit (live audit: Senate mean 285 vs. median 254; House mean 122 vs. median 107), so comparing everyone to the mean placed most of the chamber below it by construction, regardless of real effectiveness.",
+      "Fixed by measuring each member against their chamber's MEDIAN — the actual midpoint member — instead of the mean. A typical member now scores near 50 rather than in the low-40s, and each chamber lands close to an even split around neutral. This is the same 'the median member scores 50' calibration every other Civitas dimension already uses (Funding Independence, Funding Diversity, Constituent Alignment); Legislative Effectiveness was the only one still centered on a mean. The status adjustment for a member's own majority/minority bill mix is unchanged — it still nudges that midpoint bar up or down, it just now nudges around the median instead of the mean.",
+      "This is a reference-point recalibration, not a change to how any individual bill is credited: a member's raw record (bills introduced, advanced, and enacted, weighted by significance and cumulative stage) is scored exactly as before — only the population benchmark it's compared against moved from mean to median. The calibration script that derives these constants was updated to report the median, so a future recalibration can't silently revert to the mean.",
+    ],
+  },
+  {
     version: "President v4",
     date: "2026-07-22",
     title: "Historical Legacy's weight held constant — it was never actually 35% for most presidents",

@@ -1,17 +1,21 @@
 """Calibrate Legislative Effectiveness's V&W-based component constants:
-_LES_POPULATION_AVG_SENATE, _LES_POPULATION_AVG_HOUSE,
+_LES_POPULATION_MEDIAN_SENATE, _LES_POPULATION_MEDIAN_HOUSE,
 _LES_AVG_BASELINE_SENATE, _LES_AVG_BASELINE_HOUSE, _LES_CREDIT_SATURATION
 (score_calculator.py).
 
-V&W's real LES normalizes to the chamber-term population mean (average
-member = 1.0). This platform's sponsored-bill data is career-cumulative
-(many congresses, not one fixed term), so the population average is a
-periodically-recalibrated constant instead of a live computation — same
-convention as every other self-calibrated constant in this file (e.g.
-the FI small-donor state baseline). This script measures that average
-directly from live production data using the SAME _les_cumulative_credit/
-_les_bill_stage/_advancement_baseline functions the real formula uses, so
-calibration and scoring can never silently drift apart.
+V&W's real LES normalizes to the chamber-term population MEAN (average
+member = 1.0). This platform deliberately centers on the chamber MEDIAN
+instead (v6.10): the per-congress credit distribution is right-skewed, so a
+mean reference puts >50% of every chamber below neutral by construction (see
+_LES_POPULATION_MEDIAN_*'s comment in score_calculator.py). This platform's
+sponsored-bill data is also career-cumulative (many congresses, not one
+fixed term), so the reference point is a periodically-recalibrated constant
+instead of a live computation — same convention as every other
+self-calibrated constant in this file (e.g. the FI small-donor state
+baseline). This script measures that median directly from live production
+data using the SAME _les_cumulative_credit/_les_bill_stage/
+_advancement_baseline functions the real formula uses, so calibration and
+scoring can never silently drift apart.
 
 Run inside the backend container (imports the real scoring module):
     docker compose -f docker-compose.yml -f docker-compose.dev.yml \\
@@ -114,10 +118,14 @@ def main() -> None:
         print(f"\n{chamber}-average _advancement_baseline: {avg:.4f}")
 
     print("\nSuggested constants:")
+    # Reference point is the MEDIAN, not the mean (v6.10): the per-congress
+    # credit distribution is right-skewed, so a mean reference puts >50% of
+    # every chamber below neutral by construction. The mean is still printed
+    # in the per-chamber summary above for context.
     for chamber in ("senate", "house"):
         values = per_congress_by_chamber[chamber]
         if values:
-            print(f"  _LES_POPULATION_AVG_{chamber.upper()} = {statistics.mean(values):.2f}")
+            print(f"  _LES_POPULATION_MEDIAN_{chamber.upper()} = {statistics.median(values):.2f}")
     for chamber in ("senate", "house"):
         print(f"  _LES_AVG_BASELINE_{chamber.upper()} = {avg_baseline_by_chamber[chamber]:.4f}")
     # Saturation: same "~1.5x the residual spread" reasoning used
