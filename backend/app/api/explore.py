@@ -1,11 +1,13 @@
 """Explore API — semantic search over government activity documents."""
 
 import asyncio
+import json
 import logging
 import secrets
+import time
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.public import RateLimit
@@ -302,6 +304,12 @@ async def post_document_comment(
 
 _summary_timestamps: dict[int, float] = {}
 _SUMMARY_COOLDOWN = 30.0
+_SUMMARY_CACHE_KEY_VERSION = 4  # bump alongside explore_document_summary_prompt's promptVersion
+
+
+def _sse(data: dict) -> str:
+    return f"data: {json.dumps(data)}\n\n"
+
 
 @router.post("/{doc_id}/summary")
 async def get_explore_document_summary(
@@ -309,14 +317,19 @@ async def get_explore_document_summary(
     _rl: WriteRateLimit,
     db: Session = Depends(get_db),
 ):
-    """Generate an AI summary of a government document.
+    """Stream an AI summary of a government document as it generates.
 
     The per-doc cooldown below only stops repeated requests for the SAME
     document — it doesn't stop a caller from fanning out across many
     doc_ids to trigger unlimited LLM inference (2026-07 audit). The
     per-IP WriteRateLimit dependency closes that gap.
+
+    Streams Server-Sent Events, each `data:` line a JSON object:
+    {"delta": "<text chunk>"} while generating, then a final
+    {"done": true, "summary": ..., "keyPoints": [...], "impact": ...}
+    once the full text is parsed (also what a cache hit returns
+    immediately, as a single event, with no intermediate deltas).
     """
-    import time
     now = time.monotonic()
     last = _summary_timestamps.get(doc_id, 0)
     if now - last < _SUMMARY_COOLDOWN:
@@ -328,8 +341,8 @@ async def get_explore_document_summary(
         for k in [k for k, ts in _summary_timestamps.items() if ts < cutoff]:
             del _summary_timestamps[k]
 
-    from app.pipeline.analyze.ollama_client import call_llm
-    from app.pipeline.analyze.prompts import explore_document_summary_prompt
+    from app.pipeline.analyze.ollama_client import get_cached_llm_result, set_cached_llm_result, stream_llm
+    from app.pipeline.analyze.prompts import explore_document_summary_prompt, parse_explore_document_summary
 
     doc = db.query(ExploreDocument).filter(ExploreDocument.id == doc_id).first()
     if not doc:
@@ -344,34 +357,35 @@ async def get_explore_document_summary(
         "date": doc.date,
     }
     prompt = explore_document_summary_prompt(doc_dict)
+    cache_key = {"doc_id": doc_id, "v": _SUMMARY_CACHE_KEY_VERSION}
 
-    import asyncio
-    result = await asyncio.to_thread(
-        call_llm,
-        prompt_version=prompt["promptVersion"],
-        system_prompt=prompt["systemPrompt"],
-        user_prompt=prompt["userPrompt"],
-        cache_key={"doc_id": doc_id, "v": 3},
-        # call_llm caches only when BOTH cache_key and db_session are set —
-        # omitting db_session silently disabled the versioned cache, so
-        # every view past the 30s cooldown re-ran a full ~512-token
-        # generation and serialized on the single LLM backend.
-        db_session=db,
-        max_tokens=512,
-    )
+    async def event_stream():
+        cached = await asyncio.to_thread(get_cached_llm_result, prompt["promptVersion"], cache_key)
+        if cached is not None:
+            yield _sse({"done": True, **cached})
+            return
 
-    if not result or not isinstance(result, dict):
-        return {
-            "summary": "",
-            "keyPoints": [],
-            "impact": "",
-        }
+        full_text = ""
+        try:
+            async for delta in stream_llm(
+                system_prompt=prompt["systemPrompt"],
+                user_prompt=prompt["userPrompt"],
+                max_tokens=512,
+            ):
+                full_text += delta
+                yield _sse({"delta": delta})
+        except Exception:
+            logger.exception("Explore doc summary streaming failed for doc_id=%s", doc_id)
+            if not full_text:
+                yield _sse({"done": True, "summary": "", "keyPoints": [], "impact": ""})
+                return
 
-    return {
-        "summary": result.get("summary", ""),
-        "keyPoints": result.get("keyPoints", result.get("key_points", [])),
-        "impact": result.get("impact", ""),
-    }
+        parsed = parse_explore_document_summary(full_text)
+        if parsed["summary"]:
+            await asyncio.to_thread(set_cached_llm_result, prompt["promptVersion"], cache_key, parsed)
+        yield _sse({"done": True, **parsed})
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @router.post("/pipeline/trigger")

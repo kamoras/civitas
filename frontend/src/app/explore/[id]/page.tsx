@@ -11,7 +11,8 @@ import { chamberColor, chamberBorder, chamberLabel } from "@/lib/chamber";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import {
   fetchExploreDocument,
-  fetchExploreDocumentSummary,
+  streamExploreDocumentSummary,
+  parseExploreSummaryText,
   fetchDocumentComments,
   submitDocumentComment,
   type ExploreDocumentDetail,
@@ -506,9 +507,15 @@ export default function ExploreDetailPage() {
   const query = searchParams.get("q") || "";
 
   const [doc, setDoc] = useState<ExploreDocumentDetail | null>(null);
+  // liveText accumulates as the stream arrives; summary is set once the
+  // stream's terminal event resolves (also the ONLY thing that fires on a
+  // cache hit — no deltas at all — so it can't be dropped in favor of just
+  // deriving from liveText). While streaming, the summary panel renders
+  // parseExploreSummaryText(liveText) instead for progressive display.
+  const [liveText, setLiveText] = useState("");
   const [summary, setSummary] = useState<ExploreDocumentSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryStreaming, setSummaryStreaming] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -521,15 +528,17 @@ export default function ExploreDetailPage() {
   }, [docId]);
 
   useEffect(() => {
-    if (!docId || summaryLoading || summary) return;
-    setSummaryLoading(true);
-    fetchExploreDocumentSummary(docId)
+    if (!docId || summaryStreaming || summary) return;
+    setSummaryStreaming(true);
+    streamExploreDocumentSummary(docId, setLiveText)
       .then(setSummary)
       .catch(() => {
         setSummary({ summary: "Analysis unavailable. Try again later.", keyPoints: [], impact: "" });
       })
-      .finally(() => setSummaryLoading(false));
-  }, [docId, summaryLoading, summary]);
+      .finally(() => setSummaryStreaming(false));
+  }, [docId, summaryStreaming, summary]);
+
+  const displayedSummary = summary ?? (liveText ? parseExploreSummaryText(liveText) : null);
 
   if (loading) {
     return (
@@ -690,7 +699,7 @@ export default function ExploreDetailPage() {
           <div className="terminal-window mb-6">
             <TerminalTitlebar title="ai_analysis.sh" />
             <div className="p-5">
-              {summaryLoading && (
+              {summaryStreaming && !displayedSummary && (
                 <div className="text-center py-6">
                   <span className="text-neon-cyan text-sm font-terminal animate-pulse">
                     Analyzing document...
@@ -701,26 +710,29 @@ export default function ExploreDetailPage() {
                 </div>
               )}
 
-              {summary && !summaryLoading && (
+              {displayedSummary && (
                 <div className="space-y-4" aria-live="polite">
-                  {summary.summary && (
+                  {displayedSummary.summary && (
                     <div>
                       <h3 className="text-[10px] font-pixel text-neon-cyan/60 tracking-wider mb-2">
                         AI SUMMARY
                       </h3>
                       <p className="text-sm text-matrix-green/90 leading-relaxed">
-                        {summary.summary}
+                        {displayedSummary.summary}
+                        {summaryStreaming && !summary && (
+                          <span className="inline-block w-1.5 h-3.5 ml-0.5 bg-neon-cyan/70 animate-pulse align-middle" />
+                        )}
                       </p>
                     </div>
                   )}
 
-                  {summary.keyPoints.length > 0 && (
+                  {displayedSummary.keyPoints.length > 0 && (
                     <div>
                       <h3 className="text-[10px] font-pixel text-neon-cyan/60 tracking-wider mb-2">
                         KEY POINTS
                       </h3>
                       <ul className="space-y-1.5">
-                        {summary.keyPoints.map((point, i) => (
+                        {displayedSummary.keyPoints.map((point, i) => (
                           <li key={i} className="flex gap-2 text-sm text-matrix-green/80">
                             <span className="text-neon-cyan/50 shrink-0">▸</span>
                             <span className="leading-relaxed">{point}</span>
@@ -730,13 +742,13 @@ export default function ExploreDetailPage() {
                     </div>
                   )}
 
-                  {summary.impact && (
+                  {displayedSummary.impact && (
                     <div className="border-t border-matrix-green/15 pt-3">
                       <h3 className="text-[10px] font-pixel text-neon-cyan/60 tracking-wider mb-2">
                         IMPACT
                       </h3>
                       <p className="text-sm text-matrix-green/80 leading-relaxed">
-                        {summary.impact}
+                        {displayedSummary.impact}
                       </p>
                     </div>
                   )}
