@@ -654,44 +654,29 @@ runner registration needed.
 the runner change above and still applies.** The original design —
 `build-and-push` in `ci.yml` cross-builds images on GitHub-hosted runners
 and pushes to GHCR, `check-and-deploy.sh` pulls those tags instead of
-building — is still there in `ci.yml` (currently `if: false`, disabled) but
-nothing currently deploys from those tags. Reason: `ci.yml`
-first used `ubuntu-latest` + QEMU emulation, which crashed mid-build on
-Node's JIT (2026-07-12, "Illegal instruction"). The fix was switching to
-`ubuntu-24.04-arm` — a *native* ARM64 hosted runner, no emulation. That
-introduced a worse problem: those runners are server-grade Ampere/Cobalt
-CPUs, which support instruction-set extensions the Pi 5's Cortex-A76 cores
-don't. The resulting backend image SIGILL'd (exit 132) on the Pi, consistently
-at ChromaDB/onnxruntime init, crash-looping in production until caught and
-rolled back to a locally-built image the same day. "Native ARM64" on GitHub's
-runners is not the same ISA as the Pi — cross-microarchitecture, not just
-cross-emulation.
+building — hit a cross-microarchitecture SIMD trap worth remembering if
+anyone reintroduces GHCR publishing: `ubuntu-24.04-arm` runners are
+server-grade Ampere/Cobalt CPUs, a different ARM64 microarchitecture than
+the Pi 5's Cortex-A76. `hnswlib` (ChromaDB's HNSW vector-index C++
+library) had no prebuilt aarch64 wheel anywhere, so `pip install` compiled
+it from source on whichever machine ran the build, auto-detecting and
+baking in *that* machine's SIMD instruction support — the resulting
+backend image SIGILL'd (exit 132) on the Pi at first real HNSW-index use,
+crash-looping in production until caught and rolled back same-day
+(2026-07-12). "Native ARM64" on GitHub's runners is not the same ISA as
+the Pi. Building on the Pi itself is reliably safe (compiling for itself
+can't produce an incompatible binary) — hence `check-and-deploy.sh`
+building locally on every deploy, slower but guaranteed
+instruction-set-compatible.
 
-**Root cause, narrowed (2026-07-12 follow-up investigation):** `onnxruntime`
-was the wrong suspect — it ships a genuine prebuilt universal aarch64 wheel
-(`manylinux_2_27/2_28_aarch64`) from PyPI, so the same binary installs
-regardless of build machine. `hnswlib` (ChromaDB's HNSW vector-index C++
-library) has **no prebuilt aarch64 wheel anywhere** — `pip install` compiles
-it from source on whichever machine runs the build, and its build system
-likely auto-detects and bakes in build-host SIMD instruction support. That
-lines up exactly with the crash point (first real HNSW-index use, at
-ChromaDB init) and explains why building on the Pi itself is reliably safe:
-the Pi compiling for itself can't produce an incompatible binary.
-`backend/Dockerfile` now pins `CFLAGS`/`CXXFLAGS=-march=armv8-a` for
-`TARGETARCH=arm64` builds — a portable baseline instruction set every
-aarch64 chip (including the CI runners' Ampere/Cobalt cores) supports —
-but this has **not been re-verified against a GHCR-built image running
-past ChromaDB init on the Pi**, only reasoned about; don't re-enable
-`build-and-push` on the strength of this fix alone
-(the health check alone won't catch it).
-
-Until re-verified, `check-and-deploy.sh` builds images locally on the Pi
-on every deploy — slower, but guaranteed instruction-set-compatible since
-it's the target hardware. `ci.yml`'s `build-and-push` job is still present
-(currently `if: false`, disabled) and would still push to GHCR if
-re-enabled; nothing currently deploys from those tags. Do not re-enable the
-GHCR pull path
-path without first confirming a GHCR-built image actually runs on the Pi
-past ChromaDB init, not just that it deploys and passes the HTTP health
-check (the crash happens on first real vector-store use, which the health
-check doesn't touch).
+`ci.yml`'s `build-and-push` job was removed entirely (2026-07-23), not
+just left disabled — its actual consumer, the old `cd.yml`, had already
+been removed by the self-hosted-runner change above, so even a fixed
+build would never have been deployed from anywhere. If GHCR image
+publishing is wanted again for some other reason (backups, a future
+multi-host deploy), it needs designing fresh against the current
+architecture — chromadb/hnswlib are gone now too (see the sqlite-vec
+migration), so the specific SIMD trap above may no longer apply, but
+don't assume that without testing a GHCR-built image past first real
+vector-store use on the Pi, not just an HTTP health check (the crash
+never showed up there).

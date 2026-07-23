@@ -461,8 +461,8 @@ def init_db() -> None:
 def reset_all_data() -> dict:
     """Drop all pipeline-generated data and start fresh.
 
-    Truncates every table except the schema itself, resets ChromaDB
-    collections, and re-seeds static reference data (presidents).
+    Truncates every table except the schema itself, resets the vector
+    store's collections, and re-seeds static reference data (presidents).
     Returns a summary of what was cleared.
     """
     from app import models  # noqa: F401
