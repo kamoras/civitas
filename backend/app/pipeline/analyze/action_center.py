@@ -245,6 +245,21 @@ def _signatures_match(sig_a: set[str], sig_b: set[str]) -> bool:
     )
 
 
+def _is_exact_content_duplicate(
+    title: str, facts: list, cand_title: str, cand_facts: list,
+) -> bool:
+    """Byte-identical title+facts always means the same issue, checked
+    BEFORE signature overlap. _signatures_match requires >=
+    _SIGNATURE_MATCH_MIN_SHARED (2) tokens even for an exact match, but a
+    sparse, single-entity story (signature {'trump'}, nothing else
+    extractable) can never clear that floor — even against itself. Live
+    2026-07-23 bug: the same source article reprocessed an hour later
+    produced a second row (ids 420/421, "Republicans introduce crypto
+    legislation...") with title/facts equal but a 1-token signature, so it
+    silently created a duplicate instead of matching."""
+    return title == cand_title and facts == cand_facts
+
+
 _SYSTEM_PROMPT = """\
 You are a nonpartisan civic information analyst. You present facts without \
 opinion and help citizens engage with their government regardless of their \
@@ -3378,6 +3393,60 @@ def refresh_action_issues(db: Session | None = None) -> int:
             db.close()
 
 
+def _find_matching_issue(
+    title: str,
+    facts: list,
+    recent_issues: list,
+    recent_embs: "np.ndarray | None",
+    title_emb: "np.ndarray",
+    matched_issue_ids: set,
+):
+    """Find the existing issue (if any) this new cluster's title/facts
+    should update instead of becoming a new row — extracted from
+    _run_refresh's matching loop so it's directly testable without mocking
+    the rest of the pipeline (news fetch, LLM, clustering).
+
+    2026-07 audit rework: matching was previously raw title cosine alone
+    (>= TOPIC_CHANGE_THRESHOLD), and the audit measured that signal failing
+    in BOTH directions on real production rows: two same-story rows scored
+    0.80/0.85 (below 0.82 -> duplicate rows, duplicate Bluesky posts),
+    while a different-story pair scored 0.88 (above 0.82 -> the row's
+    content was overwritten in place, leaving its already-published
+    Bluesky post describing a different story than the permalink it links
+    to). Title cosine now only nominates candidates (>=
+    _TOPIC_MATCH_CANDIDATE_FLOOR); the same-story decision is made by
+    signature overlap (see _issue_signature), checked only after the
+    exact-content-duplicate case (see _is_exact_content_duplicate) — a
+    sparse single-entity signature can fail to match even an identical
+    copy of itself (live 2026-07-23 bug, ids 420/421). Signature-less rows
+    (no facts stored) fall back to the old >= TOPIC_CHANGE_THRESHOLD
+    title-only behavior rather than being unmatchable.
+    """
+    if recent_embs is None:
+        return None
+    new_sig = _issue_signature(title, facts)
+    sims = recent_embs @ title_emb
+    for cand_idx in np.argsort(-sims):
+        sim = float(sims[cand_idx])
+        if sim < _TOPIC_MATCH_CANDIDATE_FLOOR:
+            break
+        candidate = recent_issues[int(cand_idx)]
+        if candidate.id in matched_issue_ids:
+            continue
+        try:
+            cand_facts = json.loads(candidate.facts or "[]")
+        except (ValueError, TypeError):
+            cand_facts = []
+        if _is_exact_content_duplicate(title, facts, candidate.title, cand_facts):
+            return candidate
+        cand_sig = _issue_signature(candidate.title or "", cand_facts)
+        if _signatures_match(new_sig, cand_sig):
+            return candidate
+        if (not new_sig or not cand_sig) and sim >= TOPIC_CHANGE_THRESHOLD:
+            return candidate
+    return None
+
+
 def _run_refresh(db: Session) -> int:
     t0 = time.perf_counter()
     today = datetime.now(_US_EAST).strftime("%Y-%m-%d")
@@ -3748,46 +3817,11 @@ def _run_refresh(db: Session) -> int:
 
         # Find the matching existing issue across all recent issues (2-day
         # lookback, any rank). Same STORY → same row, regardless of rank
-        # yo-yoing or a brief displacement.
-        #
-        # 2026-07 audit rework: matching was previously raw title cosine
-        # alone (≥ TOPIC_CHANGE_THRESHOLD), and the audit measured that
-        # signal failing in BOTH directions on real production rows: two
-        # same-story rows scored 0.80/0.85 (below 0.82 → duplicate rows,
-        # duplicate Bluesky posts), while a different-story pair scored
-        # 0.88 (above 0.82 → the row's content was overwritten in place,
-        # leaving its already-published Bluesky post describing a
-        # different story than the permalink it links to). Title cosine
-        # now only nominates candidates (≥ _TOPIC_MATCH_CANDIDATE_FLOOR);
-        # the same-story decision is made by signature overlap — the
-        # specific entities and numbers the two versions share (see
-        # _issue_signature). A high-title-sim candidate with a DISJOINT
-        # signature is a different story wearing a similar headline: never
-        # reuse its row. Signature-less rows (no facts stored) fall back
-        # to the old ≥ TOPIC_CHANGE_THRESHOLD title-only behavior rather
-        # than being unmatchable.
-        match: ActionIssue | None = None
-        if _recent_embs is not None:
-            new_sig = _issue_signature(title, facts)
-            sims = _recent_embs @ title_emb
-            for cand_idx in np.argsort(-sims):
-                sim = float(sims[cand_idx])
-                if sim < _TOPIC_MATCH_CANDIDATE_FLOOR:
-                    break
-                candidate = _recent_issues[int(cand_idx)]
-                if candidate.id in _matched_issue_ids:
-                    continue
-                try:
-                    cand_facts = json.loads(candidate.facts or "[]")
-                except (ValueError, TypeError):
-                    cand_facts = []
-                cand_sig = _issue_signature(candidate.title or "", cand_facts)
-                if _signatures_match(new_sig, cand_sig):
-                    match = candidate
-                    break
-                if (not new_sig or not cand_sig) and sim >= TOPIC_CHANGE_THRESHOLD:
-                    match = candidate
-                    break
+        # yo-yoing or a brief displacement — see _find_matching_issue's
+        # docstring for the matching rules and their history.
+        match = _find_matching_issue(
+            title, facts, _recent_issues, _recent_embs, title_emb, _matched_issue_ids,
+        )
 
         _update_attrs = (
             "title", "summary", "facts", "actions", "source_urls",

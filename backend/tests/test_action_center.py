@@ -20,7 +20,9 @@ from app.pipeline.analyze.action_center import (
     _find_related_explore_docs,
     _find_related_senators,
     _find_related_officials,
+    _find_matching_issue,
     _fix_impossible_senate_vote_counts,
+    _is_exact_content_duplicate,
     _issue_signature,
     _largest_coherent_subgroup,
     _signatures_match,
@@ -997,6 +999,69 @@ class TestIssueSignatureMatching:
 
     def test_empty_signature_never_matches(self):
         assert _signatures_match(set(), {"taylor", "farms"}) is False
+
+    def test_sparse_single_token_signature_cannot_match_even_itself(self):
+        # Live 2026-07-23 bug: a story whose only extractable entity is one
+        # name ("Trump") produces a 1-token signature. _SIGNATURE_MATCH_MIN_SHARED
+        # (2) means it can never clear the floor, even compared to an
+        # exact copy of itself — this is exactly why _run_refresh's loop
+        # needs the exact-content check ahead of signature matching (see
+        # test_byte_identical_issues_are_duplicates below), not a reason
+        # to lower the shared-token floor (that would risk merging
+        # different stories that happen to mention the same one person).
+        facts = [
+            "A new bill text was released by Republican representatives.",
+            "The legislation includes a provision endorsed by former President Trump.",
+        ]
+        sig = _issue_signature("Republicans introduce crypto legislation with ethical clause", facts)
+        assert sig == {"trump"}
+        assert _signatures_match(sig, sig) is False
+
+    def test_byte_identical_issues_are_duplicates(self):
+        title = "Republicans introduce crypto legislation with ethical clause"
+        facts = [
+            "A new bill text was released by Republican representatives.",
+            "The legislation includes a provision endorsed by former President Trump.",
+        ]
+        assert _is_exact_content_duplicate(title, facts, title, list(facts)) is True
+
+    def test_different_content_is_not_a_duplicate(self):
+        assert _is_exact_content_duplicate(
+            "Title A", ["fact 1"], "Title B", ["fact 1"],
+        ) is False
+        assert _is_exact_content_duplicate(
+            "Same title", ["fact 1"], "Same title", ["fact 2"],
+        ) is False
+
+    def test_find_matching_issue_catches_sparse_signature_exact_duplicate(self):
+        # End-to-end reproduction of the live 2026-07-23 bug via the actual
+        # matching function _run_refresh calls, not just the helper in
+        # isolation: a byte-identical reprocessing of the same source
+        # article must resolve to the existing row, never a new one.
+        title = "Republicans introduce crypto legislation with ethical clause"
+        facts = [
+            "A new bill text was released by Republican representatives.",
+            "The legislation includes a provision endorsed by former President Trump.",
+        ]
+        existing = ActionIssue(
+            id=420, date="2026-07-23", rank=2, title=title, facts=json.dumps(facts),
+        )
+        # Identical title -> cosine similarity 1.0 against itself.
+        recent_embs = np.array([[1.0, 0.0]])
+        title_emb = np.array([1.0, 0.0])
+
+        match = _find_matching_issue(title, facts, [existing], recent_embs, title_emb, set())
+        assert match is existing
+
+    def test_find_matching_issue_returns_none_when_already_claimed_this_run(self):
+        title = "Republicans introduce crypto legislation with ethical clause"
+        facts = ["A new bill text was released by Republican representatives."]
+        existing = ActionIssue(id=420, date="2026-07-23", rank=2, title=title, facts=json.dumps(facts))
+        recent_embs = np.array([[1.0, 0.0]])
+        title_emb = np.array([1.0, 0.0])
+
+        match = _find_matching_issue(title, facts, [existing], recent_embs, title_emb, {420})
+        assert match is None
 
 
 class TestValidateFactsAuditAdditions:
