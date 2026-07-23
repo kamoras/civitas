@@ -74,6 +74,7 @@ venv/
 
 # pull-based deploy log (check-and-deploy.sh)
 /deploy-poll.log
+/.last-deployed-sha
 
 # defense-in-depth: never commit these even if something creates them
 *.key
