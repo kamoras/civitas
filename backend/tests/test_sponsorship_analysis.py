@@ -410,3 +410,32 @@ class TestBipartisanship:
         s1 = compute_bipartisanship_scores(bills, cos, parties, min_interactions=3)
         s2 = compute_bipartisanship_scores(bills2, cos2, parties2, min_interactions=3)
         assert s1 == s2
+
+    def test_receive_direction_counts_only_attracted_cosponsors(self):
+        """direction='receive' (v6.11, for Legislative Effectiveness's
+        coalition-attraction component): only cosponsors ATTRACTED to a
+        member's own bills count — the HVW 2023 construct. D0 offers six
+        cross-party cosponsorships (all giving) but attracts only
+        same-party cosponsors to their own bill, so D0's receive-only
+        rate is 0 even though their blended rate tops the cohort. R0, who
+        ATTRACTS the D0 cosponsorship to their own bill, scores above the
+        cohort's zero-crossing members."""
+        bills, cos, parties = self._cohort()
+        # min_interactions=1: receive-side totals are much smaller than
+        # blended totals in this fixture (one bill each), and what's under
+        # test is the direction split, not the thin-data guard (covered by
+        # test_no_fabrication_for_thin_data).
+        recv = compute_bipartisanship_scores(
+            bills, cos, parties, min_interactions=1, direction="receive"
+        )
+        blend = compute_bipartisanship_scores(bills, cos, parties, min_interactions=3)
+        assert blend["D0"] == 1.0
+        if "D0" in recv:
+            assert recv["D0"] == 0.0
+        assert "R0" in recv and recv["R0"] > 0.0
+
+    def test_receive_direction_rejects_unknown_value(self):
+        import pytest
+        bills, cos, parties = self._cohort()
+        with pytest.raises(ValueError):
+            compute_bipartisanship_scores(bills, cos, parties, direction="give")

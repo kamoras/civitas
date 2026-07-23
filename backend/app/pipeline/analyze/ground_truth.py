@@ -86,6 +86,14 @@ MODIFIED_Z_CUTOFF = 3.5
 MAD_Z_SCALE = 0.6745
 # Minimum distinct snapshot dates before the self-history stdev check runs.
 MIN_HISTORY_DATES = 5
+#
+# v6.11 (2026-07-23, same day as this module's rewrite): coalition breadth
+# moved to Legislative Effectiveness and position congruence added to this
+# dimension (score_calculator.py's changelog). No GROUND_TRUTH entries to
+# re-verify here anymore — the derived checks above re-measure the current
+# population automatically every run, which is the entire point of this
+# rewrite; a scoring-formula change no longer requires hand-updating
+# reference ranges the way the old hardcoded table did.
 
 _DIM_LABEL = {
     "score_independent_voting": "IV",

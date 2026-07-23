@@ -206,13 +206,14 @@ export default function AboutPage() {
               <div>
                 <Label>Constituent Alignment (33%)</Label>
                 <Gist>
-                  checks whether a member&apos;s voting and coalition-building actually match what
+                  checks whether a member&apos;s voting actually matches what
                   their state or district elected them to do. Voting with your party is <em>not</em> penalized
                   on its own — for a safe-seat member, that often IS representing your
-                  constituents. The score only moves below neutral when there&apos;s a clear,
-                  readable sign of a mismatch: an extreme position for a seat that isn&apos;t
-                  safe for that extreme, or an unusually narrow, one-party-only legislative
-                  network in a competitive seat.
+                  constituents. The score moves below neutral only for a clear,
+                  readable sign of a mismatch — a voting position toward the party&apos;s
+                  flank for a seat that isn&apos;t safe for that flank — and moves above
+                  neutral for the mirror case: a voting position genuinely in step with
+                  the seat.
                 </Gist>
                 <P>
                   Measures how a member&apos;s voting compares to what their state elected them
@@ -276,19 +277,27 @@ export default function AboutPage() {
                   the votes most suspect for donor influence.
                 </P>
                 <P>
-                  The score blends seat-relative vote alignment (80%, or 100% when
-                  cosponsorship data is unavailable) with coalition breadth (20%, when
-                  available). Coalition breadth asks whether a member also legislates for
-                  the constituents who didn&apos;t vote for them: the rate at which they
-                  attract cosponsors from the other party and lend their name to the other
-                  party&apos;s bills, normalized to the chamber median (following the Lugar
-                  Center Bipartisan Index method; Harbridge 2015). A below-median rate is,
-                  since v6.8, discounted toward neutral the same way below-expected loyalty
-                  already is above: in a safe seat, a narrow, mostly within-party coalition
-                  may be faithful representation of the coalition that elected the member,
-                  not a failure to represent — the discount fades to zero in a swing or
-                  opposed seat, where a narrow coalition is genuinely legible evidence.
-                  Through v6.4 this
+                  The score blends seat-relative vote alignment (70%, or 100% when
+                  roll-call ideal-point data is unavailable) with position congruence
+                  (30%, when available — v6.11): the member&apos;s DW-NOMINATE first-dimension
+                  position (Voteview; the standard roll-call-based position measure in
+                  political science) compared against a seat-conditional expectation —
+                  what a same-party member of a similarly-leaning seat typically holds,
+                  fit per chamber and per party from real data. Per-party fits deliberately
+                  avoid the swing-seat artifact a single pooled fit would create (Bafumi &amp;
+                  Herron 2010). A position toward the party&apos;s flank relative to that norm
+                  scores below neutral (scaled by how unsafe the seat is — flank positions
+                  in genuinely safe seats are the structural norm and are not penalized);
+                  a position toward the seat&apos;s center scores above neutral (with the same
+                  seat-direction credit shape as surplus crossing). When active, this
+                  component supersedes the v6.7 cosponsorship-based discount above — same
+                  construct, better signal, and measuring it twice would repeat the exact
+                  double-count v6.8 fixed. Coalition breadth (20% here from v5 through
+                  v6.10) has moved to Legislative Effectiveness: bipartisan
+                  coalition-building is a legislative-effectiveness signal, not a
+                  constituent-alignment one — demand for bipartisanship varies with the
+                  seat&apos;s own makeup (Harbridge &amp; Malhotra 2011), so a bipartisan member
+                  of a lopsided seat can be bipartisan and misaligned at once. Through v6.4 this
                   dimension also included a Donor Independence component (25%, a
                   heuristic based on the money associated with donor-vote topical
                   overlaps) — removed in 2026-07 after finding it measured a close cousin
@@ -323,11 +332,24 @@ export default function AboutPage() {
                   1x for commemorative simple/concurrent resolutions) and credited
                   cumulatively across every stage it reaches — introducing a bill earns
                   real credit on its own, not just bills that go on to pass a chamber or
-                  become law. Two components: bill significance &amp; advancement (70%) —
+                  become law. Three components: bill significance &amp; advancement (60%) —
                   this cumulative stage-credit per congress served, compared against an
                   expected credit for a sponsor of this chamber/majority-minority status;
-                  and legislative leadership (30%) — cosponsorship-network PageRank, see
-                  below.
+                  legislative leadership (25%) — cosponsorship-network PageRank, see
+                  below; and bipartisan coalition attraction (15%, v6.11 — moved here
+                  from Constituent Alignment): the share of cosponsors a member attracts
+                  to their own bills from the other party, chamber-median-normalized.
+                  Harbridge-Yong, Volden &amp; Wiseman (2023) show that attracting
+                  cross-party cosponsors robustly predicts lawmaking success for majority
+                  and minority members alike — and that it is specifically the{" "}
+                  <em>attraction</em> of bipartisan cosponsors, not the offering of
+                  cosponsorships across the aisle, that carries the effect, so this
+                  component uses a receive-only rate rather than the blended
+                  give-and-receive bipartisanship figure shown on profiles. Their evidence
+                  is a strong association rather than a clean causal proof, and the
+                  measure is an input to effectiveness rather than realized output — both
+                  disclosed reasons its weight stays modest. When cosponsorship data is
+                  missing, the split reverts to exactly the prior 70/30.
                 </P>
                 <P>
                   Because introduction itself earns credit, a member who sponsors many
@@ -472,52 +494,59 @@ export default function AboutPage() {
               than trade this platform&apos;s auditability for a partial, hard-to-explain fix.
             </P>
             <Gist>
-              the score can catch a senator who&apos;s clearly out of step with their state, but
-              it can&apos;t yet give extra credit to a senator who is genuinely, provably in step
-              with theirs — both look identical (a neutral score) today. This is on our list to
-              fix; see below for exactly what&apos;s blocking it.
+              the score can now give extra credit to a senator who is genuinely in step with
+              their state — the long-disclosed gap where a well-matched loyalist could never
+              score above neutral is closed as of v6.11 — but the fix measures &quot;in step
+              with the seat&quot; against the seat&apos;s overall partisan lean, which is not the
+              same thing as the voters who actually elected the member. That residual
+              simplification is still disclosed below.
             </Gist>
             <P>
-              <em className="text-matrix-green/80">Constituent Alignment still cannot positively
-              credit congruent loyalty.</em> As of v6.7 the dimension can flag a below-expected
-              loyalist whose <em>position</em> is a clear outlier for their seat (the
-              position-mismatch discount, above) — but it still has no way to reward the mirror
-              case: a senator whose party&apos;s positions already match a lopsided state, voting
-              loyally in a way that is genuinely representative, scores the same neutral ~50 as
-              an unreadable loyalist, not higher. Penalizing a legible mismatch is a lower
-              evidentiary bar than crediting a legible match — the platform is confident an
-              extreme position in an unsafe seat is not neutral, but is not yet confident enough
-              in any target to say a given position affirmatively <em>is</em> what a seat wants.
-              The political-science construct that would capture the positive case directly is
-              positional distance — how close a member&apos;s revealed ideological position sits to
-              their seat&apos;s expected position (Canes-Wrone, Brady &amp; Cogan 2002; Bafumi &amp;
-              Herron 2010). The platform already computes both ingredients (a party-blind
-              cosponsorship-ideology score and state partisan lean), so this is a data problem,
-              not a data-availability one: it needs a party- or coalition-relative target — every
-              member sits more extreme than their state&apos;s raw median, so the median itself is
-              the wrong yardstick — and edges toward an authored benchmark this platform&apos;s
-              no-hardcoded-conclusions rule resists. Disclosed here rather than papered over.
+              <em className="text-matrix-green/80">Constituent Alignment&apos;s positive-credit gap
+              is closed (v6.11), with a disclosed residual.</em> Through v6.10 the dimension
+              could flag a loyalist whose position was a clear outlier for their seat, but had
+              no way to reward the mirror case — a member whose positions genuinely match their
+              seat scored the same neutral ~50 as an unreadable loyalist. The blocker named
+              here in earlier versions was the yardstick: every member sits more extreme than
+              their state&apos;s raw median (Bafumi &amp; Herron 2010), so the median itself was the
+              wrong target, and authoring one by hand would violate the no-hardcoded-conclusions
+              rule. The v6.11 position-congruence component resolves that with a party-relative,
+              data-derived target — what a same-party member of a similarly-leaning seat
+              typically holds, fit from the live chamber — exactly the party- or
+              coalition-relative benchmark this disclosure said was needed (Canes-Wrone, Brady
+              &amp; Cogan 2002). What remains, and stays disclosed: the target is derived from
+              seat partisan lean, a one-dimensional electoral proxy — members systematically
+              track their <em>reelection</em> constituency (primary voters and copartisans)
+              rather than the geographic median (Fenno 1978; Clinton 2006), which is why
+              congruence credit is seat-direction-scaled rather than taken at face value, and
+              why issue-level opinion data (e.g. MRP estimates or CES roll-call-matched items)
+              remains the named next step for this dimension.
             </P>
             <Gist>
-              two of the checks that can lower Constituent Alignment are both computed from
-              the same underlying data, so they were catching the same problem twice. v6.8
-              (below) cut that overlap substantially, but the two will never be fully separate
-              signals with the data sources available here.
+              two of the checks that used to lower Constituent Alignment were computed from
+              the same underlying data, so they were catching the same problem twice. v6.8 cut
+              that overlap; v6.11 removes it structurally — the two signals no longer live in
+              the same dimension, and the position check now uses an independent data source
+              where available. A smaller cousin of the same caveat now applies inside
+              Legislative Effectiveness.
             </Gist>
             <P>
-              <em className="text-matrix-green/80">The position-mismatch discount and coalition
-              breadth are not fully independent signals.</em> A 2026-07-21 audit found the two
-              components of Constituent Alignment&apos;s below-expected-loyalty case correlate at
-              r=-0.76 (58% shared variance, n=99) — both are computed from the same underlying
-              cosponsorship network (one is an SVD position on it, the other its cross-party edge
-              rate), so a member with a narrow, within-party cosponsorship pattern moves both
-              signals together rather than providing two genuinely separate pieces of evidence.
-              v6.8 reduced the position-mismatch discount&apos;s strength and seat-safety-scaled
-              coalition breadth&apos;s below-median case to cut how much this double-counted a
-              single underlying fact, but the two measures remain drawn from the same data
-              source and will never be fully orthogonal within this platform&apos;s current data —
-              a genuinely independent second signal (e.g. a roll-call-based ideal point distinct
-              from cosponsorship patterns) isn&apos;t available here. See the{" "}
+              <em className="text-matrix-green/80">Cosponsorship-derived signal overlap — mostly
+              resolved, one residual.</em> A 2026-07-21 audit found Constituent Alignment&apos;s
+              position-mismatch discount and coalition breadth correlate at r=-0.76 (58% shared
+              variance, n=99) — both were projections of the same cosponsorship network. v6.8
+              reduced the double-count; v6.11 removes its structural basis: coalition breadth
+              has left Constituent Alignment entirely (it now scores legislative effectiveness,
+              where the evidence supports it), and the position signal is measured from
+              roll-call ideal points (DW-NOMINATE via Voteview) — the genuinely independent
+              second signal this disclosure previously said wasn&apos;t available — whenever that
+              generated dataset is present, with the cosponsorship-SVD discount surviving only
+              as a fallback. The residual: within Legislative Effectiveness, the leadership
+              component (cosponsorship PageRank) and the new bipartisan-coalition-attraction
+              component are both computed from the cosponsorship network (network centrality
+              vs. cross-party share — related data, different measures). Their combined weight
+              is capped at 40% for that reason, and their live correlation is a standing
+              post-run check. See the{" "}
               <a href="/changelog" className="underline underline-offset-2 hover:text-matrix-green/70"> scoring changelog</a>{" "}
               for the full account.
             </P>

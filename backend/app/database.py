@@ -147,6 +147,8 @@ def _migrate_columns() -> None:
         ("week_summaries", "bsky_posted_at", "DATETIME"),
         ("senators", "bipartisanship_score", "REAL"),
         ("representatives", "bipartisanship_score", "REAL"),
+        ("senators", "attracted_bipartisanship_score", "REAL"),
+        ("representatives", "attracted_bipartisanship_score", "REAL"),
         ("senators", "is_current", "BOOLEAN DEFAULT 1"),
         ("senators", "vacancy_reason", "TEXT"),
         ("senators", "left_office_date", "TEXT"),

@@ -10,7 +10,9 @@ from app.pipeline.analyze.score_calculator import (
     _calc_funding_independence,
     _calc_legislative_effectiveness,
     _calc_promise_persistence,
+    _constituent_alignment_core,
     _funding_independence_core,
+    _legislative_effectiveness_core,
     _LES_AVG_BASELINE_HOUSE,
     _LES_AVG_BASELINE_SENATE,
     _LES_POPULATION_MEDIAN_HOUSE,
@@ -732,7 +734,10 @@ class TestConstituentAlignment:
         (all three sit in comfortably safe D states) — scored 32-36 from the
         two components double-penalizing the same cosponsorship-derived
         signal. CT is Murphy's actual state. Same inputs should no longer
-        fall below 40."""
+        fall below 40. (v6.11: coalition breadth left this dimension
+        entirely — see TestBipartisanCoalitionAttraction — so the
+        double-count is now structurally impossible here; this test keeps
+        guarding the remaining discount channel.)"""
         self._patch_bounds(monkeypatch)
         record = {
             "keyVotes": self._make_votes(with_party=98, against_party=2),
@@ -741,7 +746,7 @@ class TestConstituentAlignment:
         funding = {"totalRaised": 1_000_000, "totalFromPACs": 200_000}
         score = _calc_constituent_alignment(
             record, [], funding, state="CT", party="D",
-            ideology_score=0.05, bipartisanship=0.1,
+            ideology_score=0.05,
         )
         assert score >= 40
 
@@ -1674,52 +1679,228 @@ class TestMajorityAdjustedAdvancement:
         assert _advancement_baseline("hres", 118, "R") != _advancement_baseline("s", 118, "R")
 
 
-class TestCoalitionBreadth:
-    def _vr(self):
+class TestBipartisanCoalitionAttraction:
+    """v6.11: coalition breadth moved OUT of Constituent Alignment into
+    Legislative Effectiveness as "Bipartisan coalition attraction"
+    (Harbridge-Yong, Volden & Wiseman 2023 — attracting cross-party
+    cosponsors to one's own bills predicts lawmaking success; it is not a
+    constituent-alignment construct, Harbridge & Malhotra 2011)."""
+
+    def _bills(self, n=250, advanced=9):
+        return [
+            {
+                "billId": f"S.{i}", "billType": "s", "congress": 118,
+                "isLaw": False,
+                "latestAction": "Passed Senate" if i < advanced else "Referred to committee",
+                "title": f"Bill {i}",
+            }
+            for i in range(n)
+        ]
+
+    def test_attraction_moves_le_score(self):
+        base = dict(sponsored_bills=self._bills(), leadership_score=0.5,
+                    party="D", years_in_office=10.0)
+        low = _calc_legislative_effectiveness(**base, attracted_bipartisanship=0.0)
+        mid = _calc_legislative_effectiveness(**base, attracted_bipartisanship=0.5)
+        high = _calc_legislative_effectiveness(**base, attracted_bipartisanship=1.0)
+        assert low < mid < high
+        # 15% weight over a 0-100 component: full range moves the score by ~15
+        assert 12 <= high - low <= 18
+
+    def test_no_seat_scaling_in_effectiveness(self):
+        """Unlike the old Constituent Alignment breadth component, there is
+        no seat-safety discount here: low bipartisan attraction predicts
+        lower lawmaking success regardless of the sponsor's seat (HVW 2023
+        find the effect for both majority and minority members). The LE
+        signature takes no seat/state input at all — this test documents
+        that the component is a pure function of the attraction rate."""
+        base = dict(sponsored_bills=self._bills(), leadership_score=0.5,
+                    party="D", years_in_office=10.0)
+        low = _calc_legislative_effectiveness(**base, attracted_bipartisanship=0.0)
+        high = _calc_legislative_effectiveness(**base, attracted_bipartisanship=1.0)
+        assert high - low >= 12
+
+    def test_missing_attraction_reverts_to_pre_v6_11_weights(self):
+        """Absent cosponsorship data must reproduce the pre-v6.11 70/30
+        LES/leadership split exactly — never scored neutral."""
+        base = dict(sponsored_bills=self._bills(), leadership_score=0.5,
+                    party="D", years_in_office=10.0)
+        assert _calc_legislative_effectiveness(**base) == _calc_legislative_effectiveness(
+            **base, attracted_bipartisanship=None
+        )
+
+    def test_median_attractor_scores_component_neutral(self):
+        """Cohort-median attraction (0.5 on the normalized scale) maps to a
+        50 component — swapping it in for missing data must not move a
+        member whose other components also sit at 50."""
+        core = _legislative_effectiveness_core(
+            [], leadership_score=None, party="D", years_in_office=None,
+            attracted_bipartisanship=0.5,
+        )
+        assert core["score"] == 50
+        labels = [c["label"] for c in core["components"]]
+        assert "Bipartisan coalition attraction" in labels
+
+    def test_breadth_no_longer_a_constituent_alignment_input(self):
+        """The old bipartisanship parameter is gone from Constituent
+        Alignment entirely — passing it must fail loudly, not be silently
+        accepted."""
+        import pytest
+        base = dict(
+            voting_record={"keyVotes": [], "recentVotes": []},
+            lobbying_matches=[], funding={}, state="CA", party="D",
+        )
+        with pytest.raises(TypeError):
+            _calc_constituent_alignment(**base, bipartisanship=0.5)
+
+
+class TestPositionCongruence:
+    """v6.11: Constituent Alignment's position-congruence component —
+    DW-NOMINATE dim1 vs. a seat-conditional per-party expectation
+    (Canes-Wrone/Brady/Cogan 2002 district-relative extremity), fed
+    entirely from generated member_ideal_points.json data. These tests
+    inject synthetic data via the loader cache (same pattern as
+    _patch_bounds); the component's deterministic branch logic is what's
+    under test — magnitudes come from the generated file in production.
+
+    Synthetic D fit: expected_dim1 = -0.35 + 0.006*seat_pvi, saturation
+    p90 = 0.2. NV is a swing seat (alignment 0.0); VT is D+15 (alignment
+    pinned to 1.0, maximally safe for a D)."""
+
+    def _patch_ideal_points(self, monkeypatch, members=None):
+        monkeypatch.setattr(
+            score_calculator, "_member_ideal_points_cache",
+            {
+                "senate": {
+                    "members": members or {},
+                    "fit": {
+                        "D": {"a": -0.35, "b": 0.006},
+                        "R": {"a": 0.35, "b": 0.006},
+                    },
+                    "extremity_p90": 0.2,
+                },
+            },
+        )
+
+    def _loyal_record(self):
         return {
             "keyVotes": [
                 {"votedWithParty": True, "partyAlignmentWeight": 1.0}
-                for _ in range(30)
+                for _ in range(98)
+            ] + [
+                {"votedWithParty": False, "partyAlignmentWeight": 1.0}
+                for _ in range(2)
             ],
             "recentVotes": [],
         }
 
-    def test_breadth_moves_score_in_swing_seat(self):
-        # PA/D is a swing seat (near-zero alignment) — the v6.8 seat-safety
-        # scaling leaves swing/opposed seats at full strength (breadth_severity
-        # ~1.0), so the pre-v6.8 "full range moves the score by ~20" behavior
-        # should still hold here.
-        base = dict(voting_record=self._vr(), lobbying_matches=[], funding={},
-                     state="PA", party="D")
-        low = _calc_constituent_alignment(**base, bipartisanship=0.0)
-        mid = _calc_constituent_alignment(**base, bipartisanship=0.5)
-        high = _calc_constituent_alignment(**base, bipartisanship=1.0)
-        assert low < mid < high
-        # 20% weight over a 0-100 component: full range moves the score by ~20
-        assert 15 <= high - low <= 25
-
-    def test_breadth_low_end_dampened_in_safe_seat(self):
-        # v6.8: a below-median breadth score is seat-safety-scaled the same
-        # way the position-mismatch discount is — a safe seat's narrow
-        # cross-party coalition is unreadable, not a failure, so the low end
-        # should float much closer to neutral (50) than the swing-seat case
-        # above, while the high end (already at/above median, no discount)
-        # is unaffected.
-        base = dict(voting_record=self._vr(), lobbying_matches=[], funding={},
-                     state="CA", party="D")
-        low = _calc_constituent_alignment(**base, bipartisanship=0.0)
-        high = _calc_constituent_alignment(**base, bipartisanship=1.0)
-        assert low < high
-        assert low >= 45  # floored close to neutral, not dropped toward 40
-        assert high - low < 15  # compressed relative to the swing-seat case
-
-    def test_missing_breadth_is_not_neutral_scored(self):
-        """Absent cosponsorship data must reproduce the pre-v5 score exactly."""
-        base = dict(voting_record=self._vr(), lobbying_matches=[], funding={},
-                    state="CA", party="D")
-        assert _calc_constituent_alignment(**base) == _calc_constituent_alignment(
-            **base, bipartisanship=None
+    def test_flank_ward_position_scores_below_neutral_in_swing_seat(self, monkeypatch):
+        """dim1 -0.55 vs. -0.35 expected for a D in a PVI-0 seat: 0.2
+        flank-ward extremity = full saturation, full severity in a swing
+        seat -> congruence component 0, total 50*0.7 + 0*0.3 = 35."""
+        self._patch_ideal_points(monkeypatch, members={"X000001": -0.55})
+        score = _calc_constituent_alignment(
+            self._loyal_record(), [], {}, state="NV", party="D",
+            bioguide_id="X000001",
         )
+        assert score == 35
+
+    def test_flank_ward_position_not_penalized_in_deep_safe_seat(self, monkeypatch):
+        """Same member in VT (alignment 1.0): severity scales to zero —
+        extremity in a deep safe aligned seat is the structural norm
+        (Bafumi & Herron 2010), same posture as the v6.7 discount."""
+        self._patch_ideal_points(monkeypatch, members={"X000001": -0.55})
+        score = _calc_constituent_alignment(
+            self._loyal_record(), [], {}, state="VT", party="D",
+            bioguide_id="X000001",
+        )
+        assert score == 50
+
+    def test_center_ward_position_earns_credit_in_swing_seat(self, monkeypatch):
+        """dim1 -0.15 vs. -0.35 expected: 0.2 center-ward = full
+        saturation, full credit in a swing seat -> congruence 100, total
+        50*0.7 + 100*0.3 = 65. A genuinely congruent member can now score
+        ABOVE 50 — the 'positive half' no rate-based signal could produce
+        (v6.6's disclosed limitation)."""
+        self._patch_ideal_points(monkeypatch, members={"X000001": -0.15})
+        score = _calc_constituent_alignment(
+            self._loyal_record(), [], {}, state="NV", party="D",
+            bioguide_id="X000001",
+        )
+        assert score == 65
+
+    def test_center_ward_credit_shrunk_in_deep_safe_seat(self, monkeypatch):
+        """Center-ward credit is seat-direction-discounted exactly like
+        surplus crossing (floor 0.25): in a deep safe seat the median
+        voter sits with the party, so moving toward the chamber center is
+        not clearly moving toward the seat."""
+        self._patch_ideal_points(monkeypatch, members={"X000001": -0.15})
+        swing = _calc_constituent_alignment(
+            self._loyal_record(), [], {}, state="NV", party="D",
+            bioguide_id="X000001",
+        )
+        safe = _calc_constituent_alignment(
+            self._loyal_record(), [], {}, state="VT", party="D",
+            bioguide_id="X000001",
+        )
+        assert 50 < safe < swing
+
+    def test_supersedes_position_mismatch_discount(self, monkeypatch):
+        """When NOMINATE congruence is active, the v6.7 SVD-based
+        position-mismatch discount must NOT also fire — measuring the
+        same construct twice is the v6.8 double-count. A member exactly
+        at the seat-conditional norm (residual 0 -> congruence 50) with
+        an extreme-tercile ideology_score in a swing seat scores 50, not
+        the discounted 40."""
+        monkeypatch.setattr(
+            score_calculator, "_party_ideology_bounds_cache",
+            {"senate": {"D": (0.3, 0.7), "R": (0.3, 0.7)}, "house": {}},
+        )
+        self._patch_ideal_points(monkeypatch, members={"X000001": -0.35})
+        score = _calc_constituent_alignment(
+            self._loyal_record(), [], {}, state="NV", party="D",
+            ideology_score=0.05, bioguide_id="X000001",
+        )
+        assert score == 50
+
+    def test_discount_still_fires_when_member_not_covered(self, monkeypatch):
+        """A member absent from the generated file falls back to the v6.7
+        discount path unchanged (full-severity swing-seat case = 40)."""
+        monkeypatch.setattr(
+            score_calculator, "_party_ideology_bounds_cache",
+            {"senate": {"D": (0.3, 0.7), "R": (0.3, 0.7)}, "house": {}},
+        )
+        self._patch_ideal_points(monkeypatch, members={})
+        score = _calc_constituent_alignment(
+            self._loyal_record(), [], {}, state="NV", party="D",
+            ideology_score=0.05, bioguide_id="X000001",
+        )
+        assert score == 40
+
+    def test_missing_data_file_component_skipped_entirely(self, monkeypatch):
+        """No generated file (loader cache empty) -> component skipped,
+        weight renormalized to the vote component — identical score with
+        or without a bioguide_id. Missing data is never punitive."""
+        monkeypatch.setattr(score_calculator, "_member_ideal_points_cache", {})
+        base = dict(state="NV", party="D")
+        with_bio = _calc_constituent_alignment(
+            self._loyal_record(), [], {}, **base, bioguide_id="X000001",
+        )
+        without_bio = _calc_constituent_alignment(
+            self._loyal_record(), [], {}, **base,
+        )
+        assert with_bio == without_bio == 50
+
+    def test_breakdown_component_present_and_weighted(self, monkeypatch):
+        self._patch_ideal_points(monkeypatch, members={"X000001": -0.15})
+        core = _constituent_alignment_core(
+            self._loyal_record(), [], {}, state="NV", party="D",
+            bioguide_id="X000001",
+        )
+        by_label = {c["label"]: c for c in core["components"]}
+        assert by_label["Seat-relative vote alignment"]["weight"] == 0.7
+        assert by_label["Position congruence"]["weight"] == 0.3
+        assert by_label["Position congruence"]["score"] == 100.0
 
 
 class TestComputeOverallScoreOnPartialColumnRows:

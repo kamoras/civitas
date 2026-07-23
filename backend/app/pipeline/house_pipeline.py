@@ -336,6 +336,7 @@ async def run_house_pipeline() -> dict:
             leadership_scores: dict[str, float] = {}
             ideology_scores: dict[str, float] = {}
             bipartisanship_scores: dict[str, float] = {}
+            attracted_bipartisanship_scores: dict[str, float] = {}
 
             from app.pipeline.analyze.bill_stage import classify_bill_stage_from_actions
 
@@ -492,6 +493,13 @@ async def run_house_pipeline() -> dict:
                 )
                 bipartisanship_scores = compute_bipartisanship_scores(
                     all_bills_for_analysis, cosponsors_map, rep_party_map,
+                )
+                # Receive-only variant for Legislative Effectiveness's
+                # coalition-attraction component (score_calculator v6.11) —
+                # see senate_pipeline's identical call for the rationale.
+                attracted_bipartisanship_scores = compute_bipartisanship_scores(
+                    all_bills_for_analysis, cosponsors_map, rep_party_map,
+                    direction="receive",
                 )
                 ideology_scores = compute_ideology_scores(
                     all_bills_for_analysis, cosponsors_map, rep_bio_ids, rep_party_map,
@@ -724,8 +732,10 @@ async def run_house_pipeline() -> dict:
                     l_score = leadership_scores.get(bio_id)
                     i_score = ideology_scores.get(bio_id)
                     b_score = bipartisanship_scores.get(bio_id)
+                    ab_score = attracted_bipartisanship_scores.get(bio_id)
                     rep["leadershipScore"] = round(l_score, 4) if l_score is not None else None
                     rep["bipartisanshipScore"] = round(b_score, 4) if b_score is not None else None
+                    rep["attractedBipartisanshipScore"] = round(ab_score, 4) if ab_score is not None else None
                     rep["ideologyScore"] = round(i_score, 4) if i_score is not None else None
                     if l_score is not None and i_score is not None:
                         rep["sponsorshipDescription"] = describe_senator_position(
