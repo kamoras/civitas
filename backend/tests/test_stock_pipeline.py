@@ -9,12 +9,14 @@ impossible to tell a slow run from a stuck one (surfaced live 2026-07-15,
 when a run took ~90 minutes with only CPU usage as a diagnostic signal).
 """
 
+from datetime import timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.models import StockTradesPipelineRun
+from app.models import HousePipelineRun, PipelineRun, PipelineStatus, StockTradesPipelineRun
 from app.pipeline import stock_pipeline
+from app.time_utils import utcnow
 
 
 @pytest.fixture(autouse=True)
@@ -92,6 +94,18 @@ class TestStockTradesPipelineRunTracking:
         assert "House" in run.error_message
         assert "Senate" in run.error_message
 
+    def test_skips_when_stocks_own_prior_run_is_still_genuinely_active(self, db_session):
+        db_session.add(StockTradesPipelineRun(started_at=utcnow() - timedelta(minutes=5), status=PipelineStatus.RUNNING))
+        db_session.commit()
+
+        with patch("app.pipeline.stock_pipeline.SessionLocal", return_value=db_session), \
+             patch("app.pipeline.stock_pipeline._other_pipeline_running", return_value=False):
+            import asyncio
+            result = asyncio.run(stock_pipeline.run_stock_trades_pipeline())
+
+        assert result == {"status": "skipped", "reason": "already_running"}
+        assert db_session.query(StockTradesPipelineRun).count() == 1
+
     def test_skips_and_creates_no_row_when_a_member_pipeline_is_running(self, db_session):
         with patch("app.pipeline.stock_pipeline.SessionLocal", return_value=db_session), \
              patch("app.pipeline.stock_pipeline._other_pipeline_running", return_value=True):
@@ -101,3 +115,36 @@ class TestStockTradesPipelineRunTracking:
         assert result["status"] == "skipped"
         assert db_session.query(StockTradesPipelineRun).count() == 0
         assert stock_pipeline.is_stock_pipeline_running() is False
+
+
+class TestOtherPipelineRunningStaleness:
+    """_other_pipeline_running gained staleness awareness 2026-07-23:
+    previously a row orphaned by a killed process (a deploy restarting
+    the container mid-run) stayed status=running forever, permanently
+    blocking Stock via this check with no auto-clear anywhere in it —
+    confirmed live as the likely cause of stock-trades data going stale
+    for 4+ days after a since-fixed deploy-race incident.
+    """
+
+    def test_recent_running_senate_row_blocks(self, db_session):
+        db_session.add(PipelineRun(started_at=utcnow() - timedelta(minutes=5), status=PipelineStatus.RUNNING))
+        db_session.commit()
+        assert stock_pipeline._other_pipeline_running(db_session) is True
+
+    def test_recent_running_house_row_blocks(self, db_session):
+        db_session.add(HousePipelineRun(started_at=utcnow() - timedelta(minutes=5), status=PipelineStatus.RUNNING))
+        db_session.commit()
+        assert stock_pipeline._other_pipeline_running(db_session) is True
+
+    def test_stale_running_senate_row_does_not_block(self, db_session):
+        db_session.add(PipelineRun(started_at=utcnow() - timedelta(hours=13), status=PipelineStatus.RUNNING))
+        db_session.commit()
+        assert stock_pipeline._other_pipeline_running(db_session) is False
+
+    def test_stale_running_house_row_does_not_block(self, db_session):
+        db_session.add(HousePipelineRun(started_at=utcnow() - timedelta(hours=13), status=PipelineStatus.RUNNING))
+        db_session.commit()
+        assert stock_pipeline._other_pipeline_running(db_session) is False
+
+    def test_no_running_rows_does_not_block(self, db_session):
+        assert stock_pipeline._other_pipeline_running(db_session) is False

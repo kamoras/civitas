@@ -10,13 +10,14 @@ House/stock trades already have, instead of piggybacking on Senate's
 own PipelineRun row.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.models import Justice, SupplementaryPipelineRun
+from app.models import Justice, PipelineStatus, SupplementaryPipelineRun
 from app.pipeline import supplementary_pipeline
+from app.time_utils import utcnow
 
 
 @pytest.fixture(autouse=True)
@@ -122,3 +123,40 @@ class TestSupplementaryPipelineRunTracking:
         assert run.explore_docs_ingested == 0
         assert run.justices_scored == 5
         assert run.presidents_updated == 2
+
+
+class TestSupplementaryPipelineLock:
+    """run_supplementary_pipeline gained a real lock 2026-07-23 — before
+    this it unconditionally created a new run row every call, so a row
+    orphaned by a killed process (a deploy restarting the container
+    mid-run) never blocked a later attempt from double-running, but ALSO
+    never got cleared — it just sat there. Confirmed live as (part of)
+    why supplementary data went stale for 1+ day after a since-fixed
+    deploy-race incident: this pipeline itself didn't cause the skip
+    (only Senate's own lock did, taking the whole chain with it), but had
+    this pipeline been retried directly, a stale row would have had no
+    auto-clear.
+    """
+
+    def test_skips_when_a_recent_run_is_already_marked_running(self, db_session):
+        db_session.add(SupplementaryPipelineRun(started_at=utcnow() - timedelta(minutes=5), status=PipelineStatus.RUNNING))
+        db_session.commit()
+
+        with patch("app.pipeline.supplementary_pipeline.SessionLocal", return_value=db_session):
+            import asyncio
+            result = asyncio.run(supplementary_pipeline.run_supplementary_pipeline())
+
+        assert result == {"status": "skipped", "reason": "already_running"}
+        assert db_session.query(SupplementaryPipelineRun).count() == 1
+
+    def test_stale_running_row_is_cleared_and_a_fresh_run_proceeds(self, db_session):
+        stale = SupplementaryPipelineRun(started_at=utcnow() - timedelta(hours=13), status=PipelineStatus.RUNNING)
+        db_session.add(stale)
+        db_session.commit()
+        stale_id = stale.id
+
+        result = _run(db_session, explore_result={"total": 0}, justice_result={"justices": 0}, president_result={"updated": 0})
+
+        assert result["status"] == "completed"
+        cleared = db_session.query(SupplementaryPipelineRun).filter(SupplementaryPipelineRun.id == stale_id).one()
+        assert cleared.status == PipelineStatus.STALE

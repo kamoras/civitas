@@ -11,7 +11,7 @@ threading.Thread) so the guard's decision can be asserted directly.
 
 from datetime import timedelta
 from app.time_utils import utcnow
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 class _SyncThread:
@@ -144,3 +144,90 @@ class TestSupplementaryOverlapGuard:
         state = {"is_running": False, "started_at": None}
         mock_refresh = _run_hourly_refresh(state, supplementary_running=False)
         mock_refresh.assert_called_once()
+
+
+class TestNightlyPipelineCascadingSkip:
+    """_nightly_pipeline's chain (Senate -> Supplementary -> House ->
+    Stock) runs each step only if the previous one didn't report
+    "skipped" — until 2026-07-23 only Senate's skip was even checked,
+    and even that alert never mentioned the rest of the chain also
+    silently not running that night. Confirmed live as the likely root
+    cause of stock-trades data going stale 4+ days and supplementary
+    data 1+ day, since a Senate (or, after this fix, any step's) skip
+    took the whole rest of the chain with it with no visible signal.
+    """
+
+    def _run_chain(
+        self, senate_result, supplementary_result=None, house_result=None, stock_result=None,
+    ):
+        from app import scheduler
+
+        with patch("app.scheduler.threading.Thread", _SyncThread), \
+             patch("app.scheduler.run_senate_pipeline", new_callable=AsyncMock) as mock_senate, \
+             patch("app.scheduler.run_supplementary_pipeline", new_callable=AsyncMock) as mock_supp, \
+             patch("app.scheduler.run_house_pipeline", new_callable=AsyncMock) as mock_house, \
+             patch("app.scheduler.run_stock_trades_pipeline", new_callable=AsyncMock) as mock_stock, \
+             patch("app.ops_alerts.send_ops_alert") as mock_alert, \
+             patch("app.ops_alerts.check_current_congress_staleness"), \
+             patch("app.services.bill_service.warm_bill_collection_cache"):
+            mock_senate.return_value = senate_result
+            mock_supp.return_value = supplementary_result or {"status": "completed"}
+            mock_house.return_value = house_result or {"status": "completed"}
+            mock_stock.return_value = stock_result or {"status": "completed"}
+
+            scheduler._nightly_pipeline()
+
+            return mock_senate, mock_supp, mock_house, mock_stock, mock_alert
+
+    def test_all_four_run_when_nothing_skips(self):
+        senate, supp, house, stock, alert = self._run_chain({"status": "completed"})
+        senate.assert_called_once()
+        supp.assert_called_once()
+        house.assert_called_once()
+        stock.assert_called_once()
+        alert.assert_not_called()
+
+    def test_senate_skip_stops_the_whole_chain(self):
+        senate, supp, house, stock, alert = self._run_chain(
+            {"status": "skipped", "reason": "already_running"},
+        )
+        senate.assert_called_once()
+        supp.assert_not_called()
+        house.assert_not_called()
+        stock.assert_not_called()
+        alert.assert_called_once()
+        subject, body = alert.call_args[0][0], alert.call_args[0][1]
+        assert "Senate" in subject
+        assert "Supplementary/House/Stock never ran either" in body
+
+    def test_supplementary_skip_stops_house_and_stock_but_senate_already_ran(self):
+        senate, supp, house, stock, alert = self._run_chain(
+            {"status": "completed"},
+            supplementary_result={"status": "skipped", "reason": "already_running"},
+        )
+        senate.assert_called_once()
+        supp.assert_called_once()
+        house.assert_not_called()
+        stock.assert_not_called()
+        alert.assert_called_once()
+        assert "Supplementary" in alert.call_args[0][0]
+
+    def test_house_skip_stops_stock_but_earlier_steps_already_ran(self):
+        senate, supp, house, stock, alert = self._run_chain(
+            {"status": "completed"},
+            house_result={"status": "skipped", "reason": "already_running"},
+        )
+        supp.assert_called_once()
+        house.assert_called_once()
+        stock.assert_not_called()
+        alert.assert_called_once()
+        assert "House" in alert.call_args[0][0]
+
+    def test_stock_skip_alerts_with_nothing_left_to_stop(self):
+        senate, supp, house, stock, alert = self._run_chain(
+            {"status": "completed"},
+            stock_result={"status": "skipped", "reason": "already_running"},
+        )
+        stock.assert_called_once()
+        alert.assert_called_once()
+        assert "Stock trades" in alert.call_args[0][0]
