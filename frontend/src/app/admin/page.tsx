@@ -2159,19 +2159,22 @@ function AdminDashboardView({
                   {/* Embedding Model */}
                   <div>
                     <h3 className="text-[10px] font-pixel text-matrix-green/50 tracking-wider mb-2">
-                      EMBEDDING MODEL
+                      EMBEDDING MODELS
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div className="border border-matrix-green/15 rounded p-3">
-                        <div className="text-[10px] font-pixel text-matrix-green/40 mb-1">MODEL</div>
+                        <div className="text-[10px] font-pixel text-matrix-green/40 mb-1">CLASSIFICATION MODEL</div>
                         <div className="text-xs font-terminal text-neon-cyan break-all">
                           {d.system.vectorDb.embeddingModel}
                         </div>
+                        <div className="text-[10px] font-terminal text-matrix-green/50 mt-1">
+                          v: {d.system.vectorDb.embeddingModelVersion}
+                        </div>
                       </div>
                       <div className="border border-matrix-green/15 rounded p-3">
-                        <div className="text-[10px] font-pixel text-matrix-green/40 mb-1">VERSION</div>
+                        <div className="text-[10px] font-pixel text-matrix-green/40 mb-1">SEARCH INDEX MODEL</div>
                         <div className="text-sm font-terminal text-matrix-green">
-                          {d.system.vectorDb.embeddingModelVersion}
+                          {d.system.vectorDb.indexModelVersion || "rebuilding…"}
                         </div>
                       </div>
                       <div className="border border-matrix-green/15 rounded p-3">
