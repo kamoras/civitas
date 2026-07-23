@@ -533,6 +533,9 @@ class RelatedBillSchema(CamelModel):
     name: str
     id: str
     url: str
+    # Path to our own bill detail page ("/bills/HR.22") when we host this
+    # bill; None means the congress.gov `url` is the only link available.
+    internal_url: str | None = None
 
 
 class ActionIssueSchema(CamelModel):

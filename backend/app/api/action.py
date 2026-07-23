@@ -18,7 +18,8 @@ from app.database import get_db
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.models import (
     ActionIssue, ExploreDocument, MonitorStatus,
-    NationalMonitor, TimelineEntry, Representative, Senator,
+    NationalMonitor, RepSponsoredBill, SponsoredBill,
+    TimelineEntry, Representative, Senator,
     WeekSummary, MonthSummary, YearSummary,
 )
 from app.schemas import (
@@ -106,9 +107,48 @@ def _latest_current_issues(db: Session, for_date: str | None = None) -> list[Act
     )
 
 
+def _issue_bill_ids(issue: ActionIssue) -> set[str]:
+    """Bill IDs (e.g. "HR.22") referenced by an issue's related_bill_ids JSON."""
+    return {
+        b["id"].upper()
+        for b in _parse_json_field(issue.related_bill_ids)
+        if isinstance(b, dict) and b.get("id")
+    }
+
+
+def _internal_bill_congresses(db: Session, bill_ids: set[str]) -> dict[str, set[int]]:
+    """{bill_id: {congress, ...}} for bills our own /bills/{id} page can show.
+
+    Mirrors bill_service.get_bill_detail's lookup (current members'
+    sponsored bills, either chamber) so we only emit an internal link when
+    that page would actually resolve rather than 404.
+    """
+    if not bill_ids:
+        return {}
+    found: dict[str, set[int]] = {}
+    senate_rows = (
+        db.query(SponsoredBill.bill_id, SponsoredBill.congress)
+        .join(Senator, SponsoredBill.senator_id == Senator.id)
+        .filter(SponsoredBill.bill_id.in_(bill_ids))
+        .filter(Senator.is_current == True)  # noqa: E712
+        .all()
+    )
+    house_rows = (
+        db.query(RepSponsoredBill.bill_id, RepSponsoredBill.congress)
+        .join(Representative, RepSponsoredBill.representative_id == Representative.id)
+        .filter(RepSponsoredBill.bill_id.in_(bill_ids))
+        .filter(Representative.is_current == True)  # noqa: E712
+        .all()
+    )
+    for bill_id, congress in senate_rows + house_rows:
+        found.setdefault(bill_id, set()).add(congress)
+    return found
+
+
 def _build_issue_response(
     issue: ActionIssue, db: Session,
     explore_docs_map: dict[int, ExploreDocument] | None = None,
+    internal_bills: dict[str, set[int]] | None = None,
 ) -> dict:
     explore_ids = _parse_json_field(issue.related_explore_ids)
     related_docs: list[dict] = []
@@ -154,14 +194,27 @@ def _build_issue_response(
             )
 
     raw_bills = _parse_json_field(issue.related_bill_ids)
+    if internal_bills is None:
+        internal_bills = _internal_bill_congresses(db, _issue_bill_ids(issue))
     related_bills: list[dict] = []
     for b in raw_bills:
         if isinstance(b, dict) and b.get("id") and b.get("url"):
+            bill_id = b["id"].upper()
+            # Link internally only when we host this bill — and, for
+            # entries that recorded which congress they refer to, only
+            # when our record is from that same congress (a bill number
+            # alone is ambiguous across congresses).
+            entry_congress = b.get("congress")
+            internal_congresses = internal_bills.get(bill_id)
+            is_internal = internal_congresses is not None and (
+                entry_congress is None or entry_congress in internal_congresses
+            )
             related_bills.append(
                 RelatedBillSchema(
                     name=b.get("name", b["id"]),
                     id=b["id"],
                     url=b["url"],
+                    internal_url=f"/bills/{bill_id}" if is_internal else None,
                 ).model_dump(by_alias=True)
             )
 
@@ -226,9 +279,17 @@ async def get_action_issues(
         )
         explore_docs_map = {d.id: d for d in docs}
 
+    all_bill_ids: set[str] = set()
+    for i in issues:
+        all_bill_ids |= _issue_bill_ids(i)
+    internal_bills = _internal_bill_congresses(db, all_bill_ids)
+
     return {
         "date": issue_date,
-        "issues": [_build_issue_response(i, db, explore_docs_map) for i in issues],
+        "issues": [
+            _build_issue_response(i, db, explore_docs_map, internal_bills)
+            for i in issues
+        ],
         "availableDates": available_dates,
     }
 
