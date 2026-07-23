@@ -161,7 +161,10 @@ def main() -> None:
             print(f"FAIL: 0-bucket mean ({means['0']:.1f}) > 1-2-bucket mean ({means['1-2']:.1f})")
 
     stdev = statistics.pstdev(all_new_scores)
-    floor = 8.0  # MIN_STDEV["score_legislative_effectiveness"], ground_truth.py
+    # Historical LE stdev floor this fix was originally verified against
+    # (the retired MIN_STDEV table — see ground_truth.py's git history);
+    # kept so this point-in-time harness reproduces its original verdict.
+    floor = 8.0
     verdict = "PASS" if stdev >= floor else "FAIL"
     print(f"{verdict}: population stdev {stdev:.2f} (floor {floor})")
 

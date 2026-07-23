@@ -56,16 +56,19 @@ EOF
 
 ---
 
-## Step 2 — Ground Truth Spot Check
+## Step 2 — Derived Consistency Spot Check
 
 Runs the same regression gate the pipeline runs automatically after every
 scoring pass (`backend/app/pipeline/analyze/ground_truth.py`), against the
-current database state. This calls the live function directly rather than
-duplicating its reference list here, so this step can never drift out of
-sync with what the pipeline actually checks — see that module's docstring
-for the rationale behind each reference senator and range (each is chosen
-because their public record — break rate, donor mix — is independently
-verifiable, not because of any editorial judgment about them).
+current database state. This calls the live functions directly rather than
+duplicating any expectations here, so this step can never drift out of
+sync with what the pipeline actually checks. Every expectation is derived
+at check time from the current population's own raw data — rank
+consistency between each score and the FEC/roll-call metric it must track,
+extreme-decile placement, raw-input existence, and distribution-collapse
+checks — no reference senators are named and no score ranges are
+hand-typed (a previous version kept such a table; see that module's git
+history and docstring for why it was replaced).
 
 ```bash
 docker exec mp-backend-blue python3 - <<'EOF'
@@ -90,8 +93,12 @@ EOF
 ```
 
 **What to look for:**
-- Any `✗` result means a known-bad senator scores well on that dimension, or a known-good senator scores poorly.
-- This is also logged automatically as `GROUND TRUTH FAIL` warnings after every pipeline run — check backend logs first before running this manually.
+- Any `✗` result means a score dimension has decoupled from the raw data it
+  is computed from (e.g. the senators with the lowest PAC ratios no longer
+  rank high on FI), or a raw input has silently gone missing (e.g. PAC
+  totals all zero).
+- This is also logged automatically as `DERIVED CHECK FAIL` warnings after
+  every pipeline run — check backend logs first before running this manually.
 
 ---
 
@@ -450,7 +457,7 @@ After running the audit, use this framework to decide what to change:
 | mean > 65 on any dimension | Missing data treated as positive | Change "no data" default from positive to neutral (50) |
 | PP×IV correlation > 0.4 | PP fallback using vote data | Remove voting fallback from PP; use 50 |
 | FI > 85 for high-fundraising senators | Outside spending not captured | Check outsideSpendingFor field; verify FEC Schedule E fetch |
-| Ground truth check ✗ | Vote/finance matching broken, or algorithm regression | See `ground_truth.py` docstring for the specific senator's rationale; check key_votes/donor tables |
+| Derived consistency check ✗ | Vote/finance matching broken, or algorithm regression | The failure's rationale names the raw metric that decoupled; check key_votes/donor tables and the corresponding fetch |
 | >20% senators in data desert | API fetch failure | Check API cache, rate limits, name matching |
 | High score variance (>15 pts) on specific senator | Inconsistent vote/FEC matching | Add name normalization or use bioguide_id as primary key |
 | LE scores all below 50 | Advancement threshold too high | Compare against the current threshold in score_calculator.py |

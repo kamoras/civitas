@@ -6,10 +6,10 @@ failures on the run record and fires an ops alert. These were copy-pasted
 (differing only in the "senator"/"representative" label and the alert text).
 This is the shared implementation.
 
-The Senate additionally runs named-reference ground-truth cases
-(``check_ground_truth``) that the House has no reference set for; that step
-stays in ``run_senate_pipeline``, which gathers its ``gt_failures`` and then
-calls ``persist_ground_truth_failures`` here just like the House does.
+Both chambers run the same derived consistency gate (``check_ground_truth``
++ ``check_score_distribution`` — expectations computed from each chamber's
+own raw data, no named reference members); each pipeline gathers its
+``gt_failures`` and calls ``persist_ground_truth_failures`` here.
 """
 
 import json

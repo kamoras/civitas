@@ -769,24 +769,26 @@ async def run_house_pipeline() -> dict:
             run_calibration_check("representative")
 
             try:
-                # Population-stdev regression gate — House's counterpart to
-                # senate_pipeline.py's ground-truth check. No named House
-                # reference cases exist yet (GROUND_TRUTH in ground_truth.py
-                # is Senate-only), so this is the stdev floor only: it still
-                # catches the failure mode a term-window change risks most —
-                # scores collapsing toward a neutral prior population-wide.
-                from app.pipeline.analyze.ground_truth import check_score_distribution
-                gt_failures = check_score_distribution(db, model=Representative)
+                # Same derived consistency + distribution gate as
+                # senate_pipeline.py. The House ran distribution-only while
+                # the gate was a hand-named Senate reference table; the
+                # derived checks are chamber-agnostic, so both run here now.
+                from app.pipeline.analyze.ground_truth import (
+                    check_ground_truth,
+                    check_score_distribution,
+                )
+                gt_failures = check_ground_truth(db, model=Representative).get("failures", [])
+                gt_failures += check_score_distribution(db, model=Representative)
                 lines = "\n".join(
-                    f"- {f.get('dimension', '?')}={f.get('score', '?')} "
-                    f"expected {f.get('expected', '?')}"
+                    f"- {f.get('senator', '?')} {f.get('dimension', '?')}="
+                    f"{f.get('score', '?')} expected {f.get('expected', '?')}"
                     for f in gt_failures
                 )
                 persist_ground_truth_failures(
                     db, house_run, gt_failures,
                     alert_title=f"House ground-truth gate failed ({len(gt_failures)})",
                     alert_body=(
-                        f"House score distribution outside expected ranges "
+                        f"House derived score-consistency checks failed "
                         f"(run #{house_run.id}):\n{lines}"
                     ),
                     dedupe_key=f"house-ground-truth-run-{house_run.id}",
