@@ -129,7 +129,17 @@ CLUSTER_TITLE_THRESHOLD = 0.40
 CLUSTER_CENTROID_MERGE_THRESHOLD = 0.20
 MAX_ISSUES = 4
 
-ACTION_CENTER_PROMPT_VERSION = "action-v20"
+# v20 -> v21 (2026-07 audit M6): added fact rule (6) against cross-topic
+# facts. Live issues carried facts from unrelated articles that survived
+# cluster-coherence filtering (a Zelenskyy army-chief fact inside a
+# Netanyahu-arrest issue; a PhRMA fact inside a cyclospora-outbreak
+# issue). A mechanical per-fact check was evaluated first and rejected on
+# measurement: fact-vs-title cosine on the production model does NOT
+# separate contaminants from legitimate facts (measured on the live
+# cases: contaminants 0.72-0.76, legitimate facts 0.73-0.97 — overlapping
+# ranges), so this class is addressed at the prompt and disclosed as not
+# mechanically enforced.
+ACTION_CENTER_PROMPT_VERSION = "action-v21"
 
 TOPIC_CHANGE_THRESHOLD = 0.82  # cosine similarity below which a rank slot is considered a new topic
 # Raw cosine similarity between ANY two news headlines is ~0.74+ due to domain clustering.
@@ -154,6 +164,71 @@ def _full_story_should_invalidate(
     obituary issue.)
     """
     return old_title != new_title or old_facts != new_facts
+
+# Tokens that appear in most political stories and therefore carry no
+# STORY identity — a signature made of these matches everything. Identity
+# comes from specific entities and numbers ("216-212", "Taylor Farms",
+# "Netanyahu"), never from the shared civic vocabulary. Calibrated against
+# real production pairs (2026-07 audit, see _issue_signature): with these
+# stripped, two same-story rows measured overlap 0.78/1.00 while a
+# different-story pair whose TITLES scored 0.88 cosine measured 0.0.
+_SIGNATURE_GENERIC_TOKENS = {
+    "the", "a", "an", "this", "these", "those", "several", "multiple",
+    "recent", "new", "over", "under", "after", "before", "while", "with",
+    "house", "senate", "congress", "congressional", "president",
+    "republicans", "republican", "democrats", "democrat", "democratic",
+    "gop", "lawmakers", "federal", "government", "state", "states",
+    "white", "washington", "american", "americans", "bill", "act",
+    "committee", "administration", "officials", "legislation",
+}
+
+
+def _issue_signature(title: str, facts: list[str]) -> set[str]:
+    """Identity fingerprint of an issue: specific capitalized entities plus
+    digit groups from its title and facts, minus generic civic vocabulary
+    (see _SIGNATURE_GENERIC_TOKENS). Two rows about the same real-world
+    story share the numbers and named entities that define it; two rows
+    that merely sound alike share only the generic tokens this strips."""
+    text = f"{title} {' '.join(facts)}"
+    tokens = {
+        m.group(0).lower()
+        for m in re.finditer(r"\b[A-Z][a-zA-Z'\-]{2,}\b", text)
+    } - _SIGNATURE_GENERIC_TOKENS
+    numbers = {
+        m.group(0).replace(",", "")
+        for m in re.finditer(r"\d[\d,]*(?:\.\d+)?", text)
+    }
+    return tokens | numbers
+
+
+# Minimum signature containment for two issues to be the same story, and
+# the minimum shared-token count backing it (containment over a tiny
+# signature is noisy). Calibrated 2026-07 on real production pairs: the
+# two same-story pairs that WRONGLY became separate rows (defense bill
+# id394/id405, cyclospora id396/id401) measure 0.78 and 1.00; the
+# different-story pair that WRONGLY shared a row (post/permalink drift,
+# audit H1) measures 0.0 after generic-token stripping. Wide gap, so the
+# threshold sits in the middle of it.
+_SIGNATURE_MATCH_MIN_CONTAINMENT = 0.35
+_SIGNATURE_MATCH_MIN_SHARED = 2
+
+# Candidate floor for topic matching by title similarity. Below this, two
+# titles aren't even about similar subjects (measured: fully unrelated
+# stories score ~0.70; see _run_refresh's matching loop for how signature
+# overlap — not this floor — decides same-story).
+_TOPIC_MATCH_CANDIDATE_FLOOR = 0.70
+
+
+def _signatures_match(sig_a: set[str], sig_b: set[str]) -> bool:
+    if not sig_a or not sig_b:
+        return False
+    shared = sig_a & sig_b
+    containment = len(shared) / min(len(sig_a), len(sig_b))
+    return (
+        len(shared) >= _SIGNATURE_MATCH_MIN_SHARED
+        and containment >= _SIGNATURE_MATCH_MIN_CONTAINMENT
+    )
+
 
 _SYSTEM_PROMPT = """\
 You are a nonpartisan civic information analyst. You present facts without \
@@ -207,7 +282,11 @@ argument about whether an action was warranted or justified, even when the \
 article states it as fact. (5) A fact must describe something that happened \
 or was said in the world — never a description of the coverage itself \
 (e.g., "the coverage emphasizes X" or "the article focuses on Y" are NOT \
-facts; extract what X or Y actually is instead).
+facts; extract what X or Y actually is instead). (6) Every fact must be \
+about the single topic named in your title. If an article in the list \
+covers a different event — a different country's politics, a different \
+agency, an unrelated person — do NOT extract facts from it, even though \
+it appears above.
 - "bills": An array of any specific bills or acts mentioned in the articles. \
 For each bill, provide an object with "name" (the bill's common name or \
 acronym EXACTLY AS WRITTEN in the articles above — never a bill name from \
@@ -903,15 +982,46 @@ def _validate_facts(facts: list, source_text: str | None = None) -> list:
     _META_PHRASES = (
         "in the article", "in the articles", "in the coverage", "in the report",
         "in the reporting", "the coverage ", "the reporting ",
+        # 2026-07 audit: "The articles focused on internal party dynamics
+        # rather than public policy outcomes" and "The articles referenced
+        # specific names and dates" both published — "the articles" as
+        # sentence SUBJECT wasn't covered by the "in the articles" form.
+        "the article ", "the articles ",
     )
     _today = datetime.now(_US_EAST).date()
     _month_index = {m: i for i, m in enumerate(calendar.month_name) if m}
+
+    from app.pipeline.analyze import action_metrics
+    from app.pipeline.analyze.grounding import (
+        placeholder_tokens,
+        ungrounded_relationship_claims,
+    )
 
     clean = []
     for fact in facts:
         if not isinstance(fact, str) or not fact.strip():
             continue
         lower = fact.lower()
+
+        # Literal unfilled placeholders — "[date]", "[name]". Every other
+        # check here is digit-based, which is exactly how "Thune announced
+        # the tribute details on [date]." published (and was posted to
+        # Bluesky) in 2026-07: no digits, nothing fired.
+        placeholders = placeholder_tokens(fact)
+        if placeholders:
+            logger.warning("Dropping fact with placeholder tokens (%s): %s",
+                           ", ".join(placeholders), fact[:120])
+            action_metrics.increment("facts_dropped_placeholder")
+            continue
+
+        # Family-relationship claims with no family vocabulary anywhere in
+        # the source articles — same fabricated-relationship class as the
+        # electoral-claims guard (2026-07: "for the seat left by her
+        # brother" published as fact with nothing able to check it).
+        if source_text and ungrounded_relationship_claims(fact, source_text):
+            logger.warning("Dropping fact with ungrounded family relationship: %s", fact[:120])
+            action_metrics.increment("facts_dropped_relationship")
+            continue
 
         # Detect self-referential comparisons: extract capitalized words and check
         # if any word root appears on both sides of a comparison verb.
@@ -921,6 +1031,7 @@ def _validate_facts(facts: list, source_text: str | None = None) -> list:
             roots = [w.lower()[:6] for w in words]  # stem to first 6 chars
             if len(roots) != len(set(roots)):  # duplicate root → self-comparison
                 logger.warning("Dropping self-referential fact: %s", fact[:120])
+                action_metrics.increment("facts_dropped_self_comparison")
                 continue
 
         # Detect stale future-tense facts with past dates — e.g. the LLM writes
@@ -935,6 +1046,7 @@ def _validate_facts(facts: list, source_text: str | None = None) -> list:
                     mentioned = datetime(int(m.group(2)), month_num, 1).date()
                     if mentioned < _today:
                         logger.warning("Dropping stale future-dated fact: %s", fact[:120])
+                        action_metrics.increment("facts_dropped_stale_date")
                         stale = True
                         break
                 except ValueError:
@@ -946,6 +1058,7 @@ def _validate_facts(facts: list, source_text: str | None = None) -> list:
         # than an actual event — see the docstring for real production examples.
         if any(phrase in lower for phrase in _META_PHRASES):
             logger.warning("Dropping meta-fact referencing the coverage itself: %s", fact[:120])
+            action_metrics.increment("facts_dropped_meta")
             continue
 
         # Fabricated-statistic check against the articles the LLM was shown.
@@ -957,6 +1070,7 @@ def _validate_facts(facts: list, source_text: str | None = None) -> list:
                     "Dropping fact with numbers not in source (%s): %s",
                     ", ".join(novel), fact[:120],
                 )
+                action_metrics.increment("facts_dropped_ungrounded_number")
                 continue
 
         clean.append(fact.strip())
@@ -1075,6 +1189,46 @@ _COMMON_WORD_SURNAMES = {
 }
 
 
+# Honorifics/titles that legitimately precede a member's bare surname —
+# a capitalized token from this set before the surname means the mention
+# is (or may be) the member, not somebody else's full name.
+_NAME_PRECEDING_TITLES = {
+    "senator", "sen", "representative", "rep", "congressman", "congresswoman",
+    "speaker", "chairman", "chairwoman", "chair", "leader", "whip",
+    "secretary", "governor", "gov", "president", "justice", "judge",
+    "dr", "mr", "mrs", "ms",
+}
+
+
+def _surname_owned_by_other_name(text: str, match: "re.Match", member_name: str) -> bool:
+    """True when this surname occurrence is part of a DIFFERENT person's
+    full name — i.e. immediately preceded by a capitalized given name that
+    is neither one of the member's own name tokens nor a title/honorific.
+
+    "featuring Ferran Torres' late goal" → the "Torres" is owned by
+    "Ferran", who is not Rep. Ritchie Torres → True.
+    "Sen. Torres said" / "... change. Torres said" → False (title-prefixed
+    or sentence-initial — could genuinely be the member).
+    """
+    preceding = text[: match.start()].rstrip()
+    m = re.search(r"([A-Za-z'\-]+[\.!?:;]?)$", preceding)
+    if not m:
+        return False
+    raw = m.group(1)
+    if raw[-1] in ".!?:;":
+        # Sentence boundary (or an abbreviation/initial) — the capitalized
+        # word before it belongs to the previous sentence, not this name.
+        return False
+    prev = raw.rstrip("'")
+    if not prev or not prev[0].isupper() or len(prev) < 3:
+        return False  # lowercase word or bare initial — not a claiming name
+    prev_lower = prev.lower()
+    if prev_lower in _NAME_PRECEDING_TITLES:
+        return False
+    member_tokens = {t.lower().rstrip(".") for t in member_name.split()}
+    return prev_lower not in member_tokens
+
+
 def _find_related_senators(
     title: str,
     summary: str,
@@ -1173,7 +1327,24 @@ def _find_related_senators(
 
         # Last-name-only match needs word-boundary + disambiguation
         pattern = re.compile(r"\b" + re.escape(last_name) + r"\b", re.IGNORECASE)
-        if pattern.search(issue_text):
+        occurrences = list(pattern.finditer(issue_text))
+        if occurrences and all(
+            _surname_owned_by_other_name(issue_text, m, s.name) for m in occurrences
+        ):
+            # Every occurrence of this surname is part of a DIFFERENT
+            # person's full name ("Ferran Torres" is not Rep. Ritchie
+            # Torres). Generalizes the full-name-matched-member exclusion
+            # above to people the platform doesn't track — the 2026-07
+            # audit found a World Cup story tagging both Reps. Torres
+            # ("referenced in coverage") off soccer player Ferran Torres'
+            # surname, and the embedding disambiguation below is provably
+            # unable to catch this: measured on the live case, the sports
+            # context scored 0.78-0.80 against the "Representative X from
+            # NY" prototypes while genuine civic last-name references
+            # scored 0.77-0.85 — the ranges overlap completely, so no
+            # threshold separates them.
+            continue
+        if occurrences:
             candidates_needing_disambiguation.append((s, last_name, pattern, chamber))
 
     if candidates_needing_disambiguation:
@@ -2153,13 +2324,19 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
             hedge_and_editorializing_violations,
             repeated_sentences,
             ungrounded_electoral_claims,
+            ungrounded_relationship_claims,
             ungrounded_statistics,
             ungrounded_titled_names,
         )
         novel = ungrounded_statistics(story, source_material)
         names = ungrounded_titled_names(story, source_material)
         dupes = repeated_sentences(story)
+        # hedge_and_editorializing_violations also covers literal unfilled
+        # placeholder tokens ("[date]") since the 2026-07 audit.
         hedge_editorial = hedge_and_editorializing_violations(story)
+        # Same fabricated-relationship class as the electoral guard, family
+        # edition (2026-07 audit: "her brother" published ungrounded).
+        relationships = ungrounded_relationship_claims(story, source_material)
         # Same relational-fabrication guard the Bluesky poster runs: a full
         # story that invents a race/campaign between two officials who both
         # appear in the facts for an unrelated reason (2026-07: a Graham story
@@ -2167,7 +2344,7 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
         # race") slips past the number and name checks — both surnames are
         # grounded and no figure is fabricated.
         electoral = ungrounded_electoral_claims(story, source_material)
-        if not novel and not names and not dupes and not hedge_editorial and not electoral:
+        if not novel and not names and not dupes and not hedge_editorial and not electoral and not relationships:
             logger.info(
                 "Generated full story for issue %s (%d chars): %s",
                 issue.id, len(story), issue.title[:60],
@@ -2213,6 +2390,14 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
             logger.warning(
                 "Full story invented an electoral contest for issue %s (attempt %d): %s",
                 issue.id, attempt + 1, ", ".join(electoral),
+            )
+        if relationships:
+            problems.append(
+                f"a family relationship not present in the key facts ({', '.join(relationships)})"
+            )
+            logger.warning(
+                "Full story asserted an ungrounded family relationship for issue %s (attempt %d): %s",
+                issue.id, attempt + 1, ", ".join(relationships),
             )
         retry_note = (
             "\n\nYour previous attempt was rejected because it contained "
@@ -3101,6 +3286,8 @@ def _run_refresh(db: Session) -> int:
     today = datetime.now(_US_EAST).strftime("%Y-%m-%d")
 
     logger.info("Action center refresh starting for %s", today)
+    from app.pipeline.analyze import action_metrics
+    action_metrics.reset()
     _set_refresh_state(
         is_running=True, stage="fetch", stage_detail=None,
         started_at=utcnow(),
@@ -3312,6 +3499,7 @@ def _run_refresh(db: Session) -> int:
                     "rank %d after retry — skipping: %s",
                     rank, "; ".join(reasons),
                 )
+                action_metrics.increment("issues_skipped_grounding")
                 continue
 
         # Second-pass check for who-did-what-to-whom role reversal (see
@@ -3354,7 +3542,22 @@ def _run_refresh(db: Session) -> int:
                     "skipping this issue rather than publish it: %s",
                     rank, reason, summary[:200],
                 )
+                action_metrics.increment("issues_skipped_role_check")
                 continue
+
+        # Minimum-substance gate (2026-07 audit): fewer than 2 facts
+        # surviving validation means there isn't a publishable issue here —
+        # observed live as issues consisting entirely of vacuous filler
+        # ("Congressional scheduling adjustments": no name, no number, no
+        # bill anywhere in its facts). Fail closed, same posture as the
+        # grounding retries above.
+        if len(facts) < 2:
+            logger.info(
+                "Skipping rank %d — only %d fact(s) survived validation: '%s'",
+                rank, len(facts), title[:60],
+            )
+            action_metrics.increment("issues_skipped_too_few_facts")
+            continue
 
         # Post-LLM title dedup: skip if this LLM-generated title is too
         # similar to one already selected this run. Catches cases where two
@@ -3366,6 +3569,7 @@ def _run_refresh(db: Session) -> int:
                 "Skipping duplicate issue rank %d (title too similar to earlier issue): '%s'",
                 rank, title[:80],
             )
+            action_metrics.increment("issues_skipped_duplicate_title")
             continue
         generated_title_embs.append((title, title_emb))
 
@@ -3395,19 +3599,34 @@ def _run_refresh(db: Session) -> int:
         related_officials = _find_related_officials(title, summary, facts, db)
 
         # Action-surface gate: an issue must connect to something a citizen
-        # can actually act on in platform data — a resolvable bill, a
-        # tracked official, or an ingested civic document. Replaces the
-        # prototype-similarity civic gate, whose absolute cosine threshold
-        # (0.30) sat below the embedding model's same-register noise floor
-        # and never fired (2026-07 audit: celebrity-crime and music-
-        # performance stories passed). This gate is derived entirely from
-        # what the platform has ingested, not from authored prototype text.
-        if not (resolved_bills or related_officials or related_explore_ids):
+        # can actually act on in platform data. Replaces the prototype-
+        # similarity civic gate, whose absolute cosine threshold (0.30) sat
+        # below the embedding model's same-register noise floor and never
+        # fired (2026-07 audit: celebrity-crime and music-performance
+        # stories passed). Derived entirely from what the platform has
+        # ingested, not from authored prototype text.
+        #
+        # Only HIGH-PRECISION anchors count (2026-07 audit tightening —
+        # a World Cup story published as a civic issue by clearing the old
+        # any-anchor version of this gate twice over): a resolved bill or a
+        # full-name-matched official is near-certain; a last-name-only
+        # official match is not (the story's anchor was soccer player
+        # Ferran Torres surname-matching two Reps. Torres), and a SINGLE
+        # explore-doc title match at the 0.75 similarity bar is not either
+        # (the same story's other anchor was a Puerto Rico PROMESA floor
+        # speech at that bar). Two independent explore docs agreeing
+        # remains a valid anchor; one alone doesn't publish an issue.
+        strong_officials = [
+            o for o in related_officials
+            if o.get("match_reason") == "named in coverage"
+        ]
+        if not (resolved_bills or strong_officials or len(related_explore_ids) >= 2):
             logger.info(
-                "Skipping rank %d — no action surface (no bills, officials, "
-                "or civic documents matched): '%s'",
+                "Skipping rank %d — no strong action surface (no bills, no "
+                "full-name officials, <2 civic documents): '%s'",
                 rank, title[:60],
             )
+            action_metrics.increment("issues_skipped_no_action_surface")
             continue
 
         # 10. Build data-driven actions (no LLM hallucinations)
@@ -3427,17 +3646,48 @@ def _run_refresh(db: Session) -> int:
             if newest_pub is not None else today
         )
 
-        # Find the matching existing issue by topic similarity across all
-        # recent issues (2-day lookback, any rank).  Same topic → same row,
-        # regardless of whether it yo-yoed in rank or was briefly displaced.
+        # Find the matching existing issue across all recent issues (2-day
+        # lookback, any rank). Same STORY → same row, regardless of rank
+        # yo-yoing or a brief displacement.
+        #
+        # 2026-07 audit rework: matching was previously raw title cosine
+        # alone (≥ TOPIC_CHANGE_THRESHOLD), and the audit measured that
+        # signal failing in BOTH directions on real production rows: two
+        # same-story rows scored 0.80/0.85 (below 0.82 → duplicate rows,
+        # duplicate Bluesky posts), while a different-story pair scored
+        # 0.88 (above 0.82 → the row's content was overwritten in place,
+        # leaving its already-published Bluesky post describing a
+        # different story than the permalink it links to). Title cosine
+        # now only nominates candidates (≥ _TOPIC_MATCH_CANDIDATE_FLOOR);
+        # the same-story decision is made by signature overlap — the
+        # specific entities and numbers the two versions share (see
+        # _issue_signature). A high-title-sim candidate with a DISJOINT
+        # signature is a different story wearing a similar headline: never
+        # reuse its row. Signature-less rows (no facts stored) fall back
+        # to the old ≥ TOPIC_CHANGE_THRESHOLD title-only behavior rather
+        # than being unmatchable.
         match: ActionIssue | None = None
         if _recent_embs is not None:
+            new_sig = _issue_signature(title, facts)
             sims = _recent_embs @ title_emb
-            best_idx = int(np.argmax(sims))
-            if float(sims[best_idx]) >= TOPIC_CHANGE_THRESHOLD:
-                candidate = _recent_issues[best_idx]
-                if candidate.id not in _matched_issue_ids:
+            for cand_idx in np.argsort(-sims):
+                sim = float(sims[cand_idx])
+                if sim < _TOPIC_MATCH_CANDIDATE_FLOOR:
+                    break
+                candidate = _recent_issues[int(cand_idx)]
+                if candidate.id in _matched_issue_ids:
+                    continue
+                try:
+                    cand_facts = json.loads(candidate.facts or "[]")
+                except (ValueError, TypeError):
+                    cand_facts = []
+                cand_sig = _issue_signature(candidate.title or "", cand_facts)
+                if _signatures_match(new_sig, cand_sig):
                     match = candidate
+                    break
+                if (not new_sig or not cand_sig) and sim >= TOPIC_CHANGE_THRESHOLD:
+                    match = candidate
+                    break
 
         _update_attrs = (
             "title", "summary", "facts", "actions", "source_urls",
@@ -3650,6 +3900,15 @@ def _run_refresh(db: Session) -> int:
     if cache_deleted:
         db.commit()
         logger.info("Pruned %d stale api_cache entries", cache_deleted)
+
+    # Persist this run's validator counters (2026-07 audit M9: these
+    # existed only as log lines, wiped by every deploy — validator hit
+    # rates were unmeasurable). One api_cache row per run, pruned by the
+    # same 60-day cleanup as every other tier.
+    _metrics_snapshot = action_metrics.snapshot()
+    action_metrics.persist(db, f"run-{datetime.now(_US_EAST).strftime('%Y-%m-%d-%H%M')}")
+    if _metrics_snapshot:
+        logger.info("Validator counters this run: %s", _metrics_snapshot)
 
     elapsed = time.perf_counter() - t0
     logger.info(

@@ -21,7 +21,11 @@ from app.pipeline.analyze.action_center import (
     _find_related_senators,
     _find_related_officials,
     _fix_impossible_senate_vote_counts,
+    _issue_signature,
     _largest_coherent_subgroup,
+    _signatures_match,
+    _surname_owned_by_other_name,
+    _validate_facts,
 )
 
 
@@ -851,3 +855,175 @@ class TestFindRelatedOfficialsJusticeCommonWordSurnames:
             "Travel feature", "Visitors flocked to Jackson, Mississippi this summer.", [], db_session,
         )
         assert result == []
+
+
+class TestSurnameOwnedByOtherName:
+    """2026-07 audit H3: a World Cup story tagged both Reps. Torres
+    ("referenced in coverage") off soccer player Ferran Torres' surname —
+    and that false tag was itself the action surface that let a sports
+    story publish as a civic issue. The embedding disambiguation is
+    provably unable to catch this (measured on the live case: 0.78-0.80
+    vs. genuine civic references at 0.77-0.85 — fully overlapping), so
+    the guard is deterministic: a surname occurrence immediately preceded
+    by a different person's given name is not the member."""
+
+    def _match(self, text, surname):
+        import re
+        return re.search(r"\b" + surname + r"\b", text)
+
+    def test_live_ferran_torres_case(self):
+        text = "Spain defeated Argentina 1-0 in a match featuring Ferran Torres' late goal."
+        m = self._match(text, "Torres")
+        assert _surname_owned_by_other_name(text, m, "Ritchie Torres") is True
+
+    def test_own_first_name_is_not_another_owner(self):
+        text = "The bill from Ritchie Torres advanced on Tuesday."
+        m = self._match(text, "Torres")
+        assert _surname_owned_by_other_name(text, m, "Ritchie Torres") is False
+
+    def test_title_prefix_is_not_another_owner(self):
+        text = "On the floor, Rep. Torres criticized the amendment."
+        m = self._match(text, "Torres")
+        assert _surname_owned_by_other_name(text, m, "Ritchie Torres") is False
+
+    def test_sentence_boundary_capitalized_word_is_not_an_owner(self):
+        # "Georgia." ends the previous sentence — it does not own "Torres".
+        text = "The delegation visited Georgia. Torres said the trip was productive."
+        m = self._match(text, "Torres")
+        assert _surname_owned_by_other_name(text, m, "Ritchie Torres") is False
+
+    def test_lowercase_preceding_word_is_not_an_owner(self):
+        text = "A spokesman for Torres confirmed the schedule."
+        m = self._match(text, "Torres")
+        assert _surname_owned_by_other_name(text, m, "Ritchie Torres") is False
+
+
+class TestFindRelatedSenatorsSurnameOwnedByOtherPerson:
+    def test_world_cup_ferran_torres_does_not_tag_reps_torres(self, db_session):
+        db_session.add(Representative(id="r-torres", name="Ritchie Torres", state="NY", party="D"))
+        db_session.add(Representative(id="n-torres", name="Norma J. Torres", state="CA", party="D"))
+        db_session.commit()
+
+        result = _find_related_senators(
+            "Spanish and Argentine reactions to World Cup final",
+            "Spain defeated Argentina 1-0 in a match featuring Ferran Torres' late goal.",
+            ["Spanish spectators celebrated in Madrid following Spain's World Cup win."],
+            db_session,
+        )
+        assert result == []
+
+    def test_member_still_matched_when_some_occurrence_is_unowned(self, db_session):
+        # One occurrence owned by another name, one genuinely bare — the
+        # member stays a live candidate (the guard requires EVERY
+        # occurrence to be someone else's).
+        db_session.add(Representative(id="r-torres", name="Ritchie Torres", state="NY", party="D"))
+        db_session.commit()
+        with patch("app.pipeline.analyze.action_center._embed_texts") as mock_embed:
+            mock_embed.return_value = np.array([[1.0, 0.0], [1.0, 0.0]])
+            result = _find_related_senators(
+                "Housing bill advances",
+                "Rep. Torres introduced the measure. Ferran Torres played no role.",
+                [],
+                db_session,
+            )
+        assert [r["id"] for r in result] == ["r-torres"]
+
+
+class TestIssueSignatureMatching:
+    """2026-07 audit H1/H2: topic identity by raw title cosine at 0.82
+    failed in both directions on real production rows — two same-story
+    rows measured 0.80/0.85 (duplicate rows, duplicate Bluesky posts)
+    while a different-story pair measured 0.88 (row content overwritten
+    in place; the published post described a different story than its
+    permalink). Every case below uses the real production rows' text."""
+
+    def test_same_defense_bill_rows_match(self):
+        # ids 394/405: same $95B bill, same 216-212 vote, two rows.
+        sig_a = _issue_signature(
+            "Defense policy bill passage and budget debates",
+            ["A defense policy bill was passed with a narrow 216-212 vote.",
+             "Six Democrats supported the bill, and seven Republicans opposed it.",
+             "House Republicans approved a $95 billion framework for a third budget reconciliation package."],
+        )
+        sig_b = _issue_signature(
+            "House approves Pentagon funding framework",
+            ["A $95 billion framework was approved for defense spending.",
+             "The vote resulted in a narrow 216-212 outcome.",
+             "Six Democrats supported the measure while seven Republicans opposed it."],
+        )
+        assert _signatures_match(sig_a, sig_b) is True
+
+    def test_same_outbreak_rows_match(self):
+        # ids 396/401: same cyclospora outbreak on adjacent days.
+        sig_a = _issue_signature(
+            "FDA investigation continues over Taylor Farms lettuce",
+            ["A lettuce sample from Taylor Farms was initially flagged as positive for cyclospora.",
+             "Multiple states are reporting over 7,000 confirmed cases of cyclosporiasis nationwide."],
+        )
+        sig_b = _issue_signature(
+            "Cyclosporiasis outbreak investigation updates",
+            ["Over 7,000 cases have been reported across several states.",
+             "The FDA has stated that a sample from Taylor Farms was later identified as a false positive."],
+        )
+        assert _signatures_match(sig_a, sig_b) is True
+
+    def test_different_stories_with_similar_titles_do_not_match(self):
+        # The drift shape: a shutdown stopgap story vs. the $95B package —
+        # titles alike enough that raw cosine matched them (0.88 measured),
+        # overwriting a posted row with a different story's content.
+        sig_a = _issue_signature(
+            "House advances funding bill to avoid government shutdown",
+            ["The House passed a temporary funding measure to avoid a shutdown.",
+             "Senators plan a response next week."],
+        )
+        sig_b = _issue_signature(
+            "House approves Pentagon funding framework",
+            ["A $95 billion framework was approved for defense spending.",
+             "The vote resulted in a narrow 216-212 outcome."],
+        )
+        assert _signatures_match(sig_a, sig_b) is False
+
+    def test_generic_civic_vocabulary_carries_no_identity(self):
+        sig = _issue_signature(
+            "House Republicans debate the bill",
+            ["Lawmakers in Congress discussed the legislation."],
+        )
+        # Everything here is generic — the signature must be (nearly)
+        # empty rather than full of House/Republicans/Congress tokens
+        # that would match every other political story.
+        assert "house" not in sig
+        assert "republicans" not in sig
+        assert "congress" not in sig
+
+    def test_empty_signature_never_matches(self):
+        assert _signatures_match(set(), {"taylor", "farms"}) is False
+
+
+class TestValidateFactsAuditAdditions:
+    """2026-07 audit: placeholder tokens, subject-form meta-facts, and
+    ungrounded family relationships all published — each case below is
+    the live text."""
+
+    def test_placeholder_fact_dropped(self):
+        facts = ["Thune announced the tribute details on [date].",
+                 "The Senate held a vote on Thursday."]
+        clean = _validate_facts(facts, source_text="Thune announced details. The Senate held a vote on Thursday.")
+        assert clean == ["The Senate held a vote on Thursday."]
+
+    def test_articles_as_subject_meta_fact_dropped(self):
+        facts = ["The articles focused on internal party dynamics rather than public policy outcomes."]
+        assert _validate_facts(facts) == []
+
+    def test_articles_referenced_meta_fact_dropped(self):
+        facts = ["The articles referenced specific names and dates related to the discussion."]
+        assert _validate_facts(facts) == []
+
+    def test_ungrounded_family_relationship_fact_dropped(self):
+        facts = ["Senator Graham announced her candidacy for the seat left by her brother."]
+        source = "Darline Graham announced her candidacy for the vacant seat."
+        assert _validate_facts(facts, source_text=source) == []
+
+    def test_grounded_family_relationship_fact_kept(self):
+        facts = ["Senator Graham announced her candidacy for the seat left by her brother."]
+        source = "Darline Graham, whose brother held the seat, announced her candidacy."
+        assert _validate_facts(facts, source_text=source) == facts
