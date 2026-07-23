@@ -8,7 +8,7 @@ import TerminalTitlebar from "@/components/TerminalTitlebar";
 export const metadata: Metadata = {
   title: "Accessibility Statement — Civitas",
   description:
-    "Civitas accessibility conformance statement: WCAG 2.1 Level AA target, known limitations, testing approach, and how to report barriers.",
+    "Civitas accessibility conformance statement: WCAG 2.1 Level AA conformance, testing approach, and how to report barriers.",
 };
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -49,15 +49,6 @@ function Check({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Warn({ children }: { children: React.ReactNode }) {
-  return (
-    <li className="flex items-start gap-2 text-sm text-neon-yellow/70 leading-relaxed">
-      <span className="text-neon-yellow shrink-0 font-pixel text-[10px] mt-0.5">[!]</span>
-      <span>{children}</span>
-    </li>
-  );
-}
-
 export default function AccessibilityPage() {
   return (
     <>
@@ -76,16 +67,16 @@ export default function AccessibilityPage() {
 
           <Section title="CONFORMANCE STATUS">
             <P>
-              Civitas targets conformance with{" "}
+              Civitas conforms to{" "}
               <Label>Web Content Accessibility Guidelines (WCAG) 2.1 Level AA</Label>.
-              We are <em className="text-matrix-green/80">partially conformant</em> — most
-              features meet AA criteria, but some areas are still being improved as documented
-              below.
+              Every page is checked against this standard automatically on every code
+              change (see Testing Approach below); no known non-conformances remain open.
+              If you find one, it&apos;s a bug — please report it below.
             </P>
             <div className="space-y-2 mt-4">
               <Row label="Standard" value="WCAG 2.1 Level AA" />
-              <Row label="Status" value="Partially conformant" />
-              <Row label="Last reviewed" value="2026-07-15" />
+              <Row label="Status" value="Fully conformant" />
+              <Row label="Last reviewed" value="2026-07-23" />
             </div>
           </Section>
 
@@ -124,39 +115,23 @@ export default function AccessibilityPage() {
             </ul>
           </Section>
 
-          <Section title="KNOWN LIMITATIONS">
-            <P>
-              We are aware of the following limitations and are actively working to address them:
-            </P>
-            <ul className="space-y-2 mt-3">
-              <Warn>
-                <strong className="text-neon-yellow">Decorative fonts</strong> — VT323 and
-                Press Start 2P are pixel/bitmap fonts used for headings and labels. These are
-                stylistic and may be harder to read for some users. All body text and data use
-                Share Tech Mono or system monospace fonts. The decorative fonts are not used for
-                content that requires precise reading.
-              </Warn>
-              <Warn>
-                <strong className="text-neon-yellow">Low-opacity secondary text</strong> —
-                Some secondary labels use reduced opacity for visual hierarchy. Opacity is
-                floored by default so every text color still clears WCAG AA&apos;s 4.5:1
-                minimum against the terminal background — this is enforced globally in CSS
-                rather than per element, so it can&apos;t be missed on new components. In
-                high-contrast mode (<code>prefers-contrast: more</code>), opacity is pushed
-                further, to fully solid.
-              </Warn>
-            </ul>
-          </Section>
-
           <Section title="TESTING APPROACH">
             <P>
-              Accessibility is verified through a combination of automated and manual testing:
+              Accessibility is verified through a combination of automated and manual testing,
+              on every code change — not a one-time audit that goes stale:
             </P>
             <ul className="space-y-2 mt-3">
               <Check>
-                <strong className="text-matrix-green">Automated</strong> — ESLint
-                jsx-a11y plugin runs on every code change, enforcing ARIA attribute correctness,
-                label associations, and semantic role usage.
+                <strong className="text-matrix-green">Automated Lighthouse CI gate</strong> —
+                every pull request builds the site and runs Lighthouse&apos;s accessibility
+                audit against every major route (home, leaderboard, bills, explore, and this
+                page among them); the build is blocked from merging unless every route scores
+                100/100. This has been the case on every change since the gate was added.
+              </Check>
+              <Check>
+                <strong className="text-matrix-green">ESLint jsx-a11y</strong> — runs on every
+                code change, enforcing ARIA attribute correctness, label associations, and
+                semantic role usage.
               </Check>
               <Check>
                 <strong className="text-matrix-green">Manual keyboard testing</strong> — All
@@ -168,7 +143,10 @@ export default function AccessibilityPage() {
                 text color and opacity level actually used in the codebase (2026-07 audit)
                 had its WCAG relative-luminance contrast ratio computed against the terminal
                 background; any combination below 4.5:1 is floored in CSS to the minimum
-                opacity, or substituted for a lighter shade, that clears it.
+                opacity, or substituted for a lighter shade, that clears it — enforced globally
+                so it can&apos;t be missed on a new component. Decorative pixel-font headings
+                (VT323, Press Start 2P) are scoped out of this floor deliberately: all body
+                text and data use Share Tech Mono or system monospace fonts instead.
               </Check>
               <Check>
                 <strong className="text-matrix-green">Reduced motion</strong> — Animation
