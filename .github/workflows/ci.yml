@@ -63,8 +63,12 @@ jobs:
       - run: pip install -r requirements.txt
 
       - name: Lint (ruff)
+        # Pinned: ruff 0.16.0 (released 2026-07-23) flags 345 pre-existing
+        # violations repo-wide, breaking every PR the moment it hit PyPI.
+        # Upgrade deliberately (bump the pin + fix the new findings in one
+        # PR), not implicitly via whatever version `pip install ruff` grabs.
         run: |
-          pip install ruff
+          pip install "ruff==0.15.4"
           ruff check app/
 
       # Two-part coverage gate:
