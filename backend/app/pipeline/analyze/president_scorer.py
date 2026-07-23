@@ -445,7 +445,7 @@ def _agency_alignment_core(
 # app.pipeline.fetch.presidential_approval.fetch_president_approval_history
 # — same "fit against real fetched data before shipping" discipline as
 # every other calibration constant in this file (see e.g. score_calculator
-# .py's _LES_POPULATION_AVG_SENATE/_HOUSE).
+# .py's _LES_POPULATION_MEDIAN_SENATE/_HOUSE).
 #
 # Trend is last-quartile-minus-first-quartile average approval across a
 # term. The population trend mean is sharply negative (-13.7, i.e. the

@@ -571,7 +571,8 @@ Changes from v6.8 -> v6.9 (2026-07-21): a platform-wide political-science
 audit of the live population (the same night as v6.8, a different
 dimension) found Legislative Effectiveness's chamber-fairness handling was
 only half-fixed. _LES_POPULATION_AVG_SENATE/_HOUSE (the population-average
-credit constants) were already correctly chamber-specific, but
+credit constants, renamed to _LES_POPULATION_MEDIAN_* in v6.10) were
+already correctly chamber-specific, but
 _LES_AVG_BASELINE — the constant every member's own majority/minority
 advancement rate gets divided by to compute their status_ratio — was a
 SINGLE value pooled across both chambers. Measuring the two chambers' real
@@ -607,6 +608,35 @@ other.
   Re-run it (and re-check the below-neutral split by chamber) after any
   pipeline run meaningfully shifts either chamber's bill-type/advancement-
   rate mix.
+
+Changes from v6.9 -> v6.10 (2026-07-23): closed the smaller residual
+imbalance v6.9 flagged but explicitly left open. After the v6.9 chamber
+split, both chambers still had slightly more than half their members
+scoring below the neutral midpoint on Legislative Effectiveness. That was
+not a chamber-comparison bug — it was symmetric across both chambers — but
+an artifact of the reference point itself: a member's per-congress credit
+was scored against their chamber's population MEAN, and that distribution is
+right-skewed (a minority of highly prolific sponsors pull the mean well
+above where the typical member sits: 2026-07 audit Senate mean 285.3 /
+median 254, House mean 122.0 / median 107). Scoring against a mean that sits
+above the median puts >50% of any such distribution below neutral by
+construction, regardless of real effectiveness.
+
+  The fix centers the reference point on each chamber's MEDIAN instead of
+  its mean (_LES_POPULATION_AVG_SENATE/_HOUSE renamed to
+  _LES_POPULATION_MEDIAN_SENATE/_HOUSE, 254 / 107), so the typical member
+  now scores ~50 and each chamber lands near a 50/50 split around neutral.
+  This is the same "each chamber's own median scores 50" calibration
+  convention every other expected-vs-actual component in this file already
+  follows (Funding Independence's small-donor state baseline, Funding
+  Diversity's chamber-median multiplier, Constituent Alignment's cohort
+  median) — Legislative Effectiveness was the lone holdout still centered on
+  a mean. The status_ratio adjustment (member vs. chamber-average
+  _advancement_baseline) is unchanged: it only tilts the median bar up or
+  down for a member's own majority/minority bill mix. scripts/
+  calibrate_les_credit_scale.py now reports the median as the suggested
+  constant; re-run it after any pipeline run meaningfully shifts either
+  chamber's per-congress credit distribution.
 """
 
 import logging
@@ -728,11 +758,22 @@ logger = logging.getLogger(__name__)
 # below neutral vs only 38% of the Senate (means 44.6 vs 60.5, n=431/101),
 # despite both chambers performing comparably once measured against their
 # own chamber's real baseline. Split into _LES_AVG_BASELINE_SENATE/_HOUSE,
-# the same pattern _LES_POPULATION_AVG_SENATE/_HOUSE already used — the two
-# constants were meant to work together chamber-specifically and were
+# the same pattern _LES_POPULATION_MEDIAN_SENATE/_HOUSE already used — the
+# two constants were meant to work together chamber-specifically and were
 # silently fighting each other. See the top-of-file "Changes from v6.8 ->
 # v6.9" note.
-ALGORITHM_VERSION = "v6.9"
+#
+# v6.9 -> v6.10 (2026-07-23): closed the smaller residual imbalance v6.9
+# explicitly left open — even after the chamber split, slightly more than
+# half of each chamber scored below neutral because the reference point was
+# each chamber's population MEAN, and the per-congress credit distribution
+# is right-skewed (a minority of prolific sponsors pull the mean above the
+# typical member). Switched the reference to each chamber's MEDIAN
+# (_LES_POPULATION_AVG_* renamed to _LES_POPULATION_MEDIAN_*), the same
+# "median member scores 50" convention every other expected-vs-actual
+# component in this file already uses. Symmetric across both chambers, not a
+# House/Senate bias. See the top-of-file "Changes from v6.9 -> v6.10" note.
+ALGORITHM_VERSION = "v6.10"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -2581,20 +2622,37 @@ def _les_cumulative_credit(bill: dict) -> float:
     return w * s
 
 
-# Population-average significance-weighted cumulative-stage credit per
-# congress served, chamber-specific (V&W's real normalization sets the
-# chamber-term average to exactly 1.0; this platform's data is career-
-# cumulative rather than one fixed term, so the population average is a
-# periodically-recalibrated constant instead of a live computation —
-# same convention as every other self-calibrated constant in this file,
-# e.g. the FI small-donor state baseline). Calibrated via
-# scripts/calibrate_les_credit_scale.py against live production data,
-# using this module's own _les_cumulative_credit so the calibration and
-# the scoring formula can never silently drift apart. 2026-07 live audit
-# (101 senators, 427 reps): Senate mean=285.3/congress (median 254,
-# stdev 157), House mean=122.0/congress (median 107, stdev 77).
-_LES_POPULATION_AVG_SENATE = 285.3
-_LES_POPULATION_AVG_HOUSE = 122.0
+# Population-MEDIAN significance-weighted cumulative-stage credit per
+# congress served, chamber-specific — the reference point a member's own
+# per-congress credit is scored against (raw credit == this value -> ~50).
+#
+# V&W's real LES normalizes to the chamber-term population MEAN (average
+# member = 1.0). This platform deliberately departs and centers on the
+# MEDIAN instead (v6.10, 2026-07-23): the per-congress credit distribution
+# is strongly right-skewed in both chambers — a minority of highly prolific
+# sponsors pull the mean well above where most members sit (2026-07 audit:
+# Senate mean 285.3 vs median 254; House mean 122.0 vs median 107) — so
+# scoring against the mean puts slightly more than half of EVERY chamber
+# below the neutral midpoint by construction, independent of real
+# effectiveness. Centering on the median makes the typical member score
+# ~50, the same "each chamber's own median lands at 50" convention every
+# other expected-vs-actual component in this file already follows (e.g.
+# Funding Independence's small-donor state baseline, Funding Diversity's
+# chamber-median multiplier). This is a symmetric right-skew correction
+# across both chambers, distinct from v6.9's cross-chamber pooling fix
+# (_LES_AVG_BASELINE_*, below) which addressed a genuine House/Senate bias.
+#
+# Career-cumulative data (many congresses, not one fixed term) makes this a
+# periodically-recalibrated constant rather than a live computation — same
+# convention as every other self-calibrated constant in this file, e.g. the
+# FI small-donor state baseline. Calibrated via
+# scripts/calibrate_les_credit_scale.py against live production data, using
+# this module's own _les_cumulative_credit so the calibration and the
+# scoring formula can never silently drift apart. 2026-07 live audit (101
+# senators, 427 reps): Senate median 254/congress (mean 285.3, stdev 157),
+# House median 107/congress (mean 122.0, stdev 77).
+_LES_POPULATION_MEDIAN_SENATE = 254.0
+_LES_POPULATION_MEDIAN_HOUSE = 107.0
 
 # Population-average _advancement_baseline rate, used to turn a member's
 # own majority/minority bill mix into a RATIO against the population
@@ -2613,19 +2671,22 @@ _LES_POPULATION_AVG_HOUSE = 122.0
 # every member's own baseline against ONE pooled cross-chamber average
 # systematically inflated House members' status_ratio (and therefore their
 # expected credit bar) while deflating the Senate's, on top of the
-# population_avg constants above already being correctly chamber-specific
-# — the two are meant to work together and were silently fighting each
+# population reference constants above already being correctly chamber-
+# specific — the two are meant to work together and were silently fighting each
 # other. Measured effect on live scores: House Legislative Effectiveness
 # was 61% below-neutral / Senate only 38% below-neutral (means 44.6 vs
 # 60.5, n=431/101) despite both chambers' members performing comparably
 # once compared against their own chamber's real baseline — simulated
 # against the live population before shipping this fix, which brings both
 # chambers to a comparable, much less lopsided split (~53-58% below-neutral
-# each — the residual is the same population-mean-vs-median right-skew
-# every other "expected vs actual" component in this file has, not a
-# chamber-comparison bug). Re-run scripts/calibrate_les_credit_scale.py
-# (now chamber-split) after any pipeline run meaningfully shifts either
-# chamber's bill-type/advancement-rate mix.
+# each — the residual imbalance this v6.9 split left was the same
+# population-mean-vs-median right-skew every other "expected vs actual"
+# component in this file has, not a chamber-comparison bug; v6.10
+# (2026-07-23) then closed it by centering the reference point on each
+# chamber's MEDIAN instead of its mean — see _LES_POPULATION_MEDIAN_*
+# above). Re-run scripts/calibrate_les_credit_scale.py (now chamber-split)
+# after any pipeline run meaningfully shifts either chamber's
+# bill-type/advancement-rate mix.
 _LES_AVG_BASELINE_SENATE = 0.0305
 _LES_AVG_BASELINE_HOUSE = 0.0444
 
@@ -2665,7 +2726,7 @@ def _les_component_score(
         if (b.get("billType") or "").lower() in _LES_HOUSE_TYPES
     )
     is_house_member = house_n > (len(sponsored_bills) - house_n)
-    population_avg = _LES_POPULATION_AVG_HOUSE if is_house_member else _LES_POPULATION_AVG_SENATE
+    population_median = _LES_POPULATION_MEDIAN_HOUSE if is_house_member else _LES_POPULATION_MEDIAN_SENATE
     avg_baseline = _LES_AVG_BASELINE_HOUSE if is_house_member else _LES_AVG_BASELINE_SENATE
 
     member_baseline = sum(
@@ -2673,7 +2734,11 @@ def _les_component_score(
         for b in sponsored_bills
     ) / len(sponsored_bills)
     status_ratio = member_baseline / avg_baseline if avg_baseline else 1.0
-    expected_per_congress = population_avg * status_ratio
+    # Reference point is the chamber MEDIAN (not V&W's mean) so the typical
+    # member scores ~50 despite the right-skewed credit distribution — see
+    # _LES_POPULATION_MEDIAN_* above. status_ratio only tilts that bar up or
+    # down for a member's own majority/minority bill mix.
+    expected_per_congress = population_median * status_ratio
 
     diff = raw_per_congress - expected_per_congress
     conf = min(n_sub / 10, 1.0)

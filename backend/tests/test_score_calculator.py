@@ -13,6 +13,8 @@ from app.pipeline.analyze.score_calculator import (
     _funding_independence_core,
     _LES_AVG_BASELINE_HOUSE,
     _LES_AVG_BASELINE_SENATE,
+    _LES_POPULATION_MEDIAN_HOUSE,
+    _LES_POPULATION_MEDIAN_SENATE,
     _les_bill_stage,
     _les_cumulative_credit,
     _les_significance_weight,
@@ -1409,8 +1411,8 @@ class TestLegislativeEffectiveness:
         component structurally uncreditable for the House: House
         per-congress bill totals sit far below the Senate's because 435
         members split similar institutional bandwidth, not because
-        they're less effective (2026-07 audit: Senate population-average
-        significance-weighted credit is 285/congress vs House's 122).
+        they're less effective (2026-07 audit: Senate population-median
+        significance-weighted credit is 254/congress vs House's 107).
         Chamber is inferred from bill-type prefix, same pattern the old
         volume-ceiling component used, so a House member at the same
         RAW bill count as a senator is compared against the House's own,
@@ -1439,7 +1441,8 @@ class TestLegislativeEffectiveness:
         ~0.031 — see the constants' own comment in score_calculator.py).
         That silently inflated House members' expected-credit bar and
         deflated the Senate's on top of the already-correct chamber split
-        for _LES_POPULATION_AVG_*, flipping the fairness the chamber split
+        for _LES_POPULATION_MEDIAN_* (then named _LES_POPULATION_AVG_*),
+        flipping the fairness the chamber split
         was supposed to provide (live population: House went from 61%
         scoring below neutral vs Senate's 38% to a much closer ~53-58%
         split for both after this fix). This guards against a future
@@ -1447,6 +1450,56 @@ class TestLegislativeEffectiveness:
         shared value."""
         assert _LES_AVG_BASELINE_HOUSE != _LES_AVG_BASELINE_SENATE
         assert _LES_AVG_BASELINE_HOUSE > _LES_AVG_BASELINE_SENATE
+
+    def test_median_member_scores_near_neutral(self):
+        """v6.10 (2026-07-23): the V&W component's reference point is each
+        chamber's population MEDIAN, not its mean. The per-congress credit
+        distribution is right-skewed (a minority of highly prolific sponsors
+        pull the mean above the typical member), so scoring against the mean
+        put slightly more than half of EVERY chamber below neutral by
+        construction — the residual imbalance v6.9 flagged and left open.
+        Centering on the median makes a member whose per-congress credit
+        sits at the chamber median score ~50 instead of below it.
+
+        Senate case: a member with credit ≈ the Senate median (254) and
+        party=None (which maps _advancement_baseline to 0.030, ≈ the Senate
+        average 0.0305, so status_ratio ≈ 1 and doesn't confound the
+        reference-point comparison) must land at neutral, not below it.
+        Under the old mean reference (285.3) this same member scored ~43."""
+        # Introduced-only substantive "s" bills each earn weight(5)*stage(1)
+        # = 5 cumulative credit; 51 of them in one congress ≈ the Senate
+        # median of 254 per-congress credit.
+        n = round(_LES_POPULATION_MEDIAN_SENATE / 5)
+        median_credit_bills = [
+            {"title": f"B{i}", "isLaw": False, "latestAction": "Introduced",
+             "billType": "s", "congress": 119}
+            for i in range(n)
+        ]
+        score = _calc_legislative_effectiveness(median_credit_bills, None)
+        # The whole point of the mean->median switch: the typical member is
+        # neutral, not below it. A comfortable band around 50 keeps this from
+        # being brittle to small recalibrations while still failing loudly if
+        # the reference point ever regresses back to the (higher) mean, which
+        # would drag this member back down into the low-40s.
+        assert 46 <= score <= 56
+
+    def test_population_reference_is_median_not_mean(self):
+        """Guard the mean->median switch itself (v6.10): the reference
+        constants must be each chamber's live-audit MEDIAN (Senate 254,
+        House 107), which sits strictly below the corresponding right-skewed
+        MEAN (Senate 285.3, House 122.0). A future recalibration that pasted
+        the mean back in would silently re-open the residual below-neutral
+        imbalance this version closed, and no behavioral test pins the exact
+        constant. House median stays well below the Senate's — 435 members
+        split similar institutional bandwidth — so the chamber split this
+        rides on top of is preserved too."""
+        assert _LES_POPULATION_MEDIAN_SENATE == 254.0
+        assert _LES_POPULATION_MEDIAN_HOUSE == 107.0
+        # Strictly below the (skewed) means they replaced.
+        assert _LES_POPULATION_MEDIAN_SENATE < 285.3
+        assert _LES_POPULATION_MEDIAN_HOUSE < 122.0
+        # Chamber split preserved: House norm far below the Senate's.
+        assert _LES_POPULATION_MEDIAN_HOUSE < _LES_POPULATION_MEDIAN_SENATE
 
 
 class TestCalculateScoresIntegration:
