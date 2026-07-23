@@ -2288,6 +2288,11 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
             prompt_version="full_story_v2",
             system_prompt=system_prompt,
             user_prompt=user_prompt + retry_note,
+            # Public-facing surface: use the story-tier model when
+            # configured (see settings.OLLAMA_STORY_MODEL — two-tier
+            # design, 2026-07). The cache hash includes the resolved
+            # model, so switching tiers never serves stale generations.
+            model=settings.OLLAMA_STORY_MODEL or None,
             # The retry must not be served the same rejected story from cache.
             cache_key=(
                 f"full_story:{issue.id}:{issue.title[:80]}" if attempt == 0 else None

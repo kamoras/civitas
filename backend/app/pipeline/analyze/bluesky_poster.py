@@ -180,6 +180,9 @@ Return JSON: {{"post": "<your post text>"}}"""
             prompt_version="bsky_new_post_v3",
             system_prompt=_SYSTEM_PROMPT,
             user_prompt=user_prompt + retry_note,
+            # Public-facing surface: story-tier model when configured
+            # (settings.OLLAMA_STORY_MODEL — two-tier design, 2026-07).
+            model=settings.OLLAMA_STORY_MODEL or None,
             cache_key=None,  # never cache — these are time-sensitive
             db_session=None,
             max_tokens=256,
