@@ -65,6 +65,11 @@ def _nightly_pipeline() -> None:
                 logger.info("Supplementary pipeline: %s", supp_result)
                 logger.info("Supplementary pipeline done — starting House pipeline")
                 loop.run_until_complete(run_house_pipeline())
+                # Both chambers' sponsored-bill rows were just rewritten —
+                # swap fresh data into the /api/bills collection cache now
+                # instead of waiting out its TTL.
+                from app.services.bill_service import warm_bill_collection_cache
+                warm_bill_collection_cache()
                 logger.info("House pipeline done — starting stock trades pipeline")
                 stock_result = loop.run_until_complete(run_stock_trades_pipeline())
                 logger.info("Stock trades pipeline: %s", stock_result)
@@ -213,10 +218,59 @@ def _hourly_action_refresh() -> None:
                     return
             count = refresh_action_issues()
             logger.info("Action center hourly refresh: %d issues", count)
+            # Issue mentions feed the bills view's "hot" ranking — rebuild
+            # its collection cache in the background so the new ranking is
+            # served immediately rather than after the cache TTL.
+            from app.services.bill_service import warm_bill_collection_cache
+            warm_bill_collection_cache()
         except Exception:
             logger.exception("Action center refresh failed")
 
     threading.Thread(target=_run, daemon=True, name="action-refresh").start()
+
+
+def _hourly_bill_status_refresh() -> None:
+    """Incremental Congress.gov bill-status sync (pipeline/bill_refresh.py)
+    in a background thread.
+
+    Skipped while the nightly Senate/House pipelines are running: those
+    rebuild the same rows wholesale (delete-then-insert per member), so a
+    concurrent incremental pass would contend for SQLite's single writer
+    lock only to update rows about to be replaced anyway. Uses the same
+    stale-run overrides as _hourly_action_refresh so a wedged pipeline row
+    can't silently starve bill freshness forever.
+    """
+    def _run():
+        try:
+            from app.pipeline.bill_refresh import is_bill_refresh_running, refresh_bill_statuses
+
+            if is_bill_refresh_running():
+                logger.info("Bill status refresh skipped — previous refresh still running")
+                return
+            from app.database import SessionLocal
+            from app.models import PipelineRun, PipelineStatus
+            db = SessionLocal()
+            try:
+                running = db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).first()
+            finally:
+                db.close()
+            if running and not _is_stale(utcnow() - running.started_at, timedelta(hours=8)):
+                logger.info("Bill status refresh skipped — nightly pipeline is running")
+                return
+            if is_house_pipeline_running() and not _is_stale(house_pipeline_age(), timedelta(hours=8)):
+                logger.info("Bill status refresh skipped — house pipeline is running")
+                return
+
+            loop = asyncio.new_event_loop()
+            try:
+                summary = loop.run_until_complete(refresh_bill_statuses())
+            finally:
+                loop.close()
+            logger.info("Bill status refresh: %s", summary)
+        except Exception:
+            logger.exception("Bill status refresh failed")
+
+    threading.Thread(target=_run, daemon=True, name="bill-status-refresh").start()
 
 
 def start_scheduler() -> None:
@@ -254,6 +308,15 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    # Hourly incremental bill-status sync — :45 so it doesn't stack on the
+    # :15 action refresh or the :5/:35 watchdog on a 4-core Pi.
+    scheduler.add_job(
+        _hourly_bill_status_refresh,
+        CronTrigger(minute="45"),
+        id="bill_status_refresh",
+        replace_existing=True,
+    )
+
     # Pipeline overrun watchdog — alerts once per run past the budget
     from app.ops_alerts import check_pipeline_overrun
     scheduler.add_job(
@@ -266,7 +329,10 @@ def start_scheduler() -> None:
     )
 
     scheduler.start()
-    logger.info("Scheduler started with cron: %s (+ hourly action refresh at :15)", settings.PIPELINE_CRON_SCHEDULE)
+    logger.info(
+        "Scheduler started with cron: %s (+ hourly action refresh at :15, bill status refresh at :45)",
+        settings.PIPELINE_CRON_SCHEDULE,
+    )
 
 
 def stop_scheduler() -> None:

@@ -346,6 +346,10 @@ def _ensure_indexes() -> None:
         ("ix_sponsored_bills_senator_id", "sponsored_bills", "senator_id"),
         ("ix_sponsored_bills_stage", "sponsored_bills", "stage"),
         ("ix_rep_sponsored_bills_stage", "rep_sponsored_bills", "stage"),
+        # get_bill_detail (bill_service.py) looks bills up by bill_id; both
+        # tables previously scanned ~8-9k rows per detail-page hit.
+        ("ix_sponsored_bills_bill_id", "sponsored_bills", "bill_id"),
+        ("ix_rep_sponsored_bills_bill_id", "rep_sponsored_bills", "bill_id"),
     ]
     # The rep_* models' representative_id column already has index=True,
     # which SQLAlchemy names ix_{table}_representative_id — this list used

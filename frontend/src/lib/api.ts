@@ -264,7 +264,11 @@ export async function fetchBillsInFlight(options?: {
   if (options?.sort) params.set("sort", options.sort);
   if (options?.page) params.set("page", String(options.page));
   if (options?.perPage) params.set("per_page", String(options.perPage));
-  return requestJson(`${API_BASE}/bills?${params}`, "Failed to load bills");
+  // cachedFetch, not requestJson: the bills page's funnel, stage groups,
+  // and list views can request the same URL concurrently (and again on
+  // mode/filter toggles) — share one network request and reuse it for the
+  // same 2 minutes the backend's Cache-Control already promises.
+  return cachedFetch(`${API_BASE}/bills?${params}`, TTL.SHORT);
 }
 
 export async function fetchBillDetail(billId: string): Promise<BillDetail | null> {

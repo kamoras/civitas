@@ -12,44 +12,56 @@ type RowSort = "recent" | "stale";
 
 interface BillStageGroupProps {
   stageCode: string;
+  /** This stage's filtered total, from the parent's single stage-counts
+   * fetch (stageCounts already reflects chamber/party/q server-side).
+   * When provided the group renders its header with zero requests of its
+   * own; when omitted it falls back to probing for a count itself. */
+  count?: number;
   chamber?: "senate" | "house";
   party?: "D" | "R" | "I";
   q?: string;
   forceExpanded?: boolean;
 }
 
-export default function BillStageGroup({ stageCode, chamber, party, q, forceExpanded }: BillStageGroupProps) {
+export default function BillStageGroup({ stageCode, count, chamber, party, q, forceExpanded }: BillStageGroupProps) {
   const config = useConfig();
   const stageInfo = config?.billStages?.[stageCode];
   const color = stageInfo?.color ?? "#00ff41";
 
-  const [total, setTotal] = useState<number | null>(null);
+  const [probedTotal, setProbedTotal] = useState<number | null>(null);
+  const [rowsTotal, setRowsTotal] = useState<number | null>(null);
   const [bills, setBills] = useState<BillInFlight[]>([]);
   const [page, setPage] = useState(0); // 0 = rows not fetched yet
   const [totalPages, setTotalPages] = useState(0);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(!!forceExpanded);
   const [loading, setLoading] = useState(false);
   const [sort, setSort] = useState<RowSort>("recent");
 
-  // Filters changed (or this group mounted) — get an accurate count for
-  // the header regardless of expand state, and decide the default.
+  // The parent's count wins; a rows fetch refines it (same stage-filtered
+  // total, fresher); the probe is the no-count fallback.
+  const total = count ?? rowsTotal ?? probedTotal;
+
+  // Filters changed (or this group mounted) — reset loaded rows. A
+  // forceExpanded group starts expanded and fetches rows immediately
+  // (that response carries the header total too).
   useEffect(() => {
-    let cancelled = false;
-    setTotal(null);
     setBills([]);
     setPage(0);
-    setExpanded(false);
-    fetchBillsInFlight({ stage: stageCode, chamber, party, q, sort: "recent", page: 1, perPage: 1 })
-      .then((res) => {
-        if (cancelled) return;
-        setTotal(res.total);
-        if (forceExpanded && res.total > 0) {
-          setExpanded(true);
-        }
-      })
-      .catch(() => { if (!cancelled) setTotal(0); });
-    return () => { cancelled = true; };
+    setRowsTotal(null);
+    setExpanded(!!forceExpanded);
   }, [stageCode, chamber, party, q, forceExpanded]);
+
+  // Fallback header count, only when the parent supplied none and rows
+  // aren't being fetched anyway (e.g. the parent's counts fetch failed).
+  useEffect(() => {
+    if (count !== undefined || forceExpanded) return;
+    let cancelled = false;
+    setProbedTotal(null);
+    fetchBillsInFlight({ stage: stageCode, chamber, party, q, sort: "recent", page: 1, perPage: 1 })
+      .then((res) => { if (!cancelled) setProbedTotal(res.total); })
+      .catch(() => { if (!cancelled) setProbedTotal(0); });
+    return () => { cancelled = true; };
+  }, [count, forceExpanded, stageCode, chamber, party, q]);
 
   // Sort choice changed — throw away whatever's loaded and refetch page 1.
   useEffect(() => {
@@ -69,6 +81,7 @@ export default function BillStageGroup({ stageCode, chamber, party, q, forceExpa
         setBills(res.bills);
         setPage(1);
         setTotalPages(res.totalPages);
+        setRowsTotal(res.total);
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };

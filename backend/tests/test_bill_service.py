@@ -187,9 +187,9 @@ class TestFiltering:
         assert result.total == 1
         assert result.bills[0].bill_id == "S.4521"
 
-    def test_stage_counts_reflect_unfiltered_set(self, db_session):
-        # The funnel counts should describe the whole pipeline, not just
-        # whatever the current filter narrowed the list down to.
+    def test_stage_counts_ignore_the_stage_filter(self, db_session):
+        # Selecting a stage narrows the list, but the funnel/group headers
+        # still need to describe every stage.
         senator = _make_senator(db_session)
         _make_sponsored_bill(db_session, senator.id, "S.1", "INTRODUCED")
         _make_sponsored_bill(db_session, senator.id, "S.2", "ENACTED")
@@ -197,6 +197,18 @@ class TestFiltering:
         result = get_bills_in_flight(db_session, stage="ENACTED")
 
         assert result.stage_counts == {"INTRODUCED": 1, "ENACTED": 1}
+
+    def test_stage_counts_respect_the_non_stage_filters(self, db_session):
+        # chamber/party/q DO narrow stage_counts — that's what lets the
+        # grouped view fill every stage group's header from one response.
+        senator = _make_senator(db_session)  # D / senate
+        rep = _make_rep(db_session)  # R / house
+        _make_sponsored_bill(db_session, senator.id, "S.1", "INTRODUCED")
+        _make_rep_sponsored_bill(db_session, rep.id, "HR.1", "ENACTED")
+
+        result = get_bills_in_flight(db_session, chamber="house")
+
+        assert result.stage_counts == {"ENACTED": 1}
 
 
 class TestPagination:

@@ -101,6 +101,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     init_db()
     _invalidate_orphaned_pipelines()
     start_scheduler()
+    # Pre-build the bills-in-flight collection cache on a background thread
+    # so the first /api/bills request after a deploy is a cache hit instead
+    # of paying the ~1.5s cold rebuild (see bill_service.py).
+    from app.services.bill_service import warm_bill_collection_cache
+    warm_bill_collection_cache()
     loop = asyncio.get_running_loop()
     loop.run_in_executor(None, _preload_embedding_model)
     asyncio.create_task(_bootstrap_explore())

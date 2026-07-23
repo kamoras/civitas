@@ -248,7 +248,7 @@ class SponsoredBill(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     senator_id: Mapped[str] = mapped_column(String, ForeignKey("senators.id", ondelete="CASCADE"), nullable=False, index=True)
-    bill_id: Mapped[str] = mapped_column(String, nullable=False)
+    bill_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     title: Mapped[str] = mapped_column(Text, nullable=False)
     introduced_date: Mapped[str] = mapped_column(String, default="")
     latest_action: Mapped[str] = mapped_column(Text, default="")
@@ -460,7 +460,7 @@ class RepSponsoredBill(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     representative_id: Mapped[str] = mapped_column(String, ForeignKey("representatives.id", ondelete="CASCADE"), nullable=False, index=True)
-    bill_id: Mapped[str] = mapped_column(String, nullable=False)
+    bill_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     title: Mapped[str] = mapped_column(Text, nullable=False)
     introduced_date: Mapped[str] = mapped_column(String, default="")
     latest_action: Mapped[str] = mapped_column(Text, default="")
