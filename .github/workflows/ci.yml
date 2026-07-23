@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   frontend:
-    name: Frontend — Lint & Build
+    name: Frontend — Lint, Test & Build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -32,6 +32,12 @@ jobs:
       - run: npm ci
       - name: Lint
         run: npm run lint
+      - name: Test
+        # No coverage gate yet — this is the first test infra the frontend
+        # has ever had (vitest + Testing Library, 2026-07-23); ratchet up
+        # a coverage floor once there's an actual baseline to ratchet from,
+        # same reasoning as the backend's diff-coverage gate comment.
+        run: npm test
       - name: Build
         run: npm run build
 
