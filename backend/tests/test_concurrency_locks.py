@@ -141,6 +141,109 @@ class TestAcquirePipelineLock:
         assert senate_pipeline._acquire_pipeline_lock(db_session) is None
 
 
+class TestAcquirePipelineLockGeneric:
+    """run_tracker.acquire_pipeline_lock (2026-07-23) — the generalized
+    version of senate_pipeline's own lock, extended to House/Stock/
+    Supplementary, which had no lock at all before this (not even the
+    check-then-insert Senate had pre-O15) — confirmed live as the root
+    cause of stock-trades data going stale 4+ days and supplementary
+    data 1+ day after a since-fixed deploy-race incident killed
+    pipelines mid-run, orphaning their DB row at status=running forever.
+
+    Uses HousePipelineRun as the test subject specifically to prove this
+    isn't Senate-specific — senate_pipeline._acquire_pipeline_lock's own
+    tests above cover the Senate-specific delegation.
+    """
+
+    def test_acquires_when_free_and_blocks_second_caller(self, db_session):
+        from app.models import HousePipelineRun
+        from app.pipeline.run_tracker import acquire_pipeline_lock
+
+        run = acquire_pipeline_lock(db_session, HousePipelineRun, timedelta(hours=12))
+        assert run is not None
+        assert run.status == PipelineStatus.RUNNING
+        assert acquire_pipeline_lock(db_session, HousePipelineRun, timedelta(hours=12)) is None
+
+    def test_stale_row_is_auto_cleared_and_fresh_lock_acquired(self, db_session):
+        # The core regression fix: a row orphaned by a killed process
+        # (container restart mid-run) must not block this pipeline
+        # forever — only Senate had this auto-clear before 2026-07-23.
+        from app.models import HousePipelineRun
+        from app.pipeline.run_tracker import acquire_pipeline_lock
+
+        stale = HousePipelineRun(started_at=utcnow() - timedelta(hours=13), status=PipelineStatus.RUNNING)
+        db_session.add(stale)
+        db_session.commit()
+        stale_id = stale.id
+
+        run = acquire_pipeline_lock(db_session, HousePipelineRun, timedelta(hours=12))
+        assert run is not None
+        assert run.id != stale_id
+
+        cleared = db_session.query(HousePipelineRun).filter(HousePipelineRun.id == stale_id).one()
+        assert cleared.status == PipelineStatus.STALE
+        assert cleared.completed_at is not None
+
+    def test_fresh_row_within_timeout_is_not_cleared_and_blocks(self, db_session):
+        from app.models import HousePipelineRun
+        from app.pipeline.run_tracker import acquire_pipeline_lock
+
+        fresh = HousePipelineRun(started_at=utcnow() - timedelta(hours=1), status=PipelineStatus.RUNNING)
+        db_session.add(fresh)
+        db_session.commit()
+
+        assert acquire_pipeline_lock(db_session, HousePipelineRun, timedelta(hours=12)) is None
+        unchanged = db_session.query(HousePipelineRun).one()
+        assert unchanged.status == PipelineStatus.RUNNING
+
+    def test_integrity_error_on_commit_yields_gracefully(self, db_session, monkeypatch):
+        from sqlalchemy.exc import IntegrityError
+
+        from app.models import HousePipelineRun
+        from app.pipeline.run_tracker import acquire_pipeline_lock
+
+        real_commit = db_session.commit
+        calls = {"n": 0}
+
+        def racing_commit():
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise IntegrityError("UNIQUE constraint failed", None, Exception())
+            return real_commit()
+
+        monkeypatch.setattr(db_session, "commit", racing_commit)
+        assert acquire_pipeline_lock(db_session, HousePipelineRun, timedelta(hours=12)) is None
+
+
+class TestEnsureIndexesCoversAllFourPipelineTables:
+    def test_all_four_partial_unique_indexes_created(self, monkeypatch):
+        import os
+        import tempfile
+
+        from sqlalchemy import create_engine, inspect
+
+        from app import database
+
+        fd, path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        eng = create_engine(f"sqlite:///{path}", connect_args={"check_same_thread": False})
+        monkeypatch.setattr(database, "engine", eng)
+        database.Base.metadata.create_all(bind=eng)
+
+        database._ensure_indexes()
+
+        expected = {
+            "pipeline_runs": "ux_pipeline_runs_one_running",
+            "house_pipeline_runs": "ux_house_pipeline_runs_one_running",
+            "stock_trades_pipeline_runs": "ux_stock_trades_pipeline_runs_one_running",
+            "supplementary_pipeline_runs": "ux_supplementary_pipeline_runs_one_running",
+        }
+        inspector = inspect(eng)
+        for table, index_name in expected.items():
+            names = {i["name"] for i in inspector.get_indexes(table)}
+            assert index_name in names, f"missing {index_name} on {table}"
+
+
 class TestRefreshActionIssuesLockWrapper:
     def test_lock_held_skips_run(self, db_session, monkeypatch):
         from app.pipeline.analyze import action_center

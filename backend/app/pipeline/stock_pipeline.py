@@ -33,7 +33,7 @@ from app.pipeline.fetch.senate_ptr import (
     search_ptr_filings,
 )
 from app.pipeline.progress_tracker import ProgressTracker
-from app.pipeline.run_tracker import PipelineRunTracker
+from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
 from app.pipeline.transform.industry_classifier import classify_batch_with_learning
 from app.time_utils import utcnow
 
@@ -71,11 +71,21 @@ def _other_pipeline_running(db: Session) -> bool:
     Reuses the existing PipelineRun/HousePipelineRun "running" status
     rather than introducing a third lock table — see scheduler.py's
     _hourly_action_refresh for the same pattern.
+
+    Staleness-aware since 2026-07-23: an orphaned "running" row (left by
+    a killed process — a deploy restarting the container mid-run) used
+    to block Stock forever, with no auto-clear anywhere in this check.
+    Confirmed live: this is what left stock-trades data stale for 4+
+    days after a since-fixed deploy-race incident. A row this old is
+    treated as dead, not as "still running" — same STALE_PIPELINE_TIMEOUT
+    bar acquire_pipeline_lock uses to actually clear these rows, so this
+    check and the thing that eventually cleans them up agree on what
+    "stuck" means.
     """
-    if db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).first():
-        return True
-    if db.query(HousePipelineRun).filter(HousePipelineRun.status == PipelineStatus.RUNNING).first():
-        return True
+    for model in (PipelineRun, HousePipelineRun):
+        running = db.query(model).filter(model.status == PipelineStatus.RUNNING).first()
+        if running and utcnow() - running.started_at <= STALE_PIPELINE_TIMEOUT:
+            return True
     return False
 
 
@@ -263,12 +273,19 @@ async def run_stock_trades_pipeline() -> dict:
             logger.info("Stock trades pipeline skipped — a member pipeline is currently running")
             return {"status": "skipped", "reason": "member_pipeline_running"}
 
+        # Same reasoning as senate_pipeline.py's own lock: until 2026-07-23
+        # this was an unconditional insert with no lock at all, so a row
+        # orphaned by a killed process stayed "running" forever, blocking
+        # every future Stock run via _other_pipeline_running's check above
+        # (which any OTHER pipeline's own stuck row would also trip) and
+        # this one (a stuck STOCK row blocking Stock's own next attempt).
+        run = acquire_pipeline_lock(db, StockTradesPipelineRun, STALE_PIPELINE_TIMEOUT)
+        if run is None:
+            logger.info("Stock trades pipeline already running in another process — skipping")
+            return {"status": "skipped", "reason": "already_running"}
+
         _tracker.start()
         start_time = time.time()
-
-        run = StockTradesPipelineRun(started_at=utcnow(), status=PipelineStatus.RUNNING)
-        db.add(run)
-        db.commit()
         progress = ProgressTracker(run, STOCK_PIPELINE_STEPS, db, start_time)
 
         house_count = 0

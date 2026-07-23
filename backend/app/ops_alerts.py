@@ -170,23 +170,37 @@ def check_current_congress_staleness() -> None:
 def check_pipeline_overrun() -> None:
     """Watchdog: alert once per run when a pipeline exceeds the budget.
 
-    Called periodically by the scheduler. Covers both the Senate and
-    House pipelines.
+    Called periodically by the scheduler. Covers all four nightly
+    pipelines (Senate, House, Supplementary, Stock trades) — until
+    2026-07-23 this only covered Senate and House, so a wedged
+    Supplementary or Stock run generated zero automatic alert, unlike
+    the other two. Confirmed live: this contributed to stock-trades data
+    going stale for 4+ days and supplementary data for 1+ day with
+    nothing telling an operator to look. Per-pipeline budgets mirror the
+    ones scheduler.py's _hourly_action_refresh already uses for the same
+    four checks (Supplementary gets Senate/House's 8h, not Stock's
+    tighter 2h — its weekly SCOTUS-refresh day includes an uncached
+    Oyez crawl that took 5h+ in run 69).
     """
     from app.database import SessionLocal
-    from app.models import HousePipelineRun, PipelineRun, PipelineStatus
+    from app.models import (
+        HousePipelineRun, PipelineRun, PipelineStatus,
+        StockTradesPipelineRun, SupplementaryPipelineRun,
+    )
 
-    budget = timedelta(hours=settings.PIPELINE_OVERRUN_ALERT_HOURS)
+    default_budget = timedelta(hours=settings.PIPELINE_OVERRUN_ALERT_HOURS)
     db = SessionLocal()
     try:
         checks = [
-            ("Senate", db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).first()),
-            ("House", db.query(HousePipelineRun).filter(HousePipelineRun.status == PipelineStatus.RUNNING).first()),
+            ("Senate", db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).first(), default_budget),
+            ("House", db.query(HousePipelineRun).filter(HousePipelineRun.status == PipelineStatus.RUNNING).first(), default_budget),
+            ("Supplementary", db.query(SupplementaryPipelineRun).filter(SupplementaryPipelineRun.status == PipelineStatus.RUNNING).first(), default_budget),
+            ("Stock trades", db.query(StockTradesPipelineRun).filter(StockTradesPipelineRun.status == PipelineStatus.RUNNING).first(), timedelta(hours=2)),
         ]
     finally:
         db.close()
 
-    for label, run in checks:
+    for label, run, budget in checks:
         if run is None:
             continue
         age = utcnow() - run.started_at
@@ -195,9 +209,9 @@ def check_pipeline_overrun() -> None:
             send_ops_alert(
                 f"{label} pipeline overrunning",
                 f"{label} pipeline run #{run.id} has been running for "
-                f"{hours:.1f}h (budget {settings.PIPELINE_OVERRUN_ALERT_HOURS:.0f}h). "
+                f"{hours:.1f}h (budget {budget.total_seconds() / 3600:.0f}h). "
                 f"Started {run.started_at.isoformat()}. Check the admin dashboard; "
-                f"a run past 12h will be marked stale and the next nightly may "
-                f"start concurrently.",
-                dedupe_key=f"overrun-{label.lower()}-{run.id}",
+                f"a run past 12h will be marked stale and the next attempt of "
+                f"this pipeline may start concurrently.",
+                dedupe_key=f"overrun-{label.lower().replace(' ', '-')}-{run.id}",
             )

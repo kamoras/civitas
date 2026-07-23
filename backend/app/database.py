@@ -390,11 +390,27 @@ def _ensure_indexes() -> None:
         # (insert-then-catch), which is race-free without transaction-
         # isolation gymnastics. Partial (WHERE status = 'running') so the
         # unbounded history of completed/failed/stale rows is unaffected.
-        if inspector.has_table("pipeline_runs"):
-            conn.execute(text(
-                "CREATE UNIQUE INDEX IF NOT EXISTS ux_pipeline_runs_one_running "
-                "ON pipeline_runs (status) WHERE status = 'running'"
-            ))
+        #
+        # Only pipeline_runs (Senate) had this until 2026-07-23 — House,
+        # Stock, and Supplementary had no equivalent protection AND no
+        # stale-row auto-clear (run_tracker.acquire_pipeline_lock, added
+        # the same day), so a row orphaned by a killed process (a deploy
+        # restarting the container mid-run) stayed "running" forever,
+        # silently blocking every future run of that pipeline. Confirmed
+        # live: this left stock-trades data stale 4+ days and
+        # supplementary data stale 1+ day after a since-fixed deploy-race
+        # incident (check-and-deploy.sh) killed pipelines mid-run.
+        for table, index_name in (
+            ("pipeline_runs", "ux_pipeline_runs_one_running"),
+            ("house_pipeline_runs", "ux_house_pipeline_runs_one_running"),
+            ("stock_trades_pipeline_runs", "ux_stock_trades_pipeline_runs_one_running"),
+            ("supplementary_pipeline_runs", "ux_supplementary_pipeline_runs_one_running"),
+        ):
+            if inspector.has_table(table):
+                conn.execute(text(
+                    f"CREATE UNIQUE INDEX IF NOT EXISTS {index_name} "
+                    f"ON {table} (status) WHERE status = 'running'"
+                ))
 
 
 def _migrate_visits_data_to_own_db() -> None:

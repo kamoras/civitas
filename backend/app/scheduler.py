@@ -42,37 +42,64 @@ def _nightly_pipeline() -> None:
     Safe to call from multiple containers: ``run_senate_pipeline`` acquires
     a database-level lock and skips if another instance is already running.
     """
+    from app.ops_alerts import check_current_congress_staleness, send_ops_alert
+
+    def _alert_if_skipped(label: str, result: dict) -> bool:
+        """Returns True (and alerts) if `result` reports the step was
+        skipped — every step in the chain can genuinely report this now
+        (2026-07-23: House/Stock/Supplementary gained the same DB-row
+        lock Senate already had). Previously only Senate's skip was
+        checked at all, and even that alert didn't mention that a Senate
+        skip silently takes the ENTIRE rest of the chain with it —
+        confirmed live as the likely root cause of stock-trades data
+        going stale for 4+ days and supplementary data for 1+ day, with
+        no alert ever firing for either.
+        """
+        if result.get("status") != "skipped":
+            return False
+        logger.info("%s pipeline skipped — %s", label, result.get("reason", "unknown reason"))
+        send_ops_alert(
+            f"Nightly {label} run skipped",
+            f"The scheduled {label} pipeline did not start because a "
+            f"previous run of it was still active. {label} data will be a "
+            "day stale unless triggered manually. If this was Senate, "
+            "note that Supplementary/House/Stock never ran either tonight "
+            "— the chain stops here, it does not skip just this one step.",
+            dedupe_key=f"skipped-{label.lower()}-{utcnow():%Y-%m-%d}",
+        )
+        return True
+
     def _run():
-        from app.ops_alerts import check_current_congress_staleness, send_ops_alert
         # Loud, deduped alert if CURRENT_CONGRESS has fallen behind the
         # calendar before we score another day against a possibly-dead one.
         check_current_congress_staleness()
         loop = asyncio.new_event_loop()
         try:
             result = loop.run_until_complete(run_senate_pipeline())
-            if result.get("status") == "skipped":
-                logger.info("Pipeline skipped — another instance is already running")
-                send_ops_alert(
-                    "Nightly Senate run skipped",
-                    "The scheduled Senate pipeline did not start because a "
-                    "previous run is still active. Senate data will be a day "
-                    "stale unless triggered manually.",
-                    dedupe_key=f"skipped-{utcnow():%Y-%m-%d}",
-                )
-            else:
-                logger.info("Senate pipeline done — starting supplementary pipeline")
-                supp_result = loop.run_until_complete(run_supplementary_pipeline())
-                logger.info("Supplementary pipeline: %s", supp_result)
-                logger.info("Supplementary pipeline done — starting House pipeline")
-                loop.run_until_complete(run_house_pipeline())
-                # Both chambers' sponsored-bill rows were just rewritten —
-                # swap fresh data into the /api/bills collection cache now
-                # instead of waiting out its TTL.
-                from app.services.bill_service import warm_bill_collection_cache
-                warm_bill_collection_cache()
-                logger.info("House pipeline done — starting stock trades pipeline")
-                stock_result = loop.run_until_complete(run_stock_trades_pipeline())
-                logger.info("Stock trades pipeline: %s", stock_result)
+            if _alert_if_skipped("Senate", result):
+                return
+
+            logger.info("Senate pipeline done — starting supplementary pipeline")
+            supp_result = loop.run_until_complete(run_supplementary_pipeline())
+            logger.info("Supplementary pipeline: %s", supp_result)
+            if _alert_if_skipped("Supplementary", supp_result):
+                return
+
+            logger.info("Supplementary pipeline done — starting House pipeline")
+            house_result = loop.run_until_complete(run_house_pipeline())
+            logger.info("House pipeline: %s", house_result)
+            if _alert_if_skipped("House", house_result):
+                return
+
+            # Both chambers' sponsored-bill rows were just rewritten —
+            # swap fresh data into the /api/bills collection cache now
+            # instead of waiting out its TTL.
+            from app.services.bill_service import warm_bill_collection_cache
+            warm_bill_collection_cache()
+            logger.info("House pipeline done — starting stock trades pipeline")
+            stock_result = loop.run_until_complete(run_stock_trades_pipeline())
+            logger.info("Stock trades pipeline: %s", stock_result)
+            _alert_if_skipped("Stock trades", stock_result)
         except BaseException as e:
             logger.exception("Nightly pipeline failed")
             send_ops_alert(

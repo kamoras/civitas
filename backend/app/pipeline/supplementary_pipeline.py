@@ -16,7 +16,7 @@ from datetime import timedelta
 from app.database import SessionLocal
 from app.models import Justice, PipelineStatus, SupplementaryPipelineRun
 from app.pipeline.progress_tracker import ProgressTracker
-from app.pipeline.run_tracker import PipelineRunTracker
+from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -42,13 +42,23 @@ def supplementary_pipeline_age() -> "timedelta | None":
 async def run_supplementary_pipeline() -> dict:
     """Ingest explore documents, refresh SCOTUS justice scorecards
     (weekly cadence), and update president scorecards."""
-    _tracker.start()
     db = SessionLocal()
-    start_time = time.time()
 
-    run = SupplementaryPipelineRun(started_at=utcnow(), status=PipelineStatus.RUNNING)
-    db.add(run)
-    db.commit()
+    # Same reasoning as senate_pipeline.py's own lock: until 2026-07-23
+    # this was an unconditional insert with no lock at all, so a row
+    # orphaned by a killed process (a deploy restarting the container
+    # mid-run) stayed "running" forever, blocking every future
+    # supplementary run. Confirmed live: this left supplementary data
+    # (explore docs, SCOTUS, presidents) stale for 1+ day after a
+    # since-fixed deploy-race incident.
+    run = acquire_pipeline_lock(db, SupplementaryPipelineRun, STALE_PIPELINE_TIMEOUT)
+    if run is None:
+        logger.warning("Supplementary pipeline already running in another process — skipping")
+        db.close()
+        return {"status": "skipped", "reason": "already_running"}
+
+    _tracker.start()
+    start_time = time.time()
     progress = ProgressTracker(run, SUPPLEMENTARY_PIPELINE_STEPS, db, start_time)
 
     try:

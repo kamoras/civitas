@@ -22,7 +22,7 @@ from app.config import settings
 from app.database import SessionLocal
 from app.models import HousePipelineRun, PipelineStatus, Representative, ScoreSnapshot
 from app.pipeline.progress_tracker import ProgressTracker
-from app.pipeline.run_tracker import PipelineRunTracker
+from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
 from app.services.representative_service import upsert_representative
 
 from app.pipeline.fetch.congress import (
@@ -100,15 +100,23 @@ def house_pipeline_age() -> "timedelta | None":
 
 async def run_house_pipeline() -> dict:
     """Run the full House representative pipeline."""
-    _tracker.start()
     db = SessionLocal()
+
+    # Acquire the run lock BEFORE any global/DB mutation — same reasoning
+    # as senate_pipeline.py's _acquire_pipeline_lock call. Until 2026-07-23
+    # this pipeline had no lock at all (just an unconditional insert), so a
+    # row orphaned by a killed process (deploy restarting the container
+    # mid-run) stayed "running" forever, blocking every future House run.
+    house_run = acquire_pipeline_lock(db, HousePipelineRun, STALE_PIPELINE_TIMEOUT)
+    if house_run is None:
+        logger.warning("House pipeline already running in another process — skipping")
+        db.close()
+        return {"status": "skipped", "reason": "already_running"}
+
+    _tracker.start()
     start_time = time.time()
     reset_fec_run_state()  # clear the by_contributor circuit breaker from any prior run
 
-    # Record run start so failures are visible in the admin dashboard.
-    house_run = HousePipelineRun(started_at=utcnow(), status=PipelineStatus.RUNNING)
-    db.add(house_run)
-    db.commit()
     progress = ProgressTracker(house_run, HOUSE_PIPELINE_STEPS, db, start_time)
 
     try:

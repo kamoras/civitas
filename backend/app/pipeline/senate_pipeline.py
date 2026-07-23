@@ -16,6 +16,7 @@ Uses SQLAlchemy sessions for persistence and PipelineRun records to track progre
 import json
 import logging
 import time
+from datetime import timedelta
 
 import httpx
 from sqlalchemy.orm import Session
@@ -387,36 +388,15 @@ def _acquire_pipeline_lock(db: Session) -> PipelineRun | None:
     check-then-insert shape meant two containers hitting the 03:00 tick
     during a blue/green overlap could both pass the check and both start
     a full pipeline run.
+
+    Thin wrapper over run_tracker.acquire_pipeline_lock — this was the
+    original, Senate-only implementation; House/Stock/Supplementary now
+    share the same helper (2026-07-23) rather than each needing (and, for
+    a long time, NOT having) their own copy.
     """
-    running = (
-        db.query(PipelineRun)
-        .filter(PipelineRun.status == PipelineStatus.RUNNING)
-        .first()
-    )
-    if running:
-        age = (utcnow() - running.started_at).total_seconds()
-        if age > STALE_PIPELINE_TIMEOUT_S:
-            running.status = PipelineStatus.STALE
-            running.completed_at = utcnow()
-            running.error_message = "Marked stale: exceeded 12-hour timeout"
-            db.commit()
-            logger.warning("Cleaned up stale pipeline run #%d (age: %ds)", running.id, int(age))
-        else:
-            return None
+    from app.pipeline.run_tracker import acquire_pipeline_lock
 
-    from sqlalchemy.exc import IntegrityError
-
-    pipeline_run = PipelineRun(started_at=utcnow(), status=PipelineStatus.RUNNING)
-    db.add(pipeline_run)
-    try:
-        db.commit()
-    except IntegrityError:
-        # Another container inserted its running row between our check
-        # and our commit — it holds the lock.
-        db.rollback()
-        logger.info("Pipeline lock held by another container — skipping this run")
-        return None
-    return pipeline_run
+    return acquire_pipeline_lock(db, PipelineRun, timedelta(seconds=STALE_PIPELINE_TIMEOUT_S))
 
 
 def _compute_analysis_code_hash() -> str:
