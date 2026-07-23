@@ -1037,6 +1037,7 @@ def _validate_facts(facts: list, source_text: str | None = None) -> list:
     from app.pipeline.analyze import action_metrics
     from app.pipeline.analyze.grounding import (
         placeholder_tokens,
+        ungrounded_former_official_claims,
         ungrounded_relationship_claims,
     )
 
@@ -1064,6 +1065,14 @@ def _validate_facts(facts: list, source_text: str | None = None) -> list:
         if source_text and ungrounded_relationship_claims(fact, source_text):
             logger.warning("Dropping fact with ungrounded family relationship: %s", fact[:120])
             action_metrics.increment("facts_dropped_relationship")
+            continue
+
+        # "Former <office>" status the source articles never asserted — the
+        # stale-training-data class (2026-07: "former President Donald
+        # Trump" published while the sources said "President Trump").
+        if source_text and ungrounded_former_official_claims(fact, source_text):
+            logger.warning("Dropping fact with ungrounded 'former' office-holder status: %s", fact[:120])
+            action_metrics.increment("facts_dropped_former_status")
             continue
 
         # Detect self-referential comparisons: extract capitalized words and check
@@ -2374,6 +2383,7 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
             hedge_and_editorializing_violations,
             repeated_sentences,
             ungrounded_electoral_claims,
+            ungrounded_former_official_claims,
             ungrounded_relationship_claims,
             ungrounded_statistics,
             ungrounded_titled_names,
@@ -2394,7 +2404,12 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
         # race") slips past the number and name checks — both surnames are
         # grounded and no figure is fabricated.
         electoral = ungrounded_electoral_claims(story, source_material)
-        if not novel and not names and not dupes and not hedge_editorial and not electoral and not relationships:
+        # Stale-training-data status claims — the model demoting a sitting
+        # official to "former" from its outdated world knowledge (2026-07:
+        # "former President Donald Trump" published to Bluesky while the
+        # source material said "President Trump").
+        former = ungrounded_former_official_claims(story, source_material)
+        if not novel and not names and not dupes and not hedge_editorial and not electoral and not relationships and not former:
             logger.info(
                 "Generated full story for issue %s (%d chars): %s",
                 issue.id, len(story), issue.title[:60],
@@ -2448,6 +2463,15 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
             logger.warning(
                 "Full story asserted an ungrounded family relationship for issue %s (attempt %d): %s",
                 issue.id, attempt + 1, ", ".join(relationships),
+            )
+        if former:
+            problems.append(
+                "'former' office-holder status not present in the key facts "
+                f"({', '.join(former)})"
+            )
+            logger.warning(
+                "Full story called an official 'former' without source basis for issue %s (attempt %d): %s",
+                issue.id, attempt + 1, ", ".join(former),
             )
         retry_note = (
             "\n\nYour previous attempt was rejected because it contained "
@@ -3599,17 +3623,39 @@ def _run_refresh(db: Session) -> int:
             logger.warning("LLM result not a dict for rank %d: %s", rank, type(llm_result))
             continue
 
+        issue_source_text = " ".join(
+            f"{a.title} {a.summary}" for a in filtered_cluster
+        )
+
         title = llm_result.get("title", cluster[0].title)
         summary = _fix_impossible_senate_vote_counts(llm_result.get("summary", ""))
         facts = _validate_facts(
             llm_result.get("facts", []),
-            source_text=" ".join(
-                f"{a.title} {a.summary}" for a in filtered_cluster
-            ),
+            source_text=issue_source_text,
         )
         facts = [_fix_impossible_senate_vote_counts(f) for f in facts]
 
         title = _validate_geographic_consistency(title, [a.title for a in filtered_cluster])
+
+        # A title that demotes a sitting official to "former" without any
+        # source basis (2026-07: "former President Donald Trump" — the
+        # model's stale training data, not the articles) is replaced with
+        # the top article's real headline: the retry below regenerates only
+        # summary/facts, so a bad title has a deterministic fallback instead
+        # of a retry, same as the geographic-consistency correction above.
+        from app.pipeline.analyze.grounding import (
+            hedge_and_editorializing_violations,
+            ungrounded_former_official_claims,
+        )
+        title_former = ungrounded_former_official_claims(title, issue_source_text)
+        if title_former:
+            logger.warning(
+                "Title asserted ungrounded 'former' status (%s) — falling back to "
+                "article headline: '%s'",
+                ", ".join(title_former), title[:80],
+            )
+            action_metrics.increment("titles_replaced_former_status")
+            title = filtered_cluster[0].title
 
         # Politician role validator: strip hallucinated "Senator X" / "Rep. X" labels
         # that don't match anyone in the database.
@@ -3621,10 +3667,16 @@ def _run_refresh(db: Session) -> int:
         # forbids both (see _SYSTEM_PROMPT / _ISSUE_PROMPT_TEMPLATE) but the
         # local model doesn't reliably follow prompt-only instructions, and
         # unlike the full-story path this summary/facts generation had no
-        # mechanical backstop at all until this fix.
-        from app.pipeline.analyze.grounding import hedge_and_editorializing_violations
+        # mechanical backstop at all until this fix. Ungrounded "former
+        # <office>" status claims ride the same retry (2026-07 live case).
         combined_text = summary + " " + " ".join(facts)
         reasons = hedge_and_editorializing_violations(combined_text)
+        summary_former = ungrounded_former_official_claims(combined_text, issue_source_text)
+        if summary_former:
+            reasons.append(
+                "'former' office-holder status the articles never state "
+                f"({', '.join(summary_former)})"
+            )
         if reasons:
             logger.warning(
                 "Issue text failed grounding for rank %d: %s — retrying",
@@ -3637,6 +3689,7 @@ def _run_refresh(db: Session) -> int:
                     f"\n\nYour previous response was rejected because it contained "
                     f"{'; '.join(reasons)}. Report events directly instead of "
                     "through phrases like 'reports say' or 'coverage indicates,' "
+                    "do not call any official 'former' unless the articles do, "
                     "and do not evaluate whether any action was warranted or "
                     "justified."
                 ),
@@ -3652,11 +3705,15 @@ def _run_refresh(db: Session) -> int:
                 retry_summary = _fix_impossible_senate_vote_counts(retry_result.get("summary", ""))
                 retry_facts = _validate_facts(
                     retry_result.get("facts", []),
-                    source_text=" ".join(f"{a.title} {a.summary}" for a in filtered_cluster),
+                    source_text=issue_source_text,
                 )
                 retry_facts = [_fix_impossible_senate_vote_counts(f) for f in retry_facts]
                 retry_combined = retry_summary + " " + " ".join(retry_facts)
-                if retry_summary and not hedge_and_editorializing_violations(retry_combined):
+                if (
+                    retry_summary
+                    and not hedge_and_editorializing_violations(retry_combined)
+                    and not ungrounded_former_official_claims(retry_combined, issue_source_text)
+                ):
                     title, summary, facts = _validate_politician_roles(title, retry_summary, retry_facts, db)
                     resolved = True
             if not resolved:

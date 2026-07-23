@@ -299,3 +299,47 @@ class TestProcessIssuesMetrics:
 
         assert text is None
         assert action_metrics.snapshot().get("bsky_post_grounding_rejections") == 2
+
+    def test_former_president_status_hallucination_rejected(self, db_session):
+        # 2026-07 live case: the post described "former President Donald
+        # Trump" while the issue's material said "President Trump" — the
+        # model's stale training data demoting the sitting president. The
+        # grounding gate must reject it, not publish it.
+        import json as _json
+
+        from app.pipeline.analyze import action_metrics, bluesky_poster
+
+        issue = self._issue(
+            title="President Trump announces new tariffs",
+            summary="President Trump announced tariffs on steel imports.",
+            facts=_json.dumps(["President Trump announced tariffs on steel imports."]),
+        )
+        with patch.object(
+            bluesky_poster, "call_llm",
+            return_value={"post": "Former President Donald Trump announced tariffs on steel imports."},
+        ):
+            action_metrics.reset()
+            text = bluesky_poster._generate_new_post(issue, "2026-07-22")
+
+        assert text is None
+        assert action_metrics.snapshot().get("bsky_post_grounding_rejections") == 2
+
+    def test_genuinely_former_official_still_posts(self, db_session):
+        # The permissive side: when the issue's own material calls someone
+        # "former", the post repeating it is grounded and publishes.
+        import json as _json
+
+        from app.pipeline.analyze import bluesky_poster
+
+        issue = self._issue(
+            title="Former President Obama criticizes ruling",
+            summary="Former President Barack Obama criticized the court ruling.",
+            facts=_json.dumps(["Former President Barack Obama criticized the ruling."]),
+        )
+        with patch.object(
+            bluesky_poster, "call_llm",
+            return_value={"post": "Former President Barack Obama criticized the court ruling."},
+        ):
+            text = bluesky_poster._generate_new_post(issue, "2026-07-22")
+
+        assert text == "Former President Barack Obama criticized the court ruling."

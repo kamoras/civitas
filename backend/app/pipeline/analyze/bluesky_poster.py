@@ -214,8 +214,9 @@ Return JSON: {{"post": "<your post text>"}}"""
             "Key facts, report events directly instead of through phrases "
             "like 'sources show' or 'reports indicate,' do not describe any "
             "election, race, campaign, or challenge for office unless the Key "
-            "facts say so, and do not evaluate whether any action was "
-            "warranted or justified."
+            "facts say so, do not call any official 'former' unless the Key "
+            "facts do, and do not evaluate whether any action was warranted "
+            "or justified."
         )
 
     return None  # ungrounded twice — skip; the next refresh cycle retries

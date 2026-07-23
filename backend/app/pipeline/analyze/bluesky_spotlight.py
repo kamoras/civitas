@@ -19,6 +19,7 @@ from app.models import BskySenatorSpotlight, Senator, WeekSummary
 from app.pipeline.analyze.bluesky_utils import publish_post
 from app.pipeline.analyze.grounding import (
     hedge_and_editorializing_violations,
+    ungrounded_former_official_claims,
     ungrounded_numbers,
 )
 from app.pipeline.analyze.ollama_client import call_llm
@@ -216,6 +217,15 @@ Return JSON: {{"post": "<your post text>"}}"""
         # generator — prompt-only instructions aren't reliably followed.
         problems += hedge_and_editorializing_violations(text)
 
+        # Stale-training-data status claims ("former Senator X") the
+        # supplied scorecard never made — spotlighted senators are sitting
+        # members by construction.
+        former = ungrounded_former_official_claims(text, user_prompt)
+        if former:
+            problems.append(
+                f"'former' status not in the data provided ({', '.join(former)})"
+            )
+
         if not problems:
             return text
         logger.warning(
@@ -347,6 +357,11 @@ Return JSON: {{"post": "<your post text>"}}"""
         if novel:
             reasons.append(f"numbers not present in the summary ({', '.join(novel)})")
         reasons += hedge_and_editorializing_violations(text)
+        former = ungrounded_former_official_claims(text, user_prompt)
+        if former:
+            reasons.append(
+                f"'former' office-holder status not present in the summary ({', '.join(former)})"
+            )
         if not reasons:
             return text
 
