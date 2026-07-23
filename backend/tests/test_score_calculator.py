@@ -262,6 +262,70 @@ class TestFundingIndependence:
         detail = breakdown["components"][0]["detail"]
         assert "no PAC committee-type data" in detail
 
+    def test_concentration_2026_07_23_recalibration_anchors(self):
+        """New anchors (0.15 -> 100, 0.40 -> 0), refit 2026-07-23 against a
+        live audit that found the prior anchors (0.20 -> 100, 1.00 -> 0,
+        "median 0.60") had drifted to roughly double the real population
+        (real median 28%) — pins the exact new anchor values and the
+        real-world median so a future recalibration can't silently drift
+        again without a test noticing."""
+        def _concentration_score(top10_total: int, pool_total: int) -> float:
+            # 100 "other" donors, deliberately small enough per-donor that
+            # they never outrank the intended top-10 group once the
+            # function sorts by amount descending (a flat split would
+            # otherwise let the "long tail" outrank the "top 10").
+            other_total = pool_total - top10_total
+            n_others = 100
+            funding = {
+                "totalRaised": pool_total,
+                "totalFromPACs": 0,
+                "topDonors": (
+                    [{"total": top10_total // 10} for _ in range(10)]
+                    + [{"total": max(1, other_total // n_others)} for _ in range(n_others)]
+                ),
+            }
+            return _funding_independence_core(funding)["components"][2]["score"]
+
+        # 15% concentration -> full score (the new ceiling anchor).
+        assert _concentration_score(150_000, 1_000_000) == 100.0
+        # 40% concentration -> zero (the new floor anchor).
+        assert _concentration_score(400_000, 1_000_000) == 0.0
+        # Beyond the floor anchor stays at zero, doesn't go negative.
+        assert _concentration_score(900_000, 1_000_000) == 0.0
+        # The live 2026-07-23 audit's real median (28%) should land near
+        # the intended ~50 center, not the ~90 the old anchors produced.
+        score_at_real_median = _concentration_score(280_000, 1_000_000)
+        assert 45 <= score_at_real_median <= 55
+
+    def test_pac_fallback_2026_07_23_recalibration_anchors(self):
+        """New fallback cap ($1,325,000, i.e. 2x the live median), refit
+        2026-07-23 against a live audit that found the prior $4,000,000
+        cap had drifted to roughly 3x the real median ($662,750) —
+        without a resolved PAC committee type, dependency should still be
+        judged relative to what members actually raise via PACs today."""
+        def _pac_score_at(pac_total: int) -> float:
+            # totalRaised scales with pac_total so pac_ratio (and thus the
+            # ratio-score half of this component) stays constant at 10% —
+            # isolating the volume_factor this test actually targets.
+            funding = {
+                "totalRaised": pac_total * 10 if pac_total else 5_000_000,
+                "totalFromPACs": pac_total,
+                "topDonors": [{"total": 50_000} for _ in range(10)],  # no committeeType -> fallback path
+            }
+            return _funding_independence_core(funding)["components"][0]["score"]
+
+        zero_pac = _pac_score_at(0)
+        at_new_median = _pac_score_at(662_750)
+        at_or_above_cap = _pac_score_at(1_325_000)
+        well_above_cap = _pac_score_at(13_250_000)
+
+        # $0 PAC money -> no volume-factor penalty at all (still the ratio
+        # score, but volume_factor itself is 1.0).
+        assert zero_pac > at_new_median > at_or_above_cap
+        # Anything at or beyond the cap floors at the same penalized value —
+        # no further differentiation past the cap, same shape as before.
+        assert at_or_above_cap == well_above_cap
+
     def test_small_state_not_penalized_for_identical_raw_percentage(self):
         """The core regression test: WY (population 0.6M, one of the
         smallest states) and CA (39.5M, the largest) with IDENTICAL raw

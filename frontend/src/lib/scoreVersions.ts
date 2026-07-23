@@ -24,6 +24,17 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.12",
+    date: "2026-07-23",
+    title: "Funding Independence recalibration — two constants had drifted from live reality",
+    tldr: "Two Funding Independence calibration numbers had quietly gone stale. When PAC donations can't be matched to a specific committee, we fall back to scoring the raw dollar total against what a typical member raises — that typical amount used to be $2.0M, but a fresh check found it's actually $662,750 now. And the top-donor-concentration check assumed a typical member's top 10 donors make up 60% of their donor pool — the real number is 28%. Both are refit to match what members actually look like today; nobody's underlying fundraising changed, the yardstick was just outdated.",
+    changes: [
+      "PAC-dependency fallback (used when no contributing PAC has a resolved committee type — i.e. we can't tell how close it came to its legal per-election cap): the dollar-based penalty was calibrated against a 2026-06 audit assuming a $2.0M median / $4.4M p90 in absolute PAC dollars. A fresh audit (n=532, both chambers) found the live distribution is roughly a third of that — median $662,750, p90 $1,915,242 — most likely the election cycle moving into a quieter off-year fundraising period since that audit, exactly the instability a hard dollar threshold is exposed to as fundraising volume shifts across a cycle. The threshold is refit so today's median lands at the same x0.75 penalty it always has.",
+      "Top-donor concentration (top 10 external donors as a share of the full external donor pool, for members with at least 20 itemized external donors and a $250K+ pool): the prior scale (0.20 -> 100, 1.00 -> 0) was built around a 60% median that, on remeasurement, isn't what the live population looks like at all — real median is 28% (confirmed separately for each chamber, not an artifact of combining them: Senate 30.5%, House 27.5%). Under the old scale, a typical member scored around 90/100 on this component no matter their real concentration, since actual concentration rarely gets anywhere near the old 60% assumption — the sub-score carried almost no real signal for most members. New anchors (0.15 -> 100, 0.40 -> 0) put the real median at ~49, restoring the intended spread. Independent corroboration: Parmigiani (2025) reports a 47% mean on the same metric in a different population — closer to this platform's re-measured 28-31% than the old 60% assumption ever was.",
+      "FEC's own PAC contribution caps ($5,000/election for a multicandidate PAC, $3,500 for a nonmulticandidate one) are unchanged — those are legal limits set by statute, not something to recalibrate, and are still the correct 2025-2026 cycle figures.",
+    ],
+  },
+  {
     version: "v6.11",
     date: "2026-07-23",
     title: "Coalition breadth moves to Legislative Effectiveness; Constituent Alignment gains a real position signal",
