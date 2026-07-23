@@ -387,6 +387,64 @@ def ungrounded_relationship_claims(generated: str, source: str) -> list[str]:
     return sorted({m.group(0).strip() for m in _RELATIONSHIP_CLAIM_RE.finditer(generated or "")})
 
 
+# "Former <office>" status claims in the GENERATED text. This is the
+# stale-training-data hallucination class: the local model's weights encode
+# who held an office as of its training cutoff, so it silently "corrects" a
+# sitting official's title to match its outdated world knowledge (2026-07:
+# a live Bluesky post described "former President Donald Trump" while the
+# source material said "President Trump" — no fabricated number, the
+# surname was grounded, no electoral or family claim, and "President"
+# isn't a _TITLED_NAME_RE title, so nothing fired). Like the electoral and
+# relationship guards, nothing here encodes who actually holds an office —
+# the check is purely: the source never called this office "former," so
+# the generated text may not either.
+_FORMER_CLAIM_RE = re.compile(
+    r"\b(?:former|ex)[-\s]+(?:(?:vice|deputy|acting)\s+)?"
+    r"(president|senator|sen\.?|representative|rep\.?|congressman|"
+    r"congresswoman|governor|gov\.?|speaker|justice|secretary)\b",
+    re.IGNORECASE,
+)
+
+# Equivalent surface forms per title word, so "former Sen. Smith" in the
+# source grounds "former Senator Smith" in the generated text and vice
+# versa. Titles without an abbreviated form fall through to re.escape.
+_TITLE_FORMS = {
+    "sen": r"sen(?:ator)?",
+    "senator": r"sen(?:ator)?",
+    "rep": r"rep(?:resentative)?",
+    "representative": r"rep(?:resentative)?",
+    "gov": r"gov(?:ernor)?",
+    "governor": r"gov(?:ernor)?",
+}
+
+
+def ungrounded_former_official_claims(generated: str, source: str) -> list[str]:
+    """"Former <office>" references in ``generated`` where ``source`` never
+    applies "former"/"ex" to that office.
+
+    Permissive side (same design as the electoral and relationship guards):
+    the source grounds the claim if it says "former"/"formerly"/"ex" within
+    a couple of words of the same office title — "the former president,"
+    "former U.S. Senator," "formerly served as governor" all count. Only a
+    former-status claim with zero basis in the source is flagged; a post
+    genuinely about a former office-holder is grounded by the coverage it
+    draws from and passes untouched.
+    """
+    source_text = source or ""
+    missing = []
+    for m in _FORMER_CLAIM_RE.finditer(generated or ""):
+        title = m.group(1).rstrip(".").lower()
+        title_re = _TITLE_FORMS.get(title, re.escape(title))
+        grounded = re.search(
+            rf"\b(?:former(?:ly)?|ex)[-\s]+(?:[\w.]+[-\s]+){{0,2}}{title_re}\b",
+            source_text,
+            re.IGNORECASE,
+        )
+        if not grounded:
+            missing.append(m.group(0))
+    return sorted(set(missing))
+
+
 def grounding_violations(generated: str, source: str) -> list[str]:
     """Human-readable list of grounding failures, empty when clean."""
     problems = []
@@ -405,6 +463,11 @@ def grounding_violations(generated: str, source: str) -> list[str]:
     if relationships:
         problems.append(
             f"family relationship not in source: {', '.join(relationships)}"
+        )
+    former = ungrounded_former_official_claims(generated, source)
+    if former:
+        problems.append(
+            f"'former' office-holder status not in source: {', '.join(former)}"
         )
     return problems
 

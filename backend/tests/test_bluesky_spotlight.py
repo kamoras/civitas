@@ -7,8 +7,13 @@ instead of leaving that choice and its framing to the model.
 
 from unittest.mock import MagicMock, patch
 
-from app.models import Senator
-from app.pipeline.analyze.bluesky_spotlight import _most_notable_score, _publish_spotlight
+from app.models import Senator, WeekSummary
+from app.pipeline.analyze.bluesky_spotlight import (
+    _generate_spotlight_post,
+    _generate_weekly_post,
+    _most_notable_score,
+    _publish_spotlight,
+)
 
 
 def _scores(**overrides):
@@ -65,6 +70,40 @@ class TestMostNotableScore:
         scores = _scores(**{"Funding independence": 80.0, "Legislative effectiveness": 80.0})
         key, _, _ = _most_notable_score(scores)
         assert key == "Funding independence"
+
+
+class TestFormerOfficialStatusGrounding:
+    """2026-07 stale-training-data class ("former President Donald Trump"
+    published while the source said "President Trump") — same mechanical
+    backstop wired into the spotlight and weekly-summary posters as the
+    issue poster and full-story generator."""
+
+    def test_spotlight_rejects_ungrounded_former_status(self):
+        senator = Senator(
+            id="chuck-grassley", name="Chuck Grassley", state="IA", party="R",
+            score_funding_independence=50.0, score_independent_voting=50.0,
+            score_legislative_effectiveness=50.0,
+        )
+        with patch(
+            "app.pipeline.analyze.bluesky_spotlight.call_llm",
+            return_value={"post": "Former Senator Chuck Grassley ranks #1 of 100 senators."},
+        ):
+            text = _generate_spotlight_post(senator, rank=1, total=100)
+
+        assert text is None
+
+    def test_weekly_post_rejects_ungrounded_former_status(self):
+        week = WeekSummary(
+            start_date="2026-07-13", end_date="2026-07-19",
+            summary="The Senate passed a funding bill on a 68-32 vote.",
+        )
+        with patch(
+            "app.pipeline.analyze.bluesky_spotlight.call_llm",
+            return_value={"post": "Former Senator Smith praised the funding bill this week."},
+        ):
+            text = _generate_weekly_post(week)
+
+        assert text is None
 
 
 class TestPublishSpotlightUrl:

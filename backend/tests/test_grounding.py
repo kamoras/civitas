@@ -391,6 +391,82 @@ class TestUngroundedRelationshipClaims:
         assert any("family relationship" in r for r in reasons)
 
 
+class TestUngroundedFormerOfficialClaims:
+    """2026-07 live case: a Bluesky post described "former President Donald
+    Trump" while the source material said "President Trump" — the model's
+    stale training data demoting a sitting official. No fabricated number,
+    grounded surname, no electoral/family claim, and "President" isn't a
+    _TITLED_NAME_RE title, so nothing fired."""
+
+    def test_live_former_president_case_flagged(self):
+        from app.pipeline.analyze.grounding import ungrounded_former_official_claims
+        generated = "Former President Donald Trump announced new tariffs on Tuesday."
+        source = "President Trump announced tariffs targeting steel imports."
+        assert ungrounded_former_official_claims(generated, source) == [
+            "Former President"
+        ]
+
+    def test_lowercase_and_appositive_forms_flagged(self):
+        from app.pipeline.analyze.grounding import ungrounded_former_official_claims
+        assert ungrounded_former_official_claims(
+            "Trump, the former president, signed the order.",
+            "President Trump signed the executive order Friday.",
+        ) == ["former president"]
+
+    def test_grounded_when_source_says_former(self):
+        from app.pipeline.analyze.grounding import ungrounded_former_official_claims
+        assert ungrounded_former_official_claims(
+            "Former President Obama criticized the ruling.",
+            "Former President Barack Obama criticized the court's ruling.",
+        ) == []
+
+    def test_title_abbreviations_ground_each_other(self):
+        from app.pipeline.analyze.grounding import ungrounded_former_official_claims
+        # "former Sen. Smith" in the source grounds "former Senator Smith"
+        assert ungrounded_former_official_claims(
+            "Former Senator Smith attended the hearing.",
+            "The hearing included testimony from former Sen. Jane Smith.",
+        ) == []
+
+    def test_intervening_words_still_ground(self):
+        from app.pipeline.analyze.grounding import ungrounded_former_official_claims
+        assert ungrounded_former_official_claims(
+            "The former vice president spoke at the event.",
+            "Kamala Harris, the former U.S. vice president, spoke Monday.",
+        ) == []
+
+    def test_ungrounded_former_senator_flagged(self):
+        from app.pipeline.analyze.grounding import ungrounded_former_official_claims
+        out = ungrounded_former_official_claims(
+            "Former Senator Collins praised the vote.",
+            "Susan Collins praised the 68-32 vote on the funding bill.",
+        )
+        assert out == ["Former Senator"]
+
+    def test_current_title_not_flagged(self):
+        from app.pipeline.analyze.grounding import ungrounded_former_official_claims
+        assert ungrounded_former_official_claims(
+            "President Trump announced tariffs. Senator Collins objected.",
+            "Trump tariff order draws objection from Collins.",
+        ) == []
+
+    def test_non_office_former_not_flagged(self):
+        from app.pipeline.analyze.grounding import ungrounded_former_official_claims
+        # "former aide" isn't an office this check can verify — out of scope.
+        assert ungrounded_former_official_claims(
+            "A former aide testified before the committee.",
+            "The committee heard testimony Wednesday.",
+        ) == []
+
+    def test_included_in_grounding_violations_bundle(self):
+        from app.pipeline.analyze.grounding import grounding_violations
+        reasons = grounding_violations(
+            "Former President Trump signed the bill.",
+            "President Trump signed the bill Thursday.",
+        )
+        assert any("former" in r.lower() for r in reasons)
+
+
 class TestAuditHedgeAndEditorializingAdditions:
     """Regression tests for the 2026-07 audit's phrase additions — each
     parametrized text is a verbatim (or lightly trimmed) published live
