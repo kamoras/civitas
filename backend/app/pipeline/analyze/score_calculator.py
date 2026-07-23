@@ -718,9 +718,56 @@ representation dimension.
   both cosponsorship-derived (centrality vs. cross-party share), kept at
   a combined 40% and flagged for the same post-run correlation check.
   Post-run validation: GROUND_TRUTH ranges + the IV stdev floor
-  (ground_truth.py), re-run after the first pipeline run with a generated
-  member_ideal_points.json, per this file's standing convention for any
-  change to this branch.
+  (ground_truth.py) + scripts/check_signal_correlations.py (the standing
+  check for (a) and (c), one command against the live API), re-run after
+  the first pipeline run with a generated member_ideal_points.json, per
+  this file's standing convention for any change to this branch.
+
+  Signals evaluated for v6.11 and DELIBERATELY NOT SHIPPED (same
+  documented-so-nobody-re-litigates-blind pattern as the v6.6 crossing-
+  side flank discount; each names its precise blocker, because two of the
+  three are "blocked", not "rejected"):
+
+  - CES vote-matched opinion congruence (Ansolabehere & Jones 2010,
+    AJPS): the Cooperative Election Study asks ~60k respondents each
+    cycle how THEY would vote on specific named roll calls — the gold-
+    standard "did the member vote how constituents wanted" construct,
+    and the strongest candidate signal this dimension doesn't have. Two
+    blockers, one structural: (1) the microdata is Dataverse-hosted
+    survey data requiring a real ingestion pipeline (weights, item-to-
+    roll-call mapping); (2) structurally, CES items reference the
+    PREVIOUS congress's votes (CES 2024 -> 118th), while v5.8's "current
+    term" rule scores only the current congress — shipping it means
+    deciding that a one-cycle-lagged window is acceptable evidence for a
+    current score, a design call for the owner, not something to slip in
+    silently. Revisit at each CES common-content release.
+  - Congressionally Directed Spending / allocation responsiveness (Stein
+    & Bickers 1994; Grimmer, Messing & Westwood 2012; Grimmer 2013 shows
+    members in seats leaning against their party rationally SUBSTITUTE
+    appropriations work for position-taking — meaning a vote-only metric
+    structurally undervalues exactly those members; Eulau & Karps 1977
+    call this the "allocation responsiveness" channel). The only
+    genuinely orthogonal candidate (not derived from votes, cosponsors,
+    or money-in). Blocker: current-cycle CDS disclosures are per-
+    subcommittee xlsx/PDF tables on appropriations.senate.gov (House:
+    committee PDFs), which need format-inspected, ingestion-gated
+    parsers — this file's own standards forbid shipping a parser written
+    blind against uninspected files, and no reputable machine-readable
+    mirror covering the current congress exists (the one public dataset,
+    BPC's, stops at FY2022 = the 117th). Fair-scoring note for whoever
+    builds it: appropriators secure structurally more CDS than non-
+    appropriators, so the baseline must be committee-conditional or the
+    component becomes a committee-membership proxy.
+  - Tausanovitch & Warshaw MRP seat ideology (americanideologyproject.
+    com) as a second seat-lean input: REJECTED on the merits, not
+    blocked. It is another one-dimensional ordering of seats that
+    correlates strongly with PVI; adding it as a separate signal would
+    recreate exactly the correlated-pair problem this file spent
+    v6.5-v6.8 removing (r=0.72 funding pair; r=-0.76 cosponsorship
+    pair). Its legitimate future use is as a cross-validation anchor on
+    PVI inside fetch_member_ideal_points.py's gates, or as the opinion
+    source for ISSUE-level congruence — which is the CES item above,
+    done properly, not a new seat ordering.
 """
 
 import logging
