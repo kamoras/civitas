@@ -176,8 +176,20 @@ _HEDGE_PHRASE_RE = re.compile(
     r"discussions?|debates?|experts?|analysts?|observers?|critics?)\s+"
     r"(?:say|says|said|suggest(?:s|ed)?|indicate(?:s|d)?|show(?:s|ed)?|reveal(?:s|ed)?|"
     r"highlight(?:s|ed)?|emphasiz(?:e|es|ed)|stress(?:es|ed)?|note(?:s|d)?|"
-    r"focus(?:es|ed)?\s+on|aim(?:s|ed)?\s+to)\b"
-    r"|\baccording to (?:reports?|coverage|sources?)\b",
+    r"focus(?:es|ed)?\s+on|aim(?:s|ed)?\s+to|"
+    # 2026-07 audit additions, each from a published live example: "These
+    # developments point to a more nuanced landscape" / "This development
+    # reflects the broader challenges" / "The coverage from BBC World and
+    # PBS NewsHour captured these developments" — same middle-man framing
+    # as the original verbs, different verb.
+    r"underscore(?:s|d)?|point(?:s|ed)?\s+to|reflect(?:s|ed)?|"
+    r"illustrate(?:s|d)?|captur(?:e|es|ed))\b"
+    r"|\baccording to (?:reports?|coverage|sources?)\b"
+    # "The coverage from BBC World and PBS NewsHour captured these
+    # developments" — the noun+verb form above requires adjacency, and the
+    # live example puts the source list between them.
+    r"|\bcaptur(?:e|es|ed)\s+these\s+developments\b"
+    r"|\bthe\s+coverage\s+from\b",
     re.IGNORECASE,
 )
 
@@ -213,7 +225,17 @@ _EDITORIALIZING_RE = re.compile(
     r"|\bmakes sense given\b"
     r"|\breflects?\s+(?:a\s+|an\s+|broader\s+)?efforts?\s+to\b"
     r"|\bin an effort to\b"
-    r"|\b(?:aims?|seeks?)\s+to\s+(?:shape|manage|control)\s+(?:public\s+)?perception\b",
+    r"|\b(?:aims?|seeks?)\s+to\s+(?:shape|manage|control)\s+(?:public\s+)?perception\b"
+    # 2026-07 audit additions, each from a published live example:
+    # speculation about future effect ("This shift may influence how
+    # political leaders frame their messaging") and unattributed motive/
+    # causation claims ("The timing of her announcement was influenced by
+    # President Trump's public statements, which shaped the tone and focus
+    # of the race") — asserting why an actor did something or what it will
+    # accomplish, rather than what was done.
+    r"|\b(?:may|could|might)\s+(?:influence|shape|affect)\s+how\b"
+    r"|\b(?:influenced|shaped)\s+the\s+(?:timing|tone|focus|narrative)\b"
+    r"|\bremains?\s+a\s+point\s+of\s+discussion\b",
     re.IGNORECASE,
 )
 
@@ -315,6 +337,56 @@ def ungrounded_electoral_claims(generated: str, source: str) -> list[str]:
     return sorted({m.group(0).strip() for m in _ELECTORAL_CLAIM_RE.finditer(generated or "")})
 
 
+# Unfilled template tokens: "[date]", "[name]", "[specific date]". Every
+# other check in this module is digit- or name-based, which is exactly why
+# this class reached production unchecked (2026-07 audit: a published fact
+# read "Thune announced the tribute details on [date]." and the Bluesky
+# post shipped with the literal "[date]" in it — no digits, no fabricated
+# name, nothing else fired). Alphabetic-only content keeps this from
+# flagging legitimate bracketed material like vote tallies "[216-212]" or
+# citations, which generated civic prose shouldn't contain anyway but a
+# narrow pattern costs nothing.
+_PLACEHOLDER_TOKEN_RE = re.compile(r"\[[A-Za-z][A-Za-z ]{0,24}\]")
+
+
+def placeholder_tokens(generated: str) -> list[str]:
+    """Literal unfilled placeholders ("[date]", "[name]") in generated text."""
+    return sorted({m.group(0) for m in _PLACEHOLDER_TOKEN_RE.finditer(generated or "")})
+
+
+# Family/personal-relationship claims in the GENERATED text. Same fabrication
+# class as ungrounded_electoral_claims — the model inventing a *relationship*
+# between two grounded people, with no fabricated number or titled name for
+# the other checks to catch (2026-07 audit: a published fact stated a
+# candidate announced "for the seat left by her brother" — a family tie
+# asserted as fact with nothing in the pipeline able to check it).
+_RELATIONSHIP_CLAIM_RE = re.compile(
+    r"\b(?:his|her|their)\s+(?:brother|sister|father|mother|son|daughter|"
+    r"husband|wife|widow|widower|cousin|uncle|aunt|nephew|niece|"
+    r"grandfather|grandmother|grandson|granddaughter)\b"
+    r"|\b(?:brother|sister|son|daughter|widow|widower|father|mother)\s+of\b",
+    re.IGNORECASE,
+)
+
+# Relationship vocabulary in the SOURCE — a single family word grounds the
+# claim (permissive side, same design as _ELECTORAL_CONTEXT_RE: only a
+# relationship asserted out of NOWHERE is flagged).
+_RELATIONSHIP_CONTEXT_RE = re.compile(
+    r"\b(?:brother|sister|father|mother|son|daughter|husband|wife|widow|"
+    r"widower|cousin|uncle|aunt|nephew|niece|grandfather|grandmother|"
+    r"grandson|granddaughter|family|sibling)\b",
+    re.IGNORECASE,
+)
+
+
+def ungrounded_relationship_claims(generated: str, source: str) -> list[str]:
+    """Family-relationship claims in ``generated`` with no family vocabulary
+    anywhere in ``source`` — see _RELATIONSHIP_CLAIM_RE for the live case."""
+    if _RELATIONSHIP_CONTEXT_RE.search(source or ""):
+        return []
+    return sorted({m.group(0).strip() for m in _RELATIONSHIP_CLAIM_RE.finditer(generated or "")})
+
+
 def grounding_violations(generated: str, source: str) -> list[str]:
     """Human-readable list of grounding failures, empty when clean."""
     problems = []
@@ -328,6 +400,11 @@ def grounding_violations(generated: str, source: str) -> list[str]:
     if electoral:
         problems.append(
             f"electoral contest not in source: {', '.join(electoral)}"
+        )
+    relationships = ungrounded_relationship_claims(generated, source)
+    if relationships:
+        problems.append(
+            f"family relationship not in source: {', '.join(relationships)}"
         )
     return problems
 
@@ -352,5 +429,10 @@ def hedge_and_editorializing_violations(generated: str) -> list[str]:
     if editorial:
         problems.append(
             f"language evaluating whether an action was justified ({', '.join(editorial)})"
+        )
+    placeholders = placeholder_tokens(generated)
+    if placeholders:
+        problems.append(
+            f"literal unfilled placeholder tokens ({', '.join(placeholders)})"
         )
     return problems

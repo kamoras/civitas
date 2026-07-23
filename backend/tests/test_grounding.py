@@ -333,3 +333,122 @@ class TestGroundingLexicalTightening:
             "Collins is facing a primary challenge in her senate race.",
             "The senate race in Maine tightened as voters weighed the candidates.",
         ) == []
+
+
+class TestPlaceholderTokens:
+    """2026-07 audit: a published fact read "Thune announced the tribute
+    details on [date]." and the Bluesky post shipped with the literal
+    "[date]" — every other check in the module is digit- or name-based,
+    so nothing fired."""
+
+    def test_live_date_placeholder_case(self):
+        from app.pipeline.analyze.grounding import placeholder_tokens
+        assert placeholder_tokens(
+            "Thune announced the tribute details on [date]."
+        ) == ["[date]"]
+
+    def test_multiword_placeholder(self):
+        from app.pipeline.analyze.grounding import placeholder_tokens
+        assert placeholder_tokens(
+            "The ceremony took place on [specific date] at the cathedral."
+        ) == ["[specific date]"]
+
+    def test_clean_text_and_numeric_brackets_pass(self):
+        from app.pipeline.analyze.grounding import placeholder_tokens
+        assert placeholder_tokens("The Senate voted 68-32 on Thursday.") == []
+        assert placeholder_tokens("The tally was [216-212] per the clerk.") == []
+
+    def test_included_in_hedge_and_editorializing_bundle(self):
+        # The bundle is what every publish path (issue text, stories,
+        # posts) actually calls — a placeholder must fail it.
+        from app.pipeline.analyze.grounding import hedge_and_editorializing_violations
+        reasons = hedge_and_editorializing_violations("Details were shared on [date].")
+        assert any("placeholder" in r for r in reasons)
+
+
+class TestUngroundedRelationshipClaims:
+    """2026-07 audit: "for the seat left by her brother" published as fact
+    with no family vocabulary anywhere in the source — same fabricated-
+    relationship class as the electoral-claims guard, family edition."""
+
+    def test_live_brother_case_flagged_without_source_basis(self):
+        from app.pipeline.analyze.grounding import ungrounded_relationship_claims
+        generated = "She announced her candidacy for the seat left by her brother."
+        source = "Graham announced a Senate campaign after the incumbent's death."
+        assert ungrounded_relationship_claims(generated, source) == ["her brother"]
+
+    def test_grounded_when_source_mentions_family(self):
+        from app.pipeline.analyze.grounding import ungrounded_relationship_claims
+        generated = "She announced her candidacy for the seat left by her brother."
+        source = "Darline Graham, sister of the late senator, announced her campaign."
+        assert ungrounded_relationship_claims(generated, source) == []
+
+    def test_included_in_grounding_violations_bundle(self):
+        from app.pipeline.analyze.grounding import grounding_violations
+        reasons = grounding_violations(
+            "The seat was held by her brother.", "The seat is vacant."
+        )
+        assert any("family relationship" in r for r in reasons)
+
+
+class TestAuditHedgeAndEditorializingAdditions:
+    """Regression tests for the 2026-07 audit's phrase additions — each
+    parametrized text is a verbatim (or lightly trimmed) published live
+    example."""
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            pytest.param(
+                "These developments point to a more nuanced landscape.",
+                id="developments_point_to",
+            ),
+            pytest.param(
+                "This development reflects the broader challenges facing congressional leadership.",
+                id="development_reflects",
+            ),
+            pytest.param(
+                "The coverage from BBC World and PBS NewsHour captured these developments.",
+                id="coverage_captured",
+            ),
+            pytest.param(
+                "These developments underscore the complex interplay between the branches.",
+                id="developments_underscore",
+            ),
+        ],
+    )
+    def test_new_hedge_verbs_fire(self, text):
+        assert hedge_language(text) != []
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            pytest.param(
+                "This shift may influence how political leaders frame their messaging.",
+                id="may_influence_how",
+            ),
+            pytest.param(
+                "President Trump's statements shaped the tone of the race.",
+                id="shaped_the_tone",
+            ),
+            pytest.param(
+                "The announcement was influenced by public statements, "
+                "which influenced the timing of the race.",
+                id="influenced_the_timing",
+            ),
+            pytest.param(
+                "The situation remains a point of discussion among officials.",
+                id="remains_a_point_of_discussion",
+            ),
+        ],
+    )
+    def test_new_editorializing_patterns_fire(self, text):
+        assert editorializing_language(text) != []
+
+    def test_plain_factual_reporting_still_clean(self):
+        text = (
+            "The Senate passed the bill 68-32 on Thursday. Sen. Collins "
+            "voted against it. The measure funds the Pentagon through March."
+        )
+        assert hedge_language(text) == []
+        assert editorializing_language(text) == []

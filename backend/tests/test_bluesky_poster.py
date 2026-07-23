@@ -7,6 +7,8 @@ _validate_facts which are pure functions with no external dependencies.
 
 import pytest
 
+from unittest.mock import patch
+
 from app.pipeline.analyze.bluesky_poster import _is_near_duplicate, _sanitize
 from app.pipeline.analyze.action_center import _validate_facts
 
@@ -235,3 +237,65 @@ class TestValidateFacts:
         facts = ["The inspector general released a report finding no wrongdoing."]
         result = _validate_facts(facts)
         assert result == facts
+
+
+class TestProcessIssuesMetrics:
+    """Audit M9: the poster's suppression and grounding-rejection paths
+    must increment the run counters."""
+
+    def _issue(self, **overrides):
+        from app.models import ActionIssue
+        import json as _json
+        defaults = dict(
+            date="2026-07-22", rank=1, is_current=True,
+            title="House passes defense bill",
+            summary="The House passed the bill 216-212.",
+            facts=_json.dumps(["The House passed the defense bill 216-212."]),
+            source_names=_json.dumps(["AP News"]),
+            bsky_posted_at=None,
+        )
+        defaults.update(overrides)
+        return ActionIssue(**defaults)
+
+    def test_near_duplicate_suppression_increments_counter(self, db_session, monkeypatch):
+        from datetime import datetime, timezone
+
+        from app.pipeline.analyze import action_metrics, bluesky_poster
+
+        monkeypatch.setattr(bluesky_poster.settings, "BSKY_HANDLE", "test.handle", raising=False)
+        monkeypatch.setattr(bluesky_poster.settings, "BSKY_APP_PASSWORD", "pw", raising=False)
+
+        prior_text = "The House passed the defense bill 216-212 on Thursday afternoon."
+        prior = self._issue(
+            title="Defense bill passes House",
+            bsky_posted_at=datetime.now(timezone.utc),
+            bsky_last_post_text=prior_text,
+        )
+        db_session.add(prior)
+        fresh = self._issue()
+        db_session.add(fresh)
+        db_session.commit()
+
+        action_metrics.reset()
+        with patch.object(bluesky_poster, "_generate_new_post", return_value=prior_text):
+            posted = bluesky_poster.process_issues_for_bluesky([fresh], db_session)
+
+        assert posted == 0
+        assert fresh.bsky_posted_at is not None  # marked handled, not published
+        assert action_metrics.snapshot().get("bsky_posts_suppressed_near_duplicate") == 1
+
+    def test_grounding_rejection_increments_counter(self, db_session):
+        from app.pipeline.analyze import action_metrics, bluesky_poster
+
+        issue = self._issue()
+        # Post invents a figure not in the issue's material — grounding
+        # rejects it on both attempts, so no post text is returned.
+        with patch.object(
+            bluesky_poster, "call_llm",
+            return_value={"post": "The House passed the defense bill with $900 billion in new spending."},
+        ):
+            action_metrics.reset()
+            text = bluesky_poster._generate_new_post(issue, "2026-07-22")
+
+        assert text is None
+        assert action_metrics.snapshot().get("bsky_post_grounding_rejections") == 2

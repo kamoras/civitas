@@ -199,6 +199,8 @@ Return JSON: {{"post": "<your post text>"}}"""
         if not reasons:
             return post
 
+        from app.pipeline.analyze import action_metrics
+        action_metrics.increment("bsky_post_grounding_rejections")
         logger.warning(
             "Bluesky post failed grounding for issue %s (attempt %d): %s | post: %s",
             issue.id, attempt + 1, "; ".join(reasons), post[:160],
@@ -276,6 +278,8 @@ def process_issues_for_bluesky(issues: list, db: Session) -> int:
             # Same story, nothing materially new to say — mark it handled so
             # the hourly pipeline doesn't regenerate and re-check it every run,
             # but publish nothing.
+            from app.pipeline.analyze import action_metrics
+            action_metrics.increment("bsky_posts_suppressed_near_duplicate")
             logger.info(
                 "Suppressing near-duplicate Bluesky post for issue %s: %s",
                 issue.id, issue.title[:80],
