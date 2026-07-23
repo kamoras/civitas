@@ -1411,8 +1411,9 @@ class TestLegislativeEffectiveness:
         component structurally uncreditable for the House: House
         per-congress bill totals sit far below the Senate's because 435
         members split similar institutional bandwidth, not because
-        they're less effective (2026-07 audit: Senate population-median
-        significance-weighted credit is 254/congress vs House's 107).
+        they're less effective (2026-07-23 post-reclassification audit:
+        Senate population-median significance-weighted credit is 289/congress
+        vs House's 129).
         Chamber is inferred from bill-type prefix, same pattern the old
         volume-ceiling component used, so a House member at the same
         RAW bill count as a senator is compared against the House's own,
@@ -1461,14 +1462,14 @@ class TestLegislativeEffectiveness:
         Centering on the median makes a member whose per-congress credit
         sits at the chamber median score ~50 instead of below it.
 
-        Senate case: a member with credit ≈ the Senate median (254) and
+        Senate case: a member with credit ≈ the Senate median (289) and
         party=None (which maps _advancement_baseline to 0.030, ≈ the Senate
         average 0.0305, so status_ratio ≈ 1 and doesn't confound the
         reference-point comparison) must land at neutral, not below it.
-        Under the old mean reference (285.3) this same member scored ~43."""
+        Under a mean reference this same member would score below neutral."""
         # Introduced-only substantive "s" bills each earn weight(5)*stage(1)
-        # = 5 cumulative credit; 51 of them in one congress ≈ the Senate
-        # median of 254 per-congress credit.
+        # = 5 cumulative credit; ~58 of them in one congress ≈ the Senate
+        # median of 289 per-congress credit.
         n = round(_LES_POPULATION_MEDIAN_SENATE / 5)
         median_credit_bills = [
             {"title": f"B{i}", "isLaw": False, "latestAction": "Introduced",
@@ -1485,19 +1486,22 @@ class TestLegislativeEffectiveness:
 
     def test_population_reference_is_median_not_mean(self):
         """Guard the mean->median switch itself (v6.10): the reference
-        constants must be each chamber's live-audit MEDIAN (Senate 254,
-        House 107), which sits strictly below the corresponding right-skewed
-        MEAN (Senate 285.3, House 122.0). A future recalibration that pasted
-        the mean back in would silently re-open the residual below-neutral
-        imbalance this version closed, and no behavioral test pins the exact
-        constant. House median stays well below the Senate's — 435 members
-        split similar institutional bandwidth — so the chamber split this
-        rides on top of is preserved too."""
-        assert _LES_POPULATION_MEDIAN_SENATE == 254.0
-        assert _LES_POPULATION_MEDIAN_HOUSE == 107.0
+        constants must be each chamber's live-audit MEDIAN (Senate 289,
+        House 129 — re-run 2026-07-23 after PR #227's REFERRED-stage split
+        was actually reclassified into the `stage` column by a pipeline run,
+        see score_calculator.py's comment above these constants), which sits
+        strictly below the corresponding right-skewed MEAN (Senate 324.95,
+        House 143.80). A future recalibration that pasted the mean back in
+        would silently re-open the residual below-neutral imbalance this
+        version closed, and no behavioral test pins the exact constant.
+        House median stays well below the Senate's — 435 members split
+        similar institutional bandwidth — so the chamber split this rides on
+        top of is preserved too."""
+        assert _LES_POPULATION_MEDIAN_SENATE == 289.0
+        assert _LES_POPULATION_MEDIAN_HOUSE == 129.0
         # Strictly below the (skewed) means they replaced.
-        assert _LES_POPULATION_MEDIAN_SENATE < 285.3
-        assert _LES_POPULATION_MEDIAN_HOUSE < 122.0
+        assert _LES_POPULATION_MEDIAN_SENATE < 324.95
+        assert _LES_POPULATION_MEDIAN_HOUSE < 143.80
         # Chamber split preserved: House norm far below the Senate's.
         assert _LES_POPULATION_MEDIAN_HOUSE < _LES_POPULATION_MEDIAN_SENATE
 
