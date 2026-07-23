@@ -113,6 +113,11 @@ References
 - Ansolabehere, S. et al. (2003). JEP, 17(1), 105-130.
 - Rhoades, S. (1993). Fed Reserve Bulletin, 79, 188-189.
 - Parmigiani, A. (2025). Journal of Public Economics, 243, 105319.
+- Canes-Wrone, B., Brady, D.W. & Cogan, J.F. (2002). APSR, 96(1), 127-140.
+- Harbridge, L. & Malhotra, N. (2011). AJPS, 55(3), 494-510.
+- Harbridge-Yong, L., Volden, C. & Wiseman, A.E. (2023). J. Politics, 85(3).
+- Lewis, J.B. et al. Voteview: Congressional Roll-Call Votes Database
+  (voteview.com) — DW-NOMINATE member estimates.
 
 Changes from v1 → v2:
 - Funding Independence: replaced double-counted PAC ratio + small donor %
@@ -638,6 +643,145 @@ construction, regardless of real effectiveness.
   calibrate_les_credit_scale.py now reports the median as the suggested
   constant; re-run it after any pipeline run meaningfully shifts either
   chamber's per-congress credit distribution.
+
+Changes from v6.10 -> v6.11 (2026-07-23): Constituent Alignment restructured
+around the construct its own notes kept naming, prompted by a direct design
+question ("bipartisan doesn't always mean aligned to your constituents —
+what signals would make this metric stronger?"). Two changes, one shared
+finding: coalition breadth was a legislative-STYLE signal living inside a
+representation dimension.
+
+  1. Coalition Breadth MOVED out of Constituent Alignment into Legislative
+     Effectiveness, reframed as "Bipartisan coalition attraction" (15%,
+     from LES 70->60 and leadership 30->25; both revert exactly when data
+     is missing). Fairness check run before the move, not after: the
+     political-science case for bipartisanship as an EFFECTIVENESS signal
+     is strong — Harbridge-Yong, Volden & Wiseman (2023, "The Bipartisan
+     Path to Effective Lawmaking," J. Politics 85:3; 93rd-114th
+     Congresses) find members who attract a larger share of their bill
+     cosponsors from the opposing party are substantially more successful
+     lawmakers, robust for majority AND minority members — while its case
+     as a CONSTITUENT-ALIGNMENT signal was always weak (Harbridge &
+     Malhotra 2011: demand for bipartisanship varies with seat
+     composition; a bipartisan member of a lopsided seat can be
+     bipartisan and misaligned at once — and v6.8 had already caught the
+     component partially re-measuring this dimension's position signal,
+     r=-0.76). Two fidelity details from the same check: HVW's effect is
+     specifically the ATTRACTION of cross-party cosponsors, not the offer
+     of them, so the LE component consumes a new receive-only rate
+     (compute_bipartisanship_scores(direction="receive")) instead of the
+     Lugar-style give+receive blend (which keeps powering the profile
+     display unchanged); and their evidence is a robust association, not
+     clean causal identification, one reason the weight stays modest. The
+     old component's seat-safety scaling does NOT move with it —
+     representation logic has no place in an effectiveness dimension; low
+     bipartisan attraction predicts lower lawmaking success regardless of
+     seat.
+
+  2. Position congruence ADDED to Constituent Alignment (30% when data
+     exists; seat-relative vote alignment holds the rest, 100% when not).
+     This is the "positive half" the v6.6 limitation note left open and
+     the construct-validity fix the v6.6 "DELIBERATELY NOT SHIPPED" note
+     said was impossible with cosponsorship-SVD ideology: a ROLL-CALL
+     ideal point (DW-NOMINATE dim1, Voteview/Lewis et al. — the exact
+     signal that note wished for) scored against a seat-conditional
+     expectation (per-chamber, per-party OLS of position on seat PVI).
+     District-relative ideological extremity is the misrepresentation
+     construct with the strongest electoral-accountability evidence
+     (Canes-Wrone, Brady & Cogan 2002, "Out of Step, Out of Office"), and
+     unlike a defection rate it is a legible POSITION signal: flank-ward
+     deviation from the seat-conditional party norm scores below neutral
+     (seat-safety-scaled to zero in deep safe seats — Bafumi & Herron
+     2010 — the v6.7 pattern), center-ward deviation scores above (the
+     surplus-crossing credit pattern, floor 0.25). A genuinely congruent
+     loyalist can now score above 50, which no rate-based signal could
+     ever produce. When active it SUPERSEDES the v6.7 loyal-branch
+     position-mismatch discount (same construct, better signal; applying
+     both would repeat the v6.8 double-count); the discount remains as
+     the fallback when data is absent. Every number the formula consumes
+     (per-member dim1, regression coefficients, p90-|extremity|
+     saturation) is ingested AUTOMATICALLY each pipeline run
+     (fetch/voteview.py: fetch from Voteview, per-party OLS fit,
+     ingestion gates in the fetch_state_pvi.py mold, then
+     write_member_ideal_points to /data/member_ideal_points.json on the
+     writable volume — the party_ideology_bounds.json pattern; no manual
+     step exists) — no Python-side magnitude constants, honoring the
+     no-un-fit-constants rule. The component is inert only until the
+     FIRST successful ingest (skipped, weight renormalized, vote
+     component carries 100%); a later fetch/gate failure keeps the last
+     good data rather than degrading scores.
+
+  Known limitations, disclosed: (a) both CA components are now roll-call-
+  derived (break rate vs. spatial position) — different constructs,
+  related data; re-check their live correlation after the first full run,
+  same standing check as v6.8's; (b) NOMINATE congruence measures
+  congruence with the GEOGRAPHIC seat median (via PVI), while members
+  systematically track their reelection constituency (Fenno 1978; Clinton
+  2006; Bafumi & Herron 2010) — the seat-safety scaling is the deliberate
+  humility about that, not a fix for it; (c) LE components 2 and 3 are
+  both cosponsorship-derived (centrality vs. cross-party share), kept at
+  a combined 40% and flagged for the same post-run correlation check.
+  Post-run validation: the derived consistency gate (ground_truth.py,
+  replaces the old hand-maintained GROUND_TRUTH table) +
+  scripts/check_signal_correlations.py (the standing check for (a) and
+  (c), one command against the live API).
+
+  Confirmed against real Voteview data, first live ingest (2026-07-23):
+  Senate Republicans' seat-PVI-vs-position fit is not statistically real
+  (OLS/Theil-Sen/Spearman all agree, robust to outlier removal — see
+  fetch/voteview.py's module docstring for the full measurement).
+  Senate Democrats' fit IS real. Gating is per-CHAMBER, not per party
+  (deliberately — a nonpartisan platform cannot ship a component only
+  one party can structurally earn), so position congruence is currently
+  House-only: both House parties' fits pass, neither Senate party's
+  fit is used until the Senate's own data supports both symmetrically.
+  Re-measured fresh every pipeline run, not a fixed assumption.
+
+  Signals evaluated for v6.11 and DELIBERATELY NOT SHIPPED (same
+  documented-so-nobody-re-litigates-blind pattern as the v6.6 crossing-
+  side flank discount; each names its precise blocker, because two of the
+  three are "blocked", not "rejected"):
+
+  - CES vote-matched opinion congruence (Ansolabehere & Jones 2010,
+    AJPS): the Cooperative Election Study asks ~60k respondents each
+    cycle how THEY would vote on specific named roll calls — the gold-
+    standard "did the member vote how constituents wanted" construct,
+    and the strongest candidate signal this dimension doesn't have. Two
+    blockers, one structural: (1) the microdata is Dataverse-hosted
+    survey data requiring a real ingestion pipeline (weights, item-to-
+    roll-call mapping); (2) structurally, CES items reference the
+    PREVIOUS congress's votes (CES 2024 -> 118th), while v5.8's "current
+    term" rule scores only the current congress — shipping it means
+    deciding that a one-cycle-lagged window is acceptable evidence for a
+    current score, a design call for the owner, not something to slip in
+    silently. Revisit at each CES common-content release.
+  - Congressionally Directed Spending / allocation responsiveness (Stein
+    & Bickers 1994; Grimmer, Messing & Westwood 2012; Grimmer 2013 shows
+    members in seats leaning against their party rationally SUBSTITUTE
+    appropriations work for position-taking — meaning a vote-only metric
+    structurally undervalues exactly those members; Eulau & Karps 1977
+    call this the "allocation responsiveness" channel). The only
+    genuinely orthogonal candidate (not derived from votes, cosponsors,
+    or money-in). Blocker: current-cycle CDS disclosures are per-
+    subcommittee xlsx/PDF tables on appropriations.senate.gov (House:
+    committee PDFs), which need format-inspected, ingestion-gated
+    parsers — this file's own standards forbid shipping a parser written
+    blind against uninspected files, and no reputable machine-readable
+    mirror covering the current congress exists (the one public dataset,
+    BPC's, stops at FY2022 = the 117th). Fair-scoring note for whoever
+    builds it: appropriators secure structurally more CDS than non-
+    appropriators, so the baseline must be committee-conditional or the
+    component becomes a committee-membership proxy.
+  - Tausanovitch & Warshaw MRP seat ideology (americanideologyproject.
+    com) as a second seat-lean input: REJECTED on the merits, not
+    blocked. It is another one-dimensional ordering of seats that
+    correlates strongly with PVI; adding it as a separate signal would
+    recreate exactly the correlated-pair problem this file spent
+    v6.5-v6.8 removing (r=0.72 funding pair; r=-0.76 cosponsorship
+    pair). Its legitimate future use is as a cross-validation anchor on
+    PVI inside fetch_member_ideal_points.py's gates, or as the opinion
+    source for ISSUE-level congruence — which is the CES item above,
+    done properly, not a new seat ordering.
 """
 
 import logging
@@ -774,7 +918,22 @@ logger = logging.getLogger(__name__)
 # "median member scores 50" convention every other expected-vs-actual
 # component in this file already uses. Symmetric across both chambers, not a
 # House/Senate bias. See the top-of-file "Changes from v6.9 -> v6.10" note.
-ALGORITHM_VERSION = "v6.10"
+#
+# v6.10 -> v6.11 (2026-07-23): Coalition Breadth moved out of Constituent
+# Alignment into Legislative Effectiveness as "Bipartisan coalition
+# attraction" (receive-only rate per Harbridge-Yong/Volden/Wiseman 2023 —
+# attracting cross-party cosponsors predicts lawmaking success; offering
+# them doesn't carry the effect), and Constituent Alignment gained a
+# Position congruence component (30% when data exists): DW-NOMINATE dim1
+# vs. a seat-conditional per-party expectation (Canes-Wrone/Brady/Cogan
+# 2002's district-relative extremity — the construct v6.6/v6.7's notes
+# named but couldn't measure from cosponsorship SVD). Supersedes the
+# loyal-branch position-mismatch discount when active. Ideal points are
+# ingested automatically every pipeline run (fetch/voteview.py ->
+# /data/member_ideal_points.json, gated; no manual step) — the component
+# is inert only until the first successful ingest. See the top-of-file
+# "Changes from v6.10 -> v6.11" note for the full account.
+ALGORITHM_VERSION = "v6.11"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -987,6 +1146,98 @@ def write_party_ideology_bounds(chamber: str, bounds: dict[str, tuple[float, flo
         )
 
 
+_member_ideal_points_cache: dict | None = None
+
+
+_MEMBER_IDEAL_POINTS_PATH = "/data/member_ideal_points.json"
+
+
+def _member_ideal_points(chamber: str) -> dict:
+    """Roll-call ideal-point data for one chamber ("senate" or "house"):
+    {"members": {bioguideId: nominate_dim1}, "fit": {party: {"a", "b"}},
+    "extremity_p90": float}. Used by _constituent_alignment_core's
+    position-congruence component (v6.11) — the member's DW-NOMINATE
+    first-dimension position scored against a seat-conditional
+    expectation.
+
+    Ingested from /data/member_ideal_points.json (the persistent
+    writable volume — same one party_ideology_bounds.json lives on, and
+    for the same reason: this is generated by the running app itself,
+    not an offline artifact). Each chamber's pipeline refreshes its own
+    section EVERY RUN from Voteview's published DW-NOMINATE estimates
+    (Lewis et al., voteview.com) joined against the seat-lean tables
+    (fetch/voteview.py — fetch, per-party OLS fit, ingestion gates,
+    then write_member_ideal_points below). Fully automated: no manual
+    generation step exists. Every number the scoring formula consumes
+    (positions, regression coefficients, saturation scale) is computed
+    from real data by that ingest, never hand-typed here.
+
+    Falls back to an empty dict if the file or the chamber's key is
+    missing — the position-congruence component is then skipped entirely
+    (never scored neutral, exactly like coalition breadth's old
+    missing-data handling), and constituent alignment runs on the
+    seat-relative vote component alone. So the component is inert only
+    until the FIRST successful ingest; a later fetch/gate failure keeps
+    the last good data (stale beats punitive, and DW-NOMINATE moves
+    slowly week to week). Missing data is never punitive — same
+    convention as every other loader in this file.
+    """
+    global _member_ideal_points_cache
+    if _member_ideal_points_cache is None:
+        import json
+        import pathlib
+        path = pathlib.Path(_MEMBER_IDEAL_POINTS_PATH)
+        try:
+            _member_ideal_points_cache = json.loads(path.read_text())
+        except Exception:
+            logger.warning(
+                "member_ideal_points.json unavailable — position-congruence "
+                "component will be skipped for every member until the first "
+                "successful Voteview ingest (fetch/voteview.py, runs "
+                "automatically each pipeline run)"
+            )
+            _member_ideal_points_cache = {}
+    chamber_data = _member_ideal_points_cache.get(chamber)
+    return chamber_data if isinstance(chamber_data, dict) else {}
+
+
+def write_member_ideal_points(chamber: str, data: dict) -> None:
+    """Persist one chamber's gated ideal-point section (fetch/voteview.py's
+    build output) to /data/member_ideal_points.json. Read-merge-write, not
+    overwrite — the two chamber pipelines run independently and each owns
+    only its own section, exactly like write_party_ideology_bounds above.
+    Callers gate BEFORE calling (refresh_member_ideal_points): this
+    function persists what it's given.
+
+    Never raises: best-effort side artifact, a write failure must not
+    abort an otherwise-successful pipeline run (the loader then serves
+    the previous file, or skips the component) — same contract and same
+    hard-learned rationale as write_party_ideology_bounds.
+    """
+    import json
+    import pathlib
+    global _member_ideal_points_cache
+    path = pathlib.Path(_MEMBER_IDEAL_POINTS_PATH)
+    try:
+        try:
+            existing = json.loads(path.read_text())
+        except Exception:
+            existing = {}
+        from app.pipeline.fetch.voteview import METHOD_DESC, SOURCE_DESC
+        existing["_source"] = SOURCE_DESC
+        existing["_method"] = METHOD_DESC
+        existing[chamber] = data
+        path.write_text(json.dumps(existing, indent=1, sort_keys=True) + "\n")
+        _member_ideal_points_cache = None  # force reload next _member_ideal_points() call
+    except Exception:
+        logger.warning(
+            "Failed to write member_ideal_points.json for %s — position-"
+            "congruence will use stale or empty data until the next "
+            "successful write; pipeline run continues.",
+            chamber, exc_info=True,
+        )
+
+
 _state_population_cache: dict[str, float] | None = None
 
 
@@ -1084,9 +1335,9 @@ def calculate_scores(senator: dict) -> dict:
             funding,
             senator.get("state", ""),
             senator.get("party", "I"),
-            bipartisanship=senator.get("bipartisanshipScore"),
             district=senator.get("district"),
             ideology_score=senator.get("ideologyScore"),
+            bioguide_id=senator.get("bioguideId"),
         ),
         "fundingDiversity": _calc_funding_diversity(funding),
         "legislativeEffectiveness": _calc_legislative_effectiveness(
@@ -1094,6 +1345,7 @@ def calculate_scores(senator: dict) -> dict:
             senator.get("leadershipScore"),
             party=voting_record.get("effectiveParty") or senator.get("party", "I"),
             years_in_office=senator.get("yearsInOffice"),
+            attracted_bipartisanship=senator.get("attractedBipartisanshipScore"),
         ),
     }
 
@@ -1126,9 +1378,9 @@ def explain_scores(senator: dict) -> dict:
             funding,
             senator.get("state", ""),
             senator.get("party", "I"),
-            bipartisanship=senator.get("bipartisanshipScore"),
             district=senator.get("district"),
             ideology_score=senator.get("ideologyScore"),
+            bioguide_id=senator.get("bioguideId"),
         ),
         "fundingDiversity": _funding_diversity_core(funding),
         "legislativeEffectiveness": _legislative_effectiveness_core(
@@ -1136,6 +1388,7 @@ def explain_scores(senator: dict) -> dict:
             senator.get("leadershipScore"),
             party=voting_record.get("effectiveParty") or senator.get("party", "I"),
             years_in_office=senator.get("yearsInOffice"),
+            attracted_bipartisanship=senator.get("attractedBipartisanshipScore"),
         ),
     }
 
@@ -1797,9 +2050,7 @@ def _signed_state_alignment(
     caucus) to determine alignment. Sanders (I-VT, caucuses D) gets the
     D lean for Vermont.
     """
-    pvi = _state_pvi().get(state, 0)
-    if district is not None:
-        pvi = _district_pvi().get(f"{state}-{district}", pvi)
+    pvi = _seat_pvi(state, district)
     eval_party = effective_party or party
     if eval_party == "R":
         lean = pvi
@@ -1808,6 +2059,20 @@ def _signed_state_alignment(
     else:
         return 0.0
     return max(-1.0, min(lean / 15.0, 1.0))
+
+
+def _seat_pvi(state: str, district: int | None = None) -> int:
+    """Raw signed Cook PVI for a seat (positive = R lean): the district's
+    when a district is given and the table has it, else the state's, else
+    0 (neutral swing). The un-normalized value both _signed_state_alignment
+    (party-signed, /15-scaled) and the position-congruence component's
+    seat-conditional regression (which fetch/voteview.py FIT on this same
+    raw scale at ingest time) are derived from — one lookup,
+    so the two consumers can't disagree about which seat a member has."""
+    pvi = _state_pvi().get(state, 0)
+    if district is not None:
+        pvi = _district_pvi().get(f"{state}-{district}", pvi)
+    return pvi
 
 
 # How much surplus-crossing credit is discounted when a member's crossings
@@ -1876,9 +2141,9 @@ def _calc_constituent_alignment(
     funding: dict,
     state: str = "",
     party: str = "I",
-    bipartisanship: float | None = None,
     district: int | None = None,
     ideology_score: float | None = None,
+    bioguide_id: str | None = None,
 ) -> int:
     """
     Constituent Alignment Score (0-100, higher = better). v4.2 rebuild of
@@ -1892,8 +2157,8 @@ def _calc_constituent_alignment(
     that, in a safe seat, IS constituent representation.
 
     Components:
-      1. Seat-relative vote alignment (80%, or 100% when cosponsorship
-         data is unavailable): the member's contested-vote break rate
+      1. Seat-relative vote alignment (70%, or 100% when roll-call
+         ideal-point data is unavailable): the member's contested-vote break rate
          compared to an EXPECTED break rate derived from state partisan
          lean (Cook PVI):
            aligned safe seat → ~3% expected (base-rate dissent),
@@ -1944,8 +2209,36 @@ def _calc_constituent_alignment(
            constants (see the v6.6 changelog note and the same posture for
            CROSSING_QUALITY_DISCOUNT).
 
-      2. Coalition breadth (20%, when cosponsorship data exists): see
-         below.
+      2. Position congruence (30%, when roll-call ideal-point data
+         exists — v6.11): the member's DW-NOMINATE first-dimension
+         position (Voteview; Lewis et al.) scored against a
+         seat-conditional expectation — a per-chamber, per-party OLS of
+         position on seat PVI, fit from real data at ingest time by
+         fetch/voteview.py (refreshed automatically every pipeline
+         run). This measures the actual
+         misrepresentation construct the branch notes above keep naming
+         (district-relative ideological EXTREMITY — Canes-Wrone, Brady &
+         Cogan 2002) with a roll-call-based position, the signal the
+         v6.6 "DELIBERATELY NOT SHIPPED" note said this file lacked.
+         Sitting toward the party flank of the seat-conditional norm
+         scores below neutral (scaled by how UNSAFE the seat is — the
+         v6.7 pattern); sitting toward the seat's center scores above
+         (scaled by the same seat-direction credit as surplus crossing).
+         When this component is active it SUPERSEDES the loyal-branch
+         position-mismatch discount below (same construct, better
+         signal — measuring it twice would repeat the v6.8 double-count
+         mistake); when the generated data file is absent the component
+         is skipped entirely and the discount still applies.
+
+    Moved out (v6.11, 2026-07): "Coalition breadth," the 20%-weighted
+    cross-party cosponsorship component (v5-v6.10). Bipartisan
+    coalition-building is not a constituent-alignment construct — demand
+    for bipartisanship varies with seat composition (Harbridge &
+    Malhotra 2011), and v6.8 already found the component was partially
+    re-measuring this dimension's position signal (r=-0.76). What
+    cross-party cosponsorship attraction DOES robustly predict is
+    legislative effectiveness (Harbridge-Yong, Volden & Wiseman 2023),
+    so the signal now lives there — see _calc_legislative_effectiveness.
 
     Removed (2026-07): "Donor independence," a 25%-weighted component
     based on donor-vote connection matches with a fundraising-total-scaled
@@ -1972,8 +2265,8 @@ def _calc_constituent_alignment(
     expectations now carry the constituent-representation adjustment.
     """
     return _constituent_alignment_core(
-        voting_record, lobbying_matches, funding, state, party, bipartisanship,
-        district, ideology_score,
+        voting_record, lobbying_matches, funding, state, party,
+        district, ideology_score, bioguide_id,
     )["score"]
 
 
@@ -1983,9 +2276,9 @@ def _constituent_alignment_core(
     funding: dict,
     state: str = "",
     party: str = "I",
-    bipartisanship: float | None = None,
     district: int | None = None,
     ideology_score: float | None = None,
+    bioguide_id: str | None = None,
 ) -> dict:
     """Same math as _calc_constituent_alignment, returning every intermediate
     value alongside the final score. Single implementation, same reuse
@@ -1994,7 +2287,57 @@ def _constituent_alignment_core(
     alignment = _signed_state_alignment(
         state, party, effective_party=effective_party, district=district,
     )
-    ideology_bounds = _party_ideology_bounds("house" if district is not None else "senate").get(party)
+    chamber = "house" if district is not None else "senate"
+    ideology_bounds = _party_ideology_bounds(chamber).get(party)
+
+    # Position congruence (v6.11) — computed before the vote loop because
+    # the loyal branch below gates its position-mismatch discount on
+    # whether this richer signal exists for the member. All numeric
+    # inputs (dim1, regression coefficients, saturation) come from the
+    # generated member_ideal_points.json (see _member_ideal_points);
+    # Independents are scored against the fit of the party they caucus
+    # with (eval_party), consistent with how every other seat-relative
+    # branch here treats them. The two branch shapes deliberately REUSE
+    # this dimension's established seat-scaling forms rather than
+    # inventing new ones: flank-ward extremity is discounted to nothing
+    # in a deep safe aligned seat (extremity there is the structural
+    # norm — Bafumi & Herron 2010; the v6.7 position-mismatch pattern),
+    # and center-ward position earns full credit only where the seat's
+    # median plausibly sits toward the center (the surplus-crossing
+    # credit pattern, floor 0.25). Saturation is the chamber's real p90
+    # |extremity| (fit by the script), so ~the most out-of-step decile
+    # spans the full component range — a data-derived scale, not a
+    # hand-picked constant.
+    eval_party = effective_party or party
+    ideal = _member_ideal_points(chamber)
+    dim1 = (ideal.get("members") or {}).get(bioguide_id) if bioguide_id else None
+    fit = (ideal.get("fit") or {}).get(eval_party)
+    congruence_sat = ideal.get("extremity_p90")
+    congruence_score = None
+    congruence_detail = ""
+    if dim1 is not None and fit is not None and congruence_sat:
+        expected_dim1 = float(fit["a"]) + float(fit["b"]) * _seat_pvi(state, district)
+        residual = float(dim1) - expected_dim1
+        extremity = -residual if eval_party == "D" else residual
+        magnitude = min(abs(extremity) / float(congruence_sat), 1.0)
+        base_detail = (
+            f"NOMINATE dim1 {float(dim1):+.2f} vs {expected_dim1:+.2f} expected "
+            f"for a {eval_party} member of this seat"
+        )
+        if extremity > 0:
+            severity = 1.0 - max(alignment, 0.0)
+            congruence_score = 50.0 - 50.0 * magnitude * severity
+            congruence_detail = (
+                f"{base_detail} — toward the party flank of the seat-conditional "
+                f"norm (severity ×{severity:.2f} for seat safety)"
+            )
+        else:
+            credit = max(0.25, 1.0 - 0.75 * max(alignment, 0.0))
+            congruence_score = 50.0 + 50.0 * magnitude * credit
+            congruence_detail = (
+                f"{base_detail} — toward the seat's center relative to the "
+                f"seat-conditional norm (credit ×{credit:.2f} for seat direction)"
+            )
 
     all_votes = (voting_record.get("keyVotes") or []) + (
         voting_record.get("recentVotes") or []
@@ -2137,8 +2480,20 @@ def _constituent_alignment_core(
             # scored members of this party, or an Independent) never
             # triggers a discount — same missing-data-is-never-punitive
             # convention as everywhere else in this file.
+            #
+            # SUPERSEDED when the position-congruence component is active
+            # for this member (v6.11): that component measures the same
+            # Canes-Wrone/Brady/Cogan construct with a roll-call-based
+            # position (the signal v6.7's own notes wished for) and does so
+            # continuously for EVERY member, not just extreme-tercile
+            # loyalists. Applying both would penalize the same underlying
+            # fact twice inside one dimension — exactly the double-count
+            # v6.8 existed to fix (and this discount's cosponsorship-SVD
+            # input is the coupled signal from that finding). The discount
+            # remains the fallback whenever member_ideal_points.json is
+            # absent or doesn't cover the member.
             position_mismatch = 0.0
-            if ideology_score is not None and ideology_bounds is not None:
+            if congruence_score is None and ideology_score is not None and ideology_bounds is not None:
                 lo, hi = ideology_bounds
                 extreme = (
                     (party == "D" and ideology_score < lo)
@@ -2152,48 +2507,28 @@ def _constituent_alignment_core(
         party_score = 50
         position_mismatch = 0.0
 
-    # Coalition breadth (v5): cross-party cosponsorship rate normalized to
-    # the chamber cohort (Lugar Center Bipartisan Index method; Harbridge
-    # 2015). Voting congruence asks "do you vote the way your seat
-    # elected you to"; breadth asks "do you also legislate for the
-    # constituents who didn't vote for you" — attracting other-party
-    # cosponsors to your bills and lending your name across the aisle.
-    # The cohort median arrives at 0.5 -> 50 (typical member), so the
-    # component carries the same "match expectation = 50" semantics as
-    # seat-relative voting. When cosponsorship data is missing the
-    # component is skipped entirely rather than scored neutral.
+    # Coalition breadth (v5-v6.10) MOVED to Legislative Effectiveness in
+    # v6.11 — see _calc_legislative_effectiveness's coalition-attraction
+    # component and the module changelog. Cross-party cosponsorship is a
+    # legislative-style/effectiveness signal (Harbridge-Yong, Volden &
+    # Wiseman 2023), not a constituent-alignment one: demand for
+    # bipartisanship varies with seat composition (Harbridge & Malhotra
+    # 2011), and v6.8 had already found the component partially
+    # re-measured this dimension's position signal (r=-0.76).
     #
-    # Below-median discount is seat-safety-scaled (v6.8, 2026-07-21): a
-    # below-chamber-median cross-party cosponsorship rate is exactly as
-    # "unreadable" in a safe seat as a below-expected vote-defection rate
-    # already is above — a safe seat's median voter is with the member's
-    # party, so narrow, within-party coalition-building may be faithful
-    # representation of that mandate (Fenno 1978), not a failure to
-    # represent. Before this, Coalition Breadth was the one component in
-    # this dimension with NO seat-safety adjustment at all, inconsistent
-    # with the "move off neutral only for legible evidence" governing
-    # principle every other branch here follows. Same seat-direction
-    # discount shape as the position-mismatch/surplus-crossing branches:
-    # floors fully at neutral in a maximally safe seat (deficit discounted
-    # to 0), stands at its full raw value in a swing/opposed seat (deficit
-    # undiscounted — there, low cross-party cosponsorship is legible).
-    if bipartisanship is not None:
-        breadth_weight = 0.20
-        raw_breadth_score = max(0.0, min(bipartisanship, 1.0)) * 100
-        if raw_breadth_score < 50.0:
-            deficit = 50.0 - raw_breadth_score
-            breadth_severity = 1.0 - max(alignment, 0.0)
-            breadth_score = 50.0 - deficit * breadth_severity
-        else:
-            breadth_score = raw_breadth_score
-    else:
-        breadth_weight = 0.0
-        breadth_score = 0.0
-
-    party_weight = 1.0 - breadth_weight
+    # Position congruence (v6.11, computed above): weight matches the
+    # construct's centrality — the branch notes above repeatedly name
+    # district-relative ideological extremity as the REAL
+    # misrepresentation construct, but as a first-run signal it doesn't
+    # take majority weight from the established seat-relative vote
+    # component. Skipped entirely (weight renormalized to the vote
+    # component, exactly like breadth's old missing-data handling) when
+    # the generated ideal-point data is absent.
+    congruence_weight = 0.30 if congruence_score is not None else 0.0
+    party_weight = 1.0 - congruence_weight
     score = clamp(
         party_score * party_weight
-        + breadth_score * breadth_weight
+        + (congruence_score or 0.0) * congruence_weight
     )
 
     party_alignment_detail = (
@@ -2226,20 +2561,12 @@ def _constituent_alignment_core(
             "detail": party_alignment_detail,
         },
     ]
-    if breadth_weight > 0:
-        breadth_detail = f"cross-party cosponsorship rate {bipartisanship:.0%}, chamber-median-normalized"
-        if bipartisanship is not None and raw_breadth_score < 50.0:
-            breadth_detail += (
-                " — below the chamber median; held closer to neutral for a safer "
-                "seat, where narrow cross-party cosponsorship is less readable as "
-                "a representational failure (discount "
-                f"{breadth_score - raw_breadth_score:+.1f}pts)"
-            )
+    if congruence_weight > 0:
         components.append({
-            "label": "Coalition breadth",
-            "weight": breadth_weight,
-            "score": round(breadth_score, 1),
-            "detail": breadth_detail,
+            "label": "Position congruence",
+            "weight": congruence_weight,
+            "score": round(congruence_score, 1),
+            "detail": congruence_detail,
         })
     return {"score": score, "components": components}
 
@@ -2794,19 +3121,21 @@ def _calc_legislative_effectiveness(
     leadership_score: float | None = None,
     party: str | None = None,
     years_in_office: float | None = None,
+    attracted_bipartisanship: float | None = None,
 ) -> int:
     """
     Legislative Effectiveness Score (0-100, higher = better).
 
-    Two components:
+    Three components (two when bipartisan-attraction data is missing —
+    weights then revert to exactly the pre-v6.11 70/30 split):
 
-      1. Bill significance & advancement (70%): Volden & Wiseman
+      1. Bill significance & advancement (60%): Volden & Wiseman
          (2014)-based — see the module comment above _LES_STAGE_ORDER for
          the full methodology and the two disclosed departures from their
          real approach (2-tier significance, expected-vs-actual credit
          instead of population-mean-ratio normalization).
 
-      2. Legislative leadership (30%): PageRank score from the
+      2. Legislative leadership (25%): PageRank score from the
          cosponsorship network (Brin & Page 1998, computed in
          sponsorship_analysis.py) — no basis in Volden & Wiseman, kept as
          an explicitly separate signal. Senators whose bills attract
@@ -2815,7 +3144,34 @@ def _calc_legislative_effectiveness(
          to build; a near-zero raw percentile in year one reflects network
          age, not effectiveness — 2026-07 fix, see leadership_conf below).
 
-    Both components apply Bayesian shrinkage toward 50 when data is
+      3. Bipartisan coalition attraction (15%, when cosponsorship data
+         exists — v6.11, moved here from Constituent Alignment): the
+         share of cosponsors a member attracts to their OWN bills from
+         the other party, cohort-median-normalized
+         (compute_bipartisanship_scores(direction="receive")).
+         Harbridge-Yong, Volden & Wiseman (2023, "The Bipartisan Path to
+         Effective Lawmaking," J. Politics 85:3, 93rd-114th Congresses)
+         show attracting cross-party cosponsors robustly predicts
+         lawmaking success for BOTH majority- and minority-party members
+         — and specifically that it is the ATTRACTION of bipartisan
+         cosponsors, not the offer of cosponsorships across the aisle,
+         that carries the effect, which is why this component consumes
+         the receive-only rate rather than the Lugar-style give+receive
+         blend the profile display uses. Two disclosed limits keep the
+         weight modest: HVW's evidence is a robust association, not a
+         clean causal identification (their own framing), and the signal
+         is an ANTECEDENT of effectiveness rather than realized output —
+         realized advancement is already component 1's job. No
+         seat-safety scaling here, unlike the old Constituent Alignment
+         breadth component: in an effectiveness dimension, low bipartisan
+         attraction predicts lower lawmaking success regardless of how
+         safe the member's seat is. Note components 2 and 3 are both
+         cosponsorship-network-derived (centrality vs. cross-party
+         share) — kept at a combined 40% for that reason; re-check their
+         live correlation after the first full run, same standing check
+         as the v6.8 r=-0.76 finding.
+
+    Components apply Bayesian shrinkage toward 50 when data is
     sparse, preventing extreme scores from thin evidence — including a
     confirmed-zero-bills record after real tenure, which is a weak but
     real negative signal, not the same as a freshman with no data yet
@@ -2823,6 +3179,7 @@ def _calc_legislative_effectiveness(
     """
     return _legislative_effectiveness_core(
         sponsored_bills, leadership_score, party, years_in_office,
+        attracted_bipartisanship,
     )["score"]
 
 
@@ -2831,6 +3188,7 @@ def _legislative_effectiveness_core(
     leadership_score: float | None = None,
     party: str | None = None,
     years_in_office: float | None = None,
+    attracted_bipartisanship: float | None = None,
 ) -> dict:
     """Same math as _calc_legislative_effectiveness, returning every
     intermediate value alongside the final score. Single implementation,
@@ -2867,16 +3225,48 @@ def _legislative_effectiveness_core(
         f"{leadership_conf:.0%} ({years_in_office or 0:.1f} of 6 years)"
     )
 
-    if not sponsored_bills and not (leadership_score and leadership_score > 0) and les_score == 50.0:
+    if (
+        not sponsored_bills
+        and not (leadership_score and leadership_score > 0)
+        and attracted_bipartisanship is None
+        and les_score == 50.0
+    ):
         return {"score": 50, "components": [], "note": "No sponsored-bill or leadership data — neutral default."}
 
-    score = clamp(les_score * 0.70 + leadership_pct * 0.30)
-    return {
-        "score": score,
-        "components": [
-            {"label": "Bill significance & advancement (V&W-based)", "weight": 0.70,
-             "score": round(les_score, 1), "detail": les_detail},
-            {"label": "Legislative leadership", "weight": 0.30,
-             "score": round(leadership_pct, 1), "detail": leadership_detail},
-        ],
-    }
+    # Bipartisan coalition attraction (v6.11 — see the docstring above for
+    # the HVW 2023 rationale and disclosed limits). Cohort-median-
+    # normalized like the leadership percentile: the chamber-median
+    # attractor of cross-party cosponsors scores 50. Missing data skips
+    # the component and reverts to the exact pre-v6.11 70/30 split —
+    # never scored neutral, matching how this dimension's own
+    # missing-data note above treats absent signals.
+    if attracted_bipartisanship is not None:
+        coalition_pct = min(max(attracted_bipartisanship, 0.0), 1.0) * 100
+        les_weight, leadership_weight, coalition_weight = 0.60, 0.25, 0.15
+    else:
+        coalition_pct = 0.0
+        les_weight, leadership_weight, coalition_weight = 0.70, 0.30, 0.0
+
+    score = clamp(
+        les_score * les_weight
+        + leadership_pct * leadership_weight
+        + coalition_pct * coalition_weight
+    )
+    components = [
+        {"label": "Bill significance & advancement (V&W-based)", "weight": les_weight,
+         "score": round(les_score, 1), "detail": les_detail},
+        {"label": "Legislative leadership", "weight": leadership_weight,
+         "score": round(leadership_pct, 1), "detail": leadership_detail},
+    ]
+    if coalition_weight > 0:
+        components.append({
+            "label": "Bipartisan coalition attraction",
+            "weight": coalition_weight,
+            "score": round(coalition_pct, 1),
+            "detail": (
+                f"cross-party share of cosponsors attracted to own bills, "
+                f"chamber-median-normalized {attracted_bipartisanship:.0%} "
+                "(median attractor = 50)"
+            ),
+        })
+    return {"score": score, "components": components}

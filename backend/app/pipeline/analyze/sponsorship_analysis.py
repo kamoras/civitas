@@ -447,6 +447,7 @@ def compute_bipartisanship_scores(
     cosponsors_map: dict[str, list[dict]],
     member_parties: dict[str, str],
     min_interactions: int = 5,
+    direction: str = "both",
 ) -> dict[str, float]:
     """Cross-party coalition breadth from cosponsorship behavior.
 
@@ -464,18 +465,36 @@ def compute_bipartisanship_scores(
     aisle shows engagement beyond the member's base (Harbridge 2015,
     "Is Bipartisanship Dead?", Cambridge UP).
 
+    ``direction`` selects which side(s) feed the rate:
+      * "both" (default): the Lugar-style blend above — the display/
+        profile measure this function has always computed.
+      * "receive": only the receiving side — of the cosponsors a member
+        attracts to their OWN bills, what share come from the other
+        party. This is the specific construct Harbridge-Yong, Volden &
+        Wiseman (2023, "The Bipartisan Path to Effective Lawmaking,"
+        J. Politics 85:3) show predicts legislative effectiveness: "it
+        is the attraction of bipartisan cosponsors, rather than the
+        offer of bipartisan cosponsorships, that matters." Used by
+        Legislative Effectiveness's coalition-attraction component
+        (score_calculator), which must not cite HVW's finding while
+        quietly measuring a blend they explicitly distinguish it from.
+
     Scores are normalized to the cohort median (median -> 0.5, 2x the
     median or better -> 1.0), which makes the measure symmetric across
     parties and majority status without any fixed constant: the
-    normalization is recomputed from the observed cohort every run.
+    normalization is recomputed from the observed cohort every run —
+    per direction, since "both" and "receive" rates have genuinely
+    different cohort distributions.
     Members of neither major party are assigned the side they cosponsor
     with most (caucus inference, consistent with normalize_votes);
     members with fewer than ``min_interactions`` observed interactions
-    are omitted (callers treat missing as neutral, and the confidence
-    grade reflects the thin data).
+    in the selected direction are omitted (callers treat missing as
+    neutral, and the confidence grade reflects the thin data).
 
     Returns bioguideId -> [0, 1].
     """
+    if direction not in ("both", "receive"):
+        raise ValueError(f"direction must be 'both' or 'receive', got {direction!r}")
     def _norm_party(p: str | None) -> str | None:
         if not p:
             return None
@@ -537,10 +556,11 @@ def compute_bipartisanship_scores(
             continue
         cross = 0
         total = 0
-        gt = give_total.get(bio, 0)
-        if gt:
-            cross += give_cross_r.get(bio, 0) if side == "D" else give_cross_d.get(bio, 0)
-            total += gt
+        if direction == "both":
+            gt = give_total.get(bio, 0)
+            if gt:
+                cross += give_cross_r.get(bio, 0) if side == "D" else give_cross_d.get(bio, 0)
+                total += gt
         rt = recv_total.get(bio, 0)
         if rt:
             cross += recv_from_r.get(bio, 0) if side == "D" else recv_from_d.get(bio, 0)

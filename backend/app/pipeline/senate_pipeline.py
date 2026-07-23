@@ -334,6 +334,8 @@ def upsert_senator(db: Session, data: dict) -> None:
         existing.leadership_score = ls if ls is not None else None
         bs = data.get("bipartisanshipScore")
         existing.bipartisanship_score = bs if bs is not None else None
+        abs_score = data.get("attractedBipartisanshipScore")
+        existing.attracted_bipartisanship_score = abs_score if abs_score is not None else None
         ids = data.get("ideologyScore")
         existing.ideology_score = ids if ids is not None else None
         existing.sponsorship_description = data.get("sponsorshipDescription") or ""
@@ -1542,8 +1544,22 @@ async def run_senate_pipeline(
         )
         from app.pipeline.analyze.score_calculator import write_party_ideology_bounds
         write_party_ideology_bounds("senate", ideology_bounds_by_party)
+        # Refresh this chamber's DW-NOMINATE ideal points from Voteview
+        # (position-congruence component, score_calculator v6.11).
+        # Best-effort: never raises; a fetch/gate failure keeps the last
+        # good /data/member_ideal_points.json section.
+        from app.pipeline.fetch.voteview import refresh_member_ideal_points
+        await refresh_member_ideal_points("senate", settings.CURRENT_CONGRESS)
         bipartisanship_scores = compute_bipartisanship_scores(
             all_bills_for_analysis, cosponsors_map, senator_party_map,
+        )
+        # Receive-only variant for Legislative Effectiveness's coalition-
+        # attraction component (score_calculator v6.11): HVW 2023's
+        # effectiveness finding is specifically about ATTRACTING cross-party
+        # cosponsors, so LE must not consume the give+receive blend above.
+        attracted_bipartisanship_scores = compute_bipartisanship_scores(
+            all_bills_for_analysis, cosponsors_map, senator_party_map,
+            direction="receive",
         )
         logger.info(
             "Sponsorship analysis: %d leadership, %d ideology, %d bipartisanship scores",
@@ -1666,6 +1682,7 @@ async def run_senate_pipeline(
                         "campaignPromises": platform_data.get("campaignPromises", []),
                         "leadershipScore": leadership_scores.get(bio_id_for_score),
                         "bipartisanshipScore": bipartisanship_scores.get(bio_id_for_score),
+                        "attractedBipartisanshipScore": attracted_bipartisanship_scores.get(bio_id_for_score),
                         "sponsoredBills": prepared.get("sponsoredBills", []),
                         "ideologyScore": ideology_scores.get(bio_id_for_score),
                     }
@@ -1799,6 +1816,8 @@ async def run_senate_pipeline(
                     result["leadershipScore"] = round(l_score, 4) if l_score is not None else None
                     b_score = bipartisanship_scores.get(bio_id)
                     result["bipartisanshipScore"] = round(b_score, 4) if b_score is not None else None
+                    ab_score = attracted_bipartisanship_scores.get(bio_id)
+                    result["attractedBipartisanshipScore"] = round(ab_score, 4) if ab_score is not None else None
                     result["ideologyScore"] = round(i_score, 4) if i_score is not None else None
                     if l_score is not None and i_score is not None:
                         result["sponsorshipDescription"] = describe_senator_position(

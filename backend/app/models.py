@@ -121,6 +121,13 @@ class Senator(Base):
     leadership_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     ideology_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     bipartisanship_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Receive-only cross-party cosponsorship rate (share of cosponsors
+    # attracted to own bills from the other party, cohort-median-normalized)
+    # — feeds Legislative Effectiveness's bipartisan-coalition-attraction
+    # component (score_calculator v6.11; Harbridge-Yong/Volden/Wiseman 2023).
+    # bipartisanship_score above stays the Lugar-style give+receive blend
+    # used for profile display.
+    attracted_bipartisanship_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     sponsorship_description: Mapped[str] = mapped_column(String, default="")
 
     website_url: Mapped[str] = mapped_column(String, default="")
@@ -339,6 +346,13 @@ class Representative(Base):
     leadership_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     ideology_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     bipartisanship_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Receive-only cross-party cosponsorship rate (share of cosponsors
+    # attracted to own bills from the other party, cohort-median-normalized)
+    # — feeds Legislative Effectiveness's bipartisan-coalition-attraction
+    # component (score_calculator v6.11; Harbridge-Yong/Volden/Wiseman 2023).
+    # bipartisanship_score above stays the Lugar-style give+receive blend
+    # used for profile display.
+    attracted_bipartisanship_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     sponsorship_description: Mapped[str] = mapped_column(String, default="")
 
     website_url: Mapped[str] = mapped_column(String, default="")

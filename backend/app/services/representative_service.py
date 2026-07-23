@@ -514,6 +514,8 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
     existing.leadership_score = ls if ls is not None else existing.leadership_score
     bs = rep_data.get("bipartisanshipScore")
     existing.bipartisanship_score = bs if bs is not None else existing.bipartisanship_score
+    abs_score = rep_data.get("attractedBipartisanshipScore")
+    existing.attracted_bipartisanship_score = abs_score if abs_score is not None else existing.attracted_bipartisanship_score
     ids = rep_data.get("ideologyScore")
     existing.ideology_score = ids if ids is not None else existing.ideology_score
     existing.sponsorship_description = rep_data.get("sponsorshipDescription") or existing.sponsorship_description
