@@ -6,7 +6,7 @@ itself (only classify_bill_by_reference/reference_corpus_label_share as
 mocked black boxes elsewhere). These pin the cache's own behavior.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pytest
