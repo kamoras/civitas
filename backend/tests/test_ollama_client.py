@@ -190,6 +190,140 @@ class TestStreamingCacheHelpers:
         assert second["summary"] == "B"
 
 
+class _FakeStreamResponse:
+    def __init__(self, lines):
+        self._lines = lines
+
+    def raise_for_status(self):
+        pass
+
+    async def aiter_lines(self):
+        for line in self._lines:
+            yield line
+
+
+class _FakeStreamCtx:
+    def __init__(self, lines):
+        self._lines = lines
+
+    async def __aenter__(self):
+        return _FakeStreamResponse(self._lines)
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+class _FakeAsyncClient:
+    def __init__(self, lines):
+        self._lines = lines
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    def stream(self, method, url, **kwargs):
+        return _FakeStreamCtx(self._lines)
+
+
+def _patched_httpx(lines):
+    """Patch httpx.AsyncClient so _stream_llama_server/_stream_ollama read
+    canned wire-format lines instead of making a real network call — same
+    role _patched_call plays for the non-streaming backend callers above."""
+    return patch(
+        "app.pipeline.analyze.ollama_client.httpx.AsyncClient",
+        side_effect=lambda **kw: _FakeAsyncClient(lines),
+    )
+
+
+class TestStreamLlamaServer:
+    async def test_yields_deltas_and_stops_at_done_sentinel(self):
+        lines = [
+            'data: {"choices":[{"delta":{"content":"Hello"}}]}',
+            'data: {"choices":[{"delta":{"content":" world"}}]}',
+            "data: [DONE]",
+            # A line after [DONE] must never be reached.
+            'data: {"choices":[{"delta":{"content":"unreachable"}}]}',
+        ]
+        with _patched_httpx(lines):
+            deltas = [d async for d in ollama_client._stream_llama_server("sys", "prompt", 512, 4096, 120)]
+        assert deltas == ["Hello", " world"]
+
+    async def test_skips_non_data_lines(self):
+        lines = [
+            "",
+            ": keep-alive comment",
+            'data: {"choices":[{"delta":{"content":"ok"}}]}',
+            "data: [DONE]",
+        ]
+        with _patched_httpx(lines):
+            deltas = [d async for d in ollama_client._stream_llama_server("sys", "prompt", 512, 4096, 120)]
+        assert deltas == ["ok"]
+
+
+class TestStreamOllama:
+    async def test_yields_deltas_and_stops_at_done_true(self):
+        lines = [
+            '{"response":"Hi","done":false}',
+            '{"response":" there","done":false}',
+            '{"response":"","done":true}',
+            '{"response":"unreachable","done":false}',
+        ]
+        with _patched_httpx(lines):
+            deltas = [
+                d async for d in ollama_client._stream_ollama("sys", "prompt", "some-model", 512, 4096, 120)
+            ]
+        assert deltas == ["Hi", " there"]
+
+    async def test_blank_lines_skipped(self):
+        lines = ["", '{"response":"x","done":true}']
+        with _patched_httpx(lines):
+            deltas = [
+                d async for d in ollama_client._stream_ollama("sys", "prompt", "some-model", 512, 4096, 120)
+            ]
+        assert deltas == ["x"]
+
+    async def test_truncation_logs_warning_but_still_yields_partial_output(self, caplog):
+        lines = ['{"response":"partial","done":true,"done_reason":"length"}']
+        with _patched_httpx(lines):
+            deltas = [
+                d async for d in ollama_client._stream_ollama("sys", "prompt", "some-model", 512, 4096, 120)
+            ]
+        assert deltas == ["partial"]
+        assert "truncated" in caplog.text
+
+
+class TestStreamLlmDispatch:
+    async def test_dispatches_to_llama_server_backend(self):
+        lines = ['data: {"choices":[{"delta":{"content":"a"}}]}', "data: [DONE]"]
+        with (
+            patch("app.pipeline.analyze.ollama_client.settings.LLM_BACKEND", "llama-server"),
+            _patched_httpx(lines),
+        ):
+            deltas = [d async for d in ollama_client.stream_llm(system_prompt="s", user_prompt="u")]
+        assert deltas == ["a"]
+
+    async def test_dispatches_to_ollama_backend(self):
+        lines = ['{"response":"b","done":true}']
+        with (
+            patch("app.pipeline.analyze.ollama_client.settings.LLM_BACKEND", "ollama"),
+            _patched_httpx(lines),
+        ):
+            deltas = [d async for d in ollama_client.stream_llm(system_prompt="s", user_prompt="u")]
+        assert deltas == ["b"]
+
+
+class TestCacheHelperExceptionHandling:
+    def test_get_cached_result_returns_none_on_backend_error(self, db_session):
+        with patch("app.pipeline.analyze.ollama_client.SessionLocal", side_effect=RuntimeError("db down")):
+            assert ollama_client.get_cached_llm_result("v1", {"id": 1}) is None
+
+    def test_set_cached_result_swallows_backend_error(self, db_session):
+        with patch("app.pipeline.analyze.ollama_client.SessionLocal", side_effect=RuntimeError("db down")):
+            ollama_client.set_cached_llm_result("v1", {"id": 1}, {"summary": "s"})  # must not raise
+
+
 class TestExtractJsonRobustness:
     def test_stray_bracket_prefix_before_object(self):
         from app.pipeline.analyze.ollama_client import extract_json
