@@ -784,12 +784,22 @@ async def admin_pipeline_history(
         for r in supplementary_runs
     ]
 
-    combined = sorted(
+    # Each pipeline type's own query above is already capped at `limit` —
+    # don't re-truncate the interleaved union down to that same `limit`.
+    # Senate/House run far more often than Stock Trades/Supplementary (daily
+    # vs. every few days), so a shared cap on the combined list silently
+    # starves the infrequent ones out of the visible history entirely once
+    # enough Senate/House runs accumulate (found 2026-07-23: Stock Trades'
+    # only entry in the last 20 combined rows was one run-length away from
+    # falling off, inflated further by the deploy-race bug's repeated
+    # stale/failed Senate retries — see check-and-deploy.sh). Returning the
+    # full union (bounded at 4x `limit` by the per-type queries) guarantees
+    # every pipeline type keeps its own most recent `limit` runs visible.
+    return sorted(
         senate_entries + house_entries + stock_entries + supplementary_entries,
         key=lambda x: x["startedAt"] or "",
         reverse=True,
     )
-    return combined[:limit]
 
 
 @router.post("/pipeline/trigger", dependencies=[Depends(require_admin)])
