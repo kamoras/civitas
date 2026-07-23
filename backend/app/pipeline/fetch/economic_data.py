@@ -98,19 +98,53 @@ def calculate_jobs_created(
     term_start_year: int,
     term_end_year: int,
 ) -> float | None:
-    """Calculate net jobs created during a presidential term.
+    """Calculate net jobs attributed to a presidential term, in millions.
 
-    Uses January employment figures at start and end of term.
-    Returns millions of jobs.
+    Baseline is January of the term's SECOND calendar year, not
+    inauguration January (2026-07 fix, platform-review O9): the GDP
+    component of the same Effectiveness score excludes year 1 per
+    Blinder & Watson (2016) — outcomes in a president's first year
+    primarily reflect the predecessor's policy — but jobs were counted
+    from inauguration month, so the two components of one score used
+    opposite attribution rules. Both now start the attribution clock at
+    the same point. Endpoint stays January of the term-end year
+    (matching calculate_gdp_adjusted, which also does not extend into
+    the successor's lag window — conservative and symmetric with the
+    GDP series' shape).
+
+    For a term still in progress there is no term-end January yet — the
+    old code returned None, silently scoring the incumbent on a
+    different basis (no jobs component) than every completed term in
+    the same ranking (the other half of O9). The endpoint now falls
+    back to the latest available month in the series: the headline
+    nonfarm series (CES0000000001) is seasonally adjusted, so a
+    non-January endpoint is comparable, and the per-year normalization
+    in the scorer already uses elapsed (not full) term years for an
+    in-progress term.
     """
     jan_values: dict[int, float] = {}
+    latest_val: float | None = None
+    latest_key: tuple[int, int] = (0, 0)
     for entry in data:
-        if entry.get("period") == "M01":
-            year = int(entry["year"])
+        period = entry.get("period", "")
+        if not period.startswith("M"):
+            continue
+        year = int(entry["year"])
+        month = int(period[1:])
+        if period == "M01":
             jan_values[year] = float(entry["value"])
+        if (year, month) > latest_key:
+            latest_key = (year, month)
+            latest_val = float(entry["value"])
 
-    start_val = jan_values.get(term_start_year)
+    baseline_year = term_start_year + 1
+    start_val = jan_values.get(baseline_year)
     end_val = jan_values.get(term_end_year)
+    if end_val is None:
+        # In-progress term (or a series gap at term end): use the latest
+        # available month, provided it is at or past the baseline.
+        if latest_val is not None and latest_key >= (baseline_year, 1):
+            end_val = latest_val
 
     if start_val is None or end_val is None:
         return None
