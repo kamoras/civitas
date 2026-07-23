@@ -698,6 +698,10 @@ export interface VectorDbStats {
   embeddingModel?: string;
   embeddingModelVersion?: string;
   embeddingDimensions?: number;
+  /** Model the SEARCH index was built with (sqlite-vec migration,
+   * 2026-07) — distinct from embeddingModel, which is the
+   * classification-side model. Empty until the first reindex completes. */
+  indexModelVersion?: string;
   learningStore?: LearningStoreStats;
   error?: string;
 }
