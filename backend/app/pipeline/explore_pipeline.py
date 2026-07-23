@@ -447,16 +447,14 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
         logger.info("Explore pipeline: embedding documents into vector store...")
         all_docs = db.query(ExploreDocument).all()
         try:
-            from app.pipeline.vector_store import get_chroma_client
-            _collection = get_chroma_client().get_or_create_collection(
-                name="explore_documents",
-            )
-            _already_embedded = set(_collection.get(include=[])["ids"])
+            from app.pipeline.vector_store import get_embedded_explore_ids
+
+            _already_embedded = get_embedded_explore_ids()
         except Exception:
             _already_embedded = set()
         all_docs = [
             d for d in all_docs
-            if str(d.id) not in _already_embedded or d.id in refreshed_ids
+            if d.id not in _already_embedded or d.id in refreshed_ids
         ]
         doc_dicts = [
             {

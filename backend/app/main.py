@@ -108,6 +108,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     loop.run_in_executor(None, _preload_embedding_model)
     asyncio.create_task(_bootstrap_explore())
 
+    # Rebuild the sqlite-vec explore index when missing or built by a
+    # different model (the 2026-07 chroma->sqlite-vec migration path, and
+    # any future index-model change). Spawns its own daemon thread;
+    # search reports "not ready" until it completes.
+    try:
+        from app.database import SessionLocal
+        from app.pipeline.vector_store import ensure_explore_index
+        ensure_explore_index(SessionLocal)
+    except Exception:
+        logging.getLogger(__name__).exception("Explore index check failed (non-fatal)")
+
     from app.api.visits import run_visit_consumer
     visit_consumer_task = asyncio.create_task(run_visit_consumer())
 

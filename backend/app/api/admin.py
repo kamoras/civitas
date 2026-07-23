@@ -234,43 +234,14 @@ def _collect_vector_db_stats(db: Session) -> dict:
     stats: dict = {}
     try:
         from app.pipeline.vector_store import (
-            get_chroma_client,
-            get_model_version,
-            EMBEDDING_MODEL_NAME,
             EMBEDDING_DIMENSIONS,
+            EMBEDDING_MODEL_NAME,
+            collection_stats,
+            get_model_version,
         )
-        chroma = get_chroma_client()
-        collections = chroma.list_collections()
-        total_vectors = 0
-        collection_details = []
-        for col in collections:
-            count = col.count()
-            total_vectors += count
-            meta = col.metadata or {}
-            detail: dict = {
-                "name": col.name,
-                "count": count,
-                "metadata": {k: str(v) for k, v in meta.items()} if meta else {},
-            }
-            if count > 0:
-                peek = col.peek(1)
-                if peek and peek.get("metadatas") and peek["metadatas"][0]:
-                    detail["sampleMetadataKeys"] = sorted(peek["metadatas"][0].keys())
-            collection_details.append(detail)
-
-        chroma_path = "/data/chroma"
-        chroma_size = 0
-        for dirpath, _, filenames in os.walk(chroma_path):
-            for f in filenames:
-                try:
-                    chroma_size += os.path.getsize(os.path.join(dirpath, f))
-                except OSError:
-                    pass
-
+        vec_stats = collection_stats()
         stats["status"] = "ok"
-        stats["totalVectors"] = total_vectors
-        stats["sizeBytes"] = chroma_size
-        stats["collections"] = collection_details
+        stats.update(vec_stats)
         stats["embeddingModel"] = EMBEDDING_MODEL_NAME
         stats["embeddingModelVersion"] = get_model_version()
         stats["embeddingDimensions"] = EMBEDDING_DIMENSIONS
@@ -863,14 +834,13 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
     """
     from app.models import ExploreDocument
     from app.pipeline.vector_store import (
-        get_chroma_client,
-        embed_explore_documents,
         _write_model_version,
+        clear_explore,
+        embed_explore_documents,
     )
 
-    client = get_chroma_client()
     try:
-        client.delete_collection(name="explore_documents")
+        clear_explore()
     except Exception:
         pass
 

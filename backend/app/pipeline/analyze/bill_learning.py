@@ -99,33 +99,18 @@ class _ReferenceCorpusCache:
             return self.embeddings, self.labels
 
         try:
-            from app.pipeline.vector_store import get_chroma_client
-            client = get_chroma_client()
-            collection = client.get_collection(name="bills")
+            from app.pipeline.vector_store import get_bill_reference
 
-            result = collection.get(
-                include=["embeddings", "metadatas"],
-                limit=5000,
-            )
-            if not result or not result["ids"]:
+            embs, labels = get_bill_reference(limit=5000)
+            if embs is None:
                 return None, []
-
-            embs = np.array(result["embeddings"])
-            labels = [
-                (m.get("policyArea") or "PROCEDURAL")
-                for m in result["metadatas"]
-            ]
-
-            norms = np.linalg.norm(embs, axis=1, keepdims=True)
-            norms[norms == 0] = 1.0
-            embs = embs / norms
 
             self.embeddings = embs
             self.labels = labels
 
             label_dist = Counter(labels)
             logger.info(
-                "Loaded %d reference bills from ChromaDB: %s",
+                "Loaded %d reference bills from the vector store: %s",
                 len(labels),
                 ", ".join(f"{k}={v}" for k, v in label_dist.most_common(8)),
             )
@@ -324,16 +309,11 @@ def _purge_reference_entries(bill_ids: list[str]) -> None:
     if not bill_ids:
         return
     try:
-        from app.pipeline.vector_store import get_chroma_client
-        client = get_chroma_client()
-        collection = client.get_collection(name="bills")
-        existing = collection.get(ids=bill_ids)
-        ids_to_delete = [
-            bid for bid in existing["ids"]
-        ] if existing and existing["ids"] else []
-        if ids_to_delete:
-            collection.delete(ids=ids_to_delete)
-            logger.info("Purged %d stale entries from reference corpus", len(ids_to_delete))
+        from app.pipeline.vector_store import purge_bills
+
+        removed = purge_bills(bill_ids)
+        if removed:
+            logger.info("Purged %d stale entries from reference corpus", removed)
     except Exception:
         logger.debug("Failed to purge stale reference-corpus entries", exc_info=True)
 
