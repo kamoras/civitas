@@ -6,7 +6,7 @@ itself (only classify_bill_by_reference/reference_corpus_label_share as
 mocked black boxes elsewhere). These pin the cache's own behavior.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -38,32 +38,26 @@ class TestReferenceCorpusCache:
         cache = _ReferenceCorpusCache()
         cache.embeddings = np.array([[1.0, 0.0]])
         cache.labels = ["HEALTHCARE"]
-        with patch("app.pipeline.vector_store.get_chroma_client") as mock_client:
+        with patch("app.pipeline.vector_store.get_bill_reference") as mock_ref:
             embs, labels = cache.load()
-            mock_client.assert_not_called()
+            mock_ref.assert_not_called()
         assert labels == ["HEALTHCARE"]
 
-    def test_load_fetches_and_normalizes_from_chromadb(self):
+    def test_load_fetches_from_vector_store(self):
         cache = _ReferenceCorpusCache()
-        mock_collection = MagicMock()
-        mock_collection.get.return_value = {
-            "ids": ["S.1", "S.2"],
-            "embeddings": [[3.0, 4.0], [1.0, 0.0]],
-            "metadatas": [{"policyArea": "HEALTHCARE"}, {"policyArea": None}],
-        }
-        mock_client = MagicMock()
-        mock_client.get_collection.return_value = mock_collection
-        with patch("app.pipeline.vector_store.get_chroma_client", return_value=mock_client):
+        # get_bill_reference returns already-normalized embeddings + labels
+        # (normalization moved into the store with the sqlite-vec migration).
+        stored = (np.array([[0.6, 0.8], [1.0, 0.0]]), ["HEALTHCARE", "PROCEDURAL"])
+        with patch("app.pipeline.vector_store.get_bill_reference", return_value=stored):
             embs, labels = cache.load()
 
-        assert labels == ["HEALTHCARE", "PROCEDURAL"]  # missing policyArea defaults
-        # [3, 4] normalized to unit length -> [0.6, 0.8]
+        assert labels == ["HEALTHCARE", "PROCEDURAL"]
         assert embs[0] == pytest.approx([0.6, 0.8])
         assert cache.is_loaded is True
 
     def test_load_returns_empty_on_missing_collection(self):
         cache = _ReferenceCorpusCache()
-        with patch("app.pipeline.vector_store.get_chroma_client", side_effect=Exception("no collection")):
+        with patch("app.pipeline.vector_store.get_bill_reference", side_effect=Exception("no corpus")):
             embs, labels = cache.load()
         assert embs is None
         assert labels == []

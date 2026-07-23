@@ -93,7 +93,7 @@ from app.pipeline.analyze.party_platform import clear_platform_cache, initialize
 from app.pipeline.vector_store import (
     check_model_version,
     embed_bills,
-    get_chroma_client,
+    clear_bills,
     invalidate_on_model_change,
     _write_model_version,
 )
@@ -496,11 +496,8 @@ def _clear_analysis_artifacts(db: Session) -> None:
 
     n_bills = 0
     try:
-        client = get_chroma_client()
         try:
-            coll = client.get_collection(name="bills")
-            n_bills = coll.count()
-            client.delete_collection(name="bills")
+            n_bills = clear_bills()
         except Exception:
             logger.debug("No existing bills collection to clear")
     except Exception:
