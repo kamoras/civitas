@@ -103,8 +103,10 @@ class TestRelatedBillInternalLinks:
         resp = _build_issue_response(issue, db_session)
 
         assert resp["relatedBills"][0]["internalUrl"] == "/bills/HR.22"
-        # congress.gov URL stays available as the fact-check fallback
-        assert "congress.gov" in resp["relatedBills"][0]["url"]
+        # stored congress.gov URL stays available verbatim as the fact-check fallback
+        assert resp["relatedBills"][0]["url"] == (
+            "https://www.congress.gov/bill/119th-congress/house-bill/22"
+        )
 
     def test_unhosted_bill_has_no_internal_url(self, db_session):
         from app.api.action import _build_issue_response
