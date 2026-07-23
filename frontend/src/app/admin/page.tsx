@@ -1092,7 +1092,7 @@ function VisitorStats({ token }: { token: string }) {
       <div className="p-4">
         <div className="flex items-baseline justify-between mb-4">
           <span className="text-matrix-green/50 text-[10px] font-pixel tracking-wider">
-            UNIQUE VISITORS TODAY
+            UNIQUE VISITORS TODAY (SO FAR)
           </span>
           <span className="text-matrix-green text-2xl font-terminal tabular-nums">
             {todayCount}
