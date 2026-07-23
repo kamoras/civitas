@@ -245,6 +245,21 @@ def _signatures_match(sig_a: set[str], sig_b: set[str]) -> bool:
     )
 
 
+def _is_exact_content_duplicate(
+    title: str, facts: list, cand_title: str, cand_facts: list,
+) -> bool:
+    """Byte-identical title+facts always means the same issue, checked
+    BEFORE signature overlap. _signatures_match requires >=
+    _SIGNATURE_MATCH_MIN_SHARED (2) tokens even for an exact match, but a
+    sparse, single-entity story (signature {'trump'}, nothing else
+    extractable) can never clear that floor — even against itself. Live
+    2026-07-23 bug: the same source article reprocessed an hour later
+    produced a second row (ids 420/421, "Republicans introduce crypto
+    legislation...") with title/facts equal but a 1-token signature, so it
+    silently created a duplicate instead of matching."""
+    return title == cand_title and facts == cand_facts
+
+
 _SYSTEM_PROMPT = """\
 You are a nonpartisan civic information analyst. You present facts without \
 opinion and help citizens engage with their government regardless of their \
@@ -3782,6 +3797,9 @@ def _run_refresh(db: Session) -> int:
                 except (ValueError, TypeError):
                     cand_facts = []
                 cand_sig = _issue_signature(candidate.title or "", cand_facts)
+                if _is_exact_content_duplicate(title, facts, candidate.title, cand_facts):
+                    match = candidate
+                    break
                 if _signatures_match(new_sig, cand_sig):
                     match = candidate
                     break
