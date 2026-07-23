@@ -123,7 +123,12 @@ _US_CIVIC_PROTOTYPES = [
     "US healthcare Medicare Medicaid insurance federal program policy",
 ]
 
-POLICY_RELEVANCE_THRESHOLD = 0.22
+# Measured under the similarity model (2026-07-22, real July articles):
+# civic headlines score 0.354-0.583 against the prototypes, non-civic
+# (World Cup / pop tour / recipes) 0.027-0.053 — threshold sits mid-gap
+# with wide margin on both sides. (Was 0.22 under the retrieval model,
+# where the same gap was paper-thin.)
+POLICY_RELEVANCE_THRESHOLD = 0.20
 CLUSTER_TITLE_THRESHOLD = 0.40
 # Floor of the self-calibrating pass-2 merge scan (see _cluster_articles).
 CLUSTER_CENTROID_MERGE_THRESHOLD = 0.20
@@ -141,9 +146,14 @@ MAX_ISSUES = 4
 # mechanically enforced.
 ACTION_CENTER_PROMPT_VERSION = "action-v21"
 
-TOPIC_CHANGE_THRESHOLD = 0.82  # cosine similarity below which a rank slot is considered a new topic
-# Raw cosine similarity between ANY two news headlines is ~0.74+ due to domain clustering.
-# Same-topic titles score 0.88-0.95; different topics score 0.72-0.78. Threshold at 0.82.
+# No-signature fallback for topic matching (rows with no stored facts —
+# rare). Measured under the similarity model (2026-07-22): a reworded
+# same headline scores 0.823, a different-story same-vocab pair 0.552 —
+# 0.65 splits them. Signature overlap (see _signatures_match) remains
+# the primary same-story decider; this fires only when signatures are
+# unavailable. (The old 0.82 was calibrated to the retrieval model's
+# compressed 0.74+ band and is meaningless on this scale.)
+TOPIC_CHANGE_THRESHOLD = 0.65
 
 
 def _full_story_should_invalidate(
@@ -212,11 +222,16 @@ def _issue_signature(title: str, facts: list[str]) -> set[str]:
 _SIGNATURE_MATCH_MIN_CONTAINMENT = 0.35
 _SIGNATURE_MATCH_MIN_SHARED = 2
 
-# Candidate floor for topic matching by title similarity. Below this, two
-# titles aren't even about similar subjects (measured: fully unrelated
-# stories score ~0.70; see _run_refresh's matching loop for how signature
-# overlap — not this floor — decides same-story).
-_TOPIC_MATCH_CANDIDATE_FLOOR = 0.70
+# Candidate floor for topic matching by title similarity — a compute
+# guard, not a decider (signature overlap decides same-story; see
+# _run_refresh's matching loop). Measured under the similarity model
+# (2026-07-22, real production titles): SAME-story pairs score as low as
+# +0.134 (the cyclospora pair) while a fully unrelated pair scores
+# +0.082 — title cosine cannot decide identity under ANY model tested
+# (a different-story same-vocab pair outscored every same-story pair at
+# +0.552), which is exactly why signatures carry the decision. The floor
+# only excludes clearly-unrelated candidates from signature comparison.
+_TOPIC_MATCH_CANDIDATE_FLOOR = 0.10
 
 
 def _signatures_match(sig_a: set[str], sig_b: set[str]) -> bool:
@@ -341,6 +356,19 @@ def _embed_texts(texts: list[str]) -> np.ndarray:
     return model.encode(texts, show_progress_bar=False, normalize_embeddings=True)
 
 
+def _embed_texts_sim(texts: list[str]) -> np.ndarray:
+    """Embeddings for the SYMMETRIC-similarity gates that were re-measured
+    under the similarity model (see vector_store.get_similarity_model's
+    docstring for scope discipline): policy relevance, trending mask,
+    explore-doc re-rank, topic-candidate/title-dedup sims. Centered-space
+    clustering gates and disambiguation stay on _embed_texts until their
+    own measurement pass."""
+    from app.pipeline.vector_store import get_similarity_model
+
+    model = get_similarity_model()
+    return model.encode(texts, show_progress_bar=False, normalize_embeddings=True)
+
+
 def _resolve_url(url: str, timeout: float = 6.0) -> str:
     """Follow Google News RSS redirect to the actual article URL.
 
@@ -402,11 +430,11 @@ def _filter_policy_relevant(
     if not specific:
         return []
 
-    prototype_embeddings = _embed_texts(_POLICY_PROTOTYPES)
-    us_civic_embeddings = _embed_texts(_US_CIVIC_PROTOTYPES)
+    prototype_embeddings = _embed_texts_sim(_POLICY_PROTOTYPES)
+    us_civic_embeddings = _embed_texts_sim(_US_CIVIC_PROTOTYPES)
 
     texts = [f"{a.title}. {a.summary[:200]}" for a in specific]
-    article_embeddings = _embed_texts(texts)
+    article_embeddings = _embed_texts_sim(texts)
 
     # Max-over-prototypes: an article is relevant if it scores high against ANY
     # policy prototype, not just the average direction. The mean collapses 18
@@ -642,9 +670,9 @@ def _compute_trending_boost(
 
     # Filter trending topics to US policy before computing boost so sports/
     # entertainment topics can't inflate scores for unrelated clusters.
-    prototype_embeddings = _embed_texts(_POLICY_PROTOTYPES)
+    prototype_embeddings = _embed_texts_sim(_POLICY_PROTOTYPES)
     trending_texts_all = [t.title for t in trending]
-    trending_embeddings_all = _embed_texts(trending_texts_all)
+    trending_embeddings_all = _embed_texts_sim(trending_texts_all)
     policy_scores = (trending_embeddings_all @ prototype_embeddings.T).max(axis=1)
     policy_mask = policy_scores >= POLICY_RELEVANCE_THRESHOLD
     policy_trending = [t for t, keep in zip(trending, policy_mask) if keep]
@@ -656,12 +684,12 @@ def _compute_trending_boost(
         len(policy_trending), len(trending),
     )
     trending_texts = [t.title for t in policy_trending]
-    trending_embeddings = _embed_texts(trending_texts)
+    trending_embeddings = _embed_texts_sim(trending_texts)
 
     boosts: list[float] = []
     for cluster in clusters:
         cluster_texts = [f"{a.title}. {a.summary[:100]}" for a in cluster]
-        cluster_embeddings = _embed_texts(cluster_texts)
+        cluster_embeddings = _embed_texts_sim(cluster_texts)
         centroid = cluster_embeddings.mean(axis=0)
         centroid /= np.linalg.norm(centroid)
 
@@ -1615,18 +1643,20 @@ def _find_related_explore_docs(
 
     doc_texts = [r.get("title", "") for r in passed]
     try:
-        all_embs = _embed_texts([title] + doc_texts)
+        all_embs = _embed_texts_sim([title] + doc_texts)
         title_emb = all_embs[0]
         doc_embs = all_embs[1:]
         sims = np.array([float(np.dot(title_emb, d)) for d in doc_embs])
     except Exception:
         sims = np.zeros(len(passed))
 
-    # See _EXPLORE_DOC_MAX_DISTANCE's comment for how this was calibrated —
-    # raised from 0.40 (which real scores never approached; genuinely
-    # unrelated titles routinely scored 0.74-0.84) to sit just below the
-    # best real match found in the sample (0.783).
-    min_sim = 0.75
+    # Re-measured under the similarity model (2026-07-22, the same live
+    # cases that exposed the PROMESA/World Cup false anchor): genuine
+    # issue-doc matches score 0.467-0.776, unrelated floor-speech noise
+    # 0.128-0.183 — 0.33 sits mid-gap. (The old 0.75 was fit to the
+    # retrieval model's compressed band, where noise reached 0.84 and
+    # this bar still admitted the World Cup/PROMESA pair.)
+    min_sim = 0.33
 
     scored = sorted(
         zip(passed, sims),
@@ -3405,7 +3435,7 @@ def _run_refresh(db: Session) -> int:
         .all()
     )
     _recent_embs: "np.ndarray | None" = (
-        np.array(_embed_texts([i.title for i in _recent_issues]))
+        np.array(_embed_texts_sim([i.title for i in _recent_issues]))
         if _recent_issues else None
     )
     _matched_issue_ids: set[int] = set()  # existing IDs touched this run
@@ -3630,8 +3660,11 @@ def _run_refresh(db: Session) -> int:
         # similar to one already selected this run. Catches cases where two
         # article clusters were distinct enough to pass pre-LLM embedding
         # dedup (threshold 0.50) but the LLM distills them to the same headline.
-        title_emb = _embed_texts([title])[0]
-        if any(float(title_emb @ prev_emb) >= 0.92 for _, prev_emb in generated_title_embs):
+        title_emb = _embed_texts_sim([title])[0]
+        # 0.60 measured under the similarity model (2026-07-22): a
+        # reworded same headline scores 0.823, different stories 0.251.
+        # (Was 0.92 on the retrieval model's compressed scale.)
+        if any(float(title_emb @ prev_emb) >= 0.60 for _, prev_emb in generated_title_embs):
             logger.info(
                 "Skipping duplicate issue rank %d (title too similar to earlier issue): '%s'",
                 rank, title[:80],

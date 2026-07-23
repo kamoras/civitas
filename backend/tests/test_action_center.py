@@ -541,7 +541,7 @@ class TestFindRelatedExploreDocsGenericTitleFilter:
             ))
         db_session.commit()
 
-    @patch("app.pipeline.analyze.action_center._embed_texts")
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
     @patch("app.pipeline.analyze.action_center.search_explore_documents")
     def test_boilerplate_title_excluded_even_with_higher_raw_similarity(
         self, mock_search, mock_embed, db_session,
@@ -569,7 +569,7 @@ class TestFindRelatedExploreDocsGenericTitleFilter:
         assert 1 in ids
         assert 2 not in ids
 
-    @patch("app.pipeline.analyze.action_center._embed_texts")
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
     @patch("app.pipeline.analyze.action_center.search_explore_documents")
     def test_title_below_repeat_threshold_is_not_filtered(
         self, mock_search, mock_embed, db_session,
@@ -608,7 +608,7 @@ class TestExploreDocThresholds:
         ))
         db_session.commit()
 
-    @patch("app.pipeline.analyze.action_center._embed_texts")
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
     @patch("app.pipeline.analyze.action_center.search_explore_documents")
     def test_distance_at_old_threshold_now_rejected(self, mock_search, mock_embed, db_session):
         self._seed_doc(db_session, 1, "Certain Steel Products From China: Preliminary Results")
@@ -620,21 +620,21 @@ class TestExploreDocThresholds:
         result = _find_related_explore_docs("Sports story", "summary", [], db_session)
         assert result == []
 
-    @patch("app.pipeline.analyze.action_center._embed_texts")
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
     @patch("app.pipeline.analyze.action_center.search_explore_documents")
     def test_similarity_at_old_threshold_now_rejected(self, mock_search, mock_embed, db_session):
         self._seed_doc(db_session, 1, "Certain Steel Products From China: Preliminary Results")
         mock_search.return_value = [
             {"id": 1, "title": "Certain Steel Products From China: Preliminary Results", "distance": 0.5},
         ]
-        # cos_sim ~= 0.60 — well above the old 0.40 floor, well below the
-        # new 0.75 one.
-        mock_embed.return_value = np.array([[1.0, 0.0], [0.60, 0.80]])
+        # cos_sim ~= 0.25 — above zero, below the similarity-model bar
+        # (0.33, measured 2026-07: genuine matches 0.467+, noise <=0.183).
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.25, 0.968]])
 
         result = _find_related_explore_docs("Sports story", "summary", [], db_session)
         assert result == []
 
-    @patch("app.pipeline.analyze.action_center._embed_texts")
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
     @patch("app.pipeline.analyze.action_center.search_explore_documents")
     def test_genuine_close_match_survives_tightened_thresholds(self, mock_search, mock_embed, db_session):
         self._seed_doc(db_session, 1, "EO 14318: Accelerating Federal Permitting of Data Center Infrastructure")
@@ -690,7 +690,7 @@ class TestAdministrativeNoticeTitleFilter:
             ),
         ],
     )
-    @patch("app.pipeline.analyze.action_center._embed_texts")
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
     @patch("app.pipeline.analyze.action_center.search_explore_documents")
     def test_administrative_notice_rejected_despite_high_similarity(
         self, mock_search, mock_embed, issue_title, doc_title, db_session,
@@ -702,7 +702,7 @@ class TestAdministrativeNoticeTitleFilter:
         result = _find_related_explore_docs(issue_title, "summary", [], db_session)
         assert result == []
 
-    @patch("app.pipeline.analyze.action_center._embed_texts")
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
     @patch("app.pipeline.analyze.action_center.search_explore_documents")
     def test_notice_without_administrative_template_phrasing_is_kept(
         self, mock_search, mock_embed, db_session,
@@ -1093,3 +1093,78 @@ class TestGenerateFullStoryRelationshipGuard:
         assert len(calls) == 2  # first rejected, retry accepted
         assert "brother" not in story
         assert "family relationship" in str(calls[1]["user_prompt"])
+
+
+class TestSimilarityModelGates:
+    """2026-07 embedding-swap (step 2): the measured symmetric-similarity
+    gates run on the similarity model (see vector_store.
+    get_similarity_model). These exercise the swapped call sites with the
+    model patched — threshold values themselves were fit on real
+    measured distributions (see each constant's comment)."""
+
+    def _fake_model(self, vectors):
+        model = MagicMock()
+        model.encode.side_effect = vectors
+        return model
+
+    def test_embed_texts_sim_uses_similarity_model(self):
+        from app.pipeline.analyze.action_center import _embed_texts_sim
+
+        fake = MagicMock()
+        fake.encode.return_value = np.array([[1.0, 0.0]])
+        with patch("app.pipeline.vector_store.get_similarity_model", return_value=fake):
+            out = _embed_texts_sim(["hello"])
+        assert out.shape == (1, 2)
+        fake.encode.assert_called_once()
+
+    def test_policy_filter_separates_on_measured_scale(self):
+        from app.pipeline.analyze.action_center import _filter_policy_relevant
+
+        civic = _make_article("House approves Pentagon funding framework in narrow vote")
+        sports = _make_article("Spain defeats Argentina 1-0 in World Cup final")
+
+        def fake_embed(texts):
+            # Prototype-space stub reproducing the MEASURED similarity-model
+            # scale: civic headline ~0.38 vs prototypes, sports ~0.03.
+            if len(texts) > 2 and "Congress" in texts[0]:
+                return np.eye(len(texts), 4)[:, :4] if False else np.tile(np.array([1.0, 0.0]), (len(texts), 1))
+            out = []
+            for t in texts:
+                if "Pentagon" in t:
+                    out.append([0.38, 0.925])
+                else:
+                    out.append([0.03, 0.9995])
+            return np.array(out)
+
+        with patch("app.pipeline.analyze.action_center._embed_texts_sim", side_effect=fake_embed):
+            kept = _filter_policy_relevant([civic, sports])
+        assert [a.title for a, _ in kept] == [civic.title]
+
+    def test_trending_boost_runs_on_sim_model(self):
+        from app.pipeline.analyze.action_center import _compute_trending_boost
+        from app.pipeline.fetch.trending import TrendingTopic
+
+        def fake_embed(texts):
+            return np.tile(np.array([1.0, 0.0]), (len(texts), 1))
+
+        clusters = [[_make_article("Senate passes appropriations bill")]]
+        trending = [TrendingTopic(title="Senate appropriations fight", source="test")]
+        with patch("app.pipeline.analyze.action_center._embed_texts_sim", side_effect=fake_embed):
+            boosts = _compute_trending_boost(clusters, trending)
+        assert len(boosts) == 1
+        assert boosts[0] > 0
+
+
+def test_get_similarity_model_lazy_singleton():
+    from app.pipeline import vector_store
+
+    fake = MagicMock()
+    with patch.object(vector_store, "SentenceTransformer", return_value=fake) as ctor:
+        vector_store._similarity_model = None
+        try:
+            first = vector_store.get_similarity_model()
+            second = vector_store.get_similarity_model()
+        finally:
+            vector_store._similarity_model = None
+    assert first is fake and second is fake
+    ctor.assert_called_once_with(vector_store._SIMILARITY_MODEL_NAME)
