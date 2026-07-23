@@ -21,6 +21,15 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+# Next's standalone-output file tracer (@vercel/nft) follows require()
+# calls but not sharp's dlopen()'d libvips-cpp.so — verified live: sharp
+# 0.34.5's traced output happened to include it, 0.35.x's does not (empty
+# @img/sharp-libvips-linuxmusl-x64/lib/), so next/image silently breaks
+# at request time despite `docker build` succeeding. Copying @img
+# straight from deps (the un-traced, un-pruned npm ci output) sidesteps
+# the tracer gap instead of depending on it staying lucky across sharp
+# releases.
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules/@img ./node_modules/@img
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000
