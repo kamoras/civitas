@@ -27,7 +27,6 @@ Run (downloads models on first use; CPU is fine):
     cd backend && python3 scripts/evaluate_embedding_models.py
 """
 
-import numpy as np
 
 CANDIDATES = [
     # (model_name, notes)
