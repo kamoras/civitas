@@ -576,14 +576,79 @@ export interface ExploreDocumentSummary {
   impact: string;
 }
 
+// Mirrors backend/app/pipeline/analyze/prompts.py's parse_explore_document_summary —
+// same two markers, same split logic — so the frontend can re-derive
+// {summary, keyPoints, impact} from the raw accumulated stream text after
+// every chunk, not just once the stream completes.
+const KEY_POINTS_MARKER = "KEY POINTS:";
+const IMPACT_MARKER = "IMPACT:";
+
+export function parseExploreSummaryText(text: string): ExploreDocumentSummary {
+  const [summaryPart, rest = ""] = splitOnce(text, KEY_POINTS_MARKER);
+  const [keyPointsPart, impactPart = ""] = splitOnce(rest, IMPACT_MARKER);
+
+  const summary = summaryPart.replace(/^SUMMARY:/, "").trim();
+  const keyPoints = keyPointsPart
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("-"))
+    .map((line) => line.replace(/^-+/, "").trim());
+
+  return { summary, keyPoints, impact: impactPart.trim() };
+}
+
+function splitOnce(text: string, marker: string): [string, string?] {
+  const i = text.indexOf(marker);
+  if (i === -1) return [text, undefined];
+  return [text.slice(0, i), text.slice(i + marker.length)];
+}
+
 export async function fetchExploreDocument(id: number): Promise<ExploreDocumentDetail> {
   return requestJson(`${API_BASE}/explore/${id}`, "Document not found");
 }
 
-export async function fetchExploreDocumentSummary(
+// Reads the SSE stream from POST /explore/:id/summary — one JSON object
+// per `data:` line, either {delta: "<chunk>"} while generating or the
+// terminal {done: true, summary, keyPoints, impact} (cache hits send only
+// the terminal event, no deltas). onDelta fires with the raw text
+// accumulated SO FAR after every chunk, letting the caller re-derive
+// {summary, keyPoints, impact} from partial text as it streams in —
+// this file only forwards bytes, it doesn't parse the marker format.
+export async function streamExploreDocumentSummary(
   id: number,
+  onDelta: (fullTextSoFar: string) => void,
 ): Promise<ExploreDocumentSummary> {
-  return requestJson(`${API_BASE}/explore/${id}/summary`, "Summary failed", { init: { method: "POST" } });
+  const res = await fetch(`${API_BASE}/explore/${id}/summary`, { method: "POST" });
+  if (!res.ok || !res.body) throw new Error(`Summary failed: ${res.status}`);
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let fullText = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const events = buffer.split("\n\n");
+    buffer = events.pop() || ""; // last element may be a partial event — keep it for next read
+
+    for (const event of events) {
+      const line = event.trim();
+      if (!line.startsWith("data:")) continue;
+      const parsed = JSON.parse(line.slice("data:".length).trim());
+      if (parsed.done) {
+        return { summary: parsed.summary ?? "", keyPoints: parsed.keyPoints ?? [], impact: parsed.impact ?? "" };
+      }
+      if (typeof parsed.delta === "string") {
+        fullText += parsed.delta;
+        onDelta(fullText);
+      }
+    }
+  }
+
+  throw new Error("Summary stream ended without a final result");
 }
 
 export interface PublicComment {

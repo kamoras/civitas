@@ -11,8 +11,10 @@ import re
 import time
 import urllib.error
 import urllib.request
+from collections.abc import AsyncIterator
 from typing import Any
 
+import httpx
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -232,6 +234,144 @@ def _call_ollama(
     if data.get("done_reason") == "length":
         logger.warning("Ollama output truncated (done_reason=length) for model %s", model)
     return data.get("response", "")
+
+
+async def _stream_llama_server(
+    system_prompt: str,
+    user_prompt: str,
+    max_tokens: int,
+    num_ctx: int,
+    http_timeout: int,
+) -> AsyncIterator[str]:
+    """Stream native llama-server via OpenAI-compatible /v1/chat/completions.
+
+    Same endpoint as _call_llama_server, minus response_format (streamed
+    text isn't valid JSON mid-response anyway — see prompts.py's
+    SUMMARY_KEY_POINTS_MARKER note) and with stream=True, which switches
+    the response body to SSE: lines of `data: {...}` carrying incremental
+    `choices[0].delta.content`, terminated by a literal `data: [DONE]`.
+    """
+    url = f"{settings.LLAMA_SERVER_URL}/v1/chat/completions"
+    body = {
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "max_tokens": max_tokens,
+        "temperature": 0.0,
+        "stream": True,
+    }
+    async with httpx.AsyncClient(timeout=http_timeout) as client:
+        async with client.stream("POST", url, json=body) as resp:
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if not line.startswith("data:"):
+                    continue
+                payload = line[len("data:"):].strip()
+                if payload == "[DONE]":
+                    break
+                chunk = json.loads(payload)
+                delta = chunk["choices"][0].get("delta", {}).get("content")
+                if delta:
+                    yield delta
+
+
+async def _stream_ollama(
+    system_prompt: str,
+    user_prompt: str,
+    model: str,
+    max_tokens: int,
+    num_ctx: int,
+    http_timeout: int,
+) -> AsyncIterator[str]:
+    """Stream Ollama via /api/generate: one JSON object per line
+    (`{"response": "...", "done": false}`), no `data:` prefix, no [DONE]
+    sentinel — the final line just carries `"done": true` instead."""
+    url = f"{settings.OLLAMA_BASE_URL}/api/generate"
+    body = {
+        "model": model,
+        "prompt": user_prompt,
+        "system": system_prompt,
+        "stream": True,
+        "options": {
+            "num_predict": max_tokens,
+            "num_ctx": num_ctx,
+            "temperature": 0.0,
+        },
+    }
+    async with httpx.AsyncClient(timeout=http_timeout) as client:
+        async with client.stream("POST", url, json=body) as resp:
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if not line.strip():
+                    continue
+                chunk = json.loads(line)
+                delta = chunk.get("response")
+                if delta:
+                    yield delta
+                if chunk.get("done"):
+                    if chunk.get("done_reason") == "length":
+                        logger.warning("Ollama output truncated (done_reason=length) for model %s", model)
+                    break
+
+
+def get_cached_llm_result(prompt_version: str, cache_key: Any, model: str | None = None) -> Any | None:
+    """Public read side of call_llm's cache, for callers (stream_llm's
+    users) that need to check/write the same cache rows without going
+    through call_llm's own retry/JSON-extraction loop — streaming callers
+    parse their own output and handle retries differently, since a retry
+    after partial output is already visible to the user isn't a silent
+    do-over the way it is for a one-shot JSON call."""
+    use_model = model or settings.OLLAMA_MODEL
+    input_hash = _make_input_hash(prompt_version, cache_key, use_model)
+    try:
+        return _cache_get_with_own_session(prompt_version, input_hash)
+    except Exception:
+        logger.debug("LLM cache lookup failed", exc_info=True)
+        return None
+
+
+def set_cached_llm_result(prompt_version: str, cache_key: Any, data: dict, model: str | None = None) -> None:
+    use_model = model or settings.OLLAMA_MODEL
+    input_hash = _make_input_hash(prompt_version, cache_key, use_model)
+    try:
+        _cache_set_with_own_session(prompt_version, input_hash, data)
+    except Exception:
+        logger.debug("LLM cache write failed", exc_info=True)
+
+
+async def stream_llm(
+    *,
+    system_prompt: str,
+    user_prompt: str,
+    model: str | None = None,
+    max_tokens: int = 512,
+    num_ctx: int = 4096,
+) -> AsyncIterator[str]:
+    """Stream the configured LLM backend's response as plain-text deltas.
+
+    No retry, no JSON extraction, no cache — this is the raw generation
+    primitive for callers that render progressively as text arrives (see
+    explore.py's summary endpoint) and handle caching/retries themselves
+    at the call site, since "retry" means something different once a
+    partial response may already be visible to the user. call_llm above
+    remains the right choice for every other caller — one-shot JSON
+    output, cached, retried transparently.
+    """
+    use_model = model or settings.OLLAMA_MODEL
+    http_timeout = min(
+        max(
+            max_tokens // _HTTP_TIMEOUT_TOKENS_PER_SECOND + _HTTP_TIMEOUT_BASE_OVERHEAD_S,
+            _HTTP_TIMEOUT_MIN_S,
+        ),
+        _HTTP_TIMEOUT_MAX_S,
+    )
+    if settings.LLM_BACKEND == "llama-server":
+        async for delta in _stream_llama_server(system_prompt, user_prompt, max_tokens, num_ctx, http_timeout):
+            yield delta
+    else:
+        async for delta in _stream_ollama(system_prompt, user_prompt, use_model, max_tokens, num_ctx, http_timeout):
+            yield delta
 
 
 def call_llm(
