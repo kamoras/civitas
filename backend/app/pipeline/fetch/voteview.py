@@ -46,7 +46,39 @@ with) but excluded from the regressions.
 Ingestion gates (same guard-the-ingestion role as fetch_state_pvi.py's):
 a swapped column or sign flip here would silently mis-score every
 member's position congruence, so a gated failure keeps the previous
-run's data and flags the run rather than writing bad numbers.
+run's data and flags the run rather than writing bad numbers. Gating is
+PER CHAMBER, not per party, deliberately: both parties' fits must pass
+together, or neither is written. A platform whose core claim is being
+nonpartisan cannot ship a scoring component that only one party can
+structurally earn — even when the underlying reason is a real,
+measured data fact rather than any political virtue, the asymmetry
+itself is the problem. If either party's data doesn't support the
+construct, BOTH parties in that chamber fall back to the existing
+seat-relative vote-alignment component alone (score_calculator.py) — the
+same footing they've always had.
+
+Confirmed, not assumed (2026-07-23, live Voteview data, 119th Congress):
+Senate Republicans' seat-PVI-vs-position relationship is not
+statistically real (OLS b=-0.00056 p=0.88; Theil-Sen, robust to
+outliers, gives an even more negative slope; Spearman rho=-0.10 p=0.47;
+excluding the two best-known crossers, Collins and Murkowski, changes
+nothing, r2=0.024 p=0.26) — three independent methods agree there is no
+relationship to detect, and it is not an artifact of a couple of famous
+outliers. Senate Democrats' fit over the same period IS real (r2=0.231).
+This is consistent with the congressional-elections literature's own
+long-standing distinction between candidate-centered Senate races and
+more partisan-lean-tracking House races (the construct's source paper,
+Canes-Wrone/Brady/Cogan 2002, is itself House-focused) — not a data gap
+awaiting a better proxy, and NOT something to patch by substituting a
+different seat-safety variable just to force a fit through. The gate
+re-measures this from scratch on every single pipeline run: if Senate
+composition or behavior ever changes enough to support the construct for
+both parties, position congruence activates for the whole Senate
+automatically, with no code change. Until then, the Senate's Constituent
+Alignment score rests entirely on the seat-relative vote-alignment
+component — real, working, unaffected — exactly as the House's does
+alongside its own (working, both-parties-passing) position-congruence
+component.
 """
 
 import csv

@@ -721,11 +721,21 @@ representation dimension.
   humility about that, not a fix for it; (c) LE components 2 and 3 are
   both cosponsorship-derived (centrality vs. cross-party share), kept at
   a combined 40% and flagged for the same post-run correlation check.
-  Post-run validation: GROUND_TRUTH ranges + the IV stdev floor
-  (ground_truth.py) + scripts/check_signal_correlations.py (the standing
-  check for (a) and (c), one command against the live API), re-run after
-  the first pipeline run with a generated member_ideal_points.json, per
-  this file's standing convention for any change to this branch.
+  Post-run validation: the derived consistency gate (ground_truth.py,
+  replaces the old hand-maintained GROUND_TRUTH table) +
+  scripts/check_signal_correlations.py (the standing check for (a) and
+  (c), one command against the live API).
+
+  Confirmed against real Voteview data, first live ingest (2026-07-23):
+  Senate Republicans' seat-PVI-vs-position fit is not statistically real
+  (OLS/Theil-Sen/Spearman all agree, robust to outlier removal — see
+  fetch/voteview.py's module docstring for the full measurement).
+  Senate Democrats' fit IS real. Gating is per-CHAMBER, not per party
+  (deliberately — a nonpartisan platform cannot ship a component only
+  one party can structurally earn), so position congruence is currently
+  House-only: both House parties' fits pass, neither Senate party's
+  fit is used until the Senate's own data supports both symmetrically.
+  Re-measured fresh every pipeline run, not a fixed assumption.
 
   Signals evaluated for v6.11 and DELIBERATELY NOT SHIPPED (same
   documented-so-nobody-re-litigates-blind pattern as the v6.6 crossing-
