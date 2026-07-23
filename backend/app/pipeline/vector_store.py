@@ -73,6 +73,38 @@ def get_embedding_model() -> SentenceTransformer:
     return _model
 
 
+_SIMILARITY_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+_similarity_model: "SentenceTransformer | None" = None
+
+
+def get_similarity_model() -> SentenceTransformer:
+    """Second embedding model for SYMMETRIC-similarity gates (2026-07
+    embedding-swap program, step 2).
+
+    The primary model (EMBEDDING_MODEL_NAME, retrieval-asymmetric arctic)
+    places all same-register text in a ~0.55-0.87 raw-cosine band, which
+    made several similarity thresholds unable to separate genuine matches
+    from noise (docs/action_center_audit_2026-07.md; the eval harness in
+    scripts/evaluate_embedding_models.py). all-MiniLM-L6-v2 — same ~22M
+    size class, so no meaningful Pi cost — measured ~4x the separation
+    margin on explore-doc anchoring and ~3x on policy relevance against
+    this platform's own live failure cases.
+
+    Scope discipline: ONLY the gates re-measured under this model consume
+    it (action_center's policy filter, trending mask, explore-doc
+    re-rank, topic-candidate/title-dedup sims). The chroma index, the
+    centered-space clustering gates, and the classification subsystem
+    (donor/kNN/bills) stay on the primary model until their own
+    measurement + recalibration pass — swapping a gate without
+    re-measuring its threshold is how thresholds go vacuous.
+    """
+    global _similarity_model
+    if _similarity_model is None:
+        logger.info("Loading similarity model: %s", _SIMILARITY_MODEL_NAME)
+        _similarity_model = SentenceTransformer(_SIMILARITY_MODEL_NAME)
+    return _similarity_model
+
+
 def get_model_version() -> str:
     """Return the current embedding model version string."""
     return EMBEDDING_MODEL_VERSION
