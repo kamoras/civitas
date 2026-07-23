@@ -210,6 +210,10 @@ function ComparisonTable({
       : 0;
 
   function winner(a: number, b: number, higherIsBetter = true) {
+    // No winner markers across chambers: calibration is chamber-specific,
+    // so declaring a cross-chamber "better score" asserts a like-for-like
+    // comparison the methodology doesn't support (see the caveat banner).
+    if (leftChamber !== rightChamber) return null;
     if (a === b) return null;
     return (higherIsBetter ? a > b : a < b) ? "left" : "right";
   }
@@ -264,6 +268,21 @@ function ComparisonTable({
           </div>
         </div>
       </div>
+
+      {/* Cross-chamber comparability caveat: score calibration is
+          deliberately chamber-specific (PAC multiplier x3.2 Senate vs
+          x1.35 House; chamber-split LES baselines), so a 70 in one
+          chamber is not the same measurement as a 70 in the other —
+          head-to-head "better score" markers across chambers would imply
+          a like-for-like comparison the methodology doesn't support. */}
+      {leftChamber !== rightChamber && (
+        <div className="px-3 py-2 border-b border-neon-yellow/20 bg-neon-yellow/5 text-center">
+          <span className="text-neon-yellow/80 font-mono text-[10px] uppercase tracking-wide">
+            Cross-chamber comparison — scores are calibrated within each chamber,
+            so side-by-side numbers are indicative, not like-for-like
+          </span>
+        </div>
+      )}
 
       {/* Score metrics */}
       <div className="divide-y divide-matrix-green/10">

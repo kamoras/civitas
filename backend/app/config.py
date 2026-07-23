@@ -11,6 +11,19 @@ class Settings(BaseSettings):
     DATA_GOV_API_KEY: str = ""
     OLLAMA_BASE_URL: str = "http://ollama:11434"
     OLLAMA_MODEL: str = "LiquidAI/lfm2.5-1.2b-instruct"
+    # Optional larger model for the two PUBLIC-facing generation surfaces
+    # (full stories, Bluesky posts) — the two-tier design from the
+    # 2026-07 permanent-solutions research: those surfaces are low-volume
+    # (<=4 stories + a handful of posts per hourly refresh), so a slower
+    # 3-4B model is affordable there while the 1.2B default keeps
+    # handling the high-volume classification work. Empty = use
+    # OLLAMA_MODEL for everything (current behavior). Measured headroom
+    # on the production Pi (12GB available): a dense 4B at Q4 (~3GB)
+    # fits safely; 30B-class MoE models do not. Enable by pulling the
+    # model in ollama and setting e.g. OLLAMA_STORY_MODEL=qwen3:4b —
+    # then compare validator rejection rates in the api_cache
+    # "action-metrics" tier before/after.
+    OLLAMA_STORY_MODEL: str = ""
     LLM_BACKEND: str = "llama-server"
     LLAMA_SERVER_URL: str = "http://host.docker.internal:8070"
     PIPELINE_CACHE_TTL_HOURS: int = 72
