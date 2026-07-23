@@ -1027,3 +1027,69 @@ class TestValidateFactsAuditAdditions:
         facts = ["Senator Graham announced her candidacy for the seat left by her brother."]
         source = "Darline Graham, whose brother held the seat, announced her candidacy."
         assert _validate_facts(facts, source_text=source) == facts
+
+
+class TestSurnameGuardEdges:
+    def test_surname_at_text_start_has_no_owner(self):
+        import re
+        text = "Torres said the housing bill would advance this week."
+        m = re.search(r"\bTorres\b", text)
+        assert _surname_owned_by_other_name(text, m, "Ritchie Torres") is False
+
+
+class TestValidateFactsMetricPaths:
+    def test_stale_future_dated_fact_dropped(self):
+        facts = ["The ban will remain in effect until December 2025."]
+        assert _validate_facts(facts) == []
+
+    def test_fact_with_ungrounded_number_dropped(self):
+        facts = ["The program cost $450 million last year."]
+        clean = _validate_facts(facts, source_text="The program's cost rose sharply last year.")
+        assert clean == []
+
+
+class TestGenerateFullStoryRelationshipGuard:
+    """Audit M8: the full-story generator must reject a story asserting a
+    family relationship absent from the material the model was shown, and
+    accept the clean retry."""
+
+    def test_ungrounded_relationship_rejected_then_clean_retry_accepted(self, db_session):
+        issue = ActionIssue(
+            date="2026-07-22", rank=1, is_current=True,
+            title="Senate Budget Committee convenes after leadership change",
+            summary="The committee met for the first time since the vacancy opened.",
+            facts=json.dumps([
+                "The Senate Budget Committee held its first meeting since the vacancy.",
+                "Senator Darline Graham announced her candidacy for the vacant seat.",
+            ]),
+            source_names=json.dumps(["AP News"]),
+            policy_areas=json.dumps(["CONGRESS"]),
+        )
+        db_session.add(issue)
+        db_session.commit()
+
+        bad = (
+            "The Senate Budget Committee convened for the first time since the vacancy "
+            "opened, marking a somber return to regular business for its members. "
+            "Senator Darline Graham announced her candidacy for the seat left by her "
+            "brother, telling reporters she would focus on fiscal policy in the term ahead."
+        )
+        clean = (
+            "The Senate Budget Committee convened for the first time since the vacancy "
+            "opened, marking a somber return to regular business for its members. "
+            "Senator Darline Graham announced her candidacy for the vacant seat, "
+            "telling reporters she would focus on fiscal policy in the term ahead."
+        )
+        calls = []
+
+        def fake_call_llm(**kwargs):
+            calls.append(kwargs)
+            return {"story": bad if len(calls) == 1 else clean}
+
+        with patch("app.pipeline.analyze.ollama_client.call_llm", side_effect=fake_call_llm):
+            from app.pipeline.analyze.action_center import _generate_full_story
+            story = _generate_full_story(issue, db_session=db_session)
+
+        assert len(calls) == 2  # first rejected, retry accepted
+        assert "brother" not in story
+        assert "family relationship" in str(calls[1]["user_prompt"])
