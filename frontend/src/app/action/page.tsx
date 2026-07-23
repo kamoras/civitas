@@ -20,7 +20,7 @@ const CivicActionWidget = dynamic(
   () => import("@/components/action/CivicTracker"),
   { ssr: false },
 );
-import type { ActionIssue, ActionIssuesResponse } from "@/types/action";
+import type { ActionIssue, ActionIssuesResponse, ActionItem, RelatedBill } from "@/types/action";
 import { STATES } from "@/data/states";
 
 const GlobeTab = dynamic(() => import("@/components/action/GlobeTab"), {
@@ -249,6 +249,27 @@ function MonitorLinks({ slugs, onNavigate }: { slugs?: string[]; onNavigate?: (t
   );
 }
 
+/** Prefer our internal bill page over congress.gov when the API says we host it. */
+function billLink(bill: RelatedBill): { href: string; internal: boolean } {
+  if (bill.internalUrl) return { href: bill.internalUrl, internal: true };
+  return { href: safeHref(bill.url) || "#", internal: false };
+}
+
+/**
+ * Track-legislation actions carry the same congress.gov URL as the related
+ * bill they came from — reuse that bill's internal link when it has one.
+ */
+function trackActionLink(issue: ActionIssue, action: ActionItem): { href: string; internal: boolean } {
+  const match = issue.relatedBills?.find((b) => b.url === action.url && b.internalUrl);
+  if (match?.internalUrl) return { href: match.internalUrl, internal: true };
+  return { href: safeHref(action.url) || "#", internal: false };
+}
+
+/** Older stored actions say "Track X on Congress.gov" — drop the suffix when we link internally. */
+function trackActionText(action: ActionItem, internal: boolean): string {
+  return internal ? action.text.replace(/ on Congress\.gov$/i, "") : action.text;
+}
+
 function HeroIssue({
   issue,
   userState,
@@ -322,22 +343,29 @@ function HeroIssue({
           <div className="space-y-2">
             {issue.actions
               .filter(a => a.type === "track_legislation" && a.url)
-              .map((action, i) => (
-                <a
-                  key={i}
-                  href={action.url!}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 p-3 border border-neon-cyan/20 bg-neon-cyan/5 hover:border-neon-cyan/40 hover:bg-neon-cyan/10 transition-all group"
-                >
-                  <span className="text-sm text-matrix-green/80 group-hover:text-matrix-green flex-1">
-                    {action.text}
-                  </span>
-                  <span className="text-[10px] font-mono tracking-wide text-neon-cyan/50 shrink-0">
-                    CONGRESS.GOV ↗
-                  </span>
-                </a>
-              ))}
+              .map((action, i) => {
+                const { href, internal } = trackActionLink(issue, action);
+                const linkClass = "flex items-center gap-3 p-3 border border-neon-cyan/20 bg-neon-cyan/5 hover:border-neon-cyan/40 hover:bg-neon-cyan/10 transition-all group";
+                const inner = (
+                  <>
+                    <span className="text-sm text-matrix-green/80 group-hover:text-matrix-green flex-1">
+                      {trackActionText(action, internal)}
+                    </span>
+                    <span className="text-[10px] font-mono tracking-wide text-neon-cyan/50 shrink-0">
+                      {internal ? "VIEW BILL →" : "CONGRESS.GOV ↗"}
+                    </span>
+                  </>
+                );
+                return internal ? (
+                  <Link key={i} href={href} className={linkClass}>
+                    {inner}
+                  </Link>
+                ) : (
+                  <a key={i} href={href} target="_blank" rel="noopener noreferrer" className={linkClass}>
+                    {inner}
+                  </a>
+                );
+              })}
           </div>
         </div>
       )}
@@ -348,25 +376,32 @@ function HeroIssue({
             Official Legislation
           </h3>
           <div className="space-y-2">
-            {issue.relatedBills.map((bill) => (
-              <a
-                key={bill.id}
-                href={safeHref(bill.url) || "#"}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-3 p-3 border border-neon-yellow/20 bg-neon-yellow/5 hover:border-neon-yellow/40 hover:bg-neon-yellow/10 transition-all group"
-              >
-                <span className="text-[10px] font-mono tracking-wide text-neon-yellow/60 border border-neon-yellow/30 px-1.5 py-0.5 shrink-0">
-                  {bill.id}
-                </span>
-                <span className="text-sm text-matrix-green/80 group-hover:text-matrix-green truncate">
-                  {bill.name}
-                </span>
-                <span className="text-[10px] font-mono tracking-wide text-neon-cyan/50 shrink-0 ml-auto">
-                  CONGRESS.GOV ↗
-                </span>
-              </a>
-            ))}
+            {issue.relatedBills.map((bill) => {
+              const { href, internal } = billLink(bill);
+              const linkClass = "flex items-center gap-3 p-3 border border-neon-yellow/20 bg-neon-yellow/5 hover:border-neon-yellow/40 hover:bg-neon-yellow/10 transition-all group";
+              const inner = (
+                <>
+                  <span className="text-[10px] font-mono tracking-wide text-neon-yellow/60 border border-neon-yellow/30 px-1.5 py-0.5 shrink-0">
+                    {bill.id}
+                  </span>
+                  <span className="text-sm text-matrix-green/80 group-hover:text-matrix-green truncate">
+                    {bill.name}
+                  </span>
+                  <span className="text-[10px] font-mono tracking-wide text-neon-cyan/50 shrink-0 ml-auto">
+                    {internal ? "VIEW BILL →" : "CONGRESS.GOV ↗"}
+                  </span>
+                </>
+              );
+              return internal ? (
+                <Link key={bill.id} href={href} className={linkClass}>
+                  {inner}
+                </Link>
+              ) : (
+                <a key={bill.id} href={href} target="_blank" rel="noopener noreferrer" className={linkClass}>
+                  {inner}
+                </a>
+              );
+            })}
           </div>
         </div>
       )}
@@ -532,18 +567,25 @@ function SecondaryIssue({
               <div className="space-y-1.5">
                 {issue.actions
                   .filter(a => a.type === "track_legislation" && a.url)
-                  .map((action, i) => (
-                    <a
-                      key={i}
-                      href={action.url!}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 p-2 border border-neon-cyan/15 bg-neon-cyan/5 hover:border-neon-cyan/30 transition-colors text-sm"
-                    >
-                      <span className="text-matrix-green/70 flex-1 truncate">{action.text}</span>
-                      <span className="text-[10px] text-neon-cyan/40 shrink-0 ml-auto">↗</span>
-                    </a>
-                  ))}
+                  .map((action, i) => {
+                    const { href, internal } = trackActionLink(issue, action);
+                    const linkClass = "flex items-center gap-2 p-2 border border-neon-cyan/15 bg-neon-cyan/5 hover:border-neon-cyan/30 transition-colors text-sm";
+                    const inner = (
+                      <>
+                        <span className="text-matrix-green/70 flex-1 truncate">{trackActionText(action, internal)}</span>
+                        <span className="text-[10px] text-neon-cyan/40 shrink-0 ml-auto">{internal ? "→" : "↗"}</span>
+                      </>
+                    );
+                    return internal ? (
+                      <Link key={i} href={href} className={linkClass}>
+                        {inner}
+                      </Link>
+                    ) : (
+                      <a key={i} href={href} target="_blank" rel="noopener noreferrer" className={linkClass}>
+                        {inner}
+                      </a>
+                    );
+                  })}
               </div>
             </div>
           )}
@@ -552,19 +594,26 @@ function SecondaryIssue({
             <div>
               <h4 className="font-mono text-[10px] tracking-widest text-neon-yellow/50 mb-2 uppercase">Official Legislation</h4>
               <div className="space-y-1.5">
-                {issue.relatedBills.map((bill) => (
-                  <a
-                    key={bill.id}
-                    href={safeHref(bill.url) || "#"}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 p-2 border border-neon-yellow/15 bg-neon-yellow/5 hover:border-neon-yellow/30 transition-colors text-sm"
-                  >
-                    <span className="text-[10px] font-mono tracking-wide text-neon-yellow/60 shrink-0">{bill.id}</span>
-                    <span className="text-matrix-green/70 truncate">{bill.name}</span>
-                    <span className="text-[10px] text-neon-cyan/40 shrink-0 ml-auto">↗</span>
-                  </a>
-                ))}
+                {issue.relatedBills.map((bill) => {
+                  const { href, internal } = billLink(bill);
+                  const linkClass = "flex items-center gap-2 p-2 border border-neon-yellow/15 bg-neon-yellow/5 hover:border-neon-yellow/30 transition-colors text-sm";
+                  const inner = (
+                    <>
+                      <span className="text-[10px] font-mono tracking-wide text-neon-yellow/60 shrink-0">{bill.id}</span>
+                      <span className="text-matrix-green/70 truncate">{bill.name}</span>
+                      <span className="text-[10px] text-neon-cyan/40 shrink-0 ml-auto">{internal ? "→" : "↗"}</span>
+                    </>
+                  );
+                  return internal ? (
+                    <Link key={bill.id} href={href} className={linkClass}>
+                      {inner}
+                    </Link>
+                  ) : (
+                    <a key={bill.id} href={href} target="_blank" rel="noopener noreferrer" className={linkClass}>
+                      {inner}
+                    </a>
+                  );
+                })}
               </div>
             </div>
           )}

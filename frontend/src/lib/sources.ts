@@ -6,26 +6,38 @@
 const CURRENT_CONGRESS = 119;
 
 /**
+ * Ordinal form ("119th", "101st", "112th") — congress.gov bill URLs embed
+ * it, and a wrong suffix (e.g. "101th") is a dead link.
+ */
+function congressOrdinal(congress: number): string {
+  const mod100 = congress % 100;
+  const suffix =
+    mod100 >= 11 && mod100 <= 13
+      ? "th"
+      : { 1: "st", 2: "nd", 3: "rd" }[congress % 10] ?? "th";
+  return `${congress}${suffix}`;
+}
+
+/**
  * "119th Congress (2025–2026)" — scores are windowed to the current
  * congress only (see AGENTS.md "current term"); this labels that window
  * on the scorecard so a sparser score isn't read as a bug.
  */
 export function currentCongressLabel(): string {
   const firstYear = 1789 + (CURRENT_CONGRESS - 1) * 2;
-  const mod100 = CURRENT_CONGRESS % 100;
-  const suffix =
-    mod100 >= 11 && mod100 <= 13
-      ? "th"
-      : { 1: "st", 2: "nd", 3: "rd" }[CURRENT_CONGRESS % 10] ?? "th";
-  return `${CURRENT_CONGRESS}${suffix} Congress (${firstYear}–${firstYear + 1})`;
+  return `${congressOrdinal(CURRENT_CONGRESS)} Congress (${firstYear}–${firstYear + 1})`;
 }
 
 /**
  * Build a congress.gov URL for a bill.
  * Bill IDs come in formats like "HR.5371", "S.1234", "PN373", "HJRES.100"
  * and lobbying bills as "H.R. 7147", "S. 1234".
+ *
+ * Pass the bill's actual `congress` when the record carries one — a bill
+ * ID alone is ambiguous across congresses, and linking a prior-congress
+ * bill under the current congress produces a wrong or dead page.
  */
-export function billUrl(billId: string): string {
+export function billUrl(billId: string, congress?: number | null): string {
   if (!billId) return "";
 
   const normalized = billId
@@ -58,7 +70,8 @@ export function billUrl(billId: string): string {
   const urlType = typeMap[typeRaw];
   if (!urlType) return "";
 
-  return `https://www.congress.gov/bill/${CURRENT_CONGRESS}th-congress/${urlType}/${number}`;
+  const effectiveCongress = congress && congress > 0 ? congress : CURRENT_CONGRESS;
+  return `https://www.congress.gov/bill/${congressOrdinal(effectiveCongress)}-congress/${urlType}/${number}`;
 }
 
 /**

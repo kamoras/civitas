@@ -345,11 +345,13 @@ def _build_actions_from_data(
     """
     actions: list[dict] = []
 
-    # Bill tracking — only when we have a real Congress.gov URL
+    # Bill tracking — only when we have a real Congress.gov URL. The text
+    # deliberately doesn't name a destination: the frontend links these to
+    # our internal bill page when we host the bill, congress.gov otherwise.
     for bill in resolved_bills[:2]:
         if bill.get("url"):
             actions.append({
-                "text": f"Track {bill['name']} on Congress.gov",
+                "text": f"Track {bill['name']}",
                 "type": "track_legislation",
                 "url": bill["url"],
             })
@@ -1760,6 +1762,23 @@ def _find_related_explore_docs(
 CONGRESS_API_BASE = "https://api.congress.gov/v3"
 
 
+def _congress_ordinal(congress: int) -> str:
+    """Ordinal form ("119th", "101st", "112th") — congress.gov bill URLs
+    embed it, and a wrong suffix (e.g. "101th") 404s."""
+    if 11 <= congress % 100 <= 13:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(congress % 10, "th")
+    return f"{congress}{suffix}"
+
+
+def _congress_gov_bill_url(congress: int, url_type: str, number: str | int) -> str:
+    return (
+        f"https://www.congress.gov/bill/"
+        f"{_congress_ordinal(congress)}-congress/{url_type}/{number}"
+    )
+
+
 def _resolve_bills(raw_bills: list, article_texts: list[str]) -> list[dict]:
     """Resolve bill names from LLM output + article text to Congress.gov URLs.
 
@@ -1842,13 +1861,12 @@ def _resolve_bills(raw_bills: list, article_texts: list[str]) -> list[dict]:
             }
             url_type = type_map.get(parts[0])
             if url_type:
-                url = (
-                    f"https://www.congress.gov/bill/"
-                    f"{settings.CURRENT_CONGRESS}th-congress/"
-                    f"{url_type}/{parts[1]}"
+                url = _congress_gov_bill_url(
+                    settings.CURRENT_CONGRESS, url_type, parts[1]
                 )
                 resolved.append({
                     "name": ref["name"], "id": bill_id, "url": url,
+                    "congress": settings.CURRENT_CONGRESS,
                 })
                 continue
 
@@ -1915,7 +1933,10 @@ def _bill_record_to_result(bill: dict, query: str, congress: int) -> dict | None
     """Convert a Congress.gov bill record to {name, id, url} or None."""
     bill_type = (bill.get("type") or "").lower()
     bill_number = bill.get("number")
-    bill_congress = bill.get("congress", congress)
+    try:
+        bill_congress = int(bill.get("congress") or congress)
+    except (TypeError, ValueError):
+        bill_congress = congress
 
     if not bill_type or not bill_number:
         return None
@@ -1925,14 +1946,12 @@ def _bill_record_to_result(bill: dict, query: str, congress: int) -> dict | None
 
     prefix, url_type = mapped
     bill_id = f"{prefix}.{bill_number}"
-    url = (
-        f"https://www.congress.gov/bill/"
-        f"{bill_congress}th-congress/{url_type}/{bill_number}"
-    )
+    url = _congress_gov_bill_url(bill_congress, url_type, bill_number)
     return {
         "name": bill.get("title", query)[:200],
         "id": bill_id,
         "url": url,
+        "congress": bill_congress,
     }
 
 

@@ -30,7 +30,7 @@ export default function BillDetailClient({ bill }: { bill: BillDetail }) {
   const stageInfo = config?.billStages?.[bill.stage];
   const stageColor = stageInfo?.color ?? "#00ff41";
   const party = PARTY_BADGE[bill.sponsorParty] ?? PARTY_BADGE.I;
-  const externalUrl = billUrl(bill.billId);
+  const externalUrl = billUrl(bill.billId, bill.congress);
 
   return (
     <div className="min-h-screen bg-crt-black text-matrix-green">

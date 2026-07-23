@@ -219,14 +219,23 @@ export default async function IssuePage({
             <ul className="space-y-2">
               {issue.relatedBills.map((bill) => (
                 <li key={bill.id}>
-                  <a
-                    href={bill.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-matrix-green/70 hover:text-matrix-green transition-colors underline underline-offset-2"
-                  >
-                    {bill.name}
-                  </a>
+                  {bill.internalUrl ? (
+                    <Link
+                      href={bill.internalUrl}
+                      className="text-sm text-matrix-green/70 hover:text-matrix-green transition-colors underline underline-offset-2"
+                    >
+                      {bill.name}
+                    </Link>
+                  ) : (
+                    <a
+                      href={bill.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-matrix-green/70 hover:text-matrix-green transition-colors underline underline-offset-2"
+                    >
+                      {bill.name}
+                    </a>
+                  )}
                 </li>
               ))}
             </ul>

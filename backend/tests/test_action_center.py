@@ -1294,3 +1294,71 @@ def test_get_similarity_model_lazy_singleton():
             vector_store._similarity_model = None
     assert first is fake and second is fake
     ctor.assert_called_once_with(vector_store._SIMILARITY_MODEL_NAME)
+
+
+class TestCongressGovUrlBuilding:
+    """congress.gov bill URLs embed the congress ordinal ("119th", "101st");
+    a wrong suffix or wrong congress number is a dead link."""
+
+    def test_ordinal_suffixes(self):
+        from app.pipeline.analyze.action_center import _congress_ordinal
+
+        assert _congress_ordinal(119) == "119th"
+        assert _congress_ordinal(101) == "101st"
+        assert _congress_ordinal(102) == "102nd"
+        assert _congress_ordinal(103) == "103rd"
+        assert _congress_ordinal(111) == "111th"
+        assert _congress_ordinal(112) == "112th"
+        assert _congress_ordinal(113) == "113th"
+        assert _congress_ordinal(104) == "104th"
+
+    def test_bill_record_uses_records_own_congress(self):
+        from app.pipeline.analyze.action_center import _bill_record_to_result
+
+        result = _bill_record_to_result(
+            {"type": "HR", "number": "3055", "congress": 101,
+             "title": "An old appropriations act"},
+            query="appropriations", congress=119,
+        )
+        assert result is not None
+        assert result["url"] == (
+            "https://www.congress.gov/bill/101st-congress/house-bill/3055"
+        )
+        assert result["congress"] == 101
+        assert result["id"] == "HR.3055"
+
+    def test_bill_record_falls_back_to_search_congress(self):
+        from app.pipeline.analyze.action_center import _bill_record_to_result
+
+        result = _bill_record_to_result(
+            {"type": "S", "number": "1234", "title": "A bill"},
+            query="a bill", congress=119,
+        )
+        assert result is not None
+        assert result["url"] == (
+            "https://www.congress.gov/bill/119th-congress/senate-bill/1234"
+        )
+        assert result["congress"] == 119
+
+    def test_bill_record_tolerates_string_congress(self):
+        from app.pipeline.analyze.action_center import _bill_record_to_result
+
+        result = _bill_record_to_result(
+            {"type": "HR", "number": "22", "congress": "119", "title": "SAVE Act"},
+            query="SAVE Act", congress=119,
+        )
+        assert result is not None
+        assert "119th-congress" in result["url"]
+
+    def test_resolved_regex_bills_record_current_congress(self):
+        from app.config import settings
+        from app.pipeline.analyze.action_center import _resolve_bills
+
+        resolved = _resolve_bills([], ["The House passed H.R. 22 yesterday."])
+
+        assert len(resolved) == 1
+        assert resolved[0]["id"] == "HR.22"
+        assert resolved[0]["congress"] == settings.CURRENT_CONGRESS
+        assert (
+            f"{settings.CURRENT_CONGRESS}th-congress" in resolved[0]["url"]
+        )
