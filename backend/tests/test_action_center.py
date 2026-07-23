@@ -1093,6 +1093,18 @@ class TestValidateFactsAuditAdditions:
         source = "Darline Graham, whose brother held the seat, announced her candidacy."
         assert _validate_facts(facts, source_text=source) == facts
 
+    def test_ungrounded_former_status_fact_dropped(self):
+        # 2026-07 live case: "former President Donald Trump" published while
+        # the source material said "President Trump".
+        facts = ["Former President Donald Trump announced new tariffs on steel imports."]
+        source = "President Trump announced tariffs on steel imports."
+        assert _validate_facts(facts, source_text=source) == []
+
+    def test_grounded_former_status_fact_kept(self):
+        facts = ["Former President Obama criticized the ruling on Tuesday."]
+        source = "Former President Barack Obama criticized the court's ruling Tuesday."
+        assert _validate_facts(facts, source_text=source) == facts
+
 
 class TestSurnameGuardEdges:
     def test_surname_at_text_start_has_no_owner(self):
@@ -1158,6 +1170,55 @@ class TestGenerateFullStoryRelationshipGuard:
         assert len(calls) == 2  # first rejected, retry accepted
         assert "brother" not in story
         assert "family relationship" in str(calls[1]["user_prompt"])
+
+
+class TestGenerateFullStoryFormerStatusGuard:
+    """2026-07 stale-training-data class: a full story that demotes a
+    sitting official to "former" without source basis must be rejected
+    and retried, mirroring the relationship guard above."""
+
+    def test_ungrounded_former_status_rejected_then_clean_retry_accepted(self, db_session):
+        issue = ActionIssue(
+            date="2026-07-22", rank=1, is_current=True,
+            title="President Trump announces new tariffs",
+            summary="President Trump announced tariffs on steel imports.",
+            facts=json.dumps([
+                "President Trump announced tariffs targeting steel imports.",
+                "The tariffs take effect next month.",
+            ]),
+            source_names=json.dumps(["AP News"]),
+            policy_areas=json.dumps(["TRADE"]),
+        )
+        db_session.add(issue)
+        db_session.commit()
+
+        bad = (
+            "Former President Donald Trump announced new tariffs targeting steel "
+            "imports, which are set to take effect next month. The announcement "
+            "follows weeks of negotiations between administration officials and "
+            "domestic steel producers who had pushed for expanded protections "
+            "against foreign competition in the sector."
+        )
+        clean = (
+            "President Trump announced new tariffs targeting steel imports, "
+            "which are set to take effect next month. The announcement follows "
+            "weeks of negotiations between administration officials and domestic "
+            "steel producers who had pushed for expanded protections against "
+            "foreign competition in the sector."
+        )
+        calls = []
+
+        def fake_call_llm(**kwargs):
+            calls.append(kwargs)
+            return {"story": bad if len(calls) == 1 else clean}
+
+        with patch("app.pipeline.analyze.ollama_client.call_llm", side_effect=fake_call_llm):
+            from app.pipeline.analyze.action_center import _generate_full_story
+            story = _generate_full_story(issue, db_session=db_session)
+
+        assert len(calls) == 2  # first rejected, retry accepted
+        assert "Former" not in story
+        assert "former" in str(calls[1]["user_prompt"]).lower()
 
 
 class TestSimilarityModelGates:
