@@ -91,15 +91,32 @@ donor. Rhoades (1993, "The Herfindahl-Hirschman Index," Fed Reserve
 Bulletin 79) is kept as a secondary reference for HHI's general
 mechanics — it is a banking/antitrust note with no campaign-finance
 content of its own, so it explains the statistic but not why it applies
-here; Parmigiani does. Known limitation, disclosed rather than fixed in
-this pass: Parmigiani's own discussion argues top-share measures are
-arguably better suited than HHI/Gini to the long-tailed distributions
-donor data actually has — the same reason income-inequality research
-prefers top-1%-share over Gini. Whether Funding Diversity should move
-from inverse-HHI to a top-share-based measure is a real open question,
-flagged here as a fast-follow rather than decided in this pass — it
-would move every senator's score and deserves its own dedicated
-evaluation.
+here; Parmigiani does. Resolved, not disclosed-and-deferred: Parmigiani's
+own discussion argues top-share measures are better suited than HHI/Gini
+to the long-tailed distributions donor data actually has — the same
+reason income-inequality research prefers top-1%-share over Gini — which
+raised a real question of whether Funding Diversity should move from
+inverse-HHI to a top-share-based measure. Tested directly (2026-07)
+against every scorecarded member's live industry breakdown (n=413 with
+>=5% industry-classified funding, the same usability floor this
+function's own fallback branch below uses): HHI and top-1-industry-share
+are rank-correlated at rho=0.942 (Spearman, p<1e-190) — the two measures
+agree on all but a handful of members. This isn't a coincidence to
+distrust; it has a structural reason. Parmigiani's argument is about raw
+per-DONOR amounts, which really are long-tailed like personal income —
+but this component buckets by industry first (the adaptation this file's
+docstring already names), and that aggregation step is exactly what
+smooths away the extreme tail a top-share measure is built to handle.
+Bucketing several thousand individual donors into one "Finance" row
+caps how dominant any single row can get long before HHI or top-share
+ever see the data — the two statistics converge because the input they
+share has already had its long tail removed. The real disagreements that
+remain (e.g. a member with several moderately-large industries vs. one
+genuinely dominant one — Gwen Moore, Ayanna Pressley in the live 2026-07
+data) are the exact case the theory predicts, but they affect roughly a
+dozen members, not the population — not enough to justify moving every
+member's score for a measure that would rank them almost identically.
+Kept as inverse-HHI on that basis.
 
 References
 ----------
@@ -739,22 +756,25 @@ representation dimension.
 
   Signals evaluated for v6.11 and DELIBERATELY NOT SHIPPED (same
   documented-so-nobody-re-litigates-blind pattern as the v6.6 crossing-
-  side flank discount; each names its precise blocker, because two of the
-  three are "blocked", not "rejected"):
+  side flank discount; each names its precise blocker, because only one
+  of the three is "blocked" — the other two are rejected outright):
 
   - CES vote-matched opinion congruence (Ansolabehere & Jones 2010,
     AJPS): the Cooperative Election Study asks ~60k respondents each
     cycle how THEY would vote on specific named roll calls — the gold-
     standard "did the member vote how constituents wanted" construct,
-    and the strongest candidate signal this dimension doesn't have. Two
-    blockers, one structural: (1) the microdata is Dataverse-hosted
-    survey data requiring a real ingestion pipeline (weights, item-to-
-    roll-call mapping); (2) structurally, CES items reference the
+    and the strongest candidate signal this dimension doesn't have.
+    REJECTED on the merits, not blocked: CES items reference the
     PREVIOUS congress's votes (CES 2024 -> 118th), while v5.8's "current
-    term" rule scores only the current congress — shipping it means
-    deciding that a one-cycle-lagged window is acceptable evidence for a
-    current score, a design call for the owner, not something to slip in
-    silently. Revisit at each CES common-content release.
+    term" rule scores only the current congress. Scoring a member's
+    CURRENT-term record against a PRIOR-term opinion survey means the
+    "constituent" half of the comparison predates some of the votes
+    being judged — not a data-quality gap to tolerate, a construct
+    mismatch, the same category of problem v6.6 found in the crossing-
+    side flank discount above. Not revisited unless CES starts
+    publishing same-cycle common content, which it structurally does
+    not (the survey runs alongside the election it covers, so the
+    current congress's votes can't yet exist when it's fielded).
   - Congressionally Directed Spending / allocation responsiveness (Stein
     & Bickers 1994; Grimmer, Messing & Westwood 2012; Grimmer 2013 shows
     members in seats leaning against their party rationally SUBSTITUTE
@@ -778,10 +798,12 @@ representation dimension.
     correlates strongly with PVI; adding it as a separate signal would
     recreate exactly the correlated-pair problem this file spent
     v6.5-v6.8 removing (r=0.72 funding pair; r=-0.76 cosponsorship
-    pair). Its legitimate future use is as a cross-validation anchor on
-    PVI inside fetch_member_ideal_points.py's gates, or as the opinion
-    source for ISSUE-level congruence — which is the CES item above,
-    done properly, not a new seat ordering.
+    pair). Its one legitimate future use is as a cross-validation anchor
+    on PVI inside fetch_member_ideal_points.py's gates — not as an
+    opinion source for issue-level congruence, since CES (the item
+    above) is rejected for the same reason on this axis: current-term
+    scoring needs current-term opinion data, which neither source
+    supplies.
 """
 
 import logging
