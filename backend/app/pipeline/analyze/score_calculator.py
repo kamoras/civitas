@@ -2648,11 +2648,22 @@ def _les_cumulative_credit(bill: dict) -> float:
 # FI small-donor state baseline. Calibrated via
 # scripts/calibrate_les_credit_scale.py against live production data, using
 # this module's own _les_cumulative_credit so the calibration and the
-# scoring formula can never silently drift apart. 2026-07 live audit (101
-# senators, 427 reps): Senate median 254/congress (mean 285.3, stdev 157),
-# House median 107/congress (mean 122.0, stdev 77).
-_LES_POPULATION_MEDIAN_SENATE = 254.0
-_LES_POPULATION_MEDIAN_HOUSE = 107.0
+# scoring formula can never silently drift apart.
+#
+# Re-run 2026-07-23 (later same day as the v6.10 mean->median switch above):
+# that switch's own live audit (254/107) was measured before PR #227's
+# REFERRED-vs-IN_COMMITTEE split had been reclassified into any bill's
+# stored `stage` column by an actual pipeline run — bills sponsored/
+# cosponsored data only gets reclassified when the pipeline touches them,
+# not on deploy — so it was still scoring against the OLD stage-credit
+# distribution despite the new code already being live (see
+# project-les-calibration-followup memory). First full Senate+House run
+# after that reclassification actually took effect (run #99) put both
+# chambers' typical per-congress credit meaningfully higher: Senate
+# median 289/congress (mean 324.95, stdev 178.37, n=101), House median
+# 129/congress (mean 143.80, stdev 88.12, n=427).
+_LES_POPULATION_MEDIAN_SENATE = 289.0
+_LES_POPULATION_MEDIAN_HOUSE = 129.0
 
 # Population-average _advancement_baseline rate, used to turn a member's
 # own majority/minority bill mix into a RATIO against the population
@@ -2694,10 +2705,11 @@ _LES_AVG_BASELINE_HOUSE = 0.0444
 # zero, never a runaway score from one outlier bill" shape as every other
 # saturation constant in this file (e.g. Constituent Alignment's
 # surplus/0.25). Same calibration script: ~1.5x the mean chamber stdev of
-# real per-congress credit (2026-07 audit: Senate stdev 157, House 77 ->
-# 175.5), checked against the population stdev floor — LE has no
-# per-senator GROUND_TRUTH entries to check against (ground_truth.py).
-_LES_CREDIT_SATURATION = 175.5
+# real per-congress credit, checked against the population stdev floor —
+# LE has no per-senator GROUND_TRUTH entries to check against
+# (ground_truth.py). Re-run 2026-07-23 alongside the medians above (post-
+# reclassification audit: Senate stdev 178.37, House stdev 88.12 -> 199.87).
+_LES_CREDIT_SATURATION = 199.87
 
 
 def _les_component_score(
