@@ -55,7 +55,12 @@ EMBEDDING_DIMENSIONS = 384
 # Search-index side — the similarity model (same 384 dims).
 INDEX_MODEL_VERSION = "minilm-l6-v2"
 
-_VERSION_FILE = "/data/chroma/.model_version"
+# NOT under /data/chroma/ — that directory is the old chromadb store,
+# orphaned by the sqlite-vec migration and safe to delete entirely, but
+# this file tracks something unrelated (the PRIMARY/classification model
+# version, still arctic-xs, untouched by that migration) and would have
+# been silently wiped along with it if left in the same directory.
+_VERSION_FILE = "/data/classification_model_version"
 
 _VECTOR_DB_PATH = os.environ.get("VECTOR_DB_PATH", "/data/vectors.db")
 

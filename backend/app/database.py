@@ -461,8 +461,8 @@ def init_db() -> None:
 def reset_all_data() -> dict:
     """Drop all pipeline-generated data and start fresh.
 
-    Truncates every table except the schema itself, resets ChromaDB
-    collections, and re-seeds static reference data (presidents).
+    Truncates every table except the schema itself, resets the vector
+    store's collections, and re-seeds static reference data (presidents).
     Returns a summary of what was cleared.
     """
     from app import models  # noqa: F401
@@ -511,7 +511,7 @@ def reset_all_data() -> dict:
     try:
         from app.pipeline.vector_store import reset_vector_db
         reset_vector_db()
-        summary["chromadb_collections"] = 2
+        summary["vector_db_collections"] = 2
     except Exception as exc:
         # Full detail goes to the server log (already unflagged by CodeQL —
         # see error_utils.py's docstring); the admin-facing summary dict
@@ -519,8 +519,8 @@ def reset_all_data() -> dict:
         # since even a hardcoded-literal classify_exception(exc) call kept
         # getting flagged at this class of sink (see federal_register.py's
         # history for the full trail of what didn't work).
-        logger.warning("ChromaDB reset failed: %s", exc)
-        summary["chromadb_error"] = "reset failed — see server logs"
+        logger.warning("Vector DB reset failed: %s", exc)
+        summary["vector_db_error"] = "reset failed — see server logs"
 
     logger.info("Full data reset complete: %s", summary)
     # President rows will be recreated by the next run_president_pipeline

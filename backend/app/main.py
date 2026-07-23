@@ -31,9 +31,6 @@ for _n in ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi", "app"):
 # WARNING regardless of the app log level.
 for _n in ("httpx", "httpcore"):
     logging.getLogger(_n).setLevel(logging.WARNING)
-# chromadb telemetry is disabled via Settings, but some versions still
-# attempt PostHog captures and log an error stack each time. Silence it.
-logging.getLogger("chromadb.telemetry").setLevel(logging.CRITICAL)
 
 
 async def _bootstrap_explore() -> None:
