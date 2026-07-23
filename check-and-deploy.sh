@@ -30,8 +30,15 @@ flock -n 200 || exit 0   # a previous check/deploy is still running
 
 log() { echo "$(date -Iseconds) $*" >> deploy-poll.log; }
 
+# What we last actually finished deploying — not `git rev-parse HEAD`.
+# HEAD gets reset to origin/main below *before* the build/deploy runs, so
+# using HEAD as "already handled" would make a deferred cycle (pipeline
+# busy) look like "nothing new" forever after that reset, and cron would
+# never retry it. Only updated on a confirmed-successful deploy, below.
+DEPLOYED_MARKER=.last-deployed-sha
+LOCAL=$(cat "$DEPLOYED_MARKER" 2>/dev/null || git rev-parse HEAD)
+
 git fetch origin main --quiet
-LOCAL=$(git rev-parse HEAD)
 REMOTE=$(git rev-parse origin/main)
 
 if [[ "$LOCAL" == "$REMOTE" ]]; then
@@ -64,18 +71,35 @@ fi
 # admin API is ambiguous, not evidence nothing is running, so a curl error
 # defers the same as a confirmed-running pipeline instead of deploying
 # through it blind.
-admin_token=$(grep '^ADMIN_TOKEN=' .env 2>/dev/null | cut -d= -f2-)
-if [[ -n "$admin_token" ]]; then
-  if ! pipeline_status=$(curl -fsS --max-time 5 \
+#
+# Checked twice, not once (found 2026-07-23): the image build below takes
+# several minutes on Pi-class hardware, so a clean check here can go stale
+# before `docker stack deploy` actually restarts backend — a nightly
+# pipeline run that starts mid-build sails right through. Second call
+# sits immediately before the stack deploy, as close to the actual
+# restart as this script gets.
+_busy_reason=""
+pipeline_is_busy() {
+  local admin_token status
+  _busy_reason=""
+  admin_token=$(grep '^ADMIN_TOKEN=' .env 2>/dev/null | cut -d= -f2-)
+  [[ -z "$admin_token" ]] && return 1   # not configured — can't check, don't block
+  if ! status=$(curl -fsS --max-time 5 \
     -H "Authorization: Bearer $admin_token" \
     "http://localhost:8081/api/admin/pipeline/status" 2>/dev/null); then
-    log "new commit ${REMOTE:0:8} available but couldn't reach pipeline status — deferring"
-    exit 0
+    _busy_reason="couldn't reach pipeline status"
+    return 0
   fi
-  if echo "$pipeline_status" | grep -Eq '"(isRunning|houseIsRunning|stockTradesIsRunning|supplementaryIsRunning)":true'; then
-    log "new commit ${REMOTE:0:8} available but a pipeline is running — deferring"
-    exit 0
+  if echo "$status" | grep -Eq '"(isRunning|houseIsRunning|stockTradesIsRunning|supplementaryIsRunning)":true'; then
+    _busy_reason="a pipeline is running"
+    return 0
   fi
+  return 1
+}
+
+if pipeline_is_busy; then
+  log "new commit ${REMOTE:0:8} available but ${_busy_reason} — deferring"
+  exit 0
 fi
 
 log "new commit on main: ${REMOTE:0:8} (was ${LOCAL:0:8})"
@@ -133,12 +157,22 @@ export IMAGE_TAG
 RESOLVED=/tmp/civitas-resolved-stack.yml
 {
   docker compose -f docker-compose.yml -f docker-compose.swarm.yml build backend frontend nginx
-  docker compose -f docker-compose.yml -f docker-compose.swarm.yml config \
-    | grep -v '^name:' \
-    | sed -E 's/published: "([0-9]+)"/published: \1/' \
-    > "$RESOLVED"
-  docker stack deploy -c "$RESOLVED" civitas --detach=true
 } >> deploy-poll.log 2>&1 || deploy_ok=0
+
+if [[ "$deploy_ok" == "1" ]] && pipeline_is_busy; then
+  log "commit ${REMOTE:0:8} built but ${_busy_reason} — deferring stack deploy"
+  exit 0
+fi
+
+if [[ "$deploy_ok" == "1" ]]; then
+  {
+    docker compose -f docker-compose.yml -f docker-compose.swarm.yml config \
+      | grep -v '^name:' \
+      | sed -E 's/published: "([0-9]+)"/published: \1/' \
+      > "$RESOLVED"
+    docker stack deploy -c "$RESOLVED" civitas --detach=true
+  } >> deploy-poll.log 2>&1 || deploy_ok=0
+fi
 
 if [[ "$deploy_ok" == "1" ]]; then
   for svc in civitas_backend civitas_frontend civitas_nginx; do
@@ -148,6 +182,7 @@ fi
 
 if [[ "$deploy_ok" == "1" ]]; then
   log "deploy OK"
+  echo "$REMOTE" > "$DEPLOYED_MARKER"
 
   # Every deploy builds a new set of backend/frontend/nginx images tagged
   # with this commit's SHA and leaves the previous commit's images behind
