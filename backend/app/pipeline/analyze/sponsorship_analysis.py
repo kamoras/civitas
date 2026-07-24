@@ -255,12 +255,9 @@ def compute_ideology_scores(
     spectrum = vh[1, :]
 
     row_to_id = {v: k for k, v in id_to_row.items()}
-    r_scores = [
-        spectrum[i]
-        for i in range(n)
-        if row_to_id.get(i) in senator_parties
-        and senator_parties[row_to_id[i]] == "R"
-    ]
+    r_idx = [i for i in range(n) if senator_parties.get(row_to_id.get(i)) == "R"]
+    d_idx = [i for i in range(n) if senator_parties.get(row_to_id.get(i)) == "D"]
+    r_scores = [spectrum[i] for i in r_idx]
     # SVD leaves the sign of each singular vector arbitrary, so pin it:
     # orient the axis so the Republican cohort mean is positive. If there is
     # no usable R cohort (empty, or a near-zero mean in a party-balanced
@@ -284,6 +281,32 @@ def compute_ideology_scores(
         spectrum = spectrum * sign
 
     scores = _rescale(spectrum)
+
+    # 2026-07 (O6): pinning the sign only fixes orientation — it does
+    # nothing to confirm the second singular vector is actually the
+    # partisan axis in the first place. In a sparse/unusual window (few
+    # cosponsorship events, an off-cycle session) it can just as easily
+    # capture some other dominant pattern, and the sign-pin above would
+    # still confidently orient noise. Real production (2026-07, current
+    # Senate, 53 R / 45 D): R_mean=0.796, D_mean=0.277 on this same
+    # rescaled scale, a 0.52 gap — a healthy signal is large, not
+    # marginal. 0.15 is a conservative floor (well under a third of that
+    # measured gap) chosen without a directly-observed degenerate example
+    # to compare against (this codebase has never actually produced a
+    # bad axis to measure) — below it, the safer failure is publishing
+    # nothing this run rather than a confidently-oriented coin flip that
+    # feeds the v6.7 position-mismatch discount and partisan-depth priors.
+    _MIN_PARTY_MEAN_SEPARATION = 0.15
+    if r_idx and d_idx:
+        r_mean_final = sum(scores[i] for i in r_idx) / len(r_idx)
+        d_mean_final = sum(scores[i] for i in d_idx) / len(d_idx)
+        if abs(r_mean_final - d_mean_final) < _MIN_PARTY_MEAN_SEPARATION:
+            logger.warning(
+                "Ideology axis failed validation (R/D mean separation %.3f < %.2f) — "
+                "withholding ideology scores this run",
+                abs(r_mean_final - d_mean_final), _MIN_PARTY_MEAN_SEPARATION,
+            )
+            return {}
 
     return {row_to_id[i]: scores[i] for i in range(n) if row_to_id[i] in senator_bioguide_ids}
 

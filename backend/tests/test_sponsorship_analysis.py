@@ -254,6 +254,33 @@ class TestIdeology:
             f"Partisan clusters should be separated: D_mean={d_mean:.4f}, R_mean={r_mean:.4f}"
         )
 
+    def test_withholds_scores_when_second_axis_is_not_partisan(self):
+        """O6: the sign-pin only fixes orientation — it doesn't confirm the
+        second singular vector is actually the partisan axis. Two cliques
+        that split cosponsorship along a line with NOTHING to do with
+        party (each clique has equal R/D representation) is a real
+        structural signal an unguarded sign-pin would still confidently
+        orient. R/D means separation should be ~0 here, so scores must be
+        withheld rather than published as a coin-flip axis."""
+        d_senators = [f"D{i:03d}" for i in range(6)]
+        r_senators = [f"R{i:03d}" for i in range(6)]
+        all_senators = set(d_senators + r_senators)
+        parties = {s: "D" for s in d_senators}
+        parties.update({s: "R" for s in r_senators})
+
+        # Two mixed-party cliques, each with equal R/D representation —
+        # cosponsorship splits senators along clique membership, not party.
+        clique1 = [d_senators[0], d_senators[1], d_senators[2], r_senators[0], r_senators[1], r_senators[2]]
+        clique2 = [d_senators[3], d_senators[4], d_senators[5], r_senators[3], r_senators[4], r_senators[5]]
+        sponsor_map: dict[str, list[str]] = {}
+        for clique in (clique1, clique2):
+            for s in clique:
+                sponsor_map[s] = [other for other in clique if other != s]
+
+        bills, cosponsors = _make_bills_and_cosponsors(sponsor_map)
+        result = compute_ideology_scores(bills, cosponsors, all_senators, parties)
+        assert result == {}
+
 
 # ---------- describe position ----------
 
