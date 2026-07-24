@@ -11,6 +11,7 @@ const NAV_LINKS: readonly { href: string; label: string; accent?: boolean }[] = 
   { href: "/action", label: "ACTION CENTER", accent: true },
   { href: "/bills", label: "BILLS" },
   { href: "/politicians", label: "POLITICIANS" },
+  { href: "/elections", label: "ELECTIONS" },
   { href: "/leaderboard", label: "LEADERBOARD" },
   { href: "/compare", label: "COMPARE" },
   { href: "/explore", label: "EXPLORE" },

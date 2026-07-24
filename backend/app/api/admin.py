@@ -595,7 +595,10 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
     from app.pipeline.house_pipeline import is_house_pipeline_running
     from app.pipeline.stock_pipeline import is_stock_pipeline_running
     from app.pipeline.supplementary_pipeline import is_supplementary_pipeline_running
-    from app.models import HousePipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun
+    from app.pipeline.election_pipeline import is_election_pipeline_running
+    from app.models import (
+        ElectionPipelineRun, HousePipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun,
+    )
     is_running = _is_pipeline_running(db)
 
     last_run = (
@@ -618,12 +621,18 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
         .order_by(SupplementaryPipelineRun.started_at.desc())
         .first()
     )
+    last_election_run = (
+        db.query(ElectionPipelineRun)
+        .order_by(ElectionPipelineRun.started_at.desc())
+        .first()
+    )
 
     result: dict = {
         "isRunning": is_running,
         "houseIsRunning": is_house_pipeline_running(),
         "stockTradesIsRunning": is_stock_pipeline_running(),
         "supplementaryIsRunning": is_supplementary_pipeline_running(),
+        "electionIsRunning": is_election_pipeline_running(),
     }
 
     if last_supplementary_run:
@@ -640,6 +649,21 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
             "elapsedSeconds": _live_elapsed(last_supplementary_run),
             "errorMessage": last_supplementary_run.error_message,
             "progressSteps": _parse_progress_steps(last_supplementary_run),
+        }
+
+    if last_election_run:
+        result["electionLastRun"] = {
+            "id": last_election_run.id,
+            "startedAt": last_election_run.started_at.isoformat() if last_election_run.started_at else None,
+            "completedAt": last_election_run.completed_at.isoformat() if last_election_run.completed_at else None,
+            "status": last_election_run.status,
+            "currentPhase": last_election_run.current_phase,
+            "candidatesSynced": last_election_run.candidates_synced,
+            "financialsRefreshed": last_election_run.financials_refreshed,
+            "coverageItemsIngested": last_election_run.coverage_items_ingested,
+            "elapsedSeconds": _live_elapsed(last_election_run),
+            "errorMessage": last_election_run.error_message,
+            "progressSteps": _parse_progress_steps(last_election_run),
         }
 
     if last_stock_run:
@@ -714,8 +738,10 @@ async def admin_pipeline_history(
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    """Return recent pipeline run history (Senate + supplementary + House + stock trades interleaved by date)."""
-    from app.models import HousePipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun
+    """Return recent pipeline run history (Senate + supplementary + House + stock trades + election interleaved by date)."""
+    from app.models import (
+        ElectionPipelineRun, HousePipelineRun, StockTradesPipelineRun, SupplementaryPipelineRun,
+    )
     senate_runs = (
         db.query(PipelineRun)
         .order_by(PipelineRun.started_at.desc())
@@ -737,6 +763,12 @@ async def admin_pipeline_history(
     supplementary_runs = (
         db.query(SupplementaryPipelineRun)
         .order_by(SupplementaryPipelineRun.started_at.desc())
+        .limit(limit)
+        .all()
+    )
+    election_runs = (
+        db.query(ElectionPipelineRun)
+        .order_by(ElectionPipelineRun.started_at.desc())
         .limit(limit)
         .all()
     )
@@ -783,6 +815,16 @@ async def admin_pipeline_history(
         })
         for r in supplementary_runs
     ]
+    election_entries = [
+        _history_entry(r, "election", {
+            "currentPhase": r.current_phase,
+            "candidatesSynced": r.candidates_synced,
+            "financialsRefreshed": r.financials_refreshed,
+            "coverageItemsIngested": r.coverage_items_ingested,
+            "progressSteps": _parse_progress_steps(r),
+        })
+        for r in election_runs
+    ]
 
     # Each pipeline type's own query above is already capped at `limit` —
     # don't re-truncate the interleaved union down to that same `limit`.
@@ -796,7 +838,7 @@ async def admin_pipeline_history(
     # full union (bounded at 4x `limit` by the per-type queries) guarantees
     # every pipeline type keeps its own most recent `limit` runs visible.
     return sorted(
-        senate_entries + house_entries + stock_entries + supplementary_entries,
+        senate_entries + house_entries + stock_entries + supplementary_entries + election_entries,
         key=lambda x: x["startedAt"] or "",
         reverse=True,
     )
@@ -941,6 +983,33 @@ async def admin_clear_stuck_supplementary(db: Session = Depends(get_db)):
     from app.pipeline.supplementary_pipeline import is_supplementary_pipeline_running
 
     return _clear_stuck_runs(db, SupplementaryPipelineRun, is_supplementary_pipeline_running(), "Supplementary")
+
+
+@router.post("/pipeline/trigger-election", dependencies=[Depends(require_admin)])
+async def admin_trigger_election_pipeline(db: Session = Depends(get_db)):
+    """Trigger a midterm-elections pipeline run (candidate roster,
+    financials, coverage ingestion, Bluesky posting)."""
+    from app.pipeline.election_pipeline import run_election_pipeline
+
+    run_pipeline_in_thread(
+        run_election_pipeline,
+        name="election-pipeline-run",
+        error_label="Election pipeline run failed",
+    )
+    return {"message": "Election pipeline triggered"}
+
+
+@router.post("/pipeline/clear-stuck-election", dependencies=[Depends(require_admin)])
+async def admin_clear_stuck_election(db: Session = Depends(get_db)):
+    """Mark any stuck (status=running) election pipeline run as failed.
+
+    Use when the in-memory flag says idle but the DB record still shows
+    running (e.g. after a container restart mid-run).
+    """
+    from app.models import ElectionPipelineRun
+    from app.pipeline.election_pipeline import is_election_pipeline_running
+
+    return _clear_stuck_runs(db, ElectionPipelineRun, is_election_pipeline_running(), "Election")
 
 
 @router.post("/data/reset", dependencies=[Depends(require_admin)])

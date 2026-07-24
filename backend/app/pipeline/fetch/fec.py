@@ -212,6 +212,64 @@ async def find_candidate(
     return match
 
 
+CANDIDATES_PER_PAGE = 100
+
+
+async def fetch_all_candidates(
+    client: httpx.AsyncClient, db: Session, cycle: int, office: str,
+) -> list[dict]:
+    """Fetch every candidate actually on the ballot for `office` ("H" or
+    "S") in `cycle`'s election.
+
+    Unlike find_candidate (resolves ONE incumbent's own record by
+    name+state+office), this pages through /v1/candidates/ in bulk — the
+    roster source for the midterm-elections feature, where every declared
+    challenger and primary candidate matters, not just sitting members.
+
+    Filters on `election_year={cycle}`, NOT `cycle={cycle}`: FEC's `cycle`
+    param matches any two-year period in a candidate's `cycles` array —
+    every filing period their committee was active in — so for Senate it
+    also returns sitting senators whose next race is 2/4 years away (their
+    committees keep filing between races) and stale prior-cycle candidates
+    whose committees are winding down. `election_year` matches the actual
+    ballot year. This is the same cycle-vs-election-year distinction
+    financials_election_year below documents for the totals endpoint;
+    _sync_roster additionally re-validates each record's own
+    candidate_election_year/election_years, so a wrong record can't mint a
+    race for a state with no election that year (2026-07 review F1).
+
+    At per_page=100 this is a modest number of requests at FEC's
+    0.25 req/s rate limit, not a per-race lookup. Each page is cached
+    independently so a re-run within the TTL window only re-fetches pages
+    that changed.
+    """
+    all_candidates: list[dict] = []
+    page = 1
+    while True:
+        cache_key = f"candidates-roster-ey{cycle}-{office}-page{page}"
+        data = api_cache_get(db, "fec", cache_key)
+        if data is None:
+            url = (
+                f"{FEC_API_BASE}/candidates/?election_year={cycle}&office={office}"
+                f"&per_page={CANDIDATES_PER_PAGE}&page={page}"
+            )
+            data = await _fetch_with_retry(client, url)
+            api_cache_set(db, "fec", cache_key, data)
+
+        if not data:
+            break
+        results = data.get("results") or []
+        all_candidates.extend(results)
+
+        total_pages = (data.get("pagination") or {}).get("pages", page)
+        if page >= total_pages or not results:
+            break
+        page += 1
+
+    logger.info("Fetched %d %s candidates for cycle %d", len(all_candidates), office, cycle)
+    return all_candidates
+
+
 def financials_election_year(row: dict) -> int | None:
     """The confirmed election year a candidate totals row belongs to.
 

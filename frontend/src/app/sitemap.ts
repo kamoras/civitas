@@ -9,6 +9,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${BASE}/action`, lastModified: now, changeFrequency: "hourly", priority: 0.9 },
     { url: `${BASE}/politicians`, lastModified: now, changeFrequency: "daily", priority: 0.9 },
     { url: `${BASE}/bills`, lastModified: now, changeFrequency: "hourly", priority: 0.8 },
+    { url: `${BASE}/elections`, lastModified: now, changeFrequency: "hourly", priority: 0.8 },
     { url: `${BASE}/leaderboard`, lastModified: now, changeFrequency: "daily", priority: 0.8 },
     { url: `${BASE}/compare`, lastModified: now, changeFrequency: "weekly", priority: 0.7 },
     { url: `${BASE}/explore`, lastModified: now, changeFrequency: "daily", priority: 0.7 },

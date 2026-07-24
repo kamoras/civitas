@@ -185,10 +185,20 @@ def main() -> int:
     for f in failures:
         print("GATE FAILED:", f)
 
+    from datetime import date
+    as_of = date.today().isoformat()
     json.dump(
         {
-            "_source": "Wikipedia district infoboxes (Cook PVI), retrieved 2026-07-10; regenerate with backend/scripts/fetch_district_pvi.py",
+            "_source": (
+                f"Wikipedia district infoboxes (Cook PVI), retrieved {as_of}; "
+                "regenerate with backend/scripts/fetch_district_pvi.py"
+            ),
             "_sign": "positive = R lean, negative = D lean (matches state_pvi.json)",
+            # Cook's current published district PVIs use the 2020+2024
+            # presidential window — recorded here so exposure surfaces
+            # (api/elections.py /pvi) can label the number's vintage.
+            "_window": "2020+2024",
+            "_as_of": as_of,
             "districts": result,
         },
         open(output, "w"),

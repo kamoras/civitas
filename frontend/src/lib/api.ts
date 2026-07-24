@@ -4,6 +4,7 @@ import type { Justice, JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssuesResponse, MyRepsResponse } from "@/types/action";
 import type { PoliticianCard } from "@/types/politicians";
 import type { BillDetail, PaginatedBills } from "@/types/bill";
+import type { PviMap, RaceSummary } from "@/types/election";
 import type {
   JusticeScoreBreakdown,
   PresidentScoreBreakdown,
@@ -1097,6 +1098,20 @@ export interface ElectionInfo {
 
 export async function fetchElectionInfo(): Promise<ElectionInfo> {
   return cachedFetch(`${API_BASE}/action/elections`, TTL.LONG);
+}
+
+// ── Midterm-elections feature (candidate rosters, race detail, PVI) ──
+// Separate namespace from /action/elections above (that endpoint is the
+// lightweight Action Center teaser; this is the fuller candidate-research
+// feature) — see backend/app/api/elections.py. Race detail is fetched
+// server-side by app/elections/[raceId]/page.tsx, not through this client.
+
+export async function fetchRaces(): Promise<RaceSummary[]> {
+  return cachedFetch(`${API_BASE}/elections/races`, TTL.SHORT);
+}
+
+export async function fetchPviMap(): Promise<PviMap> {
+  return cachedFetch(`${API_BASE}/elections/pvi`, TTL.LONG);
 }
 
 

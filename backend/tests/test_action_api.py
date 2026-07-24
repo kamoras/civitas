@@ -212,3 +212,51 @@ class TestElectionsAndTimelineRoutesUseCanonicalClock:
         with patch("app.api.action.utcnow", return_value=datetime(2026, 3, 15)):
             result = await get_timeline(Response(), year=None, db=db_session)
         assert result["year"] == 2026
+
+
+class TestElectionInfoSpecialSenateRaces:
+    """get_election_info merges data-derived special Senate races (Race
+    rows with is_special, synced from FEC by the election pipeline) into
+    the calendar-derived class rotation (2026-07 review F16) — so the
+    Action Center teaser and /api/elections can't disagree about which
+    states have a Senate race."""
+
+    def _fl_entry(self, result):
+        return next(s for s in result["states"] if s["state"] == "FL")
+
+    async def test_special_race_adds_state_and_seat_count(self, db_session):
+        from datetime import datetime
+        from unittest.mock import patch
+
+        from fastapi import Response
+
+        from app.api.action import get_election_info
+        from app.models import Race
+
+        # FL's Class 3 seat is NOT in the 2026 (Class II) rotation — only
+        # the pipeline-synced special race can put it on the map.
+        db_session.add(Race(
+            id="2026-SEN-FL-SPECIAL", cycle_year=2026, office="S",
+            state="FL", is_special=True,
+        ))
+        db_session.commit()
+
+        with patch("app.api.action.utcnow", return_value=datetime(2026, 7, 24)):
+            result = await get_election_info(Response(), db=db_session)
+
+        assert self._fl_entry(result)["hasSenateRace"] is True
+        assert result["senateSeatsUp"] == 34  # 33 Class II + FL special
+
+    async def test_without_special_race_fl_has_no_senate_race(self, db_session):
+        from datetime import datetime
+        from unittest.mock import patch
+
+        from fastapi import Response
+
+        from app.api.action import get_election_info
+
+        with patch("app.api.action.utcnow", return_value=datetime(2026, 7, 24)):
+            result = await get_election_info(Response(), db=db_session)
+
+        assert self._fl_entry(result)["hasSenateRace"] is False
+        assert result["senateSeatsUp"] == 33  # the Class II rotation alone
