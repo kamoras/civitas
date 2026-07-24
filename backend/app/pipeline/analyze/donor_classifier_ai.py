@@ -600,10 +600,25 @@ def _classify_donors_hybrid_sync(
         logger.info("Batch embedding %d donor names for industry classification...", len(all_donor_names))
         embedding_scored = classify_industries_batch_scored(all_donor_names)
 
-    # Threshold for overriding a stale learning store entry.  Industry scores are
-    # now in centered embedding space (baseline ~0); only override if the embedding
-    # has a strong positive signal for a different industry.
-    _CORRECTION_THRESHOLD = 0.25
+    # Threshold for overriding a stale learning store entry.
+    #
+    # 2026-07 fix (O2): this comment used to claim industry scores were "in
+    # centered embedding space (baseline ~0)" and set 0.25 as a "strong
+    # positive signal" bar on that assumption. classify_industries_batch_scored
+    # returns the raw cosine score, never centered — and it already only
+    # returns entries that clear its own SPREAD_THRESHOLD margin-over-mean
+    # gate (see industry_classifier.py), so every emb_score reaching this
+    # point was >= 0.25 anyway. The override fired on any top-1 disagreement,
+    # every run, including against FEC-metadata rows the pipeline itself
+    # trusts most. Live-measured (401 real donor names that pass the real
+    # spread gate): raw emb_score mean=0.565, p10=0.512, p50=0.562, max=0.712.
+    # 0.60 (just above the median of already-confident classifications)
+    # requires genuinely above-average confidence before overriding a stored
+    # label — matching the asymmetric risk _normalize_category's docstring
+    # describes (O5): a missed correction just leaves a stale label for one
+    # more run, a wrong correction pollutes the learning store with a
+    # confident-looking mistake.
+    _CORRECTION_THRESHOLD = 0.60
 
     last_commit = time.monotonic()
     for donor in unique_donors:
@@ -816,7 +831,18 @@ def _store_donor_learning(
     """Store both type and industry classifications using SQL upsert.
 
     Uses INSERT ... ON CONFLICT DO UPDATE to handle races atomically.
-    Only overwrites if new confidence >= existing confidence.
+
+    2026-07 (O2): this always overwrites the persisted row — there is no
+    comparison against the existing DB row's confidence, despite an
+    earlier version of this docstring claiming one. That's the intended
+    design, not a bug: AGENTS.md Sec.2 documents that the learning store
+    deliberately has "no confidence guards" so the current run's
+    classifications take precedence, and that this is safe within a
+    single run because learning-store lookups already short-circuit
+    re-classification of anything already seen this run. `_seen_this_run`
+    below only dedupes multiple writes to the same key *within this run*
+    (keeping the highest-confidence one of those) — it is not a guard
+    against a prior run's persisted value.
     """
     import json
     from sqlalchemy.dialects.sqlite import insert as sqlite_insert
