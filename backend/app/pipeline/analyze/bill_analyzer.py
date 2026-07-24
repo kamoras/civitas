@@ -219,7 +219,11 @@ def _augmented_embedding_classify(text: str) -> str:
             best_score = score
             best_area = area
 
-    if best_score > 0.18:
+    # 2026-07 fix (O1): was 0.18, below the measured floor for this same
+    # augmented-prefix comparison (600 real titles: mean=0.772, p10=0.734,
+    # min=0.649) — recalibrated the same way as EMBEDDING_CONFIDENCE_THRESHOLD
+    # just above (same corpus, same lack of a clean genuine/noise gap).
+    if best_score > 0.72:
         return best_area
     return "PROCEDURAL"
 
@@ -274,7 +278,20 @@ def _get_policy_embeddings() -> dict[str, np.ndarray]:
 # ── Policy area classification (embeddings) ──────────────────────
 
 
-EMBEDDING_CONFIDENCE_THRESHOLD = 0.25
+# 2026-07 fix (platform-review O1): this sat at 0.25, far below the
+# model's real similarity floor for this comparison. Live-measured
+# (600 real bill titles vs the 16 non-procedural POLICY_TAXONOMY
+# prototypes, no prompt_name="query" — matching this function's actual,
+# unfixed encoding): top-1 score mean=0.759, p10=0.722, min=0.641. At
+# 0.25 the augmented-reembed fallback below was dead code — nothing
+# ever scored that low. There is no clean gap between a genuine top-1
+# match and the runner-up category here (runner-up mean=0.740, p90=0.772)
+# — this floor was never going to separate "right category" from
+# "plausible wrong category"; recalibrating it can only restore its
+# actual job, catching the small tail of genuinely low-signal bills
+# (short/vague titles) and giving them a second, augmented-context pass.
+# 0.70 sits just below the measured p10.
+EMBEDDING_CONFIDENCE_THRESHOLD = 0.70
 
 # Below this reference-corpus share, a kNN vote against a seed-anchor
 # alternative in that category isn't trusted to override it — see
@@ -391,8 +408,12 @@ def classify_policy_area(
         # Else: fall through and let tier 2 (below) decide instead.
 
     # If reference corpus suggested PROCEDURAL but seed embedding disagrees,
-    # trust the embedding (reference corpus may have bad labels from prior runs)
-    if ref_area == "PROCEDURAL" and best_area != "PROCEDURAL" and best_score > 0.20:
+    # trust the embedding (reference corpus may have bad labels from prior runs).
+    # 2026-07 (O1): reuses EMBEDDING_CONFIDENCE_THRESHOLD rather than its own
+    # independent magic number (was 0.20, also dead) — "confident enough to
+    # override a PROCEDURAL vote" is the same bar as "confident enough to
+    # accept outright" just below.
+    if ref_area == "PROCEDURAL" and best_area != "PROCEDURAL" and best_score > EMBEDDING_CONFIDENCE_THRESHOLD:
         return best_area, best_score
 
     if best_score < EMBEDDING_CONFIDENCE_THRESHOLD:
@@ -537,8 +558,20 @@ def derive_stance(bill_name: str, summary: str, policy_area: str) -> tuple[str, 
     best_dir = max(scores, key=scores.get)  # type: ignore[arg-type]
     best_score = scores[best_dir]
 
-    # Require minimum absolute similarity to classify at all
-    if best_score < 0.10:
+    # Require minimum absolute similarity to classify at all.
+    # 2026-07 fix (O1): was 0.10, far below the measured floor — live
+    # data (28 real bill titles with an unambiguous tier-0 directional
+    # verb, so the "true" direction is known) scored best_score
+    # mean=0.779, p10=0.739, min=0.673 even on these genuinely directional
+    # titles; nothing was ever going to fall below 0.10. The real
+    # precision work here is the margin-over-neutral check just below
+    # (neutral-prototype score on these same directional titles is
+    # already mean=0.734 — almost as high as best_score itself, so the
+    # absolute floor was never going to be the thing separating
+    # directional from ambiguous). 0.65 sits below the measured min so it
+    # doesn't reject known-good cases, while still catching genuinely
+    # degenerate/off-topic text below this model's typical floor.
+    if best_score < 0.65:
         best_dir = "neutral"
     elif best_dir != "neutral":
         # For pro/anti, require a margin over neutral to avoid false positives.

@@ -181,7 +181,7 @@ def classify_batch_nn(
     entity_type: str,
     prototype_descriptions: dict[str, str] | None = None,
     k: int = 7,
-    min_similarity: float = 0.20,
+    min_similarity: float = 0.65,
 ) -> dict[str, str]:
     """Classify names by kNN in sentence-transformer embedding space.
 
@@ -196,6 +196,16 @@ def classify_batch_nn(
         prototype_descriptions: Optional seed descriptions per category.
         k: Number of nearest neighbors to consider.
         min_similarity: Minimum cosine similarity to count as a neighbor.
+            2026-07 fix (O1): was 0.20, far below this model's real floor
+            for entity-name-to-entity-name comparisons — live-measured on
+            real donor names (661 same-type pairs, 187 cross-type pairs):
+            same-type cosine mean=0.734/p10=0.681, cross-type mean=0.708/
+            p90=0.757 (no clean gap; ranges overlap heavily). 0.65 sits
+            below the same-type p10 so genuine neighbors still count as
+            neighbors, while rejecting names that don't resemble anything
+            in the reference set at all — the k-of-7 majority vote plus
+            inverse-frequency weighting is what does the real precision
+            work, not this floor (see O4 for the weighting side).
 
     Returns:
         Dict mapping query name -> predicted category.
@@ -398,8 +408,14 @@ def cross_validate_donor_types(db_session: Session) -> int:
 
     corrected = 0
     _MARGIN = 0.05
+    # 2026-07 (O1): the org_scores floor was 0.30; live-measured on 246 real
+    # PAC-labeled donors it was already functionally redundant — org_score
+    # mean=0.700/p90=0.744, well above 0.30, so _MARGIN (org beating pac by
+    # 0.05) was always the actual gate (6/246 real rows crossed it). Raised
+    # to 0.65 to match the measured floor honestly; in practice this changes
+    # nothing for real data since _MARGIN was already doing the work.
     for i, row in enumerate(pac_rows):
-        if org_scores[i] > pac_scores[i] + _MARGIN and org_scores[i] > 0.30:
+        if org_scores[i] > pac_scores[i] + _MARGIN and org_scores[i] > 0.65:
             logger.info(
                 "Reclassifying %s: PAC -> Org/Employees (org=%.3f, pac=%.3f)",
                 row.entity_name, org_scores[i], pac_scores[i],

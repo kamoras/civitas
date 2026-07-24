@@ -136,7 +136,7 @@ def _load_reference_corpus() -> tuple[np.ndarray | None, list[str]]:
 def classify_bill_by_reference(
     text: str,
     k: int = 7,
-    min_similarity: float = 0.30,
+    min_similarity: float = 0.65,
 ) -> tuple[str | None, float]:
     """Classify a bill using kNN against the reference corpus.
 
@@ -144,6 +144,18 @@ def classify_bill_by_reference(
     the policy area by similarity-weighted majority vote.
 
     Returns (policy_area, confidence) or (None, 0.0) if insufficient data.
+
+    2026-07 fix (O1): min_similarity was 0.30, far below the real floor
+    for bill-title-to-bill-title cosine — live-measured (4534 same-
+    policy-area title pairs, 179 cross-policy-area pairs, grouped by this
+    module's own classification): same-area mean=0.766/p10=0.697,
+    cross-area mean=0.749/p90=0.812 (max 0.903) — essentially no
+    separation; a cross-area pair can easily outscore a same-area one.
+    0.65 sits below the same-area p10 so real neighbors still pass, but
+    this floor was never going to be what makes kNN voting accurate here
+    (see classify_bill_by_reference's caller for the corpus-share gate
+    that compensates) — it only rejects titles that don't resemble
+    anything in the corpus at all.
     """
     ref_embs, ref_labels = _load_reference_corpus()
     if ref_embs is None or len(ref_labels) < 5:
@@ -344,7 +356,15 @@ def classify_motion_type(question: str) -> str:
     query_emb = query_emb / np.linalg.norm(query_emb)
 
     best_type = "unknown"
-    best_score = 0.30
+    # 2026-07 fix (O1): was 0.30. Real Senate.gov "question" strings aren't
+    # persisted anywhere in this codebase to measure directly, but this is
+    # the same short-text-vs-prototype comparison (no prompt_name="query")
+    # as classify_bill_by_reference just above, where the real floor for
+    # genuine matches measured p10=0.697 on live data — 0.65 matches that
+    # family's floor rather than guessing a fresh number with no evidence
+    # behind it. At 0.30, "unknown" was dead: no real question text was
+    # ever going to score that low.
+    best_score = 0.65
 
     for mtype, emb in motion_prototypes.items():
         score = float(np.dot(query_emb, emb))

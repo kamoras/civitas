@@ -163,11 +163,21 @@ def industry_policy_similarity(industry: str, policy_area: str) -> float:
 
 def get_related_policies(
     industry: str,
-    threshold: float = 0.35,
+    threshold: float = 0.75,
 ) -> set[str]:
     """Get policy areas semantically related to a donor industry.
 
     Drop-in replacement for _INDUSTRY_POLICY_MAP[industry].
+
+    2026-07 fix (O1): threshold was 0.35, on the exact same 375-pair
+    industry x policy anchor matrix detect_donor_vote_connections already
+    measured (see its docstring): genuine matches 0.87-0.93, cross-category
+    noise mean=0.66/p90=0.71 — a clean gap. At 0.35 this returned
+    essentially every policy area for every industry (feeding
+    select_key_votes' "+2 donor-industry overlap" signal uniformly, so key
+    vote selection degenerated to "voted against party, then arbitrary").
+    0.75 reuses the same already-validated gate instead of a second,
+    independently-wrong number over identical data.
     """
     scores = _compute_industry_policy_matrix()
     return {

@@ -243,8 +243,8 @@ def _get_semantic_type_embeddings() -> dict[str, np.ndarray]:
 def classify_donor_type_semantic(
     name: str,
     candidate_name: str | None = None,
-    threshold: float = 0.35,
-    skip_threshold: float = 0.45,
+    threshold: float = 0.60,
+    skip_threshold: float = 0.75,
 ) -> str | None:
     """Classify donor type using embedding cosine similarity against prototypes.
 
@@ -259,6 +259,21 @@ def classify_donor_type_semantic(
     For candidate-affiliated detection, dynamically generates a personalized
     template using the candidate's last name so the model can detect entities
     like "Sullivan Victory" or "Cruz for Senate" without hardcoded patterns.
+
+    2026-07 fix (O1): threshold was 0.35, skip_threshold 0.45 — both far
+    below the real floor. Live-measured against 800 real, already-labeled
+    donors: when the embedding's own top-1 pick matches the stored label,
+    score mean=0.745/p10=0.699/min=0.614; when it doesn't, mean=0.737/
+    p90=0.796 — almost no separation (top-1 accuracy against stored labels
+    was only 360/800, barely better than chance among 5 categories). This
+    threshold was never going to be a precision lever on its own; 0.60
+    sits below the measured min for correct top-1 picks so it doesn't
+    reject known-good matches, while no longer being unconditionally true.
+    For skip_threshold: the SKIP prototype scored mean=0.692/p90=0.733
+    against real *non*-SKIP donor names — 0.75 sits above that p90,
+    actually raising the bar the SKIP category was supposed to have over
+    the others (its whole stated purpose), rather than sharing the same
+    dead floor as everything else.
     """
     if not name or len(name.strip()) < 3:
         return None
