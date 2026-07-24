@@ -12,6 +12,7 @@ import logging
 import httpx
 
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -59,9 +60,7 @@ async def fetch_employment_data(
     # Cap at the current year (BLS has no future data), never at a
     # hardcoded year — a fixed cap silently froze the payroll series for
     # any in-progress term once the calendar passed it.
-    from datetime import datetime, timezone
-
-    capped_end = min(end_year, datetime.now(timezone.utc).year)
+    capped_end = min(end_year, utcnow().year)
 
     payload = {
         "seriesid": [NONFARM_SERIES],

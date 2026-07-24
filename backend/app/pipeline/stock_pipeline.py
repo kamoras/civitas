@@ -14,7 +14,7 @@ timeliness -> upsert.
 
 import logging
 import time
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 
 import httpx
 from sqlalchemy.orm import Session
@@ -172,7 +172,7 @@ async def _classify_rows_industry(db: Session, client: httpx.AsyncClient, rows: 
 async def _ingest_house(db: Session, client: httpx.AsyncClient) -> int:
     existing_rep_filing_ids = {row[0] for row in db.query(RepStockTrade.filing_id).all()}
 
-    current_year = date.today().year
+    current_year = utcnow().year
     inserted = 0
     for year in (current_year - 1, current_year):
         filings = await fetch_ptr_filing_index(client, db, year)
@@ -217,7 +217,7 @@ async def _ingest_senate(db: Session, client: httpx.AsyncClient) -> int:
     if latest and latest[0]:
         since_date = latest[0]
     else:
-        since_date = (date.today() - timedelta(days=COLD_START_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
+        since_date = (utcnow().date() - timedelta(days=COLD_START_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
 
     csrf_token = await senate_accept_terms(client)
     if csrf_token is None:

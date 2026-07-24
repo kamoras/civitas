@@ -173,3 +173,42 @@ class TestRelatedBillInternalLinks:
         resp = _build_issue_response(issue, db_session)
 
         assert resp["relatedBills"][0]["internalUrl"] is None
+
+
+class TestElectionsAndTimelineRoutesUseCanonicalClock:
+    """get_open_comments/get_election_info/get_timeline all compute
+    "today" via app.time_utils.utcnow — must not silently regress to a
+    local-timezone-dependent date.today()/datetime.now() call, which
+    could compute a different calendar day/year right at a UTC boundary
+    depending on the container's local timezone (2026-07-23 timezone-
+    consistency pass)."""
+
+    async def test_get_election_info_runs_against_an_empty_db(self, db_session):
+        from fastapi import Response
+
+        from app.api.action import get_election_info
+
+        result = await get_election_info(Response(), db=db_session)
+        assert "nextElection" in result
+        assert result["nextElection"]["daysUntil"] >= 0
+        assert result["senateSeatsUp"] > 0
+
+    def test_get_open_comments_runs_against_an_empty_db(self, db_session):
+        from fastapi import Response
+
+        from app.api.action import get_open_comments
+
+        result = get_open_comments(Response(), db=db_session)
+        assert result == []
+
+    async def test_get_timeline_defaults_year_from_the_canonical_clock(self, db_session):
+        from datetime import datetime
+        from unittest.mock import patch
+
+        from fastapi import Response
+
+        from app.api.action import get_timeline
+
+        with patch("app.api.action.utcnow", return_value=datetime(2026, 3, 15)):
+            result = await get_timeline(Response(), year=None, db=db_session)
+        assert result["year"] == 2026
