@@ -64,6 +64,24 @@ class TestCosponsorshipEdgeWeight:
         bill = {"isLaw": is_law, "latestAction": latest_action}
         assert _cosponsorship_edge_weight(bill) == expected
 
+    def test_known_accepted_false_positive_pattern(self):
+        """O7 disclosed exception: real production measurement (1366
+        distinct latestAction strings, 352 keyword matches) found exactly
+        one false-positive pattern — a double-clause sentence where an
+        unrelated procedural sub-motion's "agreed to" is matched instead
+        of the bill's own (failed) outcome. Pinned here as a known,
+        measured, accepted rarity (1/352, 0.28%) rather than a silent
+        regression risk."""
+        bill = {
+            "isLaw": False,
+            "latestAction": (
+                "Motion to table the motion to reconsider the vote by "
+                "which S.J. Res. 49 failed of passage (Record Vote No. "
+                "225) agreed to in Senate by Yea-Nay Vote. 50 - 49."
+            ),
+        }
+        assert _cosponsorship_edge_weight(bill) == ADVANCED_EDGE_WEIGHT
+
 
 # ---------- matrix construction ----------
 

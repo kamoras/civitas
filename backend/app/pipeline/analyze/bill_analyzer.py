@@ -67,14 +67,6 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
-_NOMINATION_NAME_RE = re.compile(
-    r"(?:,\s*of\s+\w+,?\s+to\s+be\s)"
-    r"|(?:\bto\s+be\s+(?:United\s+States|an?\s+(?:Assistant|Associate|Under))\b)"
-    r"|(?:\bnominat(?:ion|ed|ee)\b)",
-    re.IGNORECASE,
-)
-
-
 POLICY_TAXONOMY = {
     "LABOR": (
         "Labor unions, workers' rights, employment, wages, and collective bargaining. "
@@ -799,10 +791,20 @@ async def classify_recent_votes(
 
         proc_areas = [{"area": "PROCEDURAL", "confidence": 0.95, "party": "bipartisan"}]
 
+        # 2026-07 (O7): a third signal, a regex matching nomination-style
+        # document-name phrasing ("X, of Y, to be Z"), used to run here
+        # too. Live-measured against 182 real key-vote rows (53 genuine
+        # PN-prefixed nominations): it caught zero cases that motion_type
+        # and the PN prefix both missed, and itself missed a real one
+        # ("...of the Virgin Islands, to be Judge...") — its single-word
+        # \w+ state-name pattern doesn't match multi-word territories.
+        # Removed rather than kept as a "disclosed exception": that bar
+        # requires a measured failure mode the embedding/structural
+        # signals don't already cover, and this measurement showed the
+        # opposite — no unique value, plus its own bug.
         is_nomination = (
             motion_type == "nomination"
             or bill_id.startswith("PN")
-            or _NOMINATION_NAME_RE.search(name) is not None
         )
 
         if is_nomination:
