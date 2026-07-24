@@ -3,8 +3,8 @@
 import logging
 import re
 import unicodedata
-from datetime import datetime
 
+from app.time_utils import utcnow
 from app.pipeline.transform.committee_data import (
     load_committee_membership,
     load_leadership_roles,
@@ -322,14 +322,14 @@ def _calculate_house_years(member: dict, detail: dict) -> int:
         sorted_terms = sorted(house_terms, key=lambda t: t.get("startYear", 9999))
         first_year = sorted_terms[0].get("startYear")
         if first_year:
-            return datetime.now().year - first_year
+            return utcnow().year - first_year
 
     depiction = member.get("depiction") or {}
     attribution = depiction.get("attribution", "")
     if attribution:
         match = re.search(r"since (\d{4})", attribution)
         if match:
-            return datetime.now().year - int(match.group(1))
+            return utcnow().year - int(match.group(1))
 
     return 0
 
@@ -442,7 +442,7 @@ def _calculate_years_in_office(member: dict, detail: dict) -> int:
         )
         first_year = sorted_terms[0].get("startYear")
         if first_year:
-            return datetime.now().year - first_year
+            return utcnow().year - first_year
 
     # Fallback: check depiction/service info
     depiction = member.get("depiction") or {}
@@ -450,7 +450,7 @@ def _calculate_years_in_office(member: dict, detail: dict) -> int:
     if attribution:
         match = re.search(r"since (\d{4})", attribution)
         if match:
-            return datetime.now().year - int(match.group(1))
+            return utcnow().year - int(match.group(1))
 
     logger.warning(
         "Could not determine years in office for %s",

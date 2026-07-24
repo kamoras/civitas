@@ -58,6 +58,7 @@ from sqlalchemy.orm import Session
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -235,7 +236,7 @@ def recent_polls(polls: list[ApprovalPoll], days: int = 90, as_of: datetime | No
     Mandate's own full-term average, for a "how is this changing lately"
     view of the currently-serving president specifically. Any poll with
     an unparseable date is excluded rather than guessed into the window."""
-    as_of = as_of or datetime.utcnow()
+    as_of = as_of or utcnow()
     cutoff = as_of - timedelta(days=days)
     result = []
     for p in polls:

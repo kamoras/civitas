@@ -148,3 +148,50 @@ class TestOtherPipelineRunningStaleness:
 
     def test_no_running_rows_does_not_block(self, db_session):
         assert stock_pipeline._other_pipeline_running(db_session) is False
+
+
+class TestIngestHouseYearWindow:
+    """_ingest_house's current_year (2026-07-23 timezone-consistency
+    pass) must come from the project's canonical UTC clock, not a
+    local-timezone-dependent date.today() call."""
+
+    async def test_current_year_drives_the_two_years_fetched(self, db_session):
+        from datetime import datetime
+        from unittest.mock import AsyncMock, patch
+
+        from app.pipeline.stock_pipeline import _ingest_house
+
+        with (
+            patch("app.pipeline.stock_pipeline.utcnow", return_value=datetime(2026, 3, 15)),
+            patch("app.pipeline.stock_pipeline.fetch_ptr_filing_index", new_callable=AsyncMock, return_value=[]) as mock_fetch,
+        ):
+            client = AsyncMock()
+            result = await _ingest_house(db_session, client)
+
+        assert result == 0
+        years_requested = {call.args[2] for call in mock_fetch.call_args_list}
+        assert years_requested == {2025, 2026}
+
+
+class TestIngestSenateColdStartWindow:
+    """_ingest_senate's cold-start lookback (no prior disclosure_date in
+    the DB) must come from the canonical UTC clock, not a local-
+    timezone-dependent date.today() call."""
+
+    async def test_cold_start_since_date_computed_from_canonical_clock(self, db_session):
+        from datetime import datetime, timedelta
+        from unittest.mock import AsyncMock, patch
+
+        from app.pipeline.stock_pipeline import COLD_START_LOOKBACK_DAYS, _ingest_senate
+
+        with (
+            patch("app.pipeline.stock_pipeline.utcnow", return_value=datetime(2026, 3, 15)),
+            patch("app.pipeline.stock_pipeline.senate_accept_terms", new_callable=AsyncMock, return_value="csrf-token"),
+            patch("app.pipeline.stock_pipeline.search_ptr_filings", new_callable=AsyncMock, return_value=[]) as mock_search,
+        ):
+            client = AsyncMock()
+            result = await _ingest_senate(db_session, client)
+
+        assert result == 0
+        expected_since = (datetime(2026, 3, 15) - timedelta(days=COLD_START_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
+        mock_search.assert_called_once_with(client, db_session, expected_since, "csrf-token")

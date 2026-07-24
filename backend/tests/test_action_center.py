@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from app.models import ActionIssue, ExploreDocument, Justice, NationalMonitor, Representative, Senator
+from app.time_utils import utcnow
 from app.pipeline.fetch.news_feeds import NewsArticle
 from app.pipeline.analyze.action_center import (
     _deduplicate_top_clusters,
@@ -1362,3 +1363,86 @@ class TestCongressGovUrlBuilding:
         assert (
             f"{settings.CURRENT_CONGRESS}th-congress" in resolved[0]["url"]
         )
+
+
+class TestCleanupOldUnpostedIssues:
+    """Extracted from _run_refresh (2026-07-23) for direct testability —
+    also switched its cutoff computation from the module's own utcnow()
+    (already correct) to confirm it stays on the canonical clock."""
+
+    def test_old_unposted_issue_is_deleted(self, db_session):
+        from app.pipeline.analyze.action_center import _cleanup_old_unposted_issues
+
+        old_date = (utcnow() - timedelta(days=20)).strftime("%Y-%m-%d")
+        db_session.add(ActionIssue(
+            date=old_date, rank=1, title="Old unposted issue", bsky_posted_at=None,
+        ))
+        db_session.commit()
+
+        deleted = _cleanup_old_unposted_issues(db_session)
+
+        assert deleted == 1
+        assert db_session.query(ActionIssue).count() == 0
+
+    def test_old_but_posted_issue_is_preserved(self, db_session):
+        from app.pipeline.analyze.action_center import _cleanup_old_unposted_issues
+
+        old_date = (utcnow() - timedelta(days=20)).strftime("%Y-%m-%d")
+        db_session.add(ActionIssue(
+            date=old_date, rank=1, title="Old but posted issue",
+            bsky_posted_at=utcnow() - timedelta(days=19),
+        ))
+        db_session.commit()
+
+        deleted = _cleanup_old_unposted_issues(db_session)
+
+        assert deleted == 0
+        assert db_session.query(ActionIssue).count() == 1
+
+    def test_recent_unposted_issue_is_preserved(self, db_session):
+        from app.pipeline.analyze.action_center import _cleanup_old_unposted_issues
+
+        recent_date = (utcnow() - timedelta(days=2)).strftime("%Y-%m-%d")
+        db_session.add(ActionIssue(
+            date=recent_date, rank=1, title="Recent unposted issue", bsky_posted_at=None,
+        ))
+        db_session.commit()
+
+        deleted = _cleanup_old_unposted_issues(db_session)
+
+        assert deleted == 0
+        assert db_session.query(ActionIssue).count() == 1
+
+
+class TestPruneStaleApiCache:
+    """Extracted from _run_refresh (2026-07-23) for direct testability."""
+
+    def test_old_cache_entry_is_deleted(self, db_session):
+        from app.models import ApiCache
+        from app.pipeline.analyze.action_center import _prune_stale_api_cache
+
+        db_session.add(ApiCache(
+            tier="test-tier", cache_key="old-key", data_json="{}",
+            cached_at=utcnow() - timedelta(days=90),
+        ))
+        db_session.commit()
+
+        deleted = _prune_stale_api_cache(db_session)
+
+        assert deleted == 1
+        assert db_session.query(ApiCache).count() == 0
+
+    def test_recent_cache_entry_is_preserved(self, db_session):
+        from app.models import ApiCache
+        from app.pipeline.analyze.action_center import _prune_stale_api_cache
+
+        db_session.add(ApiCache(
+            tier="test-tier", cache_key="recent-key", data_json="{}",
+            cached_at=utcnow() - timedelta(days=5),
+        ))
+        db_session.commit()
+
+        deleted = _prune_stale_api_cache(db_session)
+
+        assert deleted == 0
+        assert db_session.query(ApiCache).count() == 1

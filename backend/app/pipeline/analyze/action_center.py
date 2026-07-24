@@ -19,7 +19,7 @@ import logging
 import re
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -4085,31 +4085,8 @@ def _run_refresh(db: Session) -> int:
     except Exception:
         logger.exception("Bluesky engagement failed (non-fatal)")
 
-    # Clean up unposted issues older than 14 days.
-    # Issues that have been posted to Bluesky are preserved indefinitely
-    # so their permalink URLs remain valid.
-    from datetime import timedelta as _td
-    cutoff = (datetime.now(timezone.utc) - _td(days=14)).strftime("%Y-%m-%d")
-    deleted = (
-        db.query(ActionIssue)
-        .filter(ActionIssue.date < cutoff, ActionIssue.bsky_posted_at.is_(None))
-        .delete()
-    )
-    if deleted:
-        db.commit()
-        logger.info("Cleaned up %d old unposted action issues", deleted)
-
-    # Prune api_cache entries older than 60 days to bound unbounded growth.
-    cache_cutoff = (datetime.now(timezone.utc) - _td(days=60)).isoformat()
-    from app.models import ApiCache
-    cache_deleted = (
-        db.query(ApiCache)
-        .filter(ApiCache.cached_at < cache_cutoff)
-        .delete()
-    )
-    if cache_deleted:
-        db.commit()
-        logger.info("Pruned %d stale api_cache entries", cache_deleted)
+    _cleanup_old_unposted_issues(db)
+    _prune_stale_api_cache(db)
 
     # Persist this run's validator counters (2026-07 audit M9: these
     # existed only as log lines, wiped by every deploy — validator hit
@@ -4131,3 +4108,38 @@ def _run_refresh(db: Session) -> int:
         last_elapsed=round(elapsed, 1),
     )
     return issues_created
+
+
+def _cleanup_old_unposted_issues(db: Session) -> int:
+    """Delete unposted issues older than 14 days. Issues that have been
+    posted to Bluesky are preserved indefinitely so their permalink URLs
+    remain valid. Extracted for direct testability (no mocking the rest
+    of _run_refresh's many stages)."""
+    cutoff = (utcnow() - timedelta(days=14)).strftime("%Y-%m-%d")
+    deleted = (
+        db.query(ActionIssue)
+        .filter(ActionIssue.date < cutoff, ActionIssue.bsky_posted_at.is_(None))
+        .delete()
+    )
+    if deleted:
+        db.commit()
+        logger.info("Cleaned up %d old unposted action issues", deleted)
+    return deleted
+
+
+def _prune_stale_api_cache(db: Session) -> int:
+    """Delete api_cache entries older than 60 days to bound unbounded
+    growth. Extracted for direct testability, same reasoning as
+    _cleanup_old_unposted_issues above."""
+    from app.models import ApiCache
+
+    cache_cutoff = (utcnow() - timedelta(days=60)).isoformat()
+    cache_deleted = (
+        db.query(ApiCache)
+        .filter(ApiCache.cached_at < cache_cutoff)
+        .delete()
+    )
+    if cache_deleted:
+        db.commit()
+        logger.info("Pruned %d stale api_cache entries", cache_deleted)
+    return cache_deleted
