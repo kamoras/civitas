@@ -93,6 +93,34 @@ def _normalize_category(value: str) -> str:
     semantic prototypes for each valid category. Unknown/stale categories are
     resolved by cosine similarity (Reimers & Gurevych 2019) rather than a
     hardcoded alias table.
+
+    2026-07-24 fix (platform-review O5): the query was encoded without
+    prompt_name="query", unlike classify_industry (industry_classifier.py),
+    which documents that snowflake-arctic-embed-xs requires it for queries
+    (asymmetric retrieval model — encoding a query as a document shifts the
+    whole similarity scale). That mismatch, combined with a 0.25 floor
+    already below the model's real ~0.74 baseline, made the "ghost class
+    deletion" path in normalize_learning_store dead code — nothing could
+    ever score below the floor. Fixed encoding + threshold, both measured
+    together (changing one changes what the other means):
+    real near-miss category strings (a hallucinated "SPORTS" that should
+    resolve to MEDIA, "HEALTH" -> HEALTHCARE, "AUTO" -> MANUFACTURING,
+    etc. — 19 realistic cases spanning all 26 industries) score 0.52-0.72
+    with the corrected encoding. But a broader set of genuinely
+    out-of-taxonomy business terms (TOURISM, CONSUMER_GOODS,
+    ENTERTAINMENT — real categories, just not ones in this platform's 26)
+    overlaps that same range (0.47-0.67, p90 0.61) — there is no cosine
+    threshold that cleanly separates "should resolve to an existing
+    industry" from "is a plausible but out-of-taxonomy term," so this
+    isn't a threshold-tuning problem with one right answer. The choice
+    made: bias toward precision over recall. A false REJECT here just
+    means the row gets deleted from the learning store (re-classified
+    fresh next run — a safe failure). A false ACCEPT silently writes a
+    wrong-but-confident label that then feeds future kNN votes as if it
+    were ground truth — a worse, compounding failure. 0.65 sits just
+    above the broad-garbage p90 (0.61) and rejects several weaker real
+    near-misses (SPORTS 0.56, AUTO 0.52) in exchange for not laundering
+    out-of-taxonomy noise into the corpus.
     """
     v = value.strip().upper()
     if v in VALID_INDUSTRIES:
@@ -106,13 +134,13 @@ def _normalize_category(value: str) -> str:
 
     model = _get_model()
     industry_embs = _get_industry_embeddings()
-    query_emb = model.encode([v.replace("_", " ")], show_progress_bar=False)[0]
+    query_emb = model.encode([v.replace("_", " ")], prompt_name="query", show_progress_bar=False)[0]
     norm = np.linalg.norm(query_emb)
     if norm > 0:
         query_emb = query_emb / norm
 
     best_cat = "OTHER"
-    best_score = 0.25
+    best_score = 0.65
     for cat, cat_emb in industry_embs.items():
         score = float(np.dot(query_emb, cat_emb))
         if score > best_score:
