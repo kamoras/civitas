@@ -21,9 +21,22 @@ Consistency (Ideological Independence)
       neutral 50 when backed by few cases (count-confidence).
 
 Independence
-    Cross-bloc voting rate across all non-unanimous decisions — how often the
-    justice votes with ≥50 % of the opposing bloc while <50 % of their own
-    bloc is on the same side.  Scaled so that a 50 % cross-bloc rate = 100.
+    Continuous cross-bloc credit averaged across all non-unanimous decisions:
+    per case, (fraction of the opposing bloc voting this justice's side) ×
+    (1 − fraction of their own bloc voting this justice's side). Scaled so an
+    average credit of 50% = 100.
+
+    2026-07 fix: this used to threshold each case into a binary "did ≥50% of
+    the opposing bloc join me AND <50% of my own bloc" event before counting
+    a rate — mathematically biased by bloc size, since "<50% of own bloc"
+    is a coarse, nearly all-or-nothing bar for a small bloc (e.g. needing
+    BOTH of your only two bloc-mates to disagree with you) versus an easy,
+    finer-grained bar for a large bloc (needing only a bare few of many
+    peers to disagree). Confirmed via simulation: giving every justice on a
+    6-vs-3 court an IDENTICAL individual defection rate still produced an
+    8–10 point systematic independence gap favoring the larger bloc under
+    the old threshold — gone once the per-case credit is continuous instead
+    of booleanized before averaging.
 
 Bipartisan Agreement
     Average pairwise agreement rate with opposing-bloc justices across ALL
@@ -177,7 +190,8 @@ def analyze_justice_votes(
     opp_weighted_agree = 0.0
     opp_weighted_total = 0.0
 
-    cross_bloc_count = 0
+    cross_bloc_count = 0  # informational diagnostic only — see cross_bloc_pct
+    cross_bloc_credit_sum = 0.0  # drives score_independence, see formula below
     split_decisions = 0
 
     for v in votes:
@@ -221,8 +235,13 @@ def analyze_justice_votes(
 
         # --- Cross-bloc tracking (non-unanimous only) ---
         if not is_unanimous and expected_bloc:
-            own_in = [o for o in case_votes if o["justice_id"] in own_bloc]
-            opp_in = [o for o in case_votes if o["justice_id"] in opp_bloc]
+            # Recusals excluded from both blocs here too (same reasoning as
+            # the pairwise pass above) — an unfiltered recusal would count
+            # as "disagreeing" with this justice's side, inflating this
+            # justice's apparent independence for a case where the other
+            # justice simply didn't participate.
+            own_in = [o for o in case_votes if o["justice_id"] in own_bloc and o["vote"] in _PARTICIPATION_VOTES]
+            opp_in = [o for o in case_votes if o["justice_id"] in opp_bloc and o["vote"] in _PARTICIPATION_VOTES]
             # Only count as a split decision when opposing-bloc justices were
             # seated for the case — recusals would otherwise inflate the
             # denominator and deflate independence scores spuriously.
@@ -236,6 +255,15 @@ def analyze_justice_votes(
 
                 if opp_aligned and not own_aligned:
                     cross_bloc_count += 1
+
+                # Continuous credit, not a booleanized threshold (2026-07
+                # fix, see module docstring) — own_frac/opp_frac are
+                # per-case fractions, so a small own bloc's coarse 0/0.5/1
+                # granularity no longer gets forced through a binary cutoff
+                # before being averaged across cases.
+                own_frac = (own_same / len(own_in)) if own_in else 0.0
+                opp_frac = opp_same / len(opp_in)
+                cross_bloc_credit_sum += opp_frac * (1.0 - own_frac)
 
     # --- Score: Consistency (Ideological Independence) ---
     # ABSOLUTE agreement-rate differential weighted by Fisher information.
@@ -264,11 +292,12 @@ def analyze_justice_votes(
         consistency = 50.0
 
     # --- Score: Independence ---
-    # Cross-bloc voting rate across all split decisions.
-    # A 50% cross-bloc rate → score 100 (truly case-by-case), shrunk toward
-    # neutral when few split decisions back it (2026-07).
+    # Average continuous cross-bloc credit across all split decisions.
+    # An average credit of 50% → score 100, shrunk toward neutral when few
+    # split decisions back it (2026-07) — see module docstring for why this
+    # is a continuous per-case credit, not a booleanized threshold.
     if split_decisions > 0:
-        raw_independence = min(100.0, (cross_bloc_count / split_decisions) * 200)
+        raw_independence = min(100.0, (cross_bloc_credit_sum / split_decisions) * 200)
         independence = _shrink_to_neutral(raw_independence, split_decisions)
     else:
         independence = 50.0
@@ -396,9 +425,13 @@ def analyze_justice_votes(
             "independence": {
                 "cross_bloc_count": cross_bloc_count,
                 "split_decisions": split_decisions,
+                "avg_cross_bloc_credit": (
+                    round(cross_bloc_credit_sum / split_decisions, 3) if split_decisions > 0 else None
+                ),
                 "detail": (
-                    f"voted cross-bloc in {cross_bloc_count} of {split_decisions} split decisions "
-                    f"({cross_bloc_pct:.1f}%, scaled ×2 so a 50% cross-bloc rate = 100)"
+                    f"averaged {cross_bloc_credit_sum / split_decisions:.1%} continuous cross-bloc credit "
+                    f"across {split_decisions} split decisions (full cross-bloc events: {cross_bloc_count}, "
+                    f"{cross_bloc_pct:.1f}%) — scaled ×2 so a 50% average credit = 100"
                     if split_decisions > 0
                     else "no split decisions with an opposing bloc seated — neutral 50"
                 ),

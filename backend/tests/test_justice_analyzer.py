@@ -151,6 +151,71 @@ class TestSmallSampleShrinkage:
         assert 50 <= result["score_independence"] <= 60
 
 
+class TestIndependenceUnbiasedByBlocSize:
+    """2026-07 fix: the old binary '<50% of own bloc' threshold was coarser
+    for a small bloc than a large one — needing BOTH of your only two
+    bloc-mates to disagree with you (small bloc) is a much higher bar than
+    needing a bare few of many peers to disagree (large bloc). Confirmed via
+    simulation that this produced an 8-10 point systematic gap between a
+    6-member and a 3-member bloc even given IDENTICAL individual defection
+    behavior. The continuous per-case credit (opp_frac * (1 - own_frac))
+    must not reproduce that gap."""
+
+    def _asymmetric_court(self, n_cases, defect_rate, seed):
+        import random
+        rng = random.Random(seed)
+        r_justices = [f"r{i}" for i in range(6)]
+        d_justices = [f"d{i}" for i in range(3)]
+        party_map = {j: "R" for j in r_justices} | {j: "D" for j in d_justices}
+        all_justices = r_justices + d_justices
+
+        all_case_votes = {}
+        per_justice = {j: [] for j in all_justices}
+        for i in range(n_cases):
+            case_id = f"c{i}"
+            sides = {}
+            for j in all_justices:
+                preferred = "majority" if party_map[j] == "R" else "minority"
+                other = "minority" if preferred == "majority" else "majority"
+                sides[j] = preferred if rng.random() > defect_rate else other
+            n_maj = sum(1 for s in sides.values() if s == "majority")
+            n_min = len(sides) - n_maj
+            records = []
+            for j, side in sides.items():
+                records.append({
+                    "case_id": case_id, "justice_id": j, "vote": side,
+                    "opinion_type": "none", "is_unanimous": n_min == 0,
+                    "is_close": abs(n_maj - n_min) <= 1,
+                    "majority_votes": n_maj, "minority_votes": n_min,
+                })
+            all_case_votes[case_id] = records
+            for rec in records:
+                per_justice[rec["justice_id"]].append(rec)
+        return party_map, all_case_votes, per_justice
+
+    def test_large_and_small_bloc_score_similarly_given_identical_behavior(self):
+        party_map, all_votes, per_justice = self._asymmetric_court(
+            n_cases=400, defect_rate=0.30, seed=7,
+        )
+        r_scores = []
+        d_scores = []
+        for jid, party in party_map.items():
+            result = analyze_justice_votes(
+                justice_id=jid, appointing_party=party,
+                votes=per_justice[jid], all_case_votes=all_votes, party_map=party_map,
+            )
+            (r_scores if party == "R" else d_scores).append(result["score_independence"])
+
+        r_mean = sum(r_scores) / len(r_scores)
+        d_mean = sum(d_scores) / len(d_scores)
+        # The old binary-threshold formula produced roughly an 8-10 point
+        # gap here (6-member bloc scoring higher) for identical individual
+        # behavior; the continuous credit keeps it well under that.
+        assert abs(r_mean - d_mean) < 5.0, (
+            f"bloc-size bias reappeared: R bloc mean={r_mean:.1f}, D bloc mean={d_mean:.1f}"
+        )
+
+
 class TestRecusalNotCountedAsAgreement:
     def test_recused_other_justice_excluded_from_agreement(self):
         # d1 recused (non-participation value); must not count as agreeing
