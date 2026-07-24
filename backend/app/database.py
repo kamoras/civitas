@@ -413,6 +413,28 @@ def _ensure_indexes() -> None:
                     f"ON {table} (status) WHERE status = 'running'"
                 ))
 
+        # One coverage item per (race, url), enforced by the database
+        # (2026-07 review B3): ingestion is check-then-insert, and the
+        # 15-minute election-season refresh + nightly pipeline could
+        # otherwise both pass the check during an overlap window. The
+        # model declares the same UniqueConstraint for fresh installs;
+        # this covers a database whose table predates the constraint
+        # (create_all never ALTERs existing tables — see this function's
+        # docstring).
+        if inspector.has_table("race_coverage_items"):
+            # Dedupe first (keep the earliest row) — a pre-constraint
+            # database may hold duplicates from exactly the concurrency
+            # window this index closes, and CREATE UNIQUE INDEX on a
+            # table with duplicates fails, which would wedge startup.
+            conn.execute(text(
+                "DELETE FROM race_coverage_items WHERE id NOT IN "
+                "(SELECT MIN(id) FROM race_coverage_items GROUP BY race_id, url)"
+            ))
+            conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_race_coverage_race_url "
+                "ON race_coverage_items (race_id, url)"
+            ))
+
 
 def _migrate_visits_data_to_own_db() -> None:
     """One-time copy of any pre-split SiteVisit/PageView rows out of the

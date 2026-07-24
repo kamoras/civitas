@@ -747,7 +747,7 @@ ELECTION_SEASON_WINDOW_DAYS = 60
 
 def days_until_next_election(today: date | None = None) -> int:
     """Days remaining until the next federal Election Day (0 = today)."""
-    today = today or date.today()
+    today = today or utcnow().date()
     return (_next_election_day(today) - today).days
 
 

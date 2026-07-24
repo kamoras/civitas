@@ -1829,9 +1829,18 @@ class TestPositionCongruence:
 
     Synthetic D fit: expected_dim1 = -0.35 + 0.006*seat_pvi, saturation
     p90 = 0.2. NV is a swing seat (alignment 0.0); VT is D+15 (alignment
-    pinned to 1.0, maximally safe for a D)."""
+    pinned to 1.0, maximally safe for a D).
+
+    The seat PVIs are pinned via _state_pvi_cache, not read from the live
+    state_pvi.json: these expectations are exact arithmetic over the
+    docstring's stated leans, and a data regeneration that nudges NV off 0
+    (as the 2020+2024-window regeneration did, NV 0 -> +1) must not
+    silently shift this class's fixtures."""
 
     def _patch_ideal_points(self, monkeypatch, members=None):
+        monkeypatch.setattr(
+            score_calculator, "_state_pvi_cache", {"NV": 0, "VT": -15},
+        )
         monkeypatch.setattr(
             score_calculator, "_member_ideal_points_cache",
             {
@@ -2035,12 +2044,18 @@ class TestStatePviData:
     baseline, sign flip) fails here instead of silently skewing every
     senator's seat expectation."""
 
-    # A few hand-verified Cook Political Report 2022 published PVIs. The
-    # computed values must land within +/-1 (Cook's exact formula applies
-    # undisclosed recency weighting we deliberately don't replicate).
+    # Hand-computed anchors for the 2020+2024 window (the same window
+    # Cook's current 2025 PVIs use — the 2026-07 regeneration moved the
+    # shipped data off the old 2016+2020 window): mean deviation of the
+    # state's two-party D share from the national two-party D share
+    # (52.27% in 2020, 49.25% in 2024), from official statewide returns —
+    # worked by hand from the published vote totals, independent of the
+    # generator script. Shipped values must land within +/-1 (Cook's own
+    # published numbers may differ by a point via their undisclosed
+    # recency weighting, which we deliberately don't replicate).
     COOK_ANCHORS = {
-        "WY": 25, "WV": 22, "MA": -15, "CA": -13, "MI": 1, "PA": 2,
-        "GA": 3, "TX": 5, "DC": -43,
+        "WY": 24, "WV": 21, "MA": -14, "CA": -12, "MI": 0, "PA": 1,
+        "GA": 1, "TX": 6, "DC": -43,
     }
 
     def test_shipped_json_is_sane(self):
@@ -2074,14 +2089,16 @@ class TestStatePviData:
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
 
-        # National two-party D share = 50% both cycles.
+        # compute_pvi derives the national two-party split by summing the
+        # states it is given (no separate "national" key since the 2026-07
+        # rewrite), so ZZ is a huge 50/50 anchor state pinning the national
+        # D share to ~50%. Keyed by the generator's own CYCLES (2020+2024
+        # window) so a future window bump fails loudly here.
         counts = {
-            "2016": {"national": {"D": 100, "R": 100},
-                     "XX": {"D": 50, "R": 50},    # exactly national -> EVEN
-                     "YY": {"D": 40, "R": 60}},   # 10pts more R -> R+10
-            "2020": {"national": {"D": 100, "R": 100},
-                     "XX": {"D": 50, "R": 50},
-                     "YY": {"D": 40, "R": 60}},
+            cycle: {"ZZ": {"D": 1_000_000, "R": 1_000_000},
+                    "XX": {"D": 50, "R": 50},    # exactly national -> EVEN
+                    "YY": {"D": 40, "R": 60}}    # 10pts more R -> R+10
+            for cycle in mod.CYCLES
         }
         out = mod.compute_pvi(counts)
         assert out["XX"] == 0

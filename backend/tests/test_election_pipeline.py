@@ -6,7 +6,15 @@ import asyncio
 from datetime import timedelta
 from unittest.mock import patch
 
-from app.models import Candidate, ElectionPipelineRun, PipelineStatus, Race, ScoreSnapshot
+from app.config import settings
+from app.models import (
+    Candidate,
+    ElectionPipelineRun,
+    PipelineStatus,
+    Race,
+    RaceCoverageItem,
+    ScoreSnapshot,
+)
 from app.pipeline import election_pipeline
 from app.time_utils import utcnow
 
@@ -60,9 +68,14 @@ class TestRaceId:
 
 class TestSyncRoster:
     def _raw(self, **overrides):
+        # candidate_election_year=2026 by default: _sync_roster re-validates
+        # every record's own election year (_on_ballot_in) so a wrong
+        # upstream match can't mint a phantom race — records without a
+        # confirmed 2026 election are skipped BY DESIGN.
         defaults = dict(
             candidate_id="S6GA001", state="GA", office="S", name="OSSOFF, JON",
             party="DEM", incumbent_challenge="I", has_raised_funds=True,
+            candidate_election_year=2026,
         )
         defaults.update(overrides)
         return defaults
@@ -75,6 +88,68 @@ class TestSyncRoster:
         cand = db_session.query(Candidate).filter(Candidate.id == "S6GA001").one()
         assert cand.name == "OSSOFF, JON"
         assert cand.race_id == "2026-SEN-GA"
+
+    def test_election_years_list_alone_confirms_the_ballot(self, db_session):
+        # Some FEC records carry the cycle only in election_years, not in
+        # candidate_election_year — either field confirming 2026 is enough.
+        raw = self._raw(candidate_election_year=None, election_years=[2024, 2026])
+        synced = election_pipeline._sync_roster(db_session, 2026, [raw])
+        assert synced == 1
+
+    def test_record_for_a_future_cycle_is_rejected(self, db_session):
+        """An early 2028 declarer must not mint a 2026 race (2026-07 review
+        F1: the original cycle= query fabricated phantom Senate races in
+        ~15 states from exactly these records)."""
+        raw = self._raw(
+            candidate_id="S8GA001", candidate_election_year=2028,
+            election_years=[2028],
+        )
+        synced = election_pipeline._sync_roster(db_session, 2026, [raw])
+        assert synced == 0
+        assert db_session.query(Race).count() == 0
+        assert db_session.query(Candidate).count() == 0
+
+    def test_non_state_filings_rejected(self, db_session):
+        """DC and territorial delegate filings (PR/GU/...) are not federal
+        House/Senate races and must not appear in the roster."""
+        raws = [
+            self._raw(candidate_id="H6PR001", state="PR", office="H"),
+            self._raw(candidate_id="H6DC001", state="DC", office="H"),
+            self._raw(candidate_id="H6GU001", state="GU", office="H"),
+        ]
+        synced = election_pipeline._sync_roster(db_session, 2026, raws)
+        assert synced == 0
+        assert db_session.query(Race).count() == 0
+        assert db_session.query(Candidate).count() == 0
+
+    def test_senate_candidate_outside_class_rotation_gets_special_race(self, db_session):
+        """FL and OH have no regular (Class II) Senate seat in 2026, so a
+        2026 Senate candidate there can only be running in a special
+        election — keyed with a -SPECIAL suffix and flagged is_special."""
+        raws = [
+            self._raw(candidate_id="S6FL001", state="FL"),
+            self._raw(candidate_id="S6OH001", state="OH"),
+        ]
+        synced = election_pipeline._sync_roster(db_session, 2026, raws)
+        assert synced == 2
+
+        fl = db_session.query(Race).filter(Race.id == "2026-SEN-FL-SPECIAL").one()
+        assert fl.is_special is True
+        oh = db_session.query(Race).filter(Race.id == "2026-SEN-OH-SPECIAL").one()
+        assert oh.is_special is True
+
+    def test_senate_candidate_in_class_state_gets_regular_race(self, db_session):
+        # GA's Class II seat IS up in 2026 — a plain race, not a special.
+        election_pipeline._sync_roster(db_session, 2026, [self._raw()])
+        race = db_session.query(Race).filter(Race.id == "2026-SEN-GA").one()
+        assert race.is_special is False
+
+    def test_candidate_status_stored(self, db_session):
+        election_pipeline._sync_roster(
+            db_session, 2026, [self._raw(candidate_status="C")],
+        )
+        cand = db_session.query(Candidate).one()
+        assert cand.candidate_status == "C"
 
     def test_house_candidate_gets_district(self, db_session):
         election_pipeline._sync_roster(db_session, 2026, [self._raw(
@@ -114,15 +189,36 @@ class TestPrioritizeForFinancialRefresh:
         db.add(Candidate(id=cand_id, race_id=race_id, **defaults))
 
     def test_never_synced_before_previously_synced(self, db_session):
+        # "old" is synced but well past the cache TTL — still in the pool,
+        # just behind the never-synced candidate.
         self._add_candidate(
             db_session, "old", "2026-SEN-GA",
-            last_financials_sync=utcnow() - timedelta(days=1),
+            last_financials_sync=utcnow() - timedelta(hours=settings.PIPELINE_CACHE_TTL_HOURS + 24),
         )
         self._add_candidate(db_session, "new", "2026-SEN-TX", last_financials_sync=None)
         db_session.commit()
 
         ordered = election_pipeline._prioritize_for_financial_refresh(db_session, limit=10)
         assert [c.id for c in ordered] == ["new", "old"]
+
+    def test_recently_synced_candidate_excluded_entirely(self, db_session):
+        """A candidate synced within the FEC cache TTL would be served from
+        ApiCache anyway — re-selecting it burns a batch slot reading back
+        identical numbers (2026-07 review M3), so it must drop out of the
+        pool, not merely sort last."""
+        self._add_candidate(
+            db_session, "fresh", "2026-SEN-GA",
+            incumbent_challenge="I",  # even top priority doesn't override the TTL floor
+            last_financials_sync=utcnow() - timedelta(hours=1),
+        )
+        self._add_candidate(
+            db_session, "stale", "2026-SEN-TX",
+            last_financials_sync=utcnow() - timedelta(hours=settings.PIPELINE_CACHE_TTL_HOURS + 1),
+        )
+        db_session.commit()
+
+        ordered = election_pipeline._prioritize_for_financial_refresh(db_session, limit=10)
+        assert [c.id for c in ordered] == ["stale"]
 
     def test_incumbents_before_fundraisers_before_others(self, db_session):
         self._add_candidate(
@@ -178,3 +274,67 @@ class TestSnapshotCandidates:
         election_pipeline._snapshot_candidates(db_session)
 
         assert db_session.query(ScoreSnapshot).filter(ScoreSnapshot.entity_type == "candidate").count() == 1
+
+    def test_unchanged_figures_next_day_write_no_new_snapshot(self, db_session):
+        """Changed-only snapshotting (2026-07 review): FEC totals for most
+        candidates only move when a quarterly filing lands, so a nightly
+        unconditional snapshot would add millions of no-information rows."""
+        db_session.add(Race(id="2026-SEN-GA", cycle_year=2026, office="S", state="GA"))
+        db_session.add(Candidate(
+            id="c1", race_id="2026-SEN-GA", name="A", party="DEM",
+            cash_on_hand=1000.0, contributions=1200.0, disbursements=200.0,
+        ))
+        db_session.commit()
+
+        day1 = utcnow()
+        day2 = day1 + timedelta(days=1)
+        with patch("app.pipeline.election_pipeline.utcnow", return_value=day1):
+            first = election_pipeline._snapshot_candidates(db_session)
+        with patch("app.pipeline.election_pipeline.utcnow", return_value=day2):
+            second = election_pipeline._snapshot_candidates(db_session)
+
+        assert first == 1   # first sight always writes
+        assert second == 0  # identical figures — skipped
+        assert db_session.query(ScoreSnapshot).filter(ScoreSnapshot.entity_type == "candidate").count() == 1
+
+    def test_changed_figures_next_day_write_a_new_snapshot(self, db_session):
+        db_session.add(Race(id="2026-SEN-GA", cycle_year=2026, office="S", state="GA"))
+        cand = Candidate(
+            id="c1", race_id="2026-SEN-GA", name="A", party="DEM",
+            cash_on_hand=1000.0, contributions=1200.0, disbursements=200.0,
+        )
+        db_session.add(cand)
+        db_session.commit()
+
+        day1 = utcnow()
+        day2 = day1 + timedelta(days=1)
+        with patch("app.pipeline.election_pipeline.utcnow", return_value=day1):
+            election_pipeline._snapshot_candidates(db_session)
+
+        cand.cash_on_hand = 2000.0  # a new filing landed
+        db_session.commit()
+        with patch("app.pipeline.election_pipeline.utcnow", return_value=day2):
+            written = election_pipeline._snapshot_candidates(db_session)
+
+        assert written == 1
+        assert db_session.query(ScoreSnapshot).filter(ScoreSnapshot.entity_type == "candidate").count() == 2
+
+
+class TestPruneStaleCoverage:
+    def _item(self, db, url, fetched_at):
+        db.add(RaceCoverageItem(
+            race_id="2026-SEN-GA", source_type="news", source_name="AP News",
+            title="t", url=url, fetched_at=fetched_at,
+        ))
+
+    def test_deletes_items_past_retention_and_keeps_recent_ones(self, db_session):
+        db_session.add(Race(id="2026-SEN-GA", cycle_year=2026, office="S", state="GA"))
+        self._item(db_session, "https://apnews.com/old", utcnow() - timedelta(days=91))
+        self._item(db_session, "https://apnews.com/recent", utcnow() - timedelta(days=30))
+        db_session.commit()
+
+        deleted = election_pipeline._prune_stale_coverage(db_session)
+
+        assert deleted == 1
+        remaining = db_session.query(RaceCoverageItem).one()
+        assert remaining.url == "https://apnews.com/recent"

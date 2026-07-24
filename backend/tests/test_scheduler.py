@@ -255,13 +255,24 @@ class TestElectionCoverageRefresh:
     outside is_election_season's window, and otherwise runs only the
     coverage-ingestion + posting phases (not the full nightly pipeline)."""
 
-    def _run(self, in_season: bool, pipeline_running: bool = False, pipeline_age=None):
+    def _run(
+        self, in_season: bool, pipeline_running: bool = False, pipeline_age=None,
+        coverage_running: bool = False, coverage_age=None,
+    ):
         from app import scheduler
 
         with patch("app.scheduler.threading.Thread", _SyncThread), \
              patch("app.api.action.is_election_season", return_value=in_season), \
              patch("app.scheduler.is_election_pipeline_running", return_value=pipeline_running), \
              patch("app.scheduler.election_pipeline_age", return_value=pipeline_age), \
+             patch(
+                 "app.pipeline.analyze.election_coverage.is_coverage_refresh_running",
+                 return_value=coverage_running,
+             ), \
+             patch(
+                 "app.pipeline.analyze.election_coverage.coverage_refresh_age",
+                 return_value=coverage_age,
+             ), \
              patch("app.database.SessionLocal") as mock_session_local, \
              patch(
                  "app.pipeline.analyze.election_coverage.ingest_race_coverage",
@@ -298,6 +309,25 @@ class TestElectionCoverageRefresh:
     def test_proceeds_when_election_pipeline_running_flag_is_stale_beyond_2_hours(self):
         ingest, post = self._run(
             in_season=True, pipeline_running=True, pipeline_age=timedelta(hours=3),
+        )
+        ingest.assert_called_once()
+        post.assert_called_once()
+
+    def test_skips_when_previous_coverage_refresh_still_running(self):
+        """Self-overlap guard (2026-07 review B3): the PREVIOUS 15-minute
+        refresh still mid-flight means overlapping passes would
+        double-ingest and double-post — skip while its tracker is fresh."""
+        ingest, post = self._run(
+            in_season=True, coverage_running=True, coverage_age=timedelta(minutes=20),
+        )
+        ingest.assert_not_called()
+        post.assert_not_called()
+
+    def test_proceeds_when_coverage_refresh_flag_is_stale_beyond_2_hours(self):
+        # A crashed refresh can leave the in-process flag set forever —
+        # the 2h stale override keeps one wedge from stopping all coverage.
+        ingest, post = self._run(
+            in_season=True, coverage_running=True, coverage_age=timedelta(hours=3),
         )
         ingest.assert_called_once()
         post.assert_called_once()

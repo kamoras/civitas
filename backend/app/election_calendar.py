@@ -31,10 +31,10 @@ CLASS_II_STATES = frozenset({
     "VA", "WV", "WY",
 })
 CLASS_III_STATES = frozenset({
-    "AK", "AL", "AZ", "CA", "CO", "CT", "FL", "GA", "HI", "ID",
-    "IL", "IN", "IA", "KS", "KY", "LA", "MD", "MO", "NV", "NH",
-    "NY", "NC", "ND", "OH", "OK", "OR", "PA", "SC", "SD", "UT",
-    "VT", "WA", "WI",
+    "AK", "AL", "AR", "AZ", "CA", "CO", "CT", "FL", "GA", "HI",
+    "ID", "IL", "IN", "IA", "KS", "KY", "LA", "MD", "MO", "NV",
+    "NH", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "SC", "SD",
+    "UT", "VT", "WA", "WI",
 })
 
 

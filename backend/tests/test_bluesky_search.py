@@ -1,85 +1,130 @@
-"""Tests for bluesky_search.search_posts — the new keyword/candidate-name
-search capability (the platform previously only read fixed author feeds
-and platform-wide trending topics, never searched by query)."""
+"""Tests for bluesky_search.search_posts — keyword search against
+Bluesky's PUBLIC AppView endpoint (no login, no atproto client: the read
+path deliberately shares nothing with the posting account, so search
+volume can never rate-limit the posting credentials — 2026-07 review B1).
+
+Uses httpx.MockTransport so the real request/parse code runs end-to-end
+against a canned payload, with no network.
+"""
 
 from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+
+import httpx
 
 from app.pipeline.fetch import bluesky_search
 
 
-def _post(text, handle, uri, indexed_at=None):
-    return SimpleNamespace(
-        record=SimpleNamespace(text=text),
-        author=SimpleNamespace(handle=handle),
-        uri=uri,
-        indexed_at=indexed_at,
-    )
+def _payload_post(text, handle, uri, indexed_at=None):
+    post = {
+        "record": {"text": text},
+        "author": {"handle": handle},
+        "uri": uri,
+    }
+    if indexed_at is not None:
+        post["indexedAt"] = indexed_at
+    return post
+
+
+def _client_returning(posts):
+    def handler(request):
+        return httpx.Response(200, json={"posts": posts})
+    return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+
+def _iso_z(dt):
+    return dt.isoformat().replace("+00:00", "Z")
 
 
 class TestSearchPosts:
-    def test_no_credentials_returns_empty(self, monkeypatch):
-        monkeypatch.setattr(bluesky_search.settings, "BSKY_HANDLE", "", raising=False)
-        monkeypatch.setattr(bluesky_search.settings, "BSKY_APP_PASSWORD", "", raising=False)
-        assert bluesky_search.search_posts("Ossoff") == []
-
-    def test_returns_parsed_posts(self, monkeypatch):
-        monkeypatch.setattr(bluesky_search.settings, "BSKY_HANDLE", "test.handle", raising=False)
-        monkeypatch.setattr(bluesky_search.settings, "BSKY_APP_PASSWORD", "pw", raising=False)
-
-        now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-        fake_client = MagicMock()
-        fake_client.app.bsky.feed.search_posts.return_value = SimpleNamespace(
-            posts=[_post("Ossoff holds a narrow lead in early polling.", "apnews.com", "at://did:plc:abc/app.bsky.feed.post/xyz123", now)],
-        )
-        with patch("atproto.Client", return_value=fake_client):
-            results = bluesky_search.search_posts("Ossoff")
+    async def test_returns_parsed_posts(self):
+        now = _iso_z(datetime.now(timezone.utc))
+        client = _client_returning([_payload_post(
+            "Ossoff holds a narrow lead in early polling.",
+            "apnews.com", "at://did:plc:abc/app.bsky.feed.post/xyz123", now,
+        )])
+        async with client:
+            results = await bluesky_search.search_posts(client, "Jon Ossoff")
 
         assert len(results) == 1
         assert results[0].text == "Ossoff holds a narrow lead in early polling."
         assert results[0].author_handle == "apnews.com"
         assert results[0].url == "https://bsky.app/profile/apnews.com/post/xyz123"
+        assert results[0].published is not None
 
-    def test_stale_posts_filtered_out(self, monkeypatch):
-        monkeypatch.setattr(bluesky_search.settings, "BSKY_HANDLE", "test.handle", raising=False)
-        monkeypatch.setattr(bluesky_search.settings, "BSKY_APP_PASSWORD", "pw", raising=False)
+    async def test_query_hits_public_endpoint_unauthenticated(self):
+        seen = {}
 
-        stale = (datetime.now(timezone.utc) - timedelta(hours=200)).isoformat().replace("+00:00", "Z")
-        fake_client = MagicMock()
-        fake_client.app.bsky.feed.search_posts.return_value = SimpleNamespace(
-            posts=[_post("Old post about the race.", "someone.bsky.social", "at://did:plc:abc/app.bsky.feed.post/old1", stale)],
-        )
-        with patch("atproto.Client", return_value=fake_client):
-            results = bluesky_search.search_posts("some query")
-        assert results == []
+        def handler(request):
+            seen["url"] = str(request.url)
+            seen["auth"] = request.headers.get("authorization")
+            return httpx.Response(200, json={"posts": []})
 
-    def test_empty_text_skipped(self, monkeypatch):
-        monkeypatch.setattr(bluesky_search.settings, "BSKY_HANDLE", "test.handle", raising=False)
-        monkeypatch.setattr(bluesky_search.settings, "BSKY_APP_PASSWORD", "pw", raising=False)
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            await bluesky_search.search_posts(client, "Jon Ossoff")
 
-        fake_client = MagicMock()
-        fake_client.app.bsky.feed.search_posts.return_value = SimpleNamespace(
-            posts=[_post("   ", "someone.bsky.social", "at://did:plc:abc/app.bsky.feed.post/empty")],
-        )
-        with patch("atproto.Client", return_value=fake_client):
-            results = bluesky_search.search_posts("some query")
-        assert results == []
+        assert seen["url"].startswith(bluesky_search.PUBLIC_SEARCH_URL)
+        assert "q=Jon+Ossoff" in seen["url"]
+        assert seen["auth"] is None  # public AppView — never a session token
 
-    def test_login_failure_returns_empty(self, monkeypatch):
-        monkeypatch.setattr(bluesky_search.settings, "BSKY_HANDLE", "test.handle", raising=False)
-        monkeypatch.setattr(bluesky_search.settings, "BSKY_APP_PASSWORD", "pw", raising=False)
+    async def test_request_failure_returns_empty(self):
+        def handler(request):
+            raise httpx.ConnectError("network down")
 
-        fake_client = MagicMock()
-        fake_client.login.side_effect = Exception("bad creds")
-        with patch("atproto.Client", return_value=fake_client):
-            assert bluesky_search.search_posts("Ossoff") == []
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            assert await bluesky_search.search_posts(client, "Ossoff") == []
 
-    def test_search_call_failure_returns_empty(self, monkeypatch):
-        monkeypatch.setattr(bluesky_search.settings, "BSKY_HANDLE", "test.handle", raising=False)
-        monkeypatch.setattr(bluesky_search.settings, "BSKY_APP_PASSWORD", "pw", raising=False)
+    async def test_http_error_status_returns_empty(self):
+        def handler(request):
+            return httpx.Response(429, json={"error": "RateLimitExceeded"})
 
-        fake_client = MagicMock()
-        fake_client.app.bsky.feed.search_posts.side_effect = Exception("rate limited")
-        with patch("atproto.Client", return_value=fake_client):
-            assert bluesky_search.search_posts("Ossoff") == []
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            assert await bluesky_search.search_posts(client, "Ossoff") == []
+
+    async def test_malformed_json_returns_empty(self):
+        def handler(request):
+            return httpx.Response(200, content=b"not json")
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            assert await bluesky_search.search_posts(client, "Ossoff") == []
+
+    async def test_stale_posts_filtered_out(self):
+        stale = _iso_z(datetime.now(timezone.utc) - timedelta(hours=200))
+        client = _client_returning([_payload_post(
+            "Old post about the race.", "someone.bsky.social",
+            "at://did:plc:abc/app.bsky.feed.post/old1", stale,
+        )])
+        async with client:
+            assert await bluesky_search.search_posts(client, "some query") == []
+
+    async def test_missing_indexed_at_is_kept_with_null_published(self):
+        """"Timestamp unknown" must not be treated as "stale": the AppView
+        isn't contractually required to populate indexedAt, and dropping on
+        it would silently discard valid results. published stays None so
+        downstream stores NULL, never a guessed time."""
+        client = _client_returning([_payload_post(
+            "Fresh post, no timestamp field.", "someone.bsky.social",
+            "at://did:plc:abc/app.bsky.feed.post/nots",
+        )])
+        async with client:
+            results = await bluesky_search.search_posts(client, "some query")
+
+        assert len(results) == 1
+        assert results[0].published is None
+
+    async def test_unparseable_indexed_at_is_kept(self):
+        client = _client_returning([_payload_post(
+            "Fresh post, garbage timestamp.", "someone.bsky.social",
+            "at://did:plc:abc/app.bsky.feed.post/badts", "not-a-date",
+        )])
+        async with client:
+            results = await bluesky_search.search_posts(client, "some query")
+
+        assert len(results) == 1
+        assert results[0].published is None
+
+    async def test_empty_text_skipped(self):
+        client = _client_returning([_payload_post(
+            "   ", "someone.bsky.social", "at://did:plc:abc/app.bsky.feed.post/empty",
+        )])
+        async with client:
+            assert await bluesky_search.search_posts(client, "some query") == []
