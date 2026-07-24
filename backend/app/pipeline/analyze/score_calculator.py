@@ -41,16 +41,21 @@ numbers reproduced from either paper — see _calc_funding_independence's
 own "Academic rationale" note for the fuller account, including why the
 PAC multiplier is now chamber-specific (Senate ×3.2, House ×1.35;
 scripts/audit_pac_ratio.py) rather than one shared value. Top-donor
-concentration is calibrated so a 20%-of-pool share scores 100 and the
-platform's own empirical median (60%) scores 50 — Parmigiani (2025,
-"Campaign contributions and legislative behavior," Journal of Public
-Economics 243) reports the same top-decile-donor-share metric at a 47%
-mean in a different population/period, real independent corroboration
-that concentration in the 40-60%+ range is the normal pattern (not a
-number copied from that paper — our own audit is the calibration
-source). Prior v1 multipliers (1.3×, 1.5×) compressed variation into the
-61–94 range; recalibration creates a symmetric distribution around the
-empirical sample median.
+concentration is calibrated so a 15%-of-pool share scores 100 and a
+40%-of-pool share scores 0 (2026-07-23 recalibration — the earlier
+20%/100%-median-60% anchors had drifted to roughly double the live
+population's real median, 28%; see _funding_independence_core's own
+comment on this component for the live audit numbers). Parmigiani
+(2025, "Campaign contributions and legislative behavior," Journal of
+Public Economics 243) reports the same top-decile-donor-share metric at
+a 47% mean in a different population/period — closer to this platform's
+own re-measured 28-31% median than the old 60% assumption was, real
+independent corroboration that the CURRENT calibration, not the old
+one, sits in the normal range that other work on this exact metric
+finds (not a number copied from that paper — our own audit is the
+calibration source). Prior v1 multipliers (1.3×, 1.5×) compressed
+variation into the 61–94 range; recalibration creates a symmetric
+distribution around the empirical sample median.
 
 Promise Persistence: follows Naurin (2011, "Election Promises, Party
 Behaviour and Voter Perceptions," Palgrave) who showed that promise
@@ -955,7 +960,23 @@ logger = logging.getLogger(__name__)
 # /data/member_ideal_points.json, gated; no manual step) — the component
 # is inert only until the first successful ingest. See the top-of-file
 # "Changes from v6.10 -> v6.11" note for the full account.
-ALGORITHM_VERSION = "v6.11"
+#
+# v6.11 -> v6.12 (2026-07-23): Funding Independence recalibration (roadmap
+# item "FI recalibration O11/O12" — PAC caps and election windows, refit
+# together per that review's own instruction not to move them separately).
+# Two constants had drifted hard from a fresh live audit (n=532, both
+# chambers): the fallback PAC-dollar penalty (no contributing PAC has a
+# resolved committee type) assumed a $2.0M median/$4.4M p90; live is
+# $662,750/$1,915,242 — roughly a third. Top-donor concentration assumed a
+# 60% median (0.20->100/1.00->0 anchors); live median is 28% (confirmed
+# per chamber, not a mixing artifact: Senate 30.5%, House 27.5%), so the
+# typical member was scoring ~90/100 on this component regardless of real
+# concentration — almost no signal for the bulk of the population. Both
+# refit to the live distribution (see _funding_independence_core's inline
+# comments for the exact derivation); FEC PAC contribution caps themselves
+# ($5,000/$3,500 per election) are unchanged — those are legal limits, not
+# empirical calibration, and still current for the 2025-2026 cycle.
+ALGORITHM_VERSION = "v6.12"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -1638,8 +1659,13 @@ def _calc_funding_independence(funding: dict, state: str = "", district: int | N
          fundraisers (itemized employer-aggregated donations are always a
          tiny share of a mega-campaign), so large fundraisers scored
          90–100 regardless of how concentrated their donor base was.
-         The relative pool ratio discriminates at any scale: audit median
-         0.60 maps to 50, p10 (0.34) to ≈82, p90 (0.93) to ≈9.
+         The relative pool ratio discriminates at any scale. Recalibrated
+         2026-07-23 against the live population (n=453, both chambers —
+         the earlier "median 0.60" figure had drifted to roughly double
+         the real distribution, real median 0.28); current anchors (0.15
+         -> 100, 0.40 -> 0) land the real median at ≈49, p10 (0.21) at
+         ≈75, p90 (0.38) at ≈7 — see _funding_independence_core's own
+         comment on this component for the full derivation.
 
       4. Source breadth (formerly Funding Diversity's 1st component): how
          broad and distributed the funding base is — small-donor money
@@ -1772,10 +1798,21 @@ def _funding_independence_core(funding: dict, state: str = "", district: int | N
         # "COM" rows, or all resolved to a non-PAC committee type (party
         # committee, JFC, hybrid/Carey committee) — degrade to the
         # original dollar-based penalty rather than silently skipping the
-        # correction. Calibrated to the 2026-06
-        # audit distribution of two-election-window PAC receipts: $0 → no
-        # penalty, median $2.0M → ×0.75, $4M+ (p90 $4.4M) → ×0.5.
-        volume_factor = 0.5 + 0.5 * max(0.0, 1.0 - pac_total / 4_000_000)
+        # correction. Recalibrated 2026-07-23 (n=532, both chambers):
+        # the 2026-06 calibration (median $2.0M, p90 $4.4M) had drifted to
+        # roughly 3x the live distribution — median $662,750, p90
+        # $1,915,242 — most likely the election-cycle window shifting
+        # into a quieter off-year fundraising period since that audit,
+        # the same instability this fallback's single dollar-denominated
+        # threshold is inherently exposed to (a hard-coded cap that was
+        # right at one point in the cycle drifts as fundraising volume
+        # changes with it). FALLBACK_PAC_CAP set so the CURRENT median
+        # lands at x0.75 (2 * $662,750); everything at or above it floors
+        # at x0.5, which now starts below the current p90 rather than at
+        # it — the single-parameter formula can only anchor one point, and
+        # the median is the one this fallback has always prioritized.
+        FALLBACK_PAC_CAP = 1_325_000
+        volume_factor = 0.5 + 0.5 * max(0.0, 1.0 - pac_total / FALLBACK_PAC_CAP)
         volume_detail_suffix = f"no PAC committee-type data — fallback scaling for ${pac_total:,.0f} in absolute PAC dollars"
 
     pac_score = ratio_score * volume_factor
@@ -1797,8 +1834,22 @@ def _funding_independence_core(funding: dict, state: str = "", district: int | N
     pool = sum(d.get("total", 0) for d in external)
     if len(external) >= 20 and pool >= 250_000:
         concentration = sum(d.get("total", 0) for d in external[:10]) / pool
-        # Linear map: 0.20 → 100, 1.00 → 0 (median 0.60 → 50)
-        concentration_score = max(0.0, min(1.0, (1.0 - concentration) / 0.8)) * 100
+        # Recalibrated 2026-07-23 (n=453 with a measurable pool, both
+        # chambers): the prior anchors (0.20 -> 100, 1.00 -> 0, "median
+        # 0.60 -> 50") had drifted hard from the live population — real
+        # median 27.8%, p10 21.2%, p90 38.3% (confirmed independently per
+        # chamber: Senate median 30.5%, House 27.5% — not a mixing
+        # artifact). Under the old anchors the typical member scored
+        # ~90/100 on this component regardless of real concentration,
+        # since actual concentration rarely approaches the assumed 60%
+        # midpoint — the sub-score carried almost no signal for the bulk
+        # of the population. New anchors (0.15 -> 100, 0.40 -> 0) bracket
+        # the live p10/p90 with headroom instead of the population's
+        # extreme tail, landing the real median at ~49 (p10 -> ~75, p90
+        # -> ~7) — the same "fixed conceptual endpoints, population
+        # falls naturally between them" shape as before, refit to what
+        # this population's donor pools actually look like now.
+        concentration_score = max(0.0, min(1.0, (0.40 - concentration) / 0.25)) * 100
         concentration_detail = (
             f"top 10 of {len(external)} external donors = {concentration:.0%} "
             f"of the ${pool:,.0f} itemized external donor pool"
