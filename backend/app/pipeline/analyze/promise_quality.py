@@ -37,6 +37,30 @@ _BROKEN_RE = re.compile(
     re.IGNORECASE,
 )
 
+# 2026-07 fix (O7 disclosed exception): _KEPT_RE/_BROKEN_RE count raw
+# keyword occurrences with no notion of which one the sentence is
+# actually ASSERTING — "voted against the bill, consistent with his
+# promise (to oppose it)" hits both ("consistent" is a KEPT word,
+# "voted against" is a BROKEN word) and used to fall through to the
+# both-matched branch below, forcing a correctly-KEPT promise about
+# *opposing* something to UNCLEAR. An explicit "consistent with"/"in
+# keeping with"/"in line with" framing is the sentence directly stating
+# its own verdict — it should win outright over an unrelated action-verb
+# match, not tie with it. This is a targeted fix to the specific
+# demonstrated failure, not a rewrite to embeddings: campaign-promise
+# extraction itself was removed entirely (2026-07, see policy_alignment.py's
+# module docstring) after repeatedly producing wrong/nonsensical verdicts
+# regardless of extraction method; this cleanup step now only ever runs
+# against a handful of static legacy rows (4 in production, non-growing),
+# so a full embedding rewrite is disproportionate to what's left running.
+_STRONG_CONSISTENT_RE = re.compile(
+    r"\bconsistent with|in keeping with|in line with", re.IGNORECASE,
+)
+_STRONG_INCONSISTENT_RE = re.compile(
+    r"inconsistent with|at odds with|contrary to (?:his|her|their) promise",
+    re.IGNORECASE,
+)
+
 _ERROR_PAGE_RE = re.compile(
     r"(?:404\s*error|page\s*not\s*found|page\s*requested|"
     r"search\s+senate\.gov|e-?mail\s+webmaster|broken\s+link)",
@@ -100,7 +124,13 @@ def clean_promises(promises: list[dict]) -> list[dict]:
 
         kept = len(_KEPT_RE.findall(analysis))
         broken = len(_BROKEN_RE.findall(analysis))
-        if kept > 0 and broken > 0:
+        strong_consistent = _STRONG_CONSISTENT_RE.search(analysis) is not None
+        strong_inconsistent = _STRONG_INCONSISTENT_RE.search(analysis) is not None
+        if strong_consistent and not strong_inconsistent:
+            alignment = PromiseAlignment.KEPT
+        elif strong_inconsistent and not strong_consistent:
+            alignment = PromiseAlignment.BROKEN
+        elif kept > 0 and broken > 0:
             alignment = PromiseAlignment.UNCLEAR
         elif alignment == PromiseAlignment.BROKEN and kept > 0 and broken == 0:
             alignment = PromiseAlignment.KEPT

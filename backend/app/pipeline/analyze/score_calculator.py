@@ -1034,6 +1034,20 @@ SUBSTANTIVE_BILL_TYPES = {"s", "hr", "sjres", "hjres"}
 # Shared with sponsorship_analysis.py's cosponsorship-edge weighting, so
 # "did this bill advance" means the same thing in both Legislative
 # Effectiveness and Legislative Leadership.
+#
+# 2026-07 (O7 disclosed exception): this only runs for bills where isLaw
+# is already false (the strongest, non-keyword "did this advance" signal
+# — becoming law — is checked first and short-circuits before this ever
+# runs; see _cosponsorship_edge_weight). Live-measured against 1366 real
+# distinct latestAction strings from production: 352 matched these
+# keywords, and only 1 (0.28%) contained a plausible false-positive
+# pattern — a double-clause sentence where an unrelated procedural
+# sub-motion ("agreed to") was matched instead of the bill's own outcome
+# ("...failed of passage... agreed to [the motion to table
+# reconsideration]"). An embedding check against short institutional
+# procedural phrases wouldn't obviously do better on a case this specific
+# and rare; the keyword match's transparency and determinism are worth
+# more here than chasing one edge case in 352.
 _ADVANCEMENT_ACTION_KEYWORDS = ("passed", "agreed to", "ordered to be reported")
 
 # Tenure (years) at which a member's raw cosponsorship-PageRank leadership

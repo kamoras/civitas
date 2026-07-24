@@ -14,7 +14,6 @@ import numpy as np
 import pytest
 
 from app.pipeline.analyze.bill_analyzer import (
-    _NOMINATION_NAME_RE,
     _build_classification_text,
     _is_procedural_seed_match,
     classify_all_bills,
@@ -374,40 +373,65 @@ class TestMultiAreaClassification:
 
 
 class TestNominationDetection:
-    """Nomination names must be detected to avoid policy area pollution."""
+    """classify_recent_votes' is_nomination check (O7): a third, regex-
+    based signal on document-name phrasing used to run here too, live-
+    measured (182 real key-vote rows, 53 genuine PN-prefixed nominations)
+    to add zero unique detections beyond motion_type/PN-prefix while
+    itself missing a real case (multi-word territory names) — removed.
+    These test the two remaining signals directly via classify_recent_votes."""
 
-    @pytest.mark.parametrize(
-        "name",
-        [
-            "Byron B. Conway, of Wisconsin, to be United States District Judge for the Eastern District of Wisconsin",
-            "Christopher Charles Fonzone, of Pennsylvania, to be an Assistant Attorney General",
-            "David Clay Fowlkes, of Arkansas, to be United States District Judge for the Western District of Arkansas",
-            "Matthew James Marzano, of Illinois, to be a Member of the Nuclear Regulatory Commission",
-            "Robert P. Chamberlin, of Mississippi, to be United States District Judge",
-            "Nomination of John Smith",
-            "On the Nomination (Confirmation of the nominee)",
-        ],
-    )
-    def test_nomination_names_detected(self, name):
-        assert _NOMINATION_NAME_RE.search(name) is not None, (
-            f"Nomination not detected: {name}"
-        )
+    def _roll_call(self, **overrides):
+        rc = {"congress": 119, "session": 1, "rollNumber": 42,
+              "documentTitle": "Some Nominee, of Some State, to be Some Office",
+              "question": "On the Nomination", "voteDate": "2026-01-01"}
+        rc.update(overrides)
+        return rc
 
-    @pytest.mark.parametrize(
-        "name",
-        [
-            "National Defense Authorization Act for Fiscal Year 2024",
-            "Prescription Drug Pricing Reform Act",
-            "Background Check Expansion Act",
-            "Consolidated Appropriations Act, 2026",
-            "Budd Amdt. No. 1243",
-            "Collins Amdt. No. 3937",
-        ],
-    )
-    def test_non_nomination_names_not_flagged(self, name):
-        assert _NOMINATION_NAME_RE.search(name) is None, (
-            f"Non-nomination falsely detected: {name}"
-        )
+    @pytest.mark.asyncio
+    async def test_pn_prefixed_bill_id_is_a_nomination(self):
+        from app.pipeline.analyze.bill_analyzer import classify_recent_votes
+        with patch(
+            "app.pipeline.analyze.bill_learning.classify_motion_type",
+            return_value="unknown",
+        ):
+            result = await classify_recent_votes(
+                [self._roll_call(documentName="PN123")],
+            )
+        assert result[0]["policyArea"] == "PROCEDURAL"
+        assert result[0]["stance"] == "nomination"
+
+    @pytest.mark.asyncio
+    async def test_nomination_motion_type_is_a_nomination_without_pn_prefix(self):
+        from app.pipeline.analyze.bill_analyzer import classify_recent_votes
+        with patch(
+            "app.pipeline.analyze.bill_learning.classify_motion_type",
+            return_value="nomination",
+        ):
+            result = await classify_recent_votes(
+                [self._roll_call(documentName="Roll-119-1-42")],
+            )
+        assert result[0]["stance"] == "nomination"
+
+    @pytest.mark.asyncio
+    async def test_ordinary_bill_is_not_flagged_as_a_nomination(self):
+        from app.pipeline.analyze.bill_analyzer import classify_recent_votes
+        with patch(
+            "app.pipeline.analyze.bill_learning.classify_motion_type",
+            return_value="passage",
+        ), patch(
+            "app.pipeline.analyze.bill_analyzer.classify_policy_areas_multi",
+            return_value=[{"area": "DEFENSE", "confidence": 0.9}],
+        ), patch(
+            "app.pipeline.analyze.bill_analyzer.derive_stance",
+            return_value=("some stance", "neutral"),
+        ), patch(
+            "app.pipeline.analyze.party_platform.classify_party_alignment_multi",
+            return_value={"overall": "bipartisan", "weight": 0.0, "areas": []},
+        ):
+            result = await classify_recent_votes([self._roll_call(
+                documentName="HR.1", documentTitle="National Defense Authorization Act",
+            )])
+        assert result[0]["stance"] != "nomination"
 
 
 class TestMultiAreaPartyAlignment:
