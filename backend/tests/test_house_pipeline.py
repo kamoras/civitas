@@ -57,3 +57,39 @@ class TestHousePipelineLock:
         cleared = db_session.query(HousePipelineRun).filter(HousePipelineRun.id == stale_id).one()
         assert cleared.status == PipelineStatus.STALE
         assert db_session.query(HousePipelineRun).count() == 2  # the stale row + a fresh one
+
+
+class TestHousePipelineRecentRollCallYearWindow:
+    """current_year/the "is it early in the year" check (2026-07-23
+    timezone-consistency pass) must come from the project's canonical
+    UTC clock, not a local-timezone-dependent datetime.now() call —
+    reaches Phase 3's roll-call-window logic with everything before it
+    mocked to minimal/empty data, then short-circuits (a bare mock
+    return for fetch_recent_house_roll_calls is enough to prove the
+    line executed; nothing after Phase 3 needs to succeed for this)."""
+
+    async def test_current_year_and_month_come_from_canonical_clock(self, db_session):
+        from datetime import datetime
+        from unittest.mock import AsyncMock, patch
+
+        with (
+            patch("app.pipeline.house_pipeline.SessionLocal", return_value=db_session),
+            patch("app.pipeline.house_pipeline.fetch_representatives", new_callable=AsyncMock, return_value=[{"bioguideId": "R000001"}]),
+            patch("app.pipeline.house_pipeline.fetch_member_detail", new_callable=AsyncMock, return_value={}),
+            patch("app.pipeline.house_pipeline.normalize_house_members", return_value=[{"bioguideId": "R000001"}]),
+            patch("app.pipeline.house_pipeline.fetch_significant_bills", new_callable=AsyncMock, return_value=[]),
+            patch("app.pipeline.house_pipeline.fetch_recent_house_roll_calls", new_callable=AsyncMock) as mock_rcs,
+            patch("app.pipeline.house_pipeline.utcnow", return_value=datetime(2026, 3, 15)),
+        ):
+            mock_rcs.return_value = []  # < 60, so the prior-year branch is also exercised
+            try:
+                await house_pipeline.run_house_pipeline()
+            except Exception:
+                pass  # nothing past this point needs to succeed for this test
+
+        # First call uses the mocked "current" year (2026); a second call
+        # for the prior year (2025) only happens because month <= 6 and
+        # recent_rcs stayed under 60 — both branches came from utcnow().
+        years_requested = {call.kwargs.get("year") for call in mock_rcs.call_args_list}
+        assert 2026 in years_requested
+        assert 2025 in years_requested

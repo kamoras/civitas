@@ -97,25 +97,51 @@ def _sync_roster(db: Session, roster, eo_data: dict) -> int:
     computes their scores — no separate seed step, no startup-time
     network fetch (see database.py's init_db, which now creates zero
     president rows and simply waits for this pipeline's first run).
+
+    Per-entry commit, not one commit after the whole loop (2026-07
+    incident): `party` is NOT NULL on a brand-new row, and used to be
+    silently left unset whenever the EO-table name match missed for
+    that entry (`if party:` guarded the assignment with no fallback).
+    A single miss — one EO-fetch hiccup, one unmatched name — raised
+    IntegrityError on the shared session's *next* autoflush, which
+    aborted the entire batch and rolled back every president already
+    queued in this run, not just the one that failed. Confirmed live:
+    this left the presidents table (and therefore /leaderboard) fully
+    empty, the same failure class the score-computation loop below
+    already isolates per-president for (#218 review S5) — this
+    function was the one place still missing that isolation.
     """
     synced = 0
     for entry in roster:
-        p = db.query(President).filter(President.id == entry.id).first()
-        party = eo_data.get(entry.id, {}).get("party")
-        is_current = entry.term_end is None
-        if p is None:
-            p = President(id=entry.id)
-            db.add(p)
-        p.name = entry.name
-        if party:
-            p.party = party
-        p.number = entry.number
-        p.term_start = entry.term_start
-        p.term_end = entry.term_end
-        p.is_current = is_current
-        synced += 1
-    if synced:
-        db.commit()
+        try:
+            p = db.query(President).filter(President.id == entry.id).first()
+            party = eo_data.get(entry.id, {}).get("party")
+            is_current = entry.term_end is None
+            if p is None:
+                if not party:
+                    # A brand-new row has no existing party to fall back
+                    # on — inserting with party=None would violate the
+                    # NOT NULL constraint. Skip until a later run's EO
+                    # fetch resolves the name match rather than guess.
+                    logger.warning(
+                        "Skipping new president %s (%s): no party match from EO table",
+                        entry.id, entry.name,
+                    )
+                    continue
+                p = President(id=entry.id, party=party)
+                db.add(p)
+            elif party:
+                p.party = party
+            p.name = entry.name
+            p.number = entry.number
+            p.term_start = entry.term_start
+            p.term_end = entry.term_end
+            p.is_current = is_current
+            db.commit()
+            synced += 1
+        except Exception:
+            logger.exception("Failed to sync president %s (%s) — skipping", entry.id, entry.name)
+            db.rollback()
     return synced
 
 

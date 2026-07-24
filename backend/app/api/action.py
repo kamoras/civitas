@@ -17,6 +17,7 @@ from app.api.rate_limit import WriteRateLimit, client_ip
 from app.database import get_db
 from app.election_calendar import next_election_day, seats_up_for_year
 from app.pipeline.analyze.score_calculator import compute_overall_score
+from app.time_utils import utcnow
 from app.models import (
     ActionIssue, ExploreDocument, MonitorStatus,
     NationalMonitor, Race, RepSponsoredBill, SponsoredBill,
@@ -622,7 +623,7 @@ async def get_my_reps(
         .all()
     )
 
-    today_str = date.today().isoformat()
+    today_str = utcnow().date().isoformat()
     issues = _latest_current_issues(db, for_date=today_str)
 
     member_ids = {s.id for s in senators} | {r.id for r in representatives}
@@ -708,7 +709,7 @@ async def get_my_reps(
 def get_open_comments(response: Response, db: Session = Depends(get_db)):
     """Return Federal Register documents with open public comment periods, sorted by deadline."""
     response.headers["Cache-Control"] = "public, max-age=3600"
-    today = date.today().isoformat()
+    today = utcnow().date().isoformat()
     docs = (
         db.query(ExploreDocument)
         .filter(
@@ -763,7 +764,7 @@ def is_election_season(today: date | None = None) -> bool:
 async def get_election_info(response: Response, db: Session = Depends(get_db)):
     """Return upcoming election info: dates, senate races, state data."""
     response.headers["Cache-Control"] = "public, max-age=3600"
-    today = date.today()
+    today = utcnow().date()
     election_day = _next_election_day(today)
     days_until = days_until_next_election(today)
     el_year = election_day.year
@@ -1014,9 +1015,9 @@ async def get_timeline(
     """Return the year's timeline with hierarchical week/month/year structure."""
     response.headers["Cache-Control"] = "public, max-age=300"
     if year is None:
-        year = date.today().year
+        year = utcnow().date().year
 
-    today = date.today()
+    today = utcnow().date()
     current_year = today.year
     current_month = today.month if year == current_year else 12
     current_week_num = today.isocalendar()[1] if year == current_year else 0
