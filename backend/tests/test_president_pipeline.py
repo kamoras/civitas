@@ -1,4 +1,4 @@
-"""Tests for president_pipeline.py's score-history snapshotting."""
+"""Tests for president_pipeline.py's score-history snapshotting and roster sync."""
 
 from unittest.mock import AsyncMock, patch
 
@@ -6,7 +6,8 @@ import pytest
 
 from app.models import President, ScoreSnapshot
 from app.pipeline.analyze.president_scorer import PRESIDENT_ALGORITHM_VERSION, calc_public_mandate
-from app.pipeline.president_pipeline import _record_president_snapshots, run_president_pipeline
+from app.pipeline.fetch.presidential_roster import RosterEntry
+from app.pipeline.president_pipeline import _record_president_snapshots, _sync_roster, run_president_pipeline
 
 
 def _make_president(**overrides) -> President:
@@ -18,6 +19,62 @@ def _make_president(**overrides) -> President:
     )
     defaults.update(overrides)
     return President(**defaults)
+
+
+def _entry(**overrides) -> RosterEntry:
+    defaults = dict(
+        id="washington-1", name="George Washington",
+        term_start="1789-04-30", term_end="1797-03-04", number=1,
+    )
+    defaults.update(overrides)
+    return RosterEntry(**defaults)
+
+
+class TestSyncRoster:
+    """2026-07 incident: a single roster entry with no EO-table party
+    match used to raise IntegrityError on the shared session's next
+    autoflush, rolling back every president queued in the same batch —
+    not just the one that failed — leaving the whole presidents table
+    (and /leaderboard) empty. _sync_roster now commits per-entry so one
+    bad match can't sink the rest."""
+
+    def test_syncs_new_president_with_matching_party(self, db_session):
+        synced = _sync_roster(db_session, [_entry()], {"washington-1": {"party": "I"}})
+        assert synced == 1
+        p = db_session.query(President).filter(President.id == "washington-1").one()
+        assert p.party == "I"
+        assert p.number == 1
+
+    def test_missing_party_skips_only_that_new_entry(self, db_session):
+        roster = [
+            _entry(id="washington-1", name="George Washington", number=1),
+            _entry(id="trump-47", name="Donald J. Trump", term_start="2025-01-20", term_end=None, number=47),
+        ]
+        # trump-47 has no EO match this run (simulates a name-match miss
+        # or a partial EO-fetch failure) — washington-1 must still sync.
+        eo_data = {"washington-1": {"party": "I"}}
+
+        synced = _sync_roster(db_session, roster, eo_data)
+
+        assert synced == 1
+        assert db_session.query(President).filter(President.id == "washington-1").count() == 1
+        assert db_session.query(President).filter(President.id == "trump-47").count() == 0
+
+    def test_all_entries_missing_party_syncs_none_without_crashing(self, db_session):
+        roster = [_entry(id="a", name="A", number=1), _entry(id="b", name="B", number=2)]
+        synced = _sync_roster(db_session, roster, {})
+        assert synced == 0
+        assert db_session.query(President).count() == 0
+
+    def test_existing_row_with_missing_party_this_run_keeps_its_stored_party(self, db_session):
+        db_session.add(_make_president(id="washington-1", party="F", number=1))
+        db_session.commit()
+
+        synced = _sync_roster(db_session, [_entry()], {})
+
+        assert synced == 1
+        p = db_session.query(President).filter(President.id == "washington-1").one()
+        assert p.party == "F"
 
 
 class TestRecordPresidentSnapshots:
