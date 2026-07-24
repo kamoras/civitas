@@ -146,6 +146,50 @@ class TestHybridClassification:
         assert result["MYSTERY DONOR"]["industry"] == "TECH"
 
     @pytest.mark.asyncio
+    async def test_learning_store_correction_requires_above_median_confidence(self, db_session):
+        """_CORRECTION_THRESHOLD (O2): a weak embedding disagreement (below
+        the measured real floor for classify_industries_batch_scored's raw
+        score, ~0.60) must not override a stored industry — it used to
+        override on any disagreement at all."""
+        db_session.add(LearnedClassification(
+            entity_name="STALE CO", entity_type="donor_type",
+            value="Org/Employees", confidence=0.9, source="llm",
+        ))
+        db_session.add(LearnedClassification(
+            entity_name="STALE CO", entity_type="industry",
+            value="TECH", confidence=0.9, source="llm",
+        ))
+        db_session.flush()
+
+        donors = [{"name": "Stale Co", "amount": 1000}]
+        with patch(
+            "app.pipeline.analyze.donor_classifier_ai.classify_industries_batch_scored",
+            return_value={"Stale Co": ("FINANCE", 0.50)},
+        ):
+            result = await classify_donors_hybrid(donors, db_session=db_session)
+        assert result["STALE CO"]["industry"] == "TECH"
+
+    @pytest.mark.asyncio
+    async def test_learning_store_correction_fires_above_threshold(self, db_session):
+        db_session.add(LearnedClassification(
+            entity_name="STALE CO", entity_type="donor_type",
+            value="Org/Employees", confidence=0.9, source="llm",
+        ))
+        db_session.add(LearnedClassification(
+            entity_name="STALE CO", entity_type="industry",
+            value="TECH", confidence=0.9, source="llm",
+        ))
+        db_session.flush()
+
+        donors = [{"name": "Stale Co", "amount": 1000}]
+        with patch(
+            "app.pipeline.analyze.donor_classifier_ai.classify_industries_batch_scored",
+            return_value={"Stale Co": ("FINANCE", 0.65)},
+        ):
+            result = await classify_donors_hybrid(donors, db_session=db_session)
+        assert result["STALE CO"]["industry"] == "FINANCE"
+
+    @pytest.mark.asyncio
     async def test_deduplication(self, db_session):
         donors = [
             {"name": "Test Corp", "amount": 1000, "fec_receipt": {"entity_type": "PAC"}},
