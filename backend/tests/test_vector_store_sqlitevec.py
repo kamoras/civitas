@@ -90,13 +90,48 @@ class TestEmbedAndSearch:
 
 
 class TestBillsAndMaintenance:
+    def test_embed_bills_empty_list_is_a_noop(self, vec_env):
+        vector_store.embed_bills([])
+        assert vector_store.collection_stats()["totalVectors"] == 0
+
     def test_embed_bills_and_stats(self, vec_env):
         vector_store.embed_bills([
             {"billId": "hr-1234-119", "billName": "Test Act", "description": "",
-             "policyArea": "DEFENSE", "stance": "supports", "congress": 119},
+             "policyArea": "DEFENSE", "policyAreas": [{"area": "DEFENSE", "confidence": 0.9}],
+             "stance": "supports", "congress": 119},
         ])
         stats = vector_store.collection_stats()
         assert {"name": "bills", "count": 1, "metadata": {}} in stats["collections"]
+
+    def test_embed_bills_skips_low_confidence_classifications(self, vec_env):
+        """O3: a low-confidence guess shouldn't be promoted into the kNN
+        reference corpus (the audited 55%-PROCEDURAL skew was partly this
+        — every classified bill used to be upserted unconditionally)."""
+        vector_store.embed_bills([
+            {"billId": "hr-9999-119", "billName": "Vague Act", "description": "",
+             "policyArea": "PROCEDURAL", "policyAreas": [{"area": "PROCEDURAL", "confidence": 0.5}],
+             "stance": "", "congress": 119},
+        ])
+        stats = vector_store.collection_stats()
+        assert {"name": "bills", "count": 0, "metadata": {}} in stats["collections"]
+
+    def test_get_bill_reference_prefers_recent_bills_over_the_cap(self, vec_env):
+        """O3: LIMIT with no ORDER BY returned an arbitrary hash-ordered
+        slice once the corpus grew past the cap (rowid is a deterministic
+        hash of bill_id, not insertion/recency order). Ordering by each
+        bill's own date means growth past the cap drops the oldest bills,
+        not whichever the hash happened to disfavor."""
+        # 10 bills dated 2020-01 through 2020-10, alternating policy area.
+        # The 3 most recent (Aug/Sep/Oct) are HEALTHCARE, DEFENSE, HEALTHCARE.
+        vector_store.embed_bills([
+            {"billId": f"hr-{i}-119", "billName": f"Bill {i}", "description": "",
+             "policyArea": "DEFENSE" if i % 2 == 0 else "HEALTHCARE",
+             "policyAreas": [{"area": "DEFENSE" if i % 2 == 0 else "HEALTHCARE", "confidence": 0.9}],
+             "stance": "", "congress": 119, "date": f"2020-{i + 1:02d}-01"}
+            for i in range(10)
+        ])
+        _, labels = vector_store.get_bill_reference(limit=3)
+        assert sorted(labels) == sorted(["HEALTHCARE", "DEFENSE", "HEALTHCARE"])
 
     def test_reset_clears_everything(self, vec_env):
         vector_store.embed_explore_documents([_doc(1, "Anything")])

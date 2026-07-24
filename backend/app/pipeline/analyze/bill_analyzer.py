@@ -304,16 +304,28 @@ EMBEDDING_CONFIDENCE_THRESHOLD = 0.70
 MIN_SEED_CORPUS_SHARE_FOR_KNN_TRUST = 0.03
 
 
-def _is_procedural_seed_match(text: str, threshold: float = 0.74) -> bool:
+def _is_procedural_seed_match(text: str, threshold: float = 0.74) -> tuple[bool, float]:
     """Check if text is procedural via embedding similarity to the procedural prototype.
 
     Uses cosine similarity (Reimers & Gurevych 2019) instead of keyword
     substring matching. The procedural prototype captures the semantic
     signature of ceremonial/administrative bills.
+
+    Returns (is_match, score) — 2026-07 (O3): used to return just the bool,
+    with the caller hardcoding confidence 1.0 for any match. Live-measured
+    (600 real bill titles + 6 known-procedural cases): genuinely procedural
+    titles score 0.772-0.848, but a real sample of other bills (which
+    itself includes plenty of ceremonial day/week-designation resolutions)
+    has p90=0.753/max=0.811 against the same prototype — only a thin ~0.02
+    gap around this threshold, not the clean separation the 0.75 industry/
+    policy gate has. A marginal 0.75 match and a comfortable 0.85 match are
+    not equally certain; hardcoding 1.0 for both fed an overconfident label
+    into the exact-match learning store (lookup_exact treats it as ground
+    truth forever) regardless of which side of that thin gap it landed on.
     """
     global _procedural_emb
     if not text or len(text.strip()) < 5:
-        return True
+        return True, 1.0
 
     from app.pipeline.vector_store import get_embedding_model
     model = get_embedding_model()
@@ -328,7 +340,7 @@ def _is_procedural_seed_match(text: str, threshold: float = 0.74) -> bool:
         query_emb = query_emb / norm
 
     score = float(np.dot(query_emb, _procedural_emb))
-    return score >= threshold
+    return score >= threshold, score
 
 
 def classify_policy_area(
@@ -361,8 +373,9 @@ def classify_policy_area(
             return exact  # already a (policy_area, confidence) tuple
 
     # Seed check for trivially procedural items (cold-start safety net)
-    if _is_procedural_seed_match(text):
-        return "PROCEDURAL", 1.0
+    is_procedural, procedural_score = _is_procedural_seed_match(text)
+    if is_procedural:
+        return "PROCEDURAL", procedural_score
 
     # Tier 1: kNN against reference corpus (prior classified bills)
     from app.pipeline.analyze.bill_learning import (
@@ -643,14 +656,23 @@ async def classify_all_bills(
         policy_area = areas[0]["area"]
         confidence = areas[0]["confidence"]
 
-        if policy_area == "PROCEDURAL" and confidence < 1.0:
+        # 2026-07 (O3): PROCEDURAL only ever reaches here two ways — the
+        # seed match (real score, always >= 0.74; see
+        # _is_procedural_seed_match) or the low-confidence tier-2/3
+        # fallback (score always < EMBEDDING_CONFIDENCE_THRESHOLD=0.70 by
+        # construction, since that's the branch that triggers it). These
+        # checks used to compare against a hardcoded 1.0/0.9 that only
+        # ever matched the seed match (which used to always return exactly
+        # 1.0); now that it returns its real score, EMBEDDING_CONFIDENCE_
+        # THRESHOLD is the actual dividing line between the two cases.
+        if policy_area == "PROCEDURAL" and confidence < EMBEDDING_CONFIDENCE_THRESHOLD:
             name_areas = classify_policy_areas_multi(bill_name)
             if name_areas[0]["area"] != "PROCEDURAL":
                 areas = name_areas
                 policy_area = areas[0]["area"]
                 confidence = 0.5
 
-        if policy_area == "PROCEDURAL" and confidence >= 0.9:
+        if policy_area == "PROCEDURAL" and confidence >= EMBEDDING_CONFIDENCE_THRESHOLD:
             proc = _make_procedural(b)
             proc["date"] = bill_date
             proc["policyAreas"] = [{"area": "PROCEDURAL", "confidence": confidence, "party": "bipartisan"}]
@@ -806,7 +828,9 @@ async def classify_recent_votes(
         policy_area = areas[0]["area"]
         confidence = areas[0]["confidence"]
 
-        if policy_area == "PROCEDURAL" and confidence >= 0.9:
+        # See classify_all_bills' matching check (O3) for why this compares
+        # against EMBEDDING_CONFIDENCE_THRESHOLD rather than a hardcoded 0.9.
+        if policy_area == "PROCEDURAL" and confidence >= EMBEDDING_CONFIDENCE_THRESHOLD:
             classified.append({
                 "billId": bill_id,
                 "rcKey": rc_key,
