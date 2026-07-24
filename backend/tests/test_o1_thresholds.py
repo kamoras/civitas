@@ -8,9 +8,12 @@ actually reject something now, and that real known-good cases still pass.
 """
 
 import inspect
+from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 
+from app.models import LearnedClassification
 from app.pipeline.analyze import bill_analyzer, bill_learning, donor_classifier_ai, nn_classifier
 from app.pipeline.analyze.policy_alignment import get_related_policies
 
@@ -88,3 +91,52 @@ class TestCrossValidateDonorTypesFloorRaised:
     def test_org_score_floor_matches_measured_value(self):
         src = inspect.getsource(nn_classifier.cross_validate_donor_types)
         assert "org_scores[i] > 0.65" in src
+
+
+class TestFastMockedCoverage:
+    """Fully-mocked, deterministic tests for branches the real-model tests
+    above don't happen to exercise (a text-vs-taxonomy comparison that
+    lands below EMBEDDING_CONFIDENCE_THRESHOLD, and an actual PAC->Org
+    reclassification) — independent of real model score drift."""
+
+    def test_classify_motion_type_reaches_the_best_score_floor(self):
+        fake_model = MagicMock()
+        fake_model.encode.return_value = [np.array([1.0, 0.0])]
+        fake_prototypes = {"passage": np.array([1.0, 0.0]), "cloture": np.array([0.0, 1.0])}
+        with patch("app.pipeline.vector_store.get_embedding_model", return_value=fake_model), \
+             patch("app.pipeline.analyze.bill_learning._get_motion_prototypes", return_value=fake_prototypes):
+            result = bill_learning.classify_motion_type("On Passage of the Bill")
+        assert result == "passage"
+
+    def test_augmented_embedding_classify_accepts_a_confident_match(self):
+        fake_model = MagicMock()
+        fake_model.encode.return_value = [np.array([1.0, 0.0])]
+        fake_policy_embs = {
+            "HEALTHCARE": np.array([1.0, 0.0]),
+            "PROCEDURAL": np.array([0.0, 1.0]),
+        }
+        with patch("app.pipeline.vector_store.get_embedding_model", return_value=fake_model), \
+             patch("app.pipeline.analyze.bill_analyzer._get_policy_embeddings", return_value=fake_policy_embs):
+            result = bill_analyzer._augmented_embedding_classify("anything")
+        assert result == "HEALTHCARE"
+
+    def test_cross_validate_donor_types_reclassifies_above_threshold(self, db_session):
+        db_session.add(LearnedClassification(
+            entity_name="ACME CORP PAC", entity_type="donor_type",
+            value="PAC", confidence=0.7, source="semantic",
+        ))
+        db_session.flush()
+
+        fake_model = MagicMock()
+        fake_model.encode.return_value = np.array([[1.0, 0.0]])
+        fake_type_embs = {
+            "Org/Employees": np.array([1.0, 0.0]),
+            "PAC": np.array([0.0, 1.0]),
+        }
+        with patch("app.pipeline.vector_store.get_embedding_model", return_value=fake_model), \
+             patch(
+                 "app.pipeline.analyze.donor_classifier_ai._get_semantic_type_embeddings",
+                 return_value=fake_type_embs,
+             ):
+            corrected = nn_classifier.cross_validate_donor_types(db_session)
+        assert corrected == 1
