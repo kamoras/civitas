@@ -69,3 +69,35 @@ async def test_history_does_not_starve_infrequent_pipelines(db_session):
     types = [r["pipelineType"] for r in result]
     assert "stock_trades" in types
     assert "supplementary" in types
+
+
+@pytest.mark.asyncio
+async def test_status_endpoint_includes_election_last_run(db_session):
+    from app.models import ElectionPipelineRun
+    from app.api.admin import admin_pipeline_status
+
+    db_session.add(ElectionPipelineRun(
+        status="completed",
+        candidates_synced=6917,
+        financials_refreshed=500,
+        coverage_items_ingested=42,
+    ))
+    db_session.commit()
+
+    result = await admin_pipeline_status(db=db_session)
+    assert result["electionLastRun"]["candidatesSynced"] == 6917
+    assert result["electionLastRun"]["coverageItemsIngested"] == 42
+    assert "electionIsRunning" in result
+
+
+@pytest.mark.asyncio
+async def test_history_includes_election_pipeline_type(db_session):
+    from app.models import ElectionPipelineRun
+    from app.api.admin import admin_pipeline_history
+
+    db_session.add(ElectionPipelineRun(status="completed", started_at=utcnow()))
+    db_session.commit()
+
+    result = await admin_pipeline_history(limit=20, db=db_session)
+    types = [r["pipelineType"] for r in result]
+    assert "election" in types

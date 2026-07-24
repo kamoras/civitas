@@ -2,30 +2,10 @@
 
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
-import {
-  ComposableMap,
-  Geographies,
-  Geography,
-} from "react-simple-maps";
 import { fetchElectionInfo } from "@/lib/api";
 import type { ElectionInfo, ElectionState, ElectionSenator } from "@/lib/api";
 import { PARTY_COLORS, PARTY_BORDER } from "@/lib/partyStyles";
-
-const GEO_URL = "https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json";
-
-const FIPS_TO_STATE: Record<string, string> = {
-  "01": "AL", "02": "AK", "04": "AZ", "05": "AR", "06": "CA",
-  "08": "CO", "09": "CT", "10": "DE", "11": "DC", "12": "FL",
-  "13": "GA", "15": "HI", "16": "ID", "17": "IL", "18": "IN",
-  "19": "IA", "20": "KS", "21": "KY", "22": "LA", "23": "ME",
-  "24": "MD", "25": "MA", "26": "MI", "27": "MN", "28": "MS",
-  "29": "MO", "30": "MT", "31": "NE", "32": "NV", "33": "NH",
-  "34": "NJ", "35": "NM", "36": "NY", "37": "NC", "38": "ND",
-  "39": "OH", "40": "OK", "41": "OR", "42": "PA", "44": "RI",
-  "45": "SC", "46": "SD", "47": "TN", "48": "TX", "49": "UT",
-  "50": "VT", "51": "VA", "53": "WA", "54": "WV", "55": "WI",
-  "56": "WY",
-};
+import RaceMap, { FIPS_TO_STATE } from "@/components/elections/RaceMap";
 
 function formatCountdown(days: number): { value: string; unit: string }[] {
   if (days <= 0) return [{ value: "TODAY", unit: "" }];
@@ -152,6 +132,15 @@ function StatePanel({
       {stateData.senators.length === 0 && !stateData.hasHouseRace && (
         <p className="text-sm text-matrix-green/40">No election data available for this state.</p>
       )}
+
+      {(stateData.hasSenateRace || stateData.hasHouseRace) && (
+        <Link
+          href={`/elections?state=${stateData.state}`}
+          className="inline-block mt-4 text-[11px] font-pixel text-neon-cyan/70 hover:text-neon-cyan"
+        >
+          View full race coverage →
+        </Link>
+      )}
     </div>
   );
 }
@@ -277,71 +266,26 @@ export default function ElectionsTab() {
           </div>
         </div>
 
-        <ComposableMap
-          projection="geoAlbersUsa"
-          projectionConfig={{ scale: 1000 }}
-          width={980}
-          height={600}
-          style={{ width: "100%", height: "auto" }}
-        >
-          <Geographies geography={GEO_URL}>
-            {({ geographies }) =>
-              geographies.map((geo) => {
-                const fips = geo.id as string;
-                const stateCode = FIPS_TO_STATE[fips];
-                if (!stateCode) return null;
-                const hasSenate = senateRaceStates.has(stateCode);
-                const hasHouseOnly = houseOnlyStates.has(stateCode);
-                const isSelected = selectedState === stateCode;
-
-                const defaultFill = isSelected
-                  ? "#00ffff"
-                  : hasSenate
-                    ? "rgba(255, 255, 0, 0.35)"
-                    : hasHouseOnly
-                      ? "rgba(255, 100, 200, 0.25)"
-                      : "rgba(0, 255, 65, 0.15)";
-                const hoverFill = isSelected
-                  ? "#00ffff"
-                  : hasSenate
-                    ? "rgba(255, 255, 0, 0.55)"
-                    : hasHouseOnly
-                      ? "rgba(255, 100, 200, 0.45)"
-                      : "rgba(0, 255, 65, 0.35)";
-
-                return (
-                  <Geography
-                    key={geo.rsmKey}
-                    geography={geo}
-                    onClick={() => setSelectedState(isSelected ? null : stateCode)}
-                    style={{
-                      default: {
-                        fill: defaultFill,
-                        stroke: "#0a1a0a",
-                        strokeWidth: 0.5,
-                        outline: "none",
-                        cursor: "pointer",
-                      },
-                      hover: {
-                        fill: hoverFill,
-                        stroke: "#00ff41",
-                        strokeWidth: 1,
-                        outline: "none",
-                        cursor: "pointer",
-                      },
-                      pressed: {
-                        fill: "#00ffff",
-                        stroke: "#00ff41",
-                        strokeWidth: 1,
-                        outline: "none",
-                      },
-                    }}
-                  />
-                );
-              })
-            }
-          </Geographies>
-        </ComposableMap>
+        <RaceMap
+          selectedState={selectedState}
+          onStateClick={(stateCode) =>
+            setSelectedState(selectedState === stateCode ? null : stateCode)
+          }
+          getFillColor={(stateCode) =>
+            senateRaceStates.has(stateCode)
+              ? "rgba(255, 255, 0, 0.35)"
+              : houseOnlyStates.has(stateCode)
+                ? "rgba(255, 100, 200, 0.25)"
+                : "rgba(0, 255, 65, 0.15)"
+          }
+          getHoverFillColor={(stateCode) =>
+            senateRaceStates.has(stateCode)
+              ? "rgba(255, 255, 0, 0.55)"
+              : houseOnlyStates.has(stateCode)
+                ? "rgba(255, 100, 200, 0.45)"
+                : "rgba(0, 255, 65, 0.35)"
+          }
+        />
       </div>
 
       <details className="terminal-window p-4 mt-4">

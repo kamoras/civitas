@@ -405,6 +405,7 @@ def _ensure_indexes() -> None:
             ("house_pipeline_runs", "ux_house_pipeline_runs_one_running"),
             ("stock_trades_pipeline_runs", "ux_stock_trades_pipeline_runs_one_running"),
             ("supplementary_pipeline_runs", "ux_supplementary_pipeline_runs_one_running"),
+            ("election_pipeline_runs", "ux_election_pipeline_runs_one_running"),
         ):
             if inspector.has_table(table):
                 conn.execute(text(

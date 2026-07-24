@@ -601,16 +601,23 @@ def _seats_up_for_year(year: int) -> set[str]:
     return set()
 
 
-_HOUSE_DISTRICTS: dict[str, int] = {
-    "AL": 7, "AK": 1, "AZ": 9, "AR": 4, "CA": 52, "CO": 8, "CT": 5,
-    "DE": 1, "FL": 28, "GA": 14, "HI": 2, "ID": 2, "IL": 17, "IN": 9,
-    "IA": 4, "KS": 4, "KY": 6, "LA": 6, "ME": 2, "MD": 8, "MA": 9,
-    "MI": 13, "MN": 8, "MS": 4, "MO": 8, "MT": 2, "NE": 3, "NV": 4,
-    "NH": 2, "NJ": 12, "NM": 3, "NY": 26, "NC": 14, "ND": 1, "OH": 15,
-    "OK": 5, "OR": 6, "PA": 17, "RI": 2, "SC": 7, "SD": 1, "TN": 9,
-    "TX": 38, "UT": 4, "VT": 1, "VA": 11, "WA": 10, "WV": 2, "WI": 8,
-    "WY": 1,
-}
+_house_districts_cache: dict[str, int] | None = None
+
+
+def _house_districts() -> dict[str, int]:
+    """Per-state House district count, derived by counting district_pvi.json's
+    own "ST-N" keys (2026-07 data-hygiene fix) — this used to be a second,
+    independent hand-typed copy of the same 50-state apportionment table
+    district_pvi.json already encodes, with no mechanism keeping the two in
+    sync. Verified identical to the prior hardcoded dict before replacing it."""
+    global _house_districts_cache
+    if _house_districts_cache is None:
+        from collections import Counter
+        from app.pipeline.analyze.score_calculator import get_district_pvi_map
+        _house_districts_cache = dict(
+            Counter(k.rsplit("-", 1)[0] for k in get_district_pvi_map()),
+        )
+    return _house_districts_cache
 
 
 @router.get("/my-reps")
@@ -772,17 +779,35 @@ def get_open_comments(response: Response, db: Session = Depends(get_db)):
     return result
 
 
+ELECTION_SEASON_WINDOW_DAYS = 60
+
+
+def days_until_next_election(today: date | None = None) -> int:
+    """Days remaining until the next federal Election Day (0 = today)."""
+    today = today or date.today()
+    return (_next_election_day(today) - today).days
+
+
+def is_election_season(today: date | None = None) -> bool:
+    """True within ELECTION_SEASON_WINDOW_DAYS of the next federal election
+    — the window the midterm-elections pipeline (election_pipeline.py) uses
+    to switch its coverage-ingestion phase from nightly to a tighter cadence
+    (see scheduler.py). Public so scheduler.py doesn't need its own copy of
+    this date arithmetic."""
+    return days_until_next_election(today) <= ELECTION_SEASON_WINDOW_DAYS
+
+
 @router.get("/elections")
 async def get_election_info(response: Response, db: Session = Depends(get_db)):
     """Return upcoming election info: dates, senate races, state data."""
     response.headers["Cache-Control"] = "public, max-age=3600"
     today = date.today()
     election_day = _next_election_day(today)
-    days_until = (election_day - today).days
+    days_until = days_until_next_election(today)
     el_year = election_day.year
     is_presidential = el_year % 4 == 0
     is_election_day = days_until == 0
-    is_election_season = days_until <= 60
+    is_election_season_flag = is_election_season(today)
 
     seats_up = _seats_up_for_year(el_year)
 
@@ -807,12 +832,13 @@ async def get_election_info(response: Response, db: Session = Depends(get_db)):
         }
         by_state.setdefault(s.state, []).append(entry)
 
-    all_state_codes = set(by_state.keys()) | set(_HOUSE_DISTRICTS.keys())
+    house_districts = _house_districts()
+    all_state_codes = set(by_state.keys()) | set(house_districts.keys())
     states: list[dict] = []
     for code in sorted(all_state_codes):
         sens = by_state.get(code, [])
         has_race = code in seats_up
-        districts = _HOUSE_DISTRICTS.get(code, 0)
+        districts = house_districts.get(code, 0)
         states.append({
             "state": code,
             "hasSenateRace": has_race,
@@ -829,7 +855,7 @@ async def get_election_info(response: Response, db: Session = Depends(get_db)):
             "year": el_year,
             "daysUntil": days_until,
             "isElectionDay": is_election_day,
-            "isElectionSeason": is_election_season,
+            "isElectionSeason": is_election_season_flag,
         },
         "senateSeatsUp": len(seats_up),
         "houseSeatsUp": 435,

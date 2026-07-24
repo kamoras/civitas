@@ -1363,6 +1363,21 @@ def _district_pvi() -> dict[str, int]:
     return _district_pvi_cache
 
 
+def get_state_pvi_map() -> dict[str, int]:
+    """Public read-only accessor for _state_pvi() (2026-07, midterm-elections
+    feature): api/elections.py exposes this data publicly for the first
+    time (previously internal-only, scoring-only). A thin wrapper rather
+    than importing the underscore-prefixed cache function directly keeps
+    the "this file's own scoring internals" vs. "what's safe to expose
+    externally" boundary explicit."""
+    return dict(_state_pvi())
+
+
+def get_district_pvi_map() -> dict[str, int]:
+    """Public read-only accessor for _district_pvi() — see get_state_pvi_map."""
+    return dict(_district_pvi())
+
+
 def calculate_scores(senator: dict) -> dict:
     """
     Calculate the five representation sub-scores from real data.

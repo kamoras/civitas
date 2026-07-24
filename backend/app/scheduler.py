@@ -15,6 +15,9 @@ from app.pipeline.supplementary_pipeline import (
 from app.pipeline.stock_pipeline import (
     run_stock_trades_pipeline, is_stock_pipeline_running, stock_pipeline_age,
 )
+from app.pipeline.election_pipeline import (
+    run_election_pipeline, is_election_pipeline_running, election_pipeline_age,
+)
 from app.pipeline.analyze.action_center import get_action_refresh_state, refresh_action_issues
 from app.time_utils import utcnow
 
@@ -99,7 +102,13 @@ def _nightly_pipeline() -> None:
             logger.info("House pipeline done — starting stock trades pipeline")
             stock_result = loop.run_until_complete(run_stock_trades_pipeline())
             logger.info("Stock trades pipeline: %s", stock_result)
-            _alert_if_skipped("Stock trades", stock_result)
+            if _alert_if_skipped("Stock trades", stock_result):
+                return
+
+            logger.info("Stock trades pipeline done — starting election pipeline")
+            election_result = loop.run_until_complete(run_election_pipeline())
+            logger.info("Election pipeline: %s", election_result)
+            _alert_if_skipped("Election", election_result)
         except BaseException as e:
             logger.exception("Nightly pipeline failed")
             send_ops_alert(
@@ -300,6 +309,62 @@ def _hourly_bill_status_refresh() -> None:
     threading.Thread(target=_run, daemon=True, name="bill-status-refresh").start()
 
 
+def _election_coverage_refresh() -> None:
+    """Tighter-cadence race-coverage ingestion during election season.
+
+    election_pipeline.py's full run (roster sync + financial refresh +
+    coverage + posting) is nightly-only, same as every other pipeline —
+    roster/financials don't change minute to minute. Coverage is the one
+    phase that genuinely benefits from a tighter cadence as an election
+    approaches, so this runs ONLY that phase (plus posting), and only
+    within is_election_season's window — a no-op the rest of the year,
+    same shape as _hourly_action_refresh's existing running-pipeline guards.
+    """
+    from app.api.action import is_election_season
+
+    if not is_election_season():
+        return
+
+    def _run():
+        if is_election_pipeline_running():
+            age = election_pipeline_age()
+            if not _is_stale(age, timedelta(hours=2)):
+                logger.info("Election coverage refresh skipped — election pipeline is running")
+                return
+            logger.warning(
+                "Election pipeline has been running for %s — treating as hung "
+                "and proceeding with coverage refresh anyway", age,
+            )
+        try:
+            from app.database import SessionLocal
+            import httpx
+            from app.pipeline.analyze.election_bluesky import post_race_coverage_updates
+            from app.pipeline.analyze.election_coverage import ingest_race_coverage
+
+            async def _refresh():
+                db = SessionLocal()
+                try:
+                    async with httpx.AsyncClient() as client:
+                        ingested = await ingest_race_coverage(db, client)
+                    posted = post_race_coverage_updates(db)
+                    logger.info(
+                        "Election-season coverage refresh: %d ingested, %d posted",
+                        ingested, posted,
+                    )
+                finally:
+                    db.close()
+
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(_refresh())
+            finally:
+                loop.close()
+        except Exception:
+            logger.exception("Election coverage refresh failed")
+
+    threading.Thread(target=_run, daemon=True, name="election-coverage-refresh").start()
+
+
 def start_scheduler() -> None:
     """Parse the cron schedule from settings and start the scheduler.
 
@@ -341,6 +406,16 @@ def start_scheduler() -> None:
         _hourly_bill_status_refresh,
         CronTrigger(minute="45"),
         id="bill_status_refresh",
+        replace_existing=True,
+    )
+
+    # Election-season coverage refresh — every 15 min, but a no-op outside
+    # is_election_season's window (checked inside the job itself, not the
+    # trigger, so this doesn't need its own enable/disable toggle).
+    scheduler.add_job(
+        _election_coverage_refresh,
+        CronTrigger(minute="*/15"),
+        id="election_coverage_refresh",
         replace_existing=True,
     )
 

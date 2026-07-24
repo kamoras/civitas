@@ -158,7 +158,8 @@ class TestNightlyPipelineCascadingSkip:
     """
 
     def _run_chain(
-        self, senate_result, supplementary_result=None, house_result=None, stock_result=None,
+        self, senate_result, supplementary_result=None, house_result=None,
+        stock_result=None, election_result=None,
     ):
         from app import scheduler
 
@@ -167,6 +168,7 @@ class TestNightlyPipelineCascadingSkip:
              patch("app.scheduler.run_supplementary_pipeline", new_callable=AsyncMock) as mock_supp, \
              patch("app.scheduler.run_house_pipeline", new_callable=AsyncMock) as mock_house, \
              patch("app.scheduler.run_stock_trades_pipeline", new_callable=AsyncMock) as mock_stock, \
+             patch("app.scheduler.run_election_pipeline", new_callable=AsyncMock) as mock_election, \
              patch("app.ops_alerts.send_ops_alert") as mock_alert, \
              patch("app.ops_alerts.check_current_congress_staleness"), \
              patch("app.services.bill_service.warm_bill_collection_cache"):
@@ -174,34 +176,37 @@ class TestNightlyPipelineCascadingSkip:
             mock_supp.return_value = supplementary_result or {"status": "completed"}
             mock_house.return_value = house_result or {"status": "completed"}
             mock_stock.return_value = stock_result or {"status": "completed"}
+            mock_election.return_value = election_result or {"status": "completed"}
 
             scheduler._nightly_pipeline()
 
-            return mock_senate, mock_supp, mock_house, mock_stock, mock_alert
+            return mock_senate, mock_supp, mock_house, mock_stock, mock_election, mock_alert
 
-    def test_all_four_run_when_nothing_skips(self):
-        senate, supp, house, stock, alert = self._run_chain({"status": "completed"})
+    def test_all_five_run_when_nothing_skips(self):
+        senate, supp, house, stock, election, alert = self._run_chain({"status": "completed"})
         senate.assert_called_once()
         supp.assert_called_once()
         house.assert_called_once()
         stock.assert_called_once()
+        election.assert_called_once()
         alert.assert_not_called()
 
     def test_senate_skip_stops_the_whole_chain(self):
-        senate, supp, house, stock, alert = self._run_chain(
+        senate, supp, house, stock, election, alert = self._run_chain(
             {"status": "skipped", "reason": "already_running"},
         )
         senate.assert_called_once()
         supp.assert_not_called()
         house.assert_not_called()
         stock.assert_not_called()
+        election.assert_not_called()
         alert.assert_called_once()
         subject, body = alert.call_args[0][0], alert.call_args[0][1]
         assert "Senate" in subject
         assert "Supplementary/House/Stock never ran either" in body
 
     def test_supplementary_skip_stops_house_and_stock_but_senate_already_ran(self):
-        senate, supp, house, stock, alert = self._run_chain(
+        senate, supp, house, stock, election, alert = self._run_chain(
             {"status": "completed"},
             supplementary_result={"status": "skipped", "reason": "already_running"},
         )
@@ -209,25 +214,112 @@ class TestNightlyPipelineCascadingSkip:
         supp.assert_called_once()
         house.assert_not_called()
         stock.assert_not_called()
+        election.assert_not_called()
         alert.assert_called_once()
         assert "Supplementary" in alert.call_args[0][0]
 
     def test_house_skip_stops_stock_but_earlier_steps_already_ran(self):
-        senate, supp, house, stock, alert = self._run_chain(
+        senate, supp, house, stock, election, alert = self._run_chain(
             {"status": "completed"},
             house_result={"status": "skipped", "reason": "already_running"},
         )
         supp.assert_called_once()
         house.assert_called_once()
         stock.assert_not_called()
+        election.assert_not_called()
         alert.assert_called_once()
         assert "House" in alert.call_args[0][0]
 
-    def test_stock_skip_alerts_with_nothing_left_to_stop(self):
-        senate, supp, house, stock, alert = self._run_chain(
+    def test_stock_skip_stops_election_but_earlier_steps_already_ran(self):
+        senate, supp, house, stock, election, alert = self._run_chain(
             {"status": "completed"},
             stock_result={"status": "skipped", "reason": "already_running"},
         )
         stock.assert_called_once()
+        election.assert_not_called()
         alert.assert_called_once()
         assert "Stock trades" in alert.call_args[0][0]
+
+    def test_election_skip_alerts_with_nothing_left_to_stop(self):
+        senate, supp, house, stock, election, alert = self._run_chain(
+            {"status": "completed"},
+            election_result={"status": "skipped", "reason": "already_running"},
+        )
+        election.assert_called_once()
+        alert.assert_called_once()
+        assert "Election" in alert.call_args[0][0]
+
+
+class TestElectionCoverageRefresh:
+    """The tighter-cadence election-season coverage refresh: a no-op
+    outside is_election_season's window, and otherwise runs only the
+    coverage-ingestion + posting phases (not the full nightly pipeline)."""
+
+    def _run(self, in_season: bool, pipeline_running: bool = False, pipeline_age=None):
+        from app import scheduler
+
+        with patch("app.scheduler.threading.Thread", _SyncThread), \
+             patch("app.api.action.is_election_season", return_value=in_season), \
+             patch("app.scheduler.is_election_pipeline_running", return_value=pipeline_running), \
+             patch("app.scheduler.election_pipeline_age", return_value=pipeline_age), \
+             patch("app.database.SessionLocal") as mock_session_local, \
+             patch(
+                 "app.pipeline.analyze.election_coverage.ingest_race_coverage",
+                 new_callable=AsyncMock,
+             ) as mock_ingest, \
+             patch(
+                 "app.pipeline.analyze.election_bluesky.post_race_coverage_updates",
+             ) as mock_post:
+            mock_ingest.return_value = 3
+            mock_post.return_value = 1
+            mock_session_local.return_value = MagicMock()
+
+            scheduler._election_coverage_refresh()
+
+        return mock_ingest, mock_post
+
+    def test_noop_outside_election_season(self):
+        ingest, post = self._run(in_season=False)
+        ingest.assert_not_called()
+        post.assert_not_called()
+
+    def test_runs_coverage_and_posting_in_season(self):
+        ingest, post = self._run(in_season=True)
+        ingest.assert_called_once()
+        post.assert_called_once()
+
+    def test_skips_when_election_pipeline_is_running_and_recent(self):
+        ingest, post = self._run(
+            in_season=True, pipeline_running=True, pipeline_age=timedelta(minutes=20),
+        )
+        ingest.assert_not_called()
+        post.assert_not_called()
+
+    def test_proceeds_when_election_pipeline_running_flag_is_stale_beyond_2_hours(self):
+        ingest, post = self._run(
+            in_season=True, pipeline_running=True, pipeline_age=timedelta(hours=3),
+        )
+        ingest.assert_called_once()
+        post.assert_called_once()
+
+
+class TestElectionCoverageRefreshExceptionHandling:
+    """The refresh's inner _run() must catch and log any failure, not let
+    it escape and take the daemon thread down silently."""
+
+    def test_ingestion_failure_is_caught_and_logged(self):
+        from app import scheduler
+
+        with patch("app.scheduler.threading.Thread", _SyncThread), \
+             patch("app.api.action.is_election_season", return_value=True), \
+             patch("app.scheduler.is_election_pipeline_running", return_value=False), \
+             patch("app.database.SessionLocal", return_value=MagicMock()), \
+             patch(
+                 "app.pipeline.analyze.election_coverage.ingest_race_coverage",
+                 new_callable=AsyncMock,
+                 side_effect=RuntimeError("boom"),
+             ), \
+             patch("app.scheduler.logger") as mock_logger:
+            scheduler._election_coverage_refresh()  # must not raise
+
+        mock_logger.exception.assert_called_once()

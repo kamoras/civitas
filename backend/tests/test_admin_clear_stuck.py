@@ -68,3 +68,48 @@ async def test_clear_stuck_house_refuses_while_actively_running(db_session, monk
         await admin_module.admin_clear_stuck_house(db=db_session)
 
     assert exc_info.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_clear_stuck_election_marks_running_rows_failed(db_session):
+    from app.models import ElectionPipelineRun
+    from app.api.admin import admin_clear_stuck_election
+
+    db_session.add(ElectionPipelineRun(
+        status="running",
+        started_at=utcnow() - timedelta(hours=13),
+    ))
+    db_session.commit()
+
+    result = await admin_clear_stuck_election(db=db_session)
+
+    assert result["cleared"] == 1
+    row = db_session.query(ElectionPipelineRun).first()
+    assert row.status == "failed"
+
+
+@pytest.mark.asyncio
+async def test_clear_stuck_election_refuses_while_actively_running(db_session, monkeypatch):
+    import app.api.admin as admin_module
+
+    monkeypatch.setattr(
+        "app.pipeline.election_pipeline.is_election_pipeline_running", lambda: True
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await admin_module.admin_clear_stuck_election(db=db_session)
+
+    assert exc_info.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_trigger_election_pipeline_spawns_background_thread(db_session):
+    from unittest.mock import patch
+    from app.api.admin import admin_trigger_election_pipeline
+
+    with patch("app.api.admin.run_pipeline_in_thread") as mock_run:
+        result = await admin_trigger_election_pipeline(db=db_session)
+
+    assert result == {"message": "Election pipeline triggered"}
+    mock_run.assert_called_once()
+    assert mock_run.call_args.kwargs["name"] == "election-pipeline-run"

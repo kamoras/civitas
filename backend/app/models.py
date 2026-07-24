@@ -596,6 +596,115 @@ class President(Base):
     updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
 
 
+class Race(Base):
+    """A single federal race for a given election cycle (one Senate seat in
+    one state, or one House seat in one district).
+
+    id is a human-readable composite (e.g. "2026-SEN-GA",
+    "2026-HOUSE-CA-12") rather than an autoincrement int — races are
+    naturally keyed by (cycle, office, state, district) and a readable id
+    makes admin/debug queries legible without a join, matching President's
+    id convention ("obama-44") rather than Donor/IndustryDonation's
+    autoincrement-int convention (those are pure child rows with no
+    natural external identity).
+
+    PVI (competitiveness) is deliberately NOT a column here — it's read
+    live from app/data/state_pvi.json / district_pvi.json via the same
+    accessors score_calculator.py already uses (_state_pvi/_district_pvi),
+    so there is exactly one source for that number, not a second copy that
+    can drift out of sync with the scoring system's own view of it.
+    """
+    __tablename__ = "races"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    cycle_year: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    # FEC's own office codes ("S"=Senate, "H"=House) — reused as-is rather
+    # than translated to a new vocabulary, since every candidate row already
+    # carries this code from the FEC API and translating it would just be
+    # another place for the two to drift.
+    office: Mapped[str] = mapped_column(String(1), nullable=False)
+    state: Mapped[str] = mapped_column(String(2), nullable=False, index=True)
+    # None for Senate races. 0 = at-large House district (matches FEC's own
+    # "00" convention for single-district states, stored as int).
+    district: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_special: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
+
+    candidates: Mapped[list["Candidate"]] = relationship(
+        back_populates="race", cascade="all, delete-orphan",
+    )
+    coverage_items: Mapped[list["RaceCoverageItem"]] = relationship(
+        back_populates="race", cascade="all, delete-orphan",
+    )
+
+
+class Candidate(Base):
+    """A declared candidate in a Race, sourced from FEC candidate filings.
+
+    id reuses the FEC's own candidate_id (e.g. "S6ID00146") as the primary
+    key — the same "reuse the source's own identifier" convention Senator/
+    Representative/President already follow with bioguide_id/UCSB-derived
+    ids, so this candidate's FEC record can always be looked up directly
+    without a separate crosswalk table.
+    """
+    __tablename__ = "candidates"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    race_id: Mapped[str] = mapped_column(String, ForeignKey("races.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    party: Mapped[str] = mapped_column(String, nullable=False)  # FEC party code: DEM, REP, IND, etc.
+    # FEC incumbent_challenge code: "I"=Incumbent, "C"=Challenger, "O"=Open seat.
+    incumbent_challenge: Mapped[str | None] = mapped_column(String(1), nullable=True)
+    has_raised_funds: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Fundraising totals from FEC's /candidate/{id}/totals/ endpoint — NULL
+    # until this candidate's financial-refresh turn comes up (see
+    # election_pipeline.py's prioritized/watermarked refresh), never a
+    # fabricated 0.0 standing in for "not fetched yet" (same "NULL means
+    # not computed, not zero" rule President's score columns follow).
+    contributions: Mapped[float | None] = mapped_column(Float, nullable=True)
+    disbursements: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cash_on_hand: Mapped[float | None] = mapped_column(Float, nullable=True)
+    individual_itemized_contributions: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_financials_sync: Mapped[datetime | None] = mapped_column(nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
+
+    race: Mapped["Race"] = relationship(back_populates="candidates")
+
+
+class RaceCoverageItem(Base):
+    """One news article or Bluesky post matched to a Race by candidate-name
+    string match (see fetch/election_coverage.py) — deliberately not an
+    LLM-summarized entry. title/summary/author are stored verbatim from the
+    source (RSS description or Bluesky post text), never model-generated,
+    so this table carries zero hallucination surface; the frontend renders
+    these fields as-is with a link back to the source.
+    """
+    __tablename__ = "race_coverage_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    race_id: Mapped[str] = mapped_column(String, ForeignKey("races.id", ondelete="CASCADE"), nullable=False, index=True)
+    source_type: Mapped[str] = mapped_column(String(10), nullable=False)  # "news" or "bluesky"
+    source_name: Mapped[str] = mapped_column(String, nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    url: Mapped[str] = mapped_column(String, nullable=False)
+    summary: Mapped[str] = mapped_column(Text, default="")
+    author: Mapped[str | None] = mapped_column(String, nullable=True)  # Bluesky handle, if source_type="bluesky"
+    published_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(default=utcnow)
+    # NULL = not yet considered for a Civitas Bluesky post about this race
+    # (see analyze/election_bluesky.py) — most coverage items never get
+    # posted at all (only a capped, prioritized subset per run), so this
+    # also marks "already considered this run, don't re-evaluate" for the
+    # ones that were skipped, not just the ones that were actually posted.
+    bsky_posted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+
+    race: Mapped["Race"] = relationship(back_populates="coverage_items")
+
+
 class Justice(Base):
     """Supreme Court justice with ideological consistency scores."""
     __tablename__ = "justices"
@@ -945,6 +1054,28 @@ class StockTradesPipelineRun(Base):
     status: Mapped[str] = mapped_column(String, default=PipelineStatus.RUNNING)
     house_trades_ingested: Mapped[int] = mapped_column(Integer, default=0)
     senate_trades_ingested: Mapped[int] = mapped_column(Integer, default=0)
+    elapsed_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    progress_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class ElectionPipelineRun(Base):
+    """Tracks each election-cycle candidate roster + financials + coverage
+    ingestion run — mirrors HousePipelineRun/SupplementaryPipelineRun.
+    Independent pipeline (app.pipeline.election_pipeline): no data
+    dependency on Senate/House/President's own runs, same reasoning as
+    SupplementaryPipelineRun's own docstring.
+    """
+    __tablename__ = "election_pipeline_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    started_at: Mapped[datetime] = mapped_column(default=utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    status: Mapped[str] = mapped_column(String, default=PipelineStatus.RUNNING)
+    current_phase: Mapped[str | None] = mapped_column(String, nullable=True)
+    candidates_synced: Mapped[int] = mapped_column(Integer, default=0)
+    financials_refreshed: Mapped[int] = mapped_column(Integer, default=0)
+    coverage_items_ingested: Mapped[int] = mapped_column(Integer, default=0)
     elapsed_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     progress_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
