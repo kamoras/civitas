@@ -50,6 +50,11 @@ logger = logging.getLogger(__name__)
 
 _category_norm_cache: dict[str, str] = {}
 
+# 2026-07 fix (O4): caps the inverse-frequency kNN vote weight computed in
+# classify_batch_nn — see that function's inline comment for the measured
+# real-production numbers behind this value (5.0).
+_MAX_INV_FREQ_WEIGHT = 5.0
+
 # Canonical donor type names — kNN and learning store may use mixed case
 DONOR_TYPE_CANONICAL: dict[str, str] = {
     "PAC": "PAC",
@@ -257,14 +262,29 @@ def classify_batch_nn(
     # reference set (He & Garcia 2009, "Learning from Imbalanced Data,"
     # IEEE TKDE 21:9).  Without this, over-represented classes like
     # FINANCE dominate kNN votes simply due to population, not semantic
-    # proximity.  Each vote is divided by sqrt(class_frequency) — the
-    # square root provides a moderate correction that prevents rare
-    # classes from becoming over-amplified.
+    # proximity.  Each vote is divided by sqrt(class_frequency).
+    #
+    # 2026-07 fix (O4): the sqrt alone is NOT bounded — it slows growth
+    # but a count-1 class still gets weight sqrt(total_refs), which grows
+    # with the corpus. Live production counts (donor_type reference set,
+    # prototype_descriptions seeded once per category, real SKIP-labeled
+    # rows never stored — see _load_references' skip_values): SKIP's
+    # count is always exactly 1, giving weight sqrt(5879/1)=72.95 against
+    # a well-represented class like Org/Employees at sqrt(5879/3973)=1.16.
+    # One marginal SKIP neighbor at the min_similarity floor (0.65) casts
+    # a vote of 0.65*72.95=47.4 — enough to outvote 6 genuine Org/Employees
+    # neighbors at a typical real similarity (~0.72 mean; see classify_
+    # batch_nn's min_similarity docstring) combined: 6*0.72*1.16=5.0. A cap
+    # of 5.0 keeps that same 6-neighbor genuine consensus safely ahead
+    # (0.65*5.0=3.25 < 5.0) while still giving genuinely rare classes
+    # (Party/Ideological, Self-Funded) a real, bounded boost instead of
+    # none — this was never a "should rare classes get a boost" question,
+    # only "should one anomalous match be able to overrule a consensus."
     label_counts = Counter(ref_labels)
     total_refs = len(ref_labels)
     inv_freq: dict[str, float] = {}
     for label, count in label_counts.items():
-        inv_freq[label] = 1.0 / (count / total_refs) ** 0.5
+        inv_freq[label] = min(1.0 / (count / total_refs) ** 0.5, _MAX_INV_FREQ_WEIGHT)
 
     results: dict[str, str] = {}
     for i, name in enumerate(query_names):
