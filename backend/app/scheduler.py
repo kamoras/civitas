@@ -326,6 +326,12 @@ def _election_coverage_refresh() -> None:
         return
 
     def _run():
+        from app.pipeline.analyze.election_coverage import (
+            coverage_refresh_age,
+            coverage_tracker,
+            is_coverage_refresh_running,
+        )
+
         if is_election_pipeline_running():
             age = election_pipeline_age()
             if not _is_stale(age, timedelta(hours=2)):
@@ -335,6 +341,20 @@ def _election_coverage_refresh() -> None:
                 "Election pipeline has been running for %s — treating as hung "
                 "and proceeding with coverage refresh anyway", age,
             )
+        # Self-overlap guard (2026-07 review B3): the PREVIOUS 15-minute
+        # refresh may still be mid-flight (degraded LLM, slow network) —
+        # overlapping passes double-ingest and double-post. Same shape as
+        # _hourly_action_refresh's guard after the 2026-07-13 incident.
+        if is_coverage_refresh_running():
+            age = coverage_refresh_age()
+            if not _is_stale(age, timedelta(hours=2)):
+                logger.info("Election coverage refresh skipped — previous refresh still running")
+                return
+            logger.warning(
+                "Previous election coverage refresh has been running for %s — "
+                "treating as hung and proceeding anyway", age,
+            )
+        coverage_tracker().start()
         try:
             from app.database import SessionLocal
             import httpx
@@ -361,6 +381,8 @@ def _election_coverage_refresh() -> None:
                 loop.close()
         except Exception:
             logger.exception("Election coverage refresh failed")
+        finally:
+            coverage_tracker().stop()
 
     threading.Thread(target=_run, daemon=True, name="election-coverage-refresh").start()
 

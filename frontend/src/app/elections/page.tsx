@@ -1,14 +1,16 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import MatrixRain from "@/components/effects/MatrixRain";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import GlitchText from "@/components/effects/GlitchText";
 import RaceMap from "@/components/elections/RaceMap";
-import RaceCard, { formatPvi } from "@/components/elections/RaceCard";
+import RaceCard from "@/components/elections/RaceCard";
+import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
+import { compareRaces, formatPvi } from "@/lib/elections";
 import { fetchPviMap, fetchRaces } from "@/lib/api";
 import type { PviMap, RaceSummary } from "@/types/election";
 
@@ -25,10 +27,17 @@ function pviHoverColor(pvi: number | null): string {
 }
 
 function ElectionsPageContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const [selectedState, setSelectedState] = useState<string | null>(
-    searchParams.get("state") || null,
-  );
+  // Derived from the URL (not one-shot useState) so the filter is
+  // shareable, back-button-able, and cross-navigation between
+  // /elections?state=GA and ?state=TX works.
+  const selectedState = searchParams.get("state") || null;
+  const setSelectedState = (state: string | null) => {
+    router.replace(state ? `/elections?state=${encodeURIComponent(state)}` : "/elections", {
+      scroll: false,
+    });
+  };
   const [races, setRaces] = useState<RaceSummary[] | null>(null);
   const [pvi, setPvi] = useState<PviMap | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -41,13 +50,19 @@ function ElectionsPageContent() {
         setRaces(r);
         setPvi(p);
       })
-      .catch((err) => { if (!cancelled) setError(err.message || "Failed to load races"); });
-    return () => { cancelled = true; };
+      .catch((err) => {
+        if (!cancelled) setError(err.message || "Failed to load races");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const filteredRaces = useMemo(() => {
     if (!races) return [];
-    return selectedState ? races.filter((r) => r.state === selectedState) : races;
+    const list = selectedState ? races.filter((r) => r.state === selectedState) : races;
+    // State A→Z, Senate before House within a state, district ascending.
+    return list.slice().sort(compareRaces);
   }, [races, selectedState]);
 
   return (
@@ -67,7 +82,9 @@ function ElectionsPageContent() {
             </p>
           </div>
 
-          {error && <div className="text-center py-16 font-mono text-xs text-red-400/60">{error}</div>}
+          {error && (
+            <div className="text-center py-16 font-mono text-xs text-red-400/60">{error}</div>
+          )}
 
           {!error && !races && (
             <div className="text-center py-16 font-mono text-xs text-matrix-green/30 tracking-widest animate-pulse">
@@ -82,10 +99,18 @@ function ElectionsPageContent() {
                   <h3 className="font-pixel text-xs text-matrix-green/50">{">"} SELECT A STATE</h3>
                   <div className="flex items-center gap-3 flex-wrap">
                     <span className="flex items-center gap-1.5 text-[10px] text-matrix-green/40">
-                      <span className="w-3 h-2 inline-block" style={{ backgroundColor: "rgba(255, 60, 60, 0.4)" }} /> R-LEANING
+                      <span
+                        className="w-3 h-2 inline-block"
+                        style={{ backgroundColor: "rgba(255, 60, 60, 0.4)" }}
+                      />{" "}
+                      R-LEANING
                     </span>
                     <span className="flex items-center gap-1.5 text-[10px] text-matrix-green/40">
-                      <span className="w-3 h-2 inline-block" style={{ backgroundColor: "rgba(60, 120, 255, 0.4)" }} /> D-LEANING
+                      <span
+                        className="w-3 h-2 inline-block"
+                        style={{ backgroundColor: "rgba(60, 120, 255, 0.4)" }}
+                      />{" "}
+                      D-LEANING
                     </span>
                   </div>
                 </div>
@@ -95,6 +120,7 @@ function ElectionsPageContent() {
                   getFillColor={(state) => pviFillColor(pvi?.states[state] ?? null)}
                   getHoverFillColor={(state) => pviHoverColor(pvi?.states[state] ?? null)}
                 />
+                <PviMethodologyNote meta={pvi?.meta} />
               </div>
 
               {selectedState && (

@@ -1,12 +1,28 @@
+"use client";
+
+import { useSyncExternalStore } from "react";
 import { safeHref } from "@/lib/formatting";
+import { parseUtc } from "@/lib/elections";
 import type { RaceCoverageItem } from "@/types/election";
 
 const RECENT_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
+// true after hydration, false during SSR and the first client render —
+// the useSyncExternalStore server/client-snapshot idiom (see StancePulse.tsx
+// for repo precedent), which avoids a setState-in-effect.
+const noopSubscribe = () => () => {};
+function useMounted(): boolean {
+  return useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false
+  );
+}
+
 function formatItemTime(item: RaceCoverageItem): { timeLabel: string; isRecent: boolean } {
   if (!item.publishedAt) return { timeLabel: "", isRecent: false };
-  const published = new Date(item.publishedAt);
-  if (isNaN(published.getTime())) return { timeLabel: "", isRecent: false };
+  const published = parseUtc(item.publishedAt);
+  if (!published) return { timeLabel: "", isRecent: false };
   const ageMs = Date.now() - published.getTime();
   return {
     timeLabel: published.toLocaleString(undefined, {
@@ -20,6 +36,12 @@ function formatItemTime(item: RaceCoverageItem): { timeLabel: string; isRecent: 
 }
 
 export default function CoverageFeed({ items }: { items: RaceCoverageItem[] }) {
+  // Viewer-local time formatting and the "recent" pulse both depend on the
+  // viewer's clock/locale, so they must not run during the (cached, 120s)
+  // server render — that guaranteed a hydration mismatch. Server render:
+  // no time label, non-pulsing dot; real values fill in after mount.
+  const mounted = useMounted();
+
   if (items.length === 0) {
     return <p className="text-sm text-matrix-green/40">No coverage ingested for this race yet.</p>;
   }
@@ -27,7 +49,10 @@ export default function CoverageFeed({ items }: { items: RaceCoverageItem[] }) {
   return (
     <div className="relative pl-4 border-l border-neon-cyan/20 space-y-4" role="list">
       {items.map((item) => {
-        const { timeLabel, isRecent } = formatItemTime(item);
+        const { timeLabel, isRecent } = mounted
+          ? formatItemTime(item)
+          : { timeLabel: "", isRecent: false };
+        const href = safeHref(item.url);
         return (
           <div key={item.id} className="relative" role="listitem">
             <div
@@ -40,24 +65,33 @@ export default function CoverageFeed({ items }: { items: RaceCoverageItem[] }) {
             />
             <div className="flex items-center gap-2 mb-1 flex-wrap">
               {timeLabel && (
-                <time dateTime={item.publishedAt || undefined} className="text-[10px] text-matrix-green/40 font-pixel">
+                <time
+                  dateTime={item.publishedAt || undefined}
+                  className="text-[10px] text-matrix-green/40 font-pixel"
+                >
                   {timeLabel}
                 </time>
               )}
               <span className="text-[9px] font-pixel px-1.5 py-0.5 border border-matrix-green/20 text-matrix-green/50">
                 {item.sourceType === "bluesky" ? "BLUESKY" : "NEWS"}
               </span>
-              <span className="text-[10px] text-matrix-green/30 font-pixel">via {item.sourceName}</span>
+              <span className="text-[10px] text-matrix-green/30 font-pixel">
+                via {item.sourceName}
+              </span>
             </div>
             <p className="text-sm text-matrix-green/80 leading-relaxed mb-1">{item.summary}</p>
-            <a
-              href={safeHref(item.url) || "#"}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[10px] text-neon-cyan/60 hover:text-neon-cyan transition-colors"
-            >
-              {item.title || "Source"} <span aria-hidden="true">↗</span>
-            </a>
+            {href ? (
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[10px] text-neon-cyan/60 hover:text-neon-cyan transition-colors"
+              >
+                {item.title || "Source"} <span aria-hidden="true">↗</span>
+              </a>
+            ) : (
+              <span className="text-[10px] text-neon-cyan/60">{item.title || "Source"}</span>
+            )}
           </div>
         );
       })}

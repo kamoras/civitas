@@ -6,24 +6,48 @@ a separate, fuller namespace for the new candidate-research feature)."""
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cached_json
 from app.database import get_db
 from app.models import Candidate, Race, RaceCoverageItem
-from app.pipeline.analyze.score_calculator import get_district_pvi_map, get_state_pvi_map
+from app.pipeline.analyze.score_calculator import (
+    get_district_pvi_map,
+    get_pvi_meta,
+    get_state_pvi_map,
+)
+from app.pipeline.election_pipeline import CURRENT_ELECTION_CYCLE
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/elections")
 
 
-def _pvi_for_race(race: Race, state_pvi: dict, district_pvi: dict) -> int | None:
+def _pvi_for_race(race: Race, state_pvi: dict, district_pvi: dict) -> tuple[int | None, str | None]:
+    """(pvi, level) where level says which map the number came from —
+    "district" or "state". A House race falling back to the statewide
+    number is a materially different claim (a D+19 urban district in a
+    red state is nothing like its state's lean), so the fallback is
+    FLAGGED for the frontend to label rather than silently blended
+    (2026-07 review F7)."""
     if race.office == "H":
         key = f"{race.state}-{race.district if race.district is not None else 0}"
         if key in district_pvi:
-            return district_pvi[key]
-    return state_pvi.get(race.state)
+            return district_pvi[key], "district"
+    pvi = state_pvi.get(race.state)
+    return pvi, ("state" if pvi is not None else None)
+
+
+def _iso_utc(dt) -> str | None:
+    """Serialize a stored naive-UTC datetime with an explicit Z suffix —
+    an offset-less ISO string gets parsed as LOCAL time by JS Date
+    (2026-07 review: coverage timestamps displayed shifted by the
+    viewer's UTC offset). Same reasoning as main.py's PROCESS_STARTED_AT
+    keeping its explicit +00:00 in an exposed field."""
+    if dt is None:
+        return None
+    iso = dt.isoformat()
+    return iso if ("+" in iso or iso.endswith("Z")) else iso + "Z"
 
 
 def _candidate_summary(cand: Candidate) -> dict:
@@ -33,8 +57,14 @@ def _candidate_summary(cand: Candidate) -> dict:
         "party": cand.party,
         "incumbentChallenge": cand.incumbent_challenge,
         "hasRaisedFunds": cand.has_raised_funds,
+        "candidateStatus": cand.candidate_status,
         "contributions": cand.contributions,
         "cashOnHand": cand.cash_on_hand,
+        # Null = never synced. The frontend renders "awaiting FEC sync"
+        # for null vs. real figures with an as-of date — a candidate whose
+        # refresh turn hasn't come up must not read as "$0 raised"
+        # (2026-07 review F10).
+        "lastFinancialsSync": _iso_utc(cand.last_financials_sync),
     }
 
 
@@ -45,6 +75,7 @@ def _race_summary(race: Race, state_pvi: dict, district_pvi: dict) -> dict:
         reverse=True,
     )
     top_candidates = candidates[:2]
+    pvi, pvi_level = _pvi_for_race(race, state_pvi, district_pvi)
     return {
         "id": race.id,
         "cycleYear": race.cycle_year,
@@ -52,7 +83,8 @@ def _race_summary(race: Race, state_pvi: dict, district_pvi: dict) -> dict:
         "state": race.state,
         "district": race.district,
         "isSpecial": race.is_special,
-        "pvi": _pvi_for_race(race, state_pvi, district_pvi),
+        "pvi": pvi,
+        "pviLevel": pvi_level,
         "candidateCount": len(candidates),
         "topCandidates": [_candidate_summary(c) for c in top_candidates],
     }
@@ -62,7 +94,16 @@ def _race_summary(race: Race, state_pvi: dict, district_pvi: dict) -> dict:
 def list_races(db: Session = Depends(get_db)):
     """All races for the current cycle, with PVI and top-2-by-funds
     candidates — backs the map + directory."""
-    races = db.query(Race).all()
+    races = (
+        db.query(Race)
+        # Filter matches the docstring's contract — harmless while only
+        # one cycle exists, load-bearing the day a second cycle syncs.
+        .filter(Race.cycle_year == CURRENT_ELECTION_CYCLE)
+        # ~470 races each lazy-loading .candidates is an N+1 of ~500
+        # queries per request on a Pi — batch them.
+        .options(selectinload(Race.candidates))
+        .all()
+    )
     state_pvi = get_state_pvi_map()
     district_pvi = get_district_pvi_map()
     data = [_race_summary(r, state_pvi, district_pvi) for r in races]
@@ -73,9 +114,15 @@ def list_races(db: Session = Depends(get_db)):
 def pvi_map():
     """State + district PVI maps (positive = R lean, negative = D lean) —
     already computed for internal scoring (score_calculator.py), exposed
-    publicly here for the first time to color the elections map."""
+    publicly here with their provenance metadata (source, method, election
+    window, as-of date) so the frontend can label what the number is and
+    is not (2026-07 review F7)."""
     return cached_json(
-        {"states": get_state_pvi_map(), "districts": get_district_pvi_map()},
+        {
+            "states": get_state_pvi_map(),
+            "districts": get_district_pvi_map(),
+            "meta": get_pvi_meta(),
+        },
         max_age=CACHE_TTL_LIST_S,
     )
 
@@ -98,6 +145,7 @@ def race_detail(race_id: str, db: Session = Depends(get_db)):
         .all()
     )
 
+    pvi, pvi_level = _pvi_for_race(race, state_pvi, district_pvi)
     return cached_json({
         "id": race.id,
         "cycleYear": race.cycle_year,
@@ -105,7 +153,8 @@ def race_detail(race_id: str, db: Session = Depends(get_db)):
         "state": race.state,
         "district": race.district,
         "isSpecial": race.is_special,
-        "pvi": _pvi_for_race(race, state_pvi, district_pvi),
+        "pvi": pvi,
+        "pviLevel": pvi_level,
         "candidates": [_candidate_summary(c) for c in candidates],
         "coverage": [
             {
@@ -116,7 +165,7 @@ def race_detail(race_id: str, db: Session = Depends(get_db)):
                 "url": item.url,
                 "summary": item.summary,
                 "author": item.author,
-                "publishedAt": item.published_at.isoformat() if item.published_at else None,
+                "publishedAt": _iso_utc(item.published_at),
             }
             for item in coverage
         ],
@@ -135,7 +184,6 @@ def candidate_detail(candidate_id: str, db: Session = Depends(get_db)):
         **_candidate_summary(cand),
         "disbursements": cand.disbursements,
         "individualItemizedContributions": cand.individual_itemized_contributions,
-        "lastFinancialsSync": cand.last_financials_sync.isoformat() if cand.last_financials_sync else None,
         "race": {
             "id": race.id,
             "office": race.office,

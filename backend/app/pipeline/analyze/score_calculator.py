@@ -1378,6 +1378,38 @@ def get_district_pvi_map() -> dict[str, int]:
     return dict(_district_pvi())
 
 
+def get_pvi_meta() -> dict:
+    """Provenance metadata from the two PVI data files (their _source/
+    _method/_window/_as_of keys), for public labeling (2026-07 review F7:
+    publishing the bare numbers with no source, election window, or
+    lean-is-not-a-forecast caveat over-claims what PVI measures — the
+    files carry this metadata precisely so an exposure surface can show
+    it). Values are None when a file lacks a key or is unavailable; the
+    API/frontend degrade to generic wording rather than invent provenance."""
+    import json
+    import pathlib
+    base = pathlib.Path(__file__).resolve().parent.parent.parent / "data"
+    meta: dict = {}
+    for key, fname in (("states", "state_pvi.json"), ("districts", "district_pvi.json")):
+        try:
+            raw = json.loads((base / fname).read_text())
+            meta[key] = {
+                "source": raw.get("_source"),
+                "method": raw.get("_method"),
+                "window": raw.get("_window"),
+                "asOf": raw.get("_as_of"),
+            }
+        except Exception:
+            meta[key] = None
+    meta["note"] = (
+        "Cook-PVI-style partisan lean relative to the national presidential "
+        "vote. Measures how a state or district leans, not who will win a "
+        "specific race — incumbency, candidate quality, and open seats are "
+        "not part of this number."
+    )
+    return meta
+
+
 def calculate_scores(senator: dict) -> dict:
     """
     Calculate the five representation sub-scores from real data.

@@ -9,6 +9,9 @@ export interface CandidateSummary {
   /** FEC code: "I"=Incumbent, "C"=Challenger, "O"=Open seat. Null if FEC
    * hasn't classified this candidate yet. */
   incumbentChallenge: string | null;
+  /** FEC candidate-status code: "C"=statutory candidate, "F"=future cycle,
+   * "N"=not yet statutory, "P"=prior cycle. Null if FEC hasn't set one. */
+  candidateStatus: string | null;
   hasRaisedFunds: boolean;
   /** Fundraising figures — null until this candidate's turn comes up in
    * the backend's prioritized/watermarked financial-refresh queue (FEC's
@@ -16,6 +19,10 @@ export interface CandidateSummary {
    * Never a fabricated 0. */
   contributions: number | null;
   cashOnHand: number | null;
+  /** ISO 8601 (UTC, explicit Z/offset) timestamp of the last successful
+   * FEC financials sync for this candidate — null means the figures above
+   * have never been synced, i.e. "no data yet", not "raised $0". */
+  lastFinancialsSync: string | null;
 }
 
 export interface RaceSummary {
@@ -31,6 +38,10 @@ export interface RaceSummary {
    * score_calculator.get_state_pvi_map/get_district_pvi_map) — never a
    * fabricated 0 standing in for "no lean". */
   pvi: number | null;
+  /** Which map `pvi` came from: "district" (House with district data),
+   * "state" (statewide number — a fallback when used for a House race),
+   * or null when `pvi` is null. */
+  pviLevel: "district" | "state" | null;
   candidateCount: number;
   /** Top 2 candidates by cash on hand — for the map/directory summary view. */
   topCandidates: CandidateSummary[];
@@ -57,20 +68,20 @@ export interface RaceDetail {
   district: number | null;
   isSpecial: boolean;
   pvi: number | null;
+  /** See RaceSummary.pviLevel. */
+  pviLevel: "district" | "state" | null;
   candidates: CandidateSummary[];
   coverage: RaceCoverageItem[];
 }
 
-export interface CandidateDetail extends CandidateSummary {
-  disbursements: number | null;
-  individualItemizedContributions: number | null;
-  lastFinancialsSync: string | null;
-  race: {
-    id: string;
-    office: string;
-    state: string;
-    district: number | null;
-  } | null;
+/** Provenance block on the /pvi response. Optional end to end — older
+ * backend responses (and cached ones) may omit it entirely. */
+export interface PviMeta {
+  states?: { source: string; method: string; window: string; asOf: string };
+  districts?: { source: string; window: string; asOf: string };
+  /** e.g. "Cook-PVI-style partisan lean relative to the national
+   * presidential vote. Measures lean, not a race forecast." */
+  note?: string;
 }
 
 export interface PviMap {
@@ -78,4 +89,6 @@ export interface PviMap {
   states: Record<string, number>;
   /** "ST-N" -> signed int PVI, e.g. { "CA-12": -13 }. */
   districts: Record<string, number>;
+  /** Methodology/provenance — treat as possibly missing. */
+  meta?: PviMeta;
 }

@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base, VisitsBase
@@ -657,6 +657,15 @@ class Candidate(Base):
     # FEC incumbent_challenge code: "I"=Incumbent, "C"=Challenger, "O"=Open seat.
     incumbent_challenge: Mapped[str | None] = mapped_column(String(1), nullable=True)
     has_raised_funds: Mapped[bool] = mapped_column(Boolean, default=False)
+    # FEC candidate_status code: "C"=statutory candidate this cycle,
+    # "F"=future-cycle filer, "N"=not yet statutory, "P"=prior-cycle.
+    # Stored raw (source data, not a classification decision) — the API/
+    # frontend use it to separate active candidates from paper filers.
+    candidate_status: Mapped[str | None] = mapped_column(String(1), nullable=True)
+    # Watermark for the rotating per-candidate Bluesky coverage search
+    # (election_coverage.py) — same bounded-batch design as
+    # last_financials_sync for the FEC totals refresh.
+    last_coverage_search: Mapped[datetime | None] = mapped_column(nullable=True)
 
     # Fundraising totals from FEC's /candidate/{id}/totals/ endpoint — NULL
     # until this candidate's financial-refresh turn comes up (see
@@ -684,6 +693,10 @@ class RaceCoverageItem(Base):
     these fields as-is with a link back to the source.
     """
     __tablename__ = "race_coverage_items"
+    # DB-level dedup guard: the ingestion path also checks before insert,
+    # but concurrent refreshes (15-min election-season job vs. nightly
+    # pipeline) could otherwise both pass the check-then-insert race.
+    __table_args__ = (UniqueConstraint("race_id", "url", name="uq_race_coverage_race_url"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     race_id: Mapped[str] = mapped_column(String, ForeignKey("races.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -695,12 +708,22 @@ class RaceCoverageItem(Base):
     author: Mapped[str | None] = mapped_column(String, nullable=True)  # Bluesky handle, if source_type="bluesky"
     published_at: Mapped[datetime | None] = mapped_column(nullable=True)
     fetched_at: Mapped[datetime] = mapped_column(default=utcnow)
+    # Which candidate's name matched this item, and on what evidence:
+    # "full_name" (surname + first name both present in the text) or
+    # "surname_context" (surname + state-name corroboration). Only
+    # full_name-matched items are eligible for the Bluesky posting path
+    # (election_bluesky.py) — the weaker basis is display-only.
+    matched_candidate_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    match_basis: Mapped[str | None] = mapped_column(String(20), nullable=True)
     # NULL = not yet considered for a Civitas Bluesky post about this race
     # (see analyze/election_bluesky.py) — most coverage items never get
     # posted at all (only a capped, prioritized subset per run), so this
     # also marks "already considered this run, don't re-evaluate" for the
     # ones that were skipped, not just the ones that were actually posted.
     bsky_posted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    # True only if a post was actually published (bsky_posted_at alone
+    # means "considered") — the daily posting budget counts these.
+    bsky_posted: Mapped[bool] = mapped_column(Boolean, default=False)
 
     race: Mapped["Race"] = relationship(back_populates="coverage_items")
 

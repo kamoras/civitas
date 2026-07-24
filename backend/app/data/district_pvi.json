@@ -1,6 +1,8 @@
 {
+ "_as_of": "2026-07-10",
  "_sign": "positive = R lean, negative = D lean (matches STATE_PVI)",
  "_source": "Wikipedia district infoboxes (Cook PVI), retrieved 2026-07-10; regenerate with backend/scripts/fetch_district_pvi.py",
+ "_window": "2020+2024",
  "districts": {
   "AK-0": 6,
   "AL-1": 27,

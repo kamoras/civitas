@@ -15,10 +15,11 @@ from datetime import date
 from app.api.admin import require_admin
 from app.api.rate_limit import WriteRateLimit, client_ip
 from app.database import get_db
+from app.election_calendar import next_election_day, seats_up_for_year
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.models import (
     ActionIssue, ExploreDocument, MonitorStatus,
-    NationalMonitor, RepSponsoredBill, SponsoredBill,
+    NationalMonitor, Race, RepSponsoredBill, SponsoredBill,
     TimelineEntry, Representative, Senator,
     WeekSummary, MonthSummary, YearSummary,
 )
@@ -554,51 +555,12 @@ def _extract_country_mentions(articles: list) -> list[dict]:
     return results
 
 
-def _next_election_day(after: date) -> date:
-    """Compute next federal election day (first Tue after first Mon in Nov, even years)."""
-    year = after.year if after.month <= 10 else after.year + 1
-    if year % 2 != 0:
-        year += 1
-    while True:
-        nov1 = date(year, 11, 1)
-        first_monday = nov1.day + (7 - nov1.weekday()) % 7
-        if nov1.weekday() == 0:
-            first_monday = 1
-        election_day = date(year, 11, first_monday + 1)
-        if election_day > after:
-            return election_day
-        year += 2
-
-
-_CLASS_II_STATES = {
-    "AK", "AL", "AR", "CO", "DE", "GA", "ID", "IL", "IA", "KS",
-    "KY", "LA", "ME", "MA", "MI", "MN", "MS", "MT", "NE", "NH",
-    "NJ", "NM", "NC", "OK", "OR", "RI", "SC", "SD", "TN", "TX",
-    "VA", "WV", "WY",
-}
-_CLASS_III_STATES = {
-    "AK", "AL", "AZ", "CA", "CO", "CT", "FL", "GA", "HI", "ID",
-    "IL", "IN", "IA", "KS", "KY", "LA", "MD", "MO", "NV", "NH",
-    "NY", "NC", "ND", "OH", "OK", "OR", "PA", "SC", "SD", "UT",
-    "VT", "WA", "WI",
-}
-_CLASS_I_STATES = {
-    "AZ", "CA", "CT", "DE", "FL", "HI", "IN", "ME", "MD", "MA",
-    "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NJ", "NM", "NY",
-    "ND", "OH", "PA", "RI", "TN", "TX", "UT", "VT", "VA", "WA",
-    "WV", "WI", "WY",
-}
-
-
-def _seats_up_for_year(year: int) -> set[str]:
-    """Return set of state abbreviations with Senate seats up in given year."""
-    if (year - 2020) % 6 == 0:
-        return _CLASS_II_STATES
-    if (year - 2022) % 6 == 0:
-        return _CLASS_III_STATES
-    if (year - 2018) % 6 == 0:
-        return _CLASS_I_STATES
-    return set()
+# Election-day rule and Senate class rotation live in app.election_calendar
+# (2026-07: extracted so election_pipeline.py can share them without a
+# pipeline->api import). Aliased to the original private names so this
+# module's call sites and tests stay unchanged.
+_next_election_day = next_election_day
+_seats_up_for_year = seats_up_for_year
 
 
 _house_districts_cache: dict[str, int] | None = None
@@ -810,6 +772,22 @@ async def get_election_info(response: Response, db: Session = Depends(get_db)):
     is_election_season_flag = is_election_season(today)
 
     seats_up = _seats_up_for_year(el_year)
+    # Special elections are additional to the class calendar and only
+    # knowable from data — merge in any special Senate races the election
+    # pipeline's FEC roster sync has on file for this cycle (e.g. 2026's
+    # FL and OH Class 3 specials), so this teaser and /api/elections don't
+    # disagree about which states have a Senate race (2026-07 review F16).
+    # Kept OUT of the per-senator upForElection flag below: that flag is
+    # per-member, and in a special-election state only the appointed
+    # incumbent's seat is up — flagging both of the state's senators would
+    # mislabel one of them, and seat class per member isn't stored.
+    special_states = {
+        s for (s,) in db.query(Race.state).filter(
+            Race.cycle_year == el_year,
+            Race.office == "S",
+            Race.is_special.is_(True),
+        ).all()
+    }
 
     senators = (
         db.query(Senator.id, Senator.name, Senator.state, Senator.party,
@@ -837,7 +815,7 @@ async def get_election_info(response: Response, db: Session = Depends(get_db)):
     states: list[dict] = []
     for code in sorted(all_state_codes):
         sens = by_state.get(code, [])
-        has_race = code in seats_up
+        has_race = code in seats_up or code in special_states
         districts = house_districts.get(code, 0)
         states.append({
             "state": code,
@@ -857,7 +835,7 @@ async def get_election_info(response: Response, db: Session = Depends(get_db)):
             "isElectionDay": is_election_day,
             "isElectionSeason": is_election_season_flag,
         },
-        "senateSeatsUp": len(seats_up),
+        "senateSeatsUp": len(seats_up) + len(special_states),
         "houseSeatsUp": 435,
         "states": states,
     }

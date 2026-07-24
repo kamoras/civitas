@@ -218,27 +218,39 @@ CANDIDATES_PER_PAGE = 100
 async def fetch_all_candidates(
     client: httpx.AsyncClient, db: Session, cycle: int, office: str,
 ) -> list[dict]:
-    """Fetch every declared candidate for `office` ("H" or "S") in `cycle`.
+    """Fetch every candidate actually on the ballot for `office` ("H" or
+    "S") in `cycle`'s election.
 
     Unlike find_candidate (resolves ONE incumbent's own record by
     name+state+office), this pages through /v1/candidates/ in bulk — the
     roster source for the midterm-elections feature, where every declared
     challenger and primary candidate matters, not just sitting members.
 
-    Live-verified (2026 cycle): ~5,684 House + 1,233 Senate candidates,
-    so at per_page=100 this is ~70 total requests across both offices —
-    a few minutes at FEC's 0.25 req/s rate limit, not a per-race lookup.
-    Each page is cached independently so a re-run within the TTL window
-    only re-fetches pages that changed.
+    Filters on `election_year={cycle}`, NOT `cycle={cycle}`: FEC's `cycle`
+    param matches any two-year period in a candidate's `cycles` array —
+    every filing period their committee was active in — so for Senate it
+    also returns sitting senators whose next race is 2/4 years away (their
+    committees keep filing between races) and stale prior-cycle candidates
+    whose committees are winding down. `election_year` matches the actual
+    ballot year. This is the same cycle-vs-election-year distinction
+    financials_election_year below documents for the totals endpoint;
+    _sync_roster additionally re-validates each record's own
+    candidate_election_year/election_years, so a wrong record can't mint a
+    race for a state with no election that year (2026-07 review F1).
+
+    At per_page=100 this is a modest number of requests at FEC's
+    0.25 req/s rate limit, not a per-race lookup. Each page is cached
+    independently so a re-run within the TTL window only re-fetches pages
+    that changed.
     """
     all_candidates: list[dict] = []
     page = 1
     while True:
-        cache_key = f"candidates-roster-{cycle}-{office}-page{page}"
+        cache_key = f"candidates-roster-ey{cycle}-{office}-page{page}"
         data = api_cache_get(db, "fec", cache_key)
         if data is None:
             url = (
-                f"{FEC_API_BASE}/candidates/?cycle={cycle}&office={office}"
+                f"{FEC_API_BASE}/candidates/?election_year={cycle}&office={office}"
                 f"&per_page={CANDIDATES_PER_PAGE}&page={page}"
             )
             data = await _fetch_with_retry(client, url)

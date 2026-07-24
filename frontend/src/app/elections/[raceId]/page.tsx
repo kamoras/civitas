@@ -1,5 +1,6 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { raceTitleLabel } from "@/lib/elections";
 import type { RaceDetail } from "@/types/election";
 import RaceDetailClient from "./RaceDetailClient";
 
@@ -18,11 +19,6 @@ async function fetchRace(raceId: string): Promise<RaceDetail | null> {
   }
 }
 
-function raceLabel(race: RaceDetail): string {
-  if (race.office === "S") return `${race.state} Senate`;
-  return race.district ? `${race.state}-${race.district} House` : `${race.state} House`;
-}
-
 export async function generateMetadata({
   params,
 }: {
@@ -31,9 +27,9 @@ export async function generateMetadata({
   const { raceId } = await params;
   const race = await fetchRace(raceId);
 
-  const title = race ? `${raceLabel(race)} ${race.cycleYear} — Civitas` : "Race — Civitas";
+  const title = race ? `${raceTitleLabel(race)} ${race.cycleYear} — Civitas` : "Race — Civitas";
   const description = race
-    ? `${race.candidates.length} candidates, fundraising, and live coverage for the ${race.cycleYear} ${raceLabel(race)} race.`
+    ? `${race.candidates.length} ${race.candidates.length === 1 ? "candidate" : "candidates"}, fundraising, and live coverage for the ${race.cycleYear} ${raceTitleLabel(race)} race.`
     : "Election race detail on Civitas.";
 
   return {
@@ -48,11 +44,7 @@ export async function generateMetadata({
   };
 }
 
-export default async function RaceDetailPage({
-  params,
-}: {
-  params: Promise<{ raceId: string }>;
-}) {
+export default async function RaceDetailPage({ params }: { params: Promise<{ raceId: string }> }) {
   const { raceId } = await params;
   const race = await fetchRace(raceId);
 
