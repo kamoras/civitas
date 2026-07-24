@@ -13,7 +13,7 @@ computed deterministically and don't need LLM calls.
 
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import httpx
 from sqlalchemy.orm import Session
@@ -213,10 +213,10 @@ async def run_house_pipeline() -> dict:
             # prior year is still within the current congress (2 calendar
             # years/term; see AGENTS.md "current term"), otherwise it would
             # silently pull in the previous congress's votes.
-            current_year = datetime.now().year
+            current_year = utcnow().year
             recent_rcs = await fetch_recent_house_roll_calls(client, db, year=current_year, count=120)
             same_congress_prior_year = current_year > congress_first_year(settings.CURRENT_CONGRESS)
-            if len(recent_rcs) < 60 and datetime.now().month <= 6 and same_congress_prior_year:
+            if len(recent_rcs) < 60 and utcnow().month <= 6 and same_congress_prior_year:
                 recent_rcs += await fetch_recent_house_roll_calls(
                     client, db, year=current_year - 1, count=120 - len(recent_rcs),
                 )
