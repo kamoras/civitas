@@ -8,11 +8,16 @@ Tests:
 5. Rich text construction for uninformative bill names
 """
 
+from unittest.mock import MagicMock, patch
+
+import numpy as np
 import pytest
 
 from app.pipeline.analyze.bill_analyzer import (
     _NOMINATION_NAME_RE,
     _build_classification_text,
+    _is_procedural_seed_match,
+    classify_all_bills,
     classify_policy_area,
     classify_policy_areas_multi,
     _validate_classifications,
@@ -44,6 +49,149 @@ class TestProceduralDetection:
         area, confidence = classify_policy_area("abc")
         assert area == "PROCEDURAL"
         assert confidence == 0.0
+
+    def test_seed_matched_procedural_confidence_is_the_real_score_not_1(self):
+        """O3: _is_procedural_seed_match used to hardcode confidence 1.0 for
+        any match; a marginal 0.75 and a comfortable 0.85 aren't equally
+        certain, and the exact-match learning store (lookup_exact) treats
+        whatever confidence is recorded as ground truth forever."""
+        area, confidence = classify_policy_area(
+            "Naming of a post office building in Springfield Illinois",
+        )
+        assert area == "PROCEDURAL"
+        assert 0.70 <= confidence < 1.0
+
+
+class TestIsProceduralSeedMatch:
+    """Fully mocked — _is_procedural_seed_match's own return-value contract,
+    independent of real model score drift. _procedural_emb is a module-
+    level cache populated on first call; a test that fakes the model also
+    leaves a fake (wrong-dimension) vector cached there via the function's
+    own `global`, which would poison every later real-model test in the
+    same process unless restored — hence the before/after fixture rather
+    than a reset-only helper."""
+
+    @pytest.fixture(autouse=True)
+    def _isolate_procedural_emb_cache(self):
+        import app.pipeline.analyze.bill_analyzer as mod
+        original = mod._procedural_emb
+        mod._procedural_emb = None
+        yield
+        mod._procedural_emb = original
+
+    def test_returns_tuple_of_match_and_real_score(self):
+        fake_model = MagicMock()
+        # First call encodes the prototype, second encodes the query —
+        # identical vectors here, so the match is a perfect (score=1.0) hit.
+        fake_model.encode.side_effect = [[np.array([1.0, 0.0])], [np.array([1.0, 0.0])]]
+        with patch("app.pipeline.vector_store.get_embedding_model", return_value=fake_model):
+            is_match, score = _is_procedural_seed_match("some real bill text", threshold=0.5)
+        assert is_match is True
+        assert score == pytest.approx(1.0)
+
+    def test_below_threshold_reports_no_match_with_real_score(self):
+        fake_model = MagicMock()
+        # Orthogonal prototype vs. query -> cosine 0.0, below any real threshold.
+        fake_model.encode.side_effect = [[np.array([1.0, 0.0])], [np.array([0.0, 1.0])]]
+        with patch("app.pipeline.vector_store.get_embedding_model", return_value=fake_model):
+            is_match, score = _is_procedural_seed_match("some real bill text", threshold=0.5)
+        assert is_match is False
+        assert score == pytest.approx(0.0)
+
+    def test_empty_text_matches_with_confidence_1(self):
+        is_match, score = _is_procedural_seed_match("")
+        assert is_match is True
+        assert score == 1.0
+
+
+class TestClassifyAllBillsProceduralGate:
+    """classify_all_bills' PROCEDURAL confidence gate (O3) — fully mocked
+    so the fast-path/full-analysis branch decision is tested independent
+    of the real model."""
+
+    def _bill(self, **overrides):
+        b = {"billId": "hr-1-119", "billName": "Test Bill", "congress": 119,
+             "summary": "", "actions": []}
+        b.update(overrides)
+        return b
+
+    @pytest.mark.asyncio
+    async def test_confident_procedural_takes_the_fast_path(self):
+        with patch(
+            "app.pipeline.analyze.bill_analyzer.classify_policy_areas_multi",
+            return_value=[{"area": "PROCEDURAL", "confidence": 0.9}],
+        ):
+            result = await classify_all_bills([self._bill()])
+        assert result[0]["policyArea"] == "PROCEDURAL"
+        assert result[0]["stance"] == "procedural"
+        assert result[0]["policyAreas"][0]["confidence"] == 0.9
+
+    @pytest.mark.asyncio
+    async def test_low_confidence_procedural_rechecks_via_bill_name(self):
+        with patch(
+            "app.pipeline.analyze.bill_analyzer.classify_policy_areas_multi",
+            side_effect=[
+                [{"area": "PROCEDURAL", "confidence": 0.3}],
+                [{"area": "PROCEDURAL", "confidence": 0.3}],
+            ],
+        ), patch(
+            "app.pipeline.analyze.bill_analyzer._augmented_embedding_classify",
+            return_value="PROCEDURAL",
+        ), patch(
+            "app.pipeline.analyze.bill_analyzer.derive_stance",
+            return_value=("procedural text", "neutral"),
+        ), patch(
+            "app.pipeline.analyze.party_platform.classify_party_alignment_multi",
+            return_value={"overall": "bipartisan", "weight": 0.0, "areas": []},
+        ):
+            result = await classify_all_bills([self._bill()])
+        # Below EMBEDDING_CONFIDENCE_THRESHOLD both times -> doesn't qualify
+        # for the fast procedural path; falls into full analysis instead.
+        assert result[0]["stance"] == "neutral"
+
+
+class TestClassifyRecentVotesProceduralGate:
+    """classify_recent_votes' matching PROCEDURAL confidence gate (O3)."""
+
+    def _roll_call(self, **overrides):
+        rc = {"congress": 119, "session": 1, "rollNumber": 42,
+              "documentTitle": "Some Vote", "question": "On Passage of the Bill",
+              "voteDate": "2026-01-01"}
+        rc.update(overrides)
+        return rc
+
+    @pytest.mark.asyncio
+    async def test_confident_procedural_takes_the_fast_path(self):
+        from app.pipeline.analyze.bill_analyzer import classify_recent_votes
+        with patch(
+            "app.pipeline.analyze.bill_learning.classify_motion_type",
+            return_value="passage",
+        ), patch(
+            "app.pipeline.analyze.bill_analyzer.classify_policy_areas_multi",
+            return_value=[{"area": "PROCEDURAL", "confidence": 0.9}],
+        ):
+            result = await classify_recent_votes([self._roll_call()])
+        assert result[0]["policyArea"] == "PROCEDURAL"
+        assert result[0]["stance"] == "procedural"
+
+    @pytest.mark.asyncio
+    async def test_low_confidence_procedural_falls_through_to_full_analysis(self):
+        from app.pipeline.analyze.bill_analyzer import classify_recent_votes
+        with patch(
+            "app.pipeline.analyze.bill_learning.classify_motion_type",
+            return_value="passage",
+        ), patch(
+            "app.pipeline.analyze.bill_analyzer.classify_policy_areas_multi",
+            return_value=[{"area": "PROCEDURAL", "confidence": 0.3}],
+        ), patch(
+            "app.pipeline.analyze.bill_analyzer.derive_stance",
+            return_value=("procedural text", "neutral"),
+        ), patch(
+            "app.pipeline.analyze.party_platform.classify_party_alignment_multi",
+            return_value={"overall": "bipartisan", "weight": 0.0, "areas": []},
+        ):
+            result = await classify_recent_votes([self._roll_call()])
+        assert result[0]["stance"] != "procedural"
 
 
 @pytest.mark.slow

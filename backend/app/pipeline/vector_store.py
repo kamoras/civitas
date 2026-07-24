@@ -247,7 +247,38 @@ def embed_bills(bills: list[dict]) -> None:
     classifies against — its vectors must live in the same space as the
     classifier's query embeddings. Swapping it without the O1-O7
     ground-truth recalibration would silently break bill classification
-    (see module docstring's scope discipline)."""
+    (see module docstring's scope discipline).
+
+    2026-07 fix (O3): every classified bill, including low-confidence
+    guesses, used to be upserted here unconditionally and then treated as
+    a real kNN reference example forever — the audited 55%-PROCEDURAL
+    corpus skew was partly this (the procedural seed match used to report
+    a blind 1.0 confidence for every match; see _is_procedural_seed_match's
+    fix, same review finding). Only bills whose top policy-area confidence
+    clears EMBEDDING_CONFIDENCE_THRESHOLD go into the reference corpus now
+    — the same real floor bill_analyzer.py's own classification already
+    uses to decide "confident enough to accept outright" vs. falling
+    through to a second-pass/fallback guess. A bill excluded here isn't
+    lost: it's still scored and served for the current run, just not
+    promoted into future runs' training examples.
+    """
+    if not bills:
+        return
+
+    from app.pipeline.analyze.bill_analyzer import EMBEDDING_CONFIDENCE_THRESHOLD
+
+    def _top_confidence(bill: dict) -> float:
+        areas = bill.get("policyAreas") or []
+        return areas[0].get("confidence", 0.0) if areas else 0.0
+
+    skipped = sum(1 for b in bills if _top_confidence(b) < EMBEDDING_CONFIDENCE_THRESHOLD)
+    bills = [b for b in bills if _top_confidence(b) >= EMBEDDING_CONFIDENCE_THRESHOLD]
+    if skipped:
+        logger.info(
+            "embed_bills: skipped %d low-confidence classification(s) (< %.2f) — "
+            "not promoted to the kNN reference corpus",
+            skipped, EMBEDDING_CONFIDENCE_THRESHOLD,
+        )
     if not bills:
         return
 
@@ -441,14 +472,25 @@ def collection_stats() -> dict:
 
 def get_bill_reference(limit: int = 5000):
     """kNN reference corpus: (normalized embeddings ndarray, policy labels)
-    from the stored bills, or (None, []) when empty. Preserves the
-    pre-migration limit semantics (see platform-review O3 for the known
-    cap concern — unchanged here)."""
+    from the stored bills, or (None, []) when empty.
+
+    2026-07 fix (O3): this LIMIT used to have no ORDER BY. rowid is a
+    deterministic hash of bill_id (_bill_rowid), not an insertion or
+    recency order, so once the corpus grew past `limit` the excluded rows
+    were an arbitrary hash-ordered slice — not "the most recent 5000,"
+    just whatever 5000 happened to sort first. Ordered by each bill's own
+    `date` (already stored in meta_json for every row; see embed_bills)
+    so growth past the cap drops the *oldest* bills, keeping the reference
+    corpus current with recent Congresses rather than whichever slice a
+    hash function happened to favor.
+    """
     import numpy as np
 
     conn = get_vec_conn()
     rows = conn.execute(
-        "SELECT embedding, policy_area FROM vec_bills LIMIT ?", (limit,)
+        "SELECT embedding, policy_area FROM vec_bills "
+        "ORDER BY json_extract(meta_json, '$.date') DESC LIMIT ?",
+        (limit,),
     ).fetchall()
     if not rows:
         return None, []
