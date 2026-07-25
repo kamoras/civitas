@@ -24,12 +24,11 @@ presidential_approval.py's UCSB scrape.
 import logging
 import re
 
-import httpx
 from lxml import html as lxml_html
 from sqlalchemy.orm import Session
 
 from app.pipeline.cache import api_cache_get, api_cache_set
-from app.pipeline.fetch.http_utils import fetch_with_retry
+from app.pipeline.fetch.http_utils import fetch_with_retry_requests
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -191,9 +190,7 @@ def _parse_eo_table(html: str) -> dict[str, dict]:
     return result
 
 
-async def fetch_historical_eo_counts(
-    client: httpx.AsyncClient, db: Session,
-) -> dict[str, dict]:
+async def fetch_historical_eo_counts(db: Session) -> dict[str, dict]:
     """Fetch + parse EO counts for every president in one request.
 
     Returns an empty dict (never None) on total failure — callers should
@@ -203,8 +200,8 @@ async def fetch_historical_eo_counts(
     if cached is not None:
         return cached["data"]
 
-    resp = await fetch_with_retry(
-        client, _RATE_LIMITER, "GET", URL, log_label="UCSB executive orders",
+    resp = await fetch_with_retry_requests(
+        _RATE_LIMITER, "GET", URL, log_label="UCSB executive orders",
     )
     if resp is None or resp.status_code != 200:
         logger.warning("Failed to fetch UCSB executive-orders table (%s)", URL)

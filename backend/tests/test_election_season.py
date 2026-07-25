@@ -2,12 +2,10 @@
 extracted as public helpers so scheduler.py's election-season coverage
 refresh doesn't need its own copy of this date arithmetic.
 
-Boundary dates are derived from _next_election_day itself (anchored to a
-January date, safely outside November) rather than hardcoded calendar
-dates — _next_election_day has its own pre-existing behavior around
-November of an election year (out of scope to change here), so deriving
-from it keeps these tests honest about what the wrapped function actually
-returns instead of asserting an assumed calendar date.
+Boundary dates are derived from _next_election_day itself rather than
+hardcoded calendar dates, so these tests stay honest about what the
+wrapped function actually returns instead of asserting an assumed
+calendar date.
 """
 
 from datetime import date, timedelta

@@ -142,6 +142,52 @@ RECENT_RC_SESSIONS = 2
 MIN_CONGRESS_FOR_BILL_TITLES = 116
 
 
+def _backfill_withheld_sponsorship_scores(
+    db: Session,
+    bio_ids: set[str],
+    leadership_scores: dict, ideology_scores: dict,
+    bipartisanship_scores: dict, attracted_bipartisanship_scores: dict,
+) -> None:
+    """Fill any bio_id missing from this run's freshly-computed sponsorship
+    score dicts with that senator's last-stored value, in place — see the
+    call site's comment for why a bare `.get(bio_id)` on these dicts is
+    unsafe on a withheld run."""
+    missing = {
+        bio_id for bio_id in bio_ids
+        if bio_id not in leadership_scores or bio_id not in ideology_scores
+        or bio_id not in bipartisanship_scores or bio_id not in attracted_bipartisanship_scores
+    }
+    if not missing:
+        return
+
+    prior = {
+        row.bioguide_id: row
+        for row in db.query(
+            Senator.bioguide_id, Senator.leadership_score, Senator.ideology_score,
+            Senator.bipartisanship_score, Senator.attracted_bipartisanship_score,
+        ).filter(Senator.bioguide_id.in_(missing)).all()
+    }
+
+    backfilled = 0
+    for bio_id in missing:
+        row = prior.get(bio_id)
+        if row is None:
+            continue
+        for computed, value in (
+            (leadership_scores, row.leadership_score),
+            (ideology_scores, row.ideology_score),
+            (bipartisanship_scores, row.bipartisanship_score),
+            (attracted_bipartisanship_scores, row.attracted_bipartisanship_score),
+        ):
+            if bio_id not in computed and value is not None:
+                computed[bio_id] = value
+                backfilled += 1
+
+    if backfilled:
+        logger.warning(
+            "Sponsorship analysis: %d score(s) withheld this run, backfilled from last stored value",
+            backfilled,
+        )
 
 
 def upsert_senator(db: Session, data: dict) -> None:
@@ -329,16 +375,26 @@ def upsert_senator(db: Session, data: dict) -> None:
     if partisan_depth_data and existing:
         existing.partisan_depth = json.dumps(partisan_depth_data)
 
-    # Save sponsorship analysis scores (PageRank leadership + SVD ideology)
+    # Save sponsorship analysis scores (PageRank leadership + SVD ideology).
+    # Only overwrite when this run actually produced a value — the pipeline
+    # already backfills a withheld dict from the last stored value before
+    # this point (_backfill_withheld_sponsorship_scores), but this is a
+    # second, independent guard: storage must never wipe a real score to
+    # None just because the value it was handed this run happens to be
+    # None, same principle as president_pipeline.py's `live` dict.
     if existing:
         ls = data.get("leadershipScore")
-        existing.leadership_score = ls if ls is not None else None
+        if ls is not None:
+            existing.leadership_score = ls
         bs = data.get("bipartisanshipScore")
-        existing.bipartisanship_score = bs if bs is not None else None
+        if bs is not None:
+            existing.bipartisanship_score = bs
         abs_score = data.get("attractedBipartisanshipScore")
-        existing.attracted_bipartisanship_score = abs_score if abs_score is not None else None
+        if abs_score is not None:
+            existing.attracted_bipartisanship_score = abs_score
         ids = data.get("ideologyScore")
-        existing.ideology_score = ids if ids is not None else None
+        if ids is not None:
+            existing.ideology_score = ids
         existing.sponsorship_description = data.get("sponsorshipDescription") or ""
 
     db.flush()
@@ -1516,14 +1572,6 @@ async def run_senate_pipeline(
         ideology_scores = compute_ideology_scores(
             all_bills_for_analysis, cosponsors_map, senator_bio_ids, senator_party_map,
         )
-        # Party-relative ideology label thresholds, computed once over the
-        # full cohort (see party_ideology_bounds) so progressive/moderate/
-        # centrist reflects position WITHIN a party, not just party identity.
-        ideology_bounds_by_party = party_ideology_bounds(
-            [(ideology_scores.get(bio), senator_party_map.get(bio)) for bio in senator_bio_ids]
-        )
-        from app.pipeline.analyze.score_calculator import write_party_ideology_bounds
-        write_party_ideology_bounds("senate", ideology_bounds_by_party)
         # Refresh this chamber's DW-NOMINATE ideal points from Voteview
         # (position-congruence component, score_calculator v6.11).
         # Best-effort: never raises; a fetch/gate failure keeps the last
@@ -1541,6 +1589,36 @@ async def run_senate_pipeline(
             all_bills_for_analysis, cosponsors_map, senator_party_map,
             direction="receive",
         )
+        # compute_leadership_scores/compute_ideology_scores/compute_bipartisan
+        # ship_scores each withhold (return {}) under whole-cohort data-quality
+        # gates (most recently O6's SVD-axis-not-partisan check) — every
+        # senator is missing from the dict at once, not just one. Every
+        # downstream reader of these dicts previously did a bare
+        # `.get(bio_id)`, so a withheld run silently overwrote every
+        # senator's real score with None instead of leaving it as "couldn't
+        # compute this run" — collapsing many senators' Constituent
+        # Alignment (independentVoting) score toward the same shared
+        # neutral default (confirmed live 2026-07-24, the run right after
+        # O6 shipped: 59 of 101 senators landed on an identical IV score,
+        # tripping the ground-truth point-mass check). Same "keep what we
+        # had" principle president_pipeline.py already applies to its own
+        # live-fetch failures — backfilling here, once, means every
+        # consumer below (this dimension's score, the partisan-depth
+        # analysis, the persisted raw stat, and the label-threshold
+        # computation next) gets the same fix for free.
+        _backfill_withheld_sponsorship_scores(
+            db, senator_bio_ids,
+            leadership_scores, ideology_scores,
+            bipartisanship_scores, attracted_bipartisanship_scores,
+        )
+        # Party-relative ideology label thresholds, computed once over the
+        # full cohort (see party_ideology_bounds) so progressive/moderate/
+        # centrist reflects position WITHIN a party, not just party identity.
+        ideology_bounds_by_party = party_ideology_bounds(
+            [(ideology_scores.get(bio), senator_party_map.get(bio)) for bio in senator_bio_ids]
+        )
+        from app.pipeline.analyze.score_calculator import write_party_ideology_bounds
+        write_party_ideology_bounds("senate", ideology_bounds_by_party)
         logger.info(
             "Sponsorship analysis: %d leadership, %d ideology, %d bipartisanship scores",
             len(leadership_scores), len(ideology_scores), len(bipartisanship_scores),

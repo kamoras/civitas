@@ -65,6 +65,24 @@ function ElectionsPageContent() {
     return list.slice().sort(compareRaces);
   }, [races, selectedState]);
 
+  // Races are already sorted state-first, so a single pass groups them —
+  // 500+ flat cards was the reported source of confusion; state headers
+  // make the directory scannable without adding a new endpoint or dependency.
+  const groupedRaces = useMemo(() => {
+    const groups: { state: string; races: RaceSummary[] }[] = [];
+    for (const race of filteredRaces) {
+      const last = groups[groups.length - 1];
+      if (last && last.state === race.state) last.races.push(race);
+      else groups.push({ state: race.state, races: [race] });
+    }
+    return groups;
+  }, [filteredRaces]);
+
+  // cycleYear comes from already-fetched race data, not recomputed here —
+  // the backend (election_pipeline.current_election_cycle) is the source
+  // of truth for which cycle is "current".
+  const cycleYear = races?.[0]?.cycleYear;
+
   return (
     <div className="min-h-screen bg-crt-black text-matrix-green">
       <MatrixRain />
@@ -74,7 +92,7 @@ function ElectionsPageContent() {
           <div className="text-center mb-8">
             <GlitchText
               as="h1"
-              text="2026 MIDTERM ELECTIONS"
+              text={cycleYear ? `${cycleYear} MIDTERM ELECTIONS` : "MIDTERM ELECTIONS"}
               className="font-pixel text-xl sm:text-3xl text-matrix-green neon-green mb-2 block"
             />
             <p className="font-mono text-xs text-matrix-green/40">
@@ -142,9 +160,20 @@ function ElectionsPageContent() {
                   NO RACES ON RECORD FOR THIS STATE YET
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {filteredRaces.map((race) => (
-                    <RaceCard key={race.id} race={race} />
+                <div className="space-y-6">
+                  {groupedRaces.map((group) => (
+                    <div key={group.state}>
+                      {!selectedState && (
+                        <h3 className="font-pixel text-xs text-neon-cyan/60 mb-2 tracking-widest">
+                          {group.state}
+                        </h3>
+                      )}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {group.races.map((race) => (
+                          <RaceCard key={race.id} race={race} />
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}

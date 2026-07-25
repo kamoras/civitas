@@ -27,6 +27,7 @@ import asyncio
 import logging
 
 import httpx
+import requests
 
 from app.error_utils import redact_sensitive_params
 from app.pipeline.rate_limiter import RateLimiter
@@ -121,6 +122,60 @@ async def fetch_with_retry(
                 # The exception's own message can embed the request URL,
                 # including request_url if one was given (e.g.
                 # httpx.ConnectError/ReadTimeout do) — redact it too.
+                logger.error(
+                    "%s failed after %d attempts: %s — %s",
+                    label, retries, url, redact_url(str(e)),
+                )
+                return None
+            await asyncio.sleep(backoff_s * attempt)
+
+    return None
+
+
+async def fetch_with_retry_requests(
+    rate_limiter: RateLimiter,
+    method: str,
+    url: str,
+    *,
+    retries: int = DEFAULT_MAX_RETRIES,
+    backoff_s: float = DEFAULT_RETRY_BACKOFF_S,
+    timeout: float = DEFAULT_FETCH_TIMEOUT_S,
+    log_label: str = "",
+    **request_kwargs,
+) -> "requests.Response | None":
+    """Same rate-limited retry/backoff shape as fetch_with_retry, but issues
+    the request via `requests` (run off-thread via asyncio.to_thread) instead
+    of httpx.
+
+    presidency.ucsb.edu — the sole live source for every UCSB-derived
+    president fetcher — started blanket-403ing httpx's requests sometime
+    around 2026-07-23 regardless of User-Agent value or header casing
+    (confirmed live: identical headers succeed via `requests`, fail via
+    httpx, from the same container/IP), which silently starved the
+    president pipeline's roster/EO/approval/election-margin fetches and,
+    combined with a DROP-TABLE-on-schema-mismatch migration around the same
+    time, left the presidents table empty with no way to rebuild itself.
+    `requests` isn't blocked, so every UCSB-sourced fetcher routes through
+    this instead of fetch_with_retry.
+    """
+    label = log_label or url
+    for attempt in range(1, retries + 1):
+        try:
+            await rate_limiter.acquire()
+            resp = await asyncio.to_thread(requests.request, method, url, timeout=timeout, **request_kwargs)
+
+            if resp.status_code == 429:
+                wait = backoff_s * attempt
+                logger.warning("%s rate limited, waiting %.1fs...", label, wait)
+                await asyncio.sleep(wait)
+                continue
+
+            if resp.status_code >= 400:
+                raise requests.HTTPError(f"HTTP {resp.status_code}", response=resp)
+
+            return resp
+        except Exception as e:
+            if attempt == retries:
                 logger.error(
                     "%s failed after %d attempts: %s — %s",
                     label, retries, url, redact_url(str(e)),

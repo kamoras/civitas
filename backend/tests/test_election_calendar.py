@@ -5,10 +5,13 @@ wrong silently mislabels real races; the structural invariants below
 (every state covered by the rotation) catch a typo'd roster.
 """
 
+from datetime import date
+
 from app.election_calendar import (
     CLASS_I_STATES,
     CLASS_II_STATES,
     CLASS_III_STATES,
+    next_election_day,
     seats_up_for_year,
 )
 
@@ -64,3 +67,20 @@ class TestClassRosters:
         _sync_roster's special-election derivation rests on."""
         assert "FL" not in CLASS_II_STATES
         assert "OH" not in CLASS_II_STATES
+
+
+class TestNextElectionDay:
+    def test_2026_election_day_is_november_3rd(self):
+        assert next_election_day(date(2026, 1, 1)) == date(2026, 11, 3)
+
+    def test_day_before_election_day_still_returns_same_year(self):
+        # Regression: a `year = after.year + 1` short-circuit for any
+        # November date used to skip past the current year's own election
+        # day whenever `after` landed a day or two before it.
+        assert next_election_day(date(2026, 11, 2)) == date(2026, 11, 3)
+
+    def test_election_day_itself_rolls_to_next_cycle(self):
+        assert next_election_day(date(2026, 11, 3)) == date(2028, 11, 7)
+
+    def test_day_after_election_day_rolls_to_next_cycle(self):
+        assert next_election_day(date(2026, 11, 4)) == date(2028, 11, 7)

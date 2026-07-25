@@ -39,12 +39,11 @@ not apply," not as a fetch failure to retry.
 import logging
 import re
 
-import httpx
 from lxml import html as lxml_html
 from sqlalchemy.orm import Session
 
 from app.pipeline.cache import api_cache_get, api_cache_set
-from app.pipeline.fetch.http_utils import fetch_with_retry
+from app.pipeline.fetch.http_utils import fetch_with_retry_requests
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -218,9 +217,7 @@ def _parse_election_year_page(html: str) -> float | None:
     return best
 
 
-async def fetch_election_margins(
-    client: httpx.AsyncClient, db: Session,
-) -> dict[str, float]:
+async def fetch_election_margins(db: Session) -> dict[str, float]:
     """Fetch + parse election-margin data for every president who won at
     least one presidential election (Washington through the present,
     excluding the four who succeeded without ever winning one).
@@ -236,8 +233,8 @@ async def fetch_election_margins(
     margins_by_id: dict[str, list[float]] = {}
     mandates_table_ok = False
 
-    resp = await fetch_with_retry(
-        client, _RATE_LIMITER, "GET", MANDATES_URL, log_label="UCSB election mandates",
+    resp = await fetch_with_retry_requests(
+        _RATE_LIMITER, "GET", MANDATES_URL, log_label="UCSB election mandates",
     )
     if resp is not None and resp.status_code == 200:
         try:
@@ -250,8 +247,8 @@ async def fetch_election_margins(
 
     for year, pid in _PRE_1824_ELECTIONS.items():
         url = ELECTION_YEAR_URL.format(year=year)
-        resp = await fetch_with_retry(
-            client, _RATE_LIMITER, "GET", url, log_label=f"UCSB election {year}",
+        resp = await fetch_with_retry_requests(
+            _RATE_LIMITER, "GET", url, log_label=f"UCSB election {year}",
         )
         if resp is None or resp.status_code != 200:
             logger.warning("Failed to fetch UCSB %d election page (%s)", year, url)

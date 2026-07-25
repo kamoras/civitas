@@ -39,8 +39,16 @@ CLASS_III_STATES = frozenset({
 
 
 def next_election_day(after: date) -> date:
-    """Compute next federal election day (first Tue after first Mon in Nov, even years)."""
-    year = after.year if after.month <= 10 else after.year + 1
+    """Compute next federal election day (first Tue after first Mon in Nov, even years).
+
+    Starts the search at `after`'s own year (bumped to the next even year
+    only if odd) and lets the `election_day > after` check below decide
+    whether to advance — a `year = after.year + 1` short-circuit for any
+    November date used to skip straight past the *current* year's election
+    day even when `after` fell a day or two before it (e.g. Nov 1-2 in an
+    election year), reporting the cycle two years too far out.
+    """
+    year = after.year
     if year % 2 != 0:
         year += 1
     while True:

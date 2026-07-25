@@ -51,12 +51,11 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-import httpx
 from lxml import html as lxml_html
 from sqlalchemy.orm import Session
 
 from app.pipeline.cache import api_cache_get, api_cache_set
-from app.pipeline.fetch.http_utils import fetch_with_retry
+from app.pipeline.fetch.http_utils import fetch_with_retry_requests
 from app.pipeline.rate_limiter import RateLimiter
 from app.time_utils import utcnow
 
@@ -175,7 +174,7 @@ def _parse_approval_table(html: str) -> list[ApprovalPoll]:
 
 
 async def fetch_president_approval_history(
-    client: httpx.AsyncClient, db: Session, president_id: str,
+    db: Session, president_id: str,
 ) -> list[ApprovalPoll] | None:
     """Fetch + parse a president's full approval-poll history from UCSB.
 
@@ -193,8 +192,8 @@ async def fetch_president_approval_history(
         return [ApprovalPoll(**p) for p in cached["polls"]]
 
     url = f"{BASE_URL}/{slug}"
-    resp = await fetch_with_retry(
-        client, _RATE_LIMITER, "GET", url,
+    resp = await fetch_with_retry_requests(
+        _RATE_LIMITER, "GET", url,
         log_label="UCSB approval",
     )
     if resp is None or resp.status_code != 200:

@@ -16,7 +16,7 @@ from app.pipeline.analyze.score_calculator import (
     get_pvi_meta,
     get_state_pvi_map,
 )
-from app.pipeline.election_pipeline import CURRENT_ELECTION_CYCLE
+from app.pipeline.election_pipeline import current_election_cycle
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,7 @@ def list_races(db: Session = Depends(get_db)):
         db.query(Race)
         # Filter matches the docstring's contract — harmless while only
         # one cycle exists, load-bearing the day a second cycle syncs.
-        .filter(Race.cycle_year == CURRENT_ELECTION_CYCLE)
+        .filter(Race.cycle_year == current_election_cycle())
         # ~470 races each lazy-loading .candidates is an N+1 of ~500
         # queries per request on a Pi — batch them.
         .options(selectinload(Race.candidates))

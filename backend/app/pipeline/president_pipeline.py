@@ -155,11 +155,11 @@ async def run_president_pipeline(db: Session) -> dict:
 
     async with httpx.AsyncClient() as client:
         logger.info("Fetching executive-order counts (UCSB, all presidents)...")
-        eo_data = await fetch_historical_eo_counts(client, db)
+        eo_data = await fetch_historical_eo_counts(db)
         logger.info("EO data fetched for %d presidents", len(eo_data))
 
         logger.info("Fetching presidential roster (UCSB)...")
-        roster = await fetch_presidential_roster(client, db)
+        roster = await fetch_presidential_roster(db)
         synced = _sync_roster(db, roster, eo_data)
         logger.info("Roster synced for %d presidents", synced)
 
@@ -192,7 +192,7 @@ async def run_president_pipeline(db: Session) -> dict:
         approval_trend_data: dict[str, float] = {}
         recent_avg_approval_data: dict[str, float] = {}
         for pid in PRESIDENT_APPROVAL_SLUGS:
-            polls = await fetch_president_approval_history(client, db, pid)
+            polls = await fetch_president_approval_history(db, pid)
             if not polls:
                 continue
             values = [poll.approving for poll in polls if poll.approving is not None]
@@ -212,7 +212,7 @@ async def run_president_pipeline(db: Session) -> dict:
         logger.info("Approval data fetched for %d presidents", len(approval_avg_data))
 
         logger.info("Fetching historical election-margin data (UCSB)...")
-        election_margin_data = await fetch_election_margins(client, db)
+        election_margin_data = await fetch_election_margins(db)
         logger.info("Election-margin data fetched for %d presidents", len(election_margin_data))
 
         logger.info("Fetching C-SPAN Presidential Historians Survey (2021 cycle)...")

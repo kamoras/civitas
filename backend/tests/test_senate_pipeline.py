@@ -1,8 +1,10 @@
 """Tests for senate_pipeline helper functions."""
 
 from app.config import settings
+from app.models import Senator
 from app.pipeline.senate_pipeline import (
     PIPELINE_STEPS,
+    _backfill_withheld_sponsorship_scores,
     _build_current_term_sponsored_for_cosponsor,
     _build_donor_entries,
 )
@@ -163,3 +165,63 @@ class TestBuildCurrentTermSponsoredForCosponsor:
             "isLaw": True,
             "latestAction": "Signed by President",
         }]
+
+
+class TestBackfillWithheldSponsorshipScores:
+    """2026-07-25 regression: compute_ideology_scores (and its sibling
+    leadership/bipartisanship functions) withhold as a whole-cohort gate
+    (return {}), not per-senator — the run right after O6 shipped saw 59 of
+    101 senators collapse onto an identical Independent Voting score
+    because every downstream `.get(bio_id)` silently read None for
+    everyone at once. This backfill must restore each senator's own last
+    value, not some shared default."""
+
+    def _make_senator(self, db_session, bio_id, **scores):
+        s = Senator(
+            id=bio_id, bioguide_id=bio_id, name=bio_id, state="GA", party="D",
+            **scores,
+        )
+        db_session.add(s)
+        db_session.commit()
+        return s
+
+    def test_fills_gap_from_last_stored_value_per_senator(self, db_session):
+        self._make_senator(db_session, "S001", ideology_score=0.71, leadership_score=0.4)
+        self._make_senator(db_session, "S002", ideology_score=0.22, leadership_score=0.6)
+
+        # Whole-cohort withhold: ideology_scores comes back empty, as
+        # compute_ideology_scores does when the SVD axis fails its
+        # partisan-separation check.
+        leadership_scores = {"S001": 0.4, "S002": 0.6}
+        ideology_scores: dict = {}
+        bipartisanship_scores = {"S001": 0.5, "S002": 0.5}
+        attracted_bipartisanship_scores = {"S001": 0.5, "S002": 0.5}
+
+        _backfill_withheld_sponsorship_scores(
+            db_session, {"S001", "S002"},
+            leadership_scores, ideology_scores,
+            bipartisanship_scores, attracted_bipartisanship_scores,
+        )
+
+        # Each senator gets their OWN prior value back, not a shared one.
+        assert ideology_scores == {"S001": 0.71, "S002": 0.22}
+
+    def test_no_prior_value_leaves_gap_unfilled(self, db_session):
+        # A brand-new senator with no stored history and a withheld run:
+        # nothing to backfill from, correctly stays missing.
+        self._make_senator(db_session, "S001", ideology_score=None)
+
+        ideology_scores: dict = {}
+        _backfill_withheld_sponsorship_scores(
+            db_session, {"S001"},
+            {"S001": 0.4}, ideology_scores, {"S001": 0.5}, {"S001": 0.5},
+        )
+        assert "S001" not in ideology_scores
+
+    def test_no_missing_keys_is_a_no_op(self, db_session):
+        # Every dict already has every bio_id — no DB query should even
+        # matter here; values pass through untouched.
+        scores = {"S001": 0.4}
+        _backfill_withheld_sponsorship_scores(
+            db_session, {"S001"}, dict(scores), dict(scores), dict(scores), dict(scores),
+        )
