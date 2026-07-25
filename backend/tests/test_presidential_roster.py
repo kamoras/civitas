@@ -111,10 +111,10 @@ class TestFetchPresidentialRosterSanityFloor:
         response.status_code = 200
         response.text = _FIXTURE_HTML  # 8 rows — well under the 40-row floor
         with patch(
-            "app.pipeline.fetch.presidential_roster.fetch_with_retry",
+            "app.pipeline.fetch.presidential_roster.fetch_with_retry_requests",
             new=AsyncMock(return_value=response),
         ):
-            entries = await fetch_presidential_roster(AsyncMock(), db_session)
+            entries = await fetch_presidential_roster(db_session)
         assert entries == []
 
 

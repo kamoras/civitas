@@ -30,13 +30,12 @@ import logging
 import re
 from dataclasses import dataclass
 
-import httpx
 from lxml import html as lxml_html
 from sqlalchemy.orm import Session
 
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.historical_executive_orders import NAME_TO_ID
-from app.pipeline.fetch.http_utils import fetch_with_retry
+from app.pipeline.fetch.http_utils import fetch_with_retry_requests
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -174,7 +173,7 @@ def _parse_roster(html: str) -> list[RosterEntry]:
     return entries
 
 
-async def fetch_presidential_roster(client: httpx.AsyncClient, db: Session) -> list[RosterEntry]:
+async def fetch_presidential_roster(db: Session) -> list[RosterEntry]:
     """Fetch + parse the full presidential roster in one request.
 
     Returns an empty list (never None) on failure — callers should treat
@@ -184,8 +183,8 @@ async def fetch_presidential_roster(client: httpx.AsyncClient, db: Session) -> l
     if cached is not None:
         return [RosterEntry(**e) for e in cached["entries"]]
 
-    resp = await fetch_with_retry(
-        client, _RATE_LIMITER, "GET", ROSTER_URL, log_label="UCSB presidential roster",
+    resp = await fetch_with_retry_requests(
+        _RATE_LIMITER, "GET", ROSTER_URL, log_label="UCSB presidential roster",
     )
     if resp is None or resp.status_code != 200:
         logger.warning("Failed to fetch UCSB presidential roster (%s)", ROSTER_URL)
