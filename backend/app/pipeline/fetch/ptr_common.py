@@ -47,12 +47,22 @@ OWNER_CODES = {"SP": "spouse", "DC": "dependent", "JT": "joint"}
 
 # Transaction-type text as printed on the form -> our vocabulary. Matched
 # case-insensitively against a substring since forms vary slightly in
-# capitalization/spacing across years and between chambers.
+# capitalization/spacing across years and between chambers. The House's own
+# electronic PTR form (verified live, 2026-07) prints the form's official
+# single-letter code (P/S/E) in this column, not the spelled-out word — a
+# leading `^\s*<letter>\b` alternative catches that, anchored to the start
+# so it can't false-match a stray letter inside unrelated text (this column
+# is already isolated to the Transaction Type header by _find_col, so its
+# value is always just the code, not free text). This was silently
+# skipping every single transaction row on every House filing — the
+# "sale"/"purchase"/"exchange" word patterns never matched the actual "S
+# (partial)"/"P"/"E" values the form prints, and a row with no classifiable
+# type is (correctly) dropped as unparseable rather than guessed at.
 TXN_TYPE_PATTERNS = [
-    (re.compile(r"purchase", re.I), "purchase"),
-    (re.compile(r"sale.*\(partial\)|partial.*sale", re.I), "sale_partial"),
-    (re.compile(r"sale.*\(full\)|sale", re.I), "sale_full"),
-    (re.compile(r"exchange", re.I), "exchange"),
+    (re.compile(r"^\s*p\b|purchase", re.I), "purchase"),
+    (re.compile(r"^\s*s\s*\(partial\)|sale.*\(partial\)|partial.*sale", re.I), "sale_partial"),
+    (re.compile(r"^\s*s\b|sale.*\(full\)|sale", re.I), "sale_full"),
+    (re.compile(r"^\s*e\b|exchange", re.I), "exchange"),
 ]
 
 TICKER_RE = re.compile(r"\(([A-Z]{1,5})\)")

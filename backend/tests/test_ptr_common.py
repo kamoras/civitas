@@ -29,6 +29,22 @@ def test_classify_transaction_type():
     assert classify_transaction_type("something else entirely") is None
 
 
+def test_classify_transaction_type_house_form_letter_codes():
+    """The House electronic PTR form's actual Transaction Type column value
+    is the form's own single-letter code (P/S/E), not the spelled-out word
+    — confirmed live 2026-07-25 against real filings. Every row on every
+    House filing was silently dropped as unparseable until these were
+    recognized (parse_table_rows' final "type is None" guard skips a row
+    it can't classify, same as it does for `something else entirely`
+    above — this is not a new leniency, just closing a real gap in what
+    the form actually prints)."""
+    assert classify_transaction_type("P") == "purchase"
+    assert classify_transaction_type("S (partial)") == "sale_partial"
+    assert classify_transaction_type("S (full)") == "sale_full"
+    assert classify_transaction_type("S") == "sale_full"
+    assert classify_transaction_type("E") == "exchange"
+
+
 def test_parse_amount_range_valid():
     assert parse_amount_range("$1,001 - $15,000") == (1001.0, 15000.0)
     assert parse_amount_range("$50,001 - $100,000") == (50001.0, 100000.0)
