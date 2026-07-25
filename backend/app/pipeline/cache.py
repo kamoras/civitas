@@ -69,12 +69,27 @@ def api_cache_get(
 EMPTY_RESPONSE_TTL_HOURS = 6
 
 
-def api_cache_set(db: Session, tier: str, key: str, data) -> None:
+def api_cache_set(
+    db: Session, tier: str, key: str, data, *, normal_ttl_hours: int | None = None,
+) -> None:
     """Store API response in cache (upsert).
 
     Empty payloads never overwrite existing non-empty data, and are
     stored with a shortened effective TTL (implemented by backdating
     cached_at, since expiry is computed from it at read time).
+
+    `normal_ttl_hours` must match whatever max_age_hours the caller's own
+    api_cache_get uses for a real (non-empty) hit — the backdate offset is
+    computed relative to it, defaulting to the global PIPELINE_CACHE_TTL_HOURS
+    when omitted. A caller reading with a DIFFERENT custom max_age_hours
+    without also passing the matching value here silently defeats the
+    short-TTL safety net below: confirmed live 2026-07-25, house_ptr.py/
+    senate_ptr.py read with a 30-day max_age_hours (deliberately long-lived
+    for a successfully-parsed filing — PDFs don't change) while this
+    function's backdate math assumed the 72h default, so a single transient
+    parse failure (a PDF that failed to parse once, e.g. under CPU
+    contention) stuck that filing's cache empty for a month instead of
+    retrying within EMPTY_RESPONSE_TTL_HOURS.
     """
     entry = (
         db.query(ApiCache)
@@ -87,7 +102,8 @@ def api_cache_set(db: Session, tier: str, key: str, data) -> None:
 
     cached_at = utcnow()
     if is_empty:
-        shorten = max(settings.PIPELINE_CACHE_TTL_HOURS - EMPTY_RESPONSE_TTL_HOURS, 0)
+        normal_ttl = normal_ttl_hours if normal_ttl_hours is not None else settings.PIPELINE_CACHE_TTL_HOURS
+        shorten = max(normal_ttl - EMPTY_RESPONSE_TTL_HOURS, 0)
         cached_at -= timedelta(hours=shorten)
 
     data_json = json.dumps(data, default=str)
