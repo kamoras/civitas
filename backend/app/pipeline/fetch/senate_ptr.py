@@ -201,84 +201,96 @@ async def search_ptr_filings(since_date: str) -> list[dict]:
     `fetch()` to the same endpoint, even from this same authenticated
     page, was ALSO blocked in live testing (2026-07-25): only an actual
     OS-trusted click gets through.
+
+    Browser lifecycle only — the actual scraping steps are in
+    _scrape_via_page, split out so that logic is unit-testable against a
+    mocked page without needing a real browser.
     """
-    filings: list[dict] = []
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             try:
                 page = await browser.new_page()
                 page.set_default_timeout(_ACTION_TIMEOUT_MS)
-                await page.goto(HOME_URL, wait_until="domcontentloaded")
-
-                # Accept the statutory use-restriction gate if presented
-                # (a fresh browser context always starts logged out, so
-                # this runs every time — see the Legal note in the module
-                # docstring on why this is a real acceptance, not a bypass).
-                if await page.locator("#agree_statement").count() > 0:
-                    await _click(page.locator("#agree_statement"))
-                    await _click(page.locator("#agreement_form button, #agreement_form input[type=submit]"))
-
-                await page.goto(SEARCH_URL, wait_until="domcontentloaded")
-                await _click(page.get_by_role("checkbox", name="Periodic Transactions"))
-                us_date = _iso_to_us_date(since_date)
-                if us_date:
-                    date_input = page.locator('input[name="submitted_start_date"]')
-                    if await date_input.count() > 0:
-                        await date_input.fill(us_date)
-
-                responses: list = []
-                page.on(
-                    "response",
-                    lambda r: responses.append(r) if SEARCH_DATA_URL in r.url else None,
-                )
-
-                await _click(page.get_by_role("button", name="Search Reports"))
-                if not await _wait_until(lambda: bool(responses)):
-                    logger.error("Senate eFD search produced no response — page structure may have changed")
-                    return []
-
-                # Max page size, so a real backfill needs the fewest
-                # possible "Next" clicks (each one a real, slow-ish
-                # network round trip through Akamai's checks).
-                length_dropdown = page.get_by_role("combobox", name="Show entries")
-                if await length_dropdown.count() > 0:
-                    before = len(responses)
-                    try:
-                        await length_dropdown.select_option(str(_PAGE_LEN), timeout=_ACTION_TIMEOUT_MS)
-                    except PlaywrightTimeoutError:
-                        pass
-                    await _wait_until(lambda: len(responses) > before)
-
-                for _ in range(_MAX_PAGES):
-                    resp = responses[-1]
-                    try:
-                        payload = await resp.json()
-                    except Exception:
-                        logger.error("Senate eFD search response was not JSON — session/endpoint may have changed")
-                        break
-
-                    total = payload.get("recordsTotal", 0)
-                    for row in payload.get("data", []):
-                        parsed = _parse_search_row(row)
-                        if parsed is not None:
-                            filings.append(parsed)
-
-                    if len(filings) >= total:
-                        break
-
-                    next_el = page.get_by_text("Next", exact=True)
-                    if "disabled" in (await next_el.get_attribute("class") or ""):
-                        break
-                    before = len(responses)
-                    await _click(next_el)
-                    if not await _wait_until(lambda: len(responses) > before):
-                        break
+                return await _scrape_via_page(page, since_date)
             finally:
                 await browser.close()
     except Exception:
         logger.exception("Senate eFD Playwright search failed")
         return []
+
+
+async def _scrape_via_page(page, since_date: str) -> list[dict]:
+    """The actual eFD search flow, given an already-launched Playwright
+    page. See search_ptr_filings for why this exists as a real browser
+    session at all."""
+    filings: list[dict] = []
+    await page.goto(HOME_URL, wait_until="domcontentloaded")
+
+    # Accept the statutory use-restriction gate if presented (a fresh
+    # browser context always starts logged out, so this runs every time —
+    # see the Legal note in the module docstring on why this is a real
+    # acceptance, not a bypass).
+    if await page.locator("#agree_statement").count() > 0:
+        await _click(page.locator("#agree_statement"))
+        await _click(page.locator("#agreement_form button, #agreement_form input[type=submit]"))
+
+    await page.goto(SEARCH_URL, wait_until="domcontentloaded")
+    await _click(page.get_by_role("checkbox", name="Periodic Transactions"))
+    us_date = _iso_to_us_date(since_date)
+    if us_date:
+        date_input = page.locator('input[name="submitted_start_date"]')
+        if await date_input.count() > 0:
+            await date_input.fill(us_date)
+
+    responses: list = []
+    page.on(
+        "response",
+        lambda r: responses.append(r) if SEARCH_DATA_URL in r.url else None,
+    )
+
+    await _click(page.get_by_role("button", name="Search Reports"))
+    if not await _wait_until(lambda: bool(responses)):
+        logger.error("Senate eFD search produced no response — page structure may have changed")
+        return []
+
+    # Max page size, so a real backfill needs the fewest possible "Next"
+    # clicks (each one a real, slow-ish network round trip through
+    # Akamai's checks).
+    length_dropdown = page.get_by_role("combobox", name="Show entries")
+    if await length_dropdown.count() > 0:
+        before = len(responses)
+        try:
+            await length_dropdown.select_option(str(_PAGE_LEN), timeout=_ACTION_TIMEOUT_MS)
+        except PlaywrightTimeoutError:
+            pass
+        await _wait_until(lambda: len(responses) > before)
+
+    for _ in range(_MAX_PAGES):
+        resp = responses[-1]
+        try:
+            payload = await resp.json()
+        except Exception:
+            logger.error("Senate eFD search response was not JSON — session/endpoint may have changed")
+            break
+
+        total = payload.get("recordsTotal", 0)
+        for row in payload.get("data", []):
+            parsed = _parse_search_row(row)
+            if parsed is not None:
+                filings.append(parsed)
+
+        if len(filings) >= total:
+            break
+
+        next_el = page.get_by_text("Next", exact=True)
+        if "disabled" in (await next_el.get_attribute("class") or ""):
+            break
+        before = len(responses)
+        await _click(next_el)
+        if not await _wait_until(lambda: len(responses) > before):
+            break
+
     return filings
 
 

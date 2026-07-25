@@ -1,12 +1,13 @@
 """Tests for Senate eFD PTR fetching: search-row parsing, date conversion,
-and the filed-date->disclosure-date fix (2026-07 platform review).
+the scraping control flow, and the filed-date->disclosure-date fix
+(2026-07 platform review).
 
-search_ptr_filings itself drives a real headless browser (see its module
-docstring — efdsearch.senate.gov's search endpoint is behind Akamai
-bot-management no plain HTTP client gets past, confirmed live 2026-07-25)
-and isn't meaningfully unit-testable via mocks; what's tested here are the
-pure building blocks it depends on (row parsing, date formatting), which
-carry the actual logic that could break silently.
+search_ptr_filings' own browser-launch/close plumbing isn't meaningfully
+unit-testable (that's covered by the live verification described in
+senate_ptr.py's module docstring instead), but _scrape_via_page — the
+actual flow logic (terms gate, form fill, pagination, termination
+conditions) — takes a `page` object as a plain argument, so it's exercised
+here against a small fake Playwright page rather than a real browser.
 """
 
 import json
@@ -64,6 +65,185 @@ class _FakeResponse:
         if self._payload is None:
             raise ValueError("not json")
         return self._payload
+
+
+class _FakeSearchResponse:
+    """A page.on("response", ...) event object — the real one is an
+    httpx-response-shaped object with an async .json(); .url is a plain
+    attribute, matched against SEARCH_DATA_URL by the listener."""
+
+    def __init__(self, payload):
+        self.url = senate_ptr.SEARCH_DATA_URL
+        self._payload = payload
+
+    async def json(self):
+        return self._payload
+
+
+class _FakeLocator:
+    """Stands in for a Playwright Locator. `count` is the element-present
+    check most branches in _scrape_via_page gate on; `on_click` lets a
+    test simulate the real side effect of a click (firing a response
+    event) without needing an actual page."""
+
+    def __init__(self, count=1, on_click=None, attr=None):
+        self._count = count
+        self._on_click = on_click
+        self._attr = attr
+        self.filled = None
+
+    async def count(self):
+        return self._count
+
+    async def click(self, timeout=None):
+        if self._on_click:
+            self._on_click()
+
+    async def select_option(self, value, timeout=None):
+        if self._on_click:
+            self._on_click()
+
+    async def fill(self, value):
+        self.filled = value
+
+    async def get_attribute(self, name):
+        return self._attr
+
+
+class _FakePage:
+    """Minimal stand-in for a Playwright Page, just enough surface for
+    _scrape_via_page: goto/locator/get_by_role/get_by_text/on. Locators
+    are looked up by a (kind, key) tuple the test configures up front;
+    anything not configured defaults to "present" (count=1) so a test
+    only needs to override what it cares about.
+    """
+
+    def __init__(self, locators: dict | None = None):
+        self._locators = locators or {}
+        self._response_cb = None
+
+    async def goto(self, url, wait_until=None):
+        pass
+
+    def locator(self, selector):
+        return self._locators.get(("locator", selector), _FakeLocator())
+
+    def get_by_role(self, role, name=None):
+        return self._locators.get(("role", role, name), _FakeLocator())
+
+    def get_by_text(self, text, exact=None):
+        return self._locators.get(("text", text), _FakeLocator())
+
+    def on(self, event, callback):
+        if event == "response":
+            self._response_cb = callback
+
+    def fire_response(self, response) -> None:
+        self._response_cb(response)
+
+
+class TestScrapeViaPage:
+    """_scrape_via_page's control flow: terms gate, form fill, the
+    pagination loop's termination conditions. The one thing a real
+    browser session provides that these fakes can't (passing Akamai's
+    bot-management gate) is covered by the live verification in the
+    module docstring instead."""
+
+    @pytest.mark.asyncio
+    async def test_single_page_no_terms_gate_no_length_dropdown(self):
+        payload = {"recordsTotal": 1, "data": [_search_row("Jane", "Doe")]}
+        page = _FakePage({
+            ("locator", "#agree_statement"): _FakeLocator(count=0),
+            ("role", "combobox", "Show entries"): _FakeLocator(count=0),
+        })
+        search_btn = _FakeLocator(on_click=lambda: page.fire_response(_FakeSearchResponse(payload)))
+        page._locators[("role", "button", "Search Reports")] = search_btn
+
+        filings = await senate_ptr._scrape_via_page(page, "2026-01-01")
+
+        assert len(filings) == 1
+        assert filings[0]["first"] == "Jane"
+
+    @pytest.mark.asyncio
+    async def test_terms_gate_accepted_when_present(self):
+        agree_clicks = []
+        payload = {"recordsTotal": 0, "data": []}
+        page = _FakePage({
+            ("locator", "#agree_statement"): _FakeLocator(count=1, on_click=lambda: agree_clicks.append(1)),
+            ("role", "combobox", "Show entries"): _FakeLocator(count=0),
+        })
+        page._locators[("role", "button", "Search Reports")] = _FakeLocator(
+            on_click=lambda: page.fire_response(_FakeSearchResponse(payload)),
+        )
+
+        await senate_ptr._scrape_via_page(page, "")
+
+        assert agree_clicks == [1]
+
+    @pytest.mark.asyncio
+    async def test_no_search_response_returns_empty(self, monkeypatch):
+        # "Search Reports" click never fires a response — page structure
+        # changed, or the gate blocked it. Must not hang or raise.
+        page = _FakePage({
+            ("locator", "#agree_statement"): _FakeLocator(count=0),
+        })
+
+        async def _fast_wait(predicate, timeout_s=10.0, poll_s=0.1):
+            return predicate()
+
+        monkeypatch.setattr(senate_ptr, "_wait_until", _fast_wait)
+
+        filings = await senate_ptr._scrape_via_page(page, "")
+
+        assert filings == []
+
+    @pytest.mark.asyncio
+    async def test_pagination_stops_when_next_disabled(self):
+        page1 = {"recordsTotal": 3, "data": [_search_row("A", "One"), _search_row("B", "Two")]}
+        page2 = {"recordsTotal": 3, "data": [_search_row("C", "Three")]}
+        responses = iter([_FakeSearchResponse(page1), _FakeSearchResponse(page2)])
+
+        page = _FakePage({
+            ("locator", "#agree_statement"): _FakeLocator(count=0),
+            ("role", "combobox", "Show entries"): _FakeLocator(count=0),
+        })
+        page._locators[("role", "button", "Search Reports")] = _FakeLocator(
+            on_click=lambda: page.fire_response(next(responses)),
+        )
+        page._locators[("text", "Next")] = _FakeLocator(
+            on_click=lambda: page.fire_response(next(responses)),
+            attr="paginate_button next disabled",
+        )
+
+        filings = await senate_ptr._scrape_via_page(page, "")
+
+        # First page's 2 rows only — "Next" was already disabled, so the
+        # loop must never have clicked it (recordsTotal=3 alone would
+        # otherwise keep it looping forever without this check).
+        assert len(filings) == 2
+
+    @pytest.mark.asyncio
+    async def test_pagination_continues_across_pages(self):
+        page1 = {"recordsTotal": 3, "data": [_search_row("A", "One"), _search_row("B", "Two")]}
+        page2 = {"recordsTotal": 3, "data": [_search_row("C", "Three")]}
+        responses = iter([_FakeSearchResponse(page1), _FakeSearchResponse(page2)])
+
+        page = _FakePage({
+            ("locator", "#agree_statement"): _FakeLocator(count=0),
+            ("role", "combobox", "Show entries"): _FakeLocator(count=0),
+        })
+        page._locators[("role", "button", "Search Reports")] = _FakeLocator(
+            on_click=lambda: page.fire_response(next(responses)),
+        )
+        page._locators[("text", "Next")] = _FakeLocator(
+            on_click=lambda: page.fire_response(next(responses)),
+            attr="paginate_button next",  # not disabled
+        )
+
+        filings = await senate_ptr._scrape_via_page(page, "")
+
+        assert len(filings) == 3
+        assert [f["first"] for f in filings] == ["A", "B", "C"]
 
 
 class TestFiledDateBecomesDisclosureDate:
