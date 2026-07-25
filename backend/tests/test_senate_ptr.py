@@ -270,7 +270,7 @@ class TestFiledDateBecomesDisclosureDate:
         stored = {}
         monkeypatch.setattr(
             senate_ptr, "api_cache_set",
-            lambda db, tier, key, value: stored.update({key: value}),
+            lambda db, tier, key, value, **kwargs: stored.update({key: value}),
         )
 
         filing = {

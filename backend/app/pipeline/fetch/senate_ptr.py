@@ -359,6 +359,9 @@ async def fetch_and_parse_ptr(
             row.disclosure_date = filing["filed_date"]
 
     # The API cache stores plain JSON, not dataclasses — convert at this
-    # boundary and reconstruct on the cache-hit path above.
-    api_cache_set(db, "senate_ptr", cache_key, [asdict(row) for row in rows])
+    # boundary and reconstruct on the cache-hit path above. normal_ttl_hours
+    # must match the read's own max_age_hours above (30 days) — see
+    # api_cache_set's docstring on why a mismatch here silently defeats the
+    # empty-result short-TTL safety net.
+    api_cache_set(db, "senate_ptr", cache_key, [asdict(row) for row in rows], normal_ttl_hours=24 * 30)
     return rows
