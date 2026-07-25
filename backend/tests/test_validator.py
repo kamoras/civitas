@@ -279,6 +279,24 @@ class TestValidateSenator:
         result = validate_senator(senator)
         assert result["lobbyingMatches"] == []
 
+    def test_official_website_url_preserved(self):
+        """Regression: this used to be stripped as "internal-only", but
+        senate_pipeline.py's upsert_senator reads officialWebsiteUrl from
+        this same validated dict to populate Senator.website_url —
+        stripping it here meant that column was silently empty for every
+        senator since launch (confirmed live 2026-07-25: 0/101 had one
+        stored). Must survive validation."""
+        senator = _make_senator(officialWebsiteUrl="https://www.example.senate.gov/")
+        result = validate_senator(senator)
+        assert result["officialWebsiteUrl"] == "https://www.example.senate.gov/"
+
+    def test_last_name_for_vote_match_still_stripped(self):
+        # This one really is internal-only — nothing downstream reads it
+        # off the post-validation dict.
+        senator = _make_senator(lastNameForVoteMatch="Doe")
+        result = validate_senator(senator)
+        assert "lastNameForVoteMatch" not in result
+
 
 
 class TestCommitteeTypePreserved:
