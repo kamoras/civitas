@@ -209,9 +209,16 @@ def validate_senator(senator: dict) -> dict:
         for m in (senator.get("lobbyingMatches") or [])
     ]
 
-    # Strip internal/pipeline-only fields not needed in the final output
-    # Keep bioguideId — needed for DB storage and downstream lookups
-    for _internal_key in ("officialWebsiteUrl", "lastNameForVoteMatch"):
+    # Strip internal/pipeline-only fields not needed in the final output.
+    # Keep bioguideId — needed for DB storage and downstream lookups.
+    # officialWebsiteUrl used to be stripped here too, but upsert_senator
+    # (senate_pipeline.py) reads it from this same validated dict to
+    # populate Senator.website_url — stripping it first meant that column
+    # (and the platform-text fetch's primary source, which also reads it
+    # from this dict, falling back to a Wikipedia guess otherwise) has
+    # been silently empty for every senator since launch (confirmed live
+    # 2026-07-25: 0/101 had a stored website_url).
+    for _internal_key in ("lastNameForVoteMatch",):
         senator.pop(_internal_key, None)
 
     if warnings:
