@@ -9,8 +9,8 @@ senate_pipeline.py. Phases:
      not a per-race lookup — see fetch.fec.fetch_all_candidates) upserted
      into Race/Candidate rows, per-candidate fault isolation.
   2. Financial refresh — FEC's per-candidate totals endpoint is rate-
-     limited to 1 request/4 sec and there are ~6,900 candidates in the
-     2026 cycle, so this is prioritized (incumbents first, then active
+     limited to 1 request/4 sec and there are ~6,900 candidates in a
+     midterm cycle, so this is prioritized (incumbents first, then active
      fundraisers, then everyone else) and watermarked (last_financials_
      sync), refreshing a bounded batch per run rather than blocking for
      hours on a single pass.
@@ -38,6 +38,7 @@ from app.election_calendar import (
     CLASS_I_STATES,
     CLASS_II_STATES,
     CLASS_III_STATES,
+    next_election_day,
     seats_up_for_year,
 )
 from app.models import Candidate, ElectionPipelineRun, PipelineStatus, Race, RaceCoverageItem, ScoreSnapshot
@@ -48,10 +49,12 @@ from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
-# The 2026 midterm cycle. A future cycle's fetcher work is the same shape;
-# bumping this (and the FEC candidates.py cycle param) is the only change
-# needed to point the whole pipeline at the next election.
-CURRENT_ELECTION_CYCLE = 2026
+def current_election_cycle() -> int:
+    """The election cycle currently in progress, e.g. 2026 up through
+    election night, then 2028 — computed from the calendar (reusing
+    next_election_day, the same statutory rule the roster's special-
+    election detection relies on) so a new cycle needs no code change."""
+    return next_election_day(utcnow().date()).year
 
 ELECTION_PIPELINE_STEPS = [
     ("roster_sync",        "roster",   "Sync candidate roster"),
@@ -344,10 +347,11 @@ def _prune_stale_coverage(db: Session) -> int:
     return deleted
 
 
-async def run_election_pipeline(cycle: int = CURRENT_ELECTION_CYCLE) -> dict:
+async def run_election_pipeline(cycle: int | None = None) -> dict:
     """Sync candidate rosters, refresh a prioritized batch of financials,
     ingest race coverage, post grounded Bluesky updates, and snapshot
     fundraising. Returns a summary dict with counts."""
+    cycle = cycle if cycle is not None else current_election_cycle()
     db = SessionLocal()
 
     run = acquire_pipeline_lock(db, ElectionPipelineRun, STALE_PIPELINE_TIMEOUT)

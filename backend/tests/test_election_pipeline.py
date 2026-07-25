@@ -3,7 +3,7 @@ test_house_pipeline.py's pattern), and the pure roster-sync/financial-
 prioritization/snapshot helper functions directly."""
 
 import asyncio
-from datetime import timedelta
+from datetime import datetime, timedelta
 from unittest.mock import patch
 
 from app.config import settings
@@ -53,6 +53,38 @@ class TestElectionPipelineLock:
         cleared = db_session.query(ElectionPipelineRun).filter(ElectionPipelineRun.id == stale_id).one()
         assert cleared.status == PipelineStatus.STALE
         assert db_session.query(ElectionPipelineRun).count() == 2  # stale row + fresh one
+
+
+class TestCurrentElectionCycle:
+    """current_election_cycle() replaces what used to be a frozen
+    CURRENT_ELECTION_CYCLE = 2026 constant, so the pipeline (and the
+    /elections/races filter) point at the next cycle automatically once
+    an election passes, with no code change."""
+
+    def test_during_2026_cycle_returns_2026(self):
+        with patch("app.pipeline.election_pipeline.utcnow", return_value=datetime(2026, 7, 25)):
+            assert election_pipeline.current_election_cycle() == 2026
+
+    def test_after_2026_election_day_returns_2028(self):
+        with patch("app.pipeline.election_pipeline.utcnow", return_value=datetime(2026, 11, 4)):
+            assert election_pipeline.current_election_cycle() == 2028
+
+    def test_run_election_pipeline_defaults_to_current_cycle(self, db_session):
+        seen_cycles = []
+
+        async def _fake_fetch_all_candidates(client, db, cycle, office):
+            seen_cycles.append(cycle)
+            return []
+
+        with patch("app.pipeline.election_pipeline.SessionLocal", return_value=db_session), \
+             patch("app.pipeline.election_pipeline.utcnow", return_value=datetime(2026, 11, 4)), \
+             patch(
+                 "app.pipeline.election_pipeline.fetch_all_candidates",
+                 side_effect=_fake_fetch_all_candidates,
+             ):
+            asyncio.run(election_pipeline.run_election_pipeline())
+
+        assert seen_cycles == [2028, 2028]  # once for House, once for Senate
 
 
 class TestRaceId:
