@@ -219,12 +219,16 @@ async def _ingest_senate(db: Session, client: httpx.AsyncClient) -> int:
     else:
         since_date = (utcnow().date() - timedelta(days=COLD_START_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
 
+    # Only fetch_senate_ptr (per-filing detail pages) needs this httpx
+    # session — search_ptr_filings runs its own real browser session
+    # (see its module docstring: the search endpoint itself is behind
+    # Akamai bot-management no plain HTTP client gets past).
     csrf_token = await senate_accept_terms(client)
     if csrf_token is None:
         logger.error("Could not establish a Senate eFD session — skipping Senate PTR ingestion this run")
         return 0
 
-    filings = await search_ptr_filings(client, db, since_date, csrf_token)
+    filings = await search_ptr_filings(since_date)
     inserted = 0
     for filing in filings:
         filing_id = filing["report_url"].rstrip("/").rsplit("/", 1)[-1]

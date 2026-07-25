@@ -194,4 +194,4 @@ class TestIngestSenateColdStartWindow:
 
         assert result == 0
         expected_since = (datetime(2026, 3, 15) - timedelta(days=COLD_START_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
-        mock_search.assert_called_once_with(client, db_session, expected_since, "csrf-token")
+        mock_search.assert_called_once_with(expected_since)

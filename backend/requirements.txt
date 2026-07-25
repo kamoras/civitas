@@ -85,6 +85,7 @@ pydantic_core==2.46.4
 Pygments==2.20.0
 pyparsing==3.3.2
 PyPika==0.51.1
+playwright==1.61.0
 pyproject_hooks==1.2.0
 pytest==9.0.3
 pytest-cov==7.1.0
