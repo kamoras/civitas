@@ -24,6 +24,19 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
     fi; \
     pip install --no-cache-dir -r requirements.txt
 
+# Chromium for senate_ptr.py's search_ptr_filings — the one PTR fetcher
+# that needs a real browser to pass efdsearch.senate.gov's Akamai
+# bot-management gate on its search endpoint (confirmed live 2026-07-25:
+# httpx, requests, and curl_cffi's Chrome-TLS-impersonation are all
+# blocked regardless of headers or transplanted session cookies; only a
+# genuine OS-trusted UI event from a real browser gets through). Installed
+# to a fixed, world-readable path — the app runs as the unprivileged
+# civitas user below, not root, and Playwright's default cache path lives
+# under $HOME.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN playwright install --with-deps chromium && \
+    chmod -R a+rX /ms-playwright
+
 COPY . .
 
 RUN groupadd -r civitas && useradd -r -g civitas -d /app civitas \
