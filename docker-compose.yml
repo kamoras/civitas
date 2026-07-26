@@ -19,6 +19,18 @@ services:
       - OLLAMA_NUM_PARALLEL=1
       - OLLAMA_KEEP_ALIVE=30m
     restart: unless-stopped
+    # No logging block anywhere in this stack meant the default json-file
+    # driver's unbounded size applied to every service — fine for a
+    # container that gets redeployed often (each deploy starts a fresh
+    # log file), but a genuine slow disk-fill risk for a long unattended
+    # stretch with no new commits to trigger a redeploy (found 2026-07-26
+    # auditing for exactly that scenario). 10MB x 3 files per service is
+    # ample for debugging a live issue without growing unbounded.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     deploy:
       resources:
         limits:
@@ -51,6 +63,12 @@ services:
     volumes:
       - app_data:/data
     restart: unless-stopped
+    # See ollama's logging block above for why every service has one.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     deploy:
       resources:
         limits:
@@ -82,6 +100,12 @@ services:
     # dev-only difference — it'll just show a fetch error in the UI for
     # the few seconds until backend's healthcheck passes.
     restart: unless-stopped
+    # See ollama's logging block above for why every service has one.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     deploy:
       resources:
         limits:
