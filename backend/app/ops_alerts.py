@@ -136,18 +136,17 @@ def _send_ntfy(subject: str, body: str) -> None:
 
 
 def check_current_congress_staleness() -> None:
-    """Alert when the CURRENT_CONGRESS config constant has fallen behind the
-    calendar — the silent time bomb the round-4 audit flagged.
+    """Alert if CURRENT_CONGRESS has fallen behind the calendar.
 
-    Senate roll-call windows are pinned to settings.CURRENT_CONGRESS while
-    the House window is derived from the wall-clock year, so once a new
-    Congress convenes (Jan 3 of each odd year) and the constant isn't
-    bumped, the two chambers score against *different* Congresses and the
-    Senate keeps scoring a dead one indefinitely — with nothing to notice.
-    This turns that into a loud, deduped operator alert telling them exactly
-    what to change. It does NOT auto-advance the constant: the scored
-    windows intentionally key off config so an archived-DB re-run stays
-    reproducible, so bumping it is a deliberate one-line operator action.
+    CURRENT_CONGRESS defaults to a value computed from the wall clock
+    (see app.config._default_current_congress), so under normal operation
+    this should never fire — the round-4 audit's original "silent time
+    bomb" finding was that the config default was a hardcoded literal
+    nobody would remember to bump after a new Congress convened (Jan 3 of
+    each odd year). This check remains as a defensive backstop for the one
+    case that can still go stale: an operator explicitly pinning
+    CURRENT_CONGRESS via env (for an archived-DB re-run's reproducibility)
+    and then leaving that pin in place past the next Congress.
     """
     from app.pipeline.fetch.congress import expected_current_congress
 

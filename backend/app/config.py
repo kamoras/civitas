@@ -1,4 +1,24 @@
+import datetime
+
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _default_current_congress() -> int:
+    """The Congress in session given the wall clock, computed rather than
+    hardcoded so this never needs a manual bump after Jan 3 of an odd year
+    (previously a hardcoded literal that could only be caught by a separate
+    staleness alert an unattended operator might never see — see
+    ops_alerts.check_current_congress_staleness, kept as a defensive check
+    for the rare case an operator pins this via env for archived-DB
+    reproducibility and that pin itself goes stale).
+
+    Mirrors app.pipeline.fetch.congress.congress_for_year's formula inline
+    to avoid importing pipeline code at settings-module load time; off by
+    one for the ~2 days before Jan 3 convenes in an odd January, same as
+    that function.
+    """
+    return 1 + (datetime.date.today().year - 1789) // 2
 
 
 class Settings(BaseSettings):
@@ -37,7 +57,7 @@ class Settings(BaseSettings):
     GOVINFO_RPS: float = 1.0
     HOUSE_PTR_RPS: float = 1.0
     SENATE_PTR_RPS: float = 0.5
-    CURRENT_CONGRESS: int = 119
+    CURRENT_CONGRESS: int = Field(default_factory=_default_current_congress)
     # Bluesky integration (leave BSKY_HANDLE empty to disable)
     BSKY_HANDLE: str = ""
     BSKY_APP_PASSWORD: str = ""
