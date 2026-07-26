@@ -16,7 +16,7 @@ pipeline it is reporting on.
 
 import json
 import logging
-from datetime import timedelta
+from datetime import date, timedelta
 
 import httpx
 
@@ -163,6 +163,50 @@ def check_current_congress_staleness() -> None:
             f"Bump CURRENT_CONGRESS to {expected} (env or config) and re-run "
             f"the pipeline.",
             dedupe_key=f"stale-congress-{expected}",
+        )
+
+
+def check_state_pvi_staleness() -> None:
+    """Alert once a newer presidential election's data should be available
+    for state_pvi.json's two-cycle window than what's currently baked in.
+
+    Unlike CURRENT_CONGRESS or the committee-leadership/district-PVI data
+    (app/pipeline/fetch/committee_leadership.py, district_pvi.py), this is
+    NOT something a scheduled refetch can advance automatically:
+    scripts/fetch_state_pvi.py deliberately pins its data sources to
+    specific immutable GitHub-mirrored commits — "so a regeneration years
+    from now fetches the exact same file" — so re-running it forever
+    reproduces the identical 2020+2024 numbers. Advancing the window is a
+    genuine one-time engineering task each presidential cycle (finding the
+    new cycle's data source, verifying it passes the fidelity gates), the
+    same class of unavoidable manual step as adding a new president to the
+    historical term tables. This turns "nobody notices a new cycle is due"
+    into a loud, deduped, dashboard-visible alert instead of silence —
+    logged + DB-recorded regardless of whether ALERT_NTFY_URL is set.
+    """
+    import re
+
+    from app.pipeline.analyze.score_calculator import _read_pvi_json
+
+    window = _read_pvi_json("state_pvi.json").get("_window", "")
+    years = [int(y) for y in re.findall(r"\d{4}", window)]
+    if not years:
+        return
+    next_cycle = max(years) + 4
+    # Presidential county-level canvass data is reliably compiled within a
+    # few weeks of the election; mid-December of the election year is a
+    # comfortable buffer before alerting.
+    if date.today() >= date(next_cycle, 12, 15):
+        send_ops_alert(
+            "state_pvi.json window is stale",
+            f"state_pvi.json is still windowed to {window}, but the "
+            f"{next_cycle} presidential election has passed and its data "
+            f"should be available now. Update scripts/fetch_state_pvi.py's "
+            f"CYCLES/source URLs to the new cycle, verify the fidelity "
+            f"gates pass, and regenerate the file. (district_pvi.json "
+            f"needs no such update — it refreshes automatically from "
+            f"Wikipedia's current Cook PVI figures.)",
+            dedupe_key=f"stale-state-pvi-{next_cycle}",
         )
 
 

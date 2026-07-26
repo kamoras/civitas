@@ -25,6 +25,7 @@ SUPPLEMENTARY_PIPELINE_STEPS = [
     ("explore_documents",   "explore",   "Ingest explore documents"),
     ("justice_scorecards",  "justices",  "Score SCOTUS justices"),
     ("committee_leadership", "committee_leadership", "Refresh committee/leadership data"),
+    ("district_pvi",        "district_pvi", "Refresh district PVI"),
     ("president_scorecards", "presidents", "Score presidents"),
 ]
 
@@ -150,6 +151,36 @@ async def run_supplementary_pipeline() -> dict:
             except Exception:
                 logger.exception("Committee/leadership refresh failed — continuing")
                 progress.fail("committee_leadership")
+
+        # ── DISTRICT PVI ──
+        run.current_phase = "district_pvi"
+        db.commit()
+        logger.info("--- Supplementary: DISTRICT PVI ---")
+        progress.begin("district_pvi")
+        # Same weekly-or-missing cadence as the phases above. Unlike
+        # state_pvi.json (see ops_alerts.check_state_pvi_staleness), this
+        # scrapes whatever Cook PVI Wikipedia's infoboxes currently show —
+        # no election-year window is hardcoded here, so a weekly re-pull
+        # naturally tracks Cook's next publication with no code change ever
+        # required.
+        from app.pipeline.analyze.score_calculator import _district_pvi
+        district_pvi_missing = not _district_pvi()
+        run_district_pvi = district_pvi_missing or utcnow().weekday() == 6
+        if not run_district_pvi:
+            logger.info("District PVI refresh skipped (weekly cadence; next on Sunday UTC)")
+            run.district_pvi_skipped = True
+            progress.skip("district_pvi", detail="weekly cadence")
+        else:
+            try:
+                from app.pipeline.fetch.district_pvi import refresh_district_pvi
+                run.district_pvi_refreshed = await refresh_district_pvi()
+                progress.complete(
+                    "district_pvi",
+                    detail="refreshed" if run.district_pvi_refreshed else "kept previous data",
+                )
+            except Exception:
+                logger.exception("District PVI refresh failed — continuing")
+                progress.fail("district_pvi")
 
         # ── PRESIDENTS ──
         run.current_phase = "presidents"

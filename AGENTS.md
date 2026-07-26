@@ -244,6 +244,16 @@ The correct pattern, established by `_district_pvi()` /
    drift) — this is normal, expected maintenance, not a one-time setup
    step to forget about.
 
+   Exception (2026-07): `_district_pvi()` / `district_pvi.json` no longer
+   needs this step — `app/pipeline/fetch/district_pvi.py` refreshes it
+   automatically inside the Supplementary pipeline, since it just scrapes
+   whatever Cook PVI value Wikipedia's infoboxes currently show (no
+   election-year window is hardcoded in the fetch itself, unlike
+   state_pvi.json — see `ops_alerts.check_state_pvi_staleness` for why
+   that one's sources are deliberately pinned and can't self-advance the
+   same way). `scripts/fetch_district_pvi.py` still exists only to
+   regenerate the bundled pre-first-ingest fallback.
+
 This also applies to constants that are themselves the *output* of a
 fitting script (regression coefficients, saturation points derived from
 a residual stdev, min/max clamp ranges) — if a script prints "paste this
