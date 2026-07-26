@@ -135,11 +135,26 @@ def _generate_new_post(issue, today: str) -> str | None:
 
     staleness_instruction = ""
     if is_stale:
+        # Only ever offer ONE phrasing, whichever is actually accurate —
+        # giving the model a choice between "Yesterday: ..." and the ISO
+        # date let it pick the more awkward, robotic-sounding one even
+        # when exactly one day had passed (2026-07 live case: "On
+        # 2026-07-24" published the day after, when "Yesterday:" was both
+        # available and correct). Beyond one day, "yesterday" would be
+        # factually wrong, so the date phrasing is the only option there.
+        try:
+            days_ago = (
+                datetime.strptime(today, "%Y-%m-%d") - datetime.strptime(article_date, "%Y-%m-%d")
+            ).days
+        except ValueError:
+            days_ago = None
+        if days_ago == 1:
+            date_phrasing = "Open the post with 'Yesterday: ...'."
+        else:
+            date_phrasing = f"Open the post with 'On {article_date}: ...'."
         staleness_instruction = (
             f"\nIMPORTANT: The events described occurred on {article_date}, not today ({today}). "
-            "Open the post with a clear date reference so readers are not misled into thinking "
-            "this is happening right now. Use a phrasing like 'Yesterday: ...' or "
-            f"'On {article_date}: ...' at the start of the post."
+            f"{date_phrasing} Readers must not be misled into thinking this is happening right now."
         )
 
     user_prompt = f"""Write a Bluesky post summarizing this civic news issue.
@@ -215,8 +230,11 @@ Return JSON: {{"post": "<your post text>"}}"""
             "like 'sources show' or 'reports indicate,' do not describe any "
             "election, race, campaign, or challenge for office unless the Key "
             "facts say so, do not call any official 'former' unless the Key "
-            "facts do, and do not evaluate whether any action was warranted "
-            "or justified."
+            "facts do, do not evaluate whether any action was warranted "
+            "or justified, and name the specific office-holder (e.g. the "
+            "President's actual name) instead of a vague indefinite phrase "
+            "like 'a president' or 'a Speaker' — there is only one of each "
+            "at a time, so an indefinite article reads as wrong, not neutral."
         )
 
     return None  # ungrounded twice — skip; the next refresh cycle retries

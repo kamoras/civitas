@@ -528,3 +528,47 @@ class TestAuditHedgeAndEditorializingAdditions:
         )
         assert hedge_language(text) == []
         assert editorializing_language(text) == []
+
+
+class TestVagueSingularOfficeReferences:
+    """2026-07 live case: a Bluesky post read "a U.S. president stated
+    fines... should be fully reversed" when the source title was "Trump
+    calls for EU investigation into tech fines" — the name was right
+    there, but nothing caught the vague indefinite-article phrasing.
+    Offices held by exactly one person at a time read as wrong with "a"/
+    "an"; "a senator"/"a representative" are excluded since 100/435
+    people genuinely hold those."""
+
+    def test_live_president_case_flagged(self):
+        from app.pipeline.analyze.grounding import vague_singular_office_references
+        assert vague_singular_office_references(
+            "On 2026-07-24, a U.S. president stated fines from the EU "
+            "against major tech companies should be fully reversed."
+        ) == ["a U.S. president"]
+
+    def test_bare_a_president_flagged(self):
+        from app.pipeline.analyze.grounding import vague_singular_office_references
+        assert vague_singular_office_references("A president signed the order.") == ["A president"]
+
+    def test_speaker_and_chief_justice_flagged(self):
+        from app.pipeline.analyze.grounding import vague_singular_office_references
+        assert vague_singular_office_references("A Speaker announced the vote.") != []
+        assert vague_singular_office_references("A chief justice swore him in.") != []
+
+    def test_senator_and_representative_not_flagged(self):
+        # Legitimately indefinite — 100 senators, 435 representatives.
+        from app.pipeline.analyze.grounding import vague_singular_office_references
+        assert vague_singular_office_references("A senator introduced the bill.") == []
+        assert vague_singular_office_references("A representative from Ohio voted no.") == []
+
+    def test_named_president_not_flagged(self):
+        from app.pipeline.analyze.grounding import vague_singular_office_references
+        assert vague_singular_office_references("President Trump signed the order.") == []
+        assert vague_singular_office_references("The president signed the order.") == []
+
+    def test_included_in_hedge_and_editorializing_bundle(self):
+        from app.pipeline.analyze.grounding import hedge_and_editorializing_violations
+        reasons = hedge_and_editorializing_violations(
+            "A U.S. president stated fines should be reversed."
+        )
+        assert any("single-holder office" in r for r in reasons)

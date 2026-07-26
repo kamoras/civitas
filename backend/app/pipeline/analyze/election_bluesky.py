@@ -159,8 +159,10 @@ Return JSON: {{"post": "<your sentence>"}}"""
             "\n\nYour previous attempt was rejected because it included "
             f"{'; '.join(reasons)}. Rewrite using only the Race, Candidate, "
             "Title, and Content, report directly instead of hedging "
-            "attribution, and do not assert any electoral outcome the "
-            "Content doesn't state."
+            "attribution, do not assert any electoral outcome the "
+            "Content doesn't state, and name specific people by name "
+            "instead of a vague indefinite phrase like 'a president' or "
+            "'a Speaker' for an office only one person holds at a time."
         )
 
     return None  # ungrounded twice — skip; a later run can retry

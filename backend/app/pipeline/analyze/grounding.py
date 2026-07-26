@@ -354,6 +354,36 @@ def placeholder_tokens(generated: str) -> list[str]:
     return sorted({m.group(0) for m in _PLACEHOLDER_TOKEN_RE.finditer(generated or "")})
 
 
+# Offices held by exactly one person at a time. "A president"/"a Speaker"
+# reads as if there were several to pick from — there's one, and the
+# source almost always names them (2026-07 live example: a post read "a
+# U.S. president stated fines... should be fully reversed" when the
+# source title was "Trump calls for EU investigation into tech fines,"
+# the name right there). Plural-role titles like "a senator"/"a
+# representative" are excluded on purpose: 100/435 people hold those, so
+# an indefinite article there is genuinely correct English, not vague
+# hedging. The generation prompt already instructs "use specific names...
+# rather than vaguer substitutes" (bluesky_poster.py rule 9) — same as
+# every other check in this module, prompting alone doesn't reliably stop
+# this on a local model.
+_VAGUE_SINGULAR_OFFICE_RE = re.compile(
+    r"\b(?:a|an)\s+(?:U\.?S\.?\s+|current\s+|sitting\s+)*"
+    r"(?:president|vice[- ]president|speaker(?:\s+of\s+the\s+house)?|"
+    r"chief\s+justice|senate\s+majority\s+leader|senate\s+minority\s+leader|"
+    r"house\s+majority\s+leader|house\s+minority\s+leader)\b",
+    re.IGNORECASE,
+)
+
+
+def vague_singular_office_references(generated: str) -> list[str]:
+    """Indefinite-article references ("a president," "a Speaker") to an
+    office exactly one person holds. Unlike the rest of this module, this
+    doesn't compare against source material — the phrasing itself is
+    wrong regardless of what the source says, the same way hedge_language
+    and editorializing_language check generated text alone."""
+    return sorted({m.group(0) for m in _VAGUE_SINGULAR_OFFICE_RE.finditer(generated or "")})
+
+
 # Family/personal-relationship claims in the GENERATED text. Same fabrication
 # class as ungrounded_electoral_claims — the model inventing a *relationship*
 # between two grounded people, with no fabricated number or titled name for
@@ -497,5 +527,10 @@ def hedge_and_editorializing_violations(generated: str) -> list[str]:
     if placeholders:
         problems.append(
             f"literal unfilled placeholder tokens ({', '.join(placeholders)})"
+        )
+    vague_offices = vague_singular_office_references(generated)
+    if vague_offices:
+        problems.append(
+            f"vague reference to a single-holder office ({', '.join(vague_offices)})"
         )
     return problems
