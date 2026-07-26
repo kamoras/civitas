@@ -21,6 +21,11 @@ jobs:
   lighthouse:
     name: Accessibility & SEO
     runs-on: ubuntu-latest
+    # No explicit timeout defaults to GitHub's 360-minute one — found while
+    # auditing ci.yml (2026-07-25) that a hung step there rode that default
+    # for 46 minutes before the runner disconnected on its own. Same fix
+    # here. Normal run: 2-3 minutes.
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: frontend
