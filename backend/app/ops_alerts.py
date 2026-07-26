@@ -16,7 +16,7 @@ pipeline it is reporting on.
 
 import json
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import httpx
 
@@ -163,6 +163,57 @@ def check_current_congress_staleness() -> None:
             f"Bump CURRENT_CONGRESS to {expected} (env or config) and re-run "
             f"the pipeline.",
             dedupe_key=f"stale-congress-{expected}",
+        )
+
+
+def check_feedback_token_expiration() -> None:
+    """Alert when FEEDBACK_TOKEN is within 30 days of expiring.
+
+    FEEDBACK_TOKEN must be a fine-grained GitHub PAT (see config.py's own
+    comment on why — scoped narrowly to Issues: write, not a broad classic
+    token), and fine-grained PATs always expire (commonly capped at 1 year
+    by GitHub) — there is no way to issue one that doesn't. When it
+    expires, /api/feedback starts returning a 503 to every user with
+    nothing telling an absent operator to renew it. GitHub returns the
+    exact expiration in a response header on every authenticated request
+    (github-authentication-token-expiration), so this makes an otherwise
+    silent failure into a loud, dashboard-visible alert with a month's
+    lead time to act. Runs at most weekly (Sunday) — the value only
+    changes when the token is rotated, so nightly checks would just be an
+    unnecessary GitHub API call.
+    """
+    if not settings.FEEDBACK_TOKEN or utcnow().weekday() != 6:
+        return
+    try:
+        resp = httpx.get(
+            "https://api.github.com/rate_limit",  # free — doesn't count against the rate limit
+            headers={
+                "Authorization": f"Bearer {settings.FEEDBACK_TOKEN}",
+                "Accept": "application/vnd.github+json",
+            },
+            timeout=10.0,
+        )
+    except Exception:
+        logger.warning("FEEDBACK_TOKEN expiration check failed to reach GitHub", exc_info=True)
+        return
+    expiration = resp.headers.get("github-authentication-token-expiration")
+    if not expiration:
+        return  # classic PAT (no expiration) or header not present
+    try:
+        expires_at = datetime.strptime(expiration.split(" UTC")[0], "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return
+    days_left = (expires_at - utcnow()).days
+    if days_left <= 30:
+        send_ops_alert(
+            "FEEDBACK_TOKEN is expiring soon",
+            f"The GitHub fine-grained PAT in FEEDBACK_TOKEN expires "
+            f"{expiration} ({days_left} days from now). Once it expires, "
+            f"site feedback submissions silently start failing (503) with "
+            f"no other warning anywhere. Generate a new fine-grained PAT "
+            f"scoped to Issues: write on {settings.GITHUB_FEEDBACK_REPO} "
+            f"and update FEEDBACK_TOKEN before then.",
+            dedupe_key=f"feedback-token-expiring-{expiration}",
         )
 
 
