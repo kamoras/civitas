@@ -1,4 +1,11 @@
-FROM python:3.13-slim-bookworm
+# Pinned to the exact patch version validated in prod (2026-07) rather
+# than the floating python:3.13-slim-bookworm tag — the deploy script's
+# disk-cleanup step (check-and-deploy.sh) prunes unused base-image layers
+# after every deploy, so a floating tag gets silently re-resolved against
+# whatever Docker Hub currently serves on the very next commit, with no
+# review. Bump this deliberately (like the PVI/population data refresh)
+# when a newer patch is actually wanted, not automatically.
+FROM python:3.13.14-slim-bookworm
 
 WORKDIR /app
 
