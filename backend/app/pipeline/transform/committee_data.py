@@ -1,11 +1,18 @@
 """Loads committee membership and chamber leadership titles.
 
-Ingested from unitedstates/congress-legislators (CC0-1.0) into
-app/data/committee_membership.json and app/data/leadership_roles.json by
-scripts/fetch_committee_data.py — Congress.gov's own API exposes neither
-(confirmed 2026-07: member records carry no committee/leadership fields,
-and committee-detail records list bills/reports/nominations but never a
-member roster). Same lazy-load-once-and-cache pattern as
+Ingested from unitedstates/congress-legislators (CC0-1.0) — Congress.gov's
+own API exposes neither (confirmed 2026-07: member records carry no
+committee/leadership fields, and committee-detail records list bills/
+reports/nominations but never a member roster). Refreshed automatically
+by app/pipeline/fetch/committee_leadership.py (weekly, or immediately if
+missing) to /data/committee_membership.json and /data/leadership_roles.json
+on the persistent writable volume — same fully-automated, no-manual-step
+pattern as member_ideal_points.json.
+
+The bundled app/data/*.json files (git-tracked, updated only by manually
+running scripts/fetch_committee_data.py) are checked only as a fallback,
+for the narrow window before the first successful automated ingest on a
+fresh volume. Same lazy-load-once-and-cache pattern as
 score_calculator.py's _district_pvi().
 """
 
@@ -15,6 +22,7 @@ import pathlib
 
 logger = logging.getLogger(__name__)
 
+_PERSISTENT_DATA_DIR = pathlib.Path("/data")
 _DATA_DIR = pathlib.Path(__file__).resolve().parent.parent.parent / "data"
 
 _committee_membership_cache: dict[str, list[dict]] | None = None
@@ -22,18 +30,21 @@ _leadership_roles_cache: dict[str, str] | None = None
 
 
 def _load_json_cache(filename: str, json_key: str, missing_data_context: str) -> dict:
-    """Read `json_key` out of app/data/`filename`, or an empty dict (logged)
-    if the file hasn't been generated yet. Shared by both loaders below —
-    same file-missing-is-normal-until-the-fetch-script-runs handling."""
-    path = _DATA_DIR / filename
-    try:
-        return json.loads(path.read_text())[json_key]
-    except Exception:
-        logger.warning(
-            "%s unavailable — %s until scripts/fetch_committee_data.py is run",
-            filename, missing_data_context,
-        )
-        return {}
+    """Read `json_key` out of `filename`, preferring the persistent volume's
+    auto-refreshed copy (/data/) over the git-tracked bundled fallback
+    (app/data/), or an empty dict (logged) if neither exists yet. Shared by
+    both loaders below."""
+    for directory in (_PERSISTENT_DATA_DIR, _DATA_DIR):
+        try:
+            return json.loads((directory / filename).read_text())[json_key]
+        except Exception:
+            continue
+    logger.warning(
+        "%s unavailable in /data or the bundled fallback — %s until the "
+        "first successful committee_leadership refresh",
+        filename, missing_data_context,
+    )
+    return {}
 
 
 def load_committee_membership() -> dict[str, list[dict]]:

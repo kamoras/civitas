@@ -15,6 +15,7 @@ from app.pipeline.transform import committee_data
 
 def test_missing_cache_files_return_empty_not_error(tmp_path, monkeypatch):
     committee_data.clear_committee_data_cache()
+    monkeypatch.setattr(committee_data, "_PERSISTENT_DATA_DIR", tmp_path / "no-persistent-dir")
     monkeypatch.setattr(committee_data, "_DATA_DIR", tmp_path)
 
     assert committee_data.load_committee_membership() == {}
@@ -25,6 +26,7 @@ def test_missing_cache_files_return_empty_not_error(tmp_path, monkeypatch):
 
 def test_loaders_parse_present_cache_files(tmp_path, monkeypatch):
     committee_data.clear_committee_data_cache()
+    monkeypatch.setattr(committee_data, "_PERSISTENT_DATA_DIR", tmp_path / "no-persistent-dir")
     monkeypatch.setattr(committee_data, "_DATA_DIR", tmp_path)
 
     (tmp_path / "committee_membership.json").write_text(json.dumps({
@@ -38,6 +40,31 @@ def test_loaders_parse_present_cache_files(tmp_path, monkeypatch):
         "T000250": [{"committeeName": "Senate Committee on Finance", "chamber": "senate", "title": None}],
     }
     assert committee_data.load_leadership_roles() == {"T000250": "Senate Majority Leader"}
+
+    committee_data.clear_committee_data_cache()
+
+
+def test_persistent_volume_copy_preferred_over_bundled_fallback(tmp_path, monkeypatch):
+    """The auto-refreshed /data/ copy should win over the git-tracked
+    bundled fallback when both exist."""
+    committee_data.clear_committee_data_cache()
+    persistent_dir = tmp_path / "persistent"
+    persistent_dir.mkdir()
+    bundled_dir = tmp_path / "bundled"
+    bundled_dir.mkdir()
+    monkeypatch.setattr(committee_data, "_PERSISTENT_DATA_DIR", persistent_dir)
+    monkeypatch.setattr(committee_data, "_DATA_DIR", bundled_dir)
+
+    (persistent_dir / "leadership_roles.json").write_text(json.dumps({
+        "roles": {"T000250": "Fresh Title From Persistent Volume"},
+    }))
+    (bundled_dir / "leadership_roles.json").write_text(json.dumps({
+        "roles": {"T000250": "Stale Bundled Title"},
+    }))
+
+    assert committee_data.load_leadership_roles() == {
+        "T000250": "Fresh Title From Persistent Volume",
+    }
 
     committee_data.clear_committee_data_cache()
 
