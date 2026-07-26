@@ -117,6 +117,15 @@ services:
         published: 8081
         protocol: tcp
         mode: host
+    # backend/frontend/ollama get theirs from docker-compose.yml's base
+    # definition — nginx is only ever defined here, so it needs its own.
+    # See ollama's logging block in docker-compose.yml for why every
+    # service has one.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     # No depends_on — see the same note on frontend in docker-compose.yml;
     # nginx not strictly waiting for backend/frontend to exist first is
     # fine, its own healthcheck/update_config below still gates traffic.
