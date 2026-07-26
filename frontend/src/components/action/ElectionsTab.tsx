@@ -42,7 +42,7 @@ function SenatorRow({ senator }: { senator: ElectionSenator }) {
         </span>
         {senator.upForElection && (
           <span className="text-[9px] font-pixel px-1.5 py-0.5 bg-neon-yellow/10 border border-neon-yellow/30 text-neon-yellow/80 shrink-0">
-            UP IN 2026
+            UP IN {nextElectionYear()}
           </span>
         )}
       </div>
