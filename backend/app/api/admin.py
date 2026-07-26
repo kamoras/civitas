@@ -647,6 +647,8 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
             "justicesSkipped": last_supplementary_run.justices_skipped,
             "committeeLeadershipRefreshed": last_supplementary_run.committee_leadership_refreshed,
             "committeeLeadershipSkipped": last_supplementary_run.committee_leadership_skipped,
+            "districtPviRefreshed": last_supplementary_run.district_pvi_refreshed,
+            "districtPviSkipped": last_supplementary_run.district_pvi_skipped,
             "presidentsUpdated": last_supplementary_run.presidents_updated,
             "elapsedSeconds": _live_elapsed(last_supplementary_run),
             "errorMessage": last_supplementary_run.error_message,
@@ -814,6 +816,8 @@ async def admin_pipeline_history(
             "justicesSkipped": r.justices_skipped,
             "committeeLeadershipRefreshed": r.committee_leadership_refreshed,
             "committeeLeadershipSkipped": r.committee_leadership_skipped,
+            "districtPviRefreshed": r.district_pvi_refreshed,
+            "districtPviSkipped": r.district_pvi_skipped,
             "presidentsUpdated": r.presidents_updated,
             "progressSteps": _parse_progress_steps(r),
         })

@@ -45,7 +45,7 @@ def _nightly_pipeline() -> None:
     Safe to call from multiple containers: ``run_senate_pipeline`` acquires
     a database-level lock and skips if another instance is already running.
     """
-    from app.ops_alerts import check_current_congress_staleness, send_ops_alert
+    from app.ops_alerts import check_current_congress_staleness, check_state_pvi_staleness, send_ops_alert
 
     def _alert_if_skipped(label: str, result: dict) -> bool:
         """Returns True (and alerts) if `result` reports the step was
@@ -76,6 +76,10 @@ def _nightly_pipeline() -> None:
         # Loud, deduped alert if CURRENT_CONGRESS has fallen behind the
         # calendar before we score another day against a possibly-dead one.
         check_current_congress_staleness()
+        # Same idea for state_pvi.json's election-year window — this one
+        # can't self-advance (see the check's own docstring for why), so
+        # the alert is the only signal that a manual refresh is due.
+        check_state_pvi_staleness()
         loop = asyncio.new_event_loop()
         try:
             result = loop.run_until_complete(run_senate_pipeline())
