@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 SUPPLEMENTARY_PIPELINE_STEPS = [
     ("explore_documents",   "explore",   "Ingest explore documents"),
     ("justice_scorecards",  "justices",  "Score SCOTUS justices"),
+    ("committee_leadership", "committee_leadership", "Refresh committee/leadership data"),
     ("president_scorecards", "presidents", "Score presidents"),
 ]
 
@@ -116,6 +117,39 @@ async def run_supplementary_pipeline() -> dict:
                 db.rollback()  # drop partial justice upserts before the next commit
                 logger.exception("Justice pipeline failed — continuing")
                 progress.fail("justice_scorecards")
+
+        # ── COMMITTEE MEMBERSHIP / CHAMBER LEADERSHIP ──
+        run.current_phase = "committee_leadership"
+        db.commit()
+        logger.info("--- Supplementary: COMMITTEE/LEADERSHIP ---")
+        progress.begin("committee_leadership")
+        # Same weekly-or-empty cadence as justices above: leadership titles
+        # and committee rosters change slowly, and the source (three raw
+        # GitHub-hosted YAML files) needs no more frequent a pull than that.
+        # "Missing" here means the persistent volume has never had a
+        # successful ingest — the bundled app/data/*.json fallback loads
+        # fine in the meantime, but should be refreshed immediately rather
+        # than waiting up to a week for the first real data.
+        from app.pipeline.transform.committee_data import load_leadership_roles
+        leadership_missing = not load_leadership_roles()
+        run_committee_leadership = leadership_missing or utcnow().weekday() == 6
+        if not run_committee_leadership:
+            logger.info("Committee/leadership refresh skipped (weekly cadence; next on Sunday UTC)")
+            run.committee_leadership_skipped = True
+            progress.skip("committee_leadership", detail="weekly cadence")
+        else:
+            try:
+                from app.pipeline.fetch.committee_leadership import (
+                    refresh_committee_leadership_data,
+                )
+                run.committee_leadership_refreshed = await refresh_committee_leadership_data()
+                progress.complete(
+                    "committee_leadership",
+                    detail="refreshed" if run.committee_leadership_refreshed else "kept previous data",
+                )
+            except Exception:
+                logger.exception("Committee/leadership refresh failed — continuing")
+                progress.fail("committee_leadership")
 
         # ── PRESIDENTS ──
         run.current_phase = "presidents"

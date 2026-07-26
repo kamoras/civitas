@@ -27,11 +27,14 @@ def _reset_tracker():
     supplementary_pipeline._tracker.stop()
 
 
-def _run(db_session, explore_result=None, justice_result=None, president_result=None):
+def _run(db_session, explore_result=None, justice_result=None, president_result=None,
+         committee_leadership_result=None):
     with patch("app.pipeline.supplementary_pipeline.SessionLocal", return_value=db_session), \
          patch("app.pipeline.explore_pipeline.run_explore_pipeline", new_callable=AsyncMock) as mock_explore, \
          patch("app.pipeline.justice_pipeline.run_justice_pipeline", new_callable=AsyncMock) as mock_justice, \
-         patch("app.pipeline.president_pipeline.run_president_pipeline", new_callable=AsyncMock) as mock_president:
+         patch("app.pipeline.president_pipeline.run_president_pipeline", new_callable=AsyncMock) as mock_president, \
+         patch("app.pipeline.fetch.committee_leadership.refresh_committee_leadership_data",
+               new_callable=AsyncMock) as mock_committee_leadership:
         if isinstance(explore_result, Exception):
             mock_explore.side_effect = explore_result
         else:
@@ -44,6 +47,12 @@ def _run(db_session, explore_result=None, justice_result=None, president_result=
             mock_president.side_effect = president_result
         else:
             mock_president.return_value = president_result if president_result is not None else {"updated": 0}
+        if isinstance(committee_leadership_result, Exception):
+            mock_committee_leadership.side_effect = committee_leadership_result
+        else:
+            mock_committee_leadership.return_value = (
+                committee_leadership_result if committee_leadership_result is not None else True
+            )
 
         import asyncio
         return asyncio.run(supplementary_pipeline.run_supplementary_pipeline())
@@ -104,6 +113,42 @@ class TestSupplementaryPipelineRunTracking:
         run = db_session.query(SupplementaryPipelineRun).one()
         assert run.justices_skipped is True
         assert run.justices_scored == 0
+
+    def test_committee_leadership_skipped_outside_weekly_cadence_when_not_missing(self, db_session):
+        with patch("app.pipeline.supplementary_pipeline.utcnow",
+                   return_value=datetime(2026, 7, 15)), \
+             patch("app.pipeline.transform.committee_data.load_leadership_roles",
+                   return_value={"T000250": "Senate Majority Leader"}):
+            _run(db_session)
+
+        run = db_session.query(SupplementaryPipelineRun).one()
+        assert run.committee_leadership_skipped is True
+        assert run.committee_leadership_refreshed is False
+
+    def test_committee_leadership_runs_when_missing_regardless_of_day(self, db_session):
+        with patch("app.pipeline.supplementary_pipeline.utcnow",
+                   return_value=datetime(2026, 7, 15)), \
+             patch("app.pipeline.transform.committee_data.load_leadership_roles",
+                   return_value={}):
+            _run(db_session, committee_leadership_result=True)
+
+        run = db_session.query(SupplementaryPipelineRun).one()
+        assert run.committee_leadership_skipped is False
+        assert run.committee_leadership_refreshed is True
+
+    def test_committee_leadership_failure_does_not_block_other_phases(self, db_session):
+        with patch("app.pipeline.transform.committee_data.load_leadership_roles",
+                   return_value={}):
+            result = _run(
+                db_session,
+                justice_result={"justices": 3},
+                president_result={"updated": 1},
+                committee_leadership_result=RuntimeError("fetch failed"),
+            )
+
+        assert result["status"] == "completed"
+        run = db_session.query(SupplementaryPipelineRun).one()
+        assert run.committee_leadership_refreshed is False
 
     def test_one_phase_failing_does_not_block_the_others(self, db_session):
         """Best-effort per phase, matching stock_pipeline's per-chamber pattern."""
