@@ -343,3 +343,117 @@ class TestProcessIssuesMetrics:
             text = bluesky_poster._generate_new_post(issue, "2026-07-22")
 
         assert text == "Former President Barack Obama criticized the court ruling."
+
+    def test_vague_president_reference_rejected(self, db_session):
+        # 2026-07 live case: the post read "a U.S. president stated fines
+        # from the EU... should be fully reversed" when the issue title
+        # named Trump directly — vague indefinite phrasing for an office
+        # only one person holds must be rejected, not published.
+        import json as _json
+
+        from app.pipeline.analyze import action_metrics, bluesky_poster
+
+        issue = self._issue(
+            title="Trump calls for EU investigation into tech fines",
+            summary="Trump said fines the EU imposed on major tech companies should be reversed.",
+            facts=_json.dumps(["Trump said EU fines against major tech companies should be reversed."]),
+        )
+        with patch.object(
+            bluesky_poster, "call_llm",
+            return_value={
+                "post": "A U.S. president stated fines from the EU against major tech "
+                        "companies should be fully reversed.",
+            },
+        ):
+            action_metrics.reset()
+            text = bluesky_poster._generate_new_post(issue, "2026-07-22")
+
+        assert text is None
+        assert action_metrics.snapshot().get("bsky_post_grounding_rejections") == 2
+
+    def test_named_president_reference_still_posts(self, db_session):
+        import json as _json
+
+        from app.pipeline.analyze import bluesky_poster
+
+        issue = self._issue(
+            title="Trump calls for EU investigation into tech fines",
+            summary="Trump said fines the EU imposed on major tech companies should be reversed.",
+            facts=_json.dumps(["Trump said EU fines against major tech companies should be reversed."]),
+        )
+        with patch.object(
+            bluesky_poster, "call_llm",
+            return_value={"post": "Trump said EU fines against major tech companies should be reversed."},
+        ):
+            text = bluesky_poster._generate_new_post(issue, "2026-07-22")
+
+        assert text == "Trump said EU fines against major tech companies should be reversed."
+
+
+class TestStalenessPhrasing:
+    """2026-07 live case: a post opened with 'On 2026-07-24' the day after
+    the event, when the prompt also offered 'Yesterday: ...' and that was
+    both available and accurate — the model picked the more awkward
+    option. Only ever offer the one phrasing that's actually correct."""
+
+    def _issue(self, **overrides):
+        from app.models import ActionIssue
+        import json as _json
+        defaults = dict(
+            date="2026-07-24", rank=1, is_current=True,
+            title="Trump calls for EU investigation into tech fines",
+            summary="Trump said EU fines against major tech companies should be reversed.",
+            facts=_json.dumps(["Trump said EU fines against major tech companies should be reversed."]),
+            source_names=_json.dumps(["AP News"]),
+            bsky_posted_at=None,
+            primary_article_date="2026-07-24",
+        )
+        defaults.update(overrides)
+        return ActionIssue(**defaults)
+
+    def test_exactly_one_day_stale_offers_only_yesterday(self):
+        from app.pipeline.analyze import bluesky_poster
+
+        issue = self._issue(primary_article_date="2026-07-24")
+        captured = {}
+
+        def _fake_call_llm(**kwargs):
+            captured["user_prompt"] = kwargs["user_prompt"]
+            return {"post": "Yesterday: Trump said EU fines against major tech companies should be reversed."}
+
+        with patch.object(bluesky_poster, "call_llm", side_effect=_fake_call_llm):
+            bluesky_poster._generate_new_post(issue, "2026-07-25")
+
+        assert "Yesterday: ..." in captured["user_prompt"]
+        assert "On 2026-07-24: ..." not in captured["user_prompt"]
+
+    def test_multiple_days_stale_offers_only_the_date(self):
+        from app.pipeline.analyze import bluesky_poster
+
+        issue = self._issue(primary_article_date="2026-07-20")
+        captured = {}
+
+        def _fake_call_llm(**kwargs):
+            captured["user_prompt"] = kwargs["user_prompt"]
+            return {"post": "On 2026-07-20: Trump said EU fines against major tech companies should be reversed."}
+
+        with patch.object(bluesky_poster, "call_llm", side_effect=_fake_call_llm):
+            bluesky_poster._generate_new_post(issue, "2026-07-25")
+
+        assert "On 2026-07-20: ..." in captured["user_prompt"]
+        assert "'Yesterday: ...'" not in captured["user_prompt"]
+
+    def test_not_stale_has_no_staleness_instruction(self):
+        from app.pipeline.analyze import bluesky_poster
+
+        issue = self._issue(primary_article_date="2026-07-25")
+        captured = {}
+
+        def _fake_call_llm(**kwargs):
+            captured["user_prompt"] = kwargs["user_prompt"]
+            return {"post": "Trump said EU fines against major tech companies should be reversed."}
+
+        with patch.object(bluesky_poster, "call_llm", side_effect=_fake_call_llm):
+            bluesky_poster._generate_new_post(issue, "2026-07-25")
+
+        assert "IMPORTANT: The events described" not in captured["user_prompt"]

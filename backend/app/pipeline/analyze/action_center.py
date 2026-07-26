@@ -2500,8 +2500,10 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
             "anyone who isn't named in the material above, do not describe "
             "any election, race, campaign, or challenge for office unless the "
             "material above says so, report events directly instead of "
-            "through phrases like 'reports say,' and do not evaluate whether "
-            "any action was warranted or justified."
+            "through phrases like 'reports say,' do not evaluate whether "
+            "any action was warranted or justified, and name the specific "
+            "office-holder instead of a vague indefinite phrase like 'a "
+            "president' or 'a Speaker' — there is only one at a time."
         )
 
     return None
@@ -3709,8 +3711,10 @@ def _run_refresh(db: Session) -> int:
                     f"{'; '.join(reasons)}. Report events directly instead of "
                     "through phrases like 'reports say' or 'coverage indicates,' "
                     "do not call any official 'former' unless the articles do, "
-                    "and do not evaluate whether any action was warranted or "
-                    "justified."
+                    "do not evaluate whether any action was warranted or "
+                    "justified, and name the specific office-holder instead of "
+                    "a vague indefinite phrase like 'a president' or 'a "
+                    "Speaker' — there is only one at a time."
                 ),
                 cache_key=None,
                 db_session=db,
