@@ -22,6 +22,7 @@ from app.pipeline.analyze.action_center import (
     _find_related_senators,
     _find_related_officials,
     _find_matching_issue,
+    _apply_matched_issue_update,
     _bsky_repost_has_new_information,
     _fix_impossible_senate_vote_counts,
     _is_exact_content_duplicate,
@@ -1064,6 +1065,100 @@ class TestIssueSignatureMatching:
 
         match = _find_matching_issue(title, facts, [existing], recent_embs, title_emb, {420})
         assert match is None
+
+
+def _new_values_for(title: str, facts: list[str], primary_article_date: str) -> dict:
+    return {
+        "title": title, "summary": "summary", "facts": json.dumps(facts),
+        "actions": "[]", "source_urls": "[]", "source_names": "[]",
+        "policy_areas": "[]", "related_bill_ids": "[]", "related_explore_ids": "[]",
+        "related_senators": "[]", "related_officials": "[]",
+        "primary_article_date": primary_article_date,
+    }
+
+
+class TestApplyMatchedIssueUpdate:
+    """_apply_matched_issue_update, extracted from _run_refresh (2026-07)
+    for direct testability — _run_refresh as a whole fetches real
+    articles, runs an embedding model, and calls an LLM, so it can't
+    reasonably be driven end-to-end in a unit test."""
+
+    def test_updates_row_attributes_from_new_values(self):
+        match = ActionIssue(
+            id=1, date="2026-07-20", rank=3, title="Old title",
+            facts=json.dumps(["An old fact."]), primary_article_date="2026-07-19",
+        )
+        new_values = _new_values_for("New title", ["An old fact.", "A new fact with Senator Susan Collins."], "2026-07-20")
+
+        _apply_matched_issue_update(match, new_values, 1, "2026-07-20", "2026-07-20", json.loads(new_values["facts"]), "New title")
+
+        assert match.title == "New title"
+        assert match.rank == 1
+        assert match.date == "2026-07-20"
+        assert match.is_current is True
+
+    def test_new_date_with_new_information_allows_repost(self):
+        match = ActionIssue(
+            id=1, date="2026-07-19", rank=1, title="Story",
+            facts=json.dumps(["An old fact."]), primary_article_date="2026-07-19",
+            bsky_posted_at=utcnow(), bsky_posted_rank=1,
+        )
+        facts = ["An old fact.", "A new fact naming Senator Susan Collins."]
+        new_values = _new_values_for("Story", facts, "2026-07-20")
+
+        result = _apply_matched_issue_update(match, new_values, 1, "2026-07-20", "2026-07-20", facts, "Story")
+
+        assert result is True
+        assert match.bsky_posted_at is None
+        assert match.bsky_posted_rank is None
+
+    def test_new_date_but_no_new_information_does_not_allow_repost(self):
+        match = ActionIssue(
+            id=1, date="2026-07-19", rank=1, title="Story",
+            facts=json.dumps(["An old fact about the vote."]), primary_article_date="2026-07-19",
+            bsky_posted_at=utcnow(), bsky_posted_rank=1,
+        )
+        # Same facts, reworded — no new named entity or figure.
+        facts = ["An old fact about the vote, restated."]
+        new_values = _new_values_for("Story", facts, "2026-07-20")
+        prior_posted_at = match.bsky_posted_at
+
+        result = _apply_matched_issue_update(match, new_values, 1, "2026-07-20", "2026-07-20", facts, "Story")
+
+        assert result is False
+        assert match.bsky_posted_at == prior_posted_at
+        assert match.bsky_posted_rank == 1
+
+    def test_no_new_date_does_not_allow_repost(self):
+        match = ActionIssue(
+            id=1, date="2026-07-19", rank=1, title="Story",
+            facts=json.dumps(["An old fact naming Senator Susan Collins."]),
+            primary_article_date="2026-07-19",
+            bsky_posted_at=utcnow(), bsky_posted_rank=1,
+        )
+        facts = ["An old fact naming Senator Susan Collins.", "Brand new fact naming Senator Marco Rubio."]
+        # primary_article_date NOT advanced past match's own — new facts
+        # don't matter if the date itself never moved forward.
+        new_values = _new_values_for("Story", facts, "2026-07-19")
+        prior_posted_at = match.bsky_posted_at
+
+        result = _apply_matched_issue_update(match, new_values, 1, "2026-07-19", "2026-07-19", facts, "Story")
+
+        assert result is False
+        assert match.bsky_posted_at == prior_posted_at
+
+    def test_invalidated_story_clears_cached_full_story(self):
+        match = ActionIssue(
+            id=1, date="2026-07-19", rank=1, title="Old story",
+            facts=json.dumps(["An old fact."]), primary_article_date="2026-07-19",
+            full_story="Cached long-form text about the old story.",
+        )
+        facts = ["A completely different fact."]
+        new_values = _new_values_for("A different story entirely", facts, "2026-07-19")
+
+        _apply_matched_issue_update(match, new_values, 1, "2026-07-19", "2026-07-19", facts, "A different story entirely")
+
+        assert match.full_story is None
 
 
 class TestBskyRepostHasNewInformation:
