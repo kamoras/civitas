@@ -5,7 +5,7 @@ Confirmed live as contributing to stock-trades data going stale 4+ days
 and supplementary data 1+ day with nothing telling an operator to look.
 """
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 from app.models import (
@@ -133,4 +133,54 @@ class TestCheckFeedbackTokenExpiration:
              patch("app.ops_alerts.httpx.get", side_effect=Exception("network down")), \
              patch("app.ops_alerts.send_ops_alert") as mock_alert:
             check_feedback_token_expiration()  # must not raise
+        mock_alert.assert_not_called()
+
+
+class _FrozenDate(date):
+    """datetime.date is immutable/built-in — can't patch .today() on it
+    directly, so freeze it via a real subclass instead (comparisons with
+    plain `date` instances still work via inheritance)."""
+    _frozen = date(2026, 1, 1)
+
+    @classmethod
+    def today(cls):
+        return cls._frozen
+
+
+class TestCheckStatePviStaleness:
+    """state_pvi.json's sources are deliberately pinned to immutable
+    historical snapshots (see the check's own docstring) — a scheduled
+    refetch can't advance its 2-cycle window, so this alert is the only
+    signal an operator gets that a manual refresh is due."""
+
+    def _check(self, window: str, today: date):
+        from app.ops_alerts import check_state_pvi_staleness
+
+        frozen = type("FrozenDate", (_FrozenDate,), {"_frozen": today})
+        with patch("app.pipeline.analyze.score_calculator._read_pvi_json",
+                   return_value={"_window": window}), \
+             patch("app.ops_alerts.date", frozen), \
+             patch("app.ops_alerts.send_ops_alert") as mock_alert:
+            check_state_pvi_staleness()
+        return mock_alert
+
+    def test_silent_well_before_next_cycle_is_due(self):
+        mock_alert = self._check("2020+2024", today=date(2027, 1, 1))
+        mock_alert.assert_not_called()
+
+    def test_alerts_once_next_cycle_data_should_be_available(self):
+        mock_alert = self._check("2020+2024", today=date(2029, 1, 1))
+        mock_alert.assert_called_once()
+        assert "2028" in mock_alert.call_args.args[1]
+
+    def test_silent_right_before_the_due_date(self):
+        mock_alert = self._check("2020+2024", today=date(2028, 12, 14))
+        mock_alert.assert_not_called()
+
+    def test_alerts_on_the_due_date(self):
+        mock_alert = self._check("2020+2024", today=date(2028, 12, 15))
+        mock_alert.assert_called_once()
+
+    def test_silent_when_window_metadata_missing(self):
+        mock_alert = self._check("", today=date(2030, 1, 1))
         mock_alert.assert_not_called()

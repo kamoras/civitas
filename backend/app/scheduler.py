@@ -48,6 +48,7 @@ def _nightly_pipeline() -> None:
     from app.ops_alerts import (
         check_current_congress_staleness,
         check_feedback_token_expiration,
+        check_state_pvi_staleness,
         send_ops_alert,
     )
 
@@ -83,6 +84,10 @@ def _nightly_pipeline() -> None:
         # Same idea for FEEDBACK_TOKEN's mandatory PAT expiration — a real
         # GitHub API call, so this one is self-gated to run at most weekly.
         check_feedback_token_expiration()
+        # Same idea for state_pvi.json's election-year window — this one
+        # can't self-advance (see the check's own docstring for why), so
+        # the alert is the only signal that a manual refresh is due.
+        check_state_pvi_staleness()
         loop = asyncio.new_event_loop()
         try:
             result = loop.run_until_complete(run_senate_pipeline())

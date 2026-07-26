@@ -183,6 +183,8 @@ def _migrate_columns() -> None:
         ("presidents", "score_historical_legacy", "REAL"),
         ("supplementary_pipeline_runs", "committee_leadership_refreshed", "BOOLEAN DEFAULT 0"),
         ("supplementary_pipeline_runs", "committee_leadership_skipped", "BOOLEAN DEFAULT 0"),
+        ("supplementary_pipeline_runs", "district_pvi_refreshed", "BOOLEAN DEFAULT 0"),
+        ("supplementary_pipeline_runs", "district_pvi_skipped", "BOOLEAN DEFAULT 0"),
     ]
 
     drops: list[tuple[str, str]] = [
