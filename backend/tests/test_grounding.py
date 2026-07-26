@@ -467,6 +467,47 @@ class TestUngroundedFormerOfficialClaims:
         assert any("former" in r.lower() for r in reasons)
 
 
+class TestUngroundedPartyClaims:
+    """Same stale-training-data class as the 'former' guard above: a model
+    attaching a party label from memory rather than the source material."""
+
+    def test_republican_senator_flagged(self):
+        from app.pipeline.analyze.grounding import ungrounded_party_claims
+        assert ungrounded_party_claims(
+            "Republican Senator Collins praised the vote.",
+            "Susan Collins praised the 68-32 vote on the funding bill.",
+        ) == ["Republican Senator"]
+
+    def test_party_state_abbreviation_flagged(self):
+        from app.pipeline.analyze.grounding import ungrounded_party_claims
+        assert ungrounded_party_claims(
+            "Sen. Collins (R-ME) praised the vote.",
+            "Susan Collins praised the funding bill vote.",
+        ) == ["(R-ME)"]
+
+    def test_grounded_when_source_states_party(self):
+        from app.pipeline.analyze.grounding import ungrounded_party_claims
+        assert ungrounded_party_claims(
+            "Republican Senator Collins praised the vote.",
+            "Republican Susan Collins praised the funding bill vote.",
+        ) == []
+
+    def test_no_party_vocabulary_in_either_not_flagged(self):
+        from app.pipeline.analyze.grounding import ungrounded_party_claims
+        assert ungrounded_party_claims(
+            "Senator Collins praised the vote.",
+            "Susan Collins praised the funding bill vote.",
+        ) == []
+
+    def test_included_in_grounding_violations_bundle(self):
+        from app.pipeline.analyze.grounding import grounding_violations
+        reasons = grounding_violations(
+            "Democratic Senator Booker introduced the bill.",
+            "Cory Booker introduced a bill Thursday.",
+        )
+        assert any("party" in r.lower() for r in reasons)
+
+
 class TestAuditHedgeAndEditorializingAdditions:
     """Regression tests for the 2026-07 audit's phrase additions — each
     parametrized text is a verbatim (or lightly trimmed) published live

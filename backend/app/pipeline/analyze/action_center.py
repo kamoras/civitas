@@ -2403,6 +2403,7 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
             repeated_sentences,
             ungrounded_electoral_claims,
             ungrounded_former_official_claims,
+            ungrounded_party_claims,
             ungrounded_relationship_claims,
             ungrounded_statistics,
             ungrounded_titled_names,
@@ -2428,7 +2429,11 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
         # "former President Donald Trump" published to Bluesky while the
         # source material said "President Trump").
         former = ungrounded_former_official_claims(story, source_material)
-        if not novel and not names and not dupes and not hedge_editorial and not electoral and not relationships and not former:
+        # Stale-training-data party-label claims — same failure mode as
+        # "former," a party attached from the model's own memory rather
+        # than the source (2026-07 audit addition).
+        party = ungrounded_party_claims(story, source_material)
+        if not novel and not names and not dupes and not hedge_editorial and not electoral and not relationships and not former and not party:
             logger.info(
                 "Generated full story for issue %s (%d chars): %s",
                 issue.id, len(story), issue.title[:60],
@@ -2492,6 +2497,15 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
                 "Full story called an official 'former' without source basis for issue %s (attempt %d): %s",
                 issue.id, attempt + 1, ", ".join(former),
             )
+        if party:
+            problems.append(
+                "a party affiliation not present in the key facts "
+                f"({', '.join(party)})"
+            )
+            logger.warning(
+                "Full story asserted a party affiliation without source basis for issue %s (attempt %d): %s",
+                issue.id, attempt + 1, ", ".join(party),
+            )
         retry_note = (
             "\n\nYour previous attempt was rejected because it contained "
             f"{' and '.join(problems)}. Stop writing once the facts are "
@@ -2501,7 +2515,9 @@ Return JSON: {{"story": "full article text with paragraphs separated by \\n\\n"}
             "any election, race, campaign, or challenge for office unless the "
             "material above says so, report events directly instead of "
             "through phrases like 'reports say,' do not evaluate whether "
-            "any action was warranted or justified, and name the specific "
+            "any action was warranted or justified, do not attach a party "
+            "label (Republican/Democrat/GOP/(R-)/(D-)) to anyone unless the "
+            "material above states their party, and name the specific "
             "office-holder instead of a vague indefinite phrase like 'a "
             "president' or 'a Speaker' — there is only one at a time."
         )

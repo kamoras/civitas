@@ -475,6 +475,38 @@ def ungrounded_former_official_claims(generated: str, source: str) -> list[str]:
     return sorted(set(missing))
 
 
+# Party-affiliation claims in the GENERATED text. Same stale-training-data
+# class as _FORMER_CLAIM_RE: the model attaches a party label to an official
+# from its own memory rather than the source material, which is exactly how
+# "former President Donald Trump" reached production (2026-07) when the
+# source only ever said "President Trump." A party label carries the same
+# risk — it can be wrong (a since-corrected training error, a party switch)
+# with no source basis for anyone to catch it before it publishes.
+_PARTY_CLAIM_RE = re.compile(
+    r"\b(?:Republican|Democratic|Democrat|GOP)\s+"
+    r"(?:Senator|Sen\.|Representative|Rep\.|Congressman|Congresswoman|Governor|Gov\.)\b"
+    r"|\([RD]-[A-Za-z]{2}\)",
+    re.IGNORECASE,
+)
+
+# Permissive side, same design as the electoral/relationship/former guards:
+# any party vocabulary anywhere in the source grounds the claim. A post
+# asserting a party label with zero party vocabulary anywhere in its source
+# material is the only case flagged.
+_PARTY_CONTEXT_RE = re.compile(
+    r"\bRepublican\b|\bDemocratic\b|\bDemocrat\b|\bGOP\b|\([RD]-[A-Za-z]{2}\)",
+    re.IGNORECASE,
+)
+
+
+def ungrounded_party_claims(generated: str, source: str) -> list[str]:
+    """Party-affiliation claims in ``generated`` with no party vocabulary
+    anywhere in ``source`` — see _PARTY_CLAIM_RE for the failure mode."""
+    if _PARTY_CONTEXT_RE.search(source or ""):
+        return []
+    return sorted({m.group(0).strip() for m in _PARTY_CLAIM_RE.finditer(generated or "")})
+
+
 def grounding_violations(generated: str, source: str) -> list[str]:
     """Human-readable list of grounding failures, empty when clean."""
     problems = []
@@ -499,6 +531,9 @@ def grounding_violations(generated: str, source: str) -> list[str]:
         problems.append(
             f"'former' office-holder status not in source: {', '.join(former)}"
         )
+    party = ungrounded_party_claims(generated, source)
+    if party:
+        problems.append(f"party affiliation not in source: {', '.join(party)}")
     return problems
 
 
