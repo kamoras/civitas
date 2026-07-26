@@ -22,6 +22,7 @@ from app.pipeline.analyze.action_center import (
     _find_related_senators,
     _find_related_officials,
     _find_matching_issue,
+    _bsky_repost_has_new_information,
     _fix_impossible_senate_vote_counts,
     _is_exact_content_duplicate,
     _issue_signature,
@@ -1063,6 +1064,64 @@ class TestIssueSignatureMatching:
 
         match = _find_matching_issue(title, facts, [existing], recent_embs, title_emb, {420})
         assert match is None
+
+
+class TestBskyRepostHasNewInformation:
+    """A matched issue's primary_article_date advancing used to be the only
+    gate on allowing a Bluesky repost — but recap/ongoing coverage of the
+    same story often just rewords the same names and numbers under a
+    fresher timestamp, which let a story repost with nothing new to say
+    (reported live 2026-07: Bluesky repeatedly posting about the same
+    thing). This checks the actual new-information gate, not just the
+    date comparison _run_refresh does before calling it."""
+
+    def test_reworded_recap_of_the_same_facts_has_no_new_information(self):
+        # Same pair as test_same_defense_bill_rows_match above (ids
+        # 394/405) — same $95B framework, same 216-212 vote, purely
+        # reworded with no new name or figure.
+        old_facts = json.dumps([
+            "A defense policy bill was passed with a narrow 216-212 vote.",
+            "House Republicans approved a $95 billion framework for a third budget reconciliation package.",
+        ])
+        new_facts = [
+            "A $95 billion framework was approved for defense spending.",
+            "The vote resulted in a narrow 216-212 outcome.",
+        ]
+        assert _bsky_repost_has_new_information(old_facts, new_facts) is False
+
+    def test_a_genuine_update_within_the_same_story_counts_as_new_information(self):
+        # A sample initially flagged positive later confirmed a false
+        # positive is a real narrative development (outbreak scare
+        # downgraded), not just a reword — "FDA" as the named source of
+        # that correction is new even though this reads as "the same
+        # story" for matching purposes.
+        old_facts = json.dumps([
+            "A lettuce sample from Taylor Farms was initially flagged as positive for cyclospora.",
+            "Multiple states are reporting over 7,000 confirmed cases of cyclosporiasis nationwide.",
+        ])
+        new_facts = [
+            "Over 7,000 cases have been reported across several states.",
+            "The FDA has stated that a sample from Taylor Farms was later identified as a false positive.",
+        ]
+        assert _bsky_repost_has_new_information(old_facts, new_facts) is True
+
+    def test_a_new_named_entity_counts_as_new_information(self):
+        old_facts = json.dumps(["The House passed a temporary funding measure to avoid a shutdown."])
+        new_facts = [
+            "The House passed a temporary funding measure to avoid a shutdown.",
+            "Senator Susan Collins said she would support the measure in the Senate.",
+        ]
+        assert _bsky_repost_has_new_information(old_facts, new_facts) is True
+
+    def test_a_new_figure_counts_as_new_information(self):
+        old_facts = json.dumps(["A defense policy bill was passed with a narrow 216-212 vote."])
+        new_facts = ["A defense policy bill was passed with a narrow 216-212 vote, costing $95 billion."]
+        assert _bsky_repost_has_new_information(old_facts, new_facts) is True
+
+    def test_missing_old_facts_json_treated_as_empty(self):
+        assert _bsky_repost_has_new_information(
+            "", ["Senator Susan Collins commented on the bill."],
+        ) is True
 
 
 class TestValidateFactsAuditAdditions:

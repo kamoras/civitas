@@ -211,6 +211,30 @@ def _issue_signature(title: str, facts: list[str]) -> set[str]:
     return tokens | numbers
 
 
+def _bsky_repost_has_new_information(old_facts_json: str, new_facts: list[str]) -> bool:
+    """True if the new facts introduce at least one specific named entity or
+    figure the old ones didn't have.
+
+    _run_refresh's matching loop previously allowed a Bluesky repost purely
+    because a matched issue's primary_article_date advanced — but ongoing/
+    recap coverage of the same story often just rewords the same names and
+    numbers under a fresher timestamp, so that alone let a story repost
+    with nothing new to say (2026-07: reported live as Bluesky repeatedly
+    posting about the same story). Reuses the same entity/number signature
+    _issue_signature already computes for story-identity matching, but over
+    FACTS ONLY — not title, which is regenerated fresh by the LLM every run
+    and can shift wording/capitalization for the exact same underlying
+    facts (a live recap of the Taylor Farms cyclospora story retitled
+    "Cyclosporiasis outbreak investigation updates" would otherwise read as
+    new information purely from its own title). A repost is only warranted
+    when the new facts add a signature token (name, figure) the old ones
+    lacked, not just a later publish date or a reworded headline.
+    """
+    old_signature = _issue_signature("", json.loads(old_facts_json or "[]"))
+    new_signature = _issue_signature("", new_facts)
+    return bool(new_signature - old_signature)
+
+
 # Minimum signature containment for two issues to be the same story, and
 # the minimum shared-token count backing it (containment over a tiny
 # signature is noisy). Calibrated 2026-07 on real production pairs: the
@@ -3948,6 +3972,12 @@ def _run_refresh(db: Session) -> int:
                 match.title, match.facts, _new_values["title"], _new_values["facts"],
             )
 
+            # A newer article date alone doesn't mean there's something NEW
+            # to report — see _bsky_repost_has_new_information's docstring.
+            has_new_information = has_new_articles and _bsky_repost_has_new_information(
+                match.facts, facts,
+            )
+
             match.rank = rank
             match.date = today
             match.is_current = True
@@ -3956,12 +3986,20 @@ def _run_refresh(db: Session) -> int:
             if invalidate_story:
                 match.full_story = None
 
-            if has_new_articles:
-                # New articles arrived — allow the Bluesky poster to post an update.
+            if has_new_information:
+                # New articles arrived with something new to say — allow
+                # the Bluesky poster to post an update.
                 match.bsky_posted_at = None
                 match.bsky_posted_rank = None
                 logger.info(
                     "Rank %d '%s': new articles (article_date=%s) — updating and allowing repost",
+                    rank, title[:60], primary_article_date,
+                )
+            elif has_new_articles:
+                logger.info(
+                    "Rank %d '%s': newer article date (%s) but no new named "
+                    "entity or figure beyond what's already reported — "
+                    "updating, no repost",
                     rank, title[:60], primary_article_date,
                 )
             else:
