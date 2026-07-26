@@ -1,4 +1,8 @@
-FROM node:24-alpine AS base
+# Pinned to the exact version validated in prod (2026-07), not the
+# floating node:24-alpine tag — see backend/Dockerfile's FROM comment for
+# why (check-and-deploy.sh prunes base-image layers every deploy, so a
+# floating tag re-resolves silently on the next unrelated commit).
+FROM node:24.18.0-alpine AS base
 
 FROM base AS deps
 WORKDIR /app
