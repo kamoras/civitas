@@ -3,7 +3,15 @@
  * All links point to official .gov domains or the Federal Register.
  */
 
-const CURRENT_CONGRESS = 119;
+/**
+ * The Congress currently in session, derived from the wall clock — a new
+ * Congress convenes Jan 3 of each odd year (off by one for ~2 days before
+ * that in an odd January, same as the backend's congress_for_year). Computed
+ * rather than hardcoded so this label/fallback never needs a manual bump.
+ */
+function currentCongress(): number {
+  return 1 + Math.floor((new Date().getFullYear() - 1789) / 2);
+}
 
 /**
  * Ordinal form ("119th", "101st", "112th") — congress.gov bill URLs embed
@@ -24,8 +32,9 @@ function congressOrdinal(congress: number): string {
  * on the scorecard so a sparser score isn't read as a bug.
  */
 export function currentCongressLabel(): string {
-  const firstYear = 1789 + (CURRENT_CONGRESS - 1) * 2;
-  return `${congressOrdinal(CURRENT_CONGRESS)} Congress (${firstYear}–${firstYear + 1})`;
+  const congress = currentCongress();
+  const firstYear = 1789 + (congress - 1) * 2;
+  return `${congressOrdinal(congress)} Congress (${firstYear}–${firstYear + 1})`;
 }
 
 /**
@@ -70,7 +79,7 @@ export function billUrl(billId: string, congress?: number | null): string {
   const urlType = typeMap[typeRaw];
   if (!urlType) return "";
 
-  const effectiveCongress = congress && congress > 0 ? congress : CURRENT_CONGRESS;
+  const effectiveCongress = congress && congress > 0 ? congress : currentCongress();
   return `https://www.congress.gov/bill/${congressOrdinal(effectiveCongress)}-congress/${urlType}/${number}`;
 }
 
