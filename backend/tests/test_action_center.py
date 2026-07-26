@@ -22,6 +22,8 @@ from app.pipeline.analyze.action_center import (
     _find_related_senators,
     _find_related_officials,
     _find_matching_issue,
+    _apply_matched_issue_update,
+    _bsky_repost_has_new_information,
     _fix_impossible_senate_vote_counts,
     _is_exact_content_duplicate,
     _issue_signature,
@@ -1063,6 +1065,158 @@ class TestIssueSignatureMatching:
 
         match = _find_matching_issue(title, facts, [existing], recent_embs, title_emb, {420})
         assert match is None
+
+
+def _new_values_for(title: str, facts: list[str], primary_article_date: str) -> dict:
+    return {
+        "title": title, "summary": "summary", "facts": json.dumps(facts),
+        "actions": "[]", "source_urls": "[]", "source_names": "[]",
+        "policy_areas": "[]", "related_bill_ids": "[]", "related_explore_ids": "[]",
+        "related_senators": "[]", "related_officials": "[]",
+        "primary_article_date": primary_article_date,
+    }
+
+
+class TestApplyMatchedIssueUpdate:
+    """_apply_matched_issue_update, extracted from _run_refresh (2026-07)
+    for direct testability — _run_refresh as a whole fetches real
+    articles, runs an embedding model, and calls an LLM, so it can't
+    reasonably be driven end-to-end in a unit test."""
+
+    def test_updates_row_attributes_from_new_values(self):
+        match = ActionIssue(
+            id=1, date="2026-07-20", rank=3, title="Old title",
+            facts=json.dumps(["An old fact."]), primary_article_date="2026-07-19",
+        )
+        new_values = _new_values_for("New title", ["An old fact.", "A new fact with Senator Susan Collins."], "2026-07-20")
+
+        _apply_matched_issue_update(match, new_values, 1, "2026-07-20", "2026-07-20", json.loads(new_values["facts"]), "New title")
+
+        assert match.title == "New title"
+        assert match.rank == 1
+        assert match.date == "2026-07-20"
+        assert match.is_current is True
+
+    def test_new_date_with_new_information_allows_repost(self):
+        match = ActionIssue(
+            id=1, date="2026-07-19", rank=1, title="Story",
+            facts=json.dumps(["An old fact."]), primary_article_date="2026-07-19",
+            bsky_posted_at=utcnow(), bsky_posted_rank=1,
+        )
+        facts = ["An old fact.", "A new fact naming Senator Susan Collins."]
+        new_values = _new_values_for("Story", facts, "2026-07-20")
+
+        result = _apply_matched_issue_update(match, new_values, 1, "2026-07-20", "2026-07-20", facts, "Story")
+
+        assert result is True
+        assert match.bsky_posted_at is None
+        assert match.bsky_posted_rank is None
+
+    def test_new_date_but_no_new_information_does_not_allow_repost(self):
+        match = ActionIssue(
+            id=1, date="2026-07-19", rank=1, title="Story",
+            facts=json.dumps(["An old fact about the vote."]), primary_article_date="2026-07-19",
+            bsky_posted_at=utcnow(), bsky_posted_rank=1,
+        )
+        # Same facts, reworded — no new named entity or figure.
+        facts = ["An old fact about the vote, restated."]
+        new_values = _new_values_for("Story", facts, "2026-07-20")
+        prior_posted_at = match.bsky_posted_at
+
+        result = _apply_matched_issue_update(match, new_values, 1, "2026-07-20", "2026-07-20", facts, "Story")
+
+        assert result is False
+        assert match.bsky_posted_at == prior_posted_at
+        assert match.bsky_posted_rank == 1
+
+    def test_no_new_date_does_not_allow_repost(self):
+        match = ActionIssue(
+            id=1, date="2026-07-19", rank=1, title="Story",
+            facts=json.dumps(["An old fact naming Senator Susan Collins."]),
+            primary_article_date="2026-07-19",
+            bsky_posted_at=utcnow(), bsky_posted_rank=1,
+        )
+        facts = ["An old fact naming Senator Susan Collins.", "Brand new fact naming Senator Marco Rubio."]
+        # primary_article_date NOT advanced past match's own — new facts
+        # don't matter if the date itself never moved forward.
+        new_values = _new_values_for("Story", facts, "2026-07-19")
+        prior_posted_at = match.bsky_posted_at
+
+        result = _apply_matched_issue_update(match, new_values, 1, "2026-07-19", "2026-07-19", facts, "Story")
+
+        assert result is False
+        assert match.bsky_posted_at == prior_posted_at
+
+    def test_invalidated_story_clears_cached_full_story(self):
+        match = ActionIssue(
+            id=1, date="2026-07-19", rank=1, title="Old story",
+            facts=json.dumps(["An old fact."]), primary_article_date="2026-07-19",
+            full_story="Cached long-form text about the old story.",
+        )
+        facts = ["A completely different fact."]
+        new_values = _new_values_for("A different story entirely", facts, "2026-07-19")
+
+        _apply_matched_issue_update(match, new_values, 1, "2026-07-19", "2026-07-19", facts, "A different story entirely")
+
+        assert match.full_story is None
+
+
+class TestBskyRepostHasNewInformation:
+    """A matched issue's primary_article_date advancing used to be the only
+    gate on allowing a Bluesky repost — but recap/ongoing coverage of the
+    same story often just rewords the same names and numbers under a
+    fresher timestamp, which let a story repost with nothing new to say
+    (reported live 2026-07: Bluesky repeatedly posting about the same
+    thing). This checks the actual new-information gate, not just the
+    date comparison _run_refresh does before calling it."""
+
+    def test_reworded_recap_of_the_same_facts_has_no_new_information(self):
+        # Same pair as test_same_defense_bill_rows_match above (ids
+        # 394/405) — same $95B framework, same 216-212 vote, purely
+        # reworded with no new name or figure.
+        old_facts = json.dumps([
+            "A defense policy bill was passed with a narrow 216-212 vote.",
+            "House Republicans approved a $95 billion framework for a third budget reconciliation package.",
+        ])
+        new_facts = [
+            "A $95 billion framework was approved for defense spending.",
+            "The vote resulted in a narrow 216-212 outcome.",
+        ]
+        assert _bsky_repost_has_new_information(old_facts, new_facts) is False
+
+    def test_a_genuine_update_within_the_same_story_counts_as_new_information(self):
+        # A sample initially flagged positive later confirmed a false
+        # positive is a real narrative development (outbreak scare
+        # downgraded), not just a reword — "FDA" as the named source of
+        # that correction is new even though this reads as "the same
+        # story" for matching purposes.
+        old_facts = json.dumps([
+            "A lettuce sample from Taylor Farms was initially flagged as positive for cyclospora.",
+            "Multiple states are reporting over 7,000 confirmed cases of cyclosporiasis nationwide.",
+        ])
+        new_facts = [
+            "Over 7,000 cases have been reported across several states.",
+            "The FDA has stated that a sample from Taylor Farms was later identified as a false positive.",
+        ]
+        assert _bsky_repost_has_new_information(old_facts, new_facts) is True
+
+    def test_a_new_named_entity_counts_as_new_information(self):
+        old_facts = json.dumps(["The House passed a temporary funding measure to avoid a shutdown."])
+        new_facts = [
+            "The House passed a temporary funding measure to avoid a shutdown.",
+            "Senator Susan Collins said she would support the measure in the Senate.",
+        ]
+        assert _bsky_repost_has_new_information(old_facts, new_facts) is True
+
+    def test_a_new_figure_counts_as_new_information(self):
+        old_facts = json.dumps(["A defense policy bill was passed with a narrow 216-212 vote."])
+        new_facts = ["A defense policy bill was passed with a narrow 216-212 vote, costing $95 billion."]
+        assert _bsky_repost_has_new_information(old_facts, new_facts) is True
+
+    def test_missing_old_facts_json_treated_as_empty(self):
+        assert _bsky_repost_has_new_information(
+            "", ["Senator Susan Collins commented on the bill."],
+        ) is True
 
 
 class TestValidateFactsAuditAdditions:

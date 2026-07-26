@@ -211,6 +211,90 @@ def _issue_signature(title: str, facts: list[str]) -> set[str]:
     return tokens | numbers
 
 
+def _bsky_repost_has_new_information(old_facts_json: str, new_facts: list[str]) -> bool:
+    """True if the new facts introduce at least one specific named entity or
+    figure the old ones didn't have.
+
+    _run_refresh's matching loop previously allowed a Bluesky repost purely
+    because a matched issue's primary_article_date advanced — but ongoing/
+    recap coverage of the same story often just rewords the same names and
+    numbers under a fresher timestamp, so that alone let a story repost
+    with nothing new to say (2026-07: reported live as Bluesky repeatedly
+    posting about the same story). Reuses the same entity/number signature
+    _issue_signature already computes for story-identity matching, but over
+    FACTS ONLY — not title, which is regenerated fresh by the LLM every run
+    and can shift wording/capitalization for the exact same underlying
+    facts (a live recap of the Taylor Farms cyclospora story retitled
+    "Cyclosporiasis outbreak investigation updates" would otherwise read as
+    new information purely from its own title). A repost is only warranted
+    when the new facts add a signature token (name, figure) the old ones
+    lacked, not just a later publish date or a reworded headline.
+    """
+    old_signature = _issue_signature("", json.loads(old_facts_json or "[]"))
+    new_signature = _issue_signature("", new_facts)
+    return bool(new_signature - old_signature)
+
+
+# Attributes copied from a fresh cluster pass onto a matched existing
+# ActionIssue row (_apply_matched_issue_update) — a fixed set regardless of
+# which cluster is being processed, so this lives at module scope rather
+# than being rebuilt on every loop iteration in _run_refresh.
+_ISSUE_UPDATE_ATTRS = (
+    "title", "summary", "facts", "actions", "source_urls",
+    "source_names", "policy_areas", "related_bill_ids",
+    "related_explore_ids", "related_senators", "related_officials",
+    "primary_article_date",
+)
+
+
+def _apply_matched_issue_update(
+    match: ActionIssue, new_values: dict, rank: int, today: str,
+    primary_article_date: str, facts: list[str], title: str,
+) -> bool:
+    """Update a matched ActionIssue row with this run's fresh cluster data,
+    and decide whether to allow a Bluesky repost. Returns True if a repost
+    was allowed.
+
+    Extracted from _run_refresh (2026-07) for direct testability, matching
+    the same reasoning that already extracted _full_story_should_invalidate/
+    _issue_signature/_bsky_repost_has_new_information out of this same
+    loop: _run_refresh as a whole fetches real articles, runs an embedding
+    model, and calls an LLM, so it can't reasonably be driven end-to-end in
+    a unit test.
+    """
+    has_new_articles = primary_article_date > (match.primary_article_date or "1970-01-01")
+    # A newer article date alone doesn't mean there's something NEW to
+    # report — see _bsky_repost_has_new_information's docstring.
+    if has_new_articles and not _bsky_repost_has_new_information(match.facts, facts):
+        has_new_articles = False
+    invalidate_story = _full_story_should_invalidate(
+        match.title, match.facts, new_values["title"], new_values["facts"],
+    )
+
+    match.rank = rank
+    match.date = today
+    match.is_current = True
+    for attr in _ISSUE_UPDATE_ATTRS:
+        setattr(match, attr, new_values[attr])
+    if invalidate_story:
+        match.full_story = None
+
+    if has_new_articles:
+        # New articles arrived — allow the Bluesky poster to post an update.
+        match.bsky_posted_at = None
+        match.bsky_posted_rank = None
+        logger.info(
+            "Rank %d '%s': new articles (article_date=%s) — updating and allowing repost",
+            rank, title[:60], primary_article_date,
+        )
+    else:
+        logger.info(
+            "Rank %d '%s': no new articles (article_date=%s) — rank updated, no repost",
+            rank, title[:60], primary_article_date,
+        )
+    return has_new_articles
+
+
 # Minimum signature containment for two issues to be the same story, and
 # the minimum shared-token count backing it (containment over a tiny
 # signature is noisy). Calibrated 2026-07 on real production pairs: the
@@ -3919,13 +4003,6 @@ def _run_refresh(db: Session) -> int:
             title, facts, _recent_issues, _recent_embs, title_emb, _matched_issue_ids,
         )
 
-        _update_attrs = (
-            "title", "summary", "facts", "actions", "source_urls",
-            "source_names", "policy_areas", "related_bill_ids",
-            "related_explore_ids", "related_senators", "related_officials",
-            "primary_article_date",
-        )
-
         _new_values: dict = {
             "title": title[:500],
             "summary": summary,
@@ -3943,32 +4020,9 @@ def _run_refresh(db: Session) -> int:
 
         if match:
             _matched_issue_ids.add(match.id)
-            has_new_articles = primary_article_date > (match.primary_article_date or "1970-01-01")
-            invalidate_story = _full_story_should_invalidate(
-                match.title, match.facts, _new_values["title"], _new_values["facts"],
+            _apply_matched_issue_update(
+                match, _new_values, rank, today, primary_article_date, facts, title,
             )
-
-            match.rank = rank
-            match.date = today
-            match.is_current = True
-            for attr in _update_attrs:
-                setattr(match, attr, _new_values[attr])
-            if invalidate_story:
-                match.full_story = None
-
-            if has_new_articles:
-                # New articles arrived — allow the Bluesky poster to post an update.
-                match.bsky_posted_at = None
-                match.bsky_posted_rank = None
-                logger.info(
-                    "Rank %d '%s': new articles (article_date=%s) — updating and allowing repost",
-                    rank, title[:60], primary_article_date,
-                )
-            else:
-                logger.info(
-                    "Rank %d '%s': no new articles (article_date=%s) — rank updated, no repost",
-                    rank, title[:60], primary_article_date,
-                )
         else:
             # Brand new topic — give it a permanent row and post to Bluesky.
             new_row = ActionIssue(date=today, rank=rank, is_current=True, **_new_values)
