@@ -16,6 +16,13 @@ jobs:
   frontend:
     name: Frontend — Lint, Test & Build
     runs-on: ubuntu-latest
+    # No job here sets an explicit timeout, so a hung step (a stalled
+    # network fetch, not a real hang in our own code) rides GitHub's
+    # 360-minute default before anything notices — confirmed live
+    # 2026-07-25: backend-slow's `pip install` stalled for 46 minutes
+    # before the runner disconnected on its own, not because any timeout
+    # caught it. Normal run: under 1 minute; 3x+ headroom.
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: frontend
@@ -44,6 +51,9 @@ jobs:
   backend-fast:
     name: Backend — Fast Tests
     runs-on: ubuntu-latest
+    # See frontend job's comment on why every job here has one of these.
+    # Normal run: 4-5 minutes.
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: backend
@@ -124,6 +134,11 @@ jobs:
   backend-image:
     name: Backend — Docker Image Builds
     runs-on: ubuntu-latest
+    # See frontend job's comment on why every job here has one of these.
+    # Normal run: 5-6 minutes (a fresh, from-scratch pip install inside the
+    # image build — the full ML stack plus Chromium's own download, since
+    # 2026-07-25 — makes this one the least predictable of the four).
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
       # Catches image-level breakage (e.g. requirements conflicts that
@@ -136,6 +151,13 @@ jobs:
     name: Backend — Embedding Tests
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # See frontend job's comment on why every job here has one of these —
+    # this specific job is the one that actually hung 2026-07-25 (pip
+    # install stalled 45+ minutes on a cold cache after requirements.txt
+    # changed). Normal run: 2-3 minutes with a warm pip/model cache; wider
+    # margin than the other jobs since a genuine cache miss here means
+    # downloading the full multi-GB ML stack from scratch, not just a hang.
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: backend
