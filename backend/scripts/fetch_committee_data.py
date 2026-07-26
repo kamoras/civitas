@@ -1,5 +1,14 @@
 """Fetch current committee memberships and chamber leadership titles.
 
+Superseded as the primary data path by app/pipeline/fetch/
+committee_leadership.py (2026-07), which runs this same fetch/build/gate
+logic automatically inside the Supplementary pipeline (weekly, or
+immediately if the persistent volume has no data yet) and writes to
+/data/ rather than these bundled files. This script still exists to
+regenerate the bundled app/data/*.json fallback below — the copy served
+only in the narrow window before a fresh deployment's first automated
+ingest completes.
+
 Congress.gov's official API does not expose either of these (confirmed
 2026-07: member records carry no committee/leadership fields, and
 committee-detail records list bills/reports/nominations handled by that

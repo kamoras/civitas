@@ -1061,6 +1061,8 @@ class SupplementaryPipelineRun(Base):
     explore_docs_ingested: Mapped[int] = mapped_column(Integer, default=0)
     justices_scored: Mapped[int] = mapped_column(Integer, default=0)
     justices_skipped: Mapped[bool] = mapped_column(Boolean, default=False)
+    committee_leadership_refreshed: Mapped[bool] = mapped_column(Boolean, default=False)
+    committee_leadership_skipped: Mapped[bool] = mapped_column(Boolean, default=False)
     presidents_updated: Mapped[int] = mapped_column(Integer, default=0)
     elapsed_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
