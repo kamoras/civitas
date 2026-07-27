@@ -388,9 +388,9 @@ Every hour at :15
        ▼
   6. PERSIST ─── Topic-keyed matching: each unique story maps to one permanent
        │         DB row regardless of rank changes or brief displacement.
-       │         Same story + no new articles → update rank silently, no repost.
-       │         Same story + newer article but nothing new to say → same.
-       │         Same story + newer article + new information → allow repost.
+       │         Same story → update content; repost only when a newer article
+       │         also brings new information (a name, figure, or development).
+       │         Otherwise the rank updates silently and nothing is posted.
        │         Brand new story → create new row.
        ▼
   7. ENRICH ──── sqlite-vec semantic search → link related bills/senators

@@ -129,6 +129,7 @@ erDiagram
         json related_bill_ids
         json related_monitor_slugs
         datetime bsky_posted_at "null = never posted"
+        json bsky_posted_facts "facts as of the last post, the repost baseline"
         date primary_article_date "advances only on genuinely newer articles"
         bool is_current
     }
