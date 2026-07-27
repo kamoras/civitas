@@ -227,6 +227,7 @@ def _migrate_columns() -> None:
     ]
 
     with engine.begin() as conn:
+        added: set[tuple[str, str]] = set()
         for table, column, col_type in additions:
             if not inspector.has_table(table):
                 continue
@@ -235,6 +236,7 @@ def _migrate_columns() -> None:
                 logger.info("Adding column %s.%s", table, column)
                 try:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
+                    added.add((table, column))
                 except Exception as exc:
                     if "duplicate column name" in str(exc).lower():
                         pass  # another container added the column concurrently
@@ -248,6 +250,54 @@ def _migrate_columns() -> None:
             if column in existing:
                 logger.info("Dropping legacy column %s.%s", table, column)
                 conn.execute(text(f"ALTER TABLE {table} DROP COLUMN {column}"))
+
+    # Deliberately its own transaction, after the DDL block above has
+    # committed. pysqlite implicitly commits around DDL, so a data write
+    # sharing that block is not reliably part of the same commit — the
+    # ALTER TABLEs landed and this UPDATE silently did not.
+    _backfill_bsky_posted_facts(added)
+
+
+def _backfill_bsky_posted_facts(added: set[tuple[str, str]]) -> None:
+    """Seed action_issues.bsky_posted_facts for rows that were already
+    posted to Bluesky before the column existed (#310).
+
+    #310 made the repost gate measure new facts against the facts as of
+    the last post (bsky_posted_facts) instead of the live `facts` column,
+    which every hourly refresh overwrites. Rows predating the column have
+    it NULL, and the gate falls back to `match.facts` for those — the
+    ratcheting baseline #310 exists to eliminate.
+
+    That fallback cannot resolve itself. bsky_posted_facts is only ever
+    written by the Bluesky poster, the poster only sees issues whose
+    bsky_posted_at is NULL, and for an already-posted issue only the
+    repost gate can clear that — the same gate that is stuck on the old
+    behavior. So every ongoing story carried across the migration keeps
+    the pre-#310 ratchet indefinitely, and those are exactly the rows the
+    fix was written for.
+
+    Seeding the baseline to the current `facts` breaks the deadlock
+    without the repost burst the NULL fallback was protecting against:
+    the pinned baseline equals what the gate would have compared against
+    on the very next run anyway, so nothing reads as newly-new. It just
+    stops moving from then on.
+
+    Guarded on the column having been added by THIS call, so a restart
+    never re-pins a baseline the poster has since advanced (a repeating
+    backfill would rebuild the ratchet, keyed to deploy frequency).
+    """
+    if ("action_issues", "bsky_posted_facts") not in added:
+        return
+    with engine.begin() as conn:
+        result = conn.execute(text(
+            "UPDATE action_issues SET bsky_posted_facts = facts "
+            "WHERE bsky_posted_at IS NOT NULL AND bsky_posted_facts IS NULL"
+        ))
+    if result.rowcount:
+        logger.info(
+            "Backfilled bsky_posted_facts for %d previously-posted action issue(s)",
+            result.rowcount,
+        )
 
 
 def _migrate_presidents_schema_rebuild() -> None:

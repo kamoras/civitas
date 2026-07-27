@@ -1069,6 +1069,92 @@ async def admin_reset_data(db: Session = Depends(get_db)):
     }
 
 
+# Counters that represent a story being dropped rather than published.
+# Grouped so the endpoint below can answer the question these counters
+# exist for — "did the pipeline see nothing, or see something and drop
+# it?" — without the caller having to know which of the ten-odd gates in
+# the action pipeline is which.
+_SUPPRESSION_COUNTERS = (
+    "issues_skipped_grounding",
+    "issues_skipped_role_check",
+    "issues_skipped_too_few_facts",
+    "issues_skipped_duplicate_title",
+    "issues_skipped_no_action_surface",
+    "bsky_reposts_suppressed_no_new_information",
+    "bsky_posts_suppressed_near_duplicate",
+    "bsky_post_grounding_rejections",
+)
+
+_INTAKE_COUNTERS = ("articles_fetched", "articles_policy_relevant", "clusters_considered")
+
+_OUTPUT_COUNTERS = ("issues_new_topic", "issues_matched_existing", "bsky_reposts_allowed")
+
+
+@router.get("/action-metrics", dependencies=[Depends(require_admin)])
+async def admin_action_metrics(
+    limit: int = Query(48, ge=1, le=500),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Per-run Action Center validator counters, newest run first.
+
+    The action pipeline records these on every refresh but nothing read
+    them back, so the question they answer — is the platform quiet
+    because the news is quiet, or because a validator is dropping
+    everything? — could only be settled by opening a shell on the box and
+    querying api_cache by hand. Every gate in the pipeline fails closed,
+    which is the right default for a platform that publishes under its own
+    name, but it means silence is the failure mode for roughly ten
+    independent checks and none of them is louder than the others.
+
+    ``runs`` is the raw per-run counter set. ``totals`` sums the window,
+    split into intake (what arrived), output (what published), and
+    suppressed (what was dropped, by which gate) — a window with healthy
+    intake and near-zero output is a suppression problem; one where
+    intake itself is near zero is a quiet news cycle or a broken feed.
+
+    Runs are hourly, so gaps in ``runs`` are themselves a signal: a
+    refresh that crashed or was still holding the lock leaves no row.
+    """
+    rows = (
+        db.query(ApiCache)
+        .filter(ApiCache.tier == "action-metrics")
+        .order_by(ApiCache.cached_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    runs = []
+    for row in rows:
+        try:
+            counts = json.loads(row.data_json).get("counts", {})
+        except (ValueError, TypeError):
+            continue  # a malformed row shouldn't blank the whole report
+        runs.append({
+            "run": row.cache_key,
+            "recordedAt": row.cached_at.isoformat() if row.cached_at else None,
+            "counts": counts,
+        })
+
+    def _sum(keys) -> dict:
+        return {
+            k: sum(r["counts"].get(k, 0) for r in runs)
+            for k in keys
+            if any(r["counts"].get(k) for r in runs)
+        }
+
+    suppressed = _sum(_SUPPRESSION_COUNTERS)
+    return {
+        "runs": runs,
+        "totals": {
+            "intake": _sum(_INTAKE_COUNTERS),
+            "output": _sum(_OUTPUT_COUNTERS),
+            "suppressed": suppressed,
+            "suppressedTotal": sum(suppressed.values()),
+        },
+        "runsReturned": len(runs),
+    }
+
+
 @router.get("/classification/health", dependencies=[Depends(require_admin)])
 async def admin_classification_health(db: Session = Depends(get_db)):
     """Classification system health metrics for monitoring adaptive learning."""

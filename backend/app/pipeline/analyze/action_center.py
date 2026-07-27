@@ -3668,6 +3668,26 @@ def _find_matching_issue(
     return None
 
 
+def _persist_metrics(db: Session) -> dict[str, int]:
+    """Write this run's validator counters to api_cache and return them.
+
+    Called on every exit path, not just the happy one. The two early
+    returns below (no articles fetched, nothing policy-relevant) used to
+    return before the tail persist, so the runs with the most diagnostic
+    value — the ones that published nothing at all — were the only runs
+    that left no record behind. "Was it a slow news day or is the fetch
+    broken?" was then unanswerable after the fact: a quiet hour and a
+    failing feed both looked like an absent row.
+    """
+    from app.pipeline.analyze import action_metrics
+
+    snapshot = action_metrics.snapshot()
+    action_metrics.persist(db, f"run-{datetime.now(_US_EAST).strftime('%Y-%m-%d-%H%M')}")
+    if snapshot:
+        logger.info("Validator counters this run: %s", snapshot)
+    return snapshot
+
+
 def _run_refresh(db: Session) -> int:
     t0 = time.perf_counter()
     today = datetime.now(_US_EAST).strftime("%Y-%m-%d")
@@ -3684,16 +3704,25 @@ def _run_refresh(db: Session) -> int:
     articles = fetch_news_articles()
     if not articles:
         logger.warning("No articles fetched — skipping action center refresh")
+        action_metrics.increment("refresh_aborted_no_articles")
+        _persist_metrics(db)
         _set_refresh_state(is_running=False, stage=None)
         return 0
+    # Volume counters, recorded on every run so "quiet day" is a number
+    # that can be compared against yesterday's, not an inference drawn
+    # from the absence of posts.
+    action_metrics.increment("articles_fetched", len(articles))
 
     # 2. Filter for policy relevance
     _set_refresh_state(stage="filter")
     relevant = _filter_policy_relevant(articles)
     if not relevant:
         logger.warning("No policy-relevant articles found")
+        action_metrics.increment("refresh_aborted_no_relevant_articles")
+        _persist_metrics(db)
         _set_refresh_state(is_running=False, stage=None)
         return 0
+    action_metrics.increment("articles_policy_relevant", len(relevant))
 
     # 3. Fetch trending topics from social media
     trending = fetch_trending_topics()
@@ -3709,6 +3738,7 @@ def _run_refresh(db: Session) -> int:
     # 5b. Deduplicate top clusters so two angles on the same story
     # don't both appear (e.g., "Tariff hikes" and "Market fallout from tariffs")
     top_clusters = _deduplicate_top_clusters(ranked_clusters, MAX_ISSUES)
+    action_metrics.increment("clusters_considered", len(top_clusters))
     _set_refresh_state(stage="issues", stage_detail=f"0/{len(top_clusters)}")
 
     # 6. Generate analysis for each via LLM
@@ -4099,11 +4129,18 @@ def _run_refresh(db: Session) -> int:
             _apply_matched_issue_update(
                 match, _new_values, rank, today, primary_article_date, facts, title,
             )
+            # Split from the new-topic case below: `issues_created` counts
+            # both, so a run that only ever re-matched yesterday's stories
+            # reported the same number as one that found four fresh ones.
+            # That distinction is the whole difference between "the news is
+            # quiet" and "new topics are being dropped by a gate".
+            action_metrics.increment("issues_matched_existing")
         else:
             # Brand new topic — give it a permanent row and post to Bluesky.
             new_row = ActionIssue(date=today, rank=rank, is_current=True, **_new_values)
             db.add(new_row)
             _new_issues.append(new_row)
+            action_metrics.increment("issues_new_topic")
             logger.info("Rank %d new topic: '%s'", rank, title[:60])
 
         issues_created += 1
@@ -4242,10 +4279,7 @@ def _run_refresh(db: Session) -> int:
     # existed only as log lines, wiped by every deploy — validator hit
     # rates were unmeasurable). One api_cache row per run, pruned by the
     # same 60-day cleanup as every other tier.
-    _metrics_snapshot = action_metrics.snapshot()
-    action_metrics.persist(db, f"run-{datetime.now(_US_EAST).strftime('%Y-%m-%d-%H%M')}")
-    if _metrics_snapshot:
-        logger.info("Validator counters this run: %s", _metrics_snapshot)
+    _persist_metrics(db)
 
     elapsed = time.perf_counter() - t0
     logger.info(
