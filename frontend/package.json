@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.3.3",
-    "next": "^16.2.11",
+    "next": "^16.2.12",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-globe.gl": "^2.38.0",
@@ -33,12 +33,12 @@
     "@types/react-simple-maps": "^3.0.6",
     "@vitejs/plugin-react": "^6.0.4",
     "@vitest/coverage-v8": "^4.1.10",
-    "eslint": "^10.6.0",
+    "eslint": "^10.8.0",
     "eslint-config-next": "^16.2.10",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "jsdom": "^29.1.1",
     "postcss": "^8.5.18",
-    "prettier": "^3.9.1",
+    "prettier": "^3.9.6",
     "tailwindcss": "^4.3.2",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"
