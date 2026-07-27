@@ -227,7 +227,6 @@ def _migrate_columns() -> None:
     ]
 
     with engine.begin() as conn:
-        added: set[tuple[str, str]] = set()
         for table, column, col_type in additions:
             if not inspector.has_table(table):
                 continue
@@ -236,7 +235,6 @@ def _migrate_columns() -> None:
                 logger.info("Adding column %s.%s", table, column)
                 try:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
-                    added.add((table, column))
                 except Exception as exc:
                     if "duplicate column name" in str(exc).lower():
                         pass  # another container added the column concurrently
@@ -255,10 +253,10 @@ def _migrate_columns() -> None:
     # committed. pysqlite implicitly commits around DDL, so a data write
     # sharing that block is not reliably part of the same commit — the
     # ALTER TABLEs landed and this UPDATE silently did not.
-    _backfill_bsky_posted_facts(added)
+    _backfill_bsky_posted_facts()
 
 
-def _backfill_bsky_posted_facts(added: set[tuple[str, str]]) -> None:
+def _backfill_bsky_posted_facts() -> None:
     """Seed action_issues.bsky_posted_facts for rows that were already
     posted to Bluesky before the column existed (#310).
 
@@ -282,11 +280,19 @@ def _backfill_bsky_posted_facts(added: set[tuple[str, str]]) -> None:
     on the very next run anyway, so nothing reads as newly-new. It just
     stops moving from then on.
 
-    Guarded on the column having been added by THIS call, so a restart
-    never re-pins a baseline the poster has since advanced (a repeating
-    backfill would rebuild the ratchet, keyed to deploy frequency).
+    Safe to run on every startup rather than only when the column is
+    added, which is why it isn't gated on that: the poster writes
+    bsky_posted_at and bsky_posted_facts in the same commit, so a row
+    with the former set and the latter NULL can only be one that predates
+    the column. Once seeded it stops matching, and a baseline the poster
+    has since advanced is never re-pinned. Running unconditionally also
+    means a process that dies between the ALTER and this UPDATE — the
+    ALTER having already committed, per the note above — repairs itself
+    on the next boot instead of silently keeping the old behavior
+    forever. test_bluesky_poster pins the write-both invariant this
+    relies on.
     """
-    if ("action_issues", "bsky_posted_facts") not in added:
+    if not inspect(engine).has_table("action_issues"):
         return
     with engine.begin() as conn:
         result = conn.execute(text(

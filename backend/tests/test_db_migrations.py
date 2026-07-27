@@ -150,8 +150,11 @@ def test_bsky_posted_facts_backfilled_for_already_posted_issues(patched_engine):
 
 
 def test_bsky_posted_facts_backfill_does_not_rerun_on_restart(patched_engine):
-    # A backfill that fired on every startup would rebuild the exact ratchet
-    # it removes, re-pinning the baseline to the live facts once per deploy.
+    # The backfill runs on every startup (so a process that dies between the
+    # ALTER and the UPDATE repairs itself), which is only safe because a
+    # seeded row stops matching. A baseline the poster has since advanced
+    # must never be re-pinned — that would rebuild the exact ratchet this
+    # removes, once per deploy.
     eng = patched_engine
     _legacy_action_issues(eng, (
         "INSERT INTO action_issues (id, facts, bsky_posted_at) VALUES"
@@ -175,3 +178,25 @@ def test_bsky_posted_facts_backfill_does_not_rerun_on_restart(patched_engine):
             "SELECT bsky_posted_facts FROM action_issues WHERE id = 1"
         )).scalar()
     assert value == '["posted"]'
+
+
+def test_bsky_posted_facts_backfill_repairs_a_half_applied_migration(patched_engine):
+    # pysqlite commits around DDL, so the ALTER can land while the process
+    # dies before the UPDATE. Gating the backfill on "did this call add the
+    # column?" would leave that database on the pre-#310 behavior forever,
+    # silently. Simulate it: column present, baseline never seeded.
+    eng = patched_engine
+    _legacy_action_issues(eng, (
+        "INSERT INTO action_issues (id, facts, bsky_posted_at) VALUES"
+        " (1, '[\"carried over\"]', '2026-07-26 12:00:00')"
+    ))
+    with eng.begin() as conn:
+        conn.execute(text("ALTER TABLE action_issues ADD COLUMN bsky_posted_facts TEXT"))
+
+    database._migrate_columns()  # adds nothing; must still backfill
+
+    with eng.begin() as conn:
+        value = conn.execute(text(
+            "SELECT bsky_posted_facts FROM action_issues WHERE id = 1"
+        )).scalar()
+    assert value == '["carried over"]'

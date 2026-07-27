@@ -1089,6 +1089,24 @@ _INTAKE_COUNTERS = ("articles_fetched", "articles_policy_relevant", "clusters_co
 
 _OUTPUT_COUNTERS = ("issues_new_topic", "issues_matched_existing", "bsky_reposts_allowed")
 
+_GROUPED_COUNTERS = frozenset(_INTAKE_COUNTERS + _OUTPUT_COUNTERS + _SUPPRESSION_COUNTERS)
+
+
+def _coerce_counts(raw) -> dict[str, int] | None:
+    """A run's counter payload as {name: int}, or None if unusable.
+
+    Non-integer values are dropped rather than coerced: these are counts,
+    and a payload where one isn't a number is corrupt in a way worth
+    ignoring rather than guessing at. bool is excluded explicitly because
+    it is an int subclass and would otherwise sum as 0/1.
+    """
+    if not isinstance(raw, dict):
+        return None
+    return {
+        str(k): v for k, v in raw.items()
+        if isinstance(v, int) and not isinstance(v, bool)
+    }
+
 
 @router.get("/action-metrics", dependencies=[Depends(require_admin)])
 async def admin_action_metrics(
@@ -1111,6 +1129,10 @@ async def admin_action_metrics(
     suppressed (what was dropped, by which gate) — a window with healthy
     intake and near-zero output is a suppression problem; one where
     intake itself is near zero is a quiet news cycle or a broken feed.
+    Anything the pipeline records that isn't in those three groups lands
+    in ``other`` rather than being dropped: a counter this endpoint has
+    never heard of is exactly the one worth seeing, and silently omitting
+    it would reproduce the blind spot the endpoint exists to remove.
 
     Runs are hourly, so gaps in ``runs`` are themselves a signal: a
     refresh that crashed or was still holding the lock leaves no row.
@@ -1126,9 +1148,14 @@ async def admin_action_metrics(
     runs = []
     for row in rows:
         try:
-            counts = json.loads(row.data_json).get("counts", {})
+            payload = json.loads(row.data_json)
         except (ValueError, TypeError):
             continue  # a malformed row shouldn't blank the whole report
+        # Shape is checked, not assumed: a diagnostic endpoint that 500s
+        # on one bad row fails precisely when it's being reached for.
+        counts = _coerce_counts(payload.get("counts")) if isinstance(payload, dict) else None
+        if counts is None:
+            continue
         runs.append({
             "run": row.cache_key,
             "recordedAt": row.cached_at.isoformat() if row.cached_at else None,
@@ -1143,6 +1170,9 @@ async def admin_action_metrics(
         }
 
     suppressed = _sum(_SUPPRESSION_COUNTERS)
+    ungrouped = sorted({
+        k for r in runs for k in r["counts"] if k not in _GROUPED_COUNTERS
+    })
     return {
         "runs": runs,
         "totals": {
@@ -1150,6 +1180,7 @@ async def admin_action_metrics(
             "output": _sum(_OUTPUT_COUNTERS),
             "suppressed": suppressed,
             "suppressedTotal": sum(suppressed.values()),
+            "other": _sum(ungrouped),
         },
         "runsReturned": len(runs),
     }

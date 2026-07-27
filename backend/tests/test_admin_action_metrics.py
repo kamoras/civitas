@@ -128,6 +128,75 @@ async def test_malformed_row_does_not_blank_the_report(db_session):
     assert result["totals"]["intake"]["articles_fetched"] == 7
 
 
+@pytest.mark.parametrize("payload", [
+    {"counts": None},          # valid JSON, unusable shape
+    {"counts": ["a", "b"]},    # counts as a list
+    {"counts": "12"},          # counts as a string
+    ["not", "an", "object"],   # payload itself not an object
+    {},                        # no counts key at all
+])
+@pytest.mark.asyncio
+async def test_unusable_count_shapes_are_skipped_not_fatal(db_session, payload):
+    # A diagnostic endpoint that 500s on one bad row fails exactly when
+    # someone is reaching for it. Invalid JSON was already handled; valid
+    # JSON of the wrong shape raised AttributeError.
+    from app.api.admin import admin_action_metrics
+
+    db_session.add(ApiCache(
+        tier="action-metrics", cache_key="run-odd",
+        data_json=json.dumps(payload), cached_at=utcnow(),
+    ))
+    db_session.commit()
+    _metrics_row(db_session, "run-ok", {"articles_fetched": 3}, minutes_ago=10)
+
+    result = await admin_action_metrics(limit=48, db=db_session)
+
+    assert result["runsReturned"] == 1
+    assert result["totals"]["intake"]["articles_fetched"] == 3
+
+
+@pytest.mark.asyncio
+async def test_non_integer_counter_values_are_dropped(db_session):
+    from app.api.admin import admin_action_metrics
+
+    _metrics_row(db_session, "run-mixed", {
+        "articles_fetched": 4,
+        "clusters_considered": "many",  # corrupt: would break sum()
+        "issues_new_topic": True,       # bool is an int subclass; not a count
+    })
+
+    result = await admin_action_metrics(limit=48, db=db_session)
+
+    assert result["totals"]["intake"] == {"articles_fetched": 4}
+    assert result["totals"]["output"] == {}
+
+
+@pytest.mark.asyncio
+async def test_ungrouped_counters_surface_in_other(db_session):
+    # The endpoint must not be able to hide a gate. Counters that predate
+    # the grouping (facts_dropped_*), and any a future gate adds without
+    # updating the tuples above, have to remain visible in totals — an
+    # unrecognised counter is the one most worth seeing.
+    from app.api.admin import admin_action_metrics
+
+    _metrics_row(db_session, "run-e", {
+        "articles_fetched": 9,
+        "facts_dropped_ungrounded_number": 2,
+        "refresh_aborted_no_articles": 1,
+        "some_gate_invented_next_year": 5,
+    })
+
+    totals = (await admin_action_metrics(limit=48, db=db_session))["totals"]
+
+    assert totals["other"] == {
+        "facts_dropped_ungrounded_number": 2,
+        "refresh_aborted_no_articles": 1,
+        "some_gate_invented_next_year": 5,
+    }
+    # ...and grouped counters must not be double-counted into it.
+    assert "articles_fetched" not in totals["other"]
+
+
 @pytest.mark.asyncio
 async def test_other_api_cache_tiers_are_not_included(db_session):
     from app.api.admin import admin_action_metrics
