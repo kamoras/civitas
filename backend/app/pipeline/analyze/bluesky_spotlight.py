@@ -13,13 +13,15 @@ import logging
 import random
 import re
 from datetime import date, datetime, UTC
+from typing import NamedTuple
 
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import BskySenatorSpotlight, Senator, TimelineEntry, WeekSummary
-from app.pipeline.analyze.bluesky_utils import publish_post
+from app.pipeline.analyze.bluesky_utils import BSKY_MAX_CHARS, publish_post
 from app.pipeline.analyze.grounding import (
+    grounding_violations,
     hedge_and_editorializing_violations,
     ungrounded_former_official_claims,
     ungrounded_numbers,
@@ -291,117 +293,207 @@ def post_daily_spotlight(db: Session) -> None:
 
 
 # There is no /timeline route — the timeline lives behind a tab on the action
-# page, so a bare /timeline link 404s (reported live via a Bluesky post).
+# page, so a bare /timeline link 404s (a user reported one live).
 TIMELINE_URL = f"{SITE}/action?tab=timeline"
 
-# Every weekly post is published under this header so a reader seeing it in
-# their feed knows it recaps the whole week just ended, not one day's news.
-WEEKLY_HEADER = "Last week in review ({label}):"
+# Published above every weekly post so a reader meeting it in their feed knows
+# it recaps a whole week, not one day's news. Deliberately not "Last week in
+# review": post_weekly_summary posts the most recent *summarized* week, and a
+# run of days with no timeline entries leaves that week with no WeekSummary
+# row at all, so the week being posted is not always the week just gone. The
+# parenthetical date range says which week it is; "last" would sometimes lie.
+WEEKLY_HEADER = "Week in review ({label}):"
+WEEKLY_HEADER_NO_LABEL = "Week in review:"
 
-# Bluesky caps a post at 300 characters, and the header (up to ~36 chars once
-# the label spans two months) plus the trailing URL are both spent before the
-# model's text is.
-MAX_WEEKLY_CHARS = 210
 
-
-def _week_label(week: WeekSummary) -> str:
+def _week_label(week: WeekSummary) -> str | None:
     """Human-readable date range for a week: "Jul 13–19", "Jun 29–Jul 5".
 
     The label is published in the post itself rather than only handed to the
     model, so a week straddling a month boundary has to name both months.
+
+    None when the stored dates don't parse. A raw-range fallback used to be
+    fine while the label was prompt-only; published, it would put "  –  " in
+    the feed and push the header past the character budget. Callers drop the
+    parenthetical instead. strftime is inside the try because "%-d" is a
+    glibc extension that raises on other platforms.
     """
     try:
         start = date.fromisoformat(week.start_date)
         end = date.fromisoformat(week.end_date)
+        end_format = "%-d" if start.month == end.month else "%b %-d"
+        return f"{start.strftime('%b %-d')}–{end.strftime(end_format)}"
     except (TypeError, ValueError):
-        return f"{week.start_date} – {week.end_date}"
-
-    end_format = "%-d" if start.month == end.month else "%b %-d"
-    return f"{start.strftime('%b %-d')}–{end.strftime(end_format)}"
+        return None
 
 
-# Per-day context handed to the model. TimelineEntry.date is unique, so a week
-# yields at most seven of these; 120 chars per day matches what the timeline
-# pipeline itself feeds the week-in-review generator.
-_ENTRY_SUMMARY_CHARS = 120
+def _weekly_header(week: WeekSummary) -> str:
+    label = _week_label(week)
+    return WEEKLY_HEADER.format(label=label) if label else WEEKLY_HEADER_NO_LABEL
 
 
-def _week_timeline_context(week: WeekSummary, db: Session) -> str:
-    """The timeline material the platform already holds for this week: the
-    published week-in-review summary, the days it was built from, and the
-    policy areas the timeline tab shows alongside it.
+def _weekly_body_budget(header: str) -> int:
+    """Characters left for the model's text once the header, the separating
+    blank line and the trailing link are spent out of Bluesky's per-post cap.
 
-    The week summary is itself a 2-3 sentence LLM digest of these same days
-    (see action_center._generate_period_summary), so handing the model only
-    that summary made the post a digest of a digest — the specific votes,
-    rulings and filings it is asked to name had already been compressed out.
-    The days also widen what the grounding checks below accept: a figure from
-    Tuesday's entry is now sourced material rather than an invented number.
+    Derived rather than hardcoded: a fixed constant silently overflows the
+    moment the header or the URL is reworded, and publish_post would then
+    truncate the body with nothing failing to warn us.
     """
-    sections: list[str] = []
+    return BSKY_MAX_CHARS - len(header) - 1 - len(TIMELINE_URL) - 2
 
-    if week.summary:
-        sections.append(
-            "Week-in-review summary already published on the Civitas timeline:\n"
-            f"{week.summary[:800]}"
-        )
 
-    entries = (
+# Per-day detail handed to the model. TimelineEntry.date is unique, so a week
+# contributes at most seven days — the whole point of this context is to carry
+# the specifics the week summary compressed away, so it gets a far more
+# generous per-day budget than action_center's period summarizer, which has to
+# fit up to thirty entries into the same context window.
+_ENTRY_SUMMARY_CHARS = 240
+
+
+class _WeekContext(NamedTuple):
+    """Two views of a week's timeline record.
+
+    ``prompt`` is everything the model is shown. ``sources`` is the timeline
+    text alone — no date brackets, no rule numbers — and is what the model's
+    output is checked against. Keeping them apart matters: grounding treats
+    its source as a bag of digit tokens, so checking against the whole prompt
+    grounded every number printed in it. An ISO date like [2026-07-13] alone
+    licenses "7", "13" and "2026", which is how a fabricated "17-13" vote
+    tally passed a guard whose entire job is to catch invented figures.
+    """
+    prompt: str
+    sources: str
+
+
+def _week_entries(week: WeekSummary, db: Session) -> list[TimelineEntry]:
+    """The timeline days falling inside the week's date range.
+
+    Guarded on parseable bounds because the range filter is a string
+    comparison: an empty start_date is <= every date ever recorded, which
+    would sweep years of unrelated days into the prompt labelled "that week."
+    """
+    try:
+        date.fromisoformat(week.start_date)
+        date.fromisoformat(week.end_date)
+    except (TypeError, ValueError):
+        return []
+
+    return (
         db.query(TimelineEntry)
         .filter(TimelineEntry.date >= week.start_date)
         .filter(TimelineEntry.date <= week.end_date)
         .order_by(TimelineEntry.date)
         .all()
     )
-    if entries:
-        days = "\n".join(
-            f"- [{e.date}] {e.title}: {(e.summary or '')[:_ENTRY_SUMMARY_CHARS]}"
-            for e in entries
+
+
+def _week_timeline_context(week: WeekSummary, db: Session) -> _WeekContext:
+    """The timeline material the platform already holds for this week: the
+    published week-in-review summary, the days it was built from, and the
+    policy areas the timeline tab shows alongside it.
+
+    The week summary is itself a 2-3 sentence LLM digest of these same days
+    (action_center._generate_period_summary), so handing the model only that
+    summary made the post a digest of a digest: asked to name specific votes
+    and rulings, it was given a text those specifics had been compressed out
+    of, and any figure it did recall was then rejected as ungrounded.
+    """
+    sections: list[str] = []
+    sources: list[str] = []
+
+    if week.summary:
+        summary = week.summary[:800]
+        sections.append(
+            "Week-in-review summary already published on the Civitas timeline:\n"
+            f"{summary}"
         )
-        sections.append(f"The {len(entries)} days that week, as tracked on the timeline:\n{days}")
+        sources.append(summary)
+
+    entries = _week_entries(week, db)
+    if entries:
+        days = []
+        for e in entries:
+            # Weekday rather than the ISO date: bluesky_poster carries a dated
+            # lesson that raw "2026-07-24" phrasing leaks into posts and reads
+            # robotic, and a weekday is the natural register for a week recap.
+            try:
+                weekday = f"[{date.fromisoformat(e.date).strftime('%a')}] "
+            except (TypeError, ValueError):
+                weekday = ""
+            body = (e.summary or "")[:_ENTRY_SUMMARY_CHARS]
+            days.append(f"- {weekday}{e.title}: {body}")
+            sources.append(f"{e.title} {body}")
+        sections.append(f"The {len(entries)} days that week, as tracked on the timeline:\n" + "\n".join(days))
 
     try:
         areas = json.loads(week.top_policy_areas or "[]")
     except (TypeError, ValueError):
         areas = []
+    if not isinstance(areas, list):
+        areas = []  # a JSON scalar would otherwise be joined character by character
     if areas:
-        sections.append("Dominant policy areas that week: " + ", ".join(str(a) for a in areas))
+        area_text = ", ".join(str(a) for a in areas)
+        sections.append(f"Dominant policy areas that week: {area_text}")
+        sources.append(area_text)
 
-    return "\n\n".join(sections)
+    return _WeekContext(prompt="\n\n".join(sections), sources="\n".join(sources))
+
+
+_TIMEFRAME_OPENER_RE = re.compile(r"^(?:last|this|the past)\s+week\b", re.IGNORECASE)
+
+
+def _weekly_framing_violations(text: str, week: WeekSummary) -> list[str]:
+    """Rule 6 as a mechanical check rather than a prompt-only instruction.
+
+    The header already names the week, so a body that opens "Last week…" or
+    restates the date range publishes as "Week in review (Jul 13–19): Last
+    week, the Senate…". This module treats prompt-only rules as unreliable
+    everywhere else it cares about the output (see the hedging and number
+    backstops); this one is just as visible and just as cheap to check.
+    """
+    problems = []
+    if _TIMEFRAME_OPENER_RE.match(text.strip()):
+        problems.append("a redundant timeframe opener the header already covers")
+    label = _week_label(week)
+    if label and label in text:
+        problems.append(f"the date range the header already shows ({label})")
+    return problems
 
 
 def _generate_weekly_post(week: WeekSummary, db: Session) -> str | None:
     """Condense the week's timeline record into a Bluesky post."""
-    label = _week_label(week)
+    header = _weekly_header(week)
+    max_chars = _weekly_body_budget(header)
 
     context = _week_timeline_context(week, db)
-    if not context:
+    if not context.prompt:
         logger.warning(
             "No timeline material for week %s–%s — skipping weekly post",
             week.start_date, week.end_date,
         )
         return None
 
-    user_prompt = f"""Write a Bluesky post recapping the week in civic news that
-just ended for Civitas. It stands in for the whole week, so it should read as a
-summary of the period rather than a bulletin about one story.
+    user_prompt = f"""Write a Bluesky post recapping a week in civic news for
+Civitas. It stands in for the whole week, so it should read as a summary of the
+period rather than a bulletin about one story.
 
-Week: {label}
+Week: {_week_label(week) or f"{week.start_date} to {week.end_date}"}
 
-{context}
+{context.prompt}
 
 RULES:
 1. 2-3 sentences maximum.
-2. STRICT MAXIMUM: {MAX_WEEKLY_CHARS} characters total.
+2. STRICT MAXIMUM: {max_chars} characters total.
 3. Mention 2-3 of the most significant specific events or developments, drawn
    from across the whole week rather than a single day. Let the week-in-review
    summary set which themes dominated, and take the concrete detail — who acted,
    what passed, what was ruled — from the day entries.
 4. No hashtags, no exclamation points, no editorializing.
 5. Factual and neutral — report what happened.
-6. Your text is published under the header "{WEEKLY_HEADER.format(label=label)}",
-   which already tells readers this is a recap of the week just ended. Do not
-   repeat the date range, and do not start with "This week" or "Last week".
+6. A header naming the week is printed above your text, so the timeframe is
+   already covered. Do not open with "This week" or "Last week", and do not
+   restate the dates.
 7. Report directly — never write "sources show," "reports indicate," or similar.
    State events as facts, not as something reports/coverage/sources are saying.
 8. Do not evaluate whether an action was warranted or justified, and do not
@@ -424,8 +516,8 @@ Return JSON: {{"post": "<your post text>"}}"""
             return None
 
         text = re.sub(r"#(\w+)", r"\1", result["post"]).strip()
-        if len(text) > MAX_WEEKLY_CHARS:
-            trimmed = text[:MAX_WEEKLY_CHARS]
+        if len(text) > max_chars:
+            trimmed = text[:max_chars]
             cut = max(
                 (trimmed.rfind(p) + 1 for p in (".", "!", "?") if trimmed.rfind(p) > 0),
                 default=-1,
@@ -435,25 +527,20 @@ Return JSON: {{"post": "<your post text>"}}"""
         if not text:
             return None
 
-        # Same public-post guard as the spotlight: every number must come
-        # from the timeline material (or the date label) we supplied. Hedging
-        # attribution and editorializing get the same mechanical backstop
-        # as the issue poster and full-story generator.
-        reasons = []
-        novel = ungrounded_numbers(text, user_prompt)
-        if novel:
-            reasons.append(f"numbers not present in the timeline record ({', '.join(novel)})")
+        # Checked against the timeline record alone, not the prompt: grounding
+        # reads its source as a bag of digit tokens, so passing the prompt let
+        # the model's own rule numbers and any date printed in it vouch for
+        # figures nothing in the week actually supports. Same full check and
+        # same source-material shape as bluesky_poster and election_bluesky —
+        # rule 3 asks for named actors, which is exactly what the wider check
+        # (titled names, party, electoral, relationship claims) covers.
+        reasons = grounding_violations(text, context.sources)
         reasons += hedge_and_editorializing_violations(text)
-        former = ungrounded_former_official_claims(text, user_prompt)
-        if former:
-            reasons.append(
-                f"'former' office-holder status not present in the timeline record ({', '.join(former)})"
-            )
+        reasons += _weekly_framing_violations(text, week)
         if not reasons:
-            # Header goes on after the grounding checks: it's ours, not the
-            # model's, and its date numbers would otherwise have to be
-            # re-justified against the summary on every post.
-            return f"{WEEKLY_HEADER.format(label=label)} {text}"
+            # Header goes on after the checks so its date range is never
+            # mistaken for something the model has to justify.
+            return f"{header} {text}"
 
         logger.warning(
             "Weekly post failed grounding (attempt %d): %s | post: %s",
@@ -461,10 +548,11 @@ Return JSON: {{"post": "<your post text>"}}"""
         )
         retry_note = (
             "\n\nYour previous attempt was rejected because it contained "
-            f"{'; '.join(reasons)}. Use only figures from the week-in-review "
-            "summary and day entries above, report events directly instead of through "
-            "phrases like 'sources show' or 'reports indicate,' and do not "
-            "evaluate whether any action was warranted or justified."
+            f"{'; '.join(reasons)}. Use only names and figures from the "
+            "week-in-review summary and day entries above, report events "
+            "directly instead of through phrases like 'sources show' or "
+            "'reports indicate,' leave the timeframe to the header, and do "
+            "not evaluate whether any action was warranted or justified."
         )
 
     return None

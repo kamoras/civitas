@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { fetchTimeline } from "@/lib/api";
-import { safeHref } from "@/lib/formatting";
+import { formatWeekRange, safeHref } from "@/lib/formatting";
 import type { TimelineResponse, TimelineEntry, TimelineWeek, TimelineMonth, UpcomingEvent } from "@/lib/api";
 
 const MONTH_NAMES = ["", "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
@@ -21,14 +21,6 @@ function daysUntil(dateStr: string): number {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
   return Math.round((target.getTime() - now.getTime()) / 86_400_000);
-}
-
-function formatWeekRange(startDate: string, endDate: string): string {
-  const start = new Date(startDate + "T00:00:00");
-  const end = new Date(endDate + "T00:00:00");
-  const startFmt = start.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  const endFmt = end.toLocaleDateString("en-US", { day: "numeric", year: "numeric" });
-  return `${startFmt}–${endFmt}`;
 }
 
 function EventCard({ event }: { event: UpcomingEvent }) {
@@ -140,9 +132,7 @@ function WeekCard({ week }: { week: TimelineWeek }) {
         <div className="px-3 pb-3 border-t border-matrix-green/10 pt-3 space-y-3">
           {week.summary && !week.isCurrent && (
             <div className="border-l-2 border-purple-400/30 pl-3 py-1">
-              <div className="text-[10px] font-mono tracking-widest text-purple-400/40 mb-1">
-                WEEK IN REVIEW — EVERYTHING TRACKED {formatWeekRange(week.startDate, week.endDate)}
-              </div>
+              <div className="text-[10px] font-mono tracking-widest text-purple-400/40 mb-1">WEEK IN REVIEW</div>
               <p className="text-xs text-matrix-green/60 leading-relaxed italic">{week.summary}</p>
             </div>
           )}

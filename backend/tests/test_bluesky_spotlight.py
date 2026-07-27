@@ -7,9 +7,10 @@ instead of leaving that choice and its framing to the model.
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.models import Senator, TimelineEntry, WeekSummary
 from app.pipeline.analyze.bluesky_spotlight import (
-    MAX_WEEKLY_CHARS,
     _generate_spotlight_post,
     _generate_weekly_post,
     _most_notable_score,
@@ -17,6 +18,8 @@ from app.pipeline.analyze.bluesky_spotlight import (
     _publish_weekly,
     _week_label,
     _week_timeline_context,
+    _weekly_body_budget,
+    _weekly_header,
 )
 from app.pipeline.analyze.bluesky_utils import BSKY_MAX_CHARS
 
@@ -168,23 +171,33 @@ class TestPublishWeeklyUrl:
         assert "/action?tab=timeline" in posted_text
         assert "civitas-research.org/timeline" not in posted_text
 
-    def test_header_and_url_leave_the_post_under_the_bluesky_limit(self):
-        # The header and URL are spent before the model's text is; a
-        # max-length body must still fit without the shared publisher having
-        # to truncate it.
-        week = WeekSummary(year=2025, week_num=1, start_date="2025-12-29", end_date="2026-01-04")
-        body = f"{_week_label(week)}: " + "a" * MAX_WEEKLY_CHARS
+    @pytest.mark.parametrize("start,end", [
+        ("2026-07-13", "2026-07-19"),   # same-month label
+        ("2025-12-29", "2026-01-04"),   # month- and year-spanning label
+        ("", ""),                        # unparseable — header drops the parenthetical
+    ])
+    def test_a_full_length_body_is_published_without_truncation(self, start, end):
+        # publish_post truncates unconditionally to fit the 300-char cap, so
+        # asserting len(posted) <= 300 can never fail and says nothing. What
+        # matters is that a body at the advertised budget survives intact:
+        # if the header or URL is reworded past the budget, the tail of a real
+        # post starts silently disappearing.
+        week = WeekSummary(year=2026, week_num=29, start_date=start, end_date=end)
+        header = _weekly_header(week)
+        body = "a" * _weekly_body_budget(header)
 
-        posted_text = _post_weekly(body, week)
+        posted_text = _post_weekly(f"{header} {body}", week)
 
         assert len(posted_text) <= BSKY_MAX_CHARS
+        assert body in posted_text, "the body was truncated — the budget is too generous"
+        assert posted_text.startswith(header)
 
 
 class TestWeeklyPostFraming:
     """A weekly post read as a stray news bulletin — nothing in it said the
-    text was a recap of the week just ended."""
+    text was a recap of a week."""
 
-    def test_post_is_labeled_as_a_summary_of_the_completed_week(self, db_session):
+    def test_post_is_labeled_as_a_week_summary(self, db_session):
         week = WeekSummary(
             year=2026, week_num=29, start_date="2026-07-13", end_date="2026-07-19",
             summary="The Senate passed a funding bill.",
@@ -195,8 +208,44 @@ class TestWeeklyPostFraming:
         ):
             text = _generate_weekly_post(week, db_session)
 
-        assert text.startswith("Last week in review (Jul 13–19):")
+        assert text.startswith("Week in review (Jul 13–19):")
         assert text.endswith("The Senate passed a funding bill.")
+
+    def test_header_does_not_claim_last_week(self, db_session):
+        # post_weekly_summary posts the most recent *summarized* week, and a
+        # gap in timeline entries leaves a week with no WeekSummary at all —
+        # so the week going out is not reliably the week just gone.
+        week = WeekSummary(
+            year=2026, week_num=29, start_date="2026-07-13", end_date="2026-07-19",
+            summary="The Senate passed a funding bill.",
+        )
+        with patch(
+            "app.pipeline.analyze.bluesky_spotlight.call_llm",
+            return_value={"post": "The Senate passed a funding bill."},
+        ):
+            text = _generate_weekly_post(week, db_session)
+
+        assert "last week" not in text.lower()
+
+    def test_unparseable_dates_drop_the_parenthetical_rather_than_publish_it(self):
+        # The label is published now, so the old raw-range fallback would put
+        # "(  –  )" in the feed and overflow the character budget.
+        header = _weekly_header(WeekSummary(start_date="", end_date=""))
+
+        assert header == "Week in review:"
+
+    @pytest.mark.parametrize("post", [
+        "Last week the Senate passed a funding bill.",
+        "This week the Senate passed a funding bill.",
+        "Jul 13–19 saw the Senate pass a funding bill.",
+    ])
+    def test_bodies_that_restate_the_header_timeframe_are_rejected(self, db_session, post):
+        # Rule 6 is prompt-only otherwise, and this module's own comments say
+        # prompt-only rules aren't reliably followed. The visible failure is
+        # "Week in review (Jul 13–19): Last week, the Senate…".
+        week = _seed_week(db_session)
+        with patch("app.pipeline.analyze.bluesky_spotlight.call_llm", return_value={"post": post}):
+            assert _generate_weekly_post(week, db_session) is None
 
 
 def _seed_week(db_session, **overrides) -> WeekSummary:
@@ -228,47 +277,106 @@ class TestWeekTimelineContext:
     of these same days — so the specific votes and rulings it was asked to
     name had already been compressed out before the model saw anything."""
 
-    def test_context_carries_the_published_week_summary(self, db_session):
+    def test_prompt_carries_the_published_week_summary(self, db_session):
         week = _seed_week(db_session)
-        assert "Spending and trade dominated the week." in _week_timeline_context(week, db_session)
+        assert "Spending and trade dominated the week." in _week_timeline_context(week, db_session).prompt
 
-    def test_context_carries_the_days_the_summary_was_built_from(self, db_session):
+    def test_prompt_carries_the_days_the_summary_was_built_from(self, db_session):
         week = _seed_week(db_session)
 
-        context = _week_timeline_context(week, db_session)
+        prompt = _week_timeline_context(week, db_session).prompt
 
-        assert "Senate passes funding bill" in context
-        assert "Court blocks tariff order" in context
-        assert "House opens oversight inquiry" in context
-        assert "3 days that week" in context
+        assert "Senate passes funding bill" in prompt
+        assert "Court blocks tariff order" in prompt
+        assert "House opens oversight inquiry" in prompt
 
-    def test_context_carries_the_weeks_policy_areas(self, db_session):
+    def test_prompt_carries_the_weeks_policy_areas(self, db_session):
         week = _seed_week(db_session)
-        assert "Dominant policy areas that week: Economics, Law" in _week_timeline_context(week, db_session)
+        assert "Economics, Law" in _week_timeline_context(week, db_session).prompt
+
+    def test_days_are_labelled_by_weekday_not_iso_date(self, db_session):
+        # ISO dates read robotically when the model echoes them, and their
+        # digits used to leak into the grounding source (see
+        # TestWeeklyGroundingSource).
+        week = _seed_week(db_session)
+
+        prompt = _week_timeline_context(week, db_session).prompt
+
+        assert "[Mon]" in prompt
+        assert "2026-07-13" not in prompt
 
     def test_days_outside_the_week_are_left_out(self, db_session):
         week = _seed_week(db_session)
         db_session.add(TimelineEntry(date="2026-07-20", title="Next week's news", summary=""))
         db_session.commit()
 
-        assert "Next week's news" not in _week_timeline_context(week, db_session)
+        assert "Next week's news" not in _week_timeline_context(week, db_session).prompt
+
+    def test_unparseable_week_bounds_do_not_sweep_in_unrelated_days(self, db_session):
+        # The range filter is a string comparison, so an empty start_date is
+        # <= every date on record and would pull years of unrelated entries
+        # into the prompt labelled "that week".
+        week = _seed_week(db_session, start_date="")
+        db_session.add(TimelineEntry(date="2019-03-04", title="Ancient history", summary=""))
+        db_session.commit()
+
+        prompt = _week_timeline_context(week, db_session).prompt
+
+        assert "Ancient history" not in prompt
+        assert "days that week" not in prompt
 
     def test_days_still_reach_the_model_when_the_summary_is_missing(self, db_session):
         # generate_period_summaries stores summary="" when its own LLM call
         # fails, which used to leave the post with nothing to work from.
         week = _seed_week(db_session, summary="")
 
-        context = _week_timeline_context(week, db_session)
+        assert "Senate passes funding bill" in _week_timeline_context(week, db_session).prompt
 
-        assert "Senate passes funding bill" in context
+    @pytest.mark.parametrize("stored", ["not json", '"Economics"', "5"])
+    def test_unusable_policy_areas_do_not_break_the_prompt(self, db_session, stored):
+        # A JSON scalar parses fine but would be joined character by
+        # character into "E, c, o, n, o, m, i, c, s".
+        week = _seed_week(db_session, top_policy_areas=stored)
 
-    def test_malformed_policy_areas_do_not_break_the_prompt(self, db_session):
-        week = _seed_week(db_session, top_policy_areas="not json")
+        prompt = _week_timeline_context(week, db_session).prompt
 
-        context = _week_timeline_context(week, db_session)
+        assert "Dominant policy areas" not in prompt
+        assert "Senate passes funding bill" in prompt
 
-        assert "Dominant policy areas" not in context
-        assert "Senate passes funding bill" in context
+
+class TestWeeklyGroundingSource:
+    """Grounding reads its source as a bag of digit tokens, so checking the
+    post against the whole prompt let anything printed in the prompt vouch
+    for a figure — including the model's own character-limit rule and the
+    day-entry dates. A fabricated vote tally rode out on an ISO date."""
+
+    def test_sources_exclude_the_day_dates(self, db_session):
+        sources = _week_timeline_context(_seed_week(db_session), db_session).sources
+
+        assert "2026" not in sources
+        assert "Senate passes funding bill" in sources
+
+    @pytest.mark.parametrize("post", [
+        "The Senate cleared the funding bill 17-13 and a judge stayed the tariff order.",
+        "The oversight inquiry covers 15 percent of the agency's contracts.",
+        "The judge stayed a tariff order first issued in 2026.",
+    ])
+    def test_figures_licensed_only_by_a_date_are_rejected(self, db_session, post):
+        # Every digit here appears in the week's ISO dates (2026-07-13..19)
+        # and nowhere in the timeline text.
+        week = _seed_week(db_session)
+        with patch("app.pipeline.analyze.bluesky_spotlight.call_llm", return_value={"post": post}):
+            assert _generate_weekly_post(week, db_session) is None
+
+    def test_an_official_not_in_the_timeline_is_rejected(self, db_session):
+        # Rule 3 asks the model to name who acted, so the weekly path needs
+        # the same titled-name check the other posters run.
+        week = _seed_week(db_session)
+        with patch(
+            "app.pipeline.analyze.bluesky_spotlight.call_llm",
+            return_value={"post": "Sen. Wexlerton led the funding bill through the chamber."},
+        ):
+            assert _generate_weekly_post(week, db_session) is None
 
 
 class TestWeeklyPostUsesTimelineDays:
@@ -310,6 +418,6 @@ class TestWeekLabel:
         week = WeekSummary(start_date="2026-06-29", end_date="2026-07-05")
         assert _week_label(week) == "Jun 29–Jul 5"
 
-    def test_unparseable_dates_fall_back_to_the_raw_range(self):
-        week = WeekSummary(start_date="", end_date="")
-        assert _week_label(week) == " – "
+    @pytest.mark.parametrize("start,end", [("", ""), ("2026-13-45", "2026-13-99"), (None, None)])
+    def test_unusable_dates_yield_no_label(self, start, end):
+        assert _week_label(WeekSummary(start_date=start, end_date=end)) is None
