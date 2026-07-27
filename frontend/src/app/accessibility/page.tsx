@@ -76,7 +76,7 @@ export default function AccessibilityPage() {
             <div className="space-y-2 mt-4">
               <Row label="Standard" value="WCAG 2.1 Level AA" />
               <Row label="Status" value="Fully conformant" />
-              <Row label="Last reviewed" value="2026-07-23" />
+              <Row label="Last reviewed" value="2026-07-27" />
             </div>
           </Section>
 
@@ -98,8 +98,10 @@ export default function AccessibilityPage() {
                 opacity, partisan colors lightened for improved contrast
               </Check>
               <Check>
-                Plain language toggle — all five score metrics available in everyday language
-                (e.g., &ldquo;PAC Money Reliance&rdquo; instead of &ldquo;Funding Independence&rdquo;)
+                Plain-language summaries throughout — every score metric renders a
+                jargon-free one-line explanation next to its technical label (no toggle to
+                find), and each methodology section opens with an &ldquo;In short&rdquo;
+                summary before the citations and formulas
               </Check>
               <Check>
                 Score tooltips explain every metric — no number is shown without context; the

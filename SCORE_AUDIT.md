@@ -10,12 +10,16 @@ This is a diagnostic playbook, not part of the scoring algorithm itself —
 nothing here feeds back into how scores are computed. It only reads and
 reports on scores the pipeline already produced.
 
+Every snippet below runs inside the backend container. Swarm names its
+task containers dynamically, so the commands resolve the current one with
+`docker ps -q -f name=civitas_backend` rather than hardcoding a name.
+
 ---
 
 ## Step 1 — Pull the Current Score Distribution
 
 ```bash
-docker exec mp-backend-blue python3 - <<'EOF'
+docker exec "$(docker ps -q -f name=civitas_backend)" python3 - <<'EOF'
 import sqlite3, statistics
 conn = sqlite3.connect('/data/civitas.db')
 conn.row_factory = sqlite3.Row
@@ -71,7 +75,7 @@ hand-typed (a previous version kept such a table; see that module's git
 history and docstring for why it was replaced).
 
 ```bash
-docker exec mp-backend-blue python3 - <<'EOF'
+docker exec "$(docker ps -q -f name=civitas_backend)" python3 - <<'EOF'
 from app.database import SessionLocal
 from app.pipeline.analyze.ground_truth import check_ground_truth, check_score_distribution
 
@@ -105,7 +109,7 @@ EOF
 ## Step 3 — Data Quality Assessment
 
 ```bash
-docker exec mp-backend-blue python3 - <<'EOF'
+docker exec "$(docker ps -q -f name=civitas_backend)" python3 - <<'EOF'
 import sqlite3
 conn = sqlite3.connect('/data/civitas.db')
 conn.row_factory = sqlite3.Row
@@ -200,7 +204,7 @@ EOF
 High correlation between two dimensions means they're measuring the same thing (a design flaw):
 
 ```bash
-docker exec mp-backend-blue python3 - <<'EOF'
+docker exec "$(docker ps -q -f name=civitas_backend)" python3 - <<'EOF'
 import sqlite3, statistics, math
 conn = sqlite3.connect('/data/civitas.db')
 conn.row_factory = sqlite3.Row
@@ -257,7 +261,7 @@ placeholder name — substitute whichever senator you're investigating):
 ```bash
 SENATOR_NAME="REPLACE_ME"
 
-docker exec mp-backend-blue python3 - <<EOF
+docker exec "$(docker ps -q -f name=civitas_backend)" python3 - <<EOF
 import sqlite3, json
 conn = sqlite3.connect('/data/civitas.db')
 conn.row_factory = sqlite3.Row
@@ -307,7 +311,7 @@ EOF
 ## Step 6 — House Representative Data Check
 
 ```bash
-docker exec mp-backend-blue python3 - <<'EOF'
+docker exec "$(docker ps -q -f name=civitas_backend)" python3 - <<'EOF'
 import sqlite3
 conn = sqlite3.connect('/data/civitas.db')
 conn.row_factory = sqlite3.Row
@@ -345,7 +349,7 @@ EOF
 After multiple pipeline runs, verify that scores are stable (not oscillating wildly):
 
 ```bash
-docker exec mp-backend-blue python3 - <<'EOF'
+docker exec "$(docker ps -q -f name=civitas_backend)" python3 - <<'EOF'
 import sqlite3
 conn = sqlite3.connect('/data/civitas.db')
 conn.row_factory = sqlite3.Row
@@ -393,7 +397,7 @@ EOF
 Run this BEFORE and AFTER any algorithm change to measure impact:
 
 ```bash
-docker exec mp-backend-blue python3 - <<'EOF'
+docker exec "$(docker ps -q -f name=civitas_backend)" python3 - <<'EOF'
 import sqlite3, statistics
 conn = sqlite3.connect('/data/civitas.db')
 conn.row_factory = sqlite3.Row

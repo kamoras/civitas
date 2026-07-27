@@ -4,6 +4,8 @@ Thanks for your interest in contributing. Civitas is a civic transparency projec
 
 ## Before you start
 
+- Read the [Code of Conduct](CODE_OF_CONDUCT.md) — it covers the usual ground, plus a
+  section on political subject matter that is specific to this project
 - Read the [README](README.md) to understand how the pipeline and scoring work
 - All scores are computed from public federal records. The platform is intentionally non-partisan — changes to scoring weights or methodology require clear academic or empirical justification
 - No user accounts, no tracking, no PII processing — contributions should preserve this
@@ -13,7 +15,7 @@ Thanks for your interest in contributing. Civitas is a civic transparency projec
 ### Prerequisites
 
 - Docker and Docker Compose
-- Node.js 20+
+- Node.js 24+ (the version CI builds against)
 - Python 3.13+
 - A local LLM: either [llama.cpp](https://github.com/ggerganov/llama.cpp) server or [Ollama](https://ollama.ai)
 - A free [api.data.gov](https://api.data.gov/signup/) key (covers Congress.gov, FEC, GovInfo, Regulations.gov)
@@ -32,7 +34,7 @@ cp .env.example .env
 docker compose up -d
 
 # Trigger the pipeline (generates all data)
-curl -X POST http://localhost:8000/api/pipeline/run \
+curl -X POST http://localhost:8000/api/pipeline/trigger \
   -H "Authorization: Bearer <PIPELINE_TRIGGER_TOKEN>"
 
 # Frontend
@@ -50,7 +52,7 @@ backend/        FastAPI app + pipeline
     pipeline/   Data ingestion and scoring
       analyze/  Score calculators, bill classifier, calibration
     models.py   SQLAlchemy models
-frontend/       Next.js 14 app
+frontend/       Next.js 16 app
   src/
     app/        Pages (App Router)
     components/ Reusable UI components
@@ -63,9 +65,15 @@ frontend/       Next.js 14 app
 
 1. Fork the repository and create a branch from `main`
 2. Make your changes with focused commits
-3. Run tests: `cd backend && python -m pytest tests/`
-4. Run the frontend build: `cd frontend && npm run build`
+3. Run the backend tests: `cd backend && python -m pytest tests/`
+   (`-m "not slow"` skips the tests that load the sentence-transformer model)
+4. Run the frontend checks: `cd frontend && npm run lint && npm test && npm run build`
 5. Open a pull request with a clear description of what changed and why
+
+CI gates every PR on all of the above, plus `ruff check app/` and two backend
+coverage checks: a 46% total floor and a 60% floor on the lines your PR
+changes (`diff-cover`). Adding tests alongside a change is the path of least
+resistance.
 
 ## What to contribute
 
@@ -84,7 +92,7 @@ frontend/       Next.js 14 app
 
 **Backend (Python):** Follow the existing patterns — SQLAlchemy 2.0 declarative style, async FastAPI endpoints, type hints throughout. Run `ruff check` before submitting.
 
-**Frontend (TypeScript):** Next.js 14 App Router patterns. Run `npm run build` — TypeScript errors block CI.
+**Frontend (TypeScript):** Next.js 16 App Router patterns. Run `npm run lint` and `npm run build` — lint failures and TypeScript errors both block CI.
 
 No AI-generated comments explaining what code does. If a line needs a comment, the comment should explain *why* something non-obvious is done.
 

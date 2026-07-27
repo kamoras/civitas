@@ -43,6 +43,19 @@ class Settings(BaseSettings):
     # model in ollama and setting e.g. OLLAMA_STORY_MODEL=qwen3:4b —
     # then compare validator rejection rates in the api_cache
     # "action-metrics" tier before/after.
+    #
+    # INERT ON THE llama-server BACKEND (the default, and what production
+    # runs). call_llm resolves this into use_model, but the llama-server
+    # branch calls _call_llama_server(), which takes no model argument and
+    # sends no model field — llama-server serves whichever single model it
+    # was launched with. Only _call_ollama() honors it. use_model does
+    # still feed _make_input_hash, so setting this under llama-server
+    # invalidates cached generations and triggers fresh ones from the SAME
+    # 1.2B model: the before/after comparison suggested above would show
+    # movement from cache churn and resampling, not from a better model.
+    # Making the two-tier design real on this backend needs a second
+    # llama-server instance (or a swapping proxy) plus a per-call backend
+    # target, not just plumbing the argument through.
     OLLAMA_STORY_MODEL: str = ""
     LLM_BACKEND: str = "llama-server"
     LLAMA_SERVER_URL: str = "http://host.docker.internal:8070"

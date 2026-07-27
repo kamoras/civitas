@@ -208,7 +208,7 @@ export default function RepresentationScore({ breakdown, votingRecord, funding, 
       </div>
 
       <div className="mt-3 text-[10px] text-matrix-green/50">
-        Data: fec.gov · opensecrets.org · congress.gov · Scores regress toward 50 when data is sparse
+        Data: fec.gov · congress.gov · govinfo.gov · voteview.com · Scores regress toward 50 when data is sparse
       </div>
     </div>
   );

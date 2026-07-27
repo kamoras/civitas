@@ -15,7 +15,7 @@ export const SCORE_TERMS: Record<ScoreKey, ScoreTerm> = {
     label: "Funding Independence",
     shortLabel: "FUNDING",
     description:
-      "How free is this senator from PAC and mega-donor influence? Penalizes heavy reliance on PAC money and concentration in a few top donors.",
+      "How free is this member from PAC and mega-donor influence? Blends PAC dependency (scaled by how close contributing PACs run to their legal caps), state-relative small-donor share, top-donor concentration, and — folded in from Funding Diversity in v6.5 — source breadth and industry concentration.",
   },
   independentVoting: {
     label: "Constituent Alignment",
@@ -27,7 +27,7 @@ export const SCORE_TERMS: Record<ScoreKey, ScoreTerm> = {
     label: "Funding Diversity",
     shortLabel: "DIVERSITY",
     description:
-      "Is their funding spread across many industries, or dominated by a few? Uses Shannon entropy to measure concentration. Higher = more diverse funding sources.",
+      "Is their funding spread across many industries, or dominated by a few? Blends source breadth (small-donor money counts most, opaque money least) with an inverse Herfindahl-Hirschman Index of industry concentration. Higher = more diverse funding sources. Folded into Funding Independence in v6.5 and no longer weighted into the overall score on its own; still computed and shown.",
   },
   legislativeEffectiveness: {
     label: "Legislative Effectiveness",

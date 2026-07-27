@@ -13,7 +13,11 @@ Civitas processes only public federal data (Congress.gov, FEC, GovInfo, etc.) an
 
 If you find a security issue, please do **not** open a public GitHub issue.
 
-Email: **mack.ryanm@gmail.com** with subject line `[CIVITAS SECURITY]`.
+Two private channels, either is fine:
+
+- [GitHub's security advisory form](https://github.com/kamoras/civitas/security/advisories/new)
+  — preferred, and where the issue tracker's own "Security vulnerability" link points
+- Email **mack.ryanm@gmail.com** with subject line `[CIVITAS SECURITY]`
 
 Include:
 - Description of the vulnerability and affected component

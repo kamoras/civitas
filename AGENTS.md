@@ -18,8 +18,10 @@ locally on a single self-hosted device with zero cloud AI calls.
 - **Frontend**: Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS — port 3000 (not published to the host under Swarm — see Deployment)
 - **Backend**: FastAPI (Python 3.13), SQLAlchemy ORM, SQLite — port 8000 (same)
 - **LLM**: LFM2.5-1.2B-Instruct via llama.cpp (native ARM, port 8070) or Ollama (Docker, port 11434)
-- **Embeddings**: sentence-transformers (Snowflake Arctic-XS), runs in-process
-- **Vector Store**: ChromaDB for semantic search document store
+- **Embeddings**: sentence-transformers, two models in-process — Snowflake Arctic-XS
+  (classification) and all-MiniLM-L6-v2 (search index + similarity gates)
+- **Vector Store**: sqlite-vec (`vec0` virtual tables in `/data/vectors.db`) — replaced
+  ChromaDB in the 2026-07 migration; see `pipeline/vector_store.py`
 - **Deployment**: Docker Swarm (single-node), `docker stack deploy` for zero-downtime rolling updates, nginx (in-stack) reverse proxy with caching
 - **Branches covered**: Senate (100 senators), House (435 representatives), Presidents (historical + modern), Supreme Court (9 justices)
 - **News Feeds**: RSS parsing (AP, NPR, Reuters, PBS) + Google Trends + Reddit trending for Action Center
@@ -42,7 +44,7 @@ civitas/
 │   │   │   ├── assemble/        # Scorecard builder + validator
 │   │   │   ├── senate_pipeline.py, house_pipeline.py  # FETCH→TRANSFORM→ANALYZE→ASSEMBLE+SAVE per chamber
 │   │   │   ├── stock_pipeline.py  # STOCK Act trade-disclosure ingestion (sibling phase)
-│   │   │   └── vector_store.py  # ChromaDB + sentence-transformer model management
+│   │   │   └── vector_store.py  # sqlite-vec + sentence-transformer model management
 │   │   ├── models.py            # SQLAlchemy ORM (Senator, Representative, KeyVote, Justice, NationalMonitor, TimelineEntry, etc.)
 │   │   ├── schemas.py           # Pydantic response schemas (incl. PaginatedVotesSchema)
 │   │   ├── database.py          # DB engine + session management
@@ -176,7 +178,7 @@ computes a SHA-256 fingerprint of all analysis-relevant source files
 This fingerprint is compared to the stored hash from the last pipeline run:
 
 - **Same hash** → all learning data is preserved (learning store, analysis
-  cache, ChromaDB reference corpus). The self-training system accumulates
+  cache, sqlite-vec reference corpus). The self-training system accumulates
   knowledge across same-version runs.
 - **Different hash** → all three persistence layers are cleared so updated
   algorithms start fresh. The API cache (raw Congress.gov / FEC / GovInfo
