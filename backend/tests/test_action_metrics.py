@@ -2,8 +2,15 @@
 (action_metrics.py) — the audit-M9 fix making validator hit-rates
 measurable instead of log-only."""
 
+import json
 from unittest.mock import patch
 
+# Registers every table on Base before conftest's db_session fixture calls
+# create_all. Without it this module's only model reference is an inline
+# import inside a test body — too late for that test's own fixture — so the
+# api_cache assertions here passed or failed purely on whether some earlier
+# test in the session happened to import app.models first.
+from app import models  # noqa: F401
 from app.pipeline.analyze import action_metrics
 
 
@@ -42,3 +49,37 @@ class TestCounters:
             "app.pipeline.cache.api_cache_set", side_effect=RuntimeError("boom"),
         ):
             action_metrics.persist(db_session, "run-x")  # must not raise
+
+
+class TestPersistMetricsHelper:
+    """_persist_metrics is the shared exit-path writer in action_center.
+
+    It exists so the two early aborts (nothing fetched, nothing
+    policy-relevant) leave a record: those runs return before the tail
+    persist, so a broken feed and a genuinely quiet hour were both an
+    absent row and could not be told apart after the fact.
+    """
+
+    def test_writes_current_counters_under_a_run_key(self, db_session):
+        from app.models import ApiCache
+        from app.pipeline.analyze.action_center import _persist_metrics
+
+        action_metrics.reset()
+        action_metrics.increment("refresh_aborted_no_articles")
+
+        returned = _persist_metrics(db_session)
+
+        assert returned == {"refresh_aborted_no_articles": 1}
+        row = db_session.query(ApiCache).filter(ApiCache.tier == "action-metrics").one()
+        assert row.cache_key.startswith("run-")
+        assert json.loads(row.data_json)["counts"] == {"refresh_aborted_no_articles": 1}
+
+    def test_survives_a_failing_write(self, db_session):
+        # Same posture as persist() itself: reporting on a refresh must
+        # never be what takes the refresh down.
+        from app.pipeline.analyze.action_center import _persist_metrics
+
+        action_metrics.reset()
+        action_metrics.increment("articles_fetched", 3)
+        with patch("app.pipeline.cache.api_cache_set", side_effect=RuntimeError("boom")):
+            assert _persist_metrics(db_session) == {"articles_fetched": 3}
