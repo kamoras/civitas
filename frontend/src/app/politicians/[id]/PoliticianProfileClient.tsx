@@ -9,6 +9,7 @@ import TerminalTitlebar from "@/components/TerminalTitlebar";
 import SenatorCard from "@/components/checker/SenatorCard";
 import { PresidentCard } from "@/components/president/PresidentClient";
 import { JusticeCard } from "@/components/justice/JusticeClient";
+import { formerOfficeNotice } from "@/lib/officeStatus";
 import type { PoliticianProfile, GovernmentDoc } from "@/types/politicians";
 import type { Senator } from "@/types/senator";
 import type { President } from "@/types/president";
@@ -73,6 +74,14 @@ function SectionBlock({ title, children }: { title: string; children: React.Reac
 export default function PoliticianProfileClient({ profile }: { profile: PoliticianProfile }) {
   const { identity, branch, hasScorecard, activeIssues, governmentRecord, scorecard } = profile;
 
+  // Justices carry `isActive`; every other branch carries `isCurrent`.
+  const hasLeftOffice = branch === "scotus"
+    ? identity.isActive === false
+    : identity.isCurrent === false;
+  const formerOffice = hasLeftOffice
+    ? formerOfficeNotice({ branch, ...identity })
+    : null;
+
   return (
     <div className="min-h-screen bg-crt-black text-matrix-green">
       <MatrixRain />
@@ -89,17 +98,14 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
             <span className="text-matrix-green/50">{branchLabel(branch)}</span>
           </div>
 
-          {/* Vacancy banner */}
-          {identity.isCurrent === false && (
+          {/* Left-office banner — wording is branch-specific, see officeStatus.ts */}
+          {formerOffice && (
             <div className="mb-6 border border-neon-pink/40 bg-neon-pink/5 px-4 py-3">
               <p className="font-mono text-xs text-neon-pink tracking-widest uppercase mb-1">
-                Seat Vacant
+                {formerOffice.label}
               </p>
               <p className="font-mono text-[11px] text-matrix-green/60">
-                {identity.name} is no longer serving
-                {identity.vacancyReason ? ` (${identity.vacancyReason})` : ""}
-                {identity.leftOfficeDate ? ` as of ${identity.leftOfficeDate}` : ""}.
-                The scores and data below reflect their record while in office.
+                {formerOffice.detail}
               </p>
             </div>
           )}

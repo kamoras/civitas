@@ -11,9 +11,14 @@ four tables, then compose identity + scorecard + active issues + government
 record into a single response.
 
 NOTE: Senator/Representative.is_current marks a seat vacant (death,
-resignation, expulsion) without deleting or hiding the departed member —
-historical scores stay intact and visible, with a vacancy banner instead.
-Set manually via the admin panel; there is no automated vacancy detection.
+resignation, expulsion) without immediately deleting or hiding the
+departed member — scores stay intact and visible, with a vacancy banner
+instead. Set automatically by pipeline/member_lifecycle.py, which each
+night flags anyone missing from the Congress.gov roster and deletes
+anyone who left more than RETIREMENT_GRACE_DAYS ago; the admin panel can
+still set or clear it by hand. Departed members are excluded from the
+Senate/House leaderboards immediately, but stay in this directory for the
+whole grace period. Presidents are never removed by any of that.
 """
 import json
 

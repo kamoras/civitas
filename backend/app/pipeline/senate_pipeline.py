@@ -67,6 +67,11 @@ from app.pipeline.fetch.fec import (
 )
 from app.pipeline.fetch.govinfo import fetch_bill_text
 from app.pipeline.fetch.lda import enrich_lobbying_matches_with_lda
+from app.pipeline.member_lifecycle import (
+    CHAMBER_SENATE,
+    purge_departed_members,
+    reconcile_roster,
+)
 from app.pipeline.run_checks import persist_ground_truth_failures, run_calibration_check
 from app.pipeline.progress_tracker import ProgressTracker
 # Transform modules
@@ -787,6 +792,26 @@ async def run_senate_pipeline(
 
             pipeline_run.senators_total = len(senators)
             db.commit()
+
+            # 2b. Reconcile the roster: anyone in the database but not in
+            # tonight's fetch has left office, and anyone who left long
+            # enough ago gets removed. Skipped for a filtered run — the
+            # normalized list is a single senator there, which every other
+            # senator would look "absent" against.
+            if senator_filter:
+                logger.info("Skipping roster reconciliation — filtered run (%s)", senator_filter)
+            else:
+                reconcile_roster(
+                    db, CHAMBER_SENATE, {m.get("bioguideId", "") for m in raw_members},
+                )
+                # The purge deletes rows outright, so it stays out of
+                # fetch-only runs — those exist to exercise the fetch path
+                # without side effects beyond refreshed data. Marking a
+                # departure above is fine there: it is derived purely from
+                # this fetch and the next full run reverses it if wrong.
+                if not fetch_only:
+                    purge_departed_members(db, CHAMBER_SENATE)
+                db.commit()
 
             # 1c. Dynamically discover significant bills
             logger.info("Discovering significant bills...")

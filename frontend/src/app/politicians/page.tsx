@@ -10,6 +10,7 @@ import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import { fetchPoliticianDirectory } from "@/lib/api";
 import { getScoreBgColor } from "@/lib/representation";
+import { formerOfficeBadge } from "@/lib/officeStatus";
 import type { PoliticianCard } from "@/types/politicians";
 
 type BranchFilter = "all" | "senate" | "house" | "president" | "scotus";
@@ -83,7 +84,7 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
 
           {p.isCurrent === false ? (
             <span className="font-mono text-[9px] text-neon-pink/70 tracking-widest border border-neon-pink/30 px-1.5 py-0.5">
-              SEAT VACANT{p.vacancyReason ? ` — ${p.vacancyReason.toUpperCase()}` : ""}
+              {formerOfficeBadge(p)}
             </span>
           ) : p.hasScorecard && p.overallScore != null ? (
             <ScoreBar score={p.overallScore} />

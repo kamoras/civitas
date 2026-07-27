@@ -284,7 +284,10 @@ def get_rep_leaderboard(
     per_page: int = 50,
     party: str | None = None,
 ) -> dict:
-    reps = db.query(Representative).all()
+    """Currently-serving representatives ranked by score — departed members
+    are excluded for the same reason as the Senate leaderboard (see
+    senator_service.get_leaderboard's docstring)."""
+    reps = db.query(Representative).filter(Representative.is_current == True).all()  # noqa: E712
 
     # Party-relative ideology label thresholds over the FULL cohort — before
     # the party filter/pagination below — so the terciles are stable

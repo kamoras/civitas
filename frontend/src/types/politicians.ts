@@ -1,6 +1,8 @@
+export type PoliticianBranch = "senate" | "house" | "president" | "scotus";
+
 export interface PoliticianCard {
   id: string;
-  branch: "senate" | "house" | "president" | "scotus";
+  branch: PoliticianBranch;
   name: string;
   party: string;
   state?: string;
@@ -76,7 +78,7 @@ export interface GovernmentRecord {
 
 export interface PoliticianProfile {
   id: string;
-  branch: "senate" | "house" | "president" | "scotus";
+  branch: PoliticianBranch;
   identity: PoliticianIdentity;
   hasScorecard: boolean;
   overallScore?: number | null;
