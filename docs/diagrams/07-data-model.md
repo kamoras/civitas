@@ -5,6 +5,11 @@ file (`/data/vectors.db`) holding the `vec_explore` and `vec_bills` vector
 tables — split out for writer-lock isolation, not just tidiness. Shown here in clusters; infrastructure tables are listed rather
 than drawn.
 
+**Columns are a selection, not the full schema.** Each entity draws enough to
+follow its relationships and the behavior these diagrams discuss, not every
+column on the table — `backend/app/models.py` is the authority. An undrawn
+column is one these diagrams don't need, not one that doesn't exist.
+
 ## Members of Congress
 
 Senators and representatives have **parallel, mirrored table sets**. The
@@ -59,9 +64,13 @@ erDiagram
         string state
         string district
         string party
+        bool is_current "false = left office; row deleted 180 days later"
         float score_funding_independence
-        float score_independent_voting
+        float score_independent_voting "Constituent Alignment"
         float score_legislative_effectiveness
+        float score_promise_persistence "unweighted since v6.0"
+        float score_funding_diversity "unweighted since v6.5"
+        float score_confidence
     }
 ```
 
@@ -126,9 +135,17 @@ erDiagram
         json facts
         json actions
         json source_urls
+        json source_names
+        json policy_areas
         json related_bill_ids
+        json related_senators
+        json related_officials "a 'named in coverage' match is a publish gate"
+        json related_explore_ids "2+ is a publish gate"
         json related_monitor_slugs
+        text full_story "cached long-form text, cleared when the story shifts"
         datetime bsky_posted_at "null = never posted"
+        int bsky_posted_rank "rank at the time of that post"
+        text bsky_last_post_text "what was published, for the near-duplicate gate"
         json bsky_posted_facts "facts as of the last post, the repost baseline"
         date primary_article_date "advances only on genuinely newer articles"
         bool is_current
