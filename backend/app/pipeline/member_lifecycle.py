@@ -92,6 +92,29 @@ def _today_str(today: str | None) -> str:
     return today or utcnow().strftime("%Y-%m-%d")
 
 
+def _alert(subject: str, body: str, *, dedupe_key: str) -> None:
+    """Best-effort ops alert. Imported lazily and never allowed to raise —
+    this module runs mid-pipeline and an alerting failure must not take the
+    nightly run down with it (same lazy-import pattern as scheduler.py)."""
+    try:
+        from app.ops_alerts import send_ops_alert
+        send_ops_alert(subject, body, dedupe_key=dedupe_key)
+    except Exception:
+        logger.exception("Failed to send ops alert: %s", subject)
+
+
+def _is_iso_date(value: str | None) -> bool:
+    """True for a real YYYY-MM-DD date. The purge compares dates as
+    strings, which is only sound for that exact format."""
+    if not value:
+        return False
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        return False
+    return True
+
+
 def reconcile_roster(
     db: Session,
     chamber: str,
@@ -127,6 +150,20 @@ def reconcile_roster(
             "Roster reconciliation skipped for %s — roster has %d members but "
             "%d are currently serving (floor %.0f); treating as a failed fetch",
             chamber, len(roster), len(serving), floor,
+        )
+        # Alerted, not just logged: fetch_senators caches whatever it got,
+        # and its pagination loop breaks silently on a mid-run failure, so
+        # one truncated response can keep this skipping every night with
+        # nothing but a log line to show for it. Same reasoning as
+        # scheduler.py's alert on a skipped pipeline step.
+        _alert(
+            f"{chamber.title()} roster reconciliation skipped",
+            f"Tonight's {chamber} roster had {len(roster)} members but "
+            f"{len(serving)} are recorded as currently serving. This looks "
+            "like a truncated or failed Congress.gov fetch, so no member was "
+            "retired. Departures will go undetected until it recovers; if "
+            "this repeats, check the cached roster.",
+            dedupe_key=f"roster-skipped-{chamber}-{today}",
         )
         return {
             "status": "skipped",
@@ -183,12 +220,13 @@ def purge_departed_members(
     today: str | None = None,
     grace_days: int = RETIREMENT_GRACE_DAYS,
 ) -> dict:
-    """Delete members who left office more than ``grace_days`` ago.
+    """Delete members whose ``left_office_date`` is on or before
+    ``today - grace_days``.
 
-    A member marked not-current but carrying no ``left_office_date`` (an
-    older manual admin vacancy) gets one stamped with today's date rather
-    than being deleted immediately or ignored forever — the clock starts
-    now and they are removed on a later run.
+    A member marked not-current but carrying no usable ``left_office_date``
+    — an older manual admin vacancy, or a malformed value — gets today's
+    date stamped rather than being deleted immediately or ignored forever.
+    The clock starts now and they are removed on a later run.
 
     Returns a summary dict; commits nothing.
     """
@@ -202,7 +240,19 @@ def purge_departed_members(
     stamped: list[str] = []
 
     for m in candidates:
-        if not m.left_office_date:
+        if not _is_iso_date(m.left_office_date):
+            # No date, or one that isn't YYYY-MM-DD. Both get today's date
+            # rather than a deletion: the cutoff test below is a string
+            # comparison, and a malformed value sorts arbitrarily against
+            # it — "2026" and "07/01/2026" both compare BELOW any real
+            # cutoff and would delete the member (and every donor, vote,
+            # promise, bill and trade of theirs) on the next run. Restamping
+            # is self-healing; the clock simply starts now.
+            if m.left_office_date:
+                logger.warning(
+                    "Unparseable left_office_date %r on %s — restamping as %s "
+                    "instead of purging", m.left_office_date, m.id, today,
+                )
             m.left_office_date = today
             stamped.append(m.id)
             continue

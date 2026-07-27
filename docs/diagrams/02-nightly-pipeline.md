@@ -18,7 +18,8 @@ flowchart TB
 
     P1["<b>1. FETCH</b><br/>Congress · FEC · GovInfo · Senate.gov<br/>Voteview ideal points<br/>raw responses stored verbatim in ApiCache"]
     P2["<b>2. TRANSFORM</b><br/>FEC dedup by committee ID + amendment<br/>bill title normalisation<br/>employer name canonicalisation<br/>memo-text earmark separation"]
-    P1 --> P2 --> P3
+    P2B["<b>2b. ROSTER LIFECYCLE</b><br/>in DB but off the roster → seat vacant<br/>back on the roster → restored<br/>gone > 180 days → deleted with child rows<br/><i>skipped if the roster looks truncated</i><br/><i>presidents and justices never touched</i>"]
+    P1 --> P2 --> P2B --> P3
 
     subgraph P3["3. ANALYZE — producer/consumer, per member"]
         direction LR
@@ -53,6 +54,25 @@ full queue.
 Peak memory during this phase, with embedding and LLM work overlapped, reaches
 about 3 GB.
 
+## Why a truncated roster can't retire a chamber
+
+Roster reconciliation infers departure from *absence* — a member in the
+database but missing from tonight's fetch has left office. That inference is
+only as good as the fetch, and `fetch_senators` breaks out of its pagination
+loop on a failed page rather than raising, then caches whatever it collected.
+One bad response could therefore look like a mass resignation.
+
+So reconciliation refuses to run when the roster is smaller than 90% of the
+members currently recorded as serving, and raises an ops alert rather than
+skipping silently. Real turnover still passes: at a new Congress the roster is
+*replaced*, not shrunk, so a 60–80 member freshman class clears the check.
+
+Removal is separately guarded. `left_office_date` is compared as a string, so
+a malformed value ("2026", "07/01/2026") would sort below any cutoff and
+delete a member outright; the purge restamps anything that isn't a real
+`YYYY-MM-DD` date instead of acting on it, and the admin vacancy endpoint
+rejects it up front.
+
 ## The SQLite mutex
 
 Concurrency control is a row in `pipeline_runs` (`status == "running"`), not a
@@ -77,6 +97,7 @@ become wrong because analysis code changed. See [06 — Caching](06-caching.md).
 | Orchestration | `backend/app/pipeline/senate_pipeline.py`, `house_pipeline.py` |
 | Fetch clients | `backend/app/pipeline/fetch/` |
 | Transform | `backend/app/pipeline/transform/` |
+| Roster lifecycle | `backend/app/pipeline/member_lifecycle.py` |
 | Analyze | `backend/app/pipeline/analyze/` |
 | Assemble + validate | `backend/app/pipeline/assemble/` |
 | Run bookkeeping | `backend/app/pipeline/run_tracker.py`, `progress_tracker.py` |

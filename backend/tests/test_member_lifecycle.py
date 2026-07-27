@@ -101,6 +101,37 @@ def test_partial_roster_fetch_retires_nobody(db_session):
     assert db_session.query(Senator).filter_by(is_current=False).count() == 0
 
 
+def test_partial_roster_fetch_raises_an_ops_alert(db_session, monkeypatch):
+    """A silent skip could run for weeks — fetch_senators caches whatever
+    it got and breaks out of pagination without erroring."""
+    sent = []
+    monkeypatch.setattr(
+        "app.ops_alerts.send_ops_alert",
+        lambda subject, body, **kw: sent.append(subject) or True,
+    )
+    for i in range(20):
+        _senator(db_session, f"sen-{i}", f"S{i:05d}")
+    db_session.flush()
+
+    reconcile_roster(db_session, CHAMBER_SENATE, {"S00000"}, today=TODAY)
+
+    assert sent and "roster reconciliation skipped" in sent[0].lower()
+
+
+def test_alert_failure_does_not_break_the_pipeline(db_session, monkeypatch):
+    def _boom(*a, **kw):
+        raise RuntimeError("smtp down")
+
+    monkeypatch.setattr("app.ops_alerts.send_ops_alert", _boom)
+    for i in range(20):
+        _senator(db_session, f"sen-{i}", f"S{i:05d}")
+    db_session.flush()
+
+    result = reconcile_roster(db_session, CHAMBER_SENATE, {"S00000"}, today=TODAY)
+
+    assert result["status"] == "skipped"
+
+
 def test_empty_roster_retires_nobody(db_session):
     _senator(db_session, "sen-a", "S00001")
     db_session.flush()
@@ -200,6 +231,23 @@ def test_manual_vacancy_without_a_date_gets_one_stamped(db_session):
     assert result["purged"] == []
     assert result["stamped"] == ["old-manual"]
     assert db_session.query(Senator).filter_by(id="old-manual").one().left_office_date == TODAY
+
+
+@pytest.mark.parametrize("bad_date", ["2026", "07/01/2026", "unknown", "2026-13-45"])
+def test_malformed_departure_date_never_triggers_a_delete(db_session, bad_date):
+    """The cutoff test is a string comparison, so a plausible admin typo
+    can sort below any real cutoff. Those must be restamped, not acted on
+    — deleting a member takes their donors, votes and bills with them."""
+    _senator(db_session, "typo-date", "S00001", is_current=False, left=bad_date)
+    db_session.add(Donor(senator_id="typo-date", name="Acme PAC", total=1.0, type="PAC"))
+    db_session.flush()
+
+    result = purge_departed_members(db_session, CHAMBER_SENATE, today=TODAY)
+
+    assert result["purged"] == []
+    assert result["stamped"] == ["typo-date"]
+    assert db_session.query(Senator).filter_by(id="typo-date").one().left_office_date == TODAY
+    assert db_session.query(Donor).filter_by(senator_id="typo-date").count() == 1
 
 
 def test_purge_removes_child_rows(db_session):

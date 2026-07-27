@@ -398,6 +398,21 @@ async def admin_set_vacancy(
     if reason is not None and reason not in _VACANCY_REASONS:
         raise HTTPException(status_code=400, detail=f"reason must be one of {sorted(_VACANCY_REASONS)}")
 
+    # Validated, not merely stored: member_lifecycle's purge compares this
+    # field as a string against a YYYY-MM-DD cutoff, so a plausible-looking
+    # typo ("2026", "07/01/2026") sorts below every real cutoff and would
+    # delete the member on the next nightly run. The purge re-stamps
+    # anything malformed rather than acting on it, but the value should
+    # never get that far.
+    if left_office_date is not None:
+        try:
+            datetime.strptime(left_office_date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="left_office_date must be YYYY-MM-DD",
+            ) from None
+
     entity = db.query(Senator).filter(Senator.id == politician_id).first()
     if entity is None:
         entity = db.query(Representative).filter(Representative.id == politician_id).first()

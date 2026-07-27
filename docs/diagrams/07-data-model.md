@@ -37,7 +37,7 @@ erDiagram
         string state
         string party
         int years_in_office
-        bool is_current
+        bool is_current "false = left office; row deleted 180 days later"
         float score_funding_independence
         float score_independent_voting "Constituent Alignment"
         float score_legislative_effectiveness
@@ -137,7 +137,7 @@ erDiagram
         int id PK
         string slug UK
         string title
-        string status "active | watching"
+        string status "active | watching | closed"
         json policy_areas
         date last_article_date
     }
