@@ -101,6 +101,12 @@ external API calls to cloud AI services.
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
+> **Rendered diagrams:** [`docs/diagrams/`](docs/diagrams/) has Mermaid versions of
+> this and eight other views — pipeline internals, classification tiers, scoring
+> composition, the schema, and the deploy sequence — with more detail than ASCII
+> fits. They render as pictures on GitHub. The diagrams here stay ASCII so the
+> README reads the same in a terminal.
+
 **Hardware:** Raspberry Pi 5 (16 GB RAM), NVMe SSD. All models, databases, and services run on-device. No cloud GPU, no third-party AI APIs, no data leaves the device.
 
 ---
@@ -878,6 +884,8 @@ CI gates, and what a scoring-methodology change needs to argue.
   politicians
 - [Security policy](SECURITY.md) — please report vulnerabilities privately
   rather than in a public issue
+- [Architecture diagrams](docs/diagrams/) — rendered Mermaid views of the
+  pipeline, scoring, schema, and deployment
 
 ## References
 
