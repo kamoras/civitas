@@ -406,7 +406,8 @@ Every hour at :15
        ▼
  10. BLUESKY ─── Post new/updated issues (LLM-written, with staleness framing
        │         if event predates today). Daily senator score spotlight.
-       │         Weekly civic summary.
+       │         Weekly civic summary.  (spotlight + weekly also run on the
+       │         early-abort paths above — neither depends on the news)
        │         Repost + like outlet posts that match active issues.
 ```
 
@@ -431,11 +432,15 @@ The Civitas Bluesky account (`@civitas-research.org`) is updated automatically b
 | Post type | Trigger | Content |
 |-----------|---------|---------|
 | **Issue post** | New topic enters action center, or existing topic gets articles with a newer date | LLM-written 1–3 sentence summary. If event predates today, post opens with "Yesterday: …" or "On [date]: …" |
-| **Senator spotlight** | Once per day (cycles highest → lowest scorers) | LLM-written score highlight with data from Civitas scorecard |
+| **Senator spotlight** | Once per day (random pick from those not yet spotlighted, cycling through all before repeating) | LLM-written score highlight with data from Civitas scorecard |
 | **Weekly summary** | Once per week (6-day cooldown) | LLM-written condensed week-in-review from the timeline pipeline |
 | **Repost + like** | Outlet post matches an active issue (cosine sim ≥ 0.78) | Reposts + likes posts from AP News, NPR, and PBS NewsHour (`NEWS_OUTLET_HANDLES` — a narrower list than the RSS feed set, since it needs a Bluesky presence); posts under 24h old; max 3 per hourly run |
 
-Each issue links back to its permanent Civitas permalink (`/issue/<id>`). The permalink is stable — issue IDs never change even as content is updated.
+The spotlight pick is deliberately *not* the highest or lowest scorer. Always picking an extreme, combined with framing it as praise or criticism, produced a real incident: a "praise" post about a senator's score read as badly out of touch after negative news broke about him the same day. A random pick with unevaluative framing can't fail that way.
+
+The spotlight and the weekly summary read senator scores and the timeline, not the news, so they run on every refresh — including the two paths that abort early because no articles arrived or none were policy-relevant. That makes a missing spotlight a usable signal in its own right: if it hasn't posted, the pipeline isn't completing, and the quiet isn't a slow news day.
+
+Each issue links back to its permanent Civitas permalink (`/issue/<id>`). The permalink is stable — issue IDs never change even as content is updated, and any issue that has ever been published is retained indefinitely. The 14-day cleanup of old issues keys on `bsky_last_post_text` (only ever written on a successful publish) rather than `bsky_posted_at`, which the repost path clears and so does not mean "never published".
 
 ---
 

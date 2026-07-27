@@ -143,9 +143,9 @@ erDiagram
         json related_explore_ids "2+ is a publish gate"
         json related_monitor_slugs
         text full_story "cached long-form text, cleared when the story shifts"
-        datetime bsky_posted_at "null = never posted"
+        datetime bsky_posted_at "null = awaiting the poster, NOT never posted"
         int bsky_posted_rank "rank at the time of that post"
-        text bsky_last_post_text "what was published, for the near-duplicate gate"
+        text bsky_last_post_text "what was published; near-duplicate gate + retention key"
         json bsky_posted_facts "facts as of the last post, the repost baseline"
         date primary_article_date "advances only on genuinely newer articles"
         bool is_current
@@ -175,6 +175,17 @@ linked bill was renumbered.
 
 `WEEK_SUMMARIES`, `MONTH_SUMMARIES` and `YEAR_SUMMARIES` roll up
 `TIMELINE_ENTRIES` at period boundaries with no FK, keyed by period.
+
+**`bsky_posted_at` is not a "has this been published" flag**, and reading it as
+one is a live bug source. It means "the poster has nothing queued for this
+issue": the repost path clears it back to NULL to hand a published issue *back*
+to the poster, so a row that published, was flagged for a repost, then failed to
+publish the update (two grounding rejections, a publish error) or stopped being
+matched sits at NULL with a real post live in the feed. The 14-day cleanup of
+old issues therefore keys on `bsky_last_post_text`, which is only ever written
+on a successful publish and never cleared — the honest record of "readers have a
+URL for this". Near-duplicate suppression leaves it NULL on purpose: nothing was
+published, so there is no permalink to protect and the row is free to age out.
 
 ## Score history
 
