@@ -21,6 +21,11 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import SessionLocal
 from app.models import HousePipelineRun, PipelineStatus, Representative, ScoreSnapshot
+from app.pipeline.member_lifecycle import (
+    CHAMBER_HOUSE,
+    purge_departed_members,
+    reconcile_roster,
+)
 from app.pipeline.progress_tracker import ProgressTracker
 from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
 from app.services.representative_service import upsert_representative
@@ -159,6 +164,15 @@ async def run_house_pipeline() -> dict:
             reps = normalize_house_members(raw_members, member_details)
             logger.info("Normalized %d representatives", len(reps))
             progress.complete("normalize", detail=f"{len(reps)} representatives")
+
+            # Reconcile the roster: anyone in the database but not in
+            # tonight's fetch has left office, and anyone who left long
+            # enough ago gets removed. See member_lifecycle.py — the House
+            # is where this matters most, since special elections leave
+            # seats open for months at a time.
+            reconcile_roster(db, CHAMBER_HOUSE, {m.get("bioguideId", "") for m in raw_members})
+            purge_departed_members(db, CHAMBER_HOUSE)
+            db.commit()
 
             # Build bioguide -> rep mapping
             bio_to_rep: dict[str, dict] = {}

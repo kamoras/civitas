@@ -43,6 +43,7 @@ civitas/
 │   │   │   ├── analyze/         # Bill analysis, scoring, cross-referencing, LLM narratives, justice scoring
 │   │   │   ├── assemble/        # Scorecard builder + validator
 │   │   │   ├── senate_pipeline.py, house_pipeline.py  # FETCH→TRANSFORM→ANALYZE→ASSEMBLE+SAVE per chamber
+│   │   │   ├── member_lifecycle.py  # Roster reconciliation + removal of departed members (never presidents)
 │   │   │   ├── stock_pipeline.py  # STOCK Act trade-disclosure ingestion (sibling phase)
 │   │   │   └── vector_store.py  # sqlite-vec + sentence-transformer model management
 │   │   ├── models.py            # SQLAlchemy ORM (Senator, Representative, KeyVote, Justice, NationalMonitor, TimelineEntry, etc.)
@@ -381,6 +382,28 @@ invoked by `scheduler.py`'s `_nightly_pipeline()`:
 4. **ASSEMBLE + SAVE** — Build scorecards for senators, presidents, and
    justices; validate via `assemble/validator.py`; persist to SQLite
 
+Between TRANSFORM and the rest, both chamber pipelines run
+`member_lifecycle.py` against the roster they just fetched:
+
+- Anyone in the database but absent from the roster is marked
+  `is_current=False` with a `left_office_date`. Reversible — reappearing on
+  the roster restores them and clears the clock. Skipped (with an ops alert)
+  when the roster comes back implausibly small, so a truncated Congress.gov
+  response can't retire a chamber, and skipped for single-member
+  `senator_filter` runs.
+- Anyone whose `left_office_date` is more than `RETIREMENT_GRACE_DAYS` (180)
+  old is deleted, along with their child rows and the four references no
+  foreign key covers. The grace period outlasts a House special election, so
+  a seat mid-refill still shows who held it.
+
+**Presidents are never reconciled or removed, and neither is the Court** —
+both functions take an explicit chamber and reject anything but
+`senate`/`house`. A former president is permanent site content. Relatedly,
+the Senate/House leaderboards rank only currently-serving members, while the
+presidential leaderboard ranks the *historical* field and excludes the
+sitting president (see `president_service.get_president_leaderboard`) — for
+that office, comparison against predecessors is the only meaningful ranking.
+
 In addition to the main pipeline, the **Action Center pipeline** runs hourly to
 surface trending civic issues. It fetches RSS feeds from low-bias news sources,
 filters articles for U.S. policy relevance using embedding similarity, clusters
@@ -493,6 +516,7 @@ SQLAlchemy ORM models are in `backend/app/models.py`. Key tables: `senators`,
 | What | Where |
 |------|-------|
 | Pipeline orchestration | `backend/app/scheduler.py` (entrypoint), `backend/app/pipeline/senate_pipeline.py` / `house_pipeline.py` |
+| Departed-member detection + removal | `backend/app/pipeline/member_lifecycle.py` |
 | Stock trade disclosures | `backend/app/pipeline/stock_pipeline.py` |
 | Scoring formulas | `backend/app/pipeline/analyze/score_calculator.py` |
 | Industry classification (embeddings + PAC decontextualization) | `backend/app/pipeline/transform/industry_classifier.py` |
