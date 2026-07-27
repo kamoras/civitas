@@ -21,7 +21,7 @@ diff-cover==10.4.0
 distro==1.9.0
 durationpy==0.10
 fastapi==0.139.0
-filelock==3.24.3
+filelock==3.32.0
 flatbuffers==25.12.19
 fsspec==2026.6.0
 googleapis-common-protos==1.75.0
