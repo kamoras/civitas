@@ -20,7 +20,7 @@ flowchart TB
         end
 
         LLAMA["<b>llama-server</b> :8070<br/>systemd, NOT in the stack<br/>weights stay resident across redeploys"]
-        VOL[("civitas_app_data<br/>external volume → /data<br/>SQLite + ChromaDB")]
+        VOL[("civitas_app_data<br/>external volume → /data<br/>civitas.db + vectors.db")]
     end
 
     NGINX -->|"proxy_pass via service DNS"| BE
@@ -38,7 +38,7 @@ ports that were loopback-only before, they simply aren't published. nginx,
 inside the same overlay network, is the only path to either.
 
 **The volume is `external: true`**, so `docker stack deploy` never recreates or
-touches it. The SQLite database and ChromaDB files survive image rebuilds and
+touches it. Both SQLite files (`civitas.db`, `vectors.db`) survive image rebuilds and
 stack redeploys.
 
 **llama.cpp is not containerised** and not in the stack, so model weights stay

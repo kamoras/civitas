@@ -13,7 +13,7 @@ flowchart TB
 
     PURGE --> X1["AnalysisCache — cleared"]
     PURGE --> X2["LearnedClassification — cleared"]
-    PURGE --> X3["ChromaDB reference corpus — cleared"]
+    PURGE --> X3["vec_bills reference corpus — cleared"]
     PURGE -.->|"never touched"| X4["ApiCache — retained"]
 
     subgraph CACHES["The three layers"]

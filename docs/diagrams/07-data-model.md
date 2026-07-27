@@ -1,7 +1,8 @@
 # Data model
 
-42 tables in one SQLite file (`/data/civitas.db`), plus a ChromaDB collection
-alongside it. Shown here in clusters; infrastructure tables are listed rather
+42 tables in one SQLite file (`/data/civitas.db`), plus a separate sqlite-vec
+file (`/data/vectors.db`) holding the `vec_explore` and `vec_bills` vector
+tables — split out for writer-lock isolation, not just tidiness. Shown here in clusters; infrastructure tables are listed rather
 than drawn.
 
 ## Members of Congress
@@ -163,23 +164,45 @@ linked bill was renumbered.
 erDiagram
     SCORE_SNAPSHOTS {
         int id PK
-        string entity_type "senator | representative"
+        string entity_type "senator | representative | president | candidate"
         int entity_id "no FK - polymorphic"
         date date
         float overall_score
-        float score_1 "funding independence"
-        float score_2 "promise persistence"
-        float score_3 "constituent alignment"
-        float score_4 "funding diversity"
-        float score_5 "legislative effectiveness"
+        float score_1 "meaning depends on entity_type"
+        float score_2 "meaning depends on entity_type"
+        float score_3 "meaning depends on entity_type"
+        float score_4 "meaning depends on entity_type"
+        float score_5 "meaning depends on entity_type"
         string algorithm_version "e.g. v6.12"
     }
 ```
 
-Deliberately polymorphic and unconstrained: one row per member per run, for both
-chambers, carrying the algorithm version that produced it. That last column is
-what lets the trend charts avoid comparing scores across formula changes as if
-they were the same measurement.
+One row per entity per run, carrying the algorithm version that produced it —
+that last column is what stops the trend charts from comparing scores across
+formula changes as though they were the same measurement.
+
+**The numbered columns are a shared slot layout, not fixed dimensions.** Four
+different writers use this table and each maps the slots differently, so reading
+`score_3` without first checking `entity_type` will give you the wrong number:
+
+| `entity_type` | `overall_score` | `score_1` | `score_2` | `score_3` | `score_4` | `score_5` |
+|---|---|---|---|---|---|---|
+| `senator`, `representative` | weighted overall | funding independence | promise persistence | constituent alignment | funding diversity | legislative effectiveness |
+| `president` | weighted overall | public mandate | effectiveness | *retired* — always 0.0 | agency alignment | historical legacy |
+| `candidate` | cash on hand | contributions | disbursements | — | — | — |
+
+Three things worth knowing about that table:
+
+- **`score_3` is a retired slot for presidents.** It held Competence until that
+  dimension was removed in 2026-07, and has been 0.0 since. The slot was retired
+  in place rather than reindexing every other dimension's historical rows.
+- **The columns are `NOT NULL`,** so a president dimension that is genuinely
+  inapplicable is stored as `0.0` here. That is not a score of zero — the
+  authoritative "does this apply" answer always lives on the `presidents` row's
+  own nullable column, never on the snapshot.
+- **`candidate` rows aren't scores at all.** The election pipeline reuses the
+  table as a financial time series, so `overall_score` is dollars of cash on
+  hand. Rows are only written when a value actually changed.
 
 ## Not drawn
 

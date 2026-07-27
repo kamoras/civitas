@@ -30,7 +30,7 @@ flowchart TB
 
     subgraph STORE["Persistence — /data volume"]
         SQLITE[("SQLite civitas.db<br/>42 tables")]
-        CHROMA[("ChromaDB<br/>384-dim HNSW")]
+        VECDB[("sqlite-vec vectors.db<br/>vec_explore + vec_bills<br/>384-dim, cosine")]
     end
 
     subgraph SERVE["Serving"]
@@ -40,7 +40,7 @@ flowchart TB
     end
 
     LLAMA["llama.cpp :8070<br/>LFM2.5-1.2B-Instruct<br/>systemd, ARM-native"]
-    EMBED["Snowflake Arctic-XS<br/>22M params, in-process"]
+    EMBED["Two sentence-transformers, in-process<br/>Arctic-XS — classification<br/>all-MiniLM-L6-v2 — index + similarity gates<br/>both 384-dim, ~22M params"]
     BSKY["Bluesky<br/>@civitas-research.org"]
 
     SRC -->|rate-limited HTTP| PIPE
@@ -49,13 +49,13 @@ flowchart TB
     VOTEVIEW --> NIGHTLY
 
     PIPE -->|writes| SQLITE
-    PIPE -->|upserts embeddings| CHROMA
+    PIPE -->|upserts embeddings| VECDB
     PIPE -.->|~100-400 calls/run| LLAMA
     PIPE -.->|~50,000 ops/run| EMBED
     HOURLY -->|posts| BSKY
 
     SQLITE --> API
-    CHROMA --> API
+    VECDB --> API
     API -.->|on-demand summaries| LLAMA
     API -->|JSON| WEB
     WEB --> NGINX
@@ -91,6 +91,6 @@ compute — they are deterministic and take no LLM input.
 | Pipeline orchestration | `backend/app/pipeline/{senate,house,president,justice,explore,election,stock}_pipeline.py` |
 | Scheduler | `backend/app/scheduler.py` |
 | LLM client | `backend/app/pipeline/analyze/ollama_client.py` |
-| Embeddings + ChromaDB | `backend/app/pipeline/vector_store.py` |
+| Embeddings + sqlite-vec | `backend/app/pipeline/vector_store.py` |
 | API routes | `backend/app/api/` |
 | Frontend | `frontend/src/app/` |

@@ -52,8 +52,8 @@ external API calls to cloud AI services.
 │                                                │                             │
 │  ┌──────────┐   ┌──────────┐   ┌────────────┐  │   ┌──────────────────────┐  │
 │  │4. EXPLORE│   │5.JUSTICES│   │6.PRESIDENTS│  │   │     7. FINALIZE      │  │
-│  │ (ChromaDB│   │ (Oyez)   │   │(BLS/BEA/   │◄─┘   │ (persist scores,     │  │
-│  │  index)  │   │          │   │ UCSB)      │      │  PipelineRun record) │  │
+│  │ (sqlite- │   │ (Oyez)   │   │(BLS/BEA/   │◄─┘   │ (persist scores,     │  │
+│  │  vec)    │   │          │   │ UCSB)      │      │  PipelineRun record) │  │
 │  └──────────┘   └──────────┘   └────────────┘      └──────────────────────┘  │
 │                                                                              │
 │  ──────────────────── HOUSE PIPELINE (runs after Senate) ──────────────────  │
@@ -66,9 +66,9 @@ external API calls to cloud AI services.
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                              PERSISTENCE LAYER                               │
 │                                                                              │
-│  SQLite  (civitas.db)                    ChromaDB  (HNSW vector index)       │
-│  ├── senators / representatives          └── ExploreDocument embeddings      │
-│  ├── KeyVote / SponsoredBill                 (~384-dim, Snowflake Arctic-XS) │
+│  SQLite  (civitas.db)                    sqlite-vec  (vectors.db)            │
+│  ├── senators / representatives          ├── vec_explore  (documents)        │
+│  ├── KeyVote / SponsoredBill             └── vec_bills    (classification)   │
 │  ├── Donor / IndustryDonation / LobbyingMatch                                │
 │  ├── CampaignPromise                                                         │
 │  ├── ActionIssue / NationalMonitor / MonitorUpdate                           │
@@ -170,9 +170,9 @@ speeches (Senate and House), presidential actions (executive orders,
 proclamations, memoranda), Supreme Court opinions, and Federal Register
 rulemaking documents (including ones still open for public comment):
 - One embedding per document — no chunking — over `title + summary + body[:800 chars]`
-- Encodes with the sentence-transformer (384-dim, Snowflake Arctic-XS)
-- Upserts into ChromaDB with metadata: doc type, source, date, politician name/ID, chamber
-- At query time: embed query → HNSW approximate nearest-neighbor search → return top-k documents, filterable by doc type, chamber, and open-for-comment status
+- Encodes with the **index** sentence-transformer (384-dim, all-MiniLM-L6-v2)
+- Upserts into the `vec_explore` sqlite-vec table with metadata: doc type, source, date, politician name/ID, chamber
+- At query time: embed query → sqlite-vec KNN (`embedding MATCH ? AND k = ?`, cosine) → return top-k documents, with filters pushed into the query as vec0 metadata predicates
 
 This is a separate index from the tier-3 bill-classification embeddings used
 in Phase 3 — it's for browsing/searching primary-source government documents,
@@ -329,7 +329,7 @@ These three are documented at the point of definition in code, alongside two pur
 
 ### Retrieval-Augmented Classification (RAC)
 
-A persistent learning store (SQLite `LearnedClassification`) accumulates labeled classifications across pipeline runs. A vector reference corpus (ChromaDB) grows with each run. Together they implement a retrieval-augmented classification pattern: past decisions inform future ones, reducing both latency and error rate over time (Lewis et al. 2020).
+A persistent learning store (SQLite `LearnedClassification`) accumulates labeled classifications across pipeline runs. A vector reference corpus (the `vec_bills` sqlite-vec table) grows with each run. Together they implement a retrieval-augmented classification pattern: past decisions inform future ones, reducing both latency and error rate over time (Lewis et al. 2020).
 
 Confidence levels distinguish source quality:
 - `1.0` — rule-based (FEC metadata, exact match)
@@ -392,7 +392,7 @@ Every hour at :15
        │         Same story + new articles → update content, allow Bluesky repost.
        │         Brand new story → create new row.
        ▼
-  7. ENRICH ──── ChromaDB semantic search → link related bills/senators
+  7. ENRICH ──── sqlite-vec semantic search → link related bills/senators
        │         Resolve bill IDs mentioned in article text
        ▼
   8. MONITORS ── Detect cross-day recurring topics (title similarity ≥ 0.83)
@@ -494,7 +494,7 @@ All scores default to 50 when data is insufficient. No LLM input is used in scor
 
 The Explore feature provides semantic search over government activity
 documents without keyword matching. Documents are embedded offline (during
-pipeline runs) and stored in ChromaDB; queries are embedded at request time.
+pipeline runs) and stored in sqlite-vec; queries are embedded at request time.
 
 **What is indexed:** Senate and House floor speeches, presidential actions
 (executive orders, proclamations, memoranda), Supreme Court opinions, and
@@ -507,9 +507,9 @@ date, politician name/ID, chamber.
 ```
 User query
     │
-    ▼ embed (Snowflake Arctic-XS, 384-dim)
+    ▼ embed (all-MiniLM-L6-v2, 384-dim — the index model)
     │
-    ▼ HNSW approximate nearest-neighbor (ChromaDB, cosine distance)
+    ▼ sqlite-vec KNN over vec_explore (cosine distance)
     │
     ▼ top-k documents retrieved, filterable by doc type / chamber /
     │   politician / open-for-comment
@@ -520,10 +520,30 @@ User query
         rulemakings — a comment link and deadline
 ```
 
-The same embedding model used for classification is used for Explore — no
-separate model is needed. Bill text itself is not indexed here; it's used
-separately, title-only, for the tier-3 kNN bill-classification step in the
-scoring pipeline (see Phase 3 above).
+Bill text itself is not indexed here; it's used separately, title-only, for
+the tier-3 kNN bill-classification step in the scoring pipeline (see Phase 3
+above).
+
+### Two embedding models
+
+The platform loads **two** sentence-transformers, both 384-dim and both in the
+~22M size class, split by what they are good at:
+
+| Model | Used for | Why |
+|---|---|---|
+| `Snowflake/snowflake-arctic-embed-xs` (primary) | Classification and the learning store — bill policy areas, donor/industry kNN, party alignment, the numpy batch-similarity paths | The classification thresholds were measured and calibrated against this model's geometry |
+| `sentence-transformers/all-MiniLM-L6-v2` (index) | The semantic-search index, plus the Action Center's similarity gates (policy filter, trending mask, explore re-rank, title dedup) | Arctic is retrieval-*asymmetric*: it packs same-register text into a narrow ~0.55–0.87 raw-cosine band, which left several similarity thresholds unable to separate real matches from noise. MiniLM measured ~4x the separation margin on explore-doc anchoring and ~3x on policy relevance against this platform's own live failure cases |
+
+They coexist deliberately rather than as a migration left half-finished:
+swapping a classification gate to a different embedding space without
+re-measuring its threshold is how thresholds go vacuous, so the classification
+subsystem stays on the primary model until its own recalibration pass. Both are
+~22M parameters, so carrying two costs little on the Pi.
+
+The index records which model built it (in `vectors.db`'s `meta` table). On a
+mismatch at startup the vec tables are dropped and a background reindex runs
+from the `ExploreDocument` rows already in the app database; search returns
+"index not ready" until it finishes.
 
 ---
 
@@ -692,7 +712,8 @@ civitas` follows this sequence, all built into Swarm rather than scripted:
    reverts to the previous image automatically — no manual intervention
 
 Data is persisted in the `civitas_app_data` Docker named volume, mounted at
-`/data` inside the backend container. The SQLite database and ChromaDB files
+`/data` inside the backend container. The SQLite databases (`civitas.db`,
+`vectors.db`) and model-version marker
 live here and survive image rebuilds and stack redeploys — the volume is
 `external: true` in `docker-compose.swarm.yml`, so `docker stack deploy`
 never recreates or touches it directly.
@@ -808,7 +829,7 @@ civitas/
 │   │   │   │   ├── bluesky_engagement.py     # Repost/like matching outlet posts
 │   │   │   │   └── bluesky_utils.py          # Shared link-card builder
 │   │   │   ├── assemble/     # Senator scorecard builder + validator
-│   │   │   ├── vector_store.py  # ChromaDB + sentence-transformer
+│   │   │   ├── vector_store.py  # sqlite-vec + both embedding models
 │   │   │   ├── senate_pipeline.py, house_pipeline.py  # FETCH -> TRANSFORM ->
 │   │   │   │                 #   ANALYZE -> ASSEMBLE+SAVE orchestration per chamber
 │   │   │   ├── stock_pipeline.py  # STOCK Act trade-disclosure ingestion (sibling

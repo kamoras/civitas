@@ -36,7 +36,7 @@ flowchart TB
     UPDCONTENT --> ENRICH
     UPDRANK --> ENRICH
 
-    ENRICH["<b>7. ENRICH</b><br/>ChromaDB semantic search →<br/>related bills, senators, documents<br/>resolve bill IDs in article text"]
+    ENRICH["<b>7. ENRICH</b><br/>sqlite-vec semantic search →<br/>related bills, senators, documents<br/>resolve bill IDs in article text"]
     ENRICH --> MON
 
     MON{"<b>8. MONITORS</b><br/>topic recurs on ≥ 5 distinct days in 14,<br/>from ≥ 3 unique sources,<br/>title similarity ≥ 0.83?"}

@@ -22,13 +22,13 @@ flowchart TB
 
         DOC["ExploreDocument row<br/>doc_type · source · title · summary · body<br/>date · politician_name/id · chamber<br/>agency_name · comment_url · comments_close_on"]
         DOC --> EMB["Embed title + summary + body[:800]<br/><b>one embedding per document — no chunking</b>"]
-        EMB --> UPSERT[("ChromaDB upsert<br/>384-dim, Snowflake Arctic-XS")]
+        EMB --> UPSERT[("sqlite-vec upsert into vec_explore<br/>384-dim, all-MiniLM-L6-v2")]
     end
 
     subgraph QUERY["Query — at request time"]
         direction TB
-        Q(["User query"]) --> QEMB["Embed with the same model"]
-        QEMB --> ANN["HNSW approximate nearest neighbour<br/>cosine distance"]
+        Q(["User query"]) --> QEMB["Embed with all-MiniLM-L6-v2<br/>(same model that built the index)"]
+        QEMB --> ANN["sqlite-vec KNN<br/>embedding MATCH ? AND k = ?<br/>cosine distance"]
         ANN --> FILT["Filter: doc type · chamber ·<br/>politician · open-for-comment"]
         FILT --> SORT["Rank by relevance (default) or date"]
         SORT --> OUT["Return excerpt, source URL, doc type<br/>+ comment link and deadline for open rulemakings"]
@@ -53,8 +53,20 @@ kNN bill-classification step in the scoring pipeline
 ([04 — Classification tiers](04-classification-tiers.md)). Two different
 corpora for two different jobs.
 
-**The same embedding model serves both.** Snowflake Arctic-XS, 22M parameters,
-already loaded in-process for classification. No second model is needed.
+**The index is not built with the classification model.** Indexing and querying
+both use `all-MiniLM-L6-v2`, while bill/donor classification stays on
+`Snowflake/snowflake-arctic-embed-xs`. Arctic is retrieval-*asymmetric* and
+packs same-register text into a narrow ~0.55-0.87 raw-cosine band, which left
+several similarity gates unable to separate real matches from noise; MiniLM
+measured roughly 4x the separation margin on document anchoring against this
+platform's own live failure cases. Classification stays on Arctic because its
+thresholds were calibrated against that model's geometry. Both are ~22M
+parameters and 384-dim, so carrying two costs little.
+
+**The index knows which model built it.** `vectors.db` stores the index model
+id in a `meta` table; a mismatch at startup drops the vec tables and kicks off a
+background reindex from the `ExploreDocument` rows in the app database. Search
+returns "index not ready" until it completes, which callers already handle.
 
 **Open rulemakings are a first-class filter.** Federal Register documents still
 open for public comment carry `comment_url` and `comments_close_on`, and the

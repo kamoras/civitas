@@ -27,7 +27,7 @@ flowchart TB
         LIB -->|"threading.Event + shared dict<br/>(lookahead is exactly 1, so no queue)"| ANA
     end
 
-    P3 --> P4["<b>4. EXPLORE</b><br/>embed speeches, presidential actions,<br/>SCOTUS opinions, FR rulemaking<br/>→ ChromaDB upsert"]
+    P3 --> P4["<b>4. EXPLORE</b><br/>embed speeches, presidential actions,<br/>SCOTUS opinions, FR rulemaking<br/>→ sqlite-vec upsert"]
     P3 --> P5["<b>5. JUSTICES</b><br/>Oyez votes → consistency,<br/>independence, restraint"]
     P3 --> P6["<b>6. PRESIDENTS</b><br/>BLS · BEA/FRED · MeasuringWorth<br/>UCSB approval · C-SPAN survey"]
 

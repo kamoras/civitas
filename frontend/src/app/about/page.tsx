@@ -1094,7 +1094,7 @@ export default function AboutPage() {
                     <span className="text-neon-yellow shrink-0">2.</span>
                     <span>
                       <span className="text-neon-pink/60">kNN against reference corpus</span> — the
-                      k=7 most similar previously-classified bills in ChromaDB are retrieved
+                      k=7 most similar previously-classified bills in the vector store are retrieved
                       and the policy area is assigned by similarity-weighted majority vote.
                       <Cite id="9">Cover &amp; Hart 1967</Cite>
                       This is retrieval-augmented classification: the reference corpus
@@ -1230,7 +1230,7 @@ export default function AboutPage() {
                   it is used separately, title-only, for the kNN bill-classification step in the
                   scoring pipeline. Each document gets a single embedding (no chunking) over its
                   title, summary, and first 800 characters of body, encoded with Snowflake
-                  Arctic-XS and stored in ChromaDB for approximate nearest-neighbor retrieval.
+                  all-MiniLM-L6-v2 and stored in sqlite-vec for nearest-neighbour retrieval.
                   This outperforms keyword search (BM25) for conceptual queries like
                   &quot;climate policy&quot; where exact term overlap is low.
                 </P>
@@ -1248,16 +1248,31 @@ export default function AboutPage() {
 
             <div className="space-y-4 mt-4">
               <div>
-                <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">EMBEDDING MODEL (CLASSIFICATION + SEARCH)</h3>
+                <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">EMBEDDING MODELS (CLASSIFICATION + SEARCH)</h3>
                 <P>
-                  <Label>Snowflake Arctic-XS</Label> (22M parameters)
+                  Two sentence-transformers, both 384-dimensional and both around 22M
+                  parameters. <Label>Snowflake Arctic-XS</Label> handles classification:
+                  bill policy areas, donor industries, party alignment, motion types, and
+                  the k-nearest-neighbour reference corpus.
+                  <Label> all-MiniLM-L6-v2</Label>
                   <Cite id="8">Wang et al. 2020</Cite>
-                  handles all classification tasks: bill policy areas, donor industries,
-                  party alignment, motion types, and semantic search retrieval.
-                  Sentence-transformers produce dense vector representations where cosine
-                  similarity correlates with semantic similarity
+                  handles the semantic-search index and the Action Center&apos;s similarity
+                  gates. Sentence-transformers produce dense vector representations where
+                  cosine similarity correlates with semantic similarity
                   <Cite id="7">Reimers &amp; Gurevych 2019</Cite> — making them ideal for
                   classification-by-comparison tasks where category definitions exist.
+                </P>
+                <P>
+                  The split is measured, not accidental. Arctic is retrieval-<em>asymmetric</em>:
+                  it packs same-register text into a narrow raw-cosine band (~0.55-0.87),
+                  which left several similarity thresholds unable to separate genuine
+                  matches from noise. Against this platform&apos;s own live failure cases,
+                  all-MiniLM-L6-v2 measured roughly 4x the separation margin on
+                  document anchoring and 3x on policy relevance. Classification stays on
+                  Arctic because its thresholds were calibrated against that model&apos;s
+                  geometry — moving a classification gate to a different embedding space
+                  without re-measuring the threshold is how thresholds quietly stop
+                  meaning anything.
                 </P>
               </div>
 
@@ -1337,11 +1352,14 @@ export default function AboutPage() {
                   Results are cached in a local database so each unique analysis is computed at most once.
                 </P>
                 <P>
-                  The embedding model is <Label>Snowflake Arctic-XS</Label>
-                  <Cite id="8">Wang et al. 2020</Cite>, a 22M-parameter sentence transformer.
-                  It handles all classification (bills, donors, industries, party alignment),
-                  semantic search, and nearest-neighbor retrieval. Both models run entirely
-                  on-device with no external API calls.
+                  The embedding models are <Label>Snowflake Arctic-XS</Label> for
+                  classification (bills, donors, industries, party alignment) and
+                  <Label> all-MiniLM-L6-v2</Label>
+                  <Cite id="8">Wang et al. 2020</Cite> for the search index and similarity
+                  gates — both 384-dimensional, both in the 22M-parameter class, so
+                  carrying two costs little. Vectors are stored in sqlite-vec, a
+                  single-file SQLite extension that runs on the Pi with no separate vector
+                  server. Every model runs entirely on-device with no external API calls.
                 </P>
               </div>
             </div>
@@ -1377,7 +1395,7 @@ export default function AboutPage() {
               <Row label="Congressional Record (GovInfo)" value="Senate and House floor proceedings — speaker-attributed transcripts from daily CREC packages" />
               <Row label="Federal Register" value="Executive orders, presidential memoranda, and proclamations with full text and metadata, plus proposed and final rules — including ones still open for public comment, surfaced with their comment link and deadline" />
               <Row label="Oyez / supremecourt.gov" value="Supreme Court opinions, indexed alongside the legislative and executive documents" />
-              <Row label="Semantic Search" value="Documents embedded with Snowflake Arctic-XS into ChromaDB for dense passage retrieval — one embedding per document, no chunking" />
+              <Row label="Semantic Search" value="Documents embedded with all-MiniLM-L6-v2 into a sqlite-vec table for dense passage retrieval — one embedding per document, no chunking" />
             </div>
 
             <div className="space-y-2 mt-6">
@@ -1494,9 +1512,9 @@ export default function AboutPage() {
               <Row label="Hardware" value="Raspberry Pi 5 (16GB), NVMe SSD" />
               <Row label="Backend" value="Python 3.13, FastAPI, SQLAlchemy, SQLite" />
               <Row label="Frontend" value="Next.js 16, React 19, TypeScript, Tailwind CSS" />
-              <Row label="Embedding Model" value="Snowflake Arctic-XS (22M params, Snowflake/HuggingFace)" />
+              <Row label="Embedding Models" value="Two, both 384-dim / ~22M params: Snowflake Arctic-XS for classification, all-MiniLM-L6-v2 for the search index and similarity gates" />
               <Row label="LLM Runtime" value="llama.cpp (native ARM build), LFM2.5-1.2B-Instruct" />
-              <Row label="Vector Database" value="ChromaDB (persistent, local)" />
+              <Row label="Vector Database" value="sqlite-vec (vec0 virtual tables in a local SQLite file, cosine distance)" />
               <Row label="Containers" value="Docker Swarm (single node) — zero-downtime start-first rolling updates behind an in-stack nginx reverse proxy, with automatic rollback on a failed health check" />
               <Row label="Pipeline Schedule" value="Nightly at 3:00 AM via APScheduler" />
               <Row label="Data Caching" value="72-hour TTL with persistent SQLite cache" />

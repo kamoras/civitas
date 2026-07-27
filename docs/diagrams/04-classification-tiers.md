@@ -25,7 +25,7 @@ flowchart TB
     T2B -->|"applicable"| C09B["Ideology + leadership scores"]
     T2B -->|"not applicable"| T3
 
-    T3{"Tier 3 — kNN<br/>k=7 nearest labelled neighbours<br/>in ChromaDB reference corpus"}
+    T3{"Tier 3 — kNN<br/>k=7 nearest labelled neighbours<br/>in the vec_bills reference corpus"}
     T3 -->|"weighted majority"| C09C["confidence 0.9<br/>retrieval-augmented"]
     T3 -->|"no confident neighbour"| T4
 
@@ -39,7 +39,7 @@ flowchart TB
     C07 --> STORE
     T0OUT --> STORE
 
-    STORE[("LearnedClassification<br/>+ ChromaDB reference corpus")]
+    STORE[("LearnedClassification (SQLite)<br/>+ vec_bills reference corpus (sqlite-vec)")]
     STORE -.->|"next run: tier 1 hit"| T1
     STORE -.->|"next run: richer neighbours"| T3
 ```
@@ -80,7 +80,7 @@ for effectiveness baselines.
 ## Retrieval-augmented classification
 
 The dotted feedback edges are the point. `LearnedClassification` (SQLite) and
-the ChromaDB reference corpus both grow every run, so past decisions bootstrap
+the `vec_bills` sqlite-vec reference corpus both grow every run, so past decisions bootstrap
 future ones — lower latency and lower error rate over time (Lewis et al. 2020;
 the experience-replay pattern, Lin 1992).
 
