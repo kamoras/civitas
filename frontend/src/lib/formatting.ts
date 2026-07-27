@@ -42,6 +42,28 @@ export function formatUtcDate(
   }
 }
 
+/**
+ * Format a Monday–Sunday span for display: "Jul 13–19, 2026", or
+ * "Jun 29–Jul 5, 2026" when the week crosses a month boundary.
+ *
+ * The end date is built from separate single-field lookups because
+ * { day, year } is not a CLDR skeleton — ICU best-fits the pair and renders
+ * "2026 (day: 19)", so the week header read "Jul 13–2026 (day: 19)".
+ */
+export function formatWeekRange(startDate: string, endDate: string): string {
+  const start = new Date(startDate + "T00:00:00");
+  const end = new Date(endDate + "T00:00:00");
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return `${startDate}–${endDate}`;
+  }
+  const startFmt = start.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const endFmt = end.toLocaleDateString(
+    "en-US",
+    start.getMonth() === end.getMonth() ? { day: "numeric" } : { month: "short", day: "numeric" },
+  );
+  return `${startFmt}–${endFmt}, ${end.getFullYear()}`;
+}
+
 const SAFE_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
 
 export function safeHref(url: string | null | undefined): string | undefined {

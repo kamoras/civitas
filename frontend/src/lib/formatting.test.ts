@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatCurrency, formatUtcDate, localDateStr, safeHref } from "./formatting";
+import { formatCurrency, formatUtcDate, formatWeekRange, localDateStr, safeHref } from "./formatting";
 
 describe("formatCurrency", () => {
   it("formats billions", () => {
@@ -87,5 +87,25 @@ describe("safeHref", () => {
 
   it("returns undefined for URLs the URL constructor can't parse at all", () => {
     expect(safeHref("http://[invalid")).toBeUndefined();
+  });
+});
+
+describe("formatWeekRange", () => {
+  it("names the month once for a week inside a single month", () => {
+    expect(formatWeekRange("2026-07-13", "2026-07-19")).toBe("Jul 13–19, 2026");
+  });
+
+  it("names both months when the week crosses a month boundary", () => {
+    expect(formatWeekRange("2026-06-29", "2026-07-05")).toBe("Jun 29–Jul 5, 2026");
+  });
+
+  it("does not leak ICU's best-fit rendering of a { day, year } pair", () => {
+    // { day: "numeric", year: "numeric" } is not a CLDR skeleton; ICU renders
+    // it "2026 (day: 19)", which put "Jul 13–2026 (day: 19)" in the week header.
+    expect(formatWeekRange("2026-07-13", "2026-07-19")).not.toContain("(day:");
+  });
+
+  it("falls back to the raw range for unparseable dates", () => {
+    expect(formatWeekRange("", "")).toBe("–");
   });
 });
