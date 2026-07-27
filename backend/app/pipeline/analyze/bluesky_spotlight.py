@@ -351,6 +351,20 @@ def _weekly_body_budget(header: str) -> int:
 _ENTRY_SUMMARY_CHARS = 240
 
 
+def _clip(text: str, limit: int) -> str:
+    """Trim to at most ``limit`` chars without splitting the final token.
+
+    A mid-token cut is a grounding hole: an entry ending "...a 68-32 vote"
+    clipped mid-number leaves "68" in the source, which would then vouch for
+    a claim about 68 of something the week never mentioned.
+    """
+    if len(text) <= limit:
+        return text
+    trimmed = text[:limit]
+    cut = trimmed.rfind(" ")
+    return (trimmed[:cut] if cut > 0 else trimmed).rstrip()
+
+
 class _WeekContext(NamedTuple):
     """Two views of a week's timeline record.
 
@@ -403,7 +417,7 @@ def _week_timeline_context(week: WeekSummary, db: Session) -> _WeekContext:
     sources: list[str] = []
 
     if week.summary:
-        summary = week.summary[:800]
+        summary = _clip(week.summary, 800)
         sections.append(
             "Week-in-review summary already published on the Civitas timeline:\n"
             f"{summary}"
@@ -421,7 +435,7 @@ def _week_timeline_context(week: WeekSummary, db: Session) -> _WeekContext:
                 weekday = f"[{date.fromisoformat(e.date).strftime('%a')}] "
             except (TypeError, ValueError):
                 weekday = ""
-            body = (e.summary or "")[:_ENTRY_SUMMARY_CHARS]
+            body = _clip(e.summary or "", _ENTRY_SUMMARY_CHARS)
             days.append(f"- {weekday}{e.title}: {body}")
             sources.append(f"{e.title} {body}")
         sections.append(f"The {len(entries)} days that week, as tracked on the timeline:\n" + "\n".join(days))

@@ -137,6 +137,20 @@ def ungrounded_numbers(generated: str, source: str) -> list[str]:
     )
 
 
+# The name patterns accept apostrophes so O'Rourke and D'Esposito survive as
+# single tokens, which also swallows the possessive in "Sen. Wyden's": the
+# surname came out as "wyden's" and could never match a source saying "Wyden",
+# so every possessive reference to a real, sourced official was flagged as
+# fabricated. Stripping the possessive is a false-positive fix only — the bare
+# surname still has to appear in the source.
+_POSSESSIVE_SUFFIX_RE = re.compile(r"['’]s?$")
+
+
+def _surname(name: str) -> str:
+    """Last token of a captured name, lowercased, minus any possessive."""
+    return _POSSESSIVE_SUFFIX_RE.sub("", name.split()[-1].lower())
+
+
 def ungrounded_titled_names(generated: str, source: str) -> list[str]:
     """Titled-official references in ``generated`` whose surname is absent
     from ``source``.
@@ -160,13 +174,11 @@ def ungrounded_titled_names(generated: str, source: str) -> list[str]:
 
     missing = []
     for m in _TITLED_NAME_RE.finditer(generated or ""):
-        surname = m.group(1).split()[-1].lower()
-        if not _grounded(surname):
+        if not _grounded(_surname(m.group(1))):
             missing.append(m.group(0))
     for m in _APPOSITIVE_ROLE_RE.finditer(generated or ""):
         name = m.group(1)
-        surname = name.split()[-1].lower()
-        if not _grounded(surname):
+        if not _grounded(_surname(name)):
             missing.append(name)
     return sorted(set(missing))
 
@@ -493,8 +505,14 @@ _PARTY_CLAIM_RE = re.compile(
 # any party vocabulary anywhere in the source grounds the claim. A post
 # asserting a party label with zero party vocabulary anywhere in its source
 # material is the only case flagged.
+#
+# Plurals are matched too: "Senate Republicans agreed" and "Democrats withheld
+# support" are how civic prose overwhelmingly refers to a party, and the
+# singular-only pattern treated those sources as having no party vocabulary at
+# all — flagging "Republican Senator Collins" as unsourced against a source
+# that plainly discusses Republicans.
 _PARTY_CONTEXT_RE = re.compile(
-    r"\bRepublican\b|\bDemocratic\b|\bDemocrat\b|\bGOP\b|\([RD]-[A-Za-z]{2}\)",
+    r"\bRepublicans?\b|\bDemocratic\b|\bDemocrats?\b|\bGOP\b|\([RD]-[A-Za-z]{2}\)",
     re.IGNORECASE,
 )
 

@@ -52,6 +52,27 @@ class TestUngroundedTitledNames:
         # Bare names aren't titled-official claims; other validators own those.
         assert ungrounded_titled_names("Whitfield objected", SOURCE) == []
 
+    def test_possessive_reference_to_a_sourced_official_is_grounded(self):
+        # The name pattern accepts apostrophes so O'Rourke stays one token,
+        # which also swallowed the possessive: "Sen. Collins's" yielded the
+        # surname "collins's", which no source saying "Collins" can match, so
+        # every possessive reference to a real official read as fabricated.
+        assert ungrounded_titled_names("Sen. Collins's amendment advanced", SOURCE) == []
+        assert ungrounded_titled_names("Sen. Collins' amendment advanced", SOURCE) == []
+
+    def test_possessive_does_not_ground_an_invented_official(self):
+        assert ungrounded_titled_names("Senator Whitfield's objection", SOURCE) == [
+            "Senator Whitfield's"
+        ]
+
+    def test_apostrophe_surnames_survive_possessive_stripping(self):
+        source = "Rep. O'Rourke filed the amendment."
+        assert ungrounded_titled_names("Rep. O'Rourke filed it", source) == []
+        assert ungrounded_titled_names("Rep. O'Rourke's filing", source) == []
+        assert ungrounded_titled_names("Rep. O'Rourke filed it", "A bill passed.") == [
+            "Rep. O'Rourke"
+        ]
+
     def test_appositive_role_fabrication_flagged(self):
         # The exact production failure: a role description set off by
         # commas, not a title word directly prefixing the name — the form
@@ -498,6 +519,27 @@ class TestUngroundedPartyClaims:
             "Senator Collins praised the vote.",
             "Susan Collins praised the funding bill vote.",
         ) == []
+
+    def test_plural_party_vocabulary_grounds_the_claim(self):
+        from app.pipeline.analyze.grounding import ungrounded_party_claims
+        # "Senate Republicans agreed" / "Democrats withheld support" is how
+        # civic prose overwhelmingly names a party. The singular-only context
+        # pattern read those sources as having no party vocabulary at all.
+        assert ungrounded_party_claims(
+            "Republican Senator Collins praised the vote.",
+            "Senate Republicans agreed to drop three riders.",
+        ) == []
+        assert ungrounded_party_claims(
+            "Sen. Booker (D-NJ) introduced the bill.",
+            "Democrats withheld support for the measure.",
+        ) == []
+
+    def test_plurals_do_not_ground_a_claim_with_no_party_source(self):
+        from app.pipeline.analyze.grounding import ungrounded_party_claims
+        assert ungrounded_party_claims(
+            "Republican Senator Collins praised the vote.",
+            "Senators agreed to drop three riders.",
+        ) == ["Republican Senator"]
 
     def test_included_in_grounding_violations_bundle(self):
         from app.pipeline.analyze.grounding import grounding_violations

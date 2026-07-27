@@ -368,6 +368,25 @@ class TestWeeklyGroundingSource:
         with patch("app.pipeline.analyze.bluesky_spotlight.call_llm", return_value={"post": post}):
             assert _generate_weekly_post(week, db_session) is None
 
+    def test_a_clipped_entry_cannot_leave_a_partial_number(self, db_session):
+        # A mid-token cut is a grounding hole: an entry clipped in the middle
+        # of "68-32" leaves a bare "68" in the sources, which would then vouch
+        # for a claim about 68 of something the week never mentioned.
+        tail = "word " * 46 + "cleared 68-32 today"
+        db_session.add(TimelineEntry(
+            date="2026-07-14", title="Long entry", summary=tail, policy_areas="[]",
+        ))
+        week = _seed_week(db_session, summary="", top_policy_areas="[]")
+        db_session.query(TimelineEntry).filter(
+            TimelineEntry.date.in_(["2026-07-13", "2026-07-15", "2026-07-17"])
+        ).delete(synchronize_session=False)
+        db_session.commit()
+
+        sources = _week_timeline_context(week, db_session).sources
+
+        assert len(sources) < len(tail), "the entry should have been clipped"
+        assert "68" not in sources, "a clipped figure leaked a partial number"
+
     def test_an_official_not_in_the_timeline_is_rejected(self, db_session):
         # Rule 3 asks the model to name who acted, so the weekly path needs
         # the same titled-name check the other posters run.
