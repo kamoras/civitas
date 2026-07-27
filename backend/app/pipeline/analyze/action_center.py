@@ -211,9 +211,49 @@ def _issue_signature(title: str, facts: list[str]) -> set[str]:
     return tokens | numbers
 
 
+# Words that mark a change in a story's STATE rather than the arrival of a new
+# participant. The signature check below sees only capitalized entities and
+# digits, so the developments that carry a story forward without introducing a
+# new name or number were invisible to it: "the president vetoed the measure",
+# "a federal judge blocked the order", "the override attempt failed" each add
+# no signature token at all (and their one capitalized word — President, House,
+# Senate — is stripped as generic civic vocabulary, correctly, since that list
+# is calibrated for telling stories APART, where those words are pure noise).
+# Restricted to outcome/state-change verbs; weak reporting verbs ("announced",
+# "said", "reported") are deliberately excluded because every recap has them.
+# Checked differentially — a reword that says "passed" both times adds nothing
+# — and the near-duplicate text gate in bluesky_poster.py is the backstop if a
+# synonym swap ("approved" for "passed") slips one through here.
+_DEVELOPMENT_MARKERS = frozenset({
+    # Executive and administrative action
+    "veto", "vetoed", "vetoes", "override", "overrode", "overridden",
+    "signed", "enacted", "repealed", "revoked", "reinstated", "suspended",
+    "restored", "halted", "paused", "resumed", "extended", "expired",
+    # Legislative outcome
+    "passed", "failed", "rejected", "defeated", "approved", "confirmed",
+    "advanced", "tabled", "postponed", "delayed", "withdrew", "withdrawn",
+    # Judicial
+    "blocked", "enjoined", "upheld", "overturned", "reversed", "struck",
+    "dismissed", "ruled", "indicted", "charged", "convicted", "acquitted",
+    "sentenced", "settled", "appealed", "subpoenaed",
+    # Personnel and status
+    "resigned", "fired", "ousted", "nominated", "sworn", "replaced",
+    # Story resolution
+    "dropped", "ended", "resolved", "recalled", "expanded", "escalated",
+    "arrested", "released", "admitted", "denied", "declined", "agreed",
+})
+
+_MARKER_WORD_RE = re.compile(r"[a-z]+")
+
+
+def _development_markers(facts: list[str]) -> set[str]:
+    """State-change words present in ``facts`` (see _DEVELOPMENT_MARKERS)."""
+    return set(_MARKER_WORD_RE.findall(" ".join(facts).lower())) & _DEVELOPMENT_MARKERS
+
+
 def _bsky_repost_has_new_information(old_facts_json: str, new_facts: list[str]) -> bool:
     """True if the new facts introduce at least one specific named entity or
-    figure the old ones didn't have.
+    figure — or one story development — the old ones didn't have.
 
     _run_refresh's matching loop previously allowed a Bluesky repost purely
     because a matched issue's primary_article_date advanced — but ongoing/
@@ -227,12 +267,19 @@ def _bsky_repost_has_new_information(old_facts_json: str, new_facts: list[str]) 
     facts (a live recap of the Taylor Farms cyclospora story retitled
     "Cyclosporiasis outbreak investigation updates" would otherwise read as
     new information purely from its own title). A repost is only warranted
-    when the new facts add a signature token (name, figure) the old ones
-    lacked, not just a later publish date or a reworded headline.
+    when the new facts add something the old ones lacked, not just a later
+    publish date or a reworded headline.
+
+    "Something" is a new signature token (name, figure) OR a new development
+    marker — the signature alone answered "is a new PARTICIPANT involved?"
+    when the question is "did anything HAPPEN?", so state changes that name
+    nobody new (a veto, a court blocking an order, a failed override) read as
+    pure rewords and suppressed the update. See _DEVELOPMENT_MARKERS.
     """
-    old_signature = _issue_signature("", json.loads(old_facts_json or "[]"))
-    new_signature = _issue_signature("", new_facts)
-    return bool(new_signature - old_signature)
+    old_facts = json.loads(old_facts_json or "[]")
+    if _issue_signature("", new_facts) - _issue_signature("", old_facts):
+        return True
+    return bool(_development_markers(new_facts) - _development_markers(old_facts))
 
 
 # Attributes copied from a fresh cluster pass onto a matched existing
@@ -262,10 +309,28 @@ def _apply_matched_issue_update(
     model, and calls an LLM, so it can't reasonably be driven end-to-end in
     a unit test.
     """
+    from app.pipeline.analyze import action_metrics
+
     has_new_articles = primary_article_date > (match.primary_article_date or "1970-01-01")
     # A newer article date alone doesn't mean there's something NEW to
     # report — see _bsky_repost_has_new_information's docstring.
-    if has_new_articles and not _bsky_repost_has_new_information(match.facts, facts):
+    #
+    # Compare against the facts as of the LAST POST, not last run.
+    # primary_article_date is day-granular, so has_new_articles is an edge
+    # that fires on exactly one of the ~24 hourly runs per day, while the
+    # `facts` column below is rewritten on all 24. Baselining on match.facts
+    # meant a development the LLM surfaced on any of the other 23 runs was
+    # absorbed into the baseline silently, and then read as "already known"
+    # on the one run that could actually have reposted it — the update was
+    # lost for good. bsky_posted_facts only moves when we post (or when the
+    # poster suppresses a near-duplicate, which is also a decision that
+    # these facts had nothing new to say). NULL for rows last posted before
+    # that column existed; those fall back to the old behavior once.
+    repost_baseline = match.bsky_posted_facts or match.facts
+    suppressed_no_new_info = (
+        has_new_articles and not _bsky_repost_has_new_information(repost_baseline, facts)
+    )
+    if suppressed_no_new_info:
         has_new_articles = False
     invalidate_story = _full_story_should_invalidate(
         match.title, match.facts, new_values["title"], new_values["facts"],
@@ -283,8 +348,19 @@ def _apply_matched_issue_update(
         # New articles arrived — allow the Bluesky poster to post an update.
         match.bsky_posted_at = None
         match.bsky_posted_rank = None
+        action_metrics.increment("bsky_reposts_allowed")
         logger.info(
             "Rank %d '%s': new articles (article_date=%s) — updating and allowing repost",
+            rank, title[:60], primary_article_date,
+        )
+    elif suppressed_no_new_info:
+        # Distinct from the no-newer-article case below: both used to log the
+        # same "no new articles" line, so the share of reposts this gate was
+        # actually suppressing was unmeasurable in production.
+        action_metrics.increment("bsky_reposts_suppressed_no_new_information")
+        logger.info(
+            "Rank %d '%s': newer article (article_date=%s) but no new "
+            "information vs last post — rank updated, no repost",
             rank, title[:60], primary_article_date,
         )
     else:

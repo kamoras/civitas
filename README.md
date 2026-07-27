@@ -389,7 +389,8 @@ Every hour at :15
   6. PERSIST ─── Topic-keyed matching: each unique story maps to one permanent
        │         DB row regardless of rank changes or brief displacement.
        │         Same story + no new articles → update rank silently, no repost.
-       │         Same story + new articles → update content, allow Bluesky repost.
+       │         Same story + newer article but nothing new to say → same.
+       │         Same story + newer article + new information → allow repost.
        │         Brand new story → create new row.
        ▼
   7. ENRICH ──── sqlite-vec semantic search → link related bills/senators
@@ -415,7 +416,9 @@ Every hour at :15
 
 **Why a 5-day monitor threshold?** A topic appearing in the top issues on 5+ distinct days within two weeks is structurally different from a one-day news spike — it indicates a developing situation citizens may need to track. Shorter thresholds created too many ephemeral monitors.
 
-**Why topic-keyed matching instead of rank-slot matching?** The original design keyed issues by `(date, rank)`. When the same story briefly fell off the top 4 and returned, a new row was created with `bsky_posted_at=None`, triggering a duplicate Bluesky post. Topic-keyed matching (2-day lookback by cosine similarity) ensures the same story always maps to the same row. New articles advance `primary_article_date` and allow a repost; more outlets covering the same event do not.
+**Why topic-keyed matching instead of rank-slot matching?** The original design keyed issues by `(date, rank)`. When the same story briefly fell off the top 4 and returned, a new row was created with `bsky_posted_at=None`, triggering a duplicate Bluesky post. Topic-keyed matching (2-day lookback by cosine similarity) ensures the same story always maps to the same row. New articles advance `primary_article_date`; more outlets covering the same event do not.
+
+**What makes a repost?** A newer article date is necessary but not sufficient — recap coverage rewords the same story under a fresher timestamp, which used to repost with nothing new to say. The new facts must also introduce either a named entity/figure or a story development (a veto, a court blocking an order, a failed override) that the facts *as of the last post* lacked. The baseline is `bsky_posted_facts`, not the live `facts` column: `facts` is rewritten on every hourly refresh whether or not anything was posted, so baselining on it let a development that surfaced between posts be absorbed and never read as new again.
 
 ---
 

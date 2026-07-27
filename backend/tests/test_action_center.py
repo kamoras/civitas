@@ -1147,6 +1147,98 @@ class TestApplyMatchedIssueUpdate:
         assert result is False
         assert match.bsky_posted_at == prior_posted_at
 
+    def test_repost_baseline_is_the_last_post_not_the_last_run(self):
+        """Regression: a development that surfaced on a non-posting run was
+        absorbed into `facts` and then read as already-known on the one run
+        that could have reposted it, so the update was lost for good.
+
+        primary_article_date is day-granular, so the date edge fires on one
+        of the ~24 hourly runs per day while `facts` is rewritten on all 24
+        — which run the LLM happens to surface a given fact on is luck, and
+        it decided whether the story could ever be followed up.
+        """
+        from app.pipeline.analyze import action_metrics
+
+        posted_facts = ["A defense policy bill was passed with a narrow 216-212 vote."]
+        match = ActionIssue(
+            id=1, date="2026-07-19", rank=1, title="Story",
+            facts=json.dumps(posted_facts),
+            bsky_posted_facts=json.dumps(posted_facts),
+            primary_article_date="2026-07-19",
+            bsky_posted_at=utcnow(), bsky_posted_rank=1,
+        )
+
+        # Run A — same article date, so no repost is possible here, but the
+        # LLM's re-extraction surfaces a genuinely new named entity.
+        developed = posted_facts + ["Senator Susan Collins announced opposition."]
+        action_metrics.reset()
+        assert _apply_matched_issue_update(
+            match, _new_values_for("Story", developed, "2026-07-19"),
+            1, "2026-07-19", "2026-07-19", developed, "Story",
+        ) is False
+        assert match.facts == json.dumps(developed)  # baseline for display moved
+        assert match.bsky_posted_facts == json.dumps(posted_facts)  # repost baseline did not
+
+        # Run B — the article date finally advances, facts unchanged since
+        # run A. Collins is still new relative to what was actually posted.
+        assert _apply_matched_issue_update(
+            match, _new_values_for("Story", developed, "2026-07-20"),
+            1, "2026-07-20", "2026-07-20", developed, "Story",
+        ) is True
+        assert match.bsky_posted_at is None
+        assert action_metrics.snapshot().get("bsky_reposts_allowed") == 1
+
+    def test_suppressed_repost_is_counted_separately_from_no_new_article(self):
+        """Both cases logged the same "no new articles" line, so the share
+        of reposts this gate suppressed was unmeasurable in production."""
+        from app.pipeline.analyze import action_metrics
+
+        facts = ["An old fact about the vote."]
+        match = ActionIssue(
+            id=1, date="2026-07-19", rank=1, title="Story",
+            facts=json.dumps(facts), bsky_posted_facts=json.dumps(facts),
+            primary_article_date="2026-07-19",
+            bsky_posted_at=utcnow(), bsky_posted_rank=1,
+        )
+        reworded = ["An old fact about the vote, restated."]
+
+        action_metrics.reset()
+        # Newer article date, nothing new to say -> suppressed by this gate.
+        _apply_matched_issue_update(
+            match, _new_values_for("Story", reworded, "2026-07-20"),
+            1, "2026-07-20", "2026-07-20", reworded, "Story",
+        )
+        # No newer article at all -> not this gate's doing, not counted.
+        _apply_matched_issue_update(
+            match, _new_values_for("Story", reworded, "2026-07-20"),
+            1, "2026-07-20", "2026-07-20", reworded, "Story",
+        )
+
+        counts = action_metrics.snapshot()
+        assert counts.get("bsky_reposts_suppressed_no_new_information") == 1
+        assert counts.get("bsky_reposts_allowed") is None
+
+    def test_row_last_posted_before_the_baseline_column_falls_back_to_facts(self):
+        # Rows posted before bsky_posted_facts existed have it NULL; they
+        # keep the old behavior until their next post rather than treating
+        # an empty baseline as "everything is new" and reposting all of them.
+        # The facts here carry a named entity precisely so that an empty
+        # baseline WOULD return True — this fails if the fallback is dropped.
+        facts = ["Senator Susan Collins opposed the temporary funding measure."]
+        match = ActionIssue(
+            id=1, date="2026-07-19", rank=1, title="Story",
+            facts=json.dumps(facts), bsky_posted_facts=None,
+            primary_article_date="2026-07-19",
+            bsky_posted_at=utcnow(), bsky_posted_rank=1,
+        )
+        reworded = ["Senator Susan Collins opposed the funding measure."]
+        assert _bsky_repost_has_new_information("", reworded) is True  # empty baseline
+
+        assert _apply_matched_issue_update(
+            match, _new_values_for("Story", reworded, "2026-07-20"),
+            1, "2026-07-20", "2026-07-20", reworded, "Story",
+        ) is False
+
     def test_invalidated_story_clears_cached_full_story(self):
         match = ActionIssue(
             id=1, date="2026-07-19", rank=1, title="Old story",
@@ -1217,6 +1309,60 @@ class TestBskyRepostHasNewInformation:
         assert _bsky_repost_has_new_information(
             "", ["Senator Susan Collins commented on the bill."],
         ) is True
+
+    # The signature answers "is a new PARTICIPANT involved?", which is not
+    # the same question as "did anything HAPPEN?" — a story can move
+    # decisively without naming anyone or anything new, and those updates
+    # were being suppressed as rewords (reported live 2026-07: the poster
+    # stopped following stories through to their outcome). Each case below
+    # deliberately introduces NO new capitalized entity and NO new figure,
+    # so only the development-marker path can carry it.
+
+    def test_a_veto_counts_as_new_information_without_a_new_name_or_figure(self):
+        old_facts = [
+            "A defense policy bill was passed with a narrow 216-212 vote.",
+            "The measure includes a $95 billion framework.",
+        ]
+        new_facts = old_facts + ["The president vetoed the measure."]
+        assert _issue_signature("", new_facts) - _issue_signature("", old_facts) == set()
+        assert _bsky_repost_has_new_information(json.dumps(old_facts), new_facts) is True
+
+    def test_a_court_blocking_the_measure_counts_as_new_information(self):
+        old_facts = ["A temporary funding measure took effect this week."]
+        new_facts = old_facts + ["A federal judge blocked the order."]
+        assert _issue_signature("", new_facts) - _issue_signature("", old_facts) == set()
+        assert _bsky_repost_has_new_information(json.dumps(old_facts), new_facts) is True
+
+    def test_a_failed_override_counts_as_new_information(self):
+        old_facts = json.dumps(["The president vetoed the defense measure."])
+        new_facts = [
+            "The president vetoed the defense measure.",
+            "The override attempt failed.",
+        ]
+        assert _bsky_repost_has_new_information(old_facts, new_facts) is True
+
+    def test_repeating_the_same_development_is_not_new_information(self):
+        # The marker check is differential: a recap that says "vetoed"
+        # again, having already said it, has still added nothing.
+        old_facts = json.dumps([
+            "The president vetoed the defense measure.",
+            "The bill had passed with a 216-212 vote.",
+        ])
+        new_facts = [
+            "The defense measure was vetoed by the president.",
+            "It had passed 216-212.",
+        ]
+        assert _bsky_repost_has_new_information(old_facts, new_facts) is False
+
+    def test_weak_reporting_verbs_are_not_developments(self):
+        # "announced"/"reported"/"said" appear in every recap, so treating
+        # them as developments would re-open the bug this gate exists for.
+        old_facts = json.dumps(["The committee will review the funding measure."])
+        new_facts = [
+            "The committee will review the funding measure.",
+            "The chair announced that the review is ongoing and reported no timetable.",
+        ]
+        assert _bsky_repost_has_new_information(old_facts, new_facts) is False
 
 
 class TestValidateFactsAuditAdditions:

@@ -29,8 +29,8 @@ flowchart TB
 
     MATCH{"<b>6. PERSIST</b><br/>matches an existing topic?<br/>2-day lookback, title cosine"}
     MATCH -->|"no match"| NEWROW["Create row<br/>bsky_posted_at = null"]
-    MATCH -->|"match, new articles"| UPDCONTENT["Update content<br/>advance primary_article_date<br/>allow Bluesky repost"]
-    MATCH -->|"match, no new articles"| UPDRANK["Update rank silently<br/>no repost"]
+    MATCH -->|"match, newer article<br/>+ new information"| UPDCONTENT["Update content<br/>advance primary_article_date<br/>allow Bluesky repost"]
+    MATCH -->|"match, no newer article<br/>or nothing new to say"| UPDRANK["Update rank silently<br/>no repost"]
 
     NEWROW --> ENRICH
     UPDCONTENT --> ENRICH
@@ -77,7 +77,17 @@ developing situation. Shorter thresholds produced too many ephemeral monitors.
 a new row with `bsky_posted_at = null` — and was posted to Bluesky a second
 time. Keying by topic similarity over a 2-day lookback means one story maps to
 one permanent row and one permalink, regardless of rank churn. More outlets
-covering the same event is not a reason to repost; genuinely newer articles is.
+covering the same event is not a reason to repost.
+
+**A newer article is necessary but not sufficient to repost.** Recap coverage
+rewords the same names and numbers under a fresher timestamp, so the date alone
+let a story repost with nothing new to say. The facts must also add a named
+entity, a figure, or a story development (a veto, a court blocking an order, a
+failed override) that wasn't there as of the last post — measured against
+`bsky_posted_facts`, not the live `facts` column, which every hourly refresh
+overwrites whether or not anything was posted. Two counters make the gate
+observable: `bsky_reposts_allowed` and
+`bsky_reposts_suppressed_no_new_information`.
 
 ## Known limitation, disclosed on the methodology page
 
