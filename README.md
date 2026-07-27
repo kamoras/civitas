@@ -428,7 +428,7 @@ The Civitas Bluesky account (`@civitas-research.org`) is updated automatically b
 | **Issue post** | New topic enters action center, or existing topic gets articles with a newer date | LLM-written 1–3 sentence summary. If event predates today, post opens with "Yesterday: …" or "On [date]: …" |
 | **Senator spotlight** | Once per day (cycles highest → lowest scorers) | LLM-written score highlight with data from Civitas scorecard |
 | **Weekly summary** | Once per week (6-day cooldown) | LLM-written condensed week-in-review from the timeline pipeline |
-| **Repost + like** | Outlet post matches an active issue (cosine sim ≥ 0.78) | Reposts + likes posts from AP, BBC, NPR, PBS NewsHour; max 3 per hourly run |
+| **Repost + like** | Outlet post matches an active issue (cosine sim ≥ 0.78) | Reposts + likes posts from AP News, NPR, and PBS NewsHour (`NEWS_OUTLET_HANDLES` — a narrower list than the RSS feed set, since it needs a Bluesky presence); posts under 24h old; max 3 per hourly run |
 
 Each issue links back to its permanent Civitas permalink (`/issue/<id>`). The permalink is stable — issue IDs never change even as content is updated.
 
