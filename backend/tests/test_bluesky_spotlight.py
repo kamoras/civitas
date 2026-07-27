@@ -7,7 +7,7 @@ instead of leaving that choice and its framing to the model.
 
 from unittest.mock import MagicMock, patch
 
-from app.models import Senator, WeekSummary
+from app.models import Senator, TimelineEntry, WeekSummary
 from app.pipeline.analyze.bluesky_spotlight import (
     MAX_WEEKLY_CHARS,
     _generate_spotlight_post,
@@ -16,6 +16,7 @@ from app.pipeline.analyze.bluesky_spotlight import (
     _publish_spotlight,
     _publish_weekly,
     _week_label,
+    _week_timeline_context,
 )
 from app.pipeline.analyze.bluesky_utils import BSKY_MAX_CHARS
 
@@ -96,7 +97,7 @@ class TestFormerOfficialStatusGrounding:
 
         assert text is None
 
-    def test_weekly_post_rejects_ungrounded_former_status(self):
+    def test_weekly_post_rejects_ungrounded_former_status(self, db_session):
         week = WeekSummary(
             start_date="2026-07-13", end_date="2026-07-19",
             summary="The Senate passed a funding bill on a 68-32 vote.",
@@ -105,7 +106,7 @@ class TestFormerOfficialStatusGrounding:
             "app.pipeline.analyze.bluesky_spotlight.call_llm",
             return_value={"post": "Former Senator Smith praised the funding bill this week."},
         ):
-            text = _generate_weekly_post(week)
+            text = _generate_weekly_post(week, db_session)
 
         assert text is None
 
@@ -183,7 +184,7 @@ class TestWeeklyPostFraming:
     """A weekly post read as a stray news bulletin — nothing in it said the
     text was a recap of the week just ended."""
 
-    def test_post_is_labeled_as_a_summary_of_the_completed_week(self):
+    def test_post_is_labeled_as_a_summary_of_the_completed_week(self, db_session):
         week = WeekSummary(
             year=2026, week_num=29, start_date="2026-07-13", end_date="2026-07-19",
             summary="The Senate passed a funding bill.",
@@ -192,10 +193,110 @@ class TestWeeklyPostFraming:
             "app.pipeline.analyze.bluesky_spotlight.call_llm",
             return_value={"post": "The Senate passed a funding bill."},
         ):
-            text = _generate_weekly_post(week)
+            text = _generate_weekly_post(week, db_session)
 
         assert text.startswith("Last week in review (Jul 13–19):")
         assert text.endswith("The Senate passed a funding bill.")
+
+
+def _seed_week(db_session, **overrides) -> WeekSummary:
+    """A week summary plus the three timeline days it was built from."""
+    for day, title, summary in (
+        ("2026-07-13", "Senate passes funding bill", "The chamber cleared it on a 68-32 vote."),
+        ("2026-07-15", "Court blocks tariff order", "A federal judge stayed the order pending review."),
+        ("2026-07-17", "House opens oversight inquiry", "The committee requested documents."),
+    ):
+        db_session.add(TimelineEntry(
+            date=day, title=title, summary=summary, policy_areas='["Economics", "Law"]',
+        ))
+    fields = {
+        "year": 2026, "week_num": 29,
+        "start_date": "2026-07-13", "end_date": "2026-07-19",
+        "summary": "Spending and trade dominated the week.",
+        "top_policy_areas": '["Economics", "Law"]',
+        "entry_count": 3,
+    }
+    fields.update(overrides)
+    week = WeekSummary(**fields)
+    db_session.add(week)
+    db_session.commit()
+    return week
+
+
+class TestWeekTimelineContext:
+    """The post used to see only week.summary — itself a 2-3 sentence digest
+    of these same days — so the specific votes and rulings it was asked to
+    name had already been compressed out before the model saw anything."""
+
+    def test_context_carries_the_published_week_summary(self, db_session):
+        week = _seed_week(db_session)
+        assert "Spending and trade dominated the week." in _week_timeline_context(week, db_session)
+
+    def test_context_carries_the_days_the_summary_was_built_from(self, db_session):
+        week = _seed_week(db_session)
+
+        context = _week_timeline_context(week, db_session)
+
+        assert "Senate passes funding bill" in context
+        assert "Court blocks tariff order" in context
+        assert "House opens oversight inquiry" in context
+        assert "3 days that week" in context
+
+    def test_context_carries_the_weeks_policy_areas(self, db_session):
+        week = _seed_week(db_session)
+        assert "Dominant policy areas that week: Economics, Law" in _week_timeline_context(week, db_session)
+
+    def test_days_outside_the_week_are_left_out(self, db_session):
+        week = _seed_week(db_session)
+        db_session.add(TimelineEntry(date="2026-07-20", title="Next week's news", summary=""))
+        db_session.commit()
+
+        assert "Next week's news" not in _week_timeline_context(week, db_session)
+
+    def test_days_still_reach_the_model_when_the_summary_is_missing(self, db_session):
+        # generate_period_summaries stores summary="" when its own LLM call
+        # fails, which used to leave the post with nothing to work from.
+        week = _seed_week(db_session, summary="")
+
+        context = _week_timeline_context(week, db_session)
+
+        assert "Senate passes funding bill" in context
+
+    def test_malformed_policy_areas_do_not_break_the_prompt(self, db_session):
+        week = _seed_week(db_session, top_policy_areas="not json")
+
+        context = _week_timeline_context(week, db_session)
+
+        assert "Dominant policy areas" not in context
+        assert "Senate passes funding bill" in context
+
+
+class TestWeeklyPostUsesTimelineDays:
+    def test_a_figure_from_a_day_entry_is_grounded(self, db_session):
+        # The heart of the change: "68-32" appears only in Monday's timeline
+        # entry, never in the week summary. Feeding the model just the
+        # summary made any such figure look invented, so the grounding check
+        # rejected exactly the specific detail rule 3 asks for.
+        week = _seed_week(db_session)
+        with patch(
+            "app.pipeline.analyze.bluesky_spotlight.call_llm",
+            return_value={"post": "The Senate cleared a funding bill 68-32 and a judge stayed the tariff order."},
+        ):
+            text = _generate_weekly_post(week, db_session)
+
+        assert text is not None
+        assert "68-32" in text
+
+    def test_no_timeline_material_skips_the_post_without_calling_the_model(self, db_session):
+        week = WeekSummary(
+            year=2026, week_num=30, start_date="2026-07-20", end_date="2026-07-26",
+            summary="", top_policy_areas="[]",
+        )
+        with patch("app.pipeline.analyze.bluesky_spotlight.call_llm") as mock_llm:
+            text = _generate_weekly_post(week, db_session)
+
+        assert text is None
+        mock_llm.assert_not_called()
 
 
 class TestWeekLabel:
