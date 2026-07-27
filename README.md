@@ -27,7 +27,8 @@ external API calls to cloud AI services.
 │  (bills, votes, (campaign  (bill text,  (speeches,  (SCOTUS (jobs,           │
 │   members)       finance)   histories)   remarks)    cases)  GDP)            │
 │                                                                              │
-│  AP / NPR / BBC / PBS (RSS)          Google Trends     Reddit r/politics     │
+│  AP / NPR / PBS / BBC / The Hill / Politico / Roll Call (RSS)                │
+│                                      Google Trends     Reddit r/politics     │
 └──────────────────────────┬───────────────────────────────────────────────────┘
                            │  rate-limited HTTP
                            │  (Congress 1.2 RPS, FEC 0.25 RPS, GovInfo 1.0 RPS)
@@ -35,29 +36,29 @@ external API calls to cloud AI services.
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                   NIGHTLY PIPELINE  (APScheduler, default 3 AM UTC)          │
 │                                                                              │
-│  ┌─────────┐   ┌───────────┐   ┌───────────────────────────────────────┐    │
-│  │ 1.FETCH │──▶│2.TRANSFORM│──▶│            3. ANALYZE                 │    │
-│  └─────────┘   └───────────┘   │                                       │    │
-│                                │  ┌─────────────────┬────────────────┐ │    │
-│                                │  │ Librarian thread│ Analyst thread │ │    │
-│                                │  │ (batch embed)   │ (LLM + score)  │ │    │
-│                                │  │                 │                │ │    │
-│                                │  │ bill embeddings │ ◄── blocks on  │ │    │
-│                                │  │ donor kNN       │   LLM response │ │    │
-│                                │  │ lobbying match  │                │ │    │
-│                                │  │ promise align   │ narrative synth│ │    │
-│                                │  └─────────────────┴────────────────┘ │    │
-│                                └───────────────────────────────────────┘    │
+│  ┌─────────┐   ┌───────────┐   ┌───────────────────────────────────────┐     │
+│  │ 1.FETCH │──▶│2.TRANSFORM│──▶│            3. ANALYZE                 │     │
+│  └─────────┘   └───────────┘   │                                       │     │
+│                                │  ┌─────────────────┬────────────────┐ │     │
+│                                │  │ Librarian thread│ Analyst thread │ │     │
+│                                │  │ (batch embed)   │ (LLM + score)  │ │     │
+│                                │  │                 │                │ │     │
+│                                │  │ bill embeddings │ ◄── blocks on  │ │     │
+│                                │  │ donor kNN       │   LLM response │ │     │
+│                                │  │ lobbying match  │                │ │     │
+│                                │  │ promise align   │ narrative synth│ │     │
+│                                │  └─────────────────┴────────────────┘ │     │
+│                                └───────────────────────────────────────┘     │
 │                                                │                             │
-│  ┌──────────┐   ┌──────────┐   ┌──────────┐   │   ┌──────────────────────┐ │
-│  │4. EXPLORE│   │5.JUSTICES│   │6.PRESIDENTS   │   │    7. FINALIZE       │ │
-│  │ (ChromaDB│   │ (Oyez)   │   │(BLS/BEA/ ◄────┘   │ (persist scores,    │ │
-│  │  index)  │   │          │   │ Gallup)  │         │  PipelineRun record)│ │
-│  └──────────┘   └──────────┘   └──────────┘         └──────────────────────┘ │
+│  ┌──────────┐   ┌──────────┐   ┌────────────┐  │   ┌──────────────────────┐  │
+│  │4. EXPLORE│   │5.JUSTICES│   │6.PRESIDENTS│  │   │     7. FINALIZE      │  │
+│  │ (ChromaDB│   │ (Oyez)   │   │(BLS/BEA/   │◄─┘   │ (persist scores,     │  │
+│  │  index)  │   │          │   │ UCSB)      │      │  PipelineRun record) │  │
+│  └──────────┘   └──────────┘   └────────────┘      └──────────────────────┘  │
 │                                                                              │
 │  ──────────────────── HOUSE PIPELINE (runs after Senate) ──────────────────  │
 │  Own ~6-phase pipeline for all 435 representatives (FETCH MEMBERS, NORMALIZE,│
-│  FETCH BILLS & VOTES, CLASSIFY BILLS, SPONSORSHIP ANALYSIS, FEC + SCORING) —  │
+│  FETCH BILLS & VOTES, CLASSIFY BILLS, SPONSORSHIP ANALYSIS, FEC + SCORING) — │
 │  reuses the unified EXPLORE pipeline for House floor speeches                │
 └──────────────────────────┬───────────────────────────────────────────────────┘
                            │ writes
@@ -72,7 +73,7 @@ external API calls to cloud AI services.
 │  ├── CampaignPromise                                                         │
 │  ├── ActionIssue / NationalMonitor / MonitorUpdate                           │
 │  ├── TimelineEntry / WeekSummary / MonthSummary / YearSummary                │
-│  ├── ScoreSnapshot  (historical score tracking per senator/rep)               │
+│  ├── ScoreSnapshot  (historical score tracking per senator/rep)              │
 │  ├── ApiCache  (raw API responses, TTL=72h, never cleared)                   │
 │  ├── AnalysisCache  (LLM outputs, hash-keyed, cleared on code changes)       │
 │  └── LearnedClassification  (cross-run entity learning store)                │
@@ -94,7 +95,8 @@ external API calls to cloud AI services.
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │  Next.js 16 frontend  (port 3000)                                            │
 │  /politicians  /bills  /leaderboard  /action  /explore  /compare             │
-│  /issue  /about  /admin  /environmental  /accessibility  /feedback           │
+│  /elections  /issue  /about  /changelog  /admin  /environmental              │
+│  /accessibility  /feedback                                                   │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -122,6 +124,7 @@ Pulls raw data from each government API and stores the complete response verbati
 | Federal Register | Executive orders signed per administration | 1.0 RPS |
 | House Clerk / Senate eFD | STOCK Act periodic transaction reports (PDF/HTML, parsed) | 1.0 / 0.5 RPS |
 | SEC | Ticker -> company name resolution for trade-industry classification | batch |
+| Voteview | DW-NOMINATE member ideal points (per-congress CSV exports), feeding Constituent Alignment's position-congruence component | batch |
 
 Nothing from the API cache is ever cleared — it represents immutable source data. A fresh run can replay against the cached responses without re-hitting the external APIs (controlled by `PIPELINE_CACHE_TTL_HOURS`).
 
@@ -139,7 +142,7 @@ Normalizes raw API payloads into typed domain objects. Key operations:
 The heaviest phase. Runs the producer-consumer pipeline (Librarian + Analyst threads) for each member:
 
 **Librarian thread (batch embedding, runs one member ahead):**
-1. Embed all sponsored/cosponsored bill titles → classify policy areas (nearest centroid, 14 prototypes)
+1. Embed all sponsored/cosponsored bill titles → classify policy areas (nearest centroid, 18 prototypes)
 2. Embed all donor employer names → classify industries (tiered: exact match → embedding → kNN)
 3. Compute lobbying conflicts: cosine similarity between donor industries and bill policy areas
 4. Select key votes: composite score = party deviation + donor industry overlap
@@ -178,9 +181,9 @@ Fetches and scores Supreme Court justices from Oyez:
 ### Phase 6 — PRESIDENTS
 
 Scores sitting and historical presidents from a mix of live and archival sources:
-- **Live**: BLS employment rate, BEA GDP growth, Federal Register order count
-- **Historical**: C-SPAN Presidential Historians Survey (competence/leadership), Gallup approval archive, FiveThirtyEight election margin data
-- All six score dimensions (Independence, Follow-Through, Public Mandate, Effectiveness, Competence, Agency Alignment) are computed from source data with no LLM involvement.
+- **Live**: BLS employment rate, BEA/FRED GDP growth, Federal Register rulemaking counts, UCSB American Presidency Project approval polling
+- **Historical**: C-SPAN Presidential Historians Survey (historical legacy), UCSB election-margin data, MeasuringWorth real-GDP series (1790–present)
+- All four score dimensions (Public Mandate, Effectiveness, Agency Alignment, Historical Legacy) are computed from source data with no LLM involvement. Dimensions a president has no real data source for are left N/A rather than filled with a placeholder.
 
 ### Phase 7 — FINALIZE
 
@@ -200,9 +203,9 @@ Three independent caching systems serve different purposes:
 ┌────────────────────────────────────────────────────────────────────┐
 │  ApiCache  (SQLite: api_cache)                                     │
 │  Key: (tier, endpoint+params_hash)   TTL: 72h (configurable)       │
-│  Stores: raw API JSON, verbatim                                     │
+│  Stores: raw API JSON, verbatim                                    │
 │  Cleared: never (source data is immutable; re-fetched after TTL)   │
-│  Purpose: replay pipeline without re-hitting external APIs          │
+│  Purpose: replay pipeline without re-hitting external APIs         │
 └────────────────────────────────────────────────────────────────────┘
 
 ┌────────────────────────────────────────────────────────────────────┐
@@ -251,7 +254,7 @@ The analyze phase uses a **producer-consumer pattern** to overlap embedding work
 
 On a Pi 5, this overlaps 2–4s of embedding work per senator with the LLM wait, saving 200–400s across 100 senators — a ~10–15% wall-clock reduction at zero additional peak memory cost, since the Librarian only runs one senator ahead.
 
-LLM prompts use **context compression**: platform text is distilled into concise policy-topic bullets rather than raw scraped HTML, keeping prompts within the 2,048-token context budget of the 1.5B model.
+LLM prompts use **context compression**: platform text is distilled into concise policy-topic bullets rather than raw scraped HTML, keeping prompts within the 2,048-token context budget of the 1.2B model.
 
 ### Why Embedding-First, LLM-Sparingly?
 
@@ -265,7 +268,7 @@ Everything else uses geometric methods in sentence-embedding space:
 
 | Task | Method | Rationale |
 |------|---------|-----------|
-| Bill policy area | Nearest centroid (14 prototypes) | Deterministic, explainable, ~100ms vs. ~30s |
+| Bill policy area | Nearest centroid (18 prototypes) | Deterministic, explainable, ~100ms vs. ~30s |
 | Donor industry | k-NN (300+ labeled entities) | Generalizes from precedent; full audit trail |
 | Party alignment | Nearest centroid (party platform corpora) | Content-based, not vote-based — avoids circular reasoning |
 | Lobbying conflicts | Cosine similarity (donor industry ↔ bill policy) | Transparent, reproducible threshold |
@@ -353,10 +356,12 @@ The Action Center is intentionally separate from the nightly pipeline because it
 Every hour at :15
        │
        ▼
-  1. FETCH ─── RSS (AP / NPR / BBC / PBS) + Google Trends + Reddit
+  1. FETCH ─── RSS (AP, NPR, PBS, BBC, The Hill, Politico, Roll Call — 8 feeds
+       │         across 7 newsrooms; NPR's two desks count as one source)
+       │         + Google Trends + Reddit
        │         48-hour article window; direct URLs only (no redirect wrappers)
        ▼
-  2. FILTER ── Embed each article against 18 US policy prototypes
+  2. FILTER ── Embed each article against 24 policy prototypes (19 US, 5 intl.)
        │         Discard cosine_sim < 0.22 (off-topic articles)
        ▼
   3. CLUSTER ─ Pairwise cosine similarity on title embeddings
@@ -434,7 +439,7 @@ Overall = 0.33 × FundingIndependence
 
 The weights live in `SCORE_WEIGHTS` (`backend/app/config_definitions.py`) and are served at `GET /api/config` — that dict, not this file, is authoritative. Two former dimensions are still computed, stored, and displayed but excluded from the weighted overall: **Promise Persistence** (removed in v6.0 — a live measurement found 0 of 100 senators reached even "medium" evidence confidence, so the dimension had collapsed to its neutral prior) and **Funding Diversity** (folded into Funding Independence in v6.5 after an audit found the two correlated at r=0.72 — the same underlying funding-profile signal measured twice).
 
-The exact formulas are actively iterated (v1 → v6.11 as of this writing, each change measured against real data) and are documented in full — every component's weight, calibration source, and academic citation — in the module docstring of `backend/app/pipeline/analyze/score_calculator.py`, which is the source of truth. Rather than duplicate formulas here that will drift out of sync as the algorithm evolves (as this section previously did), a summary:
+The exact formulas are actively iterated (v1 → v6.12 as of this writing, each change measured against real data) and are documented in full — every component's weight, calibration source, and academic citation — in the module docstring of `backend/app/pipeline/analyze/score_calculator.py`, which is the source of truth. Rather than duplicate formulas here that will drift out of sync as the algorithm evolves (as this section previously did), a summary:
 
 - **Funding Independence**: PAC dependency (share scaled by how close contributing PACs run to their legal caps, chamber-specific multiplier), state-relative small-donor share, relative top-donor concentration, plus the two signals folded in from the former Funding Diversity dimension (source breadth, inverse-HHI industry concentration).
 - **Constituent Alignment** (stored/keyed as `independentVoting` for API compatibility — the dimension was rebuilt in v4.2): how a member's voting compares to what their *seat* elected them to do, using Cook PVI as a proxy for constituent preference. Party-line voting in a safe seat that elected that platform scores as representation, not as a failure of independence — the delegate model of representation (Miller & Stokes 1963), not independence as an intrinsic virtue. Since v6.6, below-expected loyalty floors at neutral rather than being penalized. v6.11 adds a position-congruence component: the member's DW-NOMINATE roll-call position (Voteview) scored against a seat-conditional per-party expectation (Canes-Wrone, Brady & Cogan 2002's district-relative extremity), superseding v6.7's cosponsorship-based position-mismatch discount. Ideal points are ingested automatically every pipeline run (`app/pipeline/fetch/voteview.py`, ingestion-gated) — no manual step.
@@ -470,7 +475,7 @@ Each justice is scored on impartiality and ideological consistency based on case
 
 ### Presidential Scores
 
-Presidents are scored on six dimensions (Independence, Follow-Through, Public Mandate, Effectiveness, Competence, Agency Alignment) using a mix of live API data (BLS employment, Federal Register executive orders) and historical records (C-SPAN Historians Survey, Gallup approval data, BEA GDP).
+Presidents are scored on four dimensions — Public Mandate (21.67%), Effectiveness (21.67%), Agency Alignment (21.67%), and Historical Legacy (35%) — using a mix of live API data (BLS employment, BEA/FRED GDP, Federal Register rulemaking) and historical records (C-SPAN Historians Survey, UCSB American Presidency Project approval and election margins, MeasuringWorth GDP). Independence, Follow-Through, and Competence were removed in 2026-07 rather than left as hand-set values with no live formula behind them; a president with no data source for a dimension shows N/A and the overall score renormalizes over whichever dimensions actually apply. See the [scoring changelog](/changelog) for the full account.
 
 All scores default to 50 when data is insufficient. No LLM input is used in score calculation — formulas are deterministic and auditable.
 
@@ -720,7 +725,9 @@ Swarm considers a task healthy purely by its Docker `HEALTHCHECK` exit code
 (`curl -sf http://localhost:8000/api/health` for the backend) — the same
 "HTTP 200, don't parse the body" criterion the old deploy script used.
 `database`/`ollama` in the response body are informational for the admin
-dashboard and don't gate the rolling update.
+dashboard and don't gate the rolling update. The `ollama` key name is
+historical: it reports whichever backend `LLM_BACKEND` selects, so under the
+default it is the llama.cpp server's health, not Ollama's.
 
 ## Development Setup
 
@@ -734,9 +741,24 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 ```bash
 docker compose run --rm --no-deps backend python -m pytest tests/ -v
 
-# Fast tests only (no embedding model)
-docker compose run --rm --no-deps backend python -m pytest tests/ -v \
-  -k "not Embedding and not PolicyArea"
+# Fast tests only (skips the tests that load the sentence-transformer model)
+docker compose run --rm --no-deps backend python -m pytest tests/ -v -m "not slow"
+
+# Only the embedding-model tests
+docker compose run --rm --no-deps backend python -m pytest tests/ -v -m slow
+```
+
+CI runs the fast suite behind a 46% total-coverage floor plus a 60%
+changed-lines gate (`diff-cover`), and runs the `slow` suite on pushes to
+`main`. See `.github/workflows/ci.yml`.
+
+### Running Frontend Tests
+
+```bash
+cd frontend
+npm run lint     # eslint, including jsx-a11y
+npm test         # vitest
+npm run build    # type errors block CI
 ```
 
 ### Project Structure
@@ -802,6 +824,7 @@ civitas/
 │   │   ├── bills/            # Bills-in-motion — grouped by stage, sortable
 │   │   ├── compare/          # Side-by-side senator/representative comparison
 │   │   ├── explore/          # Semantic search over government documents
+│   │   ├── elections/        # Upcoming races, candidates, financials, state map
 │   │   ├── leaderboard/      # Rankings across all branches (House paginated)
 │   │   ├── environmental/    # Environmental policy tracking
 │   │   ├── accessibility/    # Accessibility statement

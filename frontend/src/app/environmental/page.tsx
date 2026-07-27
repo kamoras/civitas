@@ -163,7 +163,7 @@ export default function EnvironmentalPage() {
             <div className="space-y-0 mt-2">
               <Row label="Hardware" value="Raspberry Pi 5 (BCM2712)" />
               <Row label="CPU architecture" value="ARM Cortex-A76 (64-bit RISC)" note="~5–10× more efficient per watt than equivalent x86 server silicon" />
-              <Row label="AI inference" value="Ollama (local)" note="runs on-device — no data leaves the machine" />
+              <Row label="AI inference" value="llama.cpp (local)" note="runs on-device — no data leaves the machine" />
               <Row label="Web server" value="Next.js (self-hosted)" />
               <Row label="API" value="FastAPI (Python)" />
               <Row label="Database" value="SQLite + Chroma (local)" />
@@ -295,7 +295,7 @@ export default function EnvironmentalPage() {
                 },
                 {
                   title: "Local inference = no data center transit",
-                  body: "Each cloud AI query traverses public internet routing, BGP peering, CDN edges, and data center networking before reaching a GPU. Local Ollama inference happens entirely on-device — the energy cost of network transit is zero.",
+                  body: "Each cloud AI query traverses public internet routing, BGP peering, CDN edges, and data center networking before reaching a GPU. Local llama.cpp inference happens entirely on-device — the energy cost of network transit is zero.",
                 },
               ].map(({ title, body }) => (
                 <div
@@ -376,7 +376,7 @@ export default function EnvironmentalPage() {
             <p className="text-xs text-matrix-green/35 font-terminal mt-4 leading-relaxed">
               Energy and carbon figures are estimates based on published data. We
               update this page when better measurements become available. Last
-              reviewed: June 2026.
+              reviewed: July 2026.
             </p>
           </Section>
 

@@ -562,7 +562,8 @@ export default function AboutPage() {
               cosponsorship are separate graphs). Ideology is purely informational
               context. Legislative Leadership is
               <em className="text-matrix-green/80"> not</em> purely informational — it
-              already feeds into Legislative Effectiveness above at 30% weight; the
+              already feeds into Legislative Effectiveness above at 25% weight (30% in the
+              fallback split used when cosponsorship data is missing); the
               number shown on a member&apos;s card is the same underlying score, displayed
               directly (with a tenure adjustment, see below) rather than hidden inside
               the composite.
@@ -882,9 +883,10 @@ export default function AboutPage() {
               <div>
                 <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">NEWS ANALYSIS PIPELINE</h3>
                 <P>
-                  RSS feeds from eight news sources — AP News, NPR (Politics and World),
-                  PBS NewsHour, BBC World, The Hill, Politico, and Roll Call — are parsed
-                  hourly; opinion and editorial sections are filtered out of every feed.
+                  Eight RSS feeds from seven newsrooms — AP News, NPR (Politics and World
+                  desks, counted as one source), PBS NewsHour, BBC World, The Hill, Politico,
+                  and Roll Call — are parsed hourly; opinion and editorial sections are
+                  filtered out of every feed.
                   Under common media-bias ratings this mix spans center to lean-left, with
                   no right-of-center outlet currently included — a disclosed limitation of
                   the source diet, not a neutral sample of all coverage. Each article is filtered
@@ -898,11 +900,16 @@ export default function AboutPage() {
               <div>
                 <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">TRENDING TOPIC INTEGRATION</h3>
                 <P>
-                  Clusters are ranked using a weighted combination of coverage breadth (40%) —
-                  how many independent sources cover the story — and trending relevance (60%) —
-                  whether the topic aligns with what the public is actively discussing. Trending
-                  signals are drawn from Google Trends and policy-relevant Reddit communities,
-                  cross-referenced with the news clusters via embedding similarity.
+                  Clusters are ranked using a weighted combination of civic actionability
+                  (40%) — whether officials are named and how closely the story resembles the
+                  ingested corpus of civic documents — coverage breadth (35%), how many
+                  independent newsrooms cover the story, and trending relevance (25%),
+                  whether the topic aligns with what the public is actively discussing.
+                  Actionability leads because it is what makes an issue something a citizen
+                  can act on; trending is weighted least because it is the most volatile of
+                  the three signals. Trending signals are drawn from Google Trends and
+                  policy-relevant Reddit communities, cross-referenced with the news clusters
+                  via embedding similarity.
                 </P>
               </div>
 
@@ -1069,8 +1076,9 @@ export default function AboutPage() {
               <div>
                 <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">BILL POLICY AREA CLASSIFICATION</h3>
                 <P>
-                  Bills and votes are classified into 15 policy areas (healthcare, defense,
-                  energy, etc.) using a tiered adaptive strategy:
+                  Bills and votes are classified into 18 policy areas (healthcare, defense,
+                  energy, etc., plus a procedural catch-all for non-substantive motions)
+                  using a tiered adaptive strategy:
                 </P>
                 <ul className="space-y-2 mt-2 text-sm text-matrix-green/60">
                   <li className="flex items-start gap-2">
@@ -1216,10 +1224,15 @@ export default function AboutPage() {
                 <P>
                   The Explore feature uses dense passage retrieval
                   <Cite id="11">Karpukhin et al. 2020</Cite> to enable free-text search over
-                  government documents (floor speeches, executive orders, bills). Documents are
-                  chunked, embedded with Snowflake Arctic-XS, and stored in ChromaDB for approximate
-                  nearest-neighbor retrieval. This outperforms keyword search (BM25) for
-                  conceptual queries like &quot;climate policy&quot; where exact term overlap is low.
+                  government documents — Senate and House floor speeches, presidential actions
+                  (executive orders, proclamations, memoranda), Supreme Court opinions, and
+                  Federal Register rulemaking documents. Bill text is <em>not</em> indexed here;
+                  it is used separately, title-only, for the kNN bill-classification step in the
+                  scoring pipeline. Each document gets a single embedding (no chunking) over its
+                  title, summary, and first 800 characters of body, encoded with Snowflake
+                  Arctic-XS and stored in ChromaDB for approximate nearest-neighbor retrieval.
+                  This outperforms keyword search (BM25) for conceptual queries like
+                  &quot;climate policy&quot; where exact term overlap is low.
                 </P>
               </div>
             </div>
@@ -1353,16 +1366,18 @@ export default function AboutPage() {
               <h3 className="text-xs text-matrix-green/50 tracking-widest">PRESIDENTIAL DATA</h3>
               <Row label="Federal Register API" value="Executive order counts and metadata from federalregister.gov (Clinton onward, no API key required)" />
               <Row label="BLS API" value="Bureau of Labor Statistics public API — total nonfarm employment payrolls for jobs-created calculations" />
-              <Row label="C-SPAN Historians Survey" value="Presidential Historians Survey (2021) used as basis for historical president scoring" />
-              <Row label="Gallup Historical Data" value="Average approval ratings for modern presidents (Truman onward)" />
-              <Row label="BEA NIPA Tables" value="Bureau of Economic Analysis GDP growth data" />
+              <Row label="C-SPAN Historians Survey" value="Presidential Historians Survey (2021 cycle) — the basis for the Historical Legacy dimension" />
+              <Row label="American Presidency Project (UCSB)" value="Presidential roster and identity data, approval polling for modern presidents (Truman onward), and pre-polling-era election margins. Replaced Gallup, which ended presidential approval tracking in February 2026" />
+              <Row label="BEA NIPA Tables / FRED" value="Bureau of Economic Analysis GDP growth data for the modern era" />
+              <Row label="MeasuringWorth" value="Real-GDP series (1790-present) for presidents predating BEA coverage" />
             </div>
 
             <div className="space-y-2 mt-6">
               <h3 className="text-xs text-matrix-green/50 tracking-widest">EXPLORE FEATURE</h3>
               <Row label="Congressional Record (GovInfo)" value="Senate and House floor proceedings — speaker-attributed transcripts from daily CREC packages" />
-              <Row label="Federal Register" value="Executive orders, presidential memoranda, and proclamations with full text and metadata" />
-              <Row label="Semantic Search" value="Documents embedded with Snowflake Arctic-XS into ChromaDB for dense passage retrieval" />
+              <Row label="Federal Register" value="Executive orders, presidential memoranda, and proclamations with full text and metadata, plus proposed and final rules — including ones still open for public comment, surfaced with their comment link and deadline" />
+              <Row label="Oyez / supremecourt.gov" value="Supreme Court opinions, indexed alongside the legislative and executive documents" />
+              <Row label="Semantic Search" value="Documents embedded with Snowflake Arctic-XS into ChromaDB for dense passage retrieval — one embedding per document, no chunking" />
             </div>
 
             <div className="space-y-2 mt-6">
@@ -1482,7 +1497,7 @@ export default function AboutPage() {
               <Row label="Embedding Model" value="Snowflake Arctic-XS (22M params, Snowflake/HuggingFace)" />
               <Row label="LLM Runtime" value="llama.cpp (native ARM build), LFM2.5-1.2B-Instruct" />
               <Row label="Vector Database" value="ChromaDB (persistent, local)" />
-              <Row label="Containers" value="Docker Compose (blue/green zero-downtime deploy via nginx)" />
+              <Row label="Containers" value="Docker Swarm (single node) — zero-downtime start-first rolling updates behind an in-stack nginx reverse proxy, with automatic rollback on a failed health check" />
               <Row label="Pipeline Schedule" value="Nightly at 3:00 AM via APScheduler" />
               <Row label="Data Caching" value="72-hour TTL with persistent SQLite cache" />
               <Row label="Learning Store" value="SQLite table for persistent classification memory, version-aware invalidation on code change" />
@@ -1509,9 +1524,9 @@ export default function AboutPage() {
             </P>
             <div className="space-y-2 mt-4">
               <Row label="SERVER" value="Raspberry Pi 5 — a $80 single-board computer" />
-              <Row label="LOCAL LLM" value="LFM2.5-1.2B-Instruct via Ollama/llama.cpp · runs entirely on-device, zero API cost" />
+              <Row label="LOCAL LLM" value="LFM2.5-1.2B-Instruct via llama.cpp (Ollama as fallback) · runs entirely on-device, zero API cost" />
               <Row label="DATABASE" value="SQLite · no cloud database, no managed service" />
-              <Row label="DEPLOYMENT" value="Blue-green via Docker Compose on a single machine" />
+              <Row label="DEPLOYMENT" value="Docker Swarm rolling updates on a single machine" />
               <Row label="EXTERNAL APIs" value="Congress.gov, FEC.gov, Federal Register — all free and open" />
               <Row label="MONTHLY COST" value="~$5–10 (electricity)" />
               <Row label="CLOUD SERVICES" value="None" />
