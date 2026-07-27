@@ -7,9 +7,8 @@ than drawn.
 
 **Columns are a selection, not the full schema.** Each entity draws enough to
 follow its relationships and the behavior these diagrams discuss, not every
-column on the table — `backend/app/models.py` is the authority. Where a column
-gates pipeline behavior it is drawn and annotated, so an undrawn column should
-be read as inert here, never as "no such column".
+column on the table — `backend/app/models.py` is the authority. An undrawn
+column is one these diagrams don't need, not one that doesn't exist.
 
 ## Members of Congress
 
