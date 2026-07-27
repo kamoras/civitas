@@ -21,20 +21,20 @@ external API calls to cloud AI services.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│                          DATA SOURCES (read-only)                            │
+│                           DATA SOURCES (read-only)                           │
 │                                                                              │
 │  Congress.gov   FEC API    GovInfo API  Senate.gov  Oyez    BLS / BEA        │
 │  (bills, votes, (campaign  (bill text,  (speeches,  (SCOTUS (jobs,           │
 │   members)       finance)   histories)   remarks)    cases)  GDP)            │
 │                                                                              │
 │  AP / NPR / PBS / BBC / The Hill / Politico / Roll Call (RSS)                │
-│                                      Google Trends     Reddit r/politics     │
+│  Google Trends     Reddit r/politics                                         │
 └──────────────────────────┬───────────────────────────────────────────────────┘
                            │  rate-limited HTTP
                            │  (Congress 1.2 RPS, FEC 0.25 RPS, GovInfo 1.0 RPS)
                            ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│                   NIGHTLY PIPELINE  (APScheduler, default 3 AM UTC)          │
+│                NIGHTLY PIPELINE  (APScheduler, default 3 AM UTC)             │
 │                                                                              │
 │  ┌─────────┐   ┌───────────┐   ┌───────────────────────────────────────┐     │
 │  │ 1.FETCH │──▶│2.TRANSFORM│──▶│            3. ANALYZE                 │     │
@@ -64,7 +64,7 @@ external API calls to cloud AI services.
                            │ writes
                            ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│                          PERSISTENCE LAYER                                   │
+│                              PERSISTENCE LAYER                               │
 │                                                                              │
 │  SQLite  (civitas.db)                    ChromaDB  (HNSW vector index)       │
 │  ├── senators / representatives          └── ExploreDocument embeddings      │
@@ -89,7 +89,8 @@ external API calls to cloud AI services.
 │  APScheduler ──▶ nightly pipeline            │  llama.cpp server      │      │
 │  APScheduler ──▶ hourly action refresh  ────▶│  LFM2.5-1.2B-Instruct  │      │
 │                                              │  port 8070 (ARM-native)│      │
-└──────────────────────────┬───────────────────└────────────────────────┘──────┘
+│                                              └────────────────────────┘      │
+└──────────────────────────┬───────────────────────────────────────────────────┘
                            │ JSON
                            ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -356,48 +357,50 @@ The Action Center is intentionally separate from the nightly pipeline because it
 Every hour at :15
        │
        ▼
-  1. FETCH ─── RSS (AP, NPR, PBS, BBC, The Hill, Politico, Roll Call — 8 feeds
-       │         across 7 newsrooms; NPR's two desks count as one source)
+  1. FETCH ───── RSS (AP, NPR, PBS, BBC, The Hill, Politico, Roll Call —
+       │         8 feeds across 7 newsrooms; NPR's two desks count as one)
        │         + Google Trends + Reddit
        │         48-hour article window; direct URLs only (no redirect wrappers)
        ▼
-  2. FILTER ── Embed each article against 24 policy prototypes (19 US, 5 intl.)
+  2. FILTER ──── Embed each article against 24 policy prototypes (19 US, 5 intl.)
        │         Discard cosine_sim < 0.22 (off-topic articles)
        ▼
-  3. CLUSTER ─ Pairwise cosine similarity on title embeddings
+  3. CLUSTER ─── Pairwise cosine similarity on title embeddings
        │         Merge clusters starting at centroid similarity 0.20, self-
        │         calibrated upward in 0.05 steps (to 0.61 max) to avoid
        │         collapsing everything into one mega-cluster
        ▼
-  4. RANK ──── score = 0.40 × (civic actionability) + 0.35 × (source breadth) + 0.25 × (trending score)
+  4. RANK ────── score = 0.40 × (civic actionability)
+       │                 + 0.35 × (source breadth)
+       │                 + 0.25 × (trending score)
        │         Actionability leads: officials mentioned + similarity to the
        │         ingested civic-document corpus, not hand-authored keywords
        │         Select top 4 clusters (MAX_ISSUES)
        ▼
-  5. LLM ───── Per cluster: neutral summary + key facts + citizen actions
+  5. LLM ─────── Per cluster: neutral summary + key facts + citizen actions
        │         Post-generation title deduplication (cosine_sim > 0.92)
        ▼
-  6. PERSIST ─ Topic-keyed matching: each unique story maps to one permanent
+  6. PERSIST ─── Topic-keyed matching: each unique story maps to one permanent
        │         DB row regardless of rank changes or brief displacement.
        │         Same story + no new articles → update rank silently, no repost.
        │         Same story + new articles → update content, allow Bluesky repost.
        │         Brand new story → create new row.
        ▼
-  7. ENRICH ── ChromaDB semantic search → link related bills/senators
+  7. ENRICH ──── ChromaDB semantic search → link related bills/senators
        │         Resolve bill IDs mentioned in article text
        ▼
-  8. MONITORS ─ Detect cross-day recurring topics (title similarity ≥ 0.83)
-       │          Create/update NationalMonitor records (min 5 distinct
-       │          days in 14, ≥3 unique sources, LLM significance gate)
-       │          Re-merge duplicate monitors (title OR full sim > 0.50)
+  8. MONITORS ── Detect cross-day recurring topics (title similarity ≥ 0.83)
+       │         Create/update NationalMonitor records (min 5 distinct
+       │         days in 14, ≥3 unique sources, LLM significance gate)
+       │         Re-merge duplicate monitors (title OR full sim > 0.50)
        ▼
-  9. TIMELINE ─ Record daily TimelineEntry
-       │          At week/month/year boundaries: LLM generates period summary
+  9. TIMELINE ── Record daily TimelineEntry
+       │         At week/month/year boundaries: LLM generates period summary
        ▼
- 10. BLUESKY ── Post new/updated issues (LLM-written, with staleness framing
-       │          if event predates today). Daily senator score spotlight.
-       │          Weekly civic summary.
-       │          Repost + like outlet posts that match active issues.
+ 10. BLUESKY ─── Post new/updated issues (LLM-written, with staleness framing
+       │         if event predates today). Daily senator score spotlight.
+       │         Weekly civic summary.
+       │         Repost + like outlet posts that match active issues.
 ```
 
 **Why cluster before ranking?** Articles about the same event arrive from multiple outlets within minutes. Without clustering, all 4 "top issues" would be the same story from AP, NPR, BBC, and PBS. Clustering first, then ranking by source breadth, surfaces the 4 most distinct newsworthy topics.
@@ -502,11 +505,13 @@ User query
     │
     ▼ HNSW approximate nearest-neighbor (ChromaDB, cosine distance)
     │
-    ▼ top-k documents retrieved, filterable by doc type / chamber / politician / open-for-comment
+    ▼ top-k documents retrieved, filterable by doc type / chamber /
+    │   politician / open-for-comment
     │
     ▼ ranked by relevance (default) or date
     │
-    ▼ returned with excerpt, source URL, doc type, and (for open rulemakings) a comment link and deadline
+    ▼ returned with excerpt, source URL, doc type, and — for open
+        rulemakings — a comment link and deadline
 ```
 
 The same embedding model used for classification is used for Explore — no
@@ -537,15 +542,16 @@ The score transparency layer deliberately surfaces the underlying `KeyVote`, `Do
 A rate-limited public read-only API is available without authentication at `/api/public/v1`:
 
 ```
-GET /api/public/v1/senators                   All senators with scores
-GET /api/public/v1/senators/{id}               Single senator
-GET /api/public/v1/senators/{id}/history       Score history over time
-GET /api/public/v1/representatives             All representatives with scores
-GET /api/public/v1/representatives/{id}        Single representative
-GET /api/public/v1/representatives/{id}/history Score history over time
-GET /api/public/v1/states                      State metadata
-GET /api/public/v1/search                      Semantic search over bills, lobbying records,
-                                                and federal-register documents (not politician names)
+GET /api/public/v1/senators                      All senators with scores
+GET /api/public/v1/senators/{id}                 Single senator
+GET /api/public/v1/senators/{id}/history         Score history over time
+GET /api/public/v1/representatives               All representatives with scores
+GET /api/public/v1/representatives/{id}          Single representative
+GET /api/public/v1/representatives/{id}/history  Score history over time
+GET /api/public/v1/states                        State metadata
+GET /api/public/v1/search                        Semantic search over bills, lobbying
+                                                 records, and federal-register documents
+                                                 (not politician names)
 ```
 
 Score weights, industry codes, and policy areas are available unauthenticated
@@ -654,15 +660,15 @@ deploys come from Swarm's own rolling-update mechanism, not a hand-rolled
 blue/green script:
 
 ```
-                    ┌─── nginx (in-stack, port 8081) ───┐
-                    │   upstream backend { }             │
-                    │   upstream frontend { }            │
-                    └──────────┬─────────────────────────┘
-                               │ proxy_pass (overlay network DNS)
-              ┌────────────────┴────────────────┐
-              ▼                                 ▼
-        backend (task)                    frontend (task)
-   start-first rolling update        start-first rolling update
+                    ┌──── nginx (in-stack, port 8081) ────┐
+                    │  upstream backend { }               │
+                    │  upstream frontend { }              │
+                    └─────────────────┬───────────────────┘
+                                      │ proxy_pass (overlay network DNS)
+                 ┌────────────────────┴────────────────────┐
+                 ▼                                         ▼
+          backend (task)                            frontend (task)
+    start-first rolling update                start-first rolling update
 ```
 
 `docker stack deploy -c docker-compose.yml -c docker-compose.swarm.yml
@@ -689,11 +695,11 @@ never recreates or touches it directly.
 
 ```
 Host ports    Swarm service   Purpose
-──────────────────────────────────────────────────────────
+───────────────────────────────────────────────────────────────────────────────
 8081          nginx           Reverse proxy + caching (the only service
-                               published to the host — port-forwarded
-                               externally, don't change without updating
-                               that forwarding rule)
+                              published to the host — port-forwarded
+                              externally, don't change without updating
+                              that forwarding rule)
 —             backend         FastAPI backend (overlay-network only)
 —             frontend        Next.js frontend (overlay-network only)
 —             ollama          Fallback LLM backend (overlay-network only)
