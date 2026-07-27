@@ -406,7 +406,8 @@ Every hour at :15
        ▼
  10. BLUESKY ─── Post new/updated issues (LLM-written, with staleness framing
        │         if event predates today). Daily senator score spotlight.
-       │         Weekly civic summary.
+       │         Weekly civic summary.  (spotlight + weekly also run on the
+       │         early-abort paths above — neither depends on the news)
        │         Repost + like outlet posts that match active issues.
 ```
 
@@ -418,7 +419,9 @@ Every hour at :15
 
 **Why topic-keyed matching instead of rank-slot matching?** The original design keyed issues by `(date, rank)`. When the same story briefly fell off the top 4 and returned, a new row was created with `bsky_posted_at=None`, triggering a duplicate Bluesky post. Topic-keyed matching (2-day lookback by cosine similarity) ensures the same story always maps to the same row. New articles advance `primary_article_date`; more outlets covering the same event do not.
 
-**What makes a repost?** A newer article date is necessary but not sufficient — recap coverage rewords the same story under a fresher timestamp, which used to repost with nothing new to say. The new facts must also introduce either a named entity/figure or a story development (a veto, a court blocking an order, a failed override) that the facts *as of the last post* lacked. The baseline is `bsky_posted_facts`, not the live `facts` column: `facts` is rewritten on every hourly refresh whether or not anything was posted, so baselining on it let a development that surfaced between posts be absorbed and never read as new again.
+**What makes a repost?** A newer article date is necessary but not sufficient — recap coverage rewords the same story under a fresher timestamp, which used to repost with nothing new to say. The new facts must also introduce either a named entity/figure or a story development (a veto, a court blocking an order, a failed override) that the facts *as of the last post* lacked. The baseline is `bsky_posted_facts`, not the live `facts` column: `facts` is rewritten on every hourly refresh whether or not anything was posted, so baselining on it let a development that surfaced between posts be absorbed and never read as new again. Rows that predate the column are backfilled from `facts` at startup — the poster is the only writer of `bsky_posted_facts` and it only ever sees issues the repost gate has already released, so a NULL baseline on an already-posted row could never resolve itself. The backfill is unconditional rather than fired once on the migration: the poster writes `bsky_posted_at` and `bsky_posted_facts` in the same commit, so a row with the first set and the second NULL can only predate the column, and a seeded row stops matching.
+
+**How do you tell a quiet news day from an over-suppressing gate?** Both look the same from outside: nothing on the Action Center, nothing on Bluesky. Roughly ten independent checks in this pipeline fail closed — the right default when the platform publishes under its own name, but it means silence is the shared failure mode of all of them. Every refresh records what came in (`articles_fetched`, `articles_policy_relevant`, `clusters_considered`), what published (`issues_new_topic`, `issues_matched_existing`, `bsky_reposts_allowed`), and what each gate dropped, including on the two abort paths that publish nothing at all. `GET /api/admin/action-metrics` reads the window back with those three groups totalled: healthy intake against near-zero output is a suppression problem, near-zero intake is a quiet cycle or a broken feed. Runs are hourly, so a gap in the series is itself a signal — a refresh that crashed or was still holding the lock leaves no row.
 
 ---
 
@@ -429,11 +432,15 @@ The Civitas Bluesky account (`@civitas-research.org`) is updated automatically b
 | Post type | Trigger | Content |
 |-----------|---------|---------|
 | **Issue post** | New topic enters action center, or existing topic gets articles with a newer date | LLM-written 1–3 sentence summary. If event predates today, post opens with "Yesterday: …" or "On [date]: …" |
-| **Senator spotlight** | Once per day (cycles highest → lowest scorers) | LLM-written score highlight with data from Civitas scorecard |
+| **Senator spotlight** | Once per day (random pick from those not yet spotlighted, cycling through all before repeating) | LLM-written score highlight with data from Civitas scorecard |
 | **Weekly summary** | Once per week (6-day cooldown) | LLM-written condensed week-in-review from the timeline pipeline |
 | **Repost + like** | Outlet post matches an active issue (cosine sim ≥ 0.78) | Reposts + likes posts from AP News, NPR, and PBS NewsHour (`NEWS_OUTLET_HANDLES` — a narrower list than the RSS feed set, since it needs a Bluesky presence); posts under 24h old; max 3 per hourly run |
 
-Each issue links back to its permanent Civitas permalink (`/issue/<id>`). The permalink is stable — issue IDs never change even as content is updated.
+The spotlight pick is deliberately *not* the highest or lowest scorer. Always picking an extreme, combined with framing it as praise or criticism, produced a real incident: a "praise" post about a senator's score read as badly out of touch after negative news broke about him the same day. A random pick with unevaluative framing can't fail that way.
+
+The spotlight and the weekly summary read senator scores and the timeline, not the news, so they run on every refresh — including the two paths that abort early because no articles arrived or none were policy-relevant. That makes a missing spotlight a usable signal in its own right: if it hasn't posted, the pipeline isn't completing, and the quiet isn't a slow news day.
+
+Each issue links back to its permanent Civitas permalink (`/issue/<id>`). The permalink is stable — issue IDs never change even as content is updated, and any issue that has ever been published is retained indefinitely. The 14-day cleanup of old issues keys on `bsky_last_post_text` (only ever written on a successful publish) rather than `bsky_posted_at`, which the repost path clears and so does not mean "never published".
 
 ---
 

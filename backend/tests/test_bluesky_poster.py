@@ -331,6 +331,49 @@ class TestProcessIssuesMetrics:
         assert issue.bsky_posted_at is None
         assert issue.bsky_posted_facts is None
 
+    @pytest.mark.parametrize("publishes", [True, False])
+    def test_every_path_that_sets_posted_at_also_sets_posted_facts(
+        self, db_session, monkeypatch, publishes,
+    ):
+        """bsky_posted_at set with bsky_posted_facts still NULL must only
+        ever mean "row predates the column".
+
+        database._backfill_bsky_posted_facts relies on exactly that: it
+        seeds any such row on startup and is safe to re-run because the
+        poster writes both in the same commit. A future path that marks an
+        issue handled without pinning the baseline would silently turn
+        that repair into a baseline overwrite on every deploy, so the
+        invariant is asserted here rather than left implicit in the two
+        tests above.
+        """
+        from datetime import datetime, timezone
+
+        from app.pipeline.analyze import bluesky_poster
+
+        monkeypatch.setattr(bluesky_poster.settings, "BSKY_HANDLE", "test.handle", raising=False)
+        monkeypatch.setattr(bluesky_poster.settings, "BSKY_APP_PASSWORD", "pw", raising=False)
+
+        issue = self._issue()
+        db_session.add(issue)
+        db_session.commit()
+
+        # publishes=True is the publish path; False routes through
+        # near-duplicate suppression, the other way posted_at gets set.
+        prior = "The House passed the defense bill 216-212."
+        if not publishes:
+            db_session.add(self._issue(
+                bsky_posted_at=datetime.now(timezone.utc),
+                bsky_last_post_text=prior,
+            ))
+            db_session.commit()
+
+        with patch.object(bluesky_poster, "_generate_new_post", return_value=prior), \
+                patch.object(bluesky_poster, "_publish", return_value=True):
+            bluesky_poster.process_issues_for_bluesky([issue], db_session)
+
+        if issue.bsky_posted_at is not None:
+            assert issue.bsky_posted_facts is not None
+
     def test_grounding_rejection_increments_counter(self, db_session):
         from app.pipeline.analyze import action_metrics, bluesky_poster
 

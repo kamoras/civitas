@@ -1713,6 +1713,92 @@ class TestCleanupOldUnpostedIssues:
         assert deleted == 0
         assert db_session.query(ActionIssue).count() == 1
 
+    def test_published_issue_awaiting_a_repost_is_not_deleted(self, db_session):
+        # bsky_posted_at is NULL for two different reasons: never published,
+        # and published-then-flagged-for-a-repost (_apply_matched_issue_update
+        # clears it to hand the issue back to the poster). If that repost then
+        # fails to publish, or the story stops being matched, the row sits at
+        # NULL while a real post pointing at /issue/<id> is live in the feed —
+        # and deleting it 404s a link readers can still click.
+        from app.pipeline.analyze.action_center import _cleanup_old_unposted_issues
+
+        old_date = (utcnow() - timedelta(days=20)).strftime("%Y-%m-%d")
+        db_session.add(ActionIssue(
+            date=old_date, rank=1, title="Published, then flagged for a repost",
+            bsky_posted_at=None,
+            bsky_last_post_text="The House passed the defense bill 216-212.",
+        ))
+        db_session.commit()
+
+        deleted = _cleanup_old_unposted_issues(db_session)
+
+        assert deleted == 0
+        assert db_session.query(ActionIssue).count() == 1
+
+    def test_near_duplicate_suppressed_issue_is_still_deleted(self, db_session):
+        # The other side of the same rule: suppression marks the issue handled
+        # without publishing anything, so it has no permalink to protect and
+        # must not be retained forever by the fix above.
+        from app.pipeline.analyze.action_center import _cleanup_old_unposted_issues
+
+        old_date = (utcnow() - timedelta(days=20)).strftime("%Y-%m-%d")
+        db_session.add(ActionIssue(
+            date=old_date, rank=1, title="Suppressed as a near-duplicate",
+            bsky_posted_at=None, bsky_last_post_text=None,
+            bsky_posted_facts='["nothing new to say"]',
+        ))
+        db_session.commit()
+
+        deleted = _cleanup_old_unposted_issues(db_session)
+
+        assert deleted == 1
+        assert db_session.query(ActionIssue).count() == 0
+
+
+class TestPeriodicBlueskyPosts:
+    """The spotlight and weekly summary read senator scores and the
+    timeline, not the news — but they ran only as stage 6 of the refresh,
+    downstream of the two early aborts, so a bad hour of feeds silenced
+    them too."""
+
+    def test_runs_on_the_no_articles_abort_path(self, db_session):
+        from unittest.mock import patch
+
+        import app.pipeline.analyze.action_center as ac
+
+        with patch.object(ac, "fetch_news_articles", return_value=[]), \
+                patch.object(ac, "_run_periodic_bluesky_posts") as periodic, \
+                patch.object(ac, "_persist_metrics"), \
+                patch.object(ac, "_set_refresh_state"):
+            assert ac._run_refresh(db_session) == 0
+
+        periodic.assert_called_once()
+
+    def test_runs_on_the_no_relevant_articles_abort_path(self, db_session):
+        from unittest.mock import patch
+
+        import app.pipeline.analyze.action_center as ac
+
+        with patch.object(ac, "fetch_news_articles", return_value=["an article"]), \
+                patch.object(ac, "_filter_policy_relevant", return_value=[]), \
+                patch.object(ac, "_run_periodic_bluesky_posts") as periodic, \
+                patch.object(ac, "_persist_metrics"), \
+                patch.object(ac, "_set_refresh_state"):
+            assert ac._run_refresh(db_session) == 0
+
+        periodic.assert_called_once()
+
+    def test_a_failing_spotlight_never_takes_down_the_refresh(self, db_session):
+        from unittest.mock import patch
+
+        from app.pipeline.analyze.action_center import _run_periodic_bluesky_posts
+
+        with patch(
+            "app.pipeline.analyze.bluesky_spotlight.post_daily_spotlight",
+            side_effect=RuntimeError("bluesky down"),
+        ):
+            _run_periodic_bluesky_posts(db_session)  # must not raise
+
 
 class TestPruneStaleApiCache:
     """Extracted from _run_refresh (2026-07-23) for direct testability."""

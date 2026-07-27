@@ -52,6 +52,16 @@ flowchart TB
     POST["<b>10. BLUESKY</b><br/>new/updated issue posts<br/>daily senator spotlight<br/>weekly civic summary<br/>repost + like matching posts from AP, NPR, PBS<br/>(≥ 0.78, under 24h old, max 3/run)"]
 ```
 
+The daily spotlight and the weekly summary also run on the two early-abort
+paths (no articles fetched, none policy-relevant). Neither reads the news —
+the spotlight reads senator scores, the weekly reads the timeline's own
+WeekSummary rows — but both used to sit downstream of those aborts, so a bad
+hour of feeds silenced them too, and a run of such hours spanning a UTC day
+boundary dropped that day's spotlight for good (`post_daily_spotlight` asks
+whether one went out *today*, not whether the last one is overdue). Running
+them unconditionally also makes the spotlight a free liveness check: if it is
+missing from the feed, the refresh is not completing.
+
 ## Why the thresholds are what they are
 
 **Cluster before ranking.** Articles about one event arrive from several outlets
@@ -88,6 +98,31 @@ failed override) that wasn't there as of the last post — measured against
 overwrites whether or not anything was posted. Two counters make the gate
 observable: `bsky_reposts_allowed` and
 `bsky_reposts_suppressed_no_new_information`.
+
+## Silence is the shared failure mode, so every run is counted
+
+About ten checks in this pipeline fail closed, and a story dropped by any of
+them looks exactly like a story that was never there: no issue, no post. The
+counters above are per-gate for that reason, and they are written on every exit
+path — including the two early aborts (nothing fetched, nothing policy-relevant)
+that used to return before the persist, leaving the runs with the most
+diagnostic value as the only ones with no record at all.
+
+Each run also records volume at three points, so a quiet cycle is a number to
+compare rather than an inference drawn from an absence:
+
+| Group | Counters | Reads as |
+|-------|----------|----------|
+| Intake | `articles_fetched`, `articles_policy_relevant`, `clusters_considered` | what the pipeline saw |
+| Output | `issues_new_topic`, `issues_matched_existing`, `bsky_reposts_allowed` | what it published |
+| Suppressed | the `issues_skipped_*` and `bsky_*_suppressed_*` family | what it dropped, and by which gate |
+
+`issues_new_topic` and `issues_matched_existing` are split because the pipeline's
+own `issues_created` counts both — a run that only re-matched yesterday's stories
+reported the same number as one that found four fresh ones, which is exactly the
+distinction between a quiet news cycle and new topics being dropped on the way in.
+
+`GET /api/admin/action-metrics` returns the window with the three groups totalled.
 
 ## Known limitation, disclosed on the methodology page
 

@@ -104,3 +104,99 @@ def test_migration_is_idempotent(patched_engine):
     database._migrate_columns()
     cols = {c["name"] for c in inspect(eng).get_columns("sponsored_bills")}
     assert "stage" in cols
+
+
+def _legacy_action_issues(eng, rows: str) -> None:
+    """Create action_issues at the pre-#310 schema (no bsky_posted_facts)
+    and insert `rows`."""
+    with eng.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE action_issues ("
+            " id INTEGER PRIMARY KEY, facts TEXT, bsky_posted_at DATETIME,"
+            " bsky_last_post_text TEXT)"
+        ))
+        conn.execute(text(rows))
+
+
+def test_bsky_posted_facts_backfilled_for_already_posted_issues(patched_engine):
+    # #310 added bsky_posted_facts and left it NULL on existing rows, where
+    # the repost gate falls back to the live `facts` column — the ratcheting
+    # baseline #310 exists to remove. The column is only ever written by the
+    # Bluesky poster, which only sees issues with bsky_posted_at NULL, which
+    # for a posted issue only the stuck gate can clear: without a backfill
+    # the rows the fix targets can never reach it.
+    eng = patched_engine
+    _legacy_action_issues(eng, (
+        "INSERT INTO action_issues (id, facts, bsky_posted_at) VALUES"
+        " (1, '[\"Senate passed S.1\"]', '2026-07-26 12:00:00'),"
+        " (2, '[\"House voted\"]', NULL)"
+    ))
+
+    database._migrate_columns()
+
+    with eng.begin() as conn:
+        rows = {
+            r.id: r.bsky_posted_facts
+            for r in conn.execute(text(
+                "SELECT id, bsky_posted_facts FROM action_issues"
+            )).fetchall()
+        }
+    # Posted row gets its baseline pinned to what readers were last told.
+    assert rows[1] == '["Senate passed S.1"]'
+    # Never-posted row stays NULL — the poster sets it on its first post,
+    # and pinning a baseline for a post that never happened would suppress
+    # that first post's own content as "already known".
+    assert rows[2] is None
+
+
+def test_bsky_posted_facts_backfill_does_not_rerun_on_restart(patched_engine):
+    # The backfill runs on every startup (so a process that dies between the
+    # ALTER and the UPDATE repairs itself), which is only safe because a
+    # seeded row stops matching. A baseline the poster has since advanced
+    # must never be re-pinned — that would rebuild the exact ratchet this
+    # removes, once per deploy.
+    eng = patched_engine
+    _legacy_action_issues(eng, (
+        "INSERT INTO action_issues (id, facts, bsky_posted_at) VALUES"
+        " (1, '[\"original\"]', '2026-07-26 12:00:00')"
+    ))
+
+    database._migrate_columns()
+
+    # The poster advances the baseline, then `facts` moves on as it does on
+    # every hourly refresh. A second startup must not overwrite the former.
+    with eng.begin() as conn:
+        conn.execute(text(
+            "UPDATE action_issues SET bsky_posted_facts = '[\"posted\"]',"
+            " facts = '[\"newer facts\"]' WHERE id = 1"
+        ))
+
+    database._migrate_columns()
+
+    with eng.begin() as conn:
+        value = conn.execute(text(
+            "SELECT bsky_posted_facts FROM action_issues WHERE id = 1"
+        )).scalar()
+    assert value == '["posted"]'
+
+
+def test_bsky_posted_facts_backfill_repairs_a_half_applied_migration(patched_engine):
+    # pysqlite commits around DDL, so the ALTER can land while the process
+    # dies before the UPDATE. Gating the backfill on "did this call add the
+    # column?" would leave that database on the pre-#310 behavior forever,
+    # silently. Simulate it: column present, baseline never seeded.
+    eng = patched_engine
+    _legacy_action_issues(eng, (
+        "INSERT INTO action_issues (id, facts, bsky_posted_at) VALUES"
+        " (1, '[\"carried over\"]', '2026-07-26 12:00:00')"
+    ))
+    with eng.begin() as conn:
+        conn.execute(text("ALTER TABLE action_issues ADD COLUMN bsky_posted_facts TEXT"))
+
+    database._migrate_columns()  # adds nothing; must still backfill
+
+    with eng.begin() as conn:
+        value = conn.execute(text(
+            "SELECT bsky_posted_facts FROM action_issues WHERE id = 1"
+        )).scalar()
+    assert value == '["carried over"]'

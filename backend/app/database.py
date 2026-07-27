@@ -249,6 +249,62 @@ def _migrate_columns() -> None:
                 logger.info("Dropping legacy column %s.%s", table, column)
                 conn.execute(text(f"ALTER TABLE {table} DROP COLUMN {column}"))
 
+    # Deliberately its own transaction, after the DDL block above has
+    # committed. pysqlite implicitly commits around DDL, so a data write
+    # sharing that block is not reliably part of the same commit — the
+    # ALTER TABLEs landed and this UPDATE silently did not.
+    _backfill_bsky_posted_facts()
+
+
+def _backfill_bsky_posted_facts() -> None:
+    """Seed action_issues.bsky_posted_facts for rows that were already
+    posted to Bluesky before the column existed (#310).
+
+    #310 made the repost gate measure new facts against the facts as of
+    the last post (bsky_posted_facts) instead of the live `facts` column,
+    which every hourly refresh overwrites. Rows predating the column have
+    it NULL, and the gate falls back to `match.facts` for those — the
+    ratcheting baseline #310 exists to eliminate.
+
+    That fallback cannot resolve itself. bsky_posted_facts is only ever
+    written by the Bluesky poster, the poster only sees issues whose
+    bsky_posted_at is NULL, and for an already-posted issue only the
+    repost gate can clear that — the same gate that is stuck on the old
+    behavior. So every ongoing story carried across the migration keeps
+    the pre-#310 ratchet indefinitely, and those are exactly the rows the
+    fix was written for.
+
+    Seeding the baseline to the current `facts` breaks the deadlock
+    without the repost burst the NULL fallback was protecting against:
+    the pinned baseline equals what the gate would have compared against
+    on the very next run anyway, so nothing reads as newly-new. It just
+    stops moving from then on.
+
+    Safe to run on every startup rather than only when the column is
+    added, which is why it isn't gated on that: the poster writes
+    bsky_posted_at and bsky_posted_facts in the same commit, so a row
+    with the former set and the latter NULL can only be one that predates
+    the column. Once seeded it stops matching, and a baseline the poster
+    has since advanced is never re-pinned. Running unconditionally also
+    means a process that dies between the ALTER and this UPDATE — the
+    ALTER having already committed, per the note above — repairs itself
+    on the next boot instead of silently keeping the old behavior
+    forever. test_bluesky_poster pins the write-both invariant this
+    relies on.
+    """
+    if not inspect(engine).has_table("action_issues"):
+        return
+    with engine.begin() as conn:
+        result = conn.execute(text(
+            "UPDATE action_issues SET bsky_posted_facts = facts "
+            "WHERE bsky_posted_at IS NOT NULL AND bsky_posted_facts IS NULL"
+        ))
+    if result.rowcount:
+        logger.info(
+            "Backfilled bsky_posted_facts for %d previously-posted action issue(s)",
+            result.rowcount,
+        )
+
 
 def _migrate_presidents_schema_rebuild() -> None:
     """#218 makes score_public_mandate/score_effectiveness/

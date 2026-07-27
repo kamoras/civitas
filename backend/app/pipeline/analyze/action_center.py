@@ -3668,6 +3668,51 @@ def _find_matching_issue(
     return None
 
 
+def _run_periodic_bluesky_posts(db: Session) -> None:
+    """Daily senator spotlight + weekly civic summary.
+
+    Neither depends on the news at all — the spotlight reads senator
+    scores and the weekly reads the timeline's own WeekSummary rows — but
+    both ran only as stage 6 of the refresh, downstream of the two early
+    aborts. So an hour where the feeds returned nothing, or nothing
+    policy-relevant, silently took the daily spotlight with it, and a run
+    of such hours spanning a UTC day boundary skipped that day's
+    spotlight entirely (post_daily_spotlight is a no-op once the day
+    rolls over: it asks whether one was posted *today*, not whether the
+    last one is overdue).
+
+    Called on every exit path instead, which also makes the spotlight a
+    usable signal: when it is missing from the feed, the pipeline is not
+    completing — it is no longer just evidence that the news was quiet.
+    """
+    try:
+        from app.pipeline.analyze.bluesky_spotlight import post_daily_spotlight, post_weekly_summary
+        post_daily_spotlight(db)
+        post_weekly_summary(db)
+    except Exception:
+        logger.exception("Bluesky spotlight/weekly post failed (non-fatal)")
+
+
+def _persist_metrics(db: Session) -> dict[str, int]:
+    """Write this run's validator counters to api_cache and return them.
+
+    Called on every exit path, not just the happy one. The two early
+    returns below (no articles fetched, nothing policy-relevant) used to
+    return before the tail persist, so the runs with the most diagnostic
+    value — the ones that published nothing at all — were the only runs
+    that left no record behind. "Was it a slow news day or is the fetch
+    broken?" was then unanswerable after the fact: a quiet hour and a
+    failing feed both looked like an absent row.
+    """
+    from app.pipeline.analyze import action_metrics
+
+    snapshot = action_metrics.snapshot()
+    action_metrics.persist(db, f"run-{datetime.now(_US_EAST).strftime('%Y-%m-%d-%H%M')}")
+    if snapshot:
+        logger.info("Validator counters this run: %s", snapshot)
+    return snapshot
+
+
 def _run_refresh(db: Session) -> int:
     t0 = time.perf_counter()
     today = datetime.now(_US_EAST).strftime("%Y-%m-%d")
@@ -3684,16 +3729,27 @@ def _run_refresh(db: Session) -> int:
     articles = fetch_news_articles()
     if not articles:
         logger.warning("No articles fetched — skipping action center refresh")
+        action_metrics.increment("refresh_aborted_no_articles")
+        _run_periodic_bluesky_posts(db)
+        _persist_metrics(db)
         _set_refresh_state(is_running=False, stage=None)
         return 0
+    # Volume counters, recorded on every run so "quiet day" is a number
+    # that can be compared against yesterday's, not an inference drawn
+    # from the absence of posts.
+    action_metrics.increment("articles_fetched", len(articles))
 
     # 2. Filter for policy relevance
     _set_refresh_state(stage="filter")
     relevant = _filter_policy_relevant(articles)
     if not relevant:
         logger.warning("No policy-relevant articles found")
+        action_metrics.increment("refresh_aborted_no_relevant_articles")
+        _run_periodic_bluesky_posts(db)
+        _persist_metrics(db)
         _set_refresh_state(is_running=False, stage=None)
         return 0
+    action_metrics.increment("articles_policy_relevant", len(relevant))
 
     # 3. Fetch trending topics from social media
     trending = fetch_trending_topics()
@@ -3709,6 +3765,7 @@ def _run_refresh(db: Session) -> int:
     # 5b. Deduplicate top clusters so two angles on the same story
     # don't both appear (e.g., "Tariff hikes" and "Market fallout from tariffs")
     top_clusters = _deduplicate_top_clusters(ranked_clusters, MAX_ISSUES)
+    action_metrics.increment("clusters_considered", len(top_clusters))
     _set_refresh_state(stage="issues", stage_detail=f"0/{len(top_clusters)}")
 
     # 6. Generate analysis for each via LLM
@@ -4099,11 +4156,18 @@ def _run_refresh(db: Session) -> int:
             _apply_matched_issue_update(
                 match, _new_values, rank, today, primary_article_date, facts, title,
             )
+            # Split from the new-topic case below: `issues_created` counts
+            # both, so a run that only ever re-matched yesterday's stories
+            # reported the same number as one that found four fresh ones.
+            # That distinction is the whole difference between "the news is
+            # quiet" and "new topics are being dropped by a gate".
+            action_metrics.increment("issues_matched_existing")
         else:
             # Brand new topic — give it a permanent row and post to Bluesky.
             new_row = ActionIssue(date=today, rank=rank, is_current=True, **_new_values)
             db.add(new_row)
             _new_issues.append(new_row)
+            action_metrics.increment("issues_new_topic")
             logger.info("Rank %d new topic: '%s'", rank, title[:60])
 
         issues_created += 1
@@ -4221,12 +4285,7 @@ def _run_refresh(db: Session) -> int:
     _set_refresh_state(last_stories_generated=_stories_done)
 
     # Stage 6: Daily senator score spotlight + weekly civic summary
-    try:
-        from app.pipeline.analyze.bluesky_spotlight import post_daily_spotlight, post_weekly_summary
-        post_daily_spotlight(db)
-        post_weekly_summary(db)
-    except Exception:
-        logger.exception("Bluesky spotlight/weekly post failed (non-fatal)")
+    _run_periodic_bluesky_posts(db)
 
     # Stage 7: Repost/like news outlet posts that match active issues
     try:
@@ -4242,10 +4301,7 @@ def _run_refresh(db: Session) -> int:
     # existed only as log lines, wiped by every deploy — validator hit
     # rates were unmeasurable). One api_cache row per run, pruned by the
     # same 60-day cleanup as every other tier.
-    _metrics_snapshot = action_metrics.snapshot()
-    action_metrics.persist(db, f"run-{datetime.now(_US_EAST).strftime('%Y-%m-%d-%H%M')}")
-    if _metrics_snapshot:
-        logger.info("Validator counters this run: %s", _metrics_snapshot)
+    _persist_metrics(db)
 
     elapsed = time.perf_counter() - t0
     logger.info(
@@ -4264,11 +4320,31 @@ def _cleanup_old_unposted_issues(db: Session) -> int:
     """Delete unposted issues older than 14 days. Issues that have been
     posted to Bluesky are preserved indefinitely so their permalink URLs
     remain valid. Extracted for direct testability (no mocking the rest
-    of _run_refresh's many stages)."""
+    of _run_refresh's many stages).
+
+    "Unposted" is bsky_last_post_text IS NULL, not bsky_posted_at IS
+    NULL. bsky_posted_at does not mean "has been published" — the repost
+    path clears it to hand the issue back to the poster (see
+    _apply_matched_issue_update), so an issue that published, was later
+    flagged for a repost, then failed to publish it (two grounding
+    rejections, or a publish error) or simply stopped being matched sits
+    at NULL indefinitely while a real post pointing at
+    /issue/<id> is live in the feed. Deleting that row 404s a link
+    readers can still click, which is exactly what the docstring above
+    promises not to do. bsky_last_post_text is only ever written on a
+    successful publish and never cleared, so it is the honest record of
+    "readers have a URL for this". Near-duplicate suppression
+    deliberately leaves it NULL: nothing was published, so there is no
+    permalink to protect.
+    """
     cutoff = (utcnow() - timedelta(days=14)).strftime("%Y-%m-%d")
     deleted = (
         db.query(ActionIssue)
-        .filter(ActionIssue.date < cutoff, ActionIssue.bsky_posted_at.is_(None))
+        .filter(
+            ActionIssue.date < cutoff,
+            ActionIssue.bsky_posted_at.is_(None),
+            ActionIssue.bsky_last_post_text.is_(None),
+        )
         .delete()
     )
     if deleted:
