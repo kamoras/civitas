@@ -310,12 +310,22 @@ def process_issues_for_bluesky(issues: list, db: Session) -> int:
             )
             issue.bsky_posted_at = now
             issue.bsky_posted_rank = issue.rank
+            # These facts were judged to have nothing new to say, so they
+            # become the baseline the next repost is measured against —
+            # otherwise the same suppressed update is regenerated (an LLM
+            # call) and re-suppressed on every later article-date advance.
+            issue.bsky_posted_facts = issue.facts
             continue
 
         if _publish(text, issue):
             issue.bsky_posted_at = now
             issue.bsky_posted_rank = issue.rank
             issue.bsky_last_post_text = text
+            # Pin what readers have now been told; the repost gate upstream
+            # measures the next run's facts against this, NOT against the
+            # `facts` column, which every refresh overwrites whether or not
+            # anything was posted (see _apply_matched_issue_update).
+            issue.bsky_posted_facts = issue.facts
             recent_texts.append(text)
             posted += 1
 

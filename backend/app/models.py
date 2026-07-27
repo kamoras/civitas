@@ -845,6 +845,13 @@ class ActionIssue(Base):
     # suppress near-duplicate reposts when a topic gets fresh coverage whose
     # post would say essentially the same thing as the last one.
     bsky_last_post_text: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    # `facts` as of the last time this issue was handed to the Bluesky poster.
+    # The repost gate needs "what have we already told readers", and `facts`
+    # itself can't answer that: it is overwritten on every hourly refresh
+    # whether or not anything was posted, so a development that surfaced on a
+    # non-posting run would be silently absorbed into the baseline and never
+    # read as new again (see _apply_matched_issue_update).
+    bsky_posted_facts: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     is_current: Mapped[bool] = mapped_column(Boolean, default=True)
     primary_article_date: Mapped[str | None] = mapped_column(String(10), nullable=True, default=None)
 
