@@ -861,6 +861,18 @@ See `.env.example` for all options. Key variables:
 | `FEEDBACK_TOKEN` | No | Fine-grained GitHub PAT (Issues: write only) for the on-site feedback form; leave unset to disable it (returns 503, never silently drops) |
 | `GITHUB_FEEDBACK_REPO` | No | Repo the feedback form files issues against (default: `kamoras/civitas`) |
 
+## Contributing
+
+Contributions that improve data accuracy, scoring methodology, or public
+usability are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the
+CI gates, and what a scoring-methodology change needs to argue.
+
+- [Code of Conduct](CODE_OF_CONDUCT.md) — Contributor Covenant 2.1, plus a
+  section on political subject matter specific to a project that scores named
+  politicians
+- [Security policy](SECURITY.md) — please report vulnerabilities privately
+  rather than in a public issue
+
 ## References
 
 Full methodology with inline citations is available on the [About page](/about).
