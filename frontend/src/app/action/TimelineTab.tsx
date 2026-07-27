@@ -140,7 +140,9 @@ function WeekCard({ week }: { week: TimelineWeek }) {
         <div className="px-3 pb-3 border-t border-matrix-green/10 pt-3 space-y-3">
           {week.summary && !week.isCurrent && (
             <div className="border-l-2 border-purple-400/30 pl-3 py-1">
-              <div className="text-[10px] font-mono tracking-widest text-purple-400/40 mb-1">WEEK IN REVIEW</div>
+              <div className="text-[10px] font-mono tracking-widest text-purple-400/40 mb-1">
+                WEEK IN REVIEW — EVERYTHING TRACKED {formatWeekRange(week.startDate, week.endDate)}
+              </div>
               <p className="text-xs text-matrix-green/60 leading-relaxed italic">{week.summary}</p>
             </div>
           )}

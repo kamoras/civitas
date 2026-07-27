@@ -9,11 +9,15 @@ from unittest.mock import MagicMock, patch
 
 from app.models import Senator, WeekSummary
 from app.pipeline.analyze.bluesky_spotlight import (
+    MAX_WEEKLY_CHARS,
     _generate_spotlight_post,
     _generate_weekly_post,
     _most_notable_score,
     _publish_spotlight,
+    _publish_weekly,
+    _week_label,
 )
+from app.pipeline.analyze.bluesky_utils import BSKY_MAX_CHARS
 
 
 def _scores(**overrides):
@@ -133,3 +137,78 @@ class TestPublishSpotlightUrl:
         posted_text = mock_client.send_post.call_args.args[0]
         assert "/politicians/chuck-grassley" in posted_text
         assert "/scorecard?" not in posted_text
+
+
+def _post_weekly(text: str, week: WeekSummary) -> str:
+    """Run _publish_weekly against a stubbed Bluesky client, returning the
+    text that would have been posted. Mirrors the patch set used above."""
+    with patch("app.pipeline.analyze.bluesky_utils.settings") as mock_settings, \
+         patch("app.pipeline.analyze.bluesky_utils.build_link_card", return_value=None), \
+         patch("atproto.Client") as mock_client_cls:
+        mock_settings.BSKY_HANDLE = "civitas-research.org"
+        mock_settings.BSKY_APP_PASSWORD = "unused-in-test"
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+
+        assert _publish_weekly(text, week) is True
+
+    return mock_client.send_post.call_args.args[0]
+
+
+class TestPublishWeeklyUrl:
+    """The weekly summary linked to a bare /timeline path, which is not a
+    route — the timeline is a tab on the action page, so the link 404'd."""
+
+    def test_links_to_the_timeline_tab_not_a_bare_timeline_path(self):
+        week = WeekSummary(year=2026, week_num=29, start_date="2026-07-13", end_date="2026-07-19")
+
+        posted_text = _post_weekly("Congress voted on a funding bill.", week)
+
+        assert "/action?tab=timeline" in posted_text
+        assert "civitas-research.org/timeline" not in posted_text
+
+    def test_header_and_url_leave_the_post_under_the_bluesky_limit(self):
+        # The header and URL are spent before the model's text is; a
+        # max-length body must still fit without the shared publisher having
+        # to truncate it.
+        week = WeekSummary(year=2025, week_num=1, start_date="2025-12-29", end_date="2026-01-04")
+        body = f"{_week_label(week)}: " + "a" * MAX_WEEKLY_CHARS
+
+        posted_text = _post_weekly(body, week)
+
+        assert len(posted_text) <= BSKY_MAX_CHARS
+
+
+class TestWeeklyPostFraming:
+    """A weekly post read as a stray news bulletin — nothing in it said the
+    text was a recap of the week just ended."""
+
+    def test_post_is_labeled_as_a_summary_of_the_completed_week(self):
+        week = WeekSummary(
+            year=2026, week_num=29, start_date="2026-07-13", end_date="2026-07-19",
+            summary="The Senate passed a funding bill.",
+        )
+        with patch(
+            "app.pipeline.analyze.bluesky_spotlight.call_llm",
+            return_value={"post": "The Senate passed a funding bill."},
+        ):
+            text = _generate_weekly_post(week)
+
+        assert text.startswith("Last week in review (Jul 13–19):")
+        assert text.endswith("The Senate passed a funding bill.")
+
+
+class TestWeekLabel:
+    def test_single_month_week_names_the_month_once(self):
+        week = WeekSummary(start_date="2026-07-13", end_date="2026-07-19")
+        assert _week_label(week) == "Jul 13–19"
+
+    def test_month_spanning_week_names_both_months(self):
+        # The label is published, not just prompt context — "Jun 29–5" would
+        # read as a five-week span.
+        week = WeekSummary(start_date="2026-06-29", end_date="2026-07-05")
+        assert _week_label(week) == "Jun 29–Jul 5"
+
+    def test_unparseable_dates_fall_back_to_the_raw_range(self):
+        week = WeekSummary(start_date="", end_date="")
+        assert _week_label(week) == " – "
