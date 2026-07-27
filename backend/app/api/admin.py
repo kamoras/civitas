@@ -384,9 +384,16 @@ async def admin_set_vacancy(
 ) -> dict:
     """Mark a senator/representative's seat vacant, or restore it.
 
-    Manual-only — there is no automated vacancy detection (see
-    politicians.py module docstring). Historical scores/data are never
-    touched here, only the vacancy fields.
+    An override on top of the automatic nightly roster reconciliation in
+    pipeline/member_lifecycle.py — use it to record a departure before the
+    roster catches up, or to correct one it got wrong. Note that the next
+    reconciliation re-derives both fields from the roster, so restoring
+    someone the roster still lists as gone will not stick. Historical
+    scores/data are never touched here, only the vacancy fields.
+
+    Marking someone vacant also starts their removal clock: once
+    left_office_date is more than RETIREMENT_GRACE_DAYS old, the nightly
+    purge deletes them and their child rows for good.
     """
     if reason is not None and reason not in _VACANCY_REASONS:
         raise HTTPException(status_code=400, detail=f"reason must be one of {sorted(_VACANCY_REASONS)}")

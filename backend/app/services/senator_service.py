@@ -434,8 +434,19 @@ def _compute_trend_map(db: Session) -> dict[str, ScoreTrendSchema]:
 
 
 def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
-    """Return all senators ranked by weighted representation score (higher = better representative)."""
-    senators = db.query(Senator).all()
+    """Currently-serving senators ranked by weighted representation score
+    (higher = better representative).
+
+    Departed members are excluded on principle: a ranking of how well the
+    Senate represents constituents right now is a statement about people
+    who hold the office, and a member who left mid-term keeps a rank they
+    can no longer act on. They stay fully browsable on their profile and
+    in the directory (with a vacancy banner) until member_lifecycle.py
+    removes them for good. Presidents are the deliberate exception — the
+    only meaningful presidential comparison is against the historical
+    field, so that leaderboard ranks former presidents and excludes the
+    sitting one (see president_service.get_president_leaderboard)."""
+    senators = db.query(Senator).filter(Senator.is_current == True).all()  # noqa: E712
 
     top_industry_map: dict[str, str] = {}
     ind_rows = (
