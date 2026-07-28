@@ -1920,6 +1920,22 @@ class TestFullNameMatchingIsWordAnchored:
         assert sorted(r["id"] for r in result) == ["r-case", "r-green"]
         assert {r["match_reason"] for r in result} == {"named in coverage"}
 
+    def test_suffixed_member_name_still_matches(self, db_session):
+        """Regression guard for the anchoring itself: a \b-based version of
+        this rule drops every member whose name ends in a Jr./Sr. suffix."""
+        db_session.add(Senator(
+            id="s-king", name="Angus King Jr.", state="ME", party="I",
+        ))
+        db_session.commit()
+
+        result = _find_related_senators(
+            "Maine delegation splits",
+            "Sen. Angus King Jr. voted against the measure.",
+            [], db_session,
+        )
+
+        assert [r["id"] for r in result] == ["s-king"]
+
     def test_justice_full_name_is_word_anchored_too(self, db_session):
         """Same helper, same guarantee, for the SCOTUS path."""
         db_session.add(Justice(
@@ -1949,6 +1965,16 @@ class TestMentionsFullName:
         ("A profile of Al Greene, the singer.", "Al Green", False),
         ("", "Ed Case", False),
         ("Some text", "", False),
+        # A name ending in a non-word character: \b would assert a transition
+        # *after* the period and refuse every one of these. Sen. Angus King's
+        # own FEC record carries the suffix, so this is live data, not a
+        # hypothetical.
+        ("Sen. Angus King Jr. voted no.", "Angus King Jr.", True),
+        ("Rep. Donald Payne Jr. introduced it.", "Donald Payne Jr.", True),
+        ("A statement from Harold Rogers Jr.", "Harold Rogers Jr.", True),
+        ("Rep. Robert F. Kennedy spoke.", "Robert F. Kennedy", True),
+        ("Rep. Alexandria Ocasio-Cortez spoke.", "Alexandria Ocasio-Cortez", True),
+        ("Sen. Beto O'Rourke spoke.", "Beto O'Rourke", True),
     ])
     def test_boundary_rule(self, text, name, expected):
         assert _mentions_full_name(text, name) is expected

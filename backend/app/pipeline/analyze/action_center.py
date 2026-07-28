@@ -929,13 +929,24 @@ def _mentions_full_name(text: str, full_name: str) -> bool:
     Both surnames are on the common-word stoplist, so the surname pass
     correctly refuses them — and the full-name pass then tagged the member
     anyway, with the *higher* confidence "named in coverage" reason. Anchoring
-    on \b fixes both ("report|ed" and "sever|al" have no word boundary before
-    the name) while leaving genuine mentions — "Rep. Ed Case said" — matching.
+    fixes both ("report|ed" and "sever|al" put a word character immediately
+    before the name) while leaving genuine mentions — "Rep. Ed Case said" —
+    matching.
+
+    Anchored with lookarounds rather than \b: \b is a *transition* assertion,
+    so for a name ending in a non-word character it asserts the opposite of
+    what is wanted. "Angus King Jr." ends in ".", and r"...jr\.\b" demands a
+    word character right after that period — which "Jr. voted" does not have,
+    so every member carrying a Jr./Sr. suffix would silently stop matching.
+    (?<!\w)/(?!\w) says what is actually meant: the name must not be glued to
+    a neighbouring word, whatever character it happens to end on.
     """
     if not full_name or not text:
         return False
     return re.search(
-        r"\b" + re.escape(full_name.strip()) + r"\b", text, re.IGNORECASE
+        r"(?<!\w)" + re.escape(full_name.strip()) + r"(?!\w)",
+        text,
+        re.IGNORECASE,
     ) is not None
 
 

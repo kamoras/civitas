@@ -296,7 +296,7 @@ function SecondaryIssue({
             {issue.summary}
           </p>
 
-          <MonitorChips slugs={issue.relatedMonitorSlugs} onSelect={onMonitorSelect} className="" />
+          <MonitorChips slugs={issue.relatedMonitorSlugs} onSelect={onMonitorSelect} />
 
           {issue.facts.length > 0 && (
             <div>
