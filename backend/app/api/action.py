@@ -304,7 +304,12 @@ async def get_action_issue(issue_id: int, response: Response, db: Session = Depe
     if not issue:
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Issue not found")
-    return _build_issue_response(issue, db, {})
+    # Pass None, not {} — an empty map is a *populated* prefetch that happens to
+    # contain nothing, so _build_issue_response would resolve every related
+    # explore id to a miss and return no documents at all. None tells it to look
+    # them up itself. The list endpoint prefetches across all issues to avoid an
+    # N+1; a single issue has nothing to batch.
+    return _build_issue_response(issue, db, None)
 
 
 class PulseVoteRequest(BaseModel):

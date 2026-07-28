@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { fetchTimeline } from "@/lib/api";
 import { formatWeekRange, safeHref } from "@/lib/formatting";
+import { ACTION_CENTER_MONITORS_HREF } from "@/lib/routes";
 import type { TimelineResponse, TimelineEntry, TimelineWeek, TimelineMonth, UpcomingEvent } from "@/lib/api";
 
 const MONTH_NAMES = ["", "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
@@ -75,7 +76,7 @@ function DayEntry({ entry }: { entry: TimelineEntry }) {
           </a>
         )}
         {entry.monitorSlug && (
-          <Link href="/action?tab=monitors" className="text-[10px] font-pixel text-amber-400/50 hover:text-amber-400 transition-colors">
+          <Link href={ACTION_CENTER_MONITORS_HREF} className="text-[10px] font-pixel text-amber-400/50 hover:text-amber-400 transition-colors">
             ● MONITORED
           </Link>
         )}
@@ -399,7 +400,7 @@ export default function TimelineTab() {
           <h3 className="font-pixel text-sm text-amber-400/80 mb-3">{">"} ONGOING MONITORS ({data.year})</h3>
           <div className="space-y-2">
             {data.monitors.map((m) => (
-              <Link key={m.slug} href="/action?tab=monitors"
+              <Link key={m.slug} href={ACTION_CENTER_MONITORS_HREF}
                 className="flex items-center justify-between text-sm hover:bg-white/[0.02] transition-colors px-2 py-1.5 -mx-2 rounded">
                 <span className="text-matrix-green/70">{m.title}</span>
                 <div className="flex items-center gap-2 shrink-0">
