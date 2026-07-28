@@ -7,6 +7,12 @@ import { useCopyFeedback } from "@/hooks/useCopyFeedback";
 interface ShareButtonsProps {
   issue: ActionIssue;
   className?: string;
+  /**
+   * Override the URL being shared. Defaults to the Action Center deep link;
+   * the standalone /issue/{id} full-story page passes its own URL so a share
+   * from that page points back at the page the sharer was actually reading.
+   */
+  shareUrl?: string;
 }
 
 function buildShareText(title: string, shareUrl: string): string {
@@ -25,8 +31,13 @@ function buildShareText(title: string, shareUrl: string): string {
   return noHandle.slice(0, 237) + "...";
 }
 
-export default function ShareButtons({ issue, className = "" }: ShareButtonsProps) {
-  const shareUrl = `https://civitas-research.org/action?issue=${issue.id}`;
+export default function ShareButtons({
+  issue,
+  className = "",
+  shareUrl: shareUrlOverride,
+}: ShareButtonsProps) {
+  const shareUrl =
+    shareUrlOverride ?? `https://civitas-research.org/action?issue=${issue.id}`;
   const shareText = buildShareText(issue.title, shareUrl);
   const encodedText = encodeURIComponent(shareText);
 

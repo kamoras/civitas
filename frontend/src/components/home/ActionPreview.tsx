@@ -6,7 +6,7 @@ import { fetchActionIssues, fetchMonitors } from "@/lib/api";
 import type { NationalMonitor } from "@/lib/api";
 import type { ActionIssue } from "@/types/action";
 import { PARTY_COLORS } from "@/lib/partyStyles";
-import { ACTION_CENTER_HREF } from "@/lib/routes";
+import { ACTION_CENTER_HREF, ACTION_CENTER_MONITORS_HREF } from "@/lib/routes";
 
 export default function ActionPreview() {
   const [issues, setIssues] = useState<ActionIssue[]>([]);
@@ -150,7 +150,7 @@ export default function ActionPreview() {
               {activeMonitors.map((m) => (
                 <Link
                   key={m.slug}
-                  href="/action?tab=monitors"
+                  href={ACTION_CENTER_MONITORS_HREF}
                   className="terminal-window p-5 hover:border-amber-400/30 transition-colors group"
                 >
                   <div className="flex items-center gap-2 mb-2">

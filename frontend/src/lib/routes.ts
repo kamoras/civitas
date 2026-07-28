@@ -20,3 +20,6 @@
  * constant is only about links followed *inside* an already-running session.
  */
 export const ACTION_CENTER_HREF = "/action?tab=issues";
+
+/** The Action Center's national-monitors tab. Same reasoning as above. */
+export const ACTION_CENTER_MONITORS_HREF = "/action?tab=monitors";

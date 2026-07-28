@@ -260,3 +260,66 @@ class TestElectionInfoSpecialSenateRaces:
 
         assert self._fl_entry(result)["hasSenateRace"] is False
         assert result["senateSeatsUp"] == 33  # the Class II rotation alone
+
+
+class TestSingleIssueEnrichment:
+    """The single-issue endpoint backs the /issue/{id} full-story page, which
+    is a cold entry point from social posts. It has to return the same
+    enrichment the list endpoint does, not a stripped-down version."""
+
+    def _make_issue_with_doc(self, db):
+        import json
+        from app.models import ExploreDocument
+
+        doc = ExploreDocument(
+            doc_type="proposed_rule",
+            source="federal_register",
+            title="Proposed Rule on Something",
+            date="2026-07-20",
+            url="https://www.federalregister.gov/d/2026-1",
+            comment_url="https://www.regulations.gov/comment/1",
+            comments_close_on="2026-12-31",
+        )
+        db.add(doc)
+        db.flush()
+
+        issue = ActionIssue(
+            date="2026-07-22", rank=1, title="Issue", summary="s",
+            related_explore_ids=json.dumps([doc.id]), is_current=True,
+        )
+        db.add(issue)
+        db.commit()
+        return issue, doc
+
+    async def test_single_issue_returns_related_explore_docs(self, db_session):
+        """Regression: the endpoint used to pass an empty prefetch map, which
+        resolved every related explore id to a miss and silently returned no
+        documents — so the full-story page could never show them."""
+        from fastapi import Response
+
+        from app.api.action import get_action_issue
+
+        issue, doc = self._make_issue_with_doc(db_session)
+
+        resp = await get_action_issue(issue.id, Response(), db=db_session)
+
+        assert [d["id"] for d in resp["relatedExploreDocs"]] == [doc.id]
+        assert resp["relatedExploreDocs"][0]["title"] == "Proposed Rule on Something"
+        assert resp["relatedExploreDocs"][0]["commentUrl"] == (
+            "https://www.regulations.gov/comment/1"
+        )
+        assert resp["relatedExploreDocs"][0]["commentsCloseOn"] == "2026-12-31"
+
+    async def test_single_issue_matches_the_list_endpoint(self, db_session):
+        """Whatever the list endpoint exposes for an issue, the detail endpoint
+        must expose too — otherwise the full-story page silently degrades."""
+        from fastapi import Response
+
+        from app.api.action import get_action_issue, get_action_issues
+
+        issue, _ = self._make_issue_with_doc(db_session)
+
+        listed = await get_action_issues(Response(), date=issue.date, db=db_session)
+        single = await get_action_issue(issue.id, Response(), db=db_session)
+
+        assert single == listed["issues"][0]
