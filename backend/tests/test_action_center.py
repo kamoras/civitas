@@ -28,6 +28,7 @@ from app.pipeline.analyze.action_center import (
     _is_exact_content_duplicate,
     _issue_signature,
     _largest_coherent_subgroup,
+    _mentions_full_name,
     _signatures_match,
     _surname_owned_by_other_name,
     _validate_facts,
@@ -1857,3 +1858,97 @@ class TestPruneStaleApiCache:
 
         assert deleted == 0
         assert db_session.query(ApiCache).count() == 1
+
+
+class TestFullNameMatchingIsWordAnchored:
+    """A member's full name used to be matched with a plain substring test
+    (`name.lower() in text.lower()`), which lets the name straddle word
+    boundaries. That silently re-admitted the exact false positives the bare
+    surname path is hardened against by _COMMON_WORD_SURNAMES — and did it
+    with the *higher* confidence "named in coverage" reason, so the linked
+    member looked more certain, not less.
+
+    Both names below are current members whose surnames are already on the
+    stoplist, so the surname pass refuses them correctly; only the full-name
+    pass was letting them through."""
+
+    def test_reported_cases_does_not_name_rep_ed_case(self, db_session):
+        db_session.add(Representative(
+            id="r-case", name="Ed Case", state="HI", party="D",
+        ))
+        db_session.commit()
+
+        result = _find_related_senators(
+            "Measles outbreak widens",
+            "Health officials said reported cases rose again this week.",
+            [], db_session,
+        )
+
+        assert result == []
+
+    def test_several_green_does_not_name_rep_al_green(self, db_session):
+        db_session.add(Representative(
+            id="r-green", name="Al Green", state="TX", party="D",
+        ))
+        db_session.commit()
+
+        result = _find_related_senators(
+            "Energy package advances",
+            "The bill funds several green energy projects across the state.",
+            [], db_session,
+        )
+
+        assert result == []
+
+    def test_genuine_full_name_mention_still_matches(self, db_session):
+        """The anchoring must not cost real matches — these are the same two
+        members, actually named."""
+        db_session.add(Representative(
+            id="r-case", name="Ed Case", state="HI", party="D",
+        ))
+        db_session.add(Representative(
+            id="r-green", name="Al Green", state="TX", party="D",
+        ))
+        db_session.commit()
+
+        result = _find_related_senators(
+            "Hawaii and Texas delegations split on the bill",
+            "Rep. Ed Case backed the measure, while Rep. Al Green opposed it.",
+            [], db_session,
+        )
+
+        assert sorted(r["id"] for r in result) == ["r-case", "r-green"]
+        assert {r["match_reason"] for r in result} == {"named in coverage"}
+
+    def test_justice_full_name_is_word_anchored_too(self, db_session):
+        """Same helper, same guarantee, for the SCOTUS path."""
+        db_session.add(Justice(
+            id="j-1", name="Amy Coney Barrett", last_name="Barrett",
+            appointing_party="R",
+        ))
+        db_session.commit()
+
+        matched = _find_related_officials(
+            "Trade policy shift",
+            "The barrettes and other imported goods face new tariffs.",
+            [], db_session,
+        )
+
+        assert [o for o in matched if o["id"] == "j-1"] == []
+
+
+class TestMentionsFullName:
+    """Unit-level coverage of the boundary rule itself."""
+
+    @pytest.mark.parametrize("text,name,expected", [
+        ("Health officials cited reported cases.", "Ed Case", False),
+        ("It funds several green projects.", "Al Green", False),
+        ("Rep. Ed Case said so.", "Ed Case", True),
+        ("ED CASE voted no.", "Ed Case", True),
+        ("Signed by Al Green, the letter...", "Al Green", True),
+        ("A profile of Al Greene, the singer.", "Al Green", False),
+        ("", "Ed Case", False),
+        ("Some text", "", False),
+    ])
+    def test_boundary_rule(self, text, name, expected):
+        assert _mentions_full_name(text, name) is expected

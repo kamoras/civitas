@@ -915,6 +915,30 @@ def _load_official_names(db: "Session") -> dict:
     }
 
 
+def _mentions_full_name(text: str, full_name: str) -> bool:
+    """True when ``full_name`` appears in ``text`` as whole words.
+
+    A plain ``full_name.lower() in text.lower()`` looks equivalent and is not:
+    a substring match lets a name straddle word boundaries, so it re-admits
+    exactly the false positives the bare-surname path is hardened against by
+    _COMMON_WORD_SURNAMES. Measured against the current roster:
+
+      "reported cases" contains "ed case"    -> Rep. Ed Case (D-HI)
+      "several green energy jobs" contains "al green" -> Rep. Al Green (D-TX)
+
+    Both surnames are on the common-word stoplist, so the surname pass
+    correctly refuses them — and the full-name pass then tagged the member
+    anyway, with the *higher* confidence "named in coverage" reason. Anchoring
+    on \b fixes both ("report|ed" and "sever|al" have no word boundary before
+    the name) while leaving genuine mentions — "Rep. Ed Case said" — matching.
+    """
+    if not full_name or not text:
+        return False
+    return re.search(
+        r"\b" + re.escape(full_name.strip()) + r"\b", text, re.IGNORECASE
+    ) is not None
+
+
 def _count_official_mentions(cluster_text: str, officials: dict) -> int:
     """Count distinct tracked officials named in a cluster's coverage.
 
@@ -930,13 +954,13 @@ def _count_official_mentions(cluster_text: str, officials: dict) -> int:
 
     count = 0
     for full, last in zip(officials["member_full"], officials["member_last"]):
-        if last in titled_surnames or full in text_lower:
+        if last in titled_surnames or _mentions_full_name(text_lower, full):
             count += 1
 
     if officials["president_last"]:
         if re.search(
             r"\b" + re.escape(officials["president_last"]) + r"\b", text_lower
-        ) or officials["president_full"] in text_lower:
+        ) or _mentions_full_name(text_lower, officials["president_full"]):
             count += 1
 
     return count
@@ -1478,7 +1502,6 @@ def _find_related_senators(
         return []
 
     issue_text = f"{title}. {summary}. {' '.join(facts)}"
-    issue_text_lower = issue_text.lower()
 
     matched: dict[str, dict] = {}
 
@@ -1513,8 +1536,7 @@ def _find_related_senators(
     # more specific match.
     full_name_matched_last_names: set[str] = set()
     for s, chamber in all_members:
-        full_name_lower = s.name.lower() if s.name else ""
-        if full_name_lower and full_name_lower in issue_text_lower:
+        if s.name and _mentions_full_name(issue_text, s.name):
             matched[s.id] = _make_entry(s, chamber, match_reason="named in coverage")
             full_name_matched_last_names.add(s.name.split()[-1].lower())
 
@@ -1574,8 +1596,14 @@ def _find_related_senators(
             # ~435 House members — weakening disambiguation quality for
             # every Representative match, since the prototype phrase
             # didn't match their actual title.
-            title = "Senator" if chamber == "senate" else "Representative"
-            senator_phrases.append(f"{title} {s.name} from {s.state}")
+            #
+            # Named chamber_title, not title: `title` is this function's own
+            # issue-title parameter, and shadowing it here left the summary
+            # log below reporting "Senator"/"Representative" as the issue it
+            # had just matched against — blinding the one line you would read
+            # to work out why a member got linked to a story.
+            chamber_title = "Senator" if chamber == "senate" else "Representative"
+            senator_phrases.append(f"{chamber_title} {s.name} from {s.state}")
 
             # Extract ~60 chars of context around each match
             contexts = []
@@ -1609,7 +1637,9 @@ def _find_related_senators(
     if result:
         logger.info("Found %d related senators for '%s': %s",
                      len(result), title[:50],
-                     ", ".join(s["name"] for s in result))
+                     ", ".join(
+                         f"{m['name']} ({m['match_reason']})" for m in result
+                     ))
     return result
 
 
@@ -1671,7 +1701,7 @@ def _find_related_officials(
             last = j.name.split()[-1]
             if len(last) < 4:
                 continue
-            full_match = j.name.lower() in text.lower()
+            full_match = _mentions_full_name(text, j.name)
             if full_match:
                 matched_justices[j.id] = {
                     "id": j.id, "name": j.name, "party": j.appointing_party or "R",
@@ -1802,9 +1832,11 @@ def _find_related_explore_docs(
     Uses a two-gate approach:
       1. ChromaDB L2 distance must be below ``_EXPLORE_DOC_MAX_DISTANCE``
       2. Reciprocal similarity: the candidate doc title is embedded against
-         the issue title alone (not summary), and only kept if it scores in
-         the top ``max_docs`` by similarity *and* exceeds the adaptive
-         threshold (median similarity of the candidate pool).
+         the issue title alone (not summary), and only kept if it clears the
+         fixed ``min_sim`` bar below and lands in the top ``max_docs``. (This
+         was an adaptive median-of-the-pool threshold once; a median floats
+         with whatever noise the retrieval returned, so an all-noise pool
+         still promoted its own upper half.)
 
     Using title-only for re-ranking avoids false matches caused by generic
     words in the summary (e.g. "Pentagon", "supply chain") that overlap with
