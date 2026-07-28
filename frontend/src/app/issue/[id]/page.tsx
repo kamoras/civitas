@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { ActionIssue } from "@/types/action";
+import { ACTION_CENTER_HREF } from "@/lib/routes";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 const SITE = "https://civitas-research.org";
@@ -85,7 +86,7 @@ export default async function IssuePage({
       <main className="min-h-screen bg-black text-matrix-green font-mono flex items-center justify-center">
         <div className="text-center space-y-4">
           <div className="text-2xl">ISSUE NOT FOUND</div>
-          <Link href="/action" className="text-sm text-matrix-green/60 hover:text-matrix-green underline">
+          <Link href={ACTION_CENTER_HREF} className="text-sm text-matrix-green/60 hover:text-matrix-green underline">
             ← Back to Action Center
           </Link>
         </div>
@@ -103,7 +104,7 @@ export default async function IssuePage({
         {/* Nav */}
         <div className="mb-8">
           <Link
-            href="/action"
+            href={ACTION_CENTER_HREF}
             className="text-xs text-matrix-green/50 hover:text-matrix-green transition-colors"
           >
             ← ACTION CENTER
@@ -245,7 +246,7 @@ export default async function IssuePage({
         {/* Back */}
         <div className="pt-8 border-t border-matrix-green/10">
           <Link
-            href="/action"
+            href={ACTION_CENTER_HREF}
             className="text-xs text-matrix-green/50 hover:text-matrix-green transition-colors"
           >
             ← Back to Action Center

@@ -4,6 +4,7 @@ import Link from "next/link";
 import GlitchText from "@/components/effects/GlitchText";
 import TypewriterText from "@/components/effects/TypewriterText";
 import Marquee from "@/components/effects/Marquee";
+import { ACTION_CENTER_HREF } from "@/lib/routes";
 
 const MARQUEE_ITEMS = [
   "Action Center: today's top policy issues with national monitors tracking ongoing concerns",
@@ -38,7 +39,7 @@ export default function HeroSection() {
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
-        <Link href="/action" className="btn-retro">
+        <Link href={ACTION_CENTER_HREF} className="btn-retro">
           ACTION CENTER
         </Link>
         <Link href="/politicians" className="btn-retro btn-retro-pink">
