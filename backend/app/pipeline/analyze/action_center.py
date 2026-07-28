@@ -19,6 +19,7 @@ import logging
 import re
 import threading
 import time
+import uuid
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -3274,11 +3275,18 @@ def _update_national_monitors(today: str, db: Session) -> None:
                 continue
 
             slug = _slugify(metadata["title"])
-            
-            # Ensure unique slug
+
+            # Ensure unique slug. `int(time.time()) % 1000` (previous
+            # suffix) wasn't actually unique: two monitors created in the
+            # same wall-clock second — plausible in this tight loop — got
+            # the same suffix and the second's db.flush() below raised
+            # UNIQUE constraint failed: national_monitors.slug, which
+            # propagated out of _run_refresh uncaught (see 2026-07-27 fix
+            # in refresh_action_issues). uuid4 makes the collision
+            # astronomically unlikely instead of merely second-scale.
             existing_slug = db.query(NationalMonitor).filter(NationalMonitor.slug == slug).first()
             if existing_slug:
-                slug = f"{slug}-{int(time.time()) % 1000}"
+                slug = f"{slug}-{uuid.uuid4().hex[:6]}"
 
             monitor = NationalMonitor(
                 slug=slug,
@@ -3607,6 +3615,19 @@ def refresh_action_issues(db: Session | None = None) -> int:
             return 0
         try:
             return _run_refresh(db)
+        except Exception:
+            # _run_refresh only clears the in-memory is_running flag on its
+            # own explicit return paths. An exception mid-run (e.g. a DB
+            # IntegrityError) skips all of those, leaving is_running stuck
+            # true — which then blocks every future hourly refresh (see the
+            # 4h staleness override above _hourly_action_refresh) and, via
+            # /api/admin/pipeline/status, wedges check-and-deploy.sh's busy
+            # check indefinitely (found 2026-07-27: a national_monitors.slug
+            # collision wedged this for 5+ hours and blocked same-day
+            # deploys). Clear it here unconditionally so a crash degrades to
+            # "skipped this hour," not "stuck until a container restart."
+            _set_refresh_state(is_running=False, stage=None)
+            raise
         finally:
             _release_refresh_lock(db)
     finally:

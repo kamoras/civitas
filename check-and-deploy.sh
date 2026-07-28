@@ -90,7 +90,25 @@ pipeline_is_busy() {
     _busy_reason="couldn't reach pipeline status"
     return 0
   fi
-  if echo "$status" | grep -Eq '"(isRunning|houseIsRunning|stockTradesIsRunning|supplementaryIsRunning)":true'; then
+  # Checks only the four heavy/nightly pipelines this guard exists for, by
+  # parsing the JSON and reading top-level keys, not a flat text match.
+  # A plain grep for `"isRunning":true` also matched the unrelated,
+  # lightweight actionRefresh.isRunning field nested in the same JSON blob
+  # — both use the literal key name "isRunning", so no substring regex can
+  # tell them apart. Found 2026-07-27: a wedged action-center refresh
+  # (is_running stuck true in-memory after an uncaught exception — see
+  # action_center.py) blocked deploys for 5+ hours with no real pipeline
+  # running.
+  if echo "$status" | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except ValueError:
+    sys.exit(1)
+sys.exit(0 if any(d.get(k) for k in
+    ("isRunning", "houseIsRunning", "stockTradesIsRunning", "supplementaryIsRunning")
+) else 1)
+'; then
     _busy_reason="a pipeline is running"
     return 0
   fi
