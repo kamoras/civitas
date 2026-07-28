@@ -18,6 +18,7 @@ import json
 import logging
 import re
 import threading
+from functools import lru_cache
 import time
 import uuid
 from datetime import datetime, timedelta
@@ -915,8 +916,17 @@ def _load_official_names(db: "Session") -> dict:
     }
 
 
-def _mentions_full_name(text: str, full_name: str) -> bool:
-    """True when ``full_name`` appears in ``text`` as whole words.
+@lru_cache(maxsize=1024)
+def _full_name_pattern(full_name: str) -> "re.Pattern[str]":
+    return re.compile(
+        r"(?<!\w)" + re.escape(full_name) + r"(?!\w)", re.IGNORECASE
+    )
+
+
+def _mentions_full_name(
+    text: str, full_name: str, text_lower: str | None = None
+) -> bool:
+    r"""True when ``full_name`` appears in ``text`` as whole words.
 
     A plain ``full_name.lower() in text.lower()`` looks equivalent and is not:
     a substring match lets a name straddle word boundaries, so it re-admits
@@ -928,26 +938,33 @@ def _mentions_full_name(text: str, full_name: str) -> bool:
 
     Both surnames are on the common-word stoplist, so the surname pass
     correctly refuses them — and the full-name pass then tagged the member
-    anyway, with the *higher* confidence "named in coverage" reason. Anchoring
-    fixes both ("report|ed" and "sever|al" put a word character immediately
-    before the name) while leaving genuine mentions — "Rep. Ed Case said" —
-    matching.
+    anyway, with the *higher* confidence "named in coverage" reason.
 
-    Anchored with lookarounds rather than \b: \b is a *transition* assertion,
-    so for a name ending in a non-word character it asserts the opposite of
-    what is wanted. "Angus King Jr." ends in ".", and r"...jr\.\b" demands a
-    word character right after that period — which "Jr. voted" does not have,
-    so every member carrying a Jr./Sr. suffix would silently stop matching.
-    (?<!\w)/(?!\w) says what is actually meant: the name must not be glued to
-    a neighbouring word, whatever character it happens to end on.
+    Anchored with lookarounds rather than \b, because \b is a *transition*
+    assertion: for a name ending in a non-word character it asserts the
+    opposite of what is wanted. "Angus King Jr." ends in ".", and
+    r"...jr\.\b" demands a word character right after that period — which
+    "Jr. voted" does not have, so every member carrying a Jr./Sr. suffix would
+    silently stop matching.
+
+    The literal pre-check is load-bearing, not a micro-optimisation. A
+    *leading lookbehind defeats CPython's literal-prefix scan*, so the bare
+    regex restarts from every position in the text, for every one of ~535
+    members, on every cluster. That took the backend test run from 1m48s to
+    past a 15-minute CI timeout. Rejecting on a C-level substring scan first
+    leaves the regex to run only on the rare genuine hit. Callers holding an
+    already-lowercased copy should pass it as ``text_lower`` rather than make
+    this lowercase a cluster-sized string once per member.
     """
     if not full_name or not text:
         return False
-    return re.search(
-        r"(?<!\w)" + re.escape(full_name.strip()) + r"(?!\w)",
-        text,
-        re.IGNORECASE,
-    ) is not None
+    name = full_name.strip()
+    if not name:
+        return False
+    haystack = text_lower if text_lower is not None else text.lower()
+    if name.lower() not in haystack:
+        return False
+    return _full_name_pattern(name).search(text) is not None
 
 
 def _count_official_mentions(cluster_text: str, officials: dict) -> int:
@@ -965,13 +982,17 @@ def _count_official_mentions(cluster_text: str, officials: dict) -> int:
 
     count = 0
     for full, last in zip(officials["member_full"], officials["member_last"]):
-        if last in titled_surnames or _mentions_full_name(text_lower, full):
+        if last in titled_surnames or _mentions_full_name(
+            text_lower, full, text_lower
+        ):
             count += 1
 
     if officials["president_last"]:
         if re.search(
             r"\b" + re.escape(officials["president_last"]) + r"\b", text_lower
-        ) or _mentions_full_name(text_lower, officials["president_full"]):
+        ) or _mentions_full_name(
+            text_lower, officials["president_full"], text_lower
+        ):
             count += 1
 
     return count
@@ -1513,6 +1534,7 @@ def _find_related_senators(
         return []
 
     issue_text = f"{title}. {summary}. {' '.join(facts)}"
+    issue_text_lower = issue_text.lower()
 
     matched: dict[str, dict] = {}
 
@@ -1547,7 +1569,7 @@ def _find_related_senators(
     # more specific match.
     full_name_matched_last_names: set[str] = set()
     for s, chamber in all_members:
-        if s.name and _mentions_full_name(issue_text, s.name):
+        if s.name and _mentions_full_name(issue_text, s.name, issue_text_lower):
             matched[s.id] = _make_entry(s, chamber, match_reason="named in coverage")
             full_name_matched_last_names.add(s.name.split()[-1].lower())
 
