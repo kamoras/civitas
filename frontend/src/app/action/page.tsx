@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import MatrixRain from "@/components/effects/MatrixRain";
@@ -945,7 +945,22 @@ export default function ActionPage() {
 
 function ActionPageInner() {
   const searchParams = useSearchParams();
-  const router = useRouter();
+
+  // Push view state (which tab, which day, which issue) into the address bar.
+  //
+  // Deliberately NOT router.replace(): /action is statically prerendered, and
+  // in a production build Next's client router treats a same-route navigation
+  // as already-satisfied once the page was loaded with a query string. The
+  // address bar then stays frozen on whatever ?tab= it was opened with — every
+  // later tab click swapped the panel but left the URL reading ?tab=timeline,
+  // and even the navbar's own /action link couldn't clear it. Only reproduces
+  // in `next build`, never in `next dev`.
+  //
+  // The History API is Next's supported path for search-param-only updates and
+  // keeps usePathname/useSearchParams in sync without a navigation.
+  const replaceUrl = useCallback((url: string) => {
+    window.history.replaceState(null, "", url);
+  }, []);
 
   const paramTab = searchParams.get("tab");
   const [activeTab, setActiveTabRaw] = useState<Tab>(
@@ -979,21 +994,21 @@ function ActionPageInner() {
     (tab: Tab) => {
       setActiveTabRaw(tab);
       const url = tab === "issues" ? "/action" : `/action?tab=${tab}`;
-      router.replace(url, { scroll: false });
+      replaceUrl(url);
       requestAnimationFrame(() => {
         document.getElementById(`tabpanel-${tab}`)?.focus();
       });
     },
-    [router],
+    [replaceUrl],
   );
 
   // Update URL when a secondary issue is expanded/collapsed
   const handleIssueChange = useCallback(
     (id: number | null) => {
       const url = id ? `/action?issue=${id}` : "/action";
-      router.replace(url, { scroll: false });
+      replaceUrl(url);
     },
-    [router],
+    [replaceUrl],
   );
 
   return (
@@ -1069,7 +1084,7 @@ function ActionPageInner() {
               initialDate={searchParams.get("date")}
               onDateChange={(d) => {
                 const url = d ? `/action?date=${d}` : "/action";
-                router.replace(url, { scroll: false });
+                replaceUrl(url);
               }}
               initialIssueId={initialIssueId}
               onIssueChange={handleIssueChange}
