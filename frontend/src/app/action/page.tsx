@@ -975,9 +975,20 @@ function ActionPageInner() {
       .catch(() => {/* silently ignore — IssuesTab has its own error handling */});
   }, []);
 
-  // Parse ?issue=<id> from URL (numeric id)
-  const paramIssue = searchParams.get("issue");
-  const initialIssueId = paramIssue ? parseInt(paramIssue, 10) || null : null;
+  // ?date= and ?issue=<id> are read once, from the URL the page was opened
+  // with, and deliberately not re-read afterwards. The page writes those same
+  // params back as the user pages through days and expands cards, and Next
+  // feeds a history.replaceState straight back through useSearchParams — so
+  // re-reading them would make IssuesTab treat the user's own click as a fresh
+  // arrival: SecondaryIssue would smooth-scroll the card out from under them,
+  // and the day pager would reload the day it just loaded.
+  const [deepLink] = useState(() => {
+    const rawIssue = searchParams.get("issue");
+    return {
+      date: searchParams.get("date"),
+      issue: rawIssue ? parseInt(rawIssue, 10) || null : null,
+    };
+  });
 
   useEffect(() => {
     const t = searchParams.get("tab");
@@ -1081,12 +1092,12 @@ function ActionPageInner() {
               userState={userState}
               setUserState={setUserState}
               onNavigate={setActiveTab}
-              initialDate={searchParams.get("date")}
+              initialDate={deepLink.date}
               onDateChange={(d) => {
                 const url = d ? `/action?date=${d}` : "/action";
                 replaceUrl(url);
               }}
-              initialIssueId={initialIssueId}
+              initialIssueId={deepLink.issue}
               onIssueChange={handleIssueChange}
             />}
             {activeTab === "my-reps" && <MyRepsTab userState={userState} setUserState={setUserState} issues={sharedIssues} />}
