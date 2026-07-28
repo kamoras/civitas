@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef, useCallback } from "react";
+import { ACTION_CENTER_HREF } from "@/lib/routes";
 
 
 const BSKY_PROFILE_URL = "https://bsky.app/profile/civitas-research.org";
 
 const NAV_LINKS: readonly { href: string; label: string; accent?: boolean }[] = [
-  { href: "/action", label: "ACTION CENTER", accent: true },
+  { href: ACTION_CENTER_HREF, label: "ACTION CENTER", accent: true },
   { href: "/bills", label: "BILLS" },
   { href: "/politicians", label: "POLITICIANS" },
   { href: "/elections", label: "ELECTIONS" },
@@ -68,7 +69,13 @@ export default function Navbar() {
     return () => document.removeEventListener("keydown", onKey);
   }, [menuOpen, closeMenu]);
 
-  const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
+  // usePathname() never includes a query string, so compare against the href's
+  // path only — ACTION_CENTER_HREF carries a ?tab=, and a raw === would leave
+  // the Action Center link permanently un-highlighted.
+  const isActive = (href: string) => {
+    const path = href.split("?")[0];
+    return pathname === path || pathname.startsWith(path + "/");
+  };
 
   return (
     <header

@@ -1,5 +1,38 @@
 # AGENTS.md — Civitas Project Guide
 
+## Working Agreement — finish the whole job
+
+**Fix everything you find. Do not defer known problems to a follow-up PR.**
+
+When you are working a bug, the deliverable is the *behavior*, not the diff you
+first imagined. If investigating turns up more defects in the same feature —
+related bugs, a regression your own fix introduced, an accessibility violation
+in the widget you are already editing — those are yours too. Fix them in the
+same change. "Known limitation, tracked separately" is not an acceptable way to
+close out work here; a follow-up PR that nobody opens is just a bug you decided
+to keep.
+
+This applies specifically to:
+
+- **Regressions you introduce.** Review your own change adversarially before
+  calling it done, and verify the assumptions your fix rests on rather than
+  assuming them. Cheap indirect evidence often isn't evidence: a fix once
+  looked correct because no extra network request appeared, when the duplicate
+  call was really being served from `cachedFetch`'s client cache.
+- **Adjacent defects in the same component.** If the tab bar you are fixing
+  also has broken arrow-key navigation, fix that too.
+- **Every code path with the same shape.** One `<Link>` corrected out of eight
+  leaves the bug live on seven pages. Grep for the pattern and fix the class,
+  not the instance — and where the correct form looks odd enough that someone
+  might "clean it up" later, put it behind a named constant with a comment
+  explaining why (see `ACTION_CENTER_HREF` in `src/lib/routes.ts`).
+
+Verify against a **production build**, not just `next dev` / a dev server —
+several of the bugs this rule exists because of were invisible in development
+and only appeared under `next build` (see Frontend conventions). State plainly
+what you tested and what the result was; if something genuinely cannot be fixed
+here, say so explicitly with the evidence, rather than filing it away.
+
 ## Project Overview
 
 Civitas is an AI/ML political transparency platform that scores U.S. senators,
@@ -593,6 +626,41 @@ SQLAlchemy ORM models are in `backend/app/models.py`. Key tables: `senators`,
   bundle size (e.g., Action Center tabs load on demand). Use in-memory
   `cachedFetch` from `src/lib/api.ts` for API calls that benefit from
   client-side TTL caching.
+- Tabbed UIs follow the WAI-ARIA tabs pattern with a roving `tabindex`.
+  Activating a tab must focus **the incoming tab**, not its panel — the
+  Arrow/Home/End handler lives on the `role="tablist"` container, so moving
+  focus into the panel strands the keyboard user and kills every arrow press
+  after the first. The panel keeps `tabIndex=0` so Tab still reaches content.
+
+#### Client-side URL state on statically prerendered routes (2026-07)
+
+Three traps, all found in the Action Center's tab bar, **none of which
+reproduce under `next dev` — only `next build`**. Any page that keeps view
+state in the query string is exposed to them.
+
+- **`router.replace()` silently does nothing** on a statically prerendered
+  route once the page was loaded *with* a query string: Next treats the
+  same-route navigation as already-satisfied and the address bar never
+  updates. `/action?tab=timeline` froze there for the whole session — every
+  tab click swapped the panel but left the URL reading `?tab=timeline`, and a
+  refresh re-froze it. Use `window.history.replaceState` for search-param-only
+  updates instead; Next patches the History API, copies its internal state
+  onto the entry (so passing `null` is safe and popstate still works), and
+  dispatches `ACTION_RESTORE` to keep `usePathname`/`useSearchParams` in sync
+  without performing a navigation.
+- **That sync cuts both ways.** Because the replaced URL comes straight back
+  through `useSearchParams`, any prop derived from it becomes live. A
+  `?issue=<id>` the page wrote itself flipped a card's `deepLinked` prop and
+  fired its arrival effect, scroll-jumping the page on an ordinary expand
+  click. Params meant to describe *how the page was opened* must be latched at
+  mount (`useState` initializer), not re-read on every render.
+- **A soft navigation with an *empty* search reuses the cached entry's search
+  string.** So after a session has seen `/action?tab=timeline`, every
+  `<Link href="/action">` in the app lands back on the timeline tab. A href
+  that names its tab is never reused this way — hence `ACTION_CENTER_HREF`
+  (`/action?tab=issues`) for all in-app links. Bare `/action` stays fine as a
+  public entry point: a cold load has no client cache to restore from. Do not
+  "tidy" that query string away.
 
 ### Testing
 

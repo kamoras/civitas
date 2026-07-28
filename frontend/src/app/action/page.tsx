@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import MatrixRain from "@/components/effects/MatrixRain";
@@ -945,7 +945,22 @@ export default function ActionPage() {
 
 function ActionPageInner() {
   const searchParams = useSearchParams();
-  const router = useRouter();
+
+  // Push view state (which tab, which day, which issue) into the address bar.
+  //
+  // Deliberately NOT router.replace(): /action is statically prerendered, and
+  // in a production build Next's client router treats a same-route navigation
+  // as already-satisfied once the page was loaded with a query string. The
+  // address bar then stays frozen on whatever ?tab= it was opened with — every
+  // later tab click swapped the panel but left the URL reading ?tab=timeline,
+  // and even the navbar's own /action link couldn't clear it. Only reproduces
+  // in `next build`, never in `next dev`.
+  //
+  // The History API is Next's supported path for search-param-only updates and
+  // keeps usePathname/useSearchParams in sync without a navigation.
+  const replaceUrl = useCallback((url: string) => {
+    window.history.replaceState(null, "", url);
+  }, []);
 
   const paramTab = searchParams.get("tab");
   const [activeTab, setActiveTabRaw] = useState<Tab>(
@@ -960,9 +975,20 @@ function ActionPageInner() {
       .catch(() => {/* silently ignore — IssuesTab has its own error handling */});
   }, []);
 
-  // Parse ?issue=<id> from URL (numeric id)
-  const paramIssue = searchParams.get("issue");
-  const initialIssueId = paramIssue ? parseInt(paramIssue, 10) || null : null;
+  // ?date= and ?issue=<id> are read once, from the URL the page was opened
+  // with, and deliberately not re-read afterwards. The page writes those same
+  // params back as the user pages through days and expands cards, and Next
+  // feeds a history.replaceState straight back through useSearchParams — so
+  // re-reading them would make IssuesTab treat the user's own click as a fresh
+  // arrival: SecondaryIssue would smooth-scroll the card out from under them,
+  // and the day pager would reload the day it just loaded.
+  const [deepLink] = useState(() => {
+    const rawIssue = searchParams.get("issue");
+    return {
+      date: searchParams.get("date"),
+      issue: rawIssue ? parseInt(rawIssue, 10) || null : null,
+    };
+  });
 
   useEffect(() => {
     const t = searchParams.get("tab");
@@ -979,21 +1005,28 @@ function ActionPageInner() {
     (tab: Tab) => {
       setActiveTabRaw(tab);
       const url = tab === "issues" ? "/action" : `/action?tab=${tab}`;
-      router.replace(url, { scroll: false });
+      replaceUrl(url);
+      // Focus the newly selected *tab*, not its panel. The tabs use a roving
+      // tabindex, so the incoming tab has to be focused explicitly or the
+      // keyboard user is stranded on an element that just became tabindex=-1.
+      // Focusing the panel instead moved focus out of the tablist entirely,
+      // which meant the Arrow/Home/End handler below stopped receiving keys —
+      // one arrow press worked and every one after it did nothing. The panel
+      // stays tabbable (tabIndex=0), so Tab still reaches the content next.
       requestAnimationFrame(() => {
-        document.getElementById(`tabpanel-${tab}`)?.focus();
+        document.getElementById(`tab-${tab}`)?.focus();
       });
     },
-    [router],
+    [replaceUrl],
   );
 
   // Update URL when a secondary issue is expanded/collapsed
   const handleIssueChange = useCallback(
     (id: number | null) => {
       const url = id ? `/action?issue=${id}` : "/action";
-      router.replace(url, { scroll: false });
+      replaceUrl(url);
     },
-    [router],
+    [replaceUrl],
   );
 
   return (
@@ -1066,12 +1099,12 @@ function ActionPageInner() {
               userState={userState}
               setUserState={setUserState}
               onNavigate={setActiveTab}
-              initialDate={searchParams.get("date")}
+              initialDate={deepLink.date}
               onDateChange={(d) => {
                 const url = d ? `/action?date=${d}` : "/action";
-                router.replace(url, { scroll: false });
+                replaceUrl(url);
               }}
-              initialIssueId={initialIssueId}
+              initialIssueId={deepLink.issue}
               onIssueChange={handleIssueChange}
             />}
             {activeTab === "my-reps" && <MyRepsTab userState={userState} setUserState={setUserState} issues={sharedIssues} />}

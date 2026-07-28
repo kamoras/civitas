@@ -6,6 +6,7 @@ import { fetchActionIssues, fetchMonitors } from "@/lib/api";
 import type { NationalMonitor } from "@/lib/api";
 import type { ActionIssue } from "@/types/action";
 import { PARTY_COLORS } from "@/lib/partyStyles";
+import { ACTION_CENTER_HREF } from "@/lib/routes";
 
 export default function ActionPreview() {
   const [issues, setIssues] = useState<ActionIssue[]>([]);
@@ -98,7 +99,7 @@ export default function ActionPreview() {
               )}
 
               <Link
-                href="/action"
+                href={ACTION_CENTER_HREF}
                 className="inline-block font-mono text-xs tracking-widest text-neon-cyan/60 hover:text-neon-cyan transition-colors"
               >
                 SEE ALL ISSUES →
@@ -110,7 +111,7 @@ export default function ActionPreview() {
                 {others.map((issue) => (
                   <Link
                     key={issue.id}
-                    href="/action"
+                    href={ACTION_CENTER_HREF}
                     className="terminal-window p-4 hover:border-matrix-green/40 transition-colors group"
                   >
                     <div className="flex items-center gap-2 mb-2">
@@ -178,7 +179,7 @@ export default function ActionPreview() {
         )}
 
         <div className="text-center">
-          <Link href="/action" className="btn-retro">
+          <Link href={ACTION_CENTER_HREF} className="btn-retro">
             OPEN ACTION CENTER
           </Link>
         </div>
