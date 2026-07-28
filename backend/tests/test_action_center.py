@@ -1800,6 +1800,31 @@ class TestPeriodicBlueskyPosts:
             _run_periodic_bluesky_posts(db_session)  # must not raise
 
 
+class TestRefreshActionIssuesClearsIsRunningOnError:
+    """2026-07-27: _run_refresh only cleared the in-memory is_running flag
+    on its own explicit return paths, so an uncaught exception mid-run
+    (e.g. the national_monitors.slug IntegrityError this session's
+    incident hit) left it stuck true. That flag feeds
+    /api/admin/pipeline/status, which wedged both this job's own 4h
+    staleness override and check-and-deploy.sh's busy-check on the Pi for
+    5+ hours, blocking deploys of CI-green commits already on main."""
+
+    def test_is_running_cleared_when_run_refresh_raises(self, db_session):
+        import app.pipeline.analyze.action_center as ac
+
+        saved_state = ac.get_action_refresh_state()
+        try:
+            with patch.object(ac, "_run_refresh", side_effect=RuntimeError("boom")):
+                with pytest.raises(RuntimeError):
+                    ac.refresh_action_issues(db_session)
+
+            state = ac.get_action_refresh_state()
+            assert state["is_running"] is False
+            assert state["stage"] is None
+        finally:
+            ac._set_refresh_state(**saved_state)
+
+
 class TestPruneStaleApiCache:
     """Extracted from _run_refresh (2026-07-23) for direct testability."""
 
