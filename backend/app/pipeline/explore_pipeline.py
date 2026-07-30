@@ -36,6 +36,7 @@ from app.pipeline.fetch.presidential_actions import (
 from app.pipeline.fetch.fr_rulemaking import fetch_fr_rulemaking
 from app.pipeline.fetch.supreme_court import fetch_scotus_cases
 from app.pipeline.analyze.document_authority import update_document_authority
+from app.pipeline.explore_ranking import calibrate_and_store
 from app.pipeline.lexical_index import rebuild_index
 from app.pipeline.vector_store import embed_explore_documents
 
@@ -503,6 +504,15 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
             db.rollback()
             authority_stats = {"documents": 0, "cited": 0}
 
+        # --- 10. Recalibrate ranking against the corpus just built ---
+        # Last, because every derivation reads the finished indexes: field
+        # weights are fitted on keyword retrieval, the prior weights on how
+        # far the two channels disagree, the pool on how many candidates
+        # survive filtering. Ranking parameters therefore always describe
+        # the corpus actually being searched, and nobody ever types one.
+        logger.info("Explore pipeline: recalibrating ranking...")
+        calibration = calibrate_and_store(db)
+
         api_cache_set(db, "explore", "seed_version", EXPLORE_SEED_VERSION)
         db.commit()
 
@@ -520,6 +530,7 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
             "total_embedded": embedded,
             "keyword_indexed": indexed,
             "authority": authority_stats,
+            "calibration": calibration,
             "elapsed_seconds": round(elapsed, 1),
         }
 

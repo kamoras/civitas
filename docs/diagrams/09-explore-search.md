@@ -165,14 +165,25 @@ being parsed as HTML, and `<b>` would have to be either escaped (showing users
 literal tags) or trusted. The frontend splits on the sentinels and builds
 `<mark>` elements, so nothing on this path needs `dangerouslySetInnerHTML`.
 
-**No chunking, still deliberately.** One embedding per document over
-`title + summary + body[:800]`. Chunking would improve recall on long
-documents but multiplies index size and query cost — a real constraint when
-the whole index lives on a Pi alongside two embedding models. The disclosed
-trade is narrower than it was: the keyword index reads the *entire* body, so a
-term appearing past 800 characters is now reachable by the keyword channel
-even though the embedding never saw it. What remains unreachable is a
-*paraphrase* of a passage that far in.
+**Chunking is the encoder's own context window, not a choice.** A
+sentence-transformer silently truncates at `max_seq_length`, so a document
+passed in whole was only ever partially embedded — the old
+`title + summary + body[:800]` was that truncation written down rather than
+a trade-off. Documents are now split into windows that fit that limit,
+along their own paragraph and sentence boundaries, overlapping by one
+sentence so a passage straddling a seam is wholly present in some window.
+The unit of overlap is a sentence because that is a unit of the text; an
+overlap measured in tokens would be a number someone picked. A short
+document is still exactly one window, so the index grows with the corpus's
+real length rather than uniformly.
+
+At query time the index is searched at chunk level and folded back to
+documents by each document's best-matching chunk — max pooling, not
+averaging, because a long rule with one passage squarely on the query is a
+good answer and averaging over its other pages would bury it under
+something vaguely on-topic throughout. The number of chunk slots requested
+for a given number of documents comes from the index's own measured mean
+chunks per document, written at embed time.
 
 **Half the engine can be down and search still works — and says so.** The
 vector index records which model built it, and a mismatch at startup drops the
@@ -230,6 +241,48 @@ directly to an action with a deadline.
 `call_llm`, so text renders progressively; the call site handles its own
 caching and retry, because "retry" means something different once a partial
 response is already on screen.
+
+## Nothing here is a hand-set number
+
+Two constants in this feature are typed in, and both are published results
+rather than properties of this corpus: reciprocal rank fusion's K = 60
+(Cormack, Clarke & Büttcher 2009) and PageRank's damping 0.85 (Brin & Page
+1998). They live in code with their citations.
+
+Everything else — BM25F field weights, both prior weights, candidate pool
+depth, the source diversity cap, near-duplicate fingerprint lengths,
+snippet width, minimum term length — is generated data. The explore
+pipeline recalibrates against the corpus it just ingested
+(`pipeline/calibrate_ranking.py`) and stores the result; the ranker reads
+it through `pipeline/explore_ranking.py`, falling back to a bundled
+bootstrap file only until the first pipeline run. If neither exists the
+loaders raise rather than rank with invented numbers.
+
+| value | derived from |
+|---|---|
+| BM25F field weights | coordinate ascent on known-item retrieval MRR, from unweighted BM25 upward, on a doubling ladder that stops where the data stops paying |
+| freshness / authority weights | the retrievers' measured resolution limit δ, times each prior's measured coverage of the corpus |
+| candidate pool | measured post-filter survival rate, so a filtered search still fills a page |
+| source diversity cap | the corpus's own median documents-per-source among repeat publishers |
+| fingerprint lengths | the corpus's prefix-collision curve |
+| snippet width, minimum term length | the corpus's median sentence length; the shortest term length that is not near-universal |
+
+The prior weights deserve their formula written out, because they are the
+one thing here that cannot be fitted against a label-free objective:
+
+    w = channels × (K + 1) × [1/(K+1) − 1/(K+1+δ)] × coverage
+
+δ is the median rank disagreement between the semantic and keyword channels
+on documents both return — the retrievers' own resolution limit. A
+relevance difference smaller than δ is below what they can actually
+resolve, so reordering inside it costs nothing real. Coverage is the
+fraction of a candidate pool the prior can order at all rather than tie.
+Read together: *a prior may reorder documents the retrievers cannot tell
+apart, in proportion to how much it can actually distinguish, and no
+further.* Sharper retrievers shrink the priors automatically, and a
+citation graph with no edges has coverage ≈ 0 and therefore weight ≈ 0 —
+the graceful degradation falls out of the arithmetic instead of needing a
+special case.
 
 ## Measuring changes
 

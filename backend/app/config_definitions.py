@@ -285,66 +285,33 @@ BillStage = StrEnum("BillStage", {stage: stage for stage in BILL_STAGES})
 #     score(d) = Σ_r  weight_r / (K + rank_r(d))
 #
 # A ranker that didn't return a document contributes nothing for it. That
-# same property is what lets the two query-independent priors below sit in
-# the sum as additional voters: freshness ranks every candidate, while
+# same property is what lets the two query-independent priors sit in the
+# sum as additional voters: freshness ranks every candidate, while
 # authority ranks only documents the corpus actually cites, so a document
 # with no way to earn a citation is passed over rather than penalised
 # (see pipeline/analyze/document_authority.py).
 #
+# TWO published constants live here, with their citations. Everything else
+# about this ranking is generated data, loaded from
+# app/data/explore_ranking.json and produced by
+# scripts/calibrate_explore_ranking.py against the live corpus — the same
+# pattern as district_pvi.json and state_population.json (principle 3a).
+# Do not hand-edit the JSON; re-run the script.
+
 # K = 60 is the constant Cormack et al. published and the de-facto default.
 # It flattens the contribution curve so no single ranker's top hit can run
-# away with the result. That flatness is also what sets the scale of the
-# prior weights: a voter of weight w has a total swing of about w/(K+1),
-# so at w = 0.4 the entire freshness signal is worth roughly the distance
-# between rank 1 and rank 40 of one retrieval channel. It can lift a
-# markedly newer document over a slightly more relevant one and cannot
-# flip an adjacent pair — which is the intended division of labour, and
-# what `tests/test_explore_search.py` pins down in both directions.
-#
-# The two prior weights are relative to the relevance evidence actually
-# present, not absolute: `hybrid_search` scales them by how many retrieval
-# channels returned anything. Both up, they read exactly as written here.
-# One up — its index rebuilding, or simply no keyword match — and the
-# relevance mass halves, so a fixed prior would silently double in
-# influence. Measured on an identical corpus with one channel down: MRR
-# 0.752 / R@1 0.613 unscaled against 0.850 / 0.732 scaled — a third of
-# top-1 hits displaced by recency before the scaling existed.
-#
-# These weights are the tuning surface for search quality. Measure changes
-# with `backend/scripts/evaluate_explore_search.py`, not by eye — and read
-# its "How to read this" section first. Known-item retrieval scores the
-# retrieval channels and the priors in opposite directions, so the harness
-# can validate the fusion but cannot tell you whether a prior weight is
-# right; it can only tell you when one has become disproportionate.
+# away with the result. A property of the algorithm, not of this corpus.
 EXPLORE_RRF_K: int = 60
 
-EXPLORE_FUSION_WEIGHTS: dict[str, float] = {
-    "semantic": 1.0,    # sentence-transformer kNN over vec_explore
-    "keyword": 1.0,     # BM25F over the FTS5 index
-    "freshness": 0.4,   # newer first among comparably relevant documents
-    "authority": 0.3,   # PageRank over the federal citation graph
-}
+# The two retrieval channels carry equal weight, which is unweighted RRF
+# exactly as published — there is no prior reason to trust the encoder over
+# the inverted index or the reverse, and the calibration measures their
+# disagreement rather than presuming one is better.
+EXPLORE_RETRIEVAL_WEIGHT: float = 1.0
 
-# BM25F field weights (Robertson & Zaragoza 2009, §3.2). A query term in a
-# document's title is far stronger evidence of aboutness than the same term
-# somewhere inside a 15,000-character rule, and unweighted BM25 has only
-# document length to tell those apart.
-EXPLORE_FIELD_WEIGHTS: dict[str, float] = {
-    "title": 8.0,
-    "summary": 3.0,
-    "body": 1.0,
-}
-
-# How many candidates each channel retrieves before fusion, ranking, and
-# filtering. This is not the page size: post-retrieval filters (open for
-# comment, near-duplicate collapsing) and the date sort all need a pool
-# deeper than the page to work on, or "newest" means "newest of the
-# twenty most similar" and a filter returns four results out of thirty.
-EXPLORE_CANDIDATE_POOL: int = 200
-EXPLORE_MAX_CANDIDATE_POOL: int = 600
-
-# At most this many results from one member or one agency before the rest
-# are demoted below the other sources (they are moved, never dropped).
-# Web search calls this host crowding: without it a single agency's
-# fourteen near-identical notices are the entire first page.
-EXPLORE_SOURCE_DIVERSITY_CAP: int = 3
+# Everything else about this ranking — BM25F field weights, the two prior
+# weights, candidate pool depth, the diversity cap, fingerprint lengths,
+# snippet width — is generated data, not a constant. It is measured
+# against the live corpus by pipeline/calibrate_ranking.py on every
+# explore pipeline run and read through pipeline/explore_ranking.py.
+# There is deliberately nothing to hand-edit here.

@@ -34,6 +34,12 @@ def harness():
     return module
 
 
+@pytest.fixture(autouse=True)
+def _pinned_ranking(fixed_ranking):
+    """Ranking parameters are data; pin them so these tests measure the
+    mechanism rather than the last calibration."""
+
+
 class TestProbeConstruction:
     def _docs(self):
         return [{

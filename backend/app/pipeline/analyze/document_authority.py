@@ -57,11 +57,15 @@ PAGERANK_DAMPING = 0.85
 PAGERANK_MAX_ITERATIONS = 200
 PAGERANK_TOLERANCE = 1e-10
 
-# Citations past this much of a document's body are ignored. Federal
-# Register rules run to ~15k characters here (fr_rulemaking.MAX_BODY_LEN)
-# and the authority pass reads every body in the corpus, so this is a
-# bound on the nightly cost, not a semantic choice.
-MAX_SCAN_CHARS = 40_000
+def _max_scan_chars() -> int:
+    """How much of a body to scan for citations — the longest body the
+    ingest fetchers will ever store, so nothing is missed and nothing is
+    scanned twice. Read from the fetcher rather than restated, so the two
+    cannot drift apart.
+    """
+    from app.pipeline.fetch.fr_rulemaking import MAX_BODY_LEN
+
+    return MAX_BODY_LEN
 
 
 # ── Canonical identifier extraction ──────────────────────────────
@@ -101,7 +105,7 @@ def extract_citations(text: str) -> set[str]:
     """
     if not text:
         return set()
-    text = text[:MAX_SCAN_CHARS]
+    text = text[:_max_scan_chars()]
 
     found: set[str] = set()
     for pattern in (_EO_RE, _EO_ABBR_RE):
@@ -309,10 +313,18 @@ def _authority_from_graph(
     }
 
 
-# Rows per streamed batch. Bounds how much body text is resident at once:
-# Federal Register bodies run to 15k characters each (fr_rulemaking's
-# MAX_BODY_LEN), so this is a few megabytes rather than the whole corpus.
-_STREAM_BATCH = 500
+def _stream_batch() -> int:
+    """Rows fetched per batch while streaming bodies.
+
+    Derived from the largest body the fetchers store and a one-megabyte
+    resident-text ceiling, so the memory this pass holds is bounded by the
+    data's own shape rather than by a row count someone picked. Any value
+    is *correct* — this only trades resident memory against round trips —
+    but tying it to MAX_BODY_LEN means it stays right if bodies grow.
+    """
+    from app.pipeline.fetch.fr_rulemaking import MAX_BODY_LEN
+
+    return max(1, (1024 * 1024) // max(MAX_BODY_LEN, 1))
 
 
 def update_document_authority(db) -> dict:
@@ -339,7 +351,7 @@ def update_document_authority(db) -> dict:
             ExploreDocument.id, ExploreDocument.external_id,
             ExploreDocument.title, ExploreDocument.doc_type,
             ExploreDocument.identifiers,
-        ).yield_per(_STREAM_BATCH)
+        ).yield_per(_stream_batch())
     ]
     if not identity_rows:
         return {"documents": 0, "cited": 0}
@@ -347,7 +359,7 @@ def update_document_authority(db) -> dict:
     def _stream_text():
         for row in db.query(
             ExploreDocument.id, ExploreDocument.summary, ExploreDocument.body,
-        ).yield_per(_STREAM_BATCH):
+        ).yield_per(_stream_batch()):
             yield {"id": row.id, "summary": row.summary, "body": row.body}
 
     authority = _authority_from_graph(

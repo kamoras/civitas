@@ -19,6 +19,12 @@ from app.pipeline.lexical_index import ensure_lexical_index
 from app.services import explore_search
 
 
+@pytest.fixture(autouse=True)
+def _pinned_ranking(fixed_ranking):
+    """Ranking parameters are data; pin them so these tests measure the
+    mechanism rather than whatever the last calibration produced."""
+
+
 @pytest.fixture()
 def indexed_db(db_session):
     assert ensure_lexical_index(db_session.get_bind()), "FTS5 unavailable"

@@ -51,7 +51,7 @@ import threading
 
 from sqlalchemy import text
 
-from app.config_definitions import EXPLORE_FIELD_WEIGHTS
+from app.pipeline.explore_ranking import field_weights, text_shape
 
 logger = logging.getLogger(__name__)
 
@@ -69,13 +69,11 @@ FTS_SCHEMA_VERSION = "1"
 HIGHLIGHT_START = "\x02"
 HIGHLIGHT_END = "\x03"
 
-SNIPPET_TOKENS = 32
-
-# Terms shorter than this are dropped from the MATCH expression. A
-# single letter carries no retrieval signal and matches a large share of
-# the corpus; two is short enough to keep the acronyms people search for
-# ("AI", "EO", "VA").
-MIN_TERM_LENGTH = 2
+# Snippet width and the shortest term worth searching for are both
+# properties of the corpus, not choices: the excerpt should show a
+# sentence of context, and a term short enough to appear in most documents
+# carries almost no retrieval signal (Spärck Jones 1972). Both are measured
+# by scripts/calibrate_explore_ranking.py.
 
 _TERM_RE = re.compile(r"[0-9A-Za-z][0-9A-Za-z'’.\-]*")
 _PHRASE_RE = re.compile(r'"([^"]+)"')
@@ -313,10 +311,11 @@ def build_match_expression(query: str) -> str:
             parts.append('"' + " ".join(phrase_terms) + '"')
     remainder = _PHRASE_RE.sub(" ", remainder)
 
+    _snippet_tokens, min_term_length = text_shape()
     seen: set[str] = set()
     for term in _TERM_RE.findall(remainder):
         cleaned = term.strip(".-'’")
-        if len(cleaned) < MIN_TERM_LENGTH:
+        if len(cleaned) < min_term_length:
             continue
         key = cleaned.lower()
         if key in seen:
@@ -328,10 +327,11 @@ def build_match_expression(query: str) -> str:
 
 
 def _bm25_weights() -> tuple[float, float, float]:
+    weights = field_weights()
     return (
-        float(EXPLORE_FIELD_WEIGHTS["title"]),
-        float(EXPLORE_FIELD_WEIGHTS["summary"]),
-        float(EXPLORE_FIELD_WEIGHTS["body"]),
+        float(weights["title"]),
+        float(weights["summary"]),
+        float(weights["body"]),
     )
 
 
@@ -367,6 +367,7 @@ def search_lexical(
         return []
 
     w_title, w_summary, w_body = _bm25_weights()
+    snippet_tokens, _min_term_length = text_shape()
 
     sql = f"""
         SELECT d.id AS id,
@@ -380,7 +381,7 @@ def search_lexical(
         "match": match_expr, "limit": limit,
         "w_title": w_title, "w_summary": w_summary, "w_body": w_body,
         "hl_start": HIGHLIGHT_START, "hl_end": HIGHLIGHT_END,
-        "tokens": SNIPPET_TOKENS,
+        "tokens": snippet_tokens,
     }
     if doc_type:
         sql += " AND d.doc_type = :doc_type"

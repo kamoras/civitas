@@ -33,7 +33,7 @@ representative — this corpus is known to accumulate byte-identical rows
 (a 2026-07 audit found 1,758, 31% of the table, from a hash-seed bug),
 and even with that fixed the Congressional Record legitimately reprints
 text. And no single member or agency may occupy more than
-`EXPLORE_SOURCE_DIVERSITY_CAP` of the first results before the remainder
+a measured cap of the first results before the remainder
 are demoted below other sources; they are moved, never dropped, so a
 member-scoped search still returns everything it found.
 
@@ -51,24 +51,17 @@ from datetime import date as date_type
 
 from sqlalchemy import text
 
-from app.config_definitions import (
-    EXPLORE_CANDIDATE_POOL,
-    EXPLORE_FUSION_WEIGHTS,
-    EXPLORE_MAX_CANDIDATE_POOL,
-    EXPLORE_RRF_K,
-    EXPLORE_SOURCE_DIVERSITY_CAP,
+from app.config_definitions import EXPLORE_RRF_K
+from app.pipeline.explore_ranking import (
+    candidate_pool,
+    fingerprint_shape,
+    fusion_weights,
+    source_diversity_cap,
 )
 from app.pipeline.lexical_index import search_lexical
 from app.pipeline.vector_store import search_explore_documents
 
 logger = logging.getLogger(__name__)
-
-# Documents whose normalised text is shorter than this are never treated as
-# duplicates of each other. Without the floor, every body-less row in the
-# corpus fingerprints to the same empty string and the whole set collapses
-# into a single result — which is what a naive content hash does to a
-# corpus where "body not backfilled yet" is a normal state.
-MIN_FINGERPRINT_CHARS = 80
 
 _NON_WORD_RE = re.compile(r"[^0-9a-z]+")
 
@@ -81,12 +74,19 @@ def _fingerprint(doc_id: int, title: str, body: str) -> str:
     the document, where re-ingested duplicates are identical and genuinely
     distinct documents diverge. Falls back to the document's own id — a
     fingerprint that can collide with nothing — when there isn't enough
-    text to judge.
+    text to judge, which is a normal state here ("body not backfilled
+    yet"), and which a naive content hash collapses into a single result.
+
+    Both lengths are read off the corpus's own prefix-collision curve by
+    scripts/calibrate_explore_ranking.py: the prefix at which genuinely
+    distinct documents stop colliding, and the length below which no prefix
+    separates them at all.
     """
+    prefix_chars, min_chars = fingerprint_shape()
     normalized = _NON_WORD_RE.sub(" ", f"{title} {body}".lower()).strip()
-    if len(normalized) < MIN_FINGERPRINT_CHARS:
+    if len(normalized) < min_chars:
         return f"id:{doc_id}"
-    return hashlib.sha1(normalized[:400].encode()).hexdigest()
+    return hashlib.sha1(normalized[:prefix_chars].encode()).hexdigest()
 
 
 def _competition_ranks(ordered: list[tuple[int, object]]) -> dict[int, int]:
@@ -118,12 +118,23 @@ def _rrf(rank: int | None, weight: float) -> float:
     return weight / (EXPLORE_RRF_K + rank)
 
 
-# Bound on bind parameters per hydration statement. Both channels can each
-# return a full pool, so the union is up to 2 × EXPLORE_MAX_CANDIDATE_POOL —
-# past SQLite's historical 999-variable ceiling (raised to 32766 in 3.32,
-# but that is a compile-time limit and not something a read path should
-# quietly depend on).
-_HYDRATE_CHUNK = 400
+def _hydrate_chunk(db) -> int:
+    """Bind parameters per hydration statement.
+
+    Both channels can each return a full candidate pool, so the union can
+    exceed SQLite's variable ceiling. That ceiling is a compile-time limit
+    that varies by build — 999 historically, 32766 since 3.32 — so it is
+    asked of the running connection rather than assumed. Half of it, to
+    leave room for the filter parameters in the same statement.
+    """
+    import sqlite3
+
+    try:
+        raw = db.connection().connection.driver_connection
+        return max(1, raw.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER) // 2)
+    except Exception:
+        # Every SQLite ever shipped accepts at least 999.
+        return 999 // 2
 
 
 def _hydrate(db, doc_ids: list[int]) -> dict[int, dict]:
@@ -138,8 +149,9 @@ def _hydrate(db, doc_ids: list[int]) -> dict[int, dict]:
         return {}
 
     rows = []
-    for start in range(0, len(doc_ids), _HYDRATE_CHUNK):
-        chunk = doc_ids[start:start + _HYDRATE_CHUNK]
+    chunk_size = _hydrate_chunk(db)
+    for start in range(0, len(doc_ids), chunk_size):
+        chunk = doc_ids[start:start + chunk_size]
         placeholders = ", ".join(f":id{i}" for i in range(len(chunk)))
         params = {f"id{i}": doc_id for i, doc_id in enumerate(chunk)}
         rows.extend(db.execute(text(
@@ -236,7 +248,8 @@ def hybrid_search(
     measurement affordance for the evaluation harness, not a mode the API
     exposes.
     """
-    pool = min(max(limit * 8, EXPLORE_CANDIDATE_POOL), EXPLORE_MAX_CANDIDATE_POOL)
+    default_pool, max_pool = candidate_pool()
+    pool = min(max(limit * 8, default_pool), max_pool)
     today = date_type.today().isoformat()
     commentable_after = today if commentable else None
 
@@ -369,15 +382,14 @@ def hybrid_search(
         # directions (see scripts/evaluate_explore_search.py).
         prior_scale = 0.0
 
+    weights = fusion_weights()
     for doc in candidates:
         doc_id = doc["id"]
         doc["_score"] = (
-            _rrf(semantic_rank.get(doc_id), EXPLORE_FUSION_WEIGHTS["semantic"])
-            + _rrf(keyword_rank.get(doc_id), EXPLORE_FUSION_WEIGHTS["keyword"])
-            + _rrf(freshness_rank.get(doc_id),
-                   EXPLORE_FUSION_WEIGHTS["freshness"] * prior_scale)
-            + _rrf(authority_rank.get(doc_id),
-                   EXPLORE_FUSION_WEIGHTS["authority"] * prior_scale)
+            _rrf(semantic_rank.get(doc_id), weights["semantic"])
+            + _rrf(keyword_rank.get(doc_id), weights["keyword"])
+            + _rrf(freshness_rank.get(doc_id), weights["freshness"] * prior_scale)
+            + _rrf(authority_rank.get(doc_id), weights["authority"] * prior_scale)
         )
         matched: list[str] = []
         if doc_id in semantic_rank:
@@ -416,7 +428,8 @@ def hybrid_search(
         representatives.sort(key=lambda doc: (doc["date"], doc["_score"]), reverse=True)
         results = representatives[:limit]
     else:
-        results = _apply_diversity(representatives, EXPLORE_SOURCE_DIVERSITY_CAP)[:limit]
+        results = _apply_diversity(
+            representatives, source_diversity_cap())[:limit]
 
     for doc in results:
         doc.pop("_score", None)
