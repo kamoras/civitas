@@ -237,7 +237,7 @@ Three things worth knowing about that table:
 
 | Table | Purpose |
 |---|---|
-| `explore_documents` | Semantic search corpus — see [09](09-explore-search.md) |
+| `explore_documents` | Hybrid search corpus; source of truth for the vector index, the FTS5 keyword index, and citation authority — see [09](09-explore-search.md) |
 | `api_cache`, `analysis_cache`, `learned_classifications` | See [06 — Caching](06-caching.md) |
 | `pipeline_runs`, `house_pipeline_runs`, `supplementary_pipeline_runs`, `stock_trades_pipeline_runs`, `election_pipeline_runs` | Per-pipeline run bookkeeping; `pipeline_runs.status` also serves as the concurrency mutex |
 | `bsky_senator_spotlights` | Which senator has been spotlighted, to cycle without repeats |

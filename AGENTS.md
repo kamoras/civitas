@@ -55,6 +55,9 @@ locally on a single self-hosted device with zero cloud AI calls.
   (classification) and all-MiniLM-L6-v2 (search index + similarity gates)
 - **Vector Store**: sqlite-vec (`vec0` virtual tables in `/data/vectors.db`) — replaced
   ChromaDB in the 2026-07 migration; see `pipeline/vector_store.py`
+- **Keyword Index**: SQLite FTS5 (`explore_fts`, external-content over
+  `explore_documents`) with BM25F ranking — the second retrieval channel behind
+  Explore search; see `pipeline/lexical_index.py`
 - **Deployment**: Docker Swarm (single-node), `docker stack deploy` for zero-downtime rolling updates, nginx (in-stack) reverse proxy with caching
 - **Branches covered**: Senate (100 senators), House (435 representatives), Presidents (historical + modern), Supreme Court (9 justices)
 - **News Feeds**: RSS parsing (AP, NPR, Reuters, PBS) + Google Trends + Reddit trending for Action Center
@@ -78,7 +81,8 @@ civitas/
 │   │   │   ├── senate_pipeline.py, house_pipeline.py  # FETCH→TRANSFORM→ANALYZE→ASSEMBLE+SAVE per chamber
 │   │   │   ├── member_lifecycle.py  # Roster reconciliation + removal of departed members (never presidents)
 │   │   │   ├── stock_pipeline.py  # STOCK Act trade-disclosure ingestion (sibling phase)
-│   │   │   └── vector_store.py  # sqlite-vec + sentence-transformer model management
+│   │   │   ├── vector_store.py  # sqlite-vec + sentence-transformer model management
+│   │   │   └── lexical_index.py # SQLite FTS5 keyword index (BM25F) over explore docs
 │   │   ├── models.py            # SQLAlchemy ORM (Senator, Representative, KeyVote, Justice, NationalMonitor, TimelineEntry, etc.)
 │   │   ├── schemas.py           # Pydantic response schemas (incl. PaginatedVotesSchema)
 │   │   ├── database.py          # DB engine + session management
@@ -304,6 +308,35 @@ an FEC contribution limit). The bar is specifically about **calculated**
 values — anything a regression, an average, or a percentile produced —
 which must trace back to a generating script and a data file, not a
 comment asserting "trust me, I ran a script once."
+
+### 3b. Search ranking is measured, not asserted
+
+Explore search combines four rankers — semantic kNN, BM25F keyword, recency,
+and citation-graph PageRank — with weights in `config_definitions.py` under
+"Explore search ranking". Those weights are the tuning surface for search
+quality, and the same discipline that applies to scoring constants applies
+here: **do not change a ranking weight because a result set looks better.**
+
+`backend/scripts/evaluate_explore_search.py` is the instrument. It reports
+MRR and Recall@k for each channel and for the fusion, broken out by query
+style (title / paraphrase / identifier / rare-term), against the live index.
+Run it before and after, and say what moved.
+
+Relevance judgments there are derived by known-item retrieval, not
+hand-labelled — a document is pulled from the corpus, a plausible query for
+*that* document is built from it, and the measurement is where it lands. That
+is honest about exactly one question (can the engine find a document someone
+is looking for) and deliberately silent about whether a broad topical query
+returns a good *set*, which needs real labels. Don't quote it as evidence for
+the second question.
+
+The same rule covers the ranking's structure, not just its constants. A new
+signal has to be something the corpus can actually supply — the citation graph
+earns its place because federal documents cite each other by published
+identifier, and it degrades to a no-op when they don't. A signal only one
+document type can earn belongs in the fusion as a *partial* ranker (documents
+it can't score contribute nothing) rather than as a full ordering, or it
+silently demotes every document that had no way to earn it.
 
 ### 4. Content-based party alignment
 
@@ -562,6 +595,10 @@ SQLAlchemy ORM models are in `backend/app/models.py`. Key tables: `senators`,
 | Multi-word last name extraction + vote matching | `backend/app/pipeline/transform/normalize_members.py` |
 | LLM narrative generation | `backend/app/pipeline/analyze/cross_reference.py` |
 | Action Center analysis (news → issues → monitors → timeline) | `backend/app/pipeline/analyze/action_center.py` |
+| Explore hybrid search ranking (RRF fusion, priors, dedup, diversity) | `backend/app/services/explore_search.py` |
+| Explore keyword index (FTS5 + BM25F) | `backend/app/pipeline/lexical_index.py` |
+| Document citation graph + PageRank authority | `backend/app/pipeline/analyze/document_authority.py` |
+| Search-quality evaluation harness | `backend/scripts/evaluate_explore_search.py` |
 | News feed fetching (RSS) | `backend/app/pipeline/fetch/news_feeds.py` |
 | Trending topic fetching | `backend/app/pipeline/fetch/trending.py` |
 | Donor-vote cross-referencing | `backend/app/pipeline/analyze/policy_alignment.py` |

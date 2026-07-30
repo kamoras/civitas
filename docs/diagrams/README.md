@@ -20,7 +20,7 @@ and an entity-relationship view of the schema.
 | [06 — Caching](06-caching.md) | The three cache layers and what invalidates each |
 | [07 — Data model](07-data-model.md) | Entity relationships in SQLite |
 | [08 — Deployment](08-deployment.md) | Swarm topology and the rolling-update sequence |
-| [09 — Explore search](09-explore-search.md) | Indexing and query paths for semantic search |
+| [09 — Explore search](09-explore-search.md) | Indexing and query paths for hybrid search: semantic + BM25F, fused with recency and citation-graph authority |
 
 ## Keeping these honest
 

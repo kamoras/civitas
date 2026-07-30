@@ -270,3 +270,68 @@ BILL_STAGES: dict[str, dict] = {
 # (bill_stage.py, bill_service.py) can compare/assign `BillStage.ENACTED`
 # instead of a bare string, with zero risk of the two lists drifting apart.
 BillStage = StrEnum("BillStage", {stage: stage for stage in BILL_STAGES})
+
+
+# ── Explore search ranking ───────────────────────────────────────
+#
+# The explore index is queried by two retrieval channels whose scores are
+# not comparable to each other — cosine distance from a sentence encoder
+# and Okapi BM25 from an inverted index live on unrelated scales, and the
+# usual fix (min-max normalise each, then add) makes the blend depend on
+# whatever the best and worst scores happened to be for that one query.
+# Reciprocal rank fusion (Cormack, Clarke & Büttcher, SIGIR 2009) instead
+# throws the scores away and fuses the *rankings*:
+#
+#     score(d) = Σ_r  weight_r / (K + rank_r(d))
+#
+# A ranker that didn't return a document contributes nothing for it. That
+# same property is what lets the two query-independent priors below sit in
+# the sum as additional voters: freshness ranks every candidate, while
+# authority ranks only documents the corpus actually cites, so a document
+# with no way to earn a citation is passed over rather than penalised
+# (see pipeline/analyze/document_authority.py).
+#
+# K = 60 is the constant Cormack et al. published and the de-facto default.
+# It flattens the contribution curve so no single ranker's top hit can run
+# away with the result. That flatness is also what sets the scale of the
+# prior weights: a voter of weight w has a total swing of about w/(K+1),
+# so at w = 0.4 the entire freshness signal is worth roughly the distance
+# between rank 1 and rank 40 of one retrieval channel. It can lift a
+# markedly newer document over a slightly more relevant one and cannot
+# flip an adjacent pair — which is the intended division of labour, and
+# what `tests/test_explore_search.py` pins down in both directions.
+#
+# These weights are the tuning surface for search quality. Measure changes
+# with `backend/scripts/evaluate_explore_search.py`, not by eye.
+EXPLORE_RRF_K: int = 60
+
+EXPLORE_FUSION_WEIGHTS: dict[str, float] = {
+    "semantic": 1.0,    # sentence-transformer kNN over vec_explore
+    "keyword": 1.0,     # BM25F over the FTS5 index
+    "freshness": 0.4,   # newer first among comparably relevant documents
+    "authority": 0.3,   # PageRank over the federal citation graph
+}
+
+# BM25F field weights (Robertson & Zaragoza 2009, §3.2). A query term in a
+# document's title is far stronger evidence of aboutness than the same term
+# somewhere inside a 15,000-character rule, and unweighted BM25 has only
+# document length to tell those apart.
+EXPLORE_FIELD_WEIGHTS: dict[str, float] = {
+    "title": 8.0,
+    "summary": 3.0,
+    "body": 1.0,
+}
+
+# How many candidates each channel retrieves before fusion, ranking, and
+# filtering. This is not the page size: post-retrieval filters (open for
+# comment, near-duplicate collapsing) and the date sort all need a pool
+# deeper than the page to work on, or "newest" means "newest of the
+# twenty most similar" and a filter returns four results out of thirty.
+EXPLORE_CANDIDATE_POOL: int = 200
+EXPLORE_MAX_CANDIDATE_POOL: int = 600
+
+# At most this many results from one member or one agency before the rest
+# are demoted below the other sources (they are moved, never dropped).
+# Web search calls this host crowding: without it a single agency's
+# fourteen near-identical notices are the entire first page.
+EXPLORE_SOURCE_DIVERSITY_CAP: int = 3

@@ -791,8 +791,14 @@ class ExploreDocument(Base):
     """Searchable government activity document for the Explore feature.
 
     Stores Senate/House floor proceedings, executive orders, proclamations,
-    memoranda, and other official actions. Each document is also embedded in
-    ChromaDB for semantic search and linked to a politician where applicable.
+    memoranda, and other official actions.
+
+    Each document feeds three search structures, all rebuilt from this table:
+    a sentence-transformer embedding in `vec_explore` (sqlite-vec, see
+    `pipeline/vector_store.py`), a BM25F inverted index in `explore_fts`
+    (SQLite FTS5, see `pipeline/lexical_index.py`), and the citation graph
+    behind `authority` (see `pipeline/analyze/document_authority.py`). The
+    row is the source of truth; all three can be dropped and rebuilt from it.
     """
     __tablename__ = "explore_documents"
 
@@ -812,6 +818,19 @@ class ExploreDocument(Base):
     comments_close_on: Mapped[str | None] = mapped_column(String, nullable=True)
     policy_areas: Mapped[str] = mapped_column(Text, default="[]")
     external_id: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
+
+    # Canonical identifiers this document can be cited BY — its FR citation
+    # ("89 FR 12345"), FR document number, executive order number, RINs.
+    # JSON list of namespaced strings; see document_authority.declared_identifiers,
+    # which also derives what it can from external_id/title so rows written
+    # before this column existed still take part in the citation graph.
+    identifiers: Mapped[str] = mapped_column(Text, default="[]")
+    # PageRank over that graph, and the raw inbound-citation count it came
+    # from. Both are pipeline outputs, recomputed nightly; `cited_by_count`
+    # is also what the search ranker uses to decide whether a document is
+    # eligible for the authority signal at all.
+    authority: Mapped[float] = mapped_column(Float, default=0.0)
+    cited_by_count: Mapped[int] = mapped_column(Integer, default=0)
 
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
 

@@ -64,6 +64,26 @@ async def _fetch_body_text(client: httpx.AsyncClient, url: str) -> str:
         return ""
 
 
+def _identifiers(doc_num: str, citation: str | None, eo_num) -> list[str]:
+    """Canonical names other federal documents can cite this one by.
+
+    Namespaced to match `document_authority.extract_citations`, which
+    parses the same forms out of document text. An executive order is
+    cited by number for decades after it issues; the "89 FR 12345" form
+    is how one Federal Register document points at another.
+    """
+    from app.pipeline.analyze.document_authority import extract_citations
+
+    ids: list[str] = []
+    if doc_num:
+        ids.append(f"frdoc:{doc_num}")
+    if citation:
+        ids.extend(sorted(extract_citations(citation)))
+    if eo_num:
+        ids.append(f"eo:{int(eo_num)}")
+    return ids
+
+
 async def fetch_recent_presidential_actions(
     client: httpx.AsyncClient,
     pages: int = 5,
@@ -71,7 +91,7 @@ async def fetch_recent_presidential_actions(
     """Fetch recent presidential documents from the Federal Register.
 
     Returns a list of dicts with keys: external_id, title, summary, body,
-    date, doc_type, url, politician_name.
+    date, doc_type, url, politician_name, identifiers.
     """
     results: list[dict] = []
     seen_ids: set[str] = set()
@@ -94,6 +114,10 @@ async def fetch_recent_presidential_actions(
                     "signing_date",
                     "president",
                     "executive_order_number",
+                    # The "89 FR 12345" form other federal documents cite
+                    # this one by — the edge the citation graph is built
+                    # from (pipeline/analyze/document_authority.py).
+                    "citation",
                 ],
             }
 
@@ -151,6 +175,7 @@ async def fetch_recent_presidential_actions(
                     "doc_type": DOC_TYPE_LABELS.get(doc_type, doc_type),
                     "url": doc.get("html_url", ""),
                     "politician_name": president_name,
+                    "identifiers": _identifiers(doc_num, doc.get("citation"), eo_num),
                 })
 
             if len(docs) < 20:

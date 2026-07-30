@@ -10,6 +10,7 @@ import BackToTop from "@/components/BackToTop";
 import {
   searchExplore,
   fetchExploreStats,
+  splitHighlights,
   type ExploreResult,
   type ExploreStats,
 } from "@/lib/api";
@@ -28,15 +29,19 @@ const CHAMBER_FILTERS: { label: string; value: ChamberFilter }[] = [
   { label: "Rulemaking", value: "Regulatory" },
 ];
 
+// A mix of topical and exact-term queries on purpose: search now runs a
+// keyword channel alongside the semantic one, so document numbers, agency
+// names and quoted phrases work, and the suggestions are the only place a
+// visitor would find that out.
 const SUGGESTED_QUERIES = [
   "tariffs and trade policy",
   "healthcare costs and prescription drugs",
   "immigration and border security",
   "climate change and clean energy",
-  "gun control and second amendment",
   "technology regulation and AI",
-  "student loan forgiveness",
-  "Supreme Court constitutional rights",
+  "Executive Order 14110",
+  '"clean water act"',
+  "Environmental Protection Agency PFAS",
 ];
 
 function docTypeLabel(docType: string): string {
@@ -55,6 +60,35 @@ function daysUntilClose(closeDate: string): number {
   const close = new Date(closeDate + "T23:59:59");
   const now = new Date();
   return Math.max(0, Math.ceil((close.getTime() - now.getTime()) / 86_400_000));
+}
+
+/**
+ * Render a backend excerpt with its matched query terms marked.
+ *
+ * The markers are control characters, not markup, so this builds React
+ * nodes rather than reaching for `dangerouslySetInnerHTML` — the text is a
+ * verbatim slice of a government document body and has no business being
+ * parsed as HTML.
+ */
+function Snippet({ text }: { text: string }) {
+  const segments = splitHighlights(text);
+  if (segments.length === 0) return null;
+  return (
+    <p className="text-xs text-matrix-green/50 leading-relaxed mb-3 line-clamp-3">
+      {segments.map((segment, i) =>
+        segment.match ? (
+          <mark
+            key={i}
+            className="bg-neon-cyan/15 text-neon-cyan/90 rounded-sm px-0.5"
+          >
+            {segment.text}
+          </mark>
+        ) : (
+          <span key={i}>{segment.text}</span>
+        ),
+      )}
+    </p>
+  );
 }
 
 function ResultCard({
@@ -101,17 +135,34 @@ function ResultCard({
           {result.title}
         </h3>
 
-        {(result.summary || result.snippet) && (
-          <p className="text-xs text-matrix-green/50 leading-relaxed mb-3 line-clamp-3">
-            {result.summary || result.snippet}
-          </p>
-        )}
+        {/* The keyword channel returns an excerpt built around the matched
+            terms, which says far more about why a document came back than
+            its opening sentence does. Results only the semantic channel
+            found have no matched terms, and fall back to the summary. */}
+        <Snippet text={result.snippet || result.summary} />
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3 flex-wrap">
             {result.politicianName && (
               <span className="text-xs text-matrix-green/60">
                 {result.politicianName}
+              </span>
+            )}
+            {result.citedByCount > 0 && (
+              <span
+                className="text-[10px] font-mono tracking-wide text-matrix-green/40"
+                title="Other federal documents in this index that cite this one"
+              >
+                CITED BY {result.citedByCount}
+              </span>
+            )}
+            {result.duplicateCount > 0 && (
+              <span
+                className="text-[10px] font-mono tracking-wide text-matrix-green/40"
+                title="Near-identical copies of this document collapsed into this result"
+              >
+                +{result.duplicateCount} DUPLICATE
+                {result.duplicateCount !== 1 ? "S" : ""}
               </span>
             )}
           </div>
@@ -258,7 +309,8 @@ function ExplorePageInner() {
             </h1>
             <p className="text-matrix-green/40 text-sm max-w-xl mx-auto">
               Search any issue to see what all branches of government and federal
-              agencies have done about it. Many regulatory documents are open for
+              agencies have done about it — by topic, or by exact name, number, or
+              &ldquo;quoted phrase&rdquo;. Many regulatory documents are open for
               public comment — make your voice heard.
             </p>
             {stats && stats.totalDocuments > 0 && (
@@ -437,11 +489,7 @@ function ExplorePageInner() {
               </p>
               <div className="space-y-3">
                 {results.map((r) => (
-                  <ResultCard
-                    key={`${r.id}-${r.distance}`}
-                    result={r}
-                    query={query}
-                  />
+                  <ResultCard key={r.id} result={r} query={query} />
                 ))}
               </div>
             </div>

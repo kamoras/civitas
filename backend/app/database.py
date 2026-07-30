@@ -186,6 +186,14 @@ def _migrate_columns() -> None:
         ("supplementary_pipeline_runs", "committee_leadership_skipped", "BOOLEAN DEFAULT 0"),
         ("supplementary_pipeline_runs", "district_pvi_refreshed", "BOOLEAN DEFAULT 0"),
         ("supplementary_pipeline_runs", "district_pvi_skipped", "BOOLEAN DEFAULT 0"),
+        # Citation-graph ranking inputs for explore search. Defaults make an
+        # un-migrated corpus rank exactly as it did before: authority 0 for
+        # everyone means no document is eligible for the authority signal,
+        # so the ranker falls back to relevance + freshness until the first
+        # pipeline run fills these in.
+        ("explore_documents", "identifiers", "TEXT DEFAULT '[]'"),
+        ("explore_documents", "authority", "REAL DEFAULT 0.0"),
+        ("explore_documents", "cited_by_count", "INTEGER DEFAULT 0"),
     ]
 
     drops: list[tuple[str, str]] = [
@@ -557,6 +565,16 @@ def init_db() -> None:
     _ensure_indexes()
     _migrate_visits_data_to_own_db()
 
+    # The FTS5 keyword index over explore_documents, plus the triggers that
+    # keep it in step with ordinary ORM writes. Created here rather than in
+    # the pipeline because the triggers have to exist *before* the next
+    # insert, not after the run that would have rebuilt the index. Returns
+    # False (never raises) when SQLite has no FTS5 module — explore search
+    # then runs semantic-only, which is exactly what it did before.
+    from app.pipeline.lexical_index import ensure_lexical_index
+
+    ensure_lexical_index(engine)
+
     # President rows are no longer seeded here — run_president_pipeline
     # (president_pipeline.py) creates/updates them from a live UCSB
     # roster fetch on every run, so a fresh database is populated by that
@@ -613,6 +631,21 @@ def reset_all_data() -> dict:
         db.commit()
     finally:
         db.close()
+
+    # The FTS5 delete triggers fire per row on the bulk deletes above, so the
+    # keyword index is already empty — this is the belt-and-braces rebuild
+    # that makes that an invariant rather than a property of how SQLite
+    # happens to run DELETE.
+    try:
+        from app.pipeline.lexical_index import rebuild_index
+
+        rebuild_session = SessionLocal()
+        try:
+            rebuild_index(rebuild_session)
+        finally:
+            rebuild_session.close()
+    except Exception:
+        logger.exception("Keyword index rebuild after reset failed (non-fatal)")
 
     try:
         from app.pipeline.vector_store import reset_vector_db
