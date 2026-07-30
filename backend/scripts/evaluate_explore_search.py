@@ -50,6 +50,10 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from app.pipeline.lexical_index import search_lexical  # noqa: E402
+from app.pipeline.vector_store import search_explore_documents  # noqa: E402
+from app.services.explore_search import hybrid_search  # noqa: E402
+
 DEFAULT_SAMPLES = 150
 RANK_CUTOFF = 50
 
@@ -170,6 +174,47 @@ def _rank_of(results: list[int], doc_id: int) -> int | None:
         return None
 
 
+def measure(db, probes: list[dict]) -> dict:
+    """Run every probe through all four configurations.
+
+    Returns `{style: {config: [rank or None, ...]}}`, with an "ALL" style
+    aggregating across the rest.
+
+    Separated from `main` so the loop that actually produces the numbers is
+    reachable from a test. It is the part with something to get wrong — one
+    misread result key and every configuration reports a clean 100% miss,
+    which looks exactly like "this channel is broken" rather than "the
+    harness is". That failure mode is why this exists as a function.
+    """
+    CONFIGS = ("semantic", "keyword", "fusion", "hybrid")
+    by_style: dict[str, dict[str, list]] = collections.defaultdict(
+        lambda: collections.defaultdict(list))
+
+    for probe in probes:
+        semantic = search_explore_documents(probe["query"], n_results=RANK_CUTOFF)
+        results = {
+            "semantic": [h["id"] for h in (semantic or [])],
+            "keyword": [
+                h["id"] for h in search_lexical(db, probe["query"], limit=RANK_CUTOFF)
+            ],
+            "fusion": [
+                r["id"] for r in hybrid_search(
+                    db, probe["query"], limit=RANK_CUTOFF,
+                    include_priors=False)["results"]
+            ],
+            "hybrid": [
+                r["id"] for r in hybrid_search(
+                    db, probe["query"], limit=RANK_CUTOFF)["results"]
+            ],
+        }
+        for name in CONFIGS:
+            rank = _rank_of(results[name], probe["doc_id"])
+            by_style[probe["style"]][name].append(rank)
+            by_style["ALL"][name].append(rank)
+
+    return by_style
+
+
 def _summarise(ranks: list[int | None]) -> dict:
     found = [r for r in ranks if r is not None]
     n = len(ranks) or 1
@@ -193,9 +238,6 @@ def main() -> int:
 
     from app.database import SessionLocal
     from app.models import ExploreDocument
-    from app.pipeline.lexical_index import search_lexical
-    from app.pipeline.vector_store import search_explore_documents
-    from app.services.explore_search import hybrid_search
 
     db = SessionLocal()
     try:
@@ -225,33 +267,7 @@ def main() -> int:
         print(f"Corpus: {total} documents | sampled {len(sample)} | "
               f"{len(probes)} probes\n")
 
-        by_style: dict[str, dict[str, list]] = collections.defaultdict(
-            lambda: collections.defaultdict(list))
-
-        for probe in probes:
-            semantic = search_explore_documents(probe["query"], n_results=RANK_CUTOFF)
-            semantic_ids = [h["id"] for h in (semantic or [])]
-            keyword_ids = [
-                h["id"] for h in search_lexical(db, probe["query"], limit=RANK_CUTOFF)
-            ]
-            fusion_ids = [
-                r["id"] for r in hybrid_search(
-                    db, probe["query"], limit=RANK_CUTOFF,
-                    include_priors=False)["results"]
-            ]
-            hybrid_ids = [
-                r["id"] for r in hybrid_search(
-                    db, probe["query"], limit=RANK_CUTOFF)["results"]
-            ]
-
-            for name, ids in (
-                ("semantic", semantic_ids),
-                ("keyword", keyword_ids),
-                ("fusion", fusion_ids),
-                ("hybrid", hybrid_ids),
-            ):
-                by_style[probe["style"]][name].append(_rank_of(ids, probe["doc_id"]))
-                by_style["ALL"][name].append(_rank_of(ids, probe["doc_id"]))
+        by_style = measure(db, probes)
 
         header = f"{'style':<12}{'config':<10}{'n':>6}{'MRR':>8}{'R@1':>8}{'R@5':>8}{'R@20':>8}{'missed':>9}"
         print(header)
