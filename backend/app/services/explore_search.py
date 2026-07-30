@@ -351,8 +351,9 @@ def hybrid_search(
     # R@1 0.621 against the keyword channel's own 0.976 / 0.958 — a third
     # of top hits displaced by recency, in the degraded mode this change
     # otherwise advertises as a feature. Scaling restores parity.
-    live_channels = sum(1 for r in (semantic_rank, keyword_rank) if r)
-    prior_scale = live_channels / 2.0
+    retrieval_ranks = (semantic_rank, keyword_rank)
+    live_channels = sum(1 for r in retrieval_ranks if r)
+    prior_scale = live_channels / len(retrieval_ranks)
     if not include_priors:
         # Retrieval channels only. Exists for the evaluation harness, which
         # needs to separate "did fusing the two retrievers help" from "did
