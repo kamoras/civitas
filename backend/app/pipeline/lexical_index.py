@@ -35,12 +35,19 @@ silently if a trigger's 'delete' command is handed values that differ
 from what was indexed (the documented hazard), and the ingest pipeline
 rewrites bodies in place during backfill — so the nightly rebuild is the
 correctness backstop, not housekeeping.
+
+Rows that predate the index are backfilled once, on a background thread
+(`_backfill_in_background`). The table and triggers are created
+synchronously so no write is ever missed; only the re-tokenising of an
+existing corpus is deferred, because doing that inside `init_db()` would
+hold up app startup on the one deploy that introduces this index.
 """
 
 from __future__ import annotations
 
 import logging
 import re
+import threading
 
 from sqlalchemy import text
 
@@ -74,8 +81,11 @@ _TERM_RE = re.compile(r"[0-9A-Za-z][0-9A-Za-z'’.\-]*")
 _PHRASE_RE = re.compile(r'"([^"]+)"')
 
 
-class LexicalIndexUnavailable(RuntimeError):
-    """Raised when FTS5 is not compiled into the running SQLite."""
+# Set once at startup when the running SQLite has no FTS5 module. Without
+# it every single search would attempt a query against a table that cannot
+# exist, fail, and log a warning with a traceback — turning a permanent,
+# already-reported degradation into per-request log spam.
+_index_unavailable = False
 
 
 def _fts_available(conn) -> bool:
@@ -95,6 +105,7 @@ def ensure_lexical_index(engine) -> bool:
     still works on the dense channel alone and a keyword index is not
     worth failing app startup over.
     """
+    global _index_unavailable
     try:
         with engine.begin() as conn:
             if not _fts_available(conn):
@@ -102,6 +113,7 @@ def ensure_lexical_index(engine) -> bool:
                     "SQLite has no FTS5 module — explore search will run "
                     "semantic-only (no keyword channel)"
                 )
+                _index_unavailable = True
                 return False
 
             conn.execute(text(
@@ -124,6 +136,7 @@ def ensure_lexical_index(engine) -> bool:
                 "SELECT name FROM sqlite_master WHERE type='table' AND name=:n"
             ), {"n": FTS_TABLE}).fetchone()
 
+            needs_backfill = False
             if existing is None:
                 logger.info("Creating explore FTS5 index")
                 conn.execute(text(
@@ -135,20 +148,61 @@ def ensure_lexical_index(engine) -> bool:
                     )"""
                 ))
                 _create_triggers(conn)
-                # Populate from whatever is already in the table. The
-                # triggers only see writes from here on.
-                conn.execute(text(
-                    f"INSERT INTO {FTS_TABLE}({FTS_TABLE}) VALUES('rebuild')"
-                ))
+                # Only rows that predate the index need backfilling, and on
+                # a fresh database there are none — every write from here is
+                # caught by the triggers. Checking first keeps startup from
+                # spawning a thread that has nothing to do, which is the
+                # normal case everywhere except the one deploy that
+                # introduces this index.
+                needs_backfill = bool(conn.execute(text(
+                    "SELECT 1 FROM explore_documents LIMIT 1"
+                )).fetchone())
 
             conn.execute(text(
                 "INSERT INTO explore_fts_meta (key, value) VALUES ('schema_version', :v) "
                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value"
             ), {"v": FTS_SCHEMA_VERSION})
+
+        if needs_backfill:
+            _backfill_in_background(engine)
         return True
     except Exception:
         logger.exception("Could not initialise the explore keyword index")
         return False
+
+
+def _backfill_in_background(engine) -> None:
+    """Tokenise the pre-existing corpus off the startup path.
+
+    The table and triggers are created synchronously above, so every write
+    from this moment on is indexed. Only the *backfill* of rows that
+    predate the index runs here — re-tokenising the whole corpus takes
+    long enough on a Pi to matter, and doing it inside `init_db()` would
+    hold up the FastAPI lifespan and the container health check on the one
+    deploy that introduces this index.
+
+    Search is already correct while this runs: the keyword channel simply
+    returns fewer hits, and the fusion treats that the same as any other
+    ranker that didn't return a document. This mirrors how
+    `vector_store.ensure_explore_index` handles its own reindex.
+    """
+    threading.Thread(
+        target=_run_backfill, args=(engine,),
+        name="explore-fts-backfill", daemon=True,
+    ).start()
+
+
+def _run_backfill(engine) -> None:
+    """The backfill itself, separated from the thread so it can be driven
+    synchronously in tests."""
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(
+                f"INSERT INTO {FTS_TABLE}({FTS_TABLE}) VALUES('rebuild')"
+            ))
+        logger.info("Explore keyword index backfill complete")
+    except Exception:
+        logger.exception("Explore keyword index backfill failed")
 
 
 def _drop(conn) -> None:
@@ -299,6 +353,9 @@ def search_lexical(
     after the fact is how a chamber-scoped search ends up with three
     results out of a requested thirty.
     """
+    if _index_unavailable:
+        return []
+
     match_expr = build_match_expression(query)
     if not match_expr:
         return []

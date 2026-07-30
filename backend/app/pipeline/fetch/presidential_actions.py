@@ -175,7 +175,15 @@ async def fetch_recent_presidential_actions(
                     "doc_type": DOC_TYPE_LABELS.get(doc_type, doc_type),
                     "url": doc.get("html_url", ""),
                     "politician_name": president_name,
-                    "identifiers": _identifiers(doc_num, doc.get("citation"), eo_num),
+                    # eo_num is only meaningful for executive orders — the
+                    # same condition the title above uses. Declaring
+                    # "eo:14110" on a memorandum that merely referenced the
+                    # order would make every citation of that order point at
+                    # the wrong document.
+                    "identifiers": _identifiers(
+                        doc_num, doc.get("citation"),
+                        eo_num if doc_type == "executive_order" else None,
+                    ),
                 })
 
             if len(docs) < 20:

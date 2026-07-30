@@ -94,6 +94,14 @@ markedly newer document over a slightly more relevant one and cannot flip an
 adjacent pair — the division of labour `tests/test_explore_search.py` pins
 down in both directions.
 
+**The authority pass streams bodies rather than reading them.** The citation
+graph is built from two queries: one over the small columns to map identifiers
+to documents, and one that streams bodies in batches into the extractor and
+discards each after use. Reading it all in one pass would hold the corpus's
+entire body text resident next to two sentence-transformer models. `yield_per`
+alone does not achieve that — it batches the *fetch*, and accumulating the rows
+it yields puts every body straight back in memory.
+
 **Citation authority is the PageRank analogue, and it is opt-in.** Federal
 documents cite each other constantly and by canonical identifier; those
 formats are published in the Office of the Federal Register's Document
@@ -141,14 +149,28 @@ term appearing past 800 characters is now reachable by the keyword channel
 even though the embedding never saw it. What remains unreachable is a
 *paraphrase* of a passage that far in.
 
-**Half the engine can be down and search still works.** The vector index
-records which model built it, and a mismatch at startup drops the vec tables
-and kicks off a background reindex that takes minutes on the Pi. Search used
-to return "index not ready" for that entire window; it now serves keyword
-results and reports the semantic channel as empty. The endpoint only returns
-the 503 "still indexing" contract when *neither* channel can answer — which
-includes a query with no keyword match while the vector index is down, since
-in that state the endpoint genuinely cannot claim the corpus has no match.
+**Half the engine can be down and search still works — and says so.** The
+vector index records which model built it, and a mismatch at startup drops the
+vec tables and kicks off a background reindex that takes minutes on the Pi.
+Search used to return "index not ready" for that entire window; it now serves
+keyword results. The endpoint returns the 503 "still indexing" contract only
+when *neither* channel can answer — which includes a query with no keyword
+match while the vector index is down, since in that state the endpoint
+genuinely cannot claim the corpus has no match.
+
+Partial answers are labelled as partial. The response carries
+`semanticUnavailable`, and the page tells the reader they are seeing keyword
+matches only while the meaning-based index rebuilds. That flag is deliberately
+*not* `channels.semantic == 0`: a filtered query can retrieve zero vectors from
+a perfectly healthy index, and conflating the two would announce a rebuild
+every time a document-type filter came up empty on the semantic side.
+
+The keyword index has the same story on the way in. Its table and triggers are
+created synchronously at startup, so every write from that moment is indexed,
+but the *backfill* of rows that predate the index runs on a background thread —
+re-tokenising a full corpus inside `init_db()` would hold up the FastAPI
+lifespan and the container health check on the one deploy that introduces it.
+On a fresh database there is nothing to backfill and no thread is started.
 
 **The FTS index is external-content, with a nightly rebuild as the backstop.**
 `content='explore_documents'` means the inverted index stores no copy of the

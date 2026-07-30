@@ -221,19 +221,40 @@ def pagerank(
     return x / total if total > 0 else x
 
 
-def build_citation_graph(docs: list[dict]) -> tuple[list[tuple[int, int]], np.ndarray]:
-    """Edges (as row-index pairs) and per-document inbound citation counts.
+def build_citation_graph(
+    identity_rows, text_rows,
+) -> tuple[list[int], list[tuple[int, int]], np.ndarray]:
+    """Document ids by row index, edges as row-index pairs, and inbound counts.
 
-    `docs` are dicts with keys: id, external_id, title, doc_type, summary,
+    Rows are dicts with keys: id, external_id, title, doc_type, summary,
     body, identifiers. Order defines the row indices.
+
+    Two separate passes over two separate iterables, rather than one pass
+    over a list of fully-populated documents. `identity_rows` needs only the
+    small columns (id, external_id, title, doc_type, identifiers);
+    `text_rows` needs the body, which is the expensive one. Splitting them
+    is what lets `update_document_authority` stream bodies past this
+    function and discard each after use instead of holding the entire
+    corpus's text — tens of megabytes, in a process that also holds two
+    sentence-transformer models. In-memory callers (tests, small corpora)
+    pass the same list twice.
+
+    `text_rows` may arrive in any order and may omit documents; each is
+    matched back by id. A text row for an unknown id is skipped rather than
+    silently indexed at the wrong position.
 
     Self-citations are dropped. Federal Register documents stamp their own
     "FR Doc. 2023-24283 Filed" line into their own body, and a final rule
     restates its own RIN in its own heading — counted, every FR document
     would cite itself and the ranking would be a document-length contest.
     """
+    order: list[int] = []
+    row_of: dict[int, int] = {}
     owner: dict[str, list[int]] = {}
-    for row, doc in enumerate(docs):
+    for doc in identity_rows:
+        row = len(order)
+        order.append(doc["id"])
+        row_of[doc["id"]] = row
         for ident in declared_identifiers(
             doc.get("external_id"), doc.get("title"),
             doc.get("doc_type"), doc.get("identifiers"),
@@ -241,7 +262,10 @@ def build_citation_graph(docs: list[dict]) -> tuple[list[tuple[int, int]], np.nd
             owner.setdefault(ident, []).append(row)
 
     edges: set[tuple[int, int]] = set()
-    for row, doc in enumerate(docs):
+    for doc in text_rows:
+        row = row_of.get(doc["id"])
+        if row is None:
+            continue
         text = f"{doc.get('summary') or ''}\n{doc.get('body') or ''}"
         for ident in extract_citations(text):
             for target in owner.get(ident, ()):
@@ -249,14 +273,17 @@ def build_citation_graph(docs: list[dict]) -> tuple[list[tuple[int, int]], np.nd
                     edges.add((row, target))
 
     edge_list = sorted(edges)
-    inbound = np.zeros(len(docs), dtype=np.int64)
+    inbound = np.zeros(len(order), dtype=np.int64)
     for _, target in edge_list:
         inbound[target] += 1
-    return edge_list, inbound
+    return order, edge_list, inbound
 
 
 def compute_document_authority(docs: list[dict]) -> dict[int, tuple[float, int]]:
     """Map document id → (pagerank score, inbound citation count).
+
+    The in-memory entry point: fine for tests and small corpora, and the
+    same code path `update_document_authority` takes with streamed rows.
 
     The score is the raw stationary probability. Callers rank by it rather
     than thresholding on it, so it deliberately isn't rescaled here — a
@@ -265,48 +292,67 @@ def compute_document_authority(docs: list[dict]) -> dict[int, tuple[float, int]]
     """
     if not docs:
         return {}
+    return _authority_from_graph(*build_citation_graph(docs, docs))
 
-    edges, inbound = build_citation_graph(docs)
-    scores = pagerank(len(docs), edges)
 
+def _authority_from_graph(
+    order: list[int], edges: list[tuple[int, int]], inbound: np.ndarray,
+) -> dict[int, tuple[float, int]]:
+    scores = pagerank(len(order), edges)
     logger.info(
         "Citation graph: %d documents, %d edges, %d cited at least once",
-        len(docs), len(edges), int((inbound > 0).sum()),
+        len(order), len(edges), int((inbound > 0).sum()),
     )
     return {
-        doc["id"]: (float(scores[row]), int(inbound[row]))
-        for row, doc in enumerate(docs)
+        doc_id: (float(scores[row]), int(inbound[row]))
+        for row, doc_id in enumerate(order)
     }
+
+
+# Rows per streamed batch. Bounds how much body text is resident at once:
+# Federal Register bodies run to 15k characters each (fr_rulemaking's
+# MAX_BODY_LEN), so this is a few megabytes rather than the whole corpus.
+_STREAM_BATCH = 500
 
 
 def update_document_authority(db) -> dict:
     """Recompute authority for every explore document and persist it.
 
-    Called at the end of the explore ingest pipeline. Streams bodies with
-    `yield_per` so peak memory stays bounded rather than tracking corpus
-    size — the whole corpus's body text is tens of megabytes and this
-    process also holds two sentence-transformer models.
+    Called at the end of the explore ingest pipeline.
+
+    Two queries, deliberately. The first reads only the small columns and
+    builds the identifier map; the second streams bodies in batches, which
+    are handed to the citation extractor and dropped. Reading all of it in
+    one pass would hold the corpus's entire body text — tens of megabytes —
+    resident on a device that is simultaneously running two
+    sentence-transformer models and the rest of the nightly pipeline.
+    `yield_per` alone does not achieve this: it batches the *fetch*, and
+    accumulating the rows it yields into a list puts every body right back
+    in memory.
     """
     from app.models import ExploreDocument
 
-    docs: list[dict] = []
-    query = db.query(
-        ExploreDocument.id,
-        ExploreDocument.external_id,
-        ExploreDocument.title,
-        ExploreDocument.doc_type,
-        ExploreDocument.summary,
-        ExploreDocument.body,
-        ExploreDocument.identifiers,
-    ).yield_per(500)
-    for row in query:
-        docs.append({
-            "id": row.id, "external_id": row.external_id, "title": row.title,
-            "doc_type": row.doc_type, "summary": row.summary,
-            "body": row.body, "identifiers": row.identifiers,
-        })
+    identity_rows = [
+        {"id": row.id, "external_id": row.external_id, "title": row.title,
+         "doc_type": row.doc_type, "identifiers": row.identifiers}
+        for row in db.query(
+            ExploreDocument.id, ExploreDocument.external_id,
+            ExploreDocument.title, ExploreDocument.doc_type,
+            ExploreDocument.identifiers,
+        ).yield_per(_STREAM_BATCH)
+    ]
+    if not identity_rows:
+        return {"documents": 0, "cited": 0}
 
-    authority = compute_document_authority(docs)
+    def _stream_text():
+        for row in db.query(
+            ExploreDocument.id, ExploreDocument.summary, ExploreDocument.body,
+        ).yield_per(_STREAM_BATCH):
+            yield {"id": row.id, "summary": row.summary, "body": row.body}
+
+    authority = _authority_from_graph(
+        *build_citation_graph(identity_rows, _stream_text())
+    )
     if not authority:
         return {"documents": 0, "cited": 0}
 

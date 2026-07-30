@@ -218,11 +218,18 @@ def hybrid_search(
     """Run both retrieval channels, fuse, rank, and return a page.
 
     Returns `{"results": [...], "count": n, "indexReady": bool,
-    "channels": {...}}`. `indexReady` is False only when *neither* channel
-    could answer — the semantic index is mid-rebuild and the keyword index
-    is absent or matched nothing. That is a real improvement on its own:
-    a reindex used to take the whole feature down for the minutes it ran,
-    and now takes only the semantic half of it down.
+    "semanticUnavailable": bool, "channels": {...}}`.
+
+    `indexReady` is False only when *neither* channel could answer — the
+    semantic index is mid-rebuild and the keyword index is absent or
+    matched nothing. That is a real improvement on its own: a reindex used
+    to take the whole feature down for the minutes it ran, and now takes
+    only the semantic half of it down.
+
+    `semanticUnavailable` says which half. It is not `channels.semantic ==
+    0`: a filtered query can legitimately retrieve zero vectors while the
+    index is perfectly healthy, and conflating the two would tell readers
+    the engine was rebuilding whenever a doc_type filter came up empty.
     """
     pool = min(max(limit * 8, EXPLORE_CANDIDATE_POOL), EXPLORE_MAX_CANDIDATE_POOL)
     today = date_type.today().isoformat()
@@ -248,9 +255,17 @@ def hybrid_search(
         politician_id=politician_id, commentable_after=commentable_after,
     )
 
-    if semantic is None and not keyword:
+    # None (not []) from the semantic channel means the vector index is
+    # missing or mid-rebuild, which is different from "it found nothing".
+    # The distinction has to survive to the response: a page served on the
+    # keyword channel alone is a partial answer, and telling the reader so
+    # is the difference between honest degradation and quiet degradation.
+    semantic_unavailable = semantic is None
+
+    if semantic_unavailable and not keyword:
         return {
             "results": [], "count": 0, "indexReady": False,
+            "semanticUnavailable": True,
             "channels": {"semantic": 0, "keyword": 0},
         }
 
@@ -282,6 +297,7 @@ def hybrid_search(
     if not candidates:
         return {
             "results": [], "count": 0, "indexReady": True,
+            "semanticUnavailable": semantic_unavailable,
             "channels": {"semantic": len(semantic), "keyword": len(keyword)},
         }
 
@@ -369,5 +385,6 @@ def hybrid_search(
         "results": results,
         "count": len(results),
         "indexReady": True,
+        "semanticUnavailable": semantic_unavailable,
         "channels": {"semantic": len(semantic), "keyword": len(keyword)},
     }

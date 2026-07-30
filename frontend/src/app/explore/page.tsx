@@ -148,7 +148,7 @@ function ResultCard({
                 {result.politicianName}
               </span>
             )}
-            {result.citedByCount > 0 && (
+            {(result.citedByCount ?? 0) > 0 && (
               <span
                 className="text-[10px] font-mono tracking-wide text-matrix-green/40"
                 title="Other federal documents in this index that cite this one"
@@ -156,7 +156,7 @@ function ResultCard({
                 CITED BY {result.citedByCount}
               </span>
             )}
-            {result.duplicateCount > 0 && (
+            {(result.duplicateCount ?? 0) > 0 && (
               <span
                 className="text-[10px] font-mono tracking-wide text-matrix-green/40"
                 title="Near-identical copies of this document collapsed into this result"
@@ -211,6 +211,10 @@ function ExplorePageInner() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
+  // Results came from the keyword channel alone because the vector index is
+  // rebuilding. A partial answer presented as a whole one is the thing to
+  // avoid here — the reader has no other way to tell.
+  const [semanticDown, setSemanticDown] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -239,14 +243,17 @@ function ExplorePageInner() {
             "The search index is still being built. This happens right after a data refresh — please check back in a few minutes.",
           );
           setResults([]);
+          setSemanticDown(false);
         } else {
           setResults(resp.results);
+          setSemanticDown(Boolean(resp.semanticUnavailable));
         }
       } catch (e) {
         setError(
           e instanceof Error ? e.message : "Search failed. The explore pipeline may still be ingesting data.",
         );
         setResults([]);
+        setSemanticDown(false);
       } finally {
         setLoading(false);
       }
@@ -472,6 +479,20 @@ function ExplorePageInner() {
                   Searching government records...
                 </span>
               </div>
+            </div>
+          )}
+
+          {/* Partial-results notice */}
+          {!loading && searched && semanticDown && results.length > 0 && (
+            <div
+              role="status"
+              className="mb-4 px-3 py-2 rounded border border-amber-500/30 bg-amber-500/5"
+            >
+              <p className="text-amber-400/80 text-xs">
+                Showing keyword matches only — the meaning-based index is
+                rebuilding after a data refresh. Searches by topic will return
+                more once it finishes, usually within a few minutes.
+              </p>
             </div>
           )}
 

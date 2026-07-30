@@ -200,3 +200,44 @@ class TestTriggerScope:
                    body="a document about wildfire suppression")
         update_document_authority(indexed_db)
         assert [h["id"] for h in search_lexical(indexed_db, "wildfire", limit=5)] == [doc.id]
+
+
+class TestBackfill:
+    def test_preexisting_rows_are_indexed_when_the_index_is_created(self, db_session):
+        # The migration path: a deployed database already holds thousands of
+        # documents when this index first appears. They have to become
+        # searchable without waiting for the next nightly run.
+        from app.pipeline import lexical_index as module
+
+        _add(db_session, title="wildfire response rule")
+        ran: list[bool] = []
+        real = module._backfill_in_background
+
+        def _synchronous(engine):
+            ran.append(True)
+            module._run_backfill(engine)
+
+        module._backfill_in_background = _synchronous
+        try:
+            assert module.ensure_lexical_index(db_session.get_bind())
+        finally:
+            module._backfill_in_background = real
+
+        assert ran == [True]
+        assert len(search_lexical(db_session, "wildfire", limit=5)) == 1
+
+    def test_no_backfill_thread_on_an_empty_corpus(self, db_session):
+        # The normal case everywhere except that one deploy. Spawning a
+        # thread with nothing to do also races the writes a fresh process
+        # is about to make.
+        from app.pipeline import lexical_index as module
+
+        ran: list[bool] = []
+        real = module._backfill_in_background
+        module._backfill_in_background = lambda engine: ran.append(True)
+        try:
+            assert module.ensure_lexical_index(db_session.get_bind())
+        finally:
+            module._backfill_in_background = real
+
+        assert ran == []

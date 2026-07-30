@@ -83,10 +83,12 @@ describe("splitHighlights", () => {
     expect(segments[1]).toEqual({ text: "water", match: true });
   });
 
-  it("does not lose text when a snippet is truncated mid-highlight", () => {
+  it("keeps the term marked when a snippet is truncated mid-highlight", () => {
+    // The term really did match; the excerpt was just cut before the
+    // closing marker. Dropping the mark would be the wrong repair.
     expect(splitHighlights(`funding for ${S}wildfire`)).toEqual([
       { text: "funding for ", match: false },
-      { text: "wildfire", match: false },
+      { text: "wildfire", match: true },
     ]);
   });
 
@@ -98,5 +100,29 @@ describe("splitHighlights", () => {
 
   it("returns nothing for an empty snippet", () => {
     expect(splitHighlights("")).toEqual([]);
+  });
+});
+
+describe("splitHighlights — unpaired markers", () => {
+  const S = EXPLORE_HIGHLIGHT_START;
+  const E = EXPLORE_HIGHLIGHT_END;
+
+  it("never leaks a control character into rendered text", () => {
+    // FTS5 truncates snippets at token boundaries, which can leave a marker
+    // without its partner. An unpaired one left in place renders as an
+    // invisible control character inside the excerpt.
+    for (const snippet of [`a ${S}b`, `a ${E}b`, `${E}a${E}`, `${S}${S}a`]) {
+      for (const segment of splitHighlights(snippet)) {
+        expect(segment.text).not.toContain(S);
+        expect(segment.text).not.toContain(E);
+      }
+    }
+  });
+
+  it("recovers the text around an unpaired end marker", () => {
+    expect(splitHighlights(`funding for ${E}wildfire`)).toEqual([
+      { text: "funding for ", match: false },
+      { text: "wildfire", match: false },
+    ]);
   });
 });

@@ -216,3 +216,26 @@ class TestFiltersAndSort:
                  body=f"wildfire document numbered {i}")
         body = _body(await _search(indexed_db, "wildfire", limit=3))
         assert body["count"] == 3
+
+
+class TestDegradedMode:
+    async def test_partial_results_are_labelled_as_partial(self, indexed_db):
+        # The vector index is down, so these results came from the keyword
+        # channel alone. Serving them silently would present half an answer
+        # as a whole one, and the reader has no other way to tell.
+        _add(indexed_db, title="wildfire response rule")
+        body = _body(await _search(indexed_db, "wildfire"))
+        assert body["semanticUnavailable"] is True
+
+    async def test_healthy_index_is_not_labelled_partial(
+        self, indexed_db, vector_index_ready
+    ):
+        # `channels.semantic == 0` is not the same thing: a filtered query
+        # can retrieve zero vectors from a perfectly healthy index, and
+        # conflating the two would claim a rebuild whenever a filter came
+        # up empty on the semantic side.
+        _add(indexed_db, title="wildfire response rule")
+        body = _body(await _search(indexed_db, "wildfire"))
+        assert body["semanticUnavailable"] is False
+        assert body["channels"]["semantic"] == 0
+        assert body["count"] == 1

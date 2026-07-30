@@ -109,7 +109,8 @@ class TestCitationGraph:
              "doc_type": "Final Rule", "summary": "",
              "body": "Consistent with Executive Order 14110...", "identifiers": None},
         ]
-        edges, inbound = build_citation_graph(docs)
+        order, edges, inbound = build_citation_graph(docs, docs)
+        assert order == [1, 2]
         assert edges == [(1, 0)]
         assert inbound.tolist() == [1, 0]
 
@@ -121,7 +122,7 @@ class TestCitationGraph:
             "doc_type": "Final Rule", "summary": "",
             "body": "FR Doc. 2024-01234 Filed 1-1-24", "identifiers": None,
         }]
-        edges, inbound = build_citation_graph(docs)
+        _order, edges, inbound = build_citation_graph(docs, docs)
         assert edges == []
         assert inbound.tolist() == [0]
 
@@ -133,7 +134,7 @@ class TestCitationGraph:
              "doc_type": "Final Rule", "summary": "E.O. 12866",
              "body": "E.O. 12866 " * 20, "identifiers": None},
         ]
-        edges, _ = build_citation_graph(docs)
+        _order, edges, _inbound = build_citation_graph(docs, docs)
         assert edges == [(1, 0)]
 
 
@@ -225,3 +226,102 @@ class TestUpdateDocumentAuthority:
 
     def test_empty_table(self, db_session):
         assert update_document_authority(db_session) == {"documents": 0, "cited": 0}
+
+
+class TestStreamedGraph:
+    """The two-iterable form is what `update_document_authority` uses.
+
+    It exists so bodies can be streamed and discarded instead of the whole
+    corpus's text sitting in memory next to two sentence-transformer
+    models — `yield_per` alone does not do that, because accumulating the
+    rows it yields puts every body straight back.
+    """
+
+    IDENTITY = [
+        {"id": 10, "external_id": "fr-1", "title": "EO 12866: Review",
+         "doc_type": "Executive Order", "identifiers": None},
+        {"id": 20, "external_id": "fr-reg-2", "title": "A Rule",
+         "doc_type": "Final Rule", "identifiers": None},
+    ]
+
+    def test_separate_iterables_give_the_same_graph_as_one_list(self):
+        combined = [
+            {**self.IDENTITY[0], "summary": "", "body": ""},
+            {**self.IDENTITY[1], "summary": "", "body": "per Executive Order 12866"},
+        ]
+        text_rows = [
+            {"id": 10, "summary": "", "body": ""},
+            {"id": 20, "summary": "", "body": "per Executive Order 12866"},
+        ]
+        from_list = build_citation_graph(combined, combined)
+        from_stream = build_citation_graph(self.IDENTITY, iter(text_rows))
+        assert from_list[0] == from_stream[0]
+        assert from_list[1] == from_stream[1]
+        assert from_list[2].tolist() == from_stream[2].tolist()
+
+    def test_text_rows_may_arrive_in_any_order(self):
+        # Two independent queries; nothing guarantees they iterate alike.
+        # Matching by id rather than by position is what makes that safe.
+        text_rows = [
+            {"id": 20, "summary": "", "body": "per Executive Order 12866"},
+            {"id": 10, "summary": "", "body": ""},
+        ]
+        _order, edges, inbound = build_citation_graph(self.IDENTITY, iter(text_rows))
+        assert edges == [(1, 0)]
+        assert inbound.tolist() == [1, 0]
+
+    def test_a_text_row_for_an_unknown_id_is_skipped(self):
+        # A document inserted between the two queries. Indexing it at some
+        # arbitrary position would attribute its citations to another
+        # document entirely.
+        text_rows = [
+            {"id": 999, "summary": "", "body": "per Executive Order 12866"},
+            {"id": 20, "summary": "", "body": ""},
+        ]
+        _order, edges, inbound = build_citation_graph(self.IDENTITY, iter(text_rows))
+        assert edges == []
+        assert inbound.tolist() == [0, 0]
+
+    def test_a_document_with_no_text_row_still_gets_a_score(self):
+        _order, _edges, inbound = build_citation_graph(self.IDENTITY, iter([]))
+        assert inbound.tolist() == [0, 0]
+
+    def test_update_streams_text_rows_instead_of_materialising_them(self, db_session):
+        # Guards the property the docstring claims, structurally: the text
+        # rows must reach build_citation_graph as a lazy iterator, so each
+        # body is discarded after use. A regression to "read every row into
+        # a list, then process" is invisible to an output assertion — the
+        # answer is identical, only the peak memory changes — so this
+        # asserts on the shape of what gets passed.
+        import inspect
+
+        from app.pipeline.analyze import document_authority as module
+
+        for i in range(6):
+            db_session.add(ExploreDocument(
+                doc_type="Final Rule", source="Federal Register",
+                title=f"Rule {i}", body=f"body text {i}",
+                date="2026-01-01", chamber="Regulatory", external_id=f"fr-reg-{i}",
+            ))
+        db_session.commit()
+
+        seen: dict = {}
+        real_build = module.build_citation_graph
+
+        def _spy(identity_rows, text_rows):
+            seen["is_lazy"] = inspect.isgenerator(text_rows)
+            # Consume it to make sure the generator actually yields rows,
+            # rather than passing laziness by being empty.
+            rows = list(text_rows)
+            seen["count"] = len(rows)
+            return real_build(identity_rows, iter(rows))
+
+        module.build_citation_graph = _spy
+        try:
+            result = update_document_authority(db_session)
+        finally:
+            module.build_citation_graph = real_build
+
+        assert seen["is_lazy"] is True
+        assert seen["count"] == 6
+        assert result["documents"] == 6

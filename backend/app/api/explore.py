@@ -111,6 +111,10 @@ async def search_explore(
             "query": q,
             "results": outcome["results"],
             "count": outcome["count"],
+            # True when these results came from the keyword channel alone
+            # because the vector index is missing or mid-rebuild. The page
+            # says so rather than presenting a partial answer as a whole one.
+            "semanticUnavailable": outcome["semanticUnavailable"],
             "channels": outcome["channels"],
         },
         headers={"Cache-Control": "public, max-age=60, stale-while-revalidate=60"},
