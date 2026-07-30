@@ -85,7 +85,12 @@ jobs:
         # PR), not implicitly via whatever version `pip install ruff` grabs.
         run: |
           pip install "ruff==0.15.4"
-          ruff check app/
+          # scripts/ too, not just app/. It was excluded, and a plain
+          # NameError sat in scripts/rescore.py's return statement — past
+          # every line of work the script does, so it only ever surfaced
+          # after a full run. One-off calibration scripts are exactly the
+          # code nobody re-runs often enough to find that by hand.
+          ruff check app/ scripts/
 
       # Two-part coverage gate:
       #   1. TOTAL floor (--cov-fail-under=46): a regression backstop only
@@ -144,8 +149,34 @@ jobs:
       # Catches image-level breakage (e.g. requirements conflicts that
       # only surface in the container build — an inconsistent Dependabot
       # pin made main undeployable for a day in 2026-07).
+      # Retried because the failure this job actually produces most often
+      # is not a broken image — it is Docker Hub refusing the anonymous
+      # token fetch for the base image:
+      #
+      #   ERROR: failed to authorize: failed to fetch oauth token:
+      #   Post "https://auth.docker.io/token": read: connection reset by peer
+      #
+      # That lands in the first ~10 seconds, marks the PR red, and needs a
+      # human to notice and re-run a job that was never testing anything at
+      # the time it failed. Three attempts with a backoff cost nothing on
+      # the happy path (the loop exits on the first success) and cannot
+      # mask a genuine build break, which fails identically all three
+      # times. Registry rate limits are per-IP on shared runners, so the
+      # gap between attempts is deliberately long enough to outlast a
+      # short throttle rather than spend all three tries inside it.
       - name: Build backend image (amd64 smoke build)
-        run: docker build backend/
+        run: |
+          for attempt in 1 2 3; do
+            if docker build backend/; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "::warning::Backend image build attempt $attempt failed; retrying in $((attempt * 30))s"
+              sleep $((attempt * 30))
+            fi
+          done
+          echo "::error::Backend image build failed three times"
+          exit 1
 
   backend-slow:
     name: Backend — Embedding Tests

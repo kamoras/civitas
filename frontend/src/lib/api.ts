@@ -494,8 +494,27 @@ export interface ExploreResult {
   politicianName: string;
   politicianId: string;
   chamber: string;
-  distance: number;
+  // Cosine distance from the semantic channel. Null when only the keyword
+  // channel matched this document — those results have no vector distance,
+  // and coercing one would invent a number.
+  distance: number | null;
+  // Keyword-in-context excerpt. Matched terms are wrapped in the U+0002 /
+  // U+0003 control characters (never markup — see EXPLORE_HIGHLIGHT_* and
+  // splitHighlights below). Falls back to the document summary for results
+  // only the semantic channel found, which have no matched terms to mark.
   snippet: string;
+  // The three fields below are optional only because a proxy-cached
+  // response written before this feature deployed can still be served for
+  // its max-age. Every live response carries them.
+  //
+  // Which retrieval channels returned this document: "semantic", "keyword",
+  // or both.
+  matchedBy?: ("semantic" | "keyword")[];
+  // Inbound citations from other federal documents in the index — the raw
+  // count behind the PageRank authority signal.
+  citedByCount?: number;
+  // Near-identical copies of this document collapsed into this result.
+  duplicateCount?: number;
   url: string;
   summary: string;
   agencyName: string;
@@ -503,10 +522,65 @@ export interface ExploreResult {
   commentsCloseOn: string;
 }
 
+/** Sentinels the backend wraps matched query terms in. See splitHighlights. */
+export const EXPLORE_HIGHLIGHT_START = "\u0002";
+export const EXPLORE_HIGHLIGHT_END = "\u0003";
+
+/**
+ * Split a snippet into plain and matched segments for rendering.
+ *
+ * The backend marks matches with control characters rather than `<b>` tags
+ * precisely so this never needs `dangerouslySetInnerHTML`: a Federal
+ * Register body can contain anything, and a highlighted excerpt is
+ * attacker-adjacent text going straight into a page.
+ */
+export function splitHighlights(
+  snippet: string,
+): { text: string; match: boolean }[] {
+  if (!snippet) return [];
+
+  // Scan once, emitting a segment at every marker. Both sentinels are
+  // consumed as delimiters and never reach a segment's text: a snippet
+  // truncated mid-highlight can leave one unpaired, and an unpaired marker
+  // left in place would render as an invisible control character inside the
+  // excerpt.
+  const segments: { text: string; match: boolean }[] = [];
+  let buffer = "";
+  let matching = false;
+
+  const flush = () => {
+    if (buffer) segments.push({ text: buffer, match: matching });
+    buffer = "";
+  };
+
+  for (const char of snippet) {
+    if (char === EXPLORE_HIGHLIGHT_START) {
+      flush();
+      matching = true;
+    } else if (char === EXPLORE_HIGHLIGHT_END) {
+      flush();
+      matching = false;
+    } else {
+      buffer += char;
+    }
+  }
+  flush();
+  return segments;
+}
+
 export interface ExploreResponse {
   query: string;
   results: ExploreResult[];
   count: number;
+  // How many documents each retrieval channel returned before fusion.
+  // Useful for spotting a dead channel. Optional for the same
+  // proxy-cache reason as the per-result fields above.
+  channels?: { semantic: number; keyword: number };
+  // Set when these results came from the keyword channel alone because the
+  // vector index is missing or mid-rebuild. Deliberately not the same as
+  // `channels.semantic === 0`: a filtered query can retrieve zero vectors
+  // from a perfectly healthy index.
+  semanticUnavailable?: boolean;
   // Set when the vector index doesn't exist yet (e.g. right after an admin
   // reset, before the next pipeline run). The backend returns HTTP 503 with
   // this flag so the UI can show an honest "still indexing" state instead of

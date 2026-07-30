@@ -10,6 +10,7 @@ import BackToTop from "@/components/BackToTop";
 import {
   searchExplore,
   fetchExploreStats,
+  splitHighlights,
   type ExploreResult,
   type ExploreStats,
 } from "@/lib/api";
@@ -28,6 +29,12 @@ const CHAMBER_FILTERS: { label: string; value: ChamberFilter }[] = [
   { label: "Rulemaking", value: "Regulatory" },
 ];
 
+// The topical list is unchanged — it is the only editorial surface on this
+// page, and narrowing which issues get suggested is not a search change.
+// The two exact-term examples are appended because search now runs a
+// keyword channel alongside the semantic one, so document numbers and
+// "quoted phrases" work, and this is the only place a visitor would find
+// that out.
 const SUGGESTED_QUERIES = [
   "tariffs and trade policy",
   "healthcare costs and prescription drugs",
@@ -37,6 +44,8 @@ const SUGGESTED_QUERIES = [
   "technology regulation and AI",
   "student loan forgiveness",
   "Supreme Court constitutional rights",
+  "Executive Order 14110",
+  '"clean water act"',
 ];
 
 function docTypeLabel(docType: string): string {
@@ -55,6 +64,35 @@ function daysUntilClose(closeDate: string): number {
   const close = new Date(closeDate + "T23:59:59");
   const now = new Date();
   return Math.max(0, Math.ceil((close.getTime() - now.getTime()) / 86_400_000));
+}
+
+/**
+ * Render a backend excerpt with its matched query terms marked.
+ *
+ * The markers are control characters, not markup, so this builds React
+ * nodes rather than reaching for `dangerouslySetInnerHTML` — the text is a
+ * verbatim slice of a government document body and has no business being
+ * parsed as HTML.
+ */
+function Snippet({ text }: { text: string }) {
+  const segments = splitHighlights(text);
+  if (segments.length === 0) return null;
+  return (
+    <p className="text-xs text-matrix-green/50 leading-relaxed mb-3 line-clamp-3">
+      {segments.map((segment, i) =>
+        segment.match ? (
+          <mark
+            key={i}
+            className="bg-neon-cyan/15 text-neon-cyan/90 rounded-sm px-0.5"
+          >
+            {segment.text}
+          </mark>
+        ) : (
+          <span key={i}>{segment.text}</span>
+        ),
+      )}
+    </p>
+  );
 }
 
 function ResultCard({
@@ -101,17 +139,34 @@ function ResultCard({
           {result.title}
         </h3>
 
-        {(result.summary || result.snippet) && (
-          <p className="text-xs text-matrix-green/50 leading-relaxed mb-3 line-clamp-3">
-            {result.summary || result.snippet}
-          </p>
-        )}
+        {/* The keyword channel returns an excerpt built around the matched
+            terms, which says far more about why a document came back than
+            its opening sentence does. Results only the semantic channel
+            found have no matched terms, and fall back to the summary. */}
+        <Snippet text={result.snippet || result.summary} />
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3 flex-wrap">
             {result.politicianName && (
               <span className="text-xs text-matrix-green/60">
                 {result.politicianName}
+              </span>
+            )}
+            {(result.citedByCount ?? 0) > 0 && (
+              <span
+                className="text-[10px] font-mono tracking-wide text-matrix-green/40"
+                title="Other federal documents in this index that cite this one"
+              >
+                CITED BY {result.citedByCount}
+              </span>
+            )}
+            {(result.duplicateCount ?? 0) > 0 && (
+              <span
+                className="text-[10px] font-mono tracking-wide text-matrix-green/40"
+                title="Near-identical copies of this document collapsed into this result"
+              >
+                +{result.duplicateCount} DUPLICATE
+                {result.duplicateCount !== 1 ? "S" : ""}
               </span>
             )}
           </div>
@@ -160,6 +215,10 @@ function ExplorePageInner() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
+  // Results came from the keyword channel alone because the vector index is
+  // rebuilding. A partial answer presented as a whole one is the thing to
+  // avoid here — the reader has no other way to tell.
+  const [semanticDown, setSemanticDown] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -188,14 +247,17 @@ function ExplorePageInner() {
             "The search index is still being built. This happens right after a data refresh — please check back in a few minutes.",
           );
           setResults([]);
+          setSemanticDown(false);
         } else {
           setResults(resp.results);
+          setSemanticDown(Boolean(resp.semanticUnavailable));
         }
       } catch (e) {
         setError(
           e instanceof Error ? e.message : "Search failed. The explore pipeline may still be ingesting data.",
         );
         setResults([]);
+        setSemanticDown(false);
       } finally {
         setLoading(false);
       }
@@ -258,7 +320,8 @@ function ExplorePageInner() {
             </h1>
             <p className="text-matrix-green/40 text-sm max-w-xl mx-auto">
               Search any issue to see what all branches of government and federal
-              agencies have done about it. Many regulatory documents are open for
+              agencies have done about it — by topic, or by exact name, number, or
+              &ldquo;quoted phrase&rdquo;. Many regulatory documents are open for
               public comment — make your voice heard.
             </p>
             {stats && stats.totalDocuments > 0 && (
@@ -423,6 +486,20 @@ function ExplorePageInner() {
             </div>
           )}
 
+          {/* Partial-results notice */}
+          {!loading && searched && semanticDown && results.length > 0 && (
+            <div
+              role="status"
+              className="mb-4 px-3 py-2 rounded border border-amber-500/30 bg-amber-500/5"
+            >
+              <p className="text-amber-400/80 text-xs">
+                Showing keyword matches only — the meaning-based index is
+                rebuilding after a data refresh. Searches by topic will return
+                more once it finishes, usually within a few minutes.
+              </p>
+            </div>
+          )}
+
           {/* Results */}
           {!loading && searched && results.length > 0 && (
             <div aria-live="polite">
@@ -437,11 +514,7 @@ function ExplorePageInner() {
               </p>
               <div className="space-y-3">
                 {results.map((r) => (
-                  <ResultCard
-                    key={`${r.id}-${r.distance}`}
-                    result={r}
-                    query={query}
-                  />
+                  <ResultCard key={r.id} result={r} query={query} />
                 ))}
               </div>
             </div>

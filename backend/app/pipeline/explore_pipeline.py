@@ -8,11 +8,16 @@ Sources:
   4. Supreme Court opinions (Oyez API)
   5. Federal Register rulemaking (rules, proposed rules, notices)
 
-Each document is stored in the explore_documents table and embedded in ChromaDB
-for free-text semantic search on the Explore page.
+Each document is stored in the explore_documents table, which then feeds
+three search structures rebuilt from it at the end of every run: the
+sentence-transformer embeddings in `vec_explore` (sqlite-vec), the BM25F
+keyword index in `explore_fts` (SQLite FTS5), and the citation graph behind
+each document's PageRank authority. See `services/explore_search.py` for how
+the three are combined at query time.
 """
 
 import hashlib
+import json
 import logging
 import time
 
@@ -30,6 +35,9 @@ from app.pipeline.fetch.presidential_actions import (
 )
 from app.pipeline.fetch.fr_rulemaking import fetch_fr_rulemaking
 from app.pipeline.fetch.supreme_court import fetch_scotus_cases
+from app.pipeline.analyze.document_authority import update_document_authority
+from app.pipeline.explore_ranking import calibrate_and_store
+from app.pipeline.lexical_index import rebuild_index
 from app.pipeline.vector_store import embed_explore_documents
 
 logger = logging.getLogger(__name__)
@@ -350,6 +358,7 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
                         politician_id=president_id,
                         chamber="Executive",
                         external_id=ext_id,
+                        identifiers=json.dumps(action.get("identifiers") or []),
                     ))
                     stats["presidential"] += 1
 
@@ -427,6 +436,7 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
                         comment_url=fr_doc.get("comment_url"),
                         comments_close_on=fr_doc.get("comments_close_on"),
                         external_id=ext_id,
+                        identifiers=json.dumps(fr_doc.get("identifiers") or []),
                     ))
                     stats["fr_rulemaking"] += 1
 
@@ -473,20 +483,54 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
         ]
         embedded = embed_explore_documents(doc_dicts)
 
+        # --- 8. Rebuild the keyword index ---
+        # Triggers keep explore_fts live between runs, but the backfill
+        # steps above rewrite bodies in place and an external-content FTS5
+        # index goes quietly wrong if a trigger's 'delete' ever sees values
+        # that differ from what was indexed. A full re-tokenise here makes
+        # any drift self-healing within a day.
+        logger.info("Explore pipeline: rebuilding keyword index...")
+        indexed = rebuild_index(db)
+
+        # --- 9. Recompute citation-graph authority ---
+        # After ingestion, so today's documents both earn citations and
+        # count as citing documents in the same pass.
+        logger.info("Explore pipeline: recomputing citation authority...")
+        try:
+            authority_stats = update_document_authority(db)
+        except Exception:
+            logger.exception("Citation authority pass failed — ranking falls back "
+                             "to relevance + freshness until the next run")
+            db.rollback()
+            authority_stats = {"documents": 0, "cited": 0}
+
+        # --- 10. Recalibrate ranking against the corpus just built ---
+        # Last, because every derivation reads the finished indexes: field
+        # weights are fitted on keyword retrieval, the prior weights on how
+        # far the two channels disagree, the pool on how many candidates
+        # survive filtering. Ranking parameters therefore always describe
+        # the corpus actually being searched, and nobody ever types one.
+        logger.info("Explore pipeline: recalibrating ranking...")
+        calibration = calibrate_and_store(db)
+
         api_cache_set(db, "explore", "seed_version", EXPLORE_SEED_VERSION)
         db.commit()
 
         elapsed = time.time() - start
         total = sum(stats.values())
         logger.info(
-            "Explore pipeline complete: %d new docs (%d embedded) in %.1fs",
-            total, embedded, elapsed,
+            "Explore pipeline complete: %d new docs (%d embedded, %d keyword-indexed, "
+            "%d cited) in %.1fs",
+            total, embedded, indexed, authority_stats["cited"], elapsed,
         )
 
         return {
             "status": "completed",
             "new_documents": stats,
             "total_embedded": embedded,
+            "keyword_indexed": indexed,
+            "authority": authority_stats,
+            "calibration": calibration,
             "elapsed_seconds": round(elapsed, 1),
         }
 

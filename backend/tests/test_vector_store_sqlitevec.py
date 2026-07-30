@@ -82,11 +82,22 @@ class TestEmbedAndSearch:
         assert conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0] == 1
         assert conn.execute("SELECT title FROM vec_explore").fetchone()[0] == "Updated title"
 
-    def test_index_model_version_recorded(self, vec_env):
+    def test_index_identity_recorded(self, vec_env):
+        # The stored identity covers the model AND the table layout, not the
+        # model alone: the index became chunk-level without the model
+        # changing, and a deployed index has to notice that and rebuild.
         vector_store.embed_explore_documents([_doc(1, "Anything")])
         stats = vector_store.collection_stats()
-        assert stats["indexModelVersion"] == vector_store.INDEX_MODEL_VERSION
-        assert stats["totalVectors"] == 1
+        assert stats["indexModelVersion"] == vector_store.index_identity()
+        assert vector_store.INDEX_MODEL_VERSION in stats["indexModelVersion"]
+        assert vector_store.INDEX_SCHEMA_VERSION in stats["indexModelVersion"]
+
+    def test_a_short_document_is_one_chunk(self, vec_env):
+        # Chunking scales with document length; a one-line document must not
+        # acquire extra rows for nothing.
+        vector_store.embed_explore_documents([_doc(1, "Anything")])
+        assert vector_store.collection_stats()["totalVectors"] == 1
+        assert vector_store.collection_stats()["chunksPerDocument"] == 1.0
 
 
 class TestBillsAndMaintenance:

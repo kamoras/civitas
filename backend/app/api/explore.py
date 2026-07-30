@@ -15,30 +15,32 @@ from app.api.rate_limit import WriteRateLimit
 from app.config import settings
 from app.database import get_db
 from app.models import ExploreDocument
-from app.pipeline.vector_store import search_explore_documents
+from app.services.explore_search import hybrid_search
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/explore")
 
-# Canonical chamber metadata values as stored in ChromaDB (explore_pipeline
-# writes these exact strings). ChromaDB `where` equality is case-sensitive,
-# so a lowercase "senate" filter matched nothing — user input is mapped
-# through this before querying. None of the four non-legislative chambers
-# was reachable at all before this map existed.
+# Canonical chamber metadata values as written by explore_pipeline. The
+# sqlite-vec metadata filter is an exact string comparison, so a lowercase
+# "senate" matched nothing — user input is mapped through this before
+# querying. None of the four non-legislative chambers was reachable at all
+# before this map existed.
 _CHAMBER_CANONICAL = {
     "senate": "Senate", "house": "House", "executive": "Executive",
     "judicial": "Judicial", "regulatory": "Regulatory",
 }
 
-# Real doc_type values in the index (explore_pipeline). Used to validate the
-# public API's doc_type filter — an unknown value is an exact-match miss
-# that silently returns zero results, so it's rejected with 422 instead.
+# Real doc_type values in the index (explore_pipeline). An unknown value is
+# an exact-match miss that returns zero results for a reason the caller
+# can't see, so it is rejected with 422 instead.
 VALID_DOC_TYPES = {
     "Senate Floor Speech", "House Floor Speech", "Executive Order",
     "Proclamation", "Presidential Memorandum", "Supreme Court Opinion",
     "Final Rule", "Proposed Rule", "Notice",
 }
+
+VALID_SORTS = {"relevance", "date"}
 
 
 @router.get("")
@@ -53,87 +55,68 @@ async def search_explore(
     politician_id: str | None = Query(None, description="Filter by politician ID (exact match)"),
     db: Session = Depends(get_db),
 ):
-    """Semantic search over government activity documents.
+    """Hybrid search over government activity documents.
 
-    Returns matching documents ranked by relevance (default) or date.
+    Combines semantic (sentence-transformer kNN) and keyword (BM25F)
+    retrieval with recency and citation-graph authority, fused by weighted
+    reciprocal rank fusion. See `services/explore_search.py` for the
+    ranking itself and `config_definitions` for the weights.
+
+    `sort=date` orders the whole filtered candidate pool by date, not the
+    relevance page — "newest matching document", not "newest of the twenty
+    most similar".
     """
-    # Normalize the chamber filter to the canonical stored casing so a
-    # lowercase "senate" actually matches (ChromaDB equality is
-    # case-sensitive). "commentable" only ever applies to Regulatory docs,
-    # so scope the vector query to that chamber rather than 3x-oversampling
-    # and hoping enough regulatory hits survive the post-filter.
-    effective_chamber = chamber
-    if commentable and not chamber:
-        effective_chamber = "Regulatory"
+    if doc_type is not None and doc_type not in VALID_DOC_TYPES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown doc_type. Valid values: {sorted(VALID_DOC_TYPES)}",
+        )
+    if sort not in VALID_SORTS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown sort. Valid values: {sorted(VALID_SORTS)}",
+        )
+
     canonical_chamber = (
-        _CHAMBER_CANONICAL.get(effective_chamber.lower(), effective_chamber)
-        if effective_chamber else None
+        _CHAMBER_CANONICAL.get(chamber.lower(), chamber) if chamber else None
     )
 
-    results = await asyncio.to_thread(
-        search_explore_documents,
-        query=q,
-        n_results=limit,
+    outcome = await asyncio.to_thread(
+        hybrid_search,
+        db,
+        q,
+        limit=limit,
         doc_type=doc_type,
         chamber=canonical_chamber,
         politician_id=politician_id,
+        commentable=commentable,
+        sort=sort,
     )
 
-    # None (not []) means the index doesn't exist yet — e.g. after an admin
-    # reset, before the next pipeline run. Surface that distinctly so the
-    # UI can say "still indexing" instead of the misleading "no matches"
-    # (the SQL-based stats header may simultaneously report thousands of
-    # documents, which reset only the vector store).
-    if results is None:
+    # indexReady is False only when neither channel could answer: the
+    # semantic index is missing or mid-rebuild AND the keyword index
+    # returned nothing. Surface that distinctly so the UI can say "still
+    # indexing" instead of the misleading "no matches" (the SQL-based stats
+    # header may simultaneously report thousands of documents, which a
+    # vector-store reset does not touch).
+    if not outcome["indexReady"]:
         return JSONResponse(
             status_code=503,
             content={"query": q, "results": [], "count": 0, "indexEmpty": True},
             headers={"Cache-Control": "no-store"},
         )
 
-    doc_ids = [r["id"] for r in results if r.get("id")]
-    doc_map: dict = {}
-    if doc_ids:
-        docs = (
-            db.query(
-                ExploreDocument.id,
-                ExploreDocument.url,
-                ExploreDocument.summary,
-                ExploreDocument.agency_name,
-                ExploreDocument.comment_url,
-                ExploreDocument.comments_close_on,
-            )
-            .filter(ExploreDocument.id.in_(doc_ids))
-            .all()
-        )
-        doc_map = {d.id: d for d in docs}
-        for result in results:
-            doc = doc_map.get(result.get("id"))
-            if doc:
-                result["url"] = doc.url or ""
-                result["summary"] = doc.summary or result.get("snippet", "")
-                result["agencyName"] = doc.agency_name or ""
-                result["commentUrl"] = doc.comment_url or ""
-                result["commentsCloseOn"] = doc.comments_close_on or ""
-
-    # Drop vector hits with no surviving DB row — after a partial reset
-    # (DB cleared, Chroma reset swallowed) these render as snippet-only
-    # cards whose "view details" link 404s.
-    results = [r for r in results if r.get("id") in doc_map]
-
-    if commentable:
-        from datetime import date as date_type
-        today_str = date_type.today().isoformat()
-        results = [
-            r for r in results
-            if r.get("commentUrl") and r.get("commentsCloseOn", "") >= today_str
-        ]
-
-    if sort == "date":
-        results.sort(key=lambda r: r.get("date", ""), reverse=True)
-
     return JSONResponse(
-        content={"query": q, "results": results, "count": len(results)},
+        content={
+            "query": q,
+            "results": outcome["results"],
+            "count": outcome["count"],
+            # True when these results came from the keyword channel alone
+            # because the vector index is missing or mid-rebuild. The page
+            # says so rather than presenting a partial answer as a whole one.
+            "semanticUnavailable": outcome["semanticUnavailable"],
+            "channels": outcome["channels"],
+        },
         headers={"Cache-Control": "public, max-age=60, stale-while-revalidate=60"},
     )
 

@@ -165,14 +165,16 @@ The Librarian runs one member ahead of the Analyst. While the Analyst blocks on 
 
 ### Phase 4 — EXPLORE
 
-Builds the semantic search index over government activity documents — floor
+Builds the search indexes over government activity documents — floor
 speeches (Senate and House), presidential actions (executive orders,
 proclamations, memoranda), Supreme Court opinions, and Federal Register
 rulemaking documents (including ones still open for public comment):
 - One embedding per document — no chunking — over `title + summary + body[:800 chars]`
 - Encodes with the **index** sentence-transformer (384-dim, all-MiniLM-L6-v2)
 - Upserts into the `vec_explore` sqlite-vec table with metadata: doc type, source, date, politician name/ID, chamber
-- At query time: embed query → sqlite-vec KNN (`embedding MATCH ? AND k = ?`, cosine) → return top-k documents, with filters pushed into the query as vec0 metadata predicates
+- Rebuilds the `explore_fts` FTS5 keyword index (BM25F over title/summary/body)
+- Recomputes citation-graph PageRank into `explore_documents.authority`
+- At query time: both channels run, filters pushed into each, results fused by weighted reciprocal rank fusion with recency and authority priors — see "Hybrid Search (Explore)" below
 
 This is a separate index from the tier-3 bill-classification embeddings used
 in Phase 3 — it's for browsing/searching primary-source government documents,
@@ -500,35 +502,82 @@ All scores default to 50 when data is insufficient. No LLM input is used in scor
 
 ---
 
-## Semantic Search (Explore)
+## Hybrid Search (Explore)
 
-The Explore feature provides semantic search over government activity
-documents without keyword matching. Documents are embedded offline (during
-pipeline runs) and stored in sqlite-vec; queries are embedded at request time.
+The Explore feature searches primary-source government documents. It is not a
+single similarity score: general web search has never been one, and neither is
+this. Four independent rankers are combined — two retrieval channels and two
+query-independent priors.
 
 **What is indexed:** Senate and House floor speeches, presidential actions
 (executive orders, proclamations, memoranda), Supreme Court opinions, and
 Federal Register rulemaking documents — five source types, not bill text.
-Each document gets a single embedding (no chunking) over
-`title + summary + body[:800 chars]`, stored with metadata: doc type, source,
-date, politician name/ID, chamber.
+Every document feeds three structures, all rebuilt from the
+`explore_documents` table at the end of each ingest run:
+
+| Structure | Where | What it holds |
+|---|---|---|
+| `vec_explore` | `/data/vectors.db` (sqlite-vec) | One 384-dim embedding per document (no chunking) over `title + summary + body[:800 chars]`, with doc type / chamber / politician as filterable metadata |
+| `explore_fts` | app DB (SQLite FTS5) | A BM25F inverted index over title, summary and body. External-content, so the text is not duplicated; triggers keep it live between runs |
+| `authority` / `cited_by_count` | `explore_documents` columns | PageRank over the citation graph between these documents |
 
 **Query flow:**
 ```
 User query
     │
-    ▼ embed (all-MiniLM-L6-v2, 384-dim — the index model)
+    ├─▶ semantic  — embed (all-MiniLM-L6-v2) → sqlite-vec KNN, cosine
     │
-    ▼ sqlite-vec KNN over vec_explore (cosine distance)
-    │
-    ▼ top-k documents retrieved, filterable by doc type / chamber /
-    │   politician / open-for-comment
-    │
-    ▼ ranked by relevance (default) or date
-    │
-    ▼ returned with excerpt, source URL, doc type, and — for open
-        rulemakings — a comment link and deadline
+    └─▶ keyword   — parse to a safe FTS5 MATCH → BM25F, title-weighted
+              │
+              ▼  filters (doc type / chamber / politician / open-for-comment)
+              │   pushed into BOTH channels, not applied afterwards
+              ▼
+        weighted reciprocal rank fusion over four rankers:
+        semantic · keyword · freshness · citation authority
+              │
+              ▼  collapse near-duplicate documents
+              ▼  cap results per member/agency (host crowding)
+              │
+              ▼ returned with a keyword-in-context excerpt (matched terms
+                marked), source URL, doc type, citation count, and — for
+                open rulemakings — a comment link and deadline
 ```
+
+**Why two retrieval channels.** A 384-dim bi-encoder embeds "Executive Order
+14110" and "Executive Order 13985" to almost the same point: the number
+carries the meaning and the model never saw it. The same failure covers docket
+numbers, RINs, agency acronyms, statutory citations, and member surnames —
+exactly the queries where the user knows precisely what they want. Classical
+inverted-index retrieval is best at those and weakest where the embedding is
+strong (paraphrase, synonymy, topical queries). Running both and fusing them
+is why this is a hybrid engine rather than a bigger embedding model.
+
+**Why rank fusion rather than score blending.** Cosine distance and BM25 live
+on unrelated scales; min-max normalising each makes the blend depend on
+whatever the best and worst scores happened to be for that one query.
+Reciprocal rank fusion (Cormack, Clarke & Büttcher 2009) discards the scores
+and fuses the rankings: `score(d) = Σ w_r / (K + rank_r(d))`, K = 60. A ranker
+that didn't return a document contributes nothing for it.
+
+**Citation authority is the PageRank analogue.** Federal documents cite each
+other constantly and by canonical identifier — executive order numbers,
+"volume FR page" citations, RINs. Those formats are published in the Office of
+the Federal Register's Document Drafting Handbook, so they are parsed, not
+classified. An executive order agencies keep invoking a decade later is doing
+the same job as a heavily-linked web page. A document only enters the
+authority ranking if the corpus actually cites it: citability is unevenly
+distributed by document type (a rule carries an FR citation, a floor speech
+carries nothing), so the prior can lift a well-cited document and can never
+push down one that had no way to earn the signal. On a corpus with no
+cross-references the ranking is empty and the prior does nothing.
+
+**Ranking weights are measured, not asserted.** They live in
+`config_definitions.py` under "Explore search ranking".
+`backend/scripts/evaluate_explore_search.py` measures MRR and Recall@k for
+semantic, keyword and hybrid separately, using known-item retrieval over four
+query styles (title, paraphrase, identifier, rare-term) with relevance
+judgments derived from the corpus rather than hand-labelled. Change a weight,
+re-run it.
 
 Bill text itself is not indexed here; it's used separately, title-only, for
 the tier-3 kNN bill-classification step in the scoring pipeline (see Phase 3

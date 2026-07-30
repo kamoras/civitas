@@ -270,3 +270,48 @@ BILL_STAGES: dict[str, dict] = {
 # (bill_stage.py, bill_service.py) can compare/assign `BillStage.ENACTED`
 # instead of a bare string, with zero risk of the two lists drifting apart.
 BillStage = StrEnum("BillStage", {stage: stage for stage in BILL_STAGES})
+
+
+# ── Explore search ranking ───────────────────────────────────────
+#
+# The explore index is queried by two retrieval channels whose scores are
+# not comparable to each other — cosine distance from a sentence encoder
+# and Okapi BM25 from an inverted index live on unrelated scales, and the
+# usual fix (min-max normalise each, then add) makes the blend depend on
+# whatever the best and worst scores happened to be for that one query.
+# Reciprocal rank fusion (Cormack, Clarke & Büttcher, SIGIR 2009) instead
+# throws the scores away and fuses the *rankings*:
+#
+#     score(d) = Σ_r  weight_r / (K + rank_r(d))
+#
+# A ranker that didn't return a document contributes nothing for it. That
+# same property is what lets the two query-independent priors sit in the
+# sum as additional voters: freshness ranks every candidate, while
+# authority ranks only documents the corpus actually cites, so a document
+# with no way to earn a citation is passed over rather than penalised
+# (see pipeline/analyze/document_authority.py).
+#
+# TWO published constants live here, with their citations. Everything else
+# about this ranking is generated data, loaded from
+# app/data/explore_ranking.json and produced by
+# scripts/calibrate_explore_ranking.py against the live corpus — the same
+# pattern as district_pvi.json and state_population.json (principle 3a).
+# Do not hand-edit the JSON; re-run the script.
+
+# K = 60 is the constant Cormack et al. published and the de-facto default.
+# It flattens the contribution curve so no single ranker's top hit can run
+# away with the result. A property of the algorithm, not of this corpus.
+EXPLORE_RRF_K: int = 60
+
+# The two retrieval channels carry equal weight, which is unweighted RRF
+# exactly as published — there is no prior reason to trust the encoder over
+# the inverted index or the reverse, and the calibration measures their
+# disagreement rather than presuming one is better.
+EXPLORE_RETRIEVAL_WEIGHT: float = 1.0
+
+# Everything else about this ranking — BM25F field weights, the two prior
+# weights, candidate pool depth, the diversity cap, fingerprint lengths,
+# snippet width — is generated data, not a constant. It is measured
+# against the live corpus by pipeline/calibrate_ranking.py on every
+# explore pipeline run and read through pipeline/explore_ranking.py.
+# There is deliberately nothing to hand-edit here.

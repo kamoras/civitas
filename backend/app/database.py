@@ -186,6 +186,14 @@ def _migrate_columns() -> None:
         ("supplementary_pipeline_runs", "committee_leadership_skipped", "BOOLEAN DEFAULT 0"),
         ("supplementary_pipeline_runs", "district_pvi_refreshed", "BOOLEAN DEFAULT 0"),
         ("supplementary_pipeline_runs", "district_pvi_skipped", "BOOLEAN DEFAULT 0"),
+        # Citation-graph ranking inputs for explore search. Defaults make an
+        # un-migrated corpus rank exactly as it did before: authority 0 for
+        # everyone means no document is eligible for the authority signal,
+        # so the ranker falls back to relevance + freshness until the first
+        # pipeline run fills these in.
+        ("explore_documents", "identifiers", "TEXT DEFAULT '[]'"),
+        ("explore_documents", "authority", "REAL DEFAULT 0.0"),
+        ("explore_documents", "cited_by_count", "INTEGER DEFAULT 0"),
     ]
 
     drops: list[tuple[str, str]] = [
@@ -545,8 +553,89 @@ def _migrate_visits_data_to_own_db() -> None:
     logger.info("Migrated SiteVisit/PageView data to their own database file")
 
 
+def _init_lock_path() -> str | None:
+    """Path of the cross-process lock file guarding init_db, or None.
+
+    Derived from the database file so every process pointed at the same
+    database serialises on the same lock, and two stacks pointed at
+    different databases never block each other. None for in-memory or
+    non-SQLite URLs, where there is nothing to serialise (an in-memory
+    database is private to its process).
+    """
+    url = settings.DATABASE_URL
+    if "sqlite" not in url or url.endswith(":memory:"):
+        return None
+    path = url.split("sqlite:///", 1)[-1].lstrip("/")
+    return "/" + path + ".init.lock" if url.startswith("sqlite:////") else path + ".init.lock"
+
+
+@contextmanager
+def _init_lock():
+    """Serialise init_db across worker processes.
+
+    The backend runs `--workers 2` in production and each worker process
+    runs its own FastAPI lifespan, so two of them call init_db at the same
+    moment. Every step inside is check-then-act — `create_all` inspects
+    `sqlite_master` before issuing CREATE TABLE, `_migrate_columns`
+    inspects columns before ALTER, `_ensure_indexes` inspects indexes
+    before CREATE INDEX — so two processes can both observe "absent" and
+    both issue the DDL. The loser gets "table X already exists" and its
+    whole initialisation aborts partway through, leaving migrations and
+    the keyword index unapplied in that worker while the other worker
+    reports a clean start.
+
+    An advisory `flock` is the right shape here: the workers share a host
+    and a filesystem (single-node Swarm, one volume), it costs nothing on
+    the uncontended path, and the loser simply waits and then runs the
+    same idempotent steps, finding everything already done.
+
+    Never fails startup on the lock itself. If the lock file cannot be
+    created — a read-only mount, a permissions problem — this logs and
+    proceeds unlocked, which is exactly the behaviour that existed before.
+    """
+    import fcntl
+
+    path = _init_lock_path()
+    if path is None:
+        yield
+        return
+
+    handle = None
+    try:
+        handle = open(path, "w")
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+    except OSError:
+        logger.warning(
+            "Could not acquire the init lock at %s — initialising unlocked. "
+            "Concurrent worker startups may log spurious 'already exists' errors.",
+            path, exc_info=True,
+        )
+        if handle is not None:
+            handle.close()
+            handle = None
+
+    try:
+        yield
+    finally:
+        if handle is not None:
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            finally:
+                handle.close()
+
+
 def init_db() -> None:
-    """Create all tables defined in models and apply lightweight migrations."""
+    """Create all tables defined in models and apply lightweight migrations.
+
+    Serialised across worker processes — see `_init_lock`. Every step below
+    is idempotent, so the process that waits for the lock still runs them
+    all and simply finds the work already done.
+    """
+    with _init_lock():
+        _init_db_locked()
+
+
+def _init_db_locked() -> None:
     from app import models  # noqa: F401
 
     _migrate_president_ids()
@@ -556,6 +645,16 @@ def init_db() -> None:
     _migrate_columns()
     _ensure_indexes()
     _migrate_visits_data_to_own_db()
+
+    # The FTS5 keyword index over explore_documents, plus the triggers that
+    # keep it in step with ordinary ORM writes. Created here rather than in
+    # the pipeline because the triggers have to exist *before* the next
+    # insert, not after the run that would have rebuilt the index. Returns
+    # False (never raises) when SQLite has no FTS5 module — explore search
+    # then runs semantic-only, which is exactly what it did before.
+    from app.pipeline.lexical_index import ensure_lexical_index
+
+    ensure_lexical_index(engine)
 
     # President rows are no longer seeded here — run_president_pipeline
     # (president_pipeline.py) creates/updates them from a live UCSB
@@ -613,6 +712,21 @@ def reset_all_data() -> dict:
         db.commit()
     finally:
         db.close()
+
+    # The FTS5 delete triggers fire per row on the bulk deletes above, so the
+    # keyword index is already empty — this is the belt-and-braces rebuild
+    # that makes that an invariant rather than a property of how SQLite
+    # happens to run DELETE.
+    try:
+        from app.pipeline.lexical_index import rebuild_index
+
+        rebuild_session = SessionLocal()
+        try:
+            rebuild_index(rebuild_session)
+        finally:
+            rebuild_session.close()
+    except Exception:
+        logger.exception("Keyword index rebuild after reset failed (non-fatal)")
 
     try:
         from app.pipeline.vector_store import reset_vector_db

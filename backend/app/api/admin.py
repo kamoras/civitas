@@ -909,12 +909,18 @@ async def admin_trigger_pipeline(
 
 @router.post("/pipeline/reembed-explore", dependencies=[Depends(require_admin)])
 async def admin_reembed_explore(db: Session = Depends(get_db)):
-    """Re-embed all explore documents using the current model.
+    """Rebuild every search structure over the explore corpus.
 
-    Use this after changing the embedding model to rebuild the vector store
-    without running the full pipeline.
+    Use this after changing the embedding model, or any time search results
+    look inconsistent with the documents actually in the table, to rebuild
+    without running the full ingest pipeline. All three structures are
+    derived from `explore_documents`, so all three are rebuilt together —
+    rebuilding only the embeddings is how the vector index and the keyword
+    index end up disagreeing about what exists.
     """
     from app.models import ExploreDocument
+    from app.pipeline.analyze.document_authority import update_document_authority
+    from app.pipeline.lexical_index import rebuild_index
     from app.pipeline.vector_store import (
         _write_model_version,
         clear_explore,
@@ -949,7 +955,9 @@ async def admin_reembed_explore(db: Session = Depends(get_db)):
         return count
 
     count = await asyncio.to_thread(_run)
-    return {"embedded": count}
+    indexed = await asyncio.to_thread(rebuild_index, db)
+    authority = await asyncio.to_thread(update_document_authority, db)
+    return {"embedded": count, "keywordIndexed": indexed, "authority": authority}
 
 
 @router.post("/pipeline/trigger-house", dependencies=[Depends(require_admin)])

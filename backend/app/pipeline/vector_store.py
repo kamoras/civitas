@@ -37,6 +37,7 @@ until it completes, which callers already handle.
 import json
 import logging
 import os
+import re
 import sqlite3
 import struct
 import threading
@@ -54,6 +55,18 @@ EMBEDDING_DIMENSIONS = 384
 
 # Search-index side — the similarity model (same 384 dims).
 INDEX_MODEL_VERSION = "minilm-l6-v2"
+
+# Layout of vec_explore, tracked separately from the model because the two
+# change for different reasons and either one invalidates the index. Bumped
+# when the table became chunk-level. `ensure_explore_index` compares the
+# pair, so a deployed index rebuilds itself on either change without anyone
+# remembering to clear it.
+INDEX_SCHEMA_VERSION = "2-chunked"
+
+
+def index_identity() -> str:
+    """What the stored index was built by — model and layout together."""
+    return f"{INDEX_MODEL_VERSION}+{INDEX_SCHEMA_VERSION}"
 
 # NOT under /data/chroma/ — that directory is the old chromadb store,
 # orphaned by the sqlite-vec migration and safe to delete entirely, but
@@ -134,9 +147,14 @@ def get_vec_conn() -> sqlite3.Connection:
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE TABLE IF NOT EXISTS vec_meta (key TEXT PRIMARY KEY, value TEXT)")
+    # One row per CHUNK, not per document — `doc_id` is the parent. See
+    # chunk_text and embed_explore_documents for why the corpus is chunked
+    # at all, and search_explore_documents for how chunks are folded back
+    # into document-level results.
     conn.execute(
         f"""CREATE VIRTUAL TABLE IF NOT EXISTS vec_explore USING vec0(
             embedding float[{EMBEDDING_DIMENSIONS}] distance_metric=cosine,
+            doc_id integer,
             doc_type text,
             chamber text,
             politician_id text,
@@ -322,6 +340,86 @@ def embed_bills(bills: list[dict]) -> None:
     logger.info("Stored %d bill embeddings in vector DB", len(bills))
 
 
+# Paragraph and sentence boundaries. Chunking splits on the document's own
+# structure rather than at a fixed offset, so a window never begins or ends
+# mid-thought.
+_PARAGRAPH_BREAK = re.compile(r"\n\s*\n")
+_SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+")
+
+
+def _sentences(text: str) -> list[str]:
+    out: list[str] = []
+    for paragraph in _PARAGRAPH_BREAK.split(text):
+        paragraph = paragraph.strip()
+        if not paragraph:
+            continue
+        out.extend(s for s in (p.strip() for p in _SENTENCE_BREAK.split(paragraph)) if s)
+    return out
+
+
+def chunk_text(text: str, max_tokens: int, count_tokens) -> list[str]:
+    """Split a document into windows that fit the encoder's context window.
+
+    `max_tokens` is not a tuning choice — it is the model's own
+    `max_seq_length`. A sentence-transformer silently truncates anything
+    past it, so text beyond that point was never embedded no matter how it
+    was passed in. Chunking is what makes a long document reachable rather
+    than partially indexed.
+
+    Boundaries are the document's own: paragraphs, then sentences.
+    Consecutive windows overlap by one sentence, so a passage that straddles
+    a boundary is still wholly present in at least one window. A sentence is
+    the unit of overlap because it is a unit of the text; an overlap
+    measured in tokens would be a number someone picked.
+
+    A single sentence longer than the window — a Federal Register heading
+    run together with its own citation block, most often — is hard-split on
+    whitespace, since there is no smaller boundary left to respect.
+    """
+    text = (text or "").strip()
+    if not text:
+        return []
+    if count_tokens(text) <= max_tokens:
+        return [text]
+
+    windows: list[str] = []
+    current: list[str] = []
+
+    def flush() -> None:
+        if current:
+            windows.append(" ".join(current))
+
+    for sentence in _sentences(text):
+        if count_tokens(sentence) > max_tokens:
+            flush()
+            current = []
+            words = sentence.split()
+            piece: list[str] = []
+            for word in words:
+                if piece and count_tokens(" ".join([*piece, word])) > max_tokens:
+                    windows.append(" ".join(piece))
+                    piece = [word]
+                else:
+                    piece.append(word)
+            if piece:
+                current = [" ".join(piece)]
+            continue
+
+        candidate = [*current, sentence]
+        if current and count_tokens(" ".join(candidate)) > max_tokens:
+            flush()
+            # Overlap: carry the last sentence forward, unless doing so
+            # would leave no room for the incoming one.
+            tail = current[-1]
+            current = ([tail, sentence] if count_tokens(f"{tail} {sentence}") <= max_tokens
+                       else [sentence])
+        else:
+            current = candidate
+
+    flush()
+    return windows
+
+
 def embed_explore_documents(docs: list[dict]) -> int:
     """Embed explore documents for semantic search.
 
@@ -337,36 +435,48 @@ def embed_explore_documents(docs: list[dict]) -> int:
 
     conn = get_vec_conn()
     model = get_similarity_model()
+    max_tokens = int(model.max_seq_length)
 
-    rows = []
+    def _count(text: str) -> int:
+        return len(model.tokenizer.tokenize(text))
+
+    # Title and summary lead every window. They are the strongest statement
+    # of what a document is about, and without them a window drawn from the
+    # middle of a rule is a paragraph with no subject.
+    units: list[tuple[int, str, dict]] = []
     for doc in docs:
-        text = (
-            f"{doc.get('title', '')} "
-            f"{doc.get('summary', '')} "
-            f"{doc.get('body', '')[:800]}"
-        ).strip()
-        if not text:
+        head = f"{doc.get('title', '')} {doc.get('summary', '')}".strip()
+        body = (doc.get("body") or "").strip()
+        pieces = chunk_text(f"{head}\n\n{body}".strip(), max_tokens, _count)
+        if not pieces:
             continue
-        rows.append((int(doc["id"]), text, doc))
+        for piece in pieces:
+            text = piece if piece.startswith(head[:40]) else f"{head} {piece}".strip()
+            units.append((int(doc["id"]), text, doc))
 
-    if not rows:
+    if not units:
         return 0
 
+    doc_ids = {doc_id for doc_id, _, _ in units}
+    with _vec_lock:
+        for doc_id in doc_ids:
+            conn.execute("DELETE FROM vec_explore WHERE doc_id = ?", (doc_id,))
+        conn.commit()
+
     BATCH = 200
-    for i in range(0, len(rows), BATCH):
-        batch = rows[i:i + BATCH]
+    for i in range(0, len(units), BATCH):
+        batch = units[i:i + BATCH]
         embs = model.encode(
             [t for _, t, _ in batch], show_progress_bar=False, normalize_embeddings=True,
         )
         with _vec_lock:
             for (doc_id, text, doc), emb in zip(batch, embs):
-                conn.execute("DELETE FROM vec_explore WHERE rowid = ?", (doc_id,))
                 conn.execute(
-                    "INSERT INTO vec_explore (rowid, embedding, doc_type, chamber, "
+                    "INSERT INTO vec_explore (embedding, doc_id, doc_type, chamber, "
                     "politician_id, title, date, source, politician_name, snippet) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
-                        doc_id, _serialize(emb),
+                        _serialize(emb), doc_id,
                         doc.get("doc_type", "") or "",
                         doc.get("chamber") or "",
                         doc.get("politician_id") or "",
@@ -379,9 +489,24 @@ def embed_explore_documents(docs: list[dict]) -> int:
                 )
             conn.commit()
 
-    _set_meta(conn, "explore_index_model", INDEX_MODEL_VERSION)
-    logger.info("Embedded %d explore documents in vector DB", len(rows))
-    return len(rows)
+    _set_meta(conn, "explore_index_model", index_identity())
+    # Mean chunks per document, measured rather than assumed: the search
+    # path needs it to know how many chunk slots to request for a given
+    # number of documents. Stored here because it is a property of the
+    # index and recomputing it per query is a COUNT DISTINCT over the
+    # whole table.
+    total_chunks = conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
+    total_docs = conn.execute(
+        "SELECT COUNT(*) FROM (SELECT DISTINCT doc_id FROM vec_explore)"
+    ).fetchone()[0]
+    if total_docs:
+        _set_meta(conn, "explore_chunks_per_doc", str(total_chunks / total_docs))
+
+    logger.info(
+        "Embedded %d explore documents as %d chunks (%.1f per document)",
+        len(doc_ids), len(units), len(units) / len(doc_ids),
+    )
+    return len(doc_ids)
 
 
 # ── Search ───────────────────────────────────────────────────────
@@ -414,12 +539,20 @@ def search_explore_documents(
     model = get_similarity_model()
     query_embedding = model.encode([query], show_progress_bar=False, normalize_embeddings=True)[0]
 
+    # The index holds chunks, so asking for `n_results` rows would return
+    # far fewer than `n_results` documents whenever a long rule occupies
+    # several of the top slots. Scale the request by the index's own
+    # measured mean chunks per document — written at embed time, not
+    # guessed here — and bound it by the table size.
+    chunks_per_doc = float(_get_meta(conn, "explore_chunks_per_doc") or 1.0)
+    k = min(max(int(n_results * max(chunks_per_doc, 1.0)), n_results), count)
+
     sql = (
-        "SELECT rowid, distance, title, date, doc_type, source, "
+        "SELECT doc_id, distance, title, date, doc_type, source, "
         "politician_name, politician_id, chamber, snippet "
         "FROM vec_explore WHERE embedding MATCH ? AND k = ?"
     )
-    params: list = [_serialize(query_embedding), n_results]
+    params: list = [_serialize(query_embedding), k]
     if doc_type:
         sql += " AND doc_type = ?"
         params.append(doc_type)
@@ -430,10 +563,21 @@ def search_explore_documents(
         sql += " AND politician_id = ?"
         params.append(politician_id)
 
-    matches = []
+    # Fold chunks back into documents by their best-matching chunk. Max
+    # pooling, not averaging: a hundred-page rule with one passage squarely
+    # on the query is a good answer, and averaging over its other ninety-nine
+    # pages of unrelated text would bury it under a short document that is
+    # vaguely on-topic throughout. Rows arrive in ascending distance, so the
+    # first sighting of a doc_id is already its best chunk.
+    matches: list[dict] = []
+    seen: set[int] = set()
     for row in conn.execute(sql, params).fetchall():
+        doc_id = int(row[0])
+        if doc_id in seen:
+            continue
+        seen.add(doc_id)
         matches.append({
-            "id": int(row[0]),
+            "id": doc_id,
             "distance": float(row[1]),
             "title": row[2] or "",
             "date": row[3] or "",
@@ -444,6 +588,8 @@ def search_explore_documents(
             "chamber": row[8] or "",
             "snippet": row[9] or "",
         })
+        if len(matches) >= n_results:
+            break
     return matches
 
 
@@ -467,6 +613,7 @@ def collection_stats() -> dict:
             {"name": "bills", "count": bills, "metadata": {}},
         ],
         "indexModelVersion": _get_meta(conn, "explore_index_model") or "",
+        "chunksPerDocument": float(_get_meta(conn, "explore_chunks_per_doc") or 0.0),
     }
 
 
@@ -533,9 +680,14 @@ def clear_explore() -> None:
 
 
 def get_embedded_explore_ids() -> set[int]:
-    """Ids of explore documents already in the index (incremental embedding)."""
+    """Ids of explore documents already in the index (incremental embedding).
+
+    Distinct `doc_id`, not rowid: rows are chunks now, and several of them
+    belong to one document.
+    """
     conn = get_vec_conn()
-    return {r[0] for r in conn.execute("SELECT rowid FROM vec_explore").fetchall()}
+    return {r[0] for r in conn.execute(
+        "SELECT DISTINCT doc_id FROM vec_explore").fetchall()}
 
 
 def reset_vector_db() -> None:
@@ -561,7 +713,7 @@ def ensure_explore_index(db_session_factory) -> None:
     conn = get_vec_conn()
     stored = _get_meta(conn, "explore_index_model")
     count = conn.execute("SELECT COUNT(*) FROM vec_explore").fetchone()[0]
-    if stored == INDEX_MODEL_VERSION and count > 0:
+    if stored == index_identity() and count > 0:
         return
 
     def _reindex() -> None:
@@ -569,10 +721,10 @@ def ensure_explore_index(db_session_factory) -> None:
         try:
             from app.models import ExploreDocument
 
-            if stored is not None and stored != INDEX_MODEL_VERSION:
+            if stored is not None and stored != index_identity():
                 logger.warning(
-                    "Explore index model changed (%s -> %s) — rebuilding",
-                    stored, INDEX_MODEL_VERSION,
+                    "Explore index identity changed (%s -> %s) — rebuilding",
+                    stored, index_identity(),
                 )
                 with _vec_lock:
                     conn.execute("DELETE FROM vec_explore")

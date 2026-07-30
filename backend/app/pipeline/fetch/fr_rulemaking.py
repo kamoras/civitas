@@ -18,6 +18,7 @@ import httpx
 from lxml import html as lxml_html
 
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
+from app.pipeline.analyze.document_authority import extract_citations
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,11 @@ FIELDS = [
     "action",
     "dates",
     "regulation_id_numbers",
+    # The "89 FR 12345" form later documents in the same rulemaking cite
+    # this one by — the densest edge in the citation graph, since a final
+    # rule almost always points back at its own proposed rule
+    # (pipeline/analyze/document_authority.py).
+    "citation",
 ]
 
 
@@ -193,6 +199,14 @@ async def fetch_fr_rulemaking(
             comment_url = doc.get("comment_url") or None
             comments_close = doc.get("comments_close_on") or None
 
+            identifiers: list[str] = []
+            if doc.get("document_number"):
+                identifiers.append(f"frdoc:{doc['document_number']}")
+            if doc.get("citation"):
+                identifiers.extend(sorted(extract_citations(doc["citation"])))
+            for rin in doc.get("regulation_id_numbers") or []:
+                identifiers.append(f"rin:{str(rin).replace('–', '-').upper()}")
+
             results.append({
                 "external_id": f"fr-reg-{doc.get('document_number', '')}",
                 "title": doc.get("title", "Untitled"),
@@ -205,6 +219,7 @@ async def fetch_fr_rulemaking(
                 "comment_url": comment_url,
                 "comments_close_on": comments_close,
                 "chamber": "Regulatory",
+                "identifiers": identifiers,
             })
 
         await asyncio.sleep(0.3)

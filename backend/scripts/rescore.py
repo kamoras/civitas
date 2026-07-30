@@ -309,7 +309,12 @@ def main() -> int:
           f"{corr([math.log10(r['raised']) for r in funded], [r['new']['fi'] for r in funded]):+.3f} "
           f"(scale-bias check — v3 was +0.68)")
 
-    return 1 if fails else 0
+    # `report["failures"]`, not a bare `fails` — that name never existed,
+    # so this line raised NameError the moment the script reached its own
+    # return, after doing all of the work and printing all of the output.
+    # Never caught because CI's ruff step lints app/ only; scripts/ is in
+    # its scope now too (see ci.yml).
+    return 1 if report["failures"] else 0
 
 
 if __name__ == "__main__":

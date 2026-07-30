@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { parseExploreSummaryText } from "./api";
+import {
+  EXPLORE_HIGHLIGHT_END,
+  EXPLORE_HIGHLIGHT_START,
+  parseExploreSummaryText,
+  splitHighlights,
+} from "./api";
 
 describe("parseExploreSummaryText", () => {
   it("splits a complete SUMMARY/KEY POINTS/IMPACT response into its three fields", () => {
@@ -46,5 +51,78 @@ describe("parseExploreSummaryText", () => {
   it("returns all-empty fields for an empty string", () => {
     const result = parseExploreSummaryText("");
     expect(result).toEqual({ summary: "", keyPoints: [], impact: "" });
+  });
+});
+
+describe("splitHighlights", () => {
+  const S = EXPLORE_HIGHLIGHT_START;
+  const E = EXPLORE_HIGHLIGHT_END;
+
+  it("splits a snippet into plain and matched segments", () => {
+    expect(splitHighlights(`the agency proposes new ${S}wildfire${E} rules`)).toEqual([
+      { text: "the agency proposes new ", match: false },
+      { text: "wildfire", match: true },
+      { text: " rules", match: false },
+    ]);
+  });
+
+  it("handles several matches and a leading match", () => {
+    expect(splitHighlights(`${S}PFAS${E} and ${S}dioxin${E}`)).toEqual([
+      { text: "PFAS", match: true },
+      { text: " and ", match: false },
+      { text: "dioxin", match: true },
+    ]);
+  });
+
+  it("treats HTML in the document text as literal text, never markup", () => {
+    // Snippets are verbatim slices of government document bodies. The
+    // backend marks matches with control characters precisely so this
+    // function can exist without dangerouslySetInnerHTML.
+    const segments = splitHighlights(`<script>alert(1)</script> ${S}water${E}`);
+    expect(segments[0]).toEqual({ text: "<script>alert(1)</script> ", match: false });
+    expect(segments[1]).toEqual({ text: "water", match: true });
+  });
+
+  it("keeps the term marked when a snippet is truncated mid-highlight", () => {
+    // The term really did match; the excerpt was just cut before the
+    // closing marker. Dropping the mark would be the wrong repair.
+    expect(splitHighlights(`funding for ${S}wildfire`)).toEqual([
+      { text: "funding for ", match: false },
+      { text: "wildfire", match: true },
+    ]);
+  });
+
+  it("returns a single plain segment when nothing matched", () => {
+    expect(splitHighlights("no markers here")).toEqual([
+      { text: "no markers here", match: false },
+    ]);
+  });
+
+  it("returns nothing for an empty snippet", () => {
+    expect(splitHighlights("")).toEqual([]);
+  });
+});
+
+describe("splitHighlights — unpaired markers", () => {
+  const S = EXPLORE_HIGHLIGHT_START;
+  const E = EXPLORE_HIGHLIGHT_END;
+
+  it("never leaks a control character into rendered text", () => {
+    // FTS5 truncates snippets at token boundaries, which can leave a marker
+    // without its partner. An unpaired one left in place renders as an
+    // invisible control character inside the excerpt.
+    for (const snippet of [`a ${S}b`, `a ${E}b`, `${E}a${E}`, `${S}${S}a`]) {
+      for (const segment of splitHighlights(snippet)) {
+        expect(segment.text).not.toContain(S);
+        expect(segment.text).not.toContain(E);
+      }
+    }
+  });
+
+  it("recovers the text around an unpaired end marker", () => {
+    expect(splitHighlights(`funding for ${E}wildfire`)).toEqual([
+      { text: "funding for ", match: false },
+      { text: "wildfire", match: false },
+    ]);
   });
 });
