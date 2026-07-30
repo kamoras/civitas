@@ -29,19 +29,23 @@ const CHAMBER_FILTERS: { label: string; value: ChamberFilter }[] = [
   { label: "Rulemaking", value: "Regulatory" },
 ];
 
-// A mix of topical and exact-term queries on purpose: search now runs a
-// keyword channel alongside the semantic one, so document numbers, agency
-// names and quoted phrases work, and the suggestions are the only place a
-// visitor would find that out.
+// The topical list is unchanged — it is the only editorial surface on this
+// page, and narrowing which issues get suggested is not a search change.
+// The two exact-term examples are appended because search now runs a
+// keyword channel alongside the semantic one, so document numbers and
+// "quoted phrases" work, and this is the only place a visitor would find
+// that out.
 const SUGGESTED_QUERIES = [
   "tariffs and trade policy",
   "healthcare costs and prescription drugs",
   "immigration and border security",
   "climate change and clean energy",
+  "gun control and second amendment",
   "technology regulation and AI",
+  "student loan forgiveness",
+  "Supreme Court constitutional rights",
   "Executive Order 14110",
   '"clean water act"',
-  "Environmental Protection Agency PFAS",
 ];
 
 function docTypeLabel(docType: string): string {
