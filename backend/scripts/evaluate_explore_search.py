@@ -158,7 +158,8 @@ off. `hybrid` is what production serves. Compare them deliberately:
       by more than relevance; a collapse is a bug. That is how the
       live-channel scaling in explore_search.hybrid_search was found: with
       one retrieval channel returning nothing, fixed prior weights doubled
-      in relative influence and dropped ALL/hybrid from 0.85 to 0.76 MRR.
+      in relative influence and dropped ALL/hybrid from MRR 0.850 / R@1
+      0.732 to 0.752 / 0.613 on an identical corpus.
 """
 
 

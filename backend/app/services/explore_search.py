@@ -346,11 +346,18 @@ def hybrid_search(
     # prior does not, so recency and authority silently double in
     # influence exactly when the engine can least afford it.
     #
-    # Measured, not theorised: on a 407-document corpus with the semantic
-    # channel unavailable, fixed priors dropped fusion to MRR 0.755 /
-    # R@1 0.621 against the keyword channel's own 0.976 / 0.958 — a third
-    # of top hits displaced by recency, in the degraded mode this change
-    # otherwise advertises as a feature. Scaling restores parity.
+    # Measured, not theorised. On a 93-document corpus with the semantic
+    # channel unavailable, the same queries scored:
+    #
+    #     retrieval only (keyword)   MRR 0.978   R@1 0.962
+    #     hybrid, fixed priors       MRR 0.752   R@1 0.613
+    #     hybrid, scaled priors      MRR 0.850   R@1 0.732
+    #
+    # A third of top hits displaced by recency, inside the degraded mode
+    # this change otherwise advertises as a feature. (Hybrid sits below
+    # retrieval-only either way — known-item retrieval scores priors that
+    # way by construction; see scripts/evaluate_explore_search.py's
+    # "How to read this". The 0.752 -> 0.850 recovery is the signal.)
     retrieval_ranks = (semantic_rank, keyword_rank)
     live_channels = sum(1 for r in retrieval_ranks if r)
     prior_scale = live_channels / len(retrieval_ranks)

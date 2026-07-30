@@ -393,12 +393,11 @@ class TestPriorScaling:
     does not, so recency and authority double in relative influence
     exactly when the engine can least afford it.
 
-    Found by measurement, not by reading: on a 93-document corpus with the
-    semantic channel unavailable, fixed priors dropped the fusion to MRR
-    0.755 / R@1 0.621 against the keyword channel's own 0.976 / 0.958 — a
-    third of top hits displaced by recency, in the degraded mode this
-    feature otherwise advertises as a benefit. Scaling recovered it to
-    0.852 / 0.736.
+    Found by measurement, not by reading. On a 93-document corpus with the
+    semantic channel unavailable, fixed priors scored MRR 0.752 / R@1 0.613
+    where scaled priors score 0.850 / 0.732 — a third of top hits displaced
+    by recency, in the degraded mode this feature otherwise advertises as a
+    benefit.
 
     The property is *invariance*, not suppression: how far recency can
     reach must not depend on how many retrieval channels happen to be up.

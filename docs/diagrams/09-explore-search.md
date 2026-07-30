@@ -97,11 +97,20 @@ afford it. `hybrid_search` therefore scales the prior weights by the number
 of channels that returned candidates, so how far recency can reach does not
 depend on which indexes happen to be up.
 
-This was found by measuring, not by reading: on a 93-document corpus with
-the semantic channel unavailable, fixed priors scored MRR 0.755 / R@1 0.621
-against the keyword channel's own 0.976 / 0.958 — a third of top hits
-displaced by recency, inside the degraded mode this feature otherwise
-advertises as a benefit. Scaling recovered it to 0.852 / 0.736.
+This was found by measuring, not by reading. On a 93-document corpus with
+the semantic channel unavailable, the same queries scored:
+
+| configuration | MRR | R@1 |
+|---|---|---|
+| retrieval only (keyword) | 0.978 | 0.962 |
+| hybrid, fixed priors | 0.752 | 0.613 |
+| hybrid, scaled priors | 0.850 | 0.732 |
+
+A third of top hits displaced by recency, inside the degraded mode this
+feature otherwise advertises as a benefit. Hybrid sits below retrieval-only
+in both rows because known-item retrieval scores query-independent priors
+that way by construction — the 0.752 → 0.850 recovery is the signal, not
+the gap to 0.978.
 
 **Recency is a voter, not a sort.** At K = 60 a weight-`w` voter's whole swing
 is about `w/(K+1)`, so at 0.4 the entire freshness signal is worth roughly the

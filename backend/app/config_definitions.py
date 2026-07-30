@@ -306,8 +306,9 @@ BillStage = StrEnum("BillStage", {stage: stage for stage in BILL_STAGES})
 # channels returned anything. Both up, they read exactly as written here.
 # One up — its index rebuilding, or simply no keyword match — and the
 # relevance mass halves, so a fixed prior would silently double in
-# influence. Measured: that cost 22 points of MRR and a third of top-1 hits
-# in degraded mode before the scaling existed.
+# influence. Measured on an identical corpus with one channel down: MRR
+# 0.752 / R@1 0.613 unscaled against 0.850 / 0.732 scaled — a third of
+# top-1 hits displaced by recency before the scaling existed.
 #
 # These weights are the tuning surface for search quality. Measure changes
 # with `backend/scripts/evaluate_explore_search.py`, not by eye — and read
