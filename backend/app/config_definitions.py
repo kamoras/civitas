@@ -301,8 +301,20 @@ BillStage = StrEnum("BillStage", {stage: stage for stage in BILL_STAGES})
 # flip an adjacent pair — which is the intended division of labour, and
 # what `tests/test_explore_search.py` pins down in both directions.
 #
+# The two prior weights are relative to the relevance evidence actually
+# present, not absolute: `hybrid_search` scales them by how many retrieval
+# channels returned anything. Both up, they read exactly as written here.
+# One up — its index rebuilding, or simply no keyword match — and the
+# relevance mass halves, so a fixed prior would silently double in
+# influence. Measured: that cost 22 points of MRR and a third of top-1 hits
+# in degraded mode before the scaling existed.
+#
 # These weights are the tuning surface for search quality. Measure changes
-# with `backend/scripts/evaluate_explore_search.py`, not by eye.
+# with `backend/scripts/evaluate_explore_search.py`, not by eye — and read
+# its "How to read this" section first. Known-item retrieval scores the
+# retrieval channels and the priors in opposite directions, so the harness
+# can validate the fusion but cannot tell you whether a prior weight is
+# right; it can only tell you when one has become disproportionate.
 EXPLORE_RRF_K: int = 60
 
 EXPLORE_FUSION_WEIGHTS: dict[str, float] = {

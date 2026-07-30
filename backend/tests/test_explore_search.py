@@ -381,3 +381,84 @@ class TestLargeCandidatePools:
         outcome = hybrid_search(indexed_db, "wildfire", limit=20)
         assert outcome["count"] == 20
         assert all(r["title"] for r in outcome["results"])
+
+
+class TestPriorScaling:
+    """The priors are weighted against the relevance evidence present.
+
+    Both retrieval channels together contribute a combined weight of 2.0,
+    so a freshness voter of 0.4 is one fifth of the relevance mass. When
+    one channel returns nothing — its index rebuilding, or simply no
+    keyword match for this query — that mass halves while a fixed prior
+    does not, so recency and authority double in relative influence
+    exactly when the engine can least afford it.
+
+    Found by measurement, not by reading: on a 93-document corpus with the
+    semantic channel unavailable, fixed priors dropped the fusion to MRR
+    0.755 / R@1 0.621 against the keyword channel's own 0.976 / 0.958 — a
+    third of top hits displaced by recency, in the degraded mode this
+    feature otherwise advertises as a benefit. Scaling recovered it to
+    0.852 / 0.736.
+
+    The property is *invariance*, not suppression: how far recency can
+    reach must not depend on how many retrieval channels happen to be up.
+    """
+
+    def _corpus(self, db, stub_semantic, newest_at, *, semantic_up):
+        """60 documents ranked by insertion order in both channels.
+
+        Index 0 is the most relevant and the oldest; `newest_at` is the
+        newest document in the pool, sitting that far down the relevance
+        ranking. Everything else falls between.
+        """
+        def _date(i: int) -> str:
+            if i == 0:
+                return "2020-01-01"          # oldest in the pool
+            if i == newest_at:
+                return "2026-12-31"          # newest in the pool
+            j = i - 1 if i < newest_at else i - 2
+            return f"2023-{1 + j // 28:02d}-{1 + j % 28:02d}"
+
+        docs = [
+            _add(db, title="wildfire notice", agency_name=f"Agency {i}",
+                 body=f"document numbered {i + 10} about wildfire operations",
+                 date=_date(i))
+            for i in range(60)
+        ]
+        stub_semantic([d.id for d in docs] if semantic_up else None)
+        return docs
+
+    def _newest_beats_most_relevant(self, db, stub_semantic, newest_at, semantic_up):
+        docs = self._corpus(db, stub_semantic, newest_at, semantic_up=semantic_up)
+        ids = [r["id"] for r in hybrid_search(db, "wildfire", limit=60)["results"]]
+        return ids.index(docs[newest_at].id) < ids.index(docs[0].id)
+
+    @pytest.mark.parametrize("semantic_up", [True, False])
+    def test_recency_reaches_a_close_relevance_gap_either_way(
+        self, indexed_db, stub_semantic, semantic_up
+    ):
+        # Three ranks back and far newer: recency wins, and must win
+        # whether or not the semantic index happens to be available.
+        assert self._newest_beats_most_relevant(
+            indexed_db, stub_semantic, 3, semantic_up) is True
+
+    @pytest.mark.parametrize("semantic_up", [True, False])
+    def test_recency_cannot_reach_a_wide_relevance_gap_either_way(
+        self, indexed_db, stub_semantic, semantic_up
+    ):
+        # Ten ranks back: relevance holds. This is the case that
+        # discriminates — with the prior left unscaled, the degraded
+        # (semantic_up=False) run hoists the newest document to the top
+        # while the healthy run does not, which is the bug.
+        assert self._newest_beats_most_relevant(
+            indexed_db, stub_semantic, 10, semantic_up) is False
+
+    def test_include_priors_false_is_retrieval_only(self, indexed_db, stub_semantic):
+        # The measurement affordance the harness uses to tell "did fusing
+        # the retrievers help" apart from "did the priors help".
+        docs = self._corpus(indexed_db, stub_semantic, 3, semantic_up=True)
+        ids = [
+            r["id"] for r in hybrid_search(
+                indexed_db, "wildfire", limit=60, include_priors=False)["results"]
+        ]
+        assert ids.index(docs[0].id) < ids.index(docs[3].id)

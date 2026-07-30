@@ -87,6 +87,22 @@ nothing for it — which is also what lets the two priors sit in the same sum as
 extra voters. The weights are in `config_definitions.py` under "Explore search
 ranking".
 
+**The priors are weighted against the relevance evidence present.** Both
+retrieval channels together contribute a combined weight of 2.0, so a
+freshness voter of 0.4 is one fifth of the relevance mass. When one channel
+returns nothing — its index rebuilding, or simply no keyword match for this
+query — that mass halves while a fixed prior does not, and recency and
+authority double in relative influence exactly when the engine can least
+afford it. `hybrid_search` therefore scales the prior weights by the number
+of channels that returned candidates, so how far recency can reach does not
+depend on which indexes happen to be up.
+
+This was found by measuring, not by reading: on a 93-document corpus with
+the semantic channel unavailable, fixed priors scored MRR 0.755 / R@1 0.621
+against the keyword channel's own 0.976 / 0.958 — a third of top hits
+displaced by recency, inside the degraded mode this feature otherwise
+advertises as a benefit. Scaling recovered it to 0.852 / 0.736.
+
 **Recency is a voter, not a sort.** At K = 60 a weight-`w` voter's whole swing
 is about `w/(K+1)`, so at 0.4 the entire freshness signal is worth roughly the
 distance between rank 1 and rank 40 of one retrieval channel. It can lift a

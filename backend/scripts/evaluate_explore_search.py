@@ -126,6 +126,42 @@ def build_probes(docs: list[dict], corpus_df: dict[str, int], total: int) -> lis
     return probes
 
 
+HOW_TO_READ = """
+How to read this
+----------------
+`fusion` is the two retrieval channels combined with the priors switched
+off. `hybrid` is what production serves. Compare them deliberately:
+
+  fusion vs semantic/keyword
+      The question this measurement can answer. If `fusion` does not beat
+      both channels on ALL, the retrieval side is mistuned — or one channel
+      is broken and the other is carrying it.
+
+  hybrid vs fusion
+      The question this measurement CANNOT answer, and the trap to avoid.
+      Known-item retrieval defines exactly one correct document per query,
+      and the retrieval channels have usually already put it first. From
+      there, any reordering by recency or citation authority can only move
+      it down, so `hybrid` scores at or below `fusion` *by construction* —
+      even when the priors are doing precisely their job. Do NOT read that
+      gap as evidence to reduce or remove them.
+
+      The priors exist for the case this protocol cannot produce: a broad
+      query where many documents are genuinely relevant and the question is
+      which of them to show first. Judging that needs relevance labels over
+      real queries — human judgements or click data — not a synthetic
+      known-item probe.
+
+  What the hybrid column IS good for
+      Catching a prior that has become disproportionate rather than merely
+      present. A few points below `fusion` is the expected cost of ranking
+      by more than relevance; a collapse is a bug. That is how the
+      live-channel scaling in explore_search.hybrid_search was found: with
+      one retrieval channel returning nothing, fixed prior weights doubled
+      in relative influence and dropped ALL/hybrid from 0.85 to 0.76 MRR.
+"""
+
+
 def _rank_of(results: list[int], doc_id: int) -> int | None:
     try:
         return results.index(doc_id) + 1
@@ -197,6 +233,11 @@ def main() -> int:
             keyword_ids = [
                 h["id"] for h in search_lexical(db, probe["query"], limit=RANK_CUTOFF)
             ]
+            fusion_ids = [
+                r["id"] for r in hybrid_search(
+                    db, probe["query"], limit=RANK_CUTOFF,
+                    include_priors=False)["results"]
+            ]
             hybrid_ids = [
                 r["id"] for r in hybrid_search(
                     db, probe["query"], limit=RANK_CUTOFF)["results"]
@@ -205,6 +246,7 @@ def main() -> int:
             for name, ids in (
                 ("semantic", semantic_ids),
                 ("keyword", keyword_ids),
+                ("fusion", fusion_ids),
                 ("hybrid", hybrid_ids),
             ):
                 by_style[probe["style"]][name].append(_rank_of(ids, probe["doc_id"]))
@@ -216,7 +258,7 @@ def main() -> int:
         for style in ("title", "paraphrase", "identifier", "rare", "ALL"):
             if style not in by_style:
                 continue
-            for config in ("semantic", "keyword", "hybrid"):
+            for config in ("semantic", "keyword", "fusion", "hybrid"):
                 stats = _summarise(by_style[style][config])
                 print(f"{style:<12}{config:<10}{stats['n']:>6}"
                       f"{stats['mrr']:>8.3f}{stats['r@1']:>8.3f}"
@@ -224,9 +266,7 @@ def main() -> int:
                       f"{stats['missed']:>9.3f}")
             print()
 
-        print("Hybrid should beat both channels on ALL. If it does not, the "
-              "fusion weights in config_definitions are mistuned — or one "
-              "channel is broken and the other is carrying it.")
+        print(HOW_TO_READ)
         return 0
     finally:
         db.close()

@@ -214,6 +214,7 @@ def hybrid_search(
     politician_id: str | None = None,
     commentable: bool = False,
     sort: str = "relevance",
+    include_priors: bool = True,
 ) -> dict:
     """Run both retrieval channels, fuse, rank, and return a page.
 
@@ -230,6 +231,10 @@ def hybrid_search(
     0`: a filtered query can legitimately retrieve zero vectors while the
     index is perfectly healthy, and conflating the two would tell readers
     the engine was rebuilding whenever a doc_type filter came up empty.
+
+    `include_priors=False` runs the two retrieval channels alone. It is a
+    measurement affordance for the evaluation harness, not a mode the API
+    exposes.
     """
     pool = min(max(limit * 8, EXPLORE_CANDIDATE_POOL), EXPLORE_MAX_CANDIDATE_POOL)
     today = date_type.today().isoformat()
@@ -331,13 +336,40 @@ def hybrid_search(
         key=lambda pair: pair[1], reverse=True,
     ))
 
+    # The priors are weighted *relative to the relevance evidence actually
+    # present*, not absolutely. Both retrieval channels contribute a
+    # combined weight of 2.0 when both return candidates, so a freshness
+    # voter of 0.4 is one fifth of the relevance mass — the ratio the
+    # weights were chosen for and the one tests/test_explore_search.py
+    # pins down. With one channel returning nothing (its index rebuilding,
+    # or simply no keyword match) the relevance mass halves while a fixed
+    # prior does not, so recency and authority silently double in
+    # influence exactly when the engine can least afford it.
+    #
+    # Measured, not theorised: on a 407-document corpus with the semantic
+    # channel unavailable, fixed priors dropped fusion to MRR 0.755 /
+    # R@1 0.621 against the keyword channel's own 0.976 / 0.958 — a third
+    # of top hits displaced by recency, in the degraded mode this change
+    # otherwise advertises as a feature. Scaling restores parity.
+    live_channels = sum(1 for r in (semantic_rank, keyword_rank) if r)
+    prior_scale = live_channels / 2.0
+    if not include_priors:
+        # Retrieval channels only. Exists for the evaluation harness, which
+        # needs to separate "did fusing the two retrievers help" from "did
+        # the priors help" — two questions that a single blended number
+        # cannot answer, and that known-item retrieval scores in opposite
+        # directions (see scripts/evaluate_explore_search.py).
+        prior_scale = 0.0
+
     for doc in candidates:
         doc_id = doc["id"]
         doc["_score"] = (
             _rrf(semantic_rank.get(doc_id), EXPLORE_FUSION_WEIGHTS["semantic"])
             + _rrf(keyword_rank.get(doc_id), EXPLORE_FUSION_WEIGHTS["keyword"])
-            + _rrf(freshness_rank.get(doc_id), EXPLORE_FUSION_WEIGHTS["freshness"])
-            + _rrf(authority_rank.get(doc_id), EXPLORE_FUSION_WEIGHTS["authority"])
+            + _rrf(freshness_rank.get(doc_id),
+                   EXPLORE_FUSION_WEIGHTS["freshness"] * prior_scale)
+            + _rrf(authority_rank.get(doc_id),
+                   EXPLORE_FUSION_WEIGHTS["authority"] * prior_scale)
         )
         matched: list[str] = []
         if doc_id in semantic_rank:

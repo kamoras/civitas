@@ -85,7 +85,12 @@ jobs:
         # PR), not implicitly via whatever version `pip install ruff` grabs.
         run: |
           pip install "ruff==0.15.4"
-          ruff check app/
+          # scripts/ too, not just app/. It was excluded, and a plain
+          # NameError sat in scripts/rescore.py's return statement — past
+          # every line of work the script does, so it only ever surfaced
+          # after a full run. One-off calibration scripts are exactly the
+          # code nobody re-runs often enough to find that by hand.
+          ruff check app/ scripts/
 
       # Two-part coverage gate:
       #   1. TOTAL floor (--cov-fail-under=46): a regression backstop only
