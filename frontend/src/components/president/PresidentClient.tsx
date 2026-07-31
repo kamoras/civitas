@@ -7,6 +7,7 @@ import { fetchPresident, fetchPresidentLeaderboard } from "@/lib/api";
 import { getScoreColor, getPresidentLabel } from "@/lib/representation";
 import { MetricBar, StatBox } from "@/components/shared/ScoreMetric";
 import ScoreTrendSection from "@/components/checker/ScoreTrendSection";
+import StockTrades from "@/components/checker/StockTrades";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 
 const PARTY_META: Record<string, { label: string; color: string; bg: string; border: string }> = {
@@ -138,6 +139,14 @@ export function PresidentCard({ president }: { president: President }) {
             [FEDERAL REGISTER]
           </a>
           <a
+            href="https://extapps2.oge.gov/201/Presiden.nsf"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
+          >
+            [OGE FINANCIAL DISCLOSURES]
+          </a>
+          <a
             href="https://www.c-span.org/presidentsurvey2021/?page=overall"
             target="_blank"
             rel="noopener noreferrer"
@@ -167,6 +176,16 @@ export function PresidentCard({ president }: { president: President }) {
 
         {/* Score Trend */}
         <ScoreTrendSection entityId={president.id} entityType="president" />
+
+        {/* Disclosed stock/crypto transactions — current president only.
+            OGE Form 278-T filings exist only from the STOCK Act's 2012
+            effective date onward and stop when a term ends, so rendering
+            this for earlier presidents would show an empty section that
+            reads as "traded nothing" rather than "no such filings exist."
+            The section hides itself when there are no rows, so a
+            just-inaugurated president sees nothing until the first
+            filing lands. */}
+        {president.isCurrent && <StockTrades politicianId={president.id} filer="president" />}
 
         {/* Key Stats */}
         <div>

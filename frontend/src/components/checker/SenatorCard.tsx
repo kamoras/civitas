@@ -430,7 +430,7 @@ export default function SenatorCard({
 
         <VotingRecord senatorId={senator.id} votingRecord={senator.votingRecord} chamber={chamber} />
 
-        <StockTrades politicianId={senator.id} chamber={chamber} />
+        <StockTrades politicianId={senator.id} filer={chamber} />
 
         {senator.sponsoredBills && senator.sponsoredBills.length > 0 && (
           <SponsoredBills bills={senator.sponsoredBills} />

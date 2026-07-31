@@ -4,7 +4,7 @@ import asyncio
 import logging
 import secrets
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -24,6 +24,7 @@ from app.services.president_service import (
     get_president,
     get_president_leaderboard,
     get_president_score_breakdown,
+    get_president_trades,
 )
 
 logger = logging.getLogger(__name__)
@@ -105,6 +106,26 @@ def get_president_history(president_id: str, db: Session = Depends(get_db)):
         db, "president", president_id,
         max_age=CACHE_TTL_DETAIL_S, dimension_labels=PRESIDENT_DIMENSION_LABELS,
     )
+
+
+@router.get("/{president_id}/stock-trades")
+def get_trades(
+    president_id: str,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(15, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """Paginated OGE Form 278-T transaction disclosures for a president.
+
+    Path deliberately matches the senators/representatives equivalents so
+    the frontend's shared stock-trades fetcher differs only in its URL
+    segment. Every disclosed buy/sell/exchange, including virtual currency;
+    amounts are the ranges the form reports, with no derived profit — see
+    president_service.get_president_trades."""
+    result = get_president_trades(db, president_id, page, per_page)
+    if result is None:
+        raise HTTPException(status_code=404, detail="President not found")
+    return _cached_json(result.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)
 
 
 @router.get("/{president_id}/score-breakdown")

@@ -1,4 +1,5 @@
-"""Ingest STOCK Act periodic transaction reports for senators and reps.
+"""Ingest STOCK Act periodic transaction reports for senators, reps, and
+the sitting president.
 
 Runs as a sibling phase after the member pipelines (see scheduler.py's
 _nightly_pipeline) rather than inside senate_pipeline.py/house_pipeline.py —
@@ -6,10 +7,16 @@ those functions are already large single units and this ingestion is
 independent of member scoring. See issue #45 for the source-selection
 rationale and the plan this was implemented from.
 
-FETCH -> match filer to a known senator/rep by name -> resolve ticker to a
-company name (sec_tickers) -> classify industry (reusing the existing
-donor-industry embedding classifier, unmodified) -> compute disclosure
-timeliness -> upsert.
+FETCH -> match filer to a known senator/rep by name (the president's own
+filings need no matching — OGE indexes them under the office) -> resolve
+ticker to a company name (sec_tickers) -> classify industry (reusing the
+existing donor-industry embedding classifier, unmodified) -> compute
+disclosure timeliness -> upsert.
+
+No profit/gain is computed anywhere in this module, for any filer: every
+one of these forms reports an amount *bracket* with no cost basis or share
+count, so there is nothing to compute one from. See models.py
+PresidentTrade's docstring.
 """
 
 import logging
@@ -21,10 +28,14 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models import (
-    PipelineRun, HousePipelineRun, PipelineStatus, Representative, Senator,
-    StockTrade, RepStockTrade, StockTradesPipelineRun,
+    PipelineRun, HousePipelineRun, PipelineStatus, President, PresidentTrade,
+    Representative, Senator, StockTrade, RepStockTrade, StockTradesPipelineRun,
 )
 from app.pipeline.fetch.house_ptr import fetch_and_parse_ptr as fetch_house_ptr, fetch_ptr_filing_index
+from app.pipeline.fetch.president_ptr import (
+    fetch_and_parse_ptr as fetch_president_ptr,
+    fetch_ptr_filing_index as fetch_president_ptr_index,
+)
 from app.pipeline.fetch.ptr_common import TradeRow
 from app.pipeline.fetch.sec_tickers import resolve_tickers
 from app.pipeline.fetch.senate_ptr import (
@@ -40,8 +51,9 @@ from app.time_utils import utcnow
 logger = logging.getLogger(__name__)
 
 STOCK_PIPELINE_STEPS = [
-    ("house_ptr",  "fetch", "Ingest House PTR filings"),
-    ("senate_ptr", "fetch", "Ingest Senate PTR filings"),
+    ("house_ptr",     "fetch", "Ingest House PTR filings"),
+    ("senate_ptr",    "fetch", "Ingest Senate PTR filings"),
+    ("president_ptr", "fetch", "Ingest presidential 278-T filings"),
 ]
 
 # How far back to search on a cold start (no existing trades in the DB).
@@ -151,22 +163,48 @@ def _compute_days_to_disclose(transaction_date: str, disclosure_date: str) -> in
         return 0
 
 
-async def _classify_rows_industry(db: Session, client: httpx.AsyncClient, rows: list[TradeRow]) -> None:
-    """Mutate rows in place, setting `industry` from ticker -> company -> embedding."""
+async def _classify_rows_industry(
+    db: Session,
+    client: httpx.AsyncClient,
+    rows: list[TradeRow],
+    *,
+    classify_untickered: bool = False,
+) -> None:
+    """Mutate rows in place, setting `industry` from ticker -> company -> embedding.
+
+    `classify_untickered` additionally runs the *asset name itself* through
+    the same embedding classifier for rows that carry no ticker. Off by
+    default because a congressional PTR's untickered lines are mostly
+    non-tradeable holdings (rental property, private partnerships) that no
+    industry label describes usefully. It is on for presidential 278-T
+    filings, where the untickered lines are the substantive ones: virtual
+    currency has no SEC ticker to resolve at all, so a ticker-only pass
+    leaves every crypto transaction UNCLASSIFIED — the CRYPTO industry
+    prototype in industry_classifier.py ("cryptocurrency bitcoin blockchain
+    digital currency decentralized finance web3...") matches those asset
+    names directly. Same classifier, same learning store, no keyword list.
+    """
     tickers = [r.ticker for r in rows if r.ticker]
-    if not tickers:
+    ticker_to_company: dict[str, str] = {}
+    if tickers:
+        ticker_to_company = await resolve_tickers(client, db, tickers)
+
+    names = set(ticker_to_company.values())
+    if classify_untickered:
+        names.update(r.asset_name.strip() for r in rows if not r.ticker and r.asset_name.strip())
+    if not names:
         return
-    ticker_to_company = await resolve_tickers(client, db, tickers)
-    company_names = list(set(ticker_to_company.values()))
-    if not company_names:
-        return
-    industries, _unknowns = classify_batch_with_learning(company_names, db)
+
+    industries, _unknowns = classify_batch_with_learning(list(names), db)
     for row in rows:
-        if not row.ticker:
-            continue
-        company = ticker_to_company.get(row.ticker.upper())
-        if company and company in industries:
-            row.industry = industries[company]
+        if row.ticker:
+            company = ticker_to_company.get(row.ticker.upper())
+            if company and company in industries:
+                row.industry = industries[company]
+        elif classify_untickered:
+            asset = row.asset_name.strip()
+            if asset in industries:
+                row.industry = industries[asset]
 
 
 async def _ingest_house(db: Session, client: httpx.AsyncClient) -> int:
@@ -265,11 +303,66 @@ async def _ingest_senate(db: Session, client: httpx.AsyncClient) -> int:
     return inserted
 
 
-async def run_stock_trades_pipeline() -> dict:
-    """Fetch, parse, classify, and store new House + Senate PTR filings.
+async def _ingest_president(db: Session, client: httpx.AsyncClient) -> int:
+    """Ingest the sitting president's OGE 278-T periodic transaction reports.
 
-    Best-effort per chamber: a failure fetching/parsing one chamber's
-    filings does not prevent the other from being ingested.
+    Current president only, and deliberately so: 278-T filings exist only
+    from the STOCK Act's 2012 effective date onward, and a former
+    president's filings stop at the end of their term, so there is nothing
+    to keep refreshing for anyone else. Historical presidents get no
+    disclosure section rather than an empty one implying they traded
+    nothing.
+
+    Unlike the House/Senate phases there is no filer-matching step: OGE
+    indexes these filings under the office, and president_ptr.py already
+    requires the row to name this president before returning it.
+    """
+    president = db.query(President).filter(President.is_current == True).first()  # noqa: E712
+    if president is None:
+        logger.info("No current president row — skipping presidential PTR ingestion")
+        return 0
+
+    existing_filing_ids = {row[0] for row in db.query(PresidentTrade.filing_id).all()}
+    filings = await fetch_president_ptr_index(db, president.name)
+
+    inserted = 0
+    for filing in filings:
+        if filing["doc_id"] in existing_filing_ids:
+            continue
+        rows = await fetch_president_ptr(db, filing)
+        if not rows:
+            continue
+        await _classify_rows_industry(db, client, rows, classify_untickered=True)
+        for row in rows:
+            days = _compute_days_to_disclose(row.transaction_date, row.disclosure_date)
+            db.add(PresidentTrade(
+                president_id=president.id,
+                ticker=row.ticker,
+                asset_name=row.asset_name,
+                owner=row.owner,
+                transaction_type=row.transaction_type,
+                transaction_date=row.transaction_date,
+                disclosure_date=row.disclosure_date,
+                days_to_disclose=days,
+                amount_low=row.amount_low,
+                amount_high=row.amount_high,
+                industry=row.industry or "UNCLASSIFIED",
+                source_url=row.source_url,
+                filing_id=row.filing_id,
+                parse_confidence=row.parse_confidence,
+            ))
+            inserted += 1
+        existing_filing_ids.add(filing["doc_id"])
+    db.commit()
+    return inserted
+
+
+async def run_stock_trades_pipeline() -> dict:
+    """Fetch, parse, classify, and store new House + Senate + presidential
+    PTR filings.
+
+    Best-effort per phase: a failure fetching/parsing one filer group's
+    filings does not prevent the others from being ingested.
     """
     db: Session = SessionLocal()
     try:
@@ -294,6 +387,7 @@ async def run_stock_trades_pipeline() -> dict:
 
         house_count = 0
         senate_count = 0
+        president_count = 0
         error_parts: list[str] = []
         async with httpx.AsyncClient() as client:
             progress.begin("house_ptr")
@@ -319,21 +413,40 @@ async def run_stock_trades_pipeline() -> dict:
                 db.rollback()
                 error_parts.append("Senate: failed — see server logs")
                 progress.fail("senate_ptr")
+            progress.begin("president_ptr")
+            try:
+                president_count = await _ingest_president(db, client)
+                progress.complete("president_ptr", detail=f"{president_count} rows")
+            except Exception:
+                logger.exception("Presidential PTR ingestion failed")
+                db.rollback()
+                error_parts.append("President: failed — see server logs")
+                progress.fail("president_ptr")
 
         elapsed = round(time.time() - start_time, 1)
-        logger.info("Stock trades pipeline: %d House rows, %d Senate rows", house_count, senate_count)
+        logger.info(
+            "Stock trades pipeline: %d House rows, %d Senate rows, %d presidential rows",
+            house_count, senate_count, president_count,
+        )
 
-        run.status = PipelineStatus.FAILED if len(error_parts) == 2 else PipelineStatus.COMPLETED
+        # FAILED only when every phase failed — one source being down still
+        # leaves the run's other ingested rows valid.
+        run.status = (
+            PipelineStatus.FAILED
+            if len(error_parts) == len(STOCK_PIPELINE_STEPS)
+            else PipelineStatus.COMPLETED
+        )
         run.completed_at = utcnow()
         run.house_trades_ingested = house_count
         run.senate_trades_ingested = senate_count
+        run.president_trades_ingested = president_count
         run.elapsed_seconds = elapsed
         run.error_message = "; ".join(error_parts) or None
         db.commit()
 
         return {
             "status": run.status, "house_trades": house_count, "senate_trades": senate_count,
-            "elapsed_seconds": elapsed,
+            "president_trades": president_count, "elapsed_seconds": elapsed,
         }
     finally:
         _tracker.stop()

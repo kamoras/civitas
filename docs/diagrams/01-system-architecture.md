@@ -15,7 +15,7 @@ flowchart TB
         ECON["BLS · BEA / FRED · MeasuringWorth<br/>employment · GDP"]
         FEDREG["Federal Register<br/>orders · rulemaking"]
         UCSB["UCSB American Presidency Project<br/>roster · approval · margins"]
-        PTR["House Clerk · Senate eFD · SEC<br/>STOCK Act disclosures"]
+        PTR["House Clerk · Senate eFD · OGE · SEC<br/>STOCK Act disclosures"]
         VOTEVIEW["Voteview<br/>DW-NOMINATE ideal points"]
         RSS["RSS — AP · NPR · PBS · BBC<br/>The Hill · Politico · Roll Call<br/>8 feeds, 7 newsrooms"]
         SOCIAL["Google Trends · Reddit"]

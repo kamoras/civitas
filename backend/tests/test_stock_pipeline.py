@@ -28,19 +28,19 @@ def _reset_running_flag():
     stock_pipeline._stock_pipeline_started_at = None
 
 
-def _run(db_session, house_result=None, senate_result=None):
+def _run(db_session, house_result=None, senate_result=None, president_result=None):
     with patch("app.pipeline.stock_pipeline.SessionLocal", return_value=db_session), \
          patch("app.pipeline.stock_pipeline._other_pipeline_running", return_value=False), \
          patch("app.pipeline.stock_pipeline._ingest_house", new_callable=AsyncMock) as mock_house, \
-         patch("app.pipeline.stock_pipeline._ingest_senate", new_callable=AsyncMock) as mock_senate:
-        if isinstance(house_result, Exception):
-            mock_house.side_effect = house_result
-        else:
-            mock_house.return_value = house_result if house_result is not None else 0
-        if isinstance(senate_result, Exception):
-            mock_senate.side_effect = senate_result
-        else:
-            mock_senate.return_value = senate_result if senate_result is not None else 0
+         patch("app.pipeline.stock_pipeline._ingest_senate", new_callable=AsyncMock) as mock_senate, \
+         patch("app.pipeline.stock_pipeline._ingest_president", new_callable=AsyncMock) as mock_president:
+        for mock, result in (
+            (mock_house, house_result), (mock_senate, senate_result), (mock_president, president_result),
+        ):
+            if isinstance(result, Exception):
+                mock.side_effect = result
+            else:
+                mock.return_value = result if result is not None else 0
 
         import asyncio
         return asyncio.run(stock_pipeline.run_stock_trades_pipeline())
@@ -58,6 +58,7 @@ class TestStockTradesPipelineRunTracking:
         assert run.status == "completed"
         assert run.house_trades_ingested == 5
         assert run.senate_trades_ingested == 3
+        assert run.president_trades_ingested == 0
         assert run.completed_at is not None
         assert run.elapsed_seconds is not None
 
@@ -80,11 +81,12 @@ class TestStockTradesPipelineRunTracking:
         assert run.senate_trades_ingested == 7
         assert "House" in (run.error_message or "")
 
-    def test_both_chambers_failing_marks_run_failed(self, db_session):
+    def test_every_phase_failing_marks_run_failed(self, db_session):
         result = _run(
             db_session,
             house_result=RuntimeError("House PTR site down"),
             senate_result=RuntimeError("Senate session expired"),
+            president_result=RuntimeError("OGE index unreachable"),
         )
 
         assert result["status"] == "failed"
@@ -93,6 +95,26 @@ class TestStockTradesPipelineRunTracking:
         assert run.status == "failed"
         assert "House" in run.error_message
         assert "Senate" in run.error_message
+        assert "President" in run.error_message
+
+    def test_president_failing_alone_leaves_the_run_completed(self, db_session):
+        """Same best-effort-per-phase rule the chambers get: the president's
+        source is the newest and least-proven of the three, and its being
+        down must not discard the congressional rows this run did ingest."""
+        result = _run(
+            db_session,
+            house_result=4,
+            senate_result=6,
+            president_result=RuntimeError("OGE index unreachable"),
+        )
+
+        assert result["status"] == "completed"
+        assert result["house_trades"] == 4
+        assert result["president_trades"] == 0
+
+        run = db_session.query(StockTradesPipelineRun).one()
+        assert run.status == "completed"
+        assert "President" in (run.error_message or "")
 
     def test_skips_when_stocks_own_prior_run_is_still_genuinely_active(self, db_session):
         db_session.add(StockTradesPipelineRun(started_at=utcnow() - timedelta(minutes=5), status=PipelineStatus.RUNNING))

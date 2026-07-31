@@ -39,7 +39,7 @@ flowchart TB
     P7["<b>7. FINALIZE</b><br/>persist scores, key votes, lobbying matches,<br/>promises, sponsored bills<br/>append ScoreSnapshot per member<br/>record PipelineRun timings + errors"]
 
     P7 --> HOUSE["<b>House pipeline</b><br/>~6 phases, 435 members<br/>reuses the EXPLORE pipeline<br/>no LLM for promise analysis"]
-    HOUSE --> STOCK["<b>Stock pipeline</b><br/>STOCK Act PTR ingestion<br/>House Clerk + Senate eFD"]
+    HOUSE --> STOCK["<b>Stock pipeline</b><br/>STOCK Act PTR ingestion<br/>House Clerk + Senate eFD + OGE 278-T"]
     STOCK --> DONE(["PipelineRun status = completed"])
 ```
 

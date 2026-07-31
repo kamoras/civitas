@@ -520,8 +520,16 @@ After issues are committed, the Action Center pipeline also:
 
 After both member pipelines complete, `stock_pipeline.py` runs as a sibling
 phase — fetches House (PDF) and Senate (HTML) STOCK Act periodic transaction
-reports, matches filer to a known member, classifies trade industry (reusing
-the donor-industry embedding classifier), and computes disclosure timeliness.
+reports plus the sitting president's OGE Form 278-T filings (PDF, from OGE's
+public presidential disclosure index), matches filer to a known member (the
+president's filings are indexed under the office and need no matching),
+classifies trade industry (reusing the donor-industry embedding classifier),
+and computes disclosure timeliness. Best-effort per phase: one source being
+down does not discard the others' rows.
+
+No profit or gain figure is derived for any filer, and none can be: every one
+of these forms reports an amount *bracket* per transaction with no cost basis
+or share count. Disclosed ranges are stored and shown as filed.
 
 Each senator is processed independently. The pipeline uses `PipelineRun`
 records to track progress and supports resumption.

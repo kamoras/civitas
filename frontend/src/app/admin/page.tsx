@@ -1227,7 +1227,7 @@ function RunHistory({ runs }: { runs: PipelineRunInfo[] }) {
                 <td className="py-1.5 pr-3 text-matrix-green/60">{formatDuration(r.elapsedSeconds)}</td>
                 <td className="py-1.5 pr-3 text-right text-matrix-green/60">
                   {isStockTrades ? (
-                    <>{r.houseTradesIngested ?? 0}H/{r.senateTradesIngested ?? 0}S</>
+                    <>{r.houseTradesIngested ?? 0}H/{r.senateTradesIngested ?? 0}S/{r.presidentTradesIngested ?? 0}P</>
                   ) : isHouse ? (
                     <>
                       {r.repsProcessed ?? 0}/{r.repsTotal ?? 0}
@@ -1905,7 +1905,8 @@ function AdminDashboardView({
               statsRow={
                 <span>
                   Trades: {pipelineStatus.stockTradesLastRun.houseTradesIngested}H /{" "}
-                  {pipelineStatus.stockTradesLastRun.senateTradesIngested}S
+                  {pipelineStatus.stockTradesLastRun.senateTradesIngested}S /{" "}
+                  {pipelineStatus.stockTradesLastRun.presidentTradesIngested}P
                 </span>
               }
             />
@@ -2062,7 +2063,7 @@ function AdminDashboardView({
                         run={run}
                         isStuck={isStuck}
                         statusClassName={statusClassName}
-                        detail={run && <span className="text-matrix-green/60"> · {run.houseTradesIngested}H/{run.senateTradesIngested}S</span>}
+                        detail={run && <span className="text-matrix-green/60"> · {run.houseTradesIngested}H/{run.senateTradesIngested}S/{run.presidentTradesIngested}P</span>}
                         clearing={clearingStockTrades}
                         onClear={async () => {
                           setClearingStockTrades(true);
@@ -2552,7 +2553,8 @@ function AdminDashboardView({
                 <span className="text-matrix-green/50 text-xs block">TRADES INGESTED</span>
                 <span>
                   {pipelineStatus.stockTradesLastRun.houseTradesIngested}H /{" "}
-                  {pipelineStatus.stockTradesLastRun.senateTradesIngested}S
+                  {pipelineStatus.stockTradesLastRun.senateTradesIngested}S /{" "}
+                  {pipelineStatus.stockTradesLastRun.presidentTradesIngested}P
                 </span>
               </div>
             )
