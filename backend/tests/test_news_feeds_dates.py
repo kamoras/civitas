@@ -67,6 +67,12 @@ class TestStripHtml:
     def test_entities_are_decoded(self):
         assert _strip_html("Ways &amp; Means marks up the bill") == "Ways & Means marks up the bill"
 
+    def test_double_escaped_markup_is_still_stripped(self):
+        """The XML parser decodes one layer, so a feed that escaped its
+        markup twice still holds "&lt;p&gt;" by the time this runs. Strip
+        before unescape and that tag text lands in the summary verbatim."""
+        assert _strip_html("&lt;p&gt;The Senate voted.&lt;/p&gt;") == "The Senate voted."
+
     def test_comparison_operators_in_prose_are_not_treated_as_tags(self):
         """A bare "<" is not markup. Matching "<[^>]*>" swallowed the middle
         of any sentence that used both comparison signs."""
@@ -76,6 +82,47 @@ class TestStripHtml:
     def test_plain_text_is_returned_unchanged(self):
         text = "The House passed the bill. It now goes to the Senate."
         assert _strip_html(text) is text
+
+    def test_atom_entries_are_stripped_too(self):
+        """The Atom branch builds its NewsArticle separately from the RSS
+        one, so it is its own chance to forget the strip.
+
+        This also pins the ElementTree truthiness trap it uncovered:
+        `find(a) or find(b)` always took b, because a childless element is
+        falsy whatever its text, so every Atom summary was discarded."""
+        entry = _parse_rss_feed(
+            """<?xml version="1.0"?>
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry>
+                <title>Senate clears the measure</title>
+                <link rel="self" href="https://example.com/feed"/>
+                <link rel="alternate" href="https://example.com/a"/>
+                <summary>&lt;p&gt;The Senate voted Tuesday.&lt;/p&gt;</summary>
+              </entry>
+            </feed>""".encode(),
+            "Test",
+        )[0]
+        assert entry.summary == "The Senate voted Tuesday."
+        # The rel="alternate" preference never applied for the same reason.
+        assert entry.url == "https://example.com/a"
+
+    def test_atom_falls_back_to_bare_link_and_content(self):
+        """Not every Atom feed labels its link or names the body <summary>;
+        both fallbacks are real feed shapes and both are on the path the
+        truthiness fix rewrote."""
+        entry = _parse_rss_feed(
+            """<?xml version="1.0"?>
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry>
+                <title>House sends the bill onward</title>
+                <link href="https://example.com/b"/>
+                <content>&lt;p&gt;The House voted Wednesday.&lt;/p&gt;</content>
+              </entry>
+            </feed>""".encode(),
+            "Test",
+        )[0]
+        assert entry.url == "https://example.com/b"
+        assert entry.summary == "The House voted Wednesday."
 
     def test_summary_cap_is_applied_after_stripping(self):
         """Truncating first spends the budget on markup. The cap has to

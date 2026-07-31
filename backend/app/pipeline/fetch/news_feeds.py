@@ -151,9 +151,13 @@ def _strip_html(raw: str) -> str:
     """
     if "<" not in raw and "&" not in raw:
         return raw
-    text = _HTML_BLOCK_RE.sub("; ", raw)
+    # Unescape BEFORE stripping. The XML parser already decoded one layer,
+    # so a feed that escaped its markup twice (a real WordPress pathology)
+    # still holds "&lt;p&gt;" here — stripping first would leave literal
+    # tag text in the summary that no later stage knows to remove.
+    text = unescape(raw)
+    text = _HTML_BLOCK_RE.sub("; ", text)
     text = _HTML_TAG_RE.sub("", text)
-    text = unescape(text)
     text = " ".join(text.split())
     # "</p><p>" collapsed to ";  ;" above, and a leading/trailing block tag
     # leaves a dangling separator.
@@ -198,9 +202,22 @@ def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
     # Atom entries (fallback for Atom feeds)
     for entry in root.findall(".//atom:entry", ns):
         title = _extract_text(entry.find("atom:title", ns))
-        link_el = entry.find("atom:link[@rel='alternate']", ns) or entry.find("atom:link", ns)
+        # `or` between two Element results is the ElementTree truthiness
+        # trap: an element with no CHILDREN is falsy regardless of its text,
+        # so `find(a) or find(b)` always evaluated find(b). <summary> holds
+        # text and no children, which meant every Atom entry's description
+        # was silently discarded and the article reached the policy filter,
+        # the digest detector, and the LLM prompt with a title and nothing
+        # else. <link> is childless too, so the rel="alternate" preference
+        # never applied either — it only looked right because the first
+        # <link> is usually the alternate one.
+        link_el = entry.find("atom:link[@rel='alternate']", ns)
+        if link_el is None:
+            link_el = entry.find("atom:link", ns)
         link = link_el.get("href", "") if link_el is not None else ""
-        summary_el = entry.find("atom:summary", ns) or entry.find("atom:content", ns)
+        summary_el = entry.find("atom:summary", ns)
+        if summary_el is None:
+            summary_el = entry.find("atom:content", ns)
         desc = _extract_text(summary_el)
         pub_date = _parse_pub_date(_extract_text(entry.find("atom:updated", ns)))
         if not title or not link:
