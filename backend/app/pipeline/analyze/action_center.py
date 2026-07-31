@@ -43,7 +43,11 @@ from app.models import (
     Senator,
 )
 from app.pipeline.analyze.score_calculator import compute_overall_score
-from app.pipeline.fetch.news_feeds import NewsArticle, fetch_news_articles
+from app.pipeline.fetch.news_feeds import (
+    MAX_SUMMARY_CHARS,
+    NewsArticle,
+    fetch_news_articles,
+)
 from app.pipeline.fetch.trending import TrendingTopic, fetch_trending_topics
 from app.pipeline.vector_store import (
     get_embedding_model,
@@ -582,29 +586,244 @@ def _resolve_url(url: str, timeout: float = 6.0) -> str:
     return url
 
 
-_ROUNDUP_PATTERNS = re.compile(
+# Recurring multi-story products an outlet publishes as ONE feed item. The
+# body of such an item is a list of that day's (or week's) unrelated stories,
+# so everything downstream — clustering, the LLM prompt, the generated
+# summary — treats several separate events as one issue and the summary
+# stitches them into a single narrative, often inventing a causal link
+# between them (live 2026-07 case, issue 483: "A new agreement involving
+# Hamas and Israel has been announced... The U.S. economy saw a slight
+# slowdown following the announcement" — two unrelated NPR items from one
+# briefing, joined by a "following the announcement" no source stated).
+#
+# This started as a weekly-roundup title filter. Daily briefings are the
+# same shape and far more common — NPR runs "Up First" and "Morning news
+# brief" every weekday, and each is a single RSS item covering three to five
+# separate stories. Phrases that also appear on ordinary single-topic
+# explainers ("what to know", "the latest:", "live updates" — a live blog
+# covers one event in many parts, not many events) are deliberately NOT
+# here: this filter drops articles outright, so it is tuned for precision on
+# the recurring-product class rather than for catching every possible digest.
+#
+# Matching is split by WHERE the marker has to appear, because several of
+# these phrases are also ordinary English somewhere else in a headline:
+#   - anywhere: phrases that are digest-specific wherever they land
+#   - title-initial: product names that collide with real reporting when
+#     they appear mid-headline ("Pentagon holds evening briefing on troop
+#     levels", "Trump skipped the President's Daily Brief", "the building
+#     blew up first") — a product name leads its own headline, optionally
+#     after a source tag like "NPR:"
+#   - trailing tag: "in brief" / "and more", which are digest markers only
+#     at the end ("spoke in brief remarks", "and more-restrictive rules")
+#
+# Titles are apostrophe-normalized before matching (_digest_reason): feeds
+# emit the typographic ’ far more often than ', and "Today’s headlines"
+# silently missed the ' spelling.
+_DIGEST_TITLE_PATTERNS = re.compile(
     r"\b(week(?:ly)? in (?:politics|review|news)|week(?:'?s)? (?:top |best )?(?:news|stories|headlines)"
     r"|this week in|news of the week|political news this week|what we('re| are) watching"
-    r"|week(?:ly)? (?:wrap-?up|round-?up))\b",
+    r"|week(?:ly)? (?:wrap-?up|round-?up)"
+    # "brief" only, never "briefing" — "White House news briefing on the
+    # Gaza strikes" is one story about a press conference.
+    r"|news brief\b|newscast|politics chat|news round-?up"
+    r"|\d+ things to know|\d+ takeaways)",
     re.IGNORECASE,
 )
+
+_DIGEST_TITLE_PREFIX_PATTERNS = re.compile(
+    # Optional source tag: "NPR:", "AP —", "Morning Edition - ". A dash only
+    # separates a tag when it is spaced; unspaced it is a compound word, and
+    # "Wrap-up first look at the budget" is not a product name.
+    r"^(?:[A-Za-z][\w.&' ]{0,20}?(?::\s*|\s+[—–|-]\s+))?"
+    r"(up first|first up|top stories|today's headlines|headlines\s*:"
+    r"|(?:daily|morning|evening|nightly)\s+"
+    r"(?:brief|briefing|digest|rundown|wire|wrap|newsletter))\b",
+    re.IGNORECASE,
+)
+
+_DIGEST_TITLE_SUFFIX_PATTERNS = re.compile(
+    # A dash only counts as the tag boundary when spaced — "and
+    # more-restrictive tariffs" is a compound adjective, not a tag.
+    r"\b(in brief|and more)(?=\s*[:.…]|\s*$|\s+[-–—])",
+    re.IGNORECASE,
+)
+
+# Feeds emit the typographic apostrophe far more often than the ASCII one.
+_APOSTROPHES = str.maketrans({"’": "'", "ʼ": "'", "‘": "'"})
+
+# Feed descriptions enumerate their items with sentence breaks, semicolons,
+# bullets, or pipes — all four appear in real NPR/AP briefing bodies. The
+# delimiter is captured, not consumed, because it decides whether the item's
+# first word can be trusted as a name (see _split_body_items).
+_DIGEST_ITEM_SPLIT_RE = re.compile(r"((?<=[.!?])\s+|\s*[;•·|]\s*)")
+
+# A digest body must break into at least this many entity-bearing items
+# before disjointness means anything: two sentences that happen not to
+# share a name is ordinary prose ("Israel and Hamas reached a deal.
+# Negotiators met in Cairo."), three or more sharing NOTHING is a list.
+_DIGEST_MIN_ITEMS = 3
+
+
+def _split_body_items(summary: str) -> list[tuple[str, bool]]:
+    """Split a feed description into (item, first_word_is_forced_capital).
+
+    Grammar capitalizes the word that opens a sentence whether or not it
+    names anything, so "Negotiators met in Cairo." looks like it introduces
+    a person. After a semicolon or a bullet nothing is forced, so a
+    capitalized word there really is a name ("Powell defended the cut").
+    Which delimiter preceded an item is the only thing that distinguishes
+    the two, hence the captured-group split.
+
+    A body that hit news_feeds' MAX_SUMMARY_CHARS cap was cut mid-item, and
+    the fragment left behind ("...Negotiators from Qatar") names entities
+    that by construction appear nowhere else in the text — one more
+    guaranteed-disjoint item, enough to push a two-item blurb over the list
+    threshold. The cap is the signal, not trailing punctuation: plenty of
+    bodies legitimately end without a period (bulleted lists especially),
+    and treating those as cut discarded the whole final item.
+    """
+    parts = _DIGEST_ITEM_SPLIT_RE.split(summary or "")
+    delimiters = parts[1::2]
+    # Nothing precedes the first item, so its capital is read from the rest
+    # of the body: in a bulleted or semicolon-separated list the opening item
+    # is a list entry like every other one, and stripping its first word
+    # would throw away the only name it has.
+    first_forced = all(d.strip() == "" for d in delimiters)
+    items: list[tuple[str, bool]] = [(parts[0], first_forced)]
+    for delimiter, item in zip(delimiters, parts[2::2]):
+        items.append((item, delimiter.strip() == ""))
+    if len(summary or "") >= MAX_SUMMARY_CHARS and len(items) > 1:
+        items.pop()
+    return items
+
+
+# Singular and plural possessives both: "Trump's", "Democrats'".
+_POSSESSIVE_SUFFIX_RE = re.compile(r"'s?$")
+
+
+def _topic_tokens(text: str) -> set[str]:
+    """Entity signature normalized for comparing a headline against its own
+    body — apostrophes unified, trailing possessives dropped.
+
+    _issue_signature keeps "'s" inside a token, which is right for telling
+    two stories apart and wrong here: a possessive-led headline ("Trump's
+    tariff order faces court test", the most common headline shape there
+    is) yields {trump's} and shares nothing with a body that says "Trump",
+    so the headline would read as failing to describe its own story. The
+    typographic apostrophe compounds it — "Trump’s" tokenizes as {trump}
+    while "Trump's" tokenizes as {trump's}, so the same headline matched or
+    missed depending on which character the feed emitted.
+    """
+    return {
+        _POSSESSIVE_SUFFIX_RE.sub("", token)
+        for token in _issue_signature(text.translate(_APOSTROPHES), [])
+    }
+
+
+def _item_entities(item: str, forced_capital: bool) -> set[str]:
+    """Named entities in one item of a feed description.
+
+    Reuses the issue-signature extractor (capitalized tokens and digit
+    groups, minus generic civic vocabulary). Where the first word's capital
+    is forced by grammar it is dropped before extraction — _issue_signature
+    was written for whole titles and fact lists, in which sentence-initial
+    capitalization is a rounding error, and per-item it would otherwise
+    manufacture a distinct "entity" for every sentence, which is exactly the
+    noise the disjointness test below cannot tolerate.
+    """
+    if forced_capital:
+        parts = item.split(None, 1)
+        item = parts[1] if len(parts) > 1 else ""
+    return _topic_tokens(item)
+
+
+# How many of a body's items the headline may account for before the body
+# stops looking like a list. A headline names its story's subject and the
+# blurb keeps referring back to it, so a single story's title covers most
+# of its own items; a briefing's title can cover at most the one item it
+# leads with. Without this, any single story whose blurb hands off between
+# actors reads as a list ("Sen. Chuck Grassley released the transcript
+# Thursday. The FBI declined to comment. House Judiciary Democrats called
+# for hearings." — three sentences, three disjoint entity sets, one story).
+_DIGEST_MAX_TITLE_COVERED_ITEMS = 1
+
+
+def _multi_topic_body(summary: str, title: str) -> bool:
+    """True if ``summary`` reads as a list of separate stories.
+
+    Two conditions, both required. The items must be pairwise disjoint in
+    the entities they name — a single story's blurb keeps returning to its
+    own subject, a briefing's items are about different people in different
+    places. And the headline must fail to account for the body: a digest
+    headline cannot describe stories it does not know about, which is the
+    property that distinguishes a list from a story told through several
+    actors (see _DIGEST_MAX_TITLE_COVERED_ITEMS).
+    """
+    items = [
+        entities
+        for entities in (
+            _item_entities(item, forced)
+            for item, forced in _split_body_items(summary)
+        )
+        # A bare number is not a topic — an item must name something.
+        if any(not token[0].isdigit() for token in entities)
+    ]
+    if len(items) < _DIGEST_MIN_ITEMS:
+        return False
+    disjoint = all(
+        not (a & b)
+        for i, a in enumerate(items)
+        for b in items[i + 1:]
+    )
+    if not disjoint:
+        return False
+    title_entities = _topic_tokens(title)
+    covered = sum(1 for entities in items if entities & title_entities)
+    return covered <= _DIGEST_MAX_TITLE_COVERED_ITEMS
+
+
+def _digest_reason(article: NewsArticle) -> str | None:
+    """Why ``article`` is a multi-story digest, or None if it is one story."""
+    title = article.title.translate(_APOSTROPHES)
+    if (
+        _DIGEST_TITLE_PATTERNS.search(title)
+        or _DIGEST_TITLE_PREFIX_PATTERNS.match(title)
+        or _DIGEST_TITLE_SUFFIX_PATTERNS.search(title)
+    ):
+        return "recurring digest title"
+    if _multi_topic_body(article.summary, article.title):
+        return "body lists unrelated stories"
+    return None
 
 
 def _filter_policy_relevant(
     articles: list[NewsArticle],
 ) -> list[tuple[NewsArticle, np.ndarray]]:
-    """Keep only articles about US policy/legislation; drop roundup articles."""
+    """Keep only articles about US policy/legislation; drop digest articles."""
     if not articles:
         return []
 
-    # Drop weekly-roundup/digest articles before embedding — they cover multiple
-    # unrelated topics and contaminate cluster centroids, producing catch-all issues.
+    # Drop multi-story digest articles before embedding — they cover several
+    # unrelated topics and contaminate cluster centroids, producing catch-all
+    # issues whose summary presents separate events as one story.
     specific = []
     for a in articles:
-        if _ROUNDUP_PATTERNS.search(a.title):
-            logger.debug("Filtered roundup article: %s", a.title[:80])
+        reason = _digest_reason(a)
+        if reason:
+            logger.debug("Filtered digest article (%s): %s", reason, a.title[:80])
         else:
             specific.append(a)
+
+    n_digests = len(articles) - len(specific)
+    if n_digests:
+        # Counted, not just logged: this filter drops whole articles, so
+        # "is it over-firing?" needs a number that survives a deploy (see
+        # action_metrics' module docstring). Incremented before the
+        # everything-was-a-digest early return, which is precisely the run
+        # the counter has to explain.
+        from app.pipeline.analyze import action_metrics
+
+        action_metrics.increment("articles_dropped_digest", n_digests)
 
     if not specific:
         return []
@@ -633,9 +852,9 @@ def _filter_policy_relevant(
     n_penalized = int(np.sum(us_civic_scores < 0.15))
     logger.info(
         "Policy relevance filter: %d/%d articles passed "
-        "(%d roundups dropped, %d low-US-civic penalized, threshold=%.2f)",
+        "(%d digests dropped, %d low-US-civic penalized, threshold=%.2f)",
         len(relevant), len(articles),
-        len(articles) - len(specific), n_penalized, POLICY_RELEVANCE_THRESHOLD,
+        n_digests, n_penalized, POLICY_RELEVANCE_THRESHOLD,
     )
     return relevant
 

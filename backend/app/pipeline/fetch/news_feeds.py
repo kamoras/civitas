@@ -11,10 +11,12 @@ so the system degrades gracefully if a feed goes down.
 """
 
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
+from html import unescape
 
 from xml.etree.ElementTree import Element
 
@@ -26,6 +28,10 @@ logger = logging.getLogger(__name__)
 
 FEED_TIMEOUT = 15.0
 MAX_ARTICLE_AGE_HOURS = 48
+# Descriptions are capped here, which routinely cuts mid-sentence. Consumers
+# that reason about a description's STRUCTURE need to know the cap to tell a
+# body that ended from one that was cut (see action_center._split_body_items).
+MAX_SUMMARY_CHARS = 500
 
 
 @dataclass
@@ -114,6 +120,51 @@ def _extract_text(el: Element | None) -> str:
     return (el.text or "").strip()
 
 
+# Block-level markup carries an item boundary the plain text does not: a
+# WordPress feed's <li> or </p> is where one thought ends, and dropping it
+# silently welds two sentences together. Mapped to "; " so the boundary
+# survives as punctuation.
+_HTML_BLOCK_RE = re.compile(
+    r"<br\s*/?>|</?(?:p|div|li|ul|ol|h[1-6]|blockquote)\b[^>]*>",
+    re.IGNORECASE,
+)
+# A tag name (or "!" for comments/doctypes) must follow the "<", so a
+# less-than sign used as prose survives: "<[^>]*>" would swallow the middle
+# of "the margin was < 6 > the forecast" as if it were markup.
+_HTML_TAG_RE = re.compile(r"</?[a-zA-Z!][^>]*>")
+_HTML_SEPARATOR_RUN_RE = re.compile(r"(?:\s*;\s*)+")
+
+
+def _strip_html(raw: str) -> str:
+    """Plain text from a feed description that arrived as HTML.
+
+    Several feeds here are WordPress-backed (Roll Call, The Hill) and put
+    real markup in <description> — paragraph tags, tracking pixels, an
+    <img> lead. Left in, that markup reaches three places that all read the
+    description as prose: the policy-relevance embedding (which scores
+    ``title. summary[:200]`` — for an image-led item that budget is spent
+    entirely on markup), the LLM prompt for issue generation, and the
+    digest detector's entity extraction, where a filename like
+    "Trump-Rally.jpg" reads as a named entity that appears in no other
+    sentence. Tags are removed rather than escaped because none of those
+    three consumers renders HTML.
+    """
+    if "<" not in raw and "&" not in raw:
+        return raw
+    # Unescape BEFORE stripping. The XML parser already decoded one layer,
+    # so a feed that escaped its markup twice (a real WordPress pathology)
+    # still holds "&lt;p&gt;" here — stripping first would leave literal
+    # tag text in the summary that no later stage knows to remove.
+    text = unescape(raw)
+    text = _HTML_BLOCK_RE.sub("; ", text)
+    text = _HTML_TAG_RE.sub("", text)
+    text = " ".join(text.split())
+    # "</p><p>" collapsed to ";  ;" above, and a leading/trailing block tag
+    # leaves a dangling separator.
+    text = _HTML_SEPARATOR_RUN_RE.sub("; ", text)
+    return text.strip(" ;")
+
+
 def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
     """Parse RSS 2.0 / Atom XML into NewsArticle objects."""
     articles: list[NewsArticle] = []
@@ -143,7 +194,7 @@ def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
             title=title,
             url=link,
             source_name=source_name,
-            summary=desc[:500] if desc else "",
+            summary=_strip_html(desc)[:MAX_SUMMARY_CHARS] if desc else "",
             published=pub_date,
             categories=categories,
         ))
@@ -151,9 +202,22 @@ def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
     # Atom entries (fallback for Atom feeds)
     for entry in root.findall(".//atom:entry", ns):
         title = _extract_text(entry.find("atom:title", ns))
-        link_el = entry.find("atom:link[@rel='alternate']", ns) or entry.find("atom:link", ns)
+        # `or` between two Element results is the ElementTree truthiness
+        # trap: an element with no CHILDREN is falsy regardless of its text,
+        # so `find(a) or find(b)` always evaluated find(b). <summary> holds
+        # text and no children, which meant every Atom entry's description
+        # was silently discarded and the article reached the policy filter,
+        # the digest detector, and the LLM prompt with a title and nothing
+        # else. <link> is childless too, so the rel="alternate" preference
+        # never applied either — it only looked right because the first
+        # <link> is usually the alternate one.
+        link_el = entry.find("atom:link[@rel='alternate']", ns)
+        if link_el is None:
+            link_el = entry.find("atom:link", ns)
         link = link_el.get("href", "") if link_el is not None else ""
-        summary_el = entry.find("atom:summary", ns) or entry.find("atom:content", ns)
+        summary_el = entry.find("atom:summary", ns)
+        if summary_el is None:
+            summary_el = entry.find("atom:content", ns)
         desc = _extract_text(summary_el)
         pub_date = _parse_pub_date(_extract_text(entry.find("atom:updated", ns)))
         if not title or not link:
@@ -164,7 +228,7 @@ def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
             title=title,
             url=link,
             source_name=source_name,
-            summary=desc[:500] if desc else "",
+            summary=_strip_html(desc)[:MAX_SUMMARY_CHARS] if desc else "",
             published=pub_date,
         ))
 
