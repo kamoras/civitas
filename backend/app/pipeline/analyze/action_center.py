@@ -697,6 +697,29 @@ def _split_body_items(summary: str) -> list[tuple[str, bool]]:
     return items
 
 
+# Singular and plural possessives both: "Trump's", "Democrats'".
+_POSSESSIVE_SUFFIX_RE = re.compile(r"'s?$")
+
+
+def _topic_tokens(text: str) -> set[str]:
+    """Entity signature normalized for comparing a headline against its own
+    body — apostrophes unified, trailing possessives dropped.
+
+    _issue_signature keeps "'s" inside a token, which is right for telling
+    two stories apart and wrong here: a possessive-led headline ("Trump's
+    tariff order faces court test", the most common headline shape there
+    is) yields {trump's} and shares nothing with a body that says "Trump",
+    so the headline would read as failing to describe its own story. The
+    typographic apostrophe compounds it — "Trump’s" tokenizes as {trump}
+    while "Trump's" tokenizes as {trump's}, so the same headline matched or
+    missed depending on which character the feed emitted.
+    """
+    return {
+        _POSSESSIVE_SUFFIX_RE.sub("", token)
+        for token in _issue_signature(text.translate(_APOSTROPHES), [])
+    }
+
+
 def _item_entities(item: str, forced_capital: bool) -> set[str]:
     """Named entities in one item of a feed description.
 
@@ -711,7 +734,7 @@ def _item_entities(item: str, forced_capital: bool) -> set[str]:
     if forced_capital:
         parts = item.split(None, 1)
         item = parts[1] if len(parts) > 1 else ""
-    return _issue_signature(item, [])
+    return _topic_tokens(item)
 
 
 # How many of a body's items the headline may account for before the body
@@ -754,7 +777,7 @@ def _multi_topic_body(summary: str, title: str) -> bool:
     )
     if not disjoint:
         return False
-    title_entities = _issue_signature(title, [])
+    title_entities = _topic_tokens(title)
     covered = sum(1 for entities in items if entities & title_entities)
     return covered <= _DIGEST_MAX_TITLE_COVERED_ITEMS
 

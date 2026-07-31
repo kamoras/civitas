@@ -1647,6 +1647,28 @@ class TestDigestFiltering:
         article.summary = body
         assert _digest_reason(article) is None
 
+    @pytest.mark.parametrize("title", [
+        # A possessive-led headline is the most common shape there is, and
+        # _issue_signature keeps "'s" inside the token — so "Trump's" shared
+        # nothing with a body saying "Trump" and the headline read as
+        # failing to describe its own story. Both apostrophe characters,
+        # since the typographic one tokenizes differently again.
+        "Trump's tariff order and the Bessent schedule fight",
+        "Trump\u2019s tariff order and the Bessent schedule fight",
+    ])
+    def test_possessive_headline_still_covers_its_own_body(self, title):
+        from app.pipeline.analyze.action_center import _multi_topic_body
+
+        body = (
+            "The order signed by Trump takes effect Monday; Roberts set "
+            "argument for October; Bessent defended the schedule."
+        )
+        # Covers two of the three items once possessives are normalized.
+        assert _multi_topic_body(body, title) is False
+        # The same body under a headline that names none of it IS a list,
+        # so the assertion above is about coverage, not a benign body.
+        assert _multi_topic_body(body, "A quiet Tuesday") is True
+
     def test_items_sharing_an_entity_are_not_a_list(self):
         """Disjointness is the first of the two conditions and has to reject
         on its own: three items that keep naming the same person are one
@@ -1693,6 +1715,11 @@ class TestDigestFiltering:
 
         body = "Ukraine aid clears the Senate • Powell signals a pause • Texas sues"
         assert len(_split_body_items(body)) == 3
+
+    def test_empty_input_short_circuits(self):
+        from app.pipeline.analyze.action_center import _filter_policy_relevant
+
+        assert _filter_policy_relevant([]) == []
 
     def test_digests_are_dropped_before_embedding_and_counted(self):
         from app.pipeline.analyze import action_metrics
