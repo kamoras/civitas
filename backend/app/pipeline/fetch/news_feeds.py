@@ -11,10 +11,12 @@ so the system degrades gracefully if a feed goes down.
 """
 
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
+from html import unescape
 
 from xml.etree.ElementTree import Element
 
@@ -26,6 +28,10 @@ logger = logging.getLogger(__name__)
 
 FEED_TIMEOUT = 15.0
 MAX_ARTICLE_AGE_HOURS = 48
+# Descriptions are capped here, which routinely cuts mid-sentence. Consumers
+# that reason about a description's STRUCTURE need to know the cap to tell a
+# body that ended from one that was cut (see action_center._split_body_items).
+MAX_SUMMARY_CHARS = 500
 
 
 @dataclass
@@ -114,6 +120,44 @@ def _extract_text(el: Element | None) -> str:
     return (el.text or "").strip()
 
 
+# Block-level markup carries an item boundary the plain text does not: a
+# WordPress feed's <li> or </p> is where one thought ends, and dropping it
+# silently welds two sentences together. Mapped to "; " so the boundary
+# survives as punctuation.
+_HTML_BLOCK_RE = re.compile(
+    r"<br\s*/?>|</?(?:p|div|li|ul|ol|h[1-6]|blockquote)\b[^>]*>",
+    re.IGNORECASE,
+)
+_HTML_TAG_RE = re.compile(r"<[^>]*>")
+_HTML_SEPARATOR_RUN_RE = re.compile(r"(?:\s*;\s*)+")
+
+
+def _strip_html(raw: str) -> str:
+    """Plain text from a feed description that arrived as HTML.
+
+    Several feeds here are WordPress-backed (Roll Call, The Hill) and put
+    real markup in <description> — paragraph tags, tracking pixels, an
+    <img> lead. Left in, that markup reaches three places that all read the
+    description as prose: the policy-relevance embedding (which scores
+    ``title. summary[:200]`` — for an image-led item that budget is spent
+    entirely on markup), the LLM prompt for issue generation, and the
+    digest detector's entity extraction, where a filename like
+    "Trump-Rally.jpg" reads as a named entity that appears in no other
+    sentence. Tags are removed rather than escaped because none of those
+    three consumers renders HTML.
+    """
+    if "<" not in raw and "&" not in raw:
+        return raw
+    text = _HTML_BLOCK_RE.sub("; ", raw)
+    text = _HTML_TAG_RE.sub("", text)
+    text = unescape(text)
+    text = " ".join(text.split())
+    # "</p><p>" collapsed to ";  ;" above, and a leading/trailing block tag
+    # leaves a dangling separator.
+    text = _HTML_SEPARATOR_RUN_RE.sub("; ", text)
+    return text.strip(" ;")
+
+
 def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
     """Parse RSS 2.0 / Atom XML into NewsArticle objects."""
     articles: list[NewsArticle] = []
@@ -143,7 +187,7 @@ def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
             title=title,
             url=link,
             source_name=source_name,
-            summary=desc[:500] if desc else "",
+            summary=_strip_html(desc)[:MAX_SUMMARY_CHARS] if desc else "",
             published=pub_date,
             categories=categories,
         ))
@@ -164,7 +208,7 @@ def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
             title=title,
             url=link,
             source_name=source_name,
-            summary=desc[:500] if desc else "",
+            summary=_strip_html(desc)[:MAX_SUMMARY_CHARS] if desc else "",
             published=pub_date,
         ))
 

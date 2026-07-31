@@ -1,8 +1,15 @@
-"""Tests for news feed pubDate parsing (timezone robustness)."""
+"""Tests for news feed parsing: pubDate timezone robustness and the
+HTML stripping applied to feed descriptions."""
 
 from datetime import timezone
+from xml.sax.saxutils import escape
 
-from app.pipeline.fetch.news_feeds import _parse_pub_date
+from app.pipeline.fetch.news_feeds import (
+    MAX_SUMMARY_CHARS,
+    _parse_pub_date,
+    _parse_rss_feed,
+    _strip_html,
+)
 
 
 class TestParsePubDate:
@@ -28,3 +35,55 @@ class TestParsePubDate:
         assert _parse_pub_date("not a date") is None
         assert _parse_pub_date(None) is None
         assert _parse_pub_date("") is None
+
+
+class TestStripHtml:
+    """WordPress-backed feeds (Roll Call, The Hill) put real markup in
+    <description>. It reached three consumers that all read the description
+    as prose: the policy-relevance embedding (which scores only the first
+    200 characters — for an image-led item, entirely markup), the LLM prompt
+    for issue generation, and the digest detector's entity extraction."""
+
+    def test_tags_are_removed(self):
+        assert _strip_html("<p>The House passed the bill.</p>") == "The House passed the bill."
+
+    def test_image_filename_is_not_left_behind_as_an_entity(self):
+        """An <img> lead is the common WordPress shape, and "Trump-Rally.jpg"
+        reads as a named entity that appears in no other sentence — which is
+        exactly what the digest detector's disjointness test keys on."""
+        raw = (
+            '<img src="https://thehill.com/wp-content/Trump-Rally.jpg"/>'
+            "<p>The Senate voted on Tuesday.</p>"
+        )
+        assert _strip_html(raw) == "The Senate voted on Tuesday."
+
+    def test_block_boundaries_survive_as_punctuation(self):
+        """</p> and <li> are where one thought ends. Dropping them silently
+        welds two sentences into one run-on with no item boundary left for
+        the digest detector to split on."""
+        raw = "<ul><li>Ukraine aid clears</li><li>Powell signals a pause</li></ul>"
+        assert _strip_html(raw) == "Ukraine aid clears; Powell signals a pause"
+
+    def test_entities_are_decoded(self):
+        assert _strip_html("Ways &amp; Means marks up the bill") == "Ways & Means marks up the bill"
+
+    def test_plain_text_is_returned_unchanged(self):
+        text = "The House passed the bill. It now goes to the Senate."
+        assert _strip_html(text) is text
+
+    def test_summary_cap_is_applied_after_stripping(self):
+        """Truncating first spends the budget on markup. The cap has to
+        measure real prose, so the strip runs before the slice."""
+        prose = "Senators debated the measure for hours. " * 30
+        raw = f'<p><img src="https://example.com/a.jpg"/>{prose}</p>'
+        item = _parse_rss_feed(
+            f"""<?xml version="1.0"?><rss><channel><item>
+              <title>Senate debates the measure</title>
+              <link>https://example.com/a</link>
+              <description>{escape(raw)}</description>
+            </item></channel></rss>""".encode(),
+            "Test",
+        )[0]
+        assert len(item.summary) == MAX_SUMMARY_CHARS
+        assert "<" not in item.summary
+        assert item.summary.startswith("Senators debated")

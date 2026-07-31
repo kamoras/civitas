@@ -1541,10 +1541,17 @@ class TestDigestFiltering:
         "Politics chat: Congress returns from recess",
         "5 things to know about the tariff ruling",
         "Daily rundown for July 30",
+        "First up: the Senate vote",
         "NPR News Now newscast",
         "The week in politics: shutdown standoff",
         "Weekly wrap-up of the appropriations fight",
         "Tariffs, the Fed and more:",
+        "Congress this week, in brief",
+        # A source tag ahead of the product name is still the product name.
+        "NPR: Morning briefing",
+        # Feeds emit the typographic apostrophe far more often than the
+        # ASCII one; matching only the ASCII spelling missed this entirely.
+        "Today\u2019s headlines from the Capitol",
     ])
     def test_recurring_digest_titles_are_dropped(self, title):
         from app.pipeline.analyze.action_center import _digest_reason
@@ -1554,10 +1561,22 @@ class TestDigestFiltering:
     @pytest.mark.parametrize("title", [
         "House approves Pentagon funding framework in narrow vote",
         "Israel and Hamas reach agreement on hostage release",
+        # Product names collide with real reporting mid-headline, so they
+        # only count title-initial. All three published as ordinary
+        # single-story headlines and were dropped before this was split out.
+        "White House news briefing on the Gaza strikes",
+        "Trump skipped the President's Daily Brief for a week, officials say",
+        "Pentagon holds evening briefing on troop levels",
+        "The building blew up first, then the roof collapsed",
+        # A hyphenated word is not a source tag, so what follows it is not
+        # title-initial either.
+        "Wrap-up first look at the budget request",
         # "in brief" / "and more" are digest markers only as a trailing tag;
-        # mid-sentence they are ordinary prose.
+        # mid-sentence they are ordinary prose, and an unspaced dash is a
+        # compound adjective rather than the tag boundary.
         "Senator Collins spoke in brief remarks after the vote",
         "Flooding kills 20 and more than 100 are missing in Texas",
+        "Senate passes trade bill and more-restrictive tariff rules",
         # Single-topic forms deliberately left out of the pattern: an
         # explainer and a live blog each cover ONE event.
         "What to know about the new tariff rules",
@@ -1569,48 +1588,111 @@ class TestDigestFiltering:
 
         assert _digest_reason(_make_article(title)) is None
 
-    @pytest.mark.parametrize("body", [
+    @pytest.mark.parametrize("title,body", [
         # Sentence-delimited: the shape of an NPR "Up First" body.
-        "Israel and Hamas agreed to a ceasefire framework. The Federal "
-        "Reserve held interest rates steady. Wildfires forced evacuations "
-        "across Oregon.",
+        ("Your Wednesday roundup",
+         "Israel and Hamas agreed to a ceasefire framework. The Federal "
+         "Reserve held interest rates steady. Wildfires forced evacuations "
+         "across Oregon."),
         # Semicolons and bullets: after these, a capitalized first word is a
-        # real name rather than grammar, and must not be stripped.
-        "Netanyahu addressed the Knesset; Powell defended the rate decision; "
-        "Newsom declared a state of emergency.",
-        "Ukraine aid clears the Senate • Powell signals a pause • Texas sues "
-        "over the new map",
+        # real name rather than grammar, and must not be stripped. Both
+        # cases read as a single two-item blurb if it is.
+        ("Wednesday",
+         "Netanyahu addressed the Knesset; Powell defended the rate "
+         "decision; Newsom declared a state of emergency."),
+        ("The day ahead",
+         "Ukraine aid clears the Senate • Powell signals a pause • Texas "
+         "sues over the new map"),
     ])
-    def test_bodies_listing_unrelated_stories_are_dropped(self, body):
+    def test_bodies_listing_unrelated_stories_are_dropped(self, title, body):
         from app.pipeline.analyze.action_center import _digest_reason
 
-        article = _make_article("An unremarkable headline")
+        article = _make_article(title)
         article.summary = body
         assert _digest_reason(article) == "body lists unrelated stories"
 
-    @pytest.mark.parametrize("body", [
+    @pytest.mark.parametrize("title,body", [
         # A single story keeps returning to its own subject.
-        "Israel and Hamas reached a deal on Tuesday. The agreement calls for "
-        "a phased withdrawal. Hamas said it would release hostages.",
-        "The Senate voted 51-49 to confirm Jane Doe. Doe will lead the FDA. "
-        "Trump praised the outcome.",
+        ("Israel and Hamas reach ceasefire deal",
+         "Israel and Hamas reached a deal on Tuesday. The agreement calls "
+         "for a phased withdrawal. Hamas said it would release hostages."),
+        ("Senate confirms Jane Doe to lead FDA",
+         "The Senate voted 51-49 to confirm Jane Doe. Doe will lead the "
+         "FDA. Trump praised the outcome."),
         # Sentence-initial capitals are grammar, not names — without the
         # forced-capital strip each of these sentences would look like it
         # introduced a different entity and the blurb would read as a list.
-        "Prosecutors filed the charges Monday. Defense attorneys called the "
-        "case weak. Sentencing is set for October.",
+        ("Judge sets October sentencing in fraud case",
+         "Prosecutors filed the charges Monday. Defense attorneys called "
+         "the case weak. Sentencing is set for October."),
+        # Three sentences, three disjoint entity sets, ONE story — caught
+        # only by the title-coverage condition, since the headline accounts
+        # for all three items.
+        ("Grassley releases FBI transcript in Judiciary probe",
+         "Sen. Chuck Grassley released the transcript Thursday. The FBI "
+         "declined to comment. House Judiciary Democrats called for "
+         "hearings."),
         # Bare numbers are not topics.
-        "The vote was 216-212. It came after 3 hours. Final passage is "
-        "expected by 5 p.m.",
-        "The House passed the bill. It now goes to the Senate.",
-        "",
+        ("House clears the funding bill",
+         "The vote was 216-212. It came after 3 hours. Final passage is "
+         "expected by 5 p.m."),
+        ("House sends the bill to the Senate",
+         "The House passed the bill. It now goes to the Senate."),
+        ("Nothing here", ""),
     ])
-    def test_single_story_bodies_are_kept(self, body):
+    def test_single_story_bodies_are_kept(self, title, body):
         from app.pipeline.analyze.action_center import _digest_reason
 
-        article = _make_article("An unremarkable headline")
+        article = _make_article(title)
         article.summary = body
         assert _digest_reason(article) is None
+
+    def test_items_sharing_an_entity_are_not_a_list(self):
+        """Disjointness is the first of the two conditions and has to reject
+        on its own: three items that keep naming the same person are one
+        story told in three beats, whatever the headline says."""
+        from app.pipeline.analyze.action_center import _multi_topic_body
+
+        body = (
+            "Reporters pressed Netanyahu on the deal; Powell defended the "
+            "rate decision; Netanyahu answered again hours later."
+        )
+        assert _multi_topic_body(body, "A quiet Tuesday") is False
+        # Same shape with the repeated name swapped out IS a list — the
+        # only difference between the two is the shared entity.
+        disjoint = body.replace("Netanyahu answered again", "Newsom spoke again")
+        assert _multi_topic_body(disjoint, "A quiet Tuesday") is True
+
+    def test_body_cut_at_the_summary_cap_does_not_invent_an_item(self):
+        """A description that hit MAX_SUMMARY_CHARS was cut mid-item. The
+        fragment names entities that by construction appear nowhere else,
+        so counting it turns a two-item blurb into a three-item list."""
+        from app.pipeline.analyze.action_center import _multi_topic_body
+        from app.pipeline.fetch.news_feeds import MAX_SUMMARY_CHARS
+
+        head = (
+            "Israel and Hamas agreed to a ceasefire framework. Wildfires "
+            "forced evacuations across Oregon. "
+        )
+        filler = "The framework runs to many pages of annexes and phased steps. "
+        prefix = (head + filler * 10)[:MAX_SUMMARY_CHARS - 22].rstrip()
+        body = (prefix + " Mediators from Qatar met in Cairo overnight")[:MAX_SUMMARY_CHARS]
+
+        assert len(body) == MAX_SUMMARY_CHARS
+        # Same text one character under the cap is NOT treated as cut, and
+        # the trailing fragment does read as a third topic — which is what
+        # makes the cap check load-bearing rather than cosmetic.
+        assert _multi_topic_body(body[:MAX_SUMMARY_CHARS - 1], "A quiet Tuesday") is True
+        assert _multi_topic_body(body, "A quiet Tuesday") is False
+
+    def test_bulleted_body_without_terminal_punctuation_is_still_analyzed(self):
+        """Trailing punctuation was the original truncation signal and it
+        discarded the final item of every list that ends without a period —
+        which is most bulleted lists."""
+        from app.pipeline.analyze.action_center import _split_body_items
+
+        body = "Ukraine aid clears the Senate • Powell signals a pause • Texas sues"
+        assert len(_split_body_items(body)) == 3
 
     def test_digests_are_dropped_before_embedding_and_counted(self):
         from app.pipeline.analyze import action_metrics
