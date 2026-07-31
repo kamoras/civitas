@@ -1,15 +1,27 @@
 """Tests for news feed parsing: pubDate timezone robustness and the
 HTML stripping applied to feed descriptions."""
 
-from datetime import timezone
+import logging
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 from xml.sax.saxutils import escape
 
 from app.pipeline.fetch.news_feeds import (
+    MAX_ARTICLE_AGE_HOURS,
     MAX_SUMMARY_CHARS,
+    _extract_body_text,
     _parse_pub_date,
     _parse_rss_feed,
     _strip_html,
+    fetch_news_articles,
 )
+
+
+def _recent_iso(hours_ago: float) -> str:
+    """An ISO timestamp relative to now — the parser drops anything older
+    than MAX_ARTICLE_AGE_HOURS, so fixtures cannot use a fixed date."""
+    stamp = datetime.now(timezone.utc) - timedelta(hours=hours_ago)
+    return stamp.replace(microsecond=0).isoformat()
 
 
 class TestParsePubDate:
@@ -124,6 +136,64 @@ class TestStripHtml:
         assert entry.url == "https://example.com/b"
         assert entry.summary == "The House voted Wednesday."
 
+    def test_atom_xhtml_content_is_not_lost(self):
+        """<content type="xhtml"> holds real child elements, so .text is
+        empty — the same title-and-nothing-else outcome the truthiness trap
+        produced, and just as silent."""
+        entry = _parse_rss_feed(
+            """<?xml version="1.0"?>
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry>
+                <title>Committee advances the nomination</title>
+                <link href="https://example.com/c"/>
+                <content type="xhtml">
+                  <div xmlns="http://www.w3.org/1999/xhtml">
+                    <p>The committee voted Thursday.</p>
+                  </div>
+                </content>
+              </entry>
+            </feed>""".encode(),
+            "Test",
+        )[0]
+        assert entry.summary == "The committee voted Thursday."
+
+    def test_atom_prefers_published_over_updated(self):
+        """<updated> is when the entry was last touched; <published> is when
+        the story ran. Reading <updated> alone made a lightly-edited old
+        story look fresh."""
+        entry = _parse_rss_feed(
+            f"""<?xml version="1.0"?>
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry>
+                <title>Senate returns from recess</title>
+                <link href="https://example.com/d"/>
+                <summary>The Senate reconvened.</summary>
+                <published>{_recent_iso(hours_ago=3)}</published>
+                <updated>{_recent_iso(hours_ago=1)}</updated>
+              </entry>
+            </feed>""".encode(),
+            "Test",
+        )[0]
+        assert entry.published == datetime.fromisoformat(_recent_iso(hours_ago=3))
+
+    def test_atom_entry_with_only_published_is_still_dated(self):
+        """Many feeds emit <published> alone. Left undated, an entry skips
+        the MAX_ARTICLE_AGE_HOURS cutoff entirely and sorts last."""
+        stale = _recent_iso(hours_ago=MAX_ARTICLE_AGE_HOURS + 24)
+        entries = _parse_rss_feed(
+            f"""<?xml version="1.0"?>
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry>
+                <title>An article from last week</title>
+                <link href="https://example.com/e"/>
+                <summary>Old news.</summary>
+                <published>{stale}</published>
+              </entry>
+            </feed>""".encode(),
+            "Test",
+        )
+        assert entries == []
+
     def test_summary_cap_is_applied_after_stripping(self):
         """Truncating first spends the budget on markup. The cap has to
         measure real prose, so the strip runs before the slice."""
@@ -140,3 +210,63 @@ class TestStripHtml:
         assert len(item.summary) == MAX_SUMMARY_CHARS
         assert "<" not in item.summary
         assert item.summary.startswith("Senators debated")
+
+
+def _feed_response(xml: bytes) -> MagicMock:
+    resp = MagicMock()
+    resp.content = xml
+    resp.raise_for_status = MagicMock()
+    return resp
+
+
+def _rss(*items: str) -> bytes:
+    body = "".join(items)
+    return f'<?xml version="1.0"?><rss><channel>{body}</channel></rss>'.encode()
+
+
+def _item(title: str, link: str, desc: str | None = None) -> str:
+    body = f"<description>{desc}</description>" if desc is not None else ""
+    return f"<item><title>{title}</title><link>{link}</link>{body}</item>"
+
+
+class TestMissingDescriptionIsAudible:
+    """The Atom truthiness bug survived because its failure mode was
+    invisible: the articles still existed, still clustered, still reached
+    the LLM prompt — with a headline and nothing else. A feed whose items
+    ALL arrive body-less is the signature of that class of parse mismatch,
+    so it gets a warning of its own rather than a silent degradation."""
+
+    def test_body_text_of_a_missing_element_is_empty(self):
+        assert _extract_body_text(None) == ""
+
+    def test_feed_with_no_descriptions_at_all_warns(self, caplog):
+        feed = _rss(
+            _item("Senate passes the bill", "https://example.com/a"),
+            _item("House takes it up", "https://example.com/b"),
+        )
+        with patch(
+            "app.pipeline.fetch.news_feeds.httpx.get",
+            return_value=_feed_response(feed),
+        ), caplog.at_level(logging.INFO):
+            articles = fetch_news_articles([{"name": "Test", "url": "https://x/f"}])
+
+        assert len(articles) == 2
+        assert "2 without a description" in caplog.text
+        assert "probably not being read" in caplog.text
+
+    def test_feed_with_some_descriptions_counts_but_does_not_warn(self, caplog):
+        feed = _rss(
+            _item("Senate passes the bill", "https://example.com/a", "It cleared 60-40."),
+            _item("House takes it up", "https://example.com/b"),
+        )
+        with patch(
+            "app.pipeline.fetch.news_feeds.httpx.get",
+            return_value=_feed_response(feed),
+        ), caplog.at_level(logging.INFO):
+            articles = fetch_news_articles([{"name": "Test", "url": "https://x/f"}])
+
+        assert len(articles) == 2
+        assert "1 without a description" in caplog.text
+        # A partly-bodyless feed is normal; only an all-or-nothing feed is
+        # evidence of a parse mismatch.
+        assert "probably not being read" not in caplog.text

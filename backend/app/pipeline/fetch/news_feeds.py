@@ -120,6 +120,22 @@ def _extract_text(el: Element | None) -> str:
     return (el.text or "").strip()
 
 
+def _extract_body_text(el: Element | None) -> str:
+    """Extract an element's full text, including any nested markup's.
+
+    .text stops at the first child element, which is empty for Atom's
+    <content type="xhtml">: there the body is real child elements rather
+    than escaped text. That produced the same invisible failure the
+    truthiness trap did — an article with a title and no description,
+    silently — so descriptions read their text this way. For RSS, where
+    the description is CDATA or escaped HTML and therefore childless, this
+    is identical to .text.
+    """
+    if el is None:
+        return ""
+    return "".join(el.itertext()).strip()
+
+
 # Block-level markup carries an item boundary the plain text does not: a
 # WordPress feed's <li> or </p> is where one thought ends, and dropping it
 # silently welds two sentences together. Mapped to "; " so the boundary
@@ -181,7 +197,7 @@ def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
     for item in root.iter("item"):
         title = _extract_text(item.find("title"))
         link = _extract_text(item.find("link"))
-        desc = _extract_text(item.find("description"))
+        desc = _extract_body_text(item.find("description"))
         pub_date = _parse_pub_date(_extract_text(item.find("pubDate")))
         categories = [_extract_text(c) for c in item.findall("category") if _extract_text(c)]
 
@@ -218,8 +234,18 @@ def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
         summary_el = entry.find("atom:summary", ns)
         if summary_el is None:
             summary_el = entry.find("atom:content", ns)
-        desc = _extract_text(summary_el)
-        pub_date = _parse_pub_date(_extract_text(entry.find("atom:updated", ns)))
+        desc = _extract_body_text(summary_el)
+        # <published> is when the story ran; <updated> is when the entry was
+        # last touched. Reading <updated> alone made a lightly-edited old
+        # story look fresh, and left pub_date None for the many feeds that
+        # emit only <published> — which silently exempts the entry from the
+        # MAX_ARTICLE_AGE_HOURS cutoff below and sorts it last. (This `or`
+        # is between two strings, not two find() results — see the note on
+        # the truthiness trap above.)
+        pub_date = _parse_pub_date(
+            _extract_text(entry.find("atom:published", ns))
+            or _extract_text(entry.find("atom:updated", ns))
+        )
         if not title or not link:
             continue
         if pub_date and pub_date < cutoff:
@@ -256,7 +282,23 @@ def fetch_news_articles(
             resp.raise_for_status()
             articles = _parse_rss_feed(resp.content, name)
             elapsed = time.perf_counter() - t0
-            logger.info("Fetched %d articles from %s (%.1fs)", len(articles), name, elapsed)
+            # Count empty descriptions, don't just fetch. A feed whose
+            # articles all arrive body-less is the signature of a parse
+            # mismatch, and it is otherwise completely silent: the articles
+            # still exist, still cluster, still reach the LLM prompt — with
+            # a headline and nothing else. That is exactly how the Atom
+            # truthiness bug survived, so it gets a log line of its own.
+            blank = sum(1 for a in articles if not a.summary)
+            logger.info(
+                "Fetched %d articles from %s (%.1fs, %d without a description)",
+                len(articles), name, elapsed, blank,
+            )
+            if articles and blank == len(articles):
+                logger.warning(
+                    "Every article from %s came back with no description — "
+                    "the feed's body element is probably not being read",
+                    name,
+                )
             all_articles.extend(articles)
         except Exception as e:
             logger.warning("Failed to fetch feed %s: %s", name, e)
