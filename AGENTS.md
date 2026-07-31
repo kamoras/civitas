@@ -477,18 +477,38 @@ related articles, incorporates trending topics from Google Trends and Reddit,
 and uses the LLM to generate non-partisan summaries with recommended citizen
 actions. Results are stored in the `action_issues` table.
 
-Before any of that, **multi-story digests are dropped at ingest**
-(`_digest_reason`) — an outlet's recurring briefing ("Up First", "Morning news
-brief", "The week in politics") is a single RSS item covering three to five
-unrelated stories, and every stage downstream treats it as one story. Two
-signals, both mechanical: a recurring-product title, or a body whose items
-name entirely disjoint sets of entities. This has to happen here because once
-several stories share one article the boundary between them is not recoverable
-later — cluster coherence filtering sees one article, and a per-fact
-topic check does not separate the facts (measured; see
-`ACTION_CENTER_PROMPT_VERSION`). Phrases that also appear on single-topic
-explainers and live blogs ("what to know", "live updates") are deliberately
-left out: the filter drops whole articles, so it is tuned for precision.
+Feed descriptions are **stripped of HTML** as they are parsed
+(`news_feeds._strip_html`): the WordPress-backed feeds put real markup in
+`<description>`, and three consumers read that field as prose — the
+policy-relevance embedding (which sees only the first 200 characters, all of
+it markup for an image-led item), the LLM prompt, and the digest detector
+below. Block tags become `"; "` so item boundaries survive, and the
+500-character cap measures prose rather than tags.
+
+Then **multi-story digests are dropped at ingest** (`_digest_reason`) — an
+outlet's recurring briefing ("Up First", "Morning news brief", "The week in
+politics") is a single RSS item covering three to five unrelated stories, and
+every stage downstream treats it as one story. Two mechanical signals:
+
+- **A recurring-product title.** Matching is split by where the marker may
+  appear, because most of these phrases are ordinary English somewhere else
+  in a headline: product names count only title-initial ("Pentagon holds
+  evening briefing on troop levels" is one story), "in brief" / "and more"
+  only as a trailing tag, and "news brief" never matches "news briefing".
+- **A body that lists unrelated stories** — its items name pairwise-disjoint
+  entities *and* the headline fails to account for them. Both halves are
+  required: disjointness alone flags any single story whose blurb hands off
+  between actors, and a headline that names its own subject is what tells the
+  two apart. A body cut at the description cap has its trailing fragment
+  discarded first, since a fragment's entities are disjoint by construction.
+
+This has to happen here because once several stories share one article the
+boundary between them is not recoverable later — cluster coherence filtering
+sees one article, and a per-fact topic check does not separate the facts
+(measured; see `ACTION_CENTER_PROMPT_VERSION`). Phrases that also appear on
+single-topic explainers and live blogs ("what to know", "live updates") are
+deliberately left out: the filter drops whole articles, so it is tuned for
+precision. `articles_dropped_digest` is the counter to watch.
 
 After issues are committed, the Action Center pipeline also:
 - **Saves a timeline entry** for each day's #1 issue (permanent record for

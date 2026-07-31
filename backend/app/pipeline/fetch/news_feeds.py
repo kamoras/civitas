@@ -128,7 +128,10 @@ _HTML_BLOCK_RE = re.compile(
     r"<br\s*/?>|</?(?:p|div|li|ul|ol|h[1-6]|blockquote)\b[^>]*>",
     re.IGNORECASE,
 )
-_HTML_TAG_RE = re.compile(r"<[^>]*>")
+# A tag name (or "!" for comments/doctypes) must follow the "<", so a
+# less-than sign used as prose survives: "<[^>]*>" would swallow the middle
+# of "the margin was < 6 > the forecast" as if it were markup.
+_HTML_TAG_RE = re.compile(r"</?[a-zA-Z!][^>]*>")
 _HTML_SEPARATOR_RUN_RE = re.compile(r"(?:\s*;\s*)+")
 
 

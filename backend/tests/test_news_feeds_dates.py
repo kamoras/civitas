@@ -67,6 +67,12 @@ class TestStripHtml:
     def test_entities_are_decoded(self):
         assert _strip_html("Ways &amp; Means marks up the bill") == "Ways & Means marks up the bill"
 
+    def test_comparison_operators_in_prose_are_not_treated_as_tags(self):
+        """A bare "<" is not markup. Matching "<[^>]*>" swallowed the middle
+        of any sentence that used both comparison signs."""
+        text = "Turnout ran < 6 > the 2024 figure, analysts said."
+        assert _strip_html(text) == text
+
     def test_plain_text_is_returned_unchanged(self):
         text = "The House passed the bill. It now goes to the Senate."
         assert _strip_html(text) is text
