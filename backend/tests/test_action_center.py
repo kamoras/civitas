@@ -1523,6 +1523,122 @@ class TestGenerateFullStoryFormerStatusGuard:
         assert "former" in str(calls[1]["user_prompt"]).lower()
 
 
+class TestDigestFiltering:
+    """An outlet's recurring briefing ("Up First", "Morning news brief") is
+    ONE feed item covering several unrelated stories. Left in, it becomes an
+    issue whose summary presents separate events as one narrative — live
+    2026-07 case (issue 483): a Hamas-Israel agreement, a Trump quote, and a
+    slowing US economy joined by a causal "following the announcement" no
+    source stated. These have to be dropped at ingest: once the items are in
+    one article the topic boundary between them is not recoverable
+    downstream (see ACTION_CENTER_PROMPT_VERSION's note on why the
+    per-fact mechanical check does not separate them)."""
+
+    @pytest.mark.parametrize("title", [
+        "Up First briefing: Israel-Hamas deal, a slowing economy and the Court",
+        "Morning news brief",
+        "News Brief: Senate vote, border talks, Fed decision",
+        "Politics chat: Congress returns from recess",
+        "5 things to know about the tariff ruling",
+        "Daily rundown for July 30",
+        "NPR News Now newscast",
+        "The week in politics: shutdown standoff",
+        "Weekly wrap-up of the appropriations fight",
+        "Tariffs, the Fed and more:",
+    ])
+    def test_recurring_digest_titles_are_dropped(self, title):
+        from app.pipeline.analyze.action_center import _digest_reason
+
+        assert _digest_reason(_make_article(title)) == "recurring digest title"
+
+    @pytest.mark.parametrize("title", [
+        "House approves Pentagon funding framework in narrow vote",
+        "Israel and Hamas reach agreement on hostage release",
+        # "in brief" / "and more" are digest markers only as a trailing tag;
+        # mid-sentence they are ordinary prose.
+        "Senator Collins spoke in brief remarks after the vote",
+        "Flooding kills 20 and more than 100 are missing in Texas",
+        # Single-topic forms deliberately left out of the pattern: an
+        # explainer and a live blog each cover ONE event.
+        "What to know about the new tariff rules",
+        "Israel-Hamas war live updates: talks resume in Cairo",
+        "The latest: FEMA administrator resigns",
+    ])
+    def test_single_story_titles_are_kept(self, title):
+        from app.pipeline.analyze.action_center import _digest_reason
+
+        assert _digest_reason(_make_article(title)) is None
+
+    @pytest.mark.parametrize("body", [
+        # Sentence-delimited: the shape of an NPR "Up First" body.
+        "Israel and Hamas agreed to a ceasefire framework. The Federal "
+        "Reserve held interest rates steady. Wildfires forced evacuations "
+        "across Oregon.",
+        # Semicolons and bullets: after these, a capitalized first word is a
+        # real name rather than grammar, and must not be stripped.
+        "Netanyahu addressed the Knesset; Powell defended the rate decision; "
+        "Newsom declared a state of emergency.",
+        "Ukraine aid clears the Senate • Powell signals a pause • Texas sues "
+        "over the new map",
+    ])
+    def test_bodies_listing_unrelated_stories_are_dropped(self, body):
+        from app.pipeline.analyze.action_center import _digest_reason
+
+        article = _make_article("An unremarkable headline")
+        article.summary = body
+        assert _digest_reason(article) == "body lists unrelated stories"
+
+    @pytest.mark.parametrize("body", [
+        # A single story keeps returning to its own subject.
+        "Israel and Hamas reached a deal on Tuesday. The agreement calls for "
+        "a phased withdrawal. Hamas said it would release hostages.",
+        "The Senate voted 51-49 to confirm Jane Doe. Doe will lead the FDA. "
+        "Trump praised the outcome.",
+        # Sentence-initial capitals are grammar, not names — without the
+        # forced-capital strip each of these sentences would look like it
+        # introduced a different entity and the blurb would read as a list.
+        "Prosecutors filed the charges Monday. Defense attorneys called the "
+        "case weak. Sentencing is set for October.",
+        # Bare numbers are not topics.
+        "The vote was 216-212. It came after 3 hours. Final passage is "
+        "expected by 5 p.m.",
+        "The House passed the bill. It now goes to the Senate.",
+        "",
+    ])
+    def test_single_story_bodies_are_kept(self, body):
+        from app.pipeline.analyze.action_center import _digest_reason
+
+        article = _make_article("An unremarkable headline")
+        article.summary = body
+        assert _digest_reason(article) is None
+
+    def test_digests_are_dropped_before_embedding_and_counted(self):
+        from app.pipeline.analyze import action_metrics
+        from app.pipeline.analyze.action_center import _filter_policy_relevant
+
+        digest = _make_article("Up First briefing: three stories to start your day")
+        story = _make_article("House approves Pentagon funding framework")
+        embedded: list[list[str]] = []
+
+        def fake_embed(texts):
+            embedded.append(list(texts))
+            return np.array([[1.0, 0.0]] * len(texts))
+
+        action_metrics.reset()
+        with patch(
+            "app.pipeline.analyze.action_center._embed_texts_sim",
+            side_effect=fake_embed,
+        ):
+            kept = _filter_policy_relevant([digest, story])
+
+        assert [a.title for a, _ in kept] == [story.title]
+        # The digest never reaches the embedding model at all — the article
+        # batch is the third _embed_texts_sim call (after the two prototype
+        # sets) and contains only the real story.
+        assert not any("Up First" in t for t in embedded[-1])
+        assert action_metrics.snapshot()["articles_dropped_digest"] == 1
+
+
 class TestSimilarityModelGates:
     """2026-07 embedding-swap (step 2): the measured symmetric-similarity
     gates run on the similarity model (see vector_store.

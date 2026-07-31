@@ -582,29 +582,156 @@ def _resolve_url(url: str, timeout: float = 6.0) -> str:
     return url
 
 
-_ROUNDUP_PATTERNS = re.compile(
+# Recurring multi-story products an outlet publishes as ONE feed item. The
+# body of such an item is a list of that day's (or week's) unrelated stories,
+# so everything downstream — clustering, the LLM prompt, the generated
+# summary — treats several separate events as one issue and the summary
+# stitches them into a single narrative, often inventing a causal link
+# between them (live 2026-07 case, issue 483: "A new agreement involving
+# Hamas and Israel has been announced... The U.S. economy saw a slight
+# slowdown following the announcement" — two unrelated NPR items from one
+# briefing, joined by a "following the announcement" no source stated).
+#
+# This started as a weekly-roundup title filter. Daily briefings are the
+# same shape and far more common — NPR runs "Up First" and "Morning news
+# brief" every weekday, and each is a single RSS item covering three to five
+# separate stories. Phrases that also appear on ordinary single-topic
+# explainers ("what to know", "the latest:", "live updates" — a live blog
+# covers one event in many parts, not many events) are deliberately NOT
+# here: this filter drops articles outright, so it is tuned for precision on
+# the recurring-product class rather than for catching every possible digest.
+_DIGEST_TITLE_PATTERNS = re.compile(
     r"\b(week(?:ly)? in (?:politics|review|news)|week(?:'?s)? (?:top |best )?(?:news|stories|headlines)"
     r"|this week in|news of the week|political news this week|what we('re| are) watching"
-    r"|week(?:ly)? (?:wrap-?up|round-?up))\b",
+    r"|week(?:ly)? (?:wrap-?up|round-?up)"
+    r"|up first|first up|news brief|newscast|politics chat"
+    r"|(?:daily|morning|evening|nightly) (?:brief|briefing|digest|rundown|wire|wrap|newsletter)"
+    r"|news round-?up|top stories|today's headlines|headlines:"
+    r"|\d+ things to know|\d+ takeaways"
+    # "in brief" and "and more" are digest markers only as a trailing tag —
+    # unanchored they match ordinary prose ("spoke in brief remarks", "kills
+    # 20 and more than 100 missing").
+    r"|(?:in brief|and more)(?=\s*[:.\-—]|\s*$))",
     re.IGNORECASE,
 )
+
+# Feed descriptions enumerate their items with sentence breaks, semicolons,
+# bullets, or pipes — all four appear in real NPR/AP briefing bodies. The
+# delimiter is captured, not consumed, because it decides whether the item's
+# first word can be trusted as a name (see _split_body_items).
+_DIGEST_ITEM_SPLIT_RE = re.compile(r"((?<=[.!?])\s+|\s*[;•·|]\s*)")
+
+# A digest body must break into at least this many entity-bearing items
+# before disjointness means anything: two sentences that happen not to
+# share a name is ordinary prose ("Israel and Hamas reached a deal.
+# Negotiators met in Cairo."), three or more sharing NOTHING is a list.
+_DIGEST_MIN_ITEMS = 3
+
+
+def _split_body_items(summary: str) -> list[tuple[str, bool]]:
+    """Split a feed description into (item, first_word_is_forced_capital).
+
+    Grammar capitalizes the word that opens a sentence whether or not it
+    names anything, so "Negotiators met in Cairo." looks like it introduces
+    a person. After a semicolon or a bullet nothing is forced, so a
+    capitalized word there really is a name ("Powell defended the cut").
+    Which delimiter preceded an item is the only thing that distinguishes
+    the two, hence the captured-group split.
+    """
+    parts = _DIGEST_ITEM_SPLIT_RE.split(summary or "")
+    delimiters = parts[1::2]
+    # Nothing precedes the first item, so its capital is read from the rest
+    # of the body: in a bulleted or semicolon-separated list the opening item
+    # is a list entry like every other one, and stripping its first word
+    # would throw away the only name it has.
+    first_forced = all(d.strip() == "" for d in delimiters)
+    items: list[tuple[str, bool]] = [(parts[0], first_forced)]
+    for delimiter, item in zip(delimiters, parts[2::2]):
+        items.append((item, delimiter.strip() == ""))
+    return items
+
+
+def _item_entities(item: str, forced_capital: bool) -> set[str]:
+    """Named entities in one item of a feed description.
+
+    Reuses the issue-signature extractor (capitalized tokens and digit
+    groups, minus generic civic vocabulary). Where the first word's capital
+    is forced by grammar it is dropped before extraction — _issue_signature
+    was written for whole titles and fact lists, in which sentence-initial
+    capitalization is a rounding error, and per-item it would otherwise
+    manufacture a distinct "entity" for every sentence, which is exactly the
+    noise the disjointness test below cannot tolerate.
+    """
+    if forced_capital:
+        parts = item.split(None, 1)
+        item = parts[1] if len(parts) > 1 else ""
+    return _issue_signature(item, [])
+
+
+def _multi_topic_body(summary: str) -> bool:
+    """True if ``summary`` reads as a list of separate stories.
+
+    A single story's blurb keeps returning to its own subject, so its
+    sentences share entities. A briefing's items are about different people
+    in different places and share none. Requiring EVERY pair to be disjoint
+    (not merely most) is what keeps an ordinary multi-sentence blurb — where
+    one sentence usually re-names the subject — out of this branch.
+    """
+    items = [
+        entities
+        for entities in (
+            _item_entities(item, forced)
+            for item, forced in _split_body_items(summary)
+        )
+        # A bare number is not a topic — an item must name something.
+        if any(not token[0].isdigit() for token in entities)
+    ]
+    if len(items) < _DIGEST_MIN_ITEMS:
+        return False
+    return all(
+        not (a & b)
+        for i, a in enumerate(items)
+        for b in items[i + 1:]
+    )
+
+
+def _digest_reason(article: NewsArticle) -> str | None:
+    """Why ``article`` is a multi-story digest, or None if it is one story."""
+    if _DIGEST_TITLE_PATTERNS.search(article.title):
+        return "recurring digest title"
+    if _multi_topic_body(article.summary):
+        return "body lists unrelated stories"
+    return None
 
 
 def _filter_policy_relevant(
     articles: list[NewsArticle],
 ) -> list[tuple[NewsArticle, np.ndarray]]:
-    """Keep only articles about US policy/legislation; drop roundup articles."""
+    """Keep only articles about US policy/legislation; drop digest articles."""
     if not articles:
         return []
 
-    # Drop weekly-roundup/digest articles before embedding — they cover multiple
-    # unrelated topics and contaminate cluster centroids, producing catch-all issues.
+    # Drop multi-story digest articles before embedding — they cover several
+    # unrelated topics and contaminate cluster centroids, producing catch-all
+    # issues whose summary presents separate events as one story.
     specific = []
     for a in articles:
-        if _ROUNDUP_PATTERNS.search(a.title):
-            logger.debug("Filtered roundup article: %s", a.title[:80])
+        reason = _digest_reason(a)
+        if reason:
+            logger.debug("Filtered digest article (%s): %s", reason, a.title[:80])
         else:
             specific.append(a)
+
+    n_digests = len(articles) - len(specific)
+    if n_digests:
+        # Counted, not just logged: this filter drops whole articles, so
+        # "is it over-firing?" needs a number that survives a deploy (see
+        # action_metrics' module docstring). Incremented before the
+        # everything-was-a-digest early return, which is precisely the run
+        # the counter has to explain.
+        from app.pipeline.analyze import action_metrics
+
+        action_metrics.increment("articles_dropped_digest", n_digests)
 
     if not specific:
         return []
@@ -633,9 +760,9 @@ def _filter_policy_relevant(
     n_penalized = int(np.sum(us_civic_scores < 0.15))
     logger.info(
         "Policy relevance filter: %d/%d articles passed "
-        "(%d roundups dropped, %d low-US-civic penalized, threshold=%.2f)",
+        "(%d digests dropped, %d low-US-civic penalized, threshold=%.2f)",
         len(relevant), len(articles),
-        len(articles) - len(specific), n_penalized, POLICY_RELEVANCE_THRESHOLD,
+        n_digests, n_penalized, POLICY_RELEVANCE_THRESHOLD,
     )
     return relevant
 

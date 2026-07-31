@@ -477,6 +477,19 @@ related articles, incorporates trending topics from Google Trends and Reddit,
 and uses the LLM to generate non-partisan summaries with recommended citizen
 actions. Results are stored in the `action_issues` table.
 
+Before any of that, **multi-story digests are dropped at ingest**
+(`_digest_reason`) — an outlet's recurring briefing ("Up First", "Morning news
+brief", "The week in politics") is a single RSS item covering three to five
+unrelated stories, and every stage downstream treats it as one story. Two
+signals, both mechanical: a recurring-product title, or a body whose items
+name entirely disjoint sets of entities. This has to happen here because once
+several stories share one article the boundary between them is not recoverable
+later — cluster coherence filtering sees one article, and a per-fact
+topic check does not separate the facts (measured; see
+`ACTION_CENTER_PROMPT_VERSION`). Phrases that also appear on single-topic
+explainers and live blogs ("what to know", "live updates") are deliberately
+left out: the filter drops whole articles, so it is tuned for precision.
+
 After issues are committed, the Action Center pipeline also:
 - **Saves a timeline entry** for each day's #1 issue (permanent record for
   year-in-review tracking, stored in `timeline_entries` table)
