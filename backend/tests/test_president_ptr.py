@@ -102,6 +102,14 @@ class TestIndexParsing:
         nonsense = html.replace("2025-11-14", "2025-13-45")
         assert _parse_index(nonsense, _BASE, "Donald Trump")[0]["filing_date"] is None
 
+    def test_a_malformed_date_does_not_hide_a_real_one_elsewhere_in_the_row(self):
+        html = (
+            '<table><tr><td>Trump, Donald J.</td><td>President</td>'
+            '<td>Periodic Transaction Report</td><td>99/99/9999</td><td>2025-11-14</td>'
+            '<td><a href="https://extapps2.oge.gov/f/ptr-mixed.pdf">D</a></td></tr></table>'
+        )
+        assert _parse_index(html, _BASE, "Donald Trump")[0]["filing_date"] == "2025-11-14"
+
     def test_a_link_pointing_off_the_allowed_hosts_is_not_counted_as_a_filing(self):
         html = (
             '<table><tr><td>Trump, Donald J.</td><td>President</td>'

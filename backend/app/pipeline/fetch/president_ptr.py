@@ -149,7 +149,7 @@ def _filing_id_for(pdf_url: str) -> str:
     identical link doesn't mint a second id and re-ingest the filing.
     """
     path = urlparse(pdf_url).path.rstrip("/")
-    digest = hashlib.sha1(path.encode()).hexdigest()[:12]
+    digest = hashlib.sha256(path.encode()).hexdigest()[:12]
     stem = re.sub(r"\.pdf$", "", path.rsplit("/", 1)[-1], flags=re.I)
     slug = re.sub(r"[^A-Za-z0-9_-]+", "-", stem).strip("-")[:40]
     return f"{slug}-{digest}" if slug else digest
@@ -173,7 +173,10 @@ def _row_date(text: str) -> str | None:
         try:
             return datetime.strptime(raw, "%Y-%m-%d").strftime("%Y-%m-%d")
         except ValueError:
-            return None
+            # Keep looking rather than giving up: a row carrying a
+            # malformed date in one column and a real one in another
+            # should yield the real one.
+            continue
     return None
 
 
