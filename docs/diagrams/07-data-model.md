@@ -81,6 +81,7 @@ erDiagram
     RACES ||--o{ CANDIDATES : "race_id"
     RACES ||--o{ RACE_COVERAGE_ITEMS : "race_id"
     JUSTICES ||--o{ JUSTICE_VOTES : "justice_id"
+    PRESIDENTS ||--o{ PRESIDENT_TRADES : "president_id"
 
     PRESIDENTS {
         int id PK
@@ -96,6 +97,19 @@ erDiagram
         float avg_approval
         float gdp_growth_avg
         int rulemaking_count
+    }
+
+    PRESIDENT_TRADES {
+        int id PK
+        string president_id FK
+        string asset_name "securities and virtual currency alike"
+        string ticker "null for crypto and bond lines"
+        string transaction_type "purchase | sale_full | sale_partial | exchange"
+        date transaction_date
+        date disclosure_date
+        float amount_low "OGE 278-T reports a range, never a single figure"
+        float amount_high "== amount_low encodes the open-ended top bracket"
+        string industry "embedding-classified, same classifier as donors"
     }
 
     JUSTICES {

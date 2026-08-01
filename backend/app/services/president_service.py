@@ -62,13 +62,17 @@ import logging
 
 from sqlalchemy.orm import Session
 
-from app.models import President
+from app.models import President, PresidentTrade
 from app.pipeline.analyze.president_scorer import compute_president_overall_score, dimensions_available
 from app.schemas import (
+    STOCK_ACT_DISCLOSURE_DEADLINE_DAYS,
+    PaginatedStockTradesSchema,
     PresidentialScoreSchema,
     PresidentLeaderboardEntry,
     PresidentSchema,
+    StockTradeSchema,
 )
+from app.services.pagination import paginate_bounds
 
 logger = logging.getLogger(__name__)
 
@@ -218,3 +222,66 @@ def get_president_leaderboard(db: Session) -> list[PresidentLeaderboardEntry]:
     # natural order; a president's own number is more meaningful here).
     entries.sort(key=lambda e: (-e.score.overall, e.number))
     return entries
+
+
+def get_president_trades(
+    db: Session,
+    president_id: str,
+    page: int = 1,
+    per_page: int = 15,
+) -> PaginatedStockTradesSchema | None:
+    """Return paginated OGE Form 278-T transaction disclosures for a president.
+
+    Informational only — not part of the weighted score dimensions, on the
+    same reasoning get_senator_stock_trades documents for Congress (issue
+    #45): disclosure completeness isn't comparable across filers, so scoring
+    it would rank the diligence of a filer's lawyers, not their conduct.
+
+    Reuses StockTradeSchema/PaginatedStockTradesSchema rather than defining a
+    parallel president-shaped pair: 278-T reports the same fields as the
+    congressional PTR and carries the same 45-day statutory deadline, so the
+    schema's derived `late` flag is correct here unchanged.
+
+    Returns rows in disclosed-value ranges with no profit/gain field, because
+    the form has none to report — see models.py PresidentTrade's docstring.
+    """
+    president = db.query(President).filter(President.id == president_id).first()
+    if president is None:
+        return None
+
+    query = db.query(PresidentTrade).filter(PresidentTrade.president_id == president_id)
+    total = query.count()
+    late_count = query.filter(PresidentTrade.days_to_disclose > STOCK_ACT_DISCLOSURE_DEADLINE_DAYS).count()
+    total_pages, page = paginate_bounds(total, page, per_page)
+
+    trades_db = (
+        query.order_by(PresidentTrade.transaction_date.desc(), PresidentTrade.id.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+
+    return PaginatedStockTradesSchema(
+        trades=[
+            StockTradeSchema(
+                ticker=t.ticker,
+                asset_name=t.asset_name,
+                owner=t.owner,
+                transaction_type=t.transaction_type,
+                transaction_date=t.transaction_date,
+                disclosure_date=t.disclosure_date,
+                days_to_disclose=t.days_to_disclose,
+                amount_low=t.amount_low,
+                amount_high=t.amount_high,
+                industry=t.industry,
+                source_url=t.source_url,
+                parse_confidence=t.parse_confidence,
+            )
+            for t in trades_db
+        ],
+        total=total,
+        page=page,
+        per_page=per_page,
+        total_pages=total_pages,
+        late_count=late_count,
+    )

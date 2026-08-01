@@ -595,6 +595,52 @@ class President(Base):
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
 
+    trades: Mapped[list["PresidentTrade"]] = relationship(
+        back_populates="president", cascade="all, delete-orphan"
+    )
+
+
+class PresidentTrade(Base):
+    """One disclosed buy/sell/exchange from a president's OGE Form 278-T
+    periodic transaction report.
+
+    Deliberately the same shape as StockTrade/RepStockTrade: the STOCK Act
+    imposes the same reporting duty on the President as on members of
+    Congress (5 U.S.C. §13103; the executive-branch form is OGE 278-T
+    rather than the House/Senate PTR, but the reported fields — asset,
+    owner, transaction type, transaction date, notification date, amount
+    *range* — are the same), so the same columns, the same 45-day
+    timeliness math, and the same parser in ptr_common.py all apply
+    unchanged.
+
+    What this table deliberately does NOT have is any profit/gain column.
+    278-T reports an amount *bracket* per transaction and no cost basis,
+    share count, or realized gain anywhere on the form, so a P&L figure
+    could only ever be an estimate this platform invented — exactly the
+    class of number president_service.py's docstring documents removing
+    (hand-set values presented as computed ones). Volumes are shown as the
+    disclosed range and nothing is derived from them.
+    """
+    __tablename__ = "president_trades"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    president_id: Mapped[str] = mapped_column(String, ForeignKey("presidents.id", ondelete="CASCADE"), nullable=False, index=True)
+    ticker: Mapped[str | None] = mapped_column(String, nullable=True)  # crypto and bond lines carry none
+    asset_name: Mapped[str] = mapped_column(String, nullable=False)
+    owner: Mapped[str] = mapped_column(String, default="self")  # self | spouse | joint | dependent
+    transaction_type: Mapped[str] = mapped_column(String, nullable=False)  # purchase | sale_full | sale_partial | exchange
+    transaction_date: Mapped[str] = mapped_column(String, nullable=False)
+    disclosure_date: Mapped[str] = mapped_column(String, nullable=False)
+    days_to_disclose: Mapped[int] = mapped_column(Integer, default=0)
+    amount_low: Mapped[float] = mapped_column(Float, default=0.0)
+    amount_high: Mapped[float] = mapped_column(Float, default=0.0)
+    industry: Mapped[str] = mapped_column(String, default="UNCLASSIFIED")
+    source_url: Mapped[str] = mapped_column(String, default="")
+    filing_id: Mapped[str] = mapped_column(String, nullable=False, index=True)  # dedupe key
+    parse_confidence: Mapped[str] = mapped_column(String, default="text")
+
+    president: Mapped["President"] = relationship(back_populates="trades")
+
 
 class Race(Base):
     """A single federal race for a given election cycle (one Senate seat in
@@ -1107,6 +1153,7 @@ class StockTradesPipelineRun(Base):
     status: Mapped[str] = mapped_column(String, default=PipelineStatus.RUNNING)
     house_trades_ingested: Mapped[int] = mapped_column(Integer, default=0)
     senate_trades_ingested: Mapped[int] = mapped_column(Integer, default=0)
+    president_trades_ingested: Mapped[int] = mapped_column(Integer, default=0)
     elapsed_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     progress_detail: Mapped[str | None] = mapped_column(Text, nullable=True)

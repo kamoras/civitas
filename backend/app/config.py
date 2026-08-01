@@ -70,6 +70,7 @@ class Settings(BaseSettings):
     GOVINFO_RPS: float = 1.0
     HOUSE_PTR_RPS: float = 1.0
     SENATE_PTR_RPS: float = 0.5
+    PRESIDENT_PTR_RPS: float = 0.5
     CURRENT_CONGRESS: int = Field(default_factory=_default_current_congress)
     # Bluesky integration (leave BSKY_HANDLE empty to disable)
     BSKY_HANDLE: str = ""

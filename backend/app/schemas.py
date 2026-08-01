@@ -131,15 +131,24 @@ class StockTradeSchema(CamelModel):
     late: bool = False
     amount_low: float
     amount_high: float
+    # True when the filing used the open-ended top bracket ("Over
+    # $50,000,000"), which states a floor and no ceiling. Derived from
+    # amount_high == amount_low, the encoding parse_amount_range uses for
+    # exactly this case — no real bracket on these forms has equal bounds.
+    # Consumers must render these as "$X+", never as a closed range, since
+    # the upper figure is this platform's placeholder and not a disclosed
+    # number.
+    amount_open_ended: bool = False
     industry: str = "UNCLASSIFIED"
     source_url: str
     parse_confidence: Literal["text", "ocr"] = "text"
 
     @model_validator(mode="after")
-    def _compute_late(self) -> "StockTradeSchema":
+    def _compute_derived_flags(self) -> "StockTradeSchema":
         # Derived, not stored — see StockTrade model comment on
         # days_to_disclose for why this isn't a separate DB column.
         self.late = self.days_to_disclose > STOCK_ACT_DISCLOSURE_DEADLINE_DAYS
+        self.amount_open_ended = self.amount_low > 0 and self.amount_high == self.amount_low
         return self
 
 

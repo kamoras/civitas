@@ -130,6 +130,7 @@ Pulls raw data from each government API and stores the complete response verbati
 | BEA | GDP growth by quarter | batch |
 | Federal Register | Executive orders signed per administration | 1.0 RPS |
 | House Clerk / Senate eFD | STOCK Act periodic transaction reports (PDF/HTML, parsed) | 1.0 / 0.5 RPS |
+| OGE | Sitting president's OGE Form 278-T periodic transaction reports — disclosed securities and virtual-currency buys/sells (PDF, parsed) | 0.5 RPS |
 | SEC | Ticker -> company name resolution for trade-industry classification | batch |
 | Voteview | DW-NOMINATE member ideal points (per-congress CSV exports), feeding Constituent Alignment's position-congruence component | batch |
 
