@@ -94,7 +94,7 @@ def get_rep_stock_trades_route(
     result = get_rep_stock_trades(db, rep_id, page, per_page)
     if result is None:
         raise HTTPException(status_code=404, detail="Representative not found")
-    return _cached_json(result, max_age=CACHE_TTL_DETAIL_S)
+    return _cached_json(result.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)
 
 
 @router.get("/representatives/{rep_id}")

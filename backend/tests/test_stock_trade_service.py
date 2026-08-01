@@ -112,7 +112,48 @@ def test_get_rep_stock_trades_pagination(db_session):
     db_session.commit()
 
     result = get_rep_stock_trades(db_session, "R1")
-    assert result["total"] == 1
-    assert result["lateCount"] == 1
-    assert result["trades"][0]["late"] is True
-    assert result["trades"][0]["parseConfidence"] == "ocr"
+    # Schema object, not a hand-built dict — the House serializer used to
+    # be its own copy and had already drifted from the shared one.
+    assert result.total == 1
+    assert result.late_count == 1
+    assert result.trades[0].late is True
+    assert result.trades[0].parse_confidence == "ocr"
+
+
+def test_all_three_chambers_serialize_trades_identically(db_session):
+    """One serializer for senators, reps, and the president. A field added
+    to StockTradeSchema must reach every surface, or the same filing
+    renders differently depending on whose page you are on."""
+    from app.models import President, PresidentTrade, StockTrade
+    from app.services.president_service import get_president_trades
+    from app.services.senator_service import get_senator_stock_trades
+
+    _rep(db_session)
+    db_session.add(Senator(id="S1", name="Sen One", state="CA", party="D"))
+    db_session.add(President(
+        id="p-1", name="Pres One", party="R", number=47,
+        term_start="2025-01-20", is_current=True,
+    ))
+    shared = dict(
+        ticker="MSFT", asset_name="Microsoft Corp.", owner="self",
+        transaction_type="purchase", transaction_date="2026-02-01",
+        disclosure_date="2026-02-10", days_to_disclose=9, amount_low=15001.0,
+        amount_high=50000.0, industry="TECH",
+        source_url="https://example.com/ptr.pdf", filing_id="F9",
+    )
+    db_session.add(RepStockTrade(representative_id="R1", **shared))
+    db_session.add(StockTrade(senator_id="S1", **shared))
+    db_session.add(PresidentTrade(president_id="p-1", **shared))
+    db_session.commit()
+
+    shapes = {
+        frozenset(
+            fetch(db_session, entity_id).model_dump(by_alias=True)["trades"][0].keys()
+        )
+        for fetch, entity_id in (
+            (get_rep_stock_trades, "R1"),
+            (get_senator_stock_trades, "S1"),
+            (get_president_trades, "p-1"),
+        )
+    }
+    assert len(shapes) == 1, "trade payloads diverged between filer groups"
