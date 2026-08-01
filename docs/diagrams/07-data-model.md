@@ -108,7 +108,7 @@ erDiagram
         date transaction_date
         date disclosure_date
         float amount_low "OGE 278-T reports a range, never a single figure"
-        float amount_high "no cost basis on the form, so no gain is derivable"
+        float amount_high "== amount_low encodes the open-ended top bracket"
         string industry "embedding-classified, same classifier as donors"
     }
 

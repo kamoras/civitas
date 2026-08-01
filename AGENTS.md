@@ -531,6 +531,13 @@ No profit or gain figure is derived for any filer, and none can be: every one
 of these forms reports an amount *bracket* per transaction with no cost basis
 or share count. Disclosed ranges are stored and shown as filed.
 
+The top bracket ("Over $50,000,000") states a floor and no ceiling, and is
+stored as `amount_high == amount_low` — a sentinel, not a real upper bound.
+`StockTradeSchema.amount_open_ended` derives from it and every surface renders
+those as `$X+`. All three filer groups serialize through that one schema, so a
+field added there reaches senators, representatives, and the president
+together.
+
 Each senator is processed independently. The pipeline uses `PipelineRun`
 records to track progress and supports resumption.
 
