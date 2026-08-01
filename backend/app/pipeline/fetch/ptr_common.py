@@ -68,6 +68,18 @@ TXN_TYPE_PATTERNS = [
 TICKER_RE = re.compile(r"\(([A-Z]{1,5})\)")
 AMOUNT_RE = re.compile(r"\$?([\d,]+)")
 
+# The highest bracket on every one of these forms is open-ended — printed
+# as "Over $50,000,000", "$50,000,001 +", or "$50,000,001 or more" — so it
+# carries one figure where every other bracket carries two. Form vocabulary,
+# the same documented-data-format exception OWNER_CODES and
+# TXN_TYPE_PATTERNS above already rely on.
+#
+# Until 2026-07-31 a single-figure cell simply failed to parse and the whole
+# row was dropped, so a member's (or the president's) largest disclosed
+# transactions were the ones silently missing from the record — precisely
+# inverted from what a reader would assume a gap meant.
+OPEN_ENDED_AMOUNT_RE = re.compile(r"\bover\b|\bor more\b|\+\s*$", re.I)
+
 
 def normalize_date(raw: str) -> str | None:
     """Parse a M/D/YYYY (or MM/DD/YYYY) date string to ISO YYYY-MM-DD."""
@@ -88,13 +100,24 @@ def classify_transaction_type(text: str) -> str | None:
 
 
 def parse_amount_range(text: str) -> tuple[float, float] | None:
+    """Parse a disclosed amount bracket into (low, high).
+
+    An open-ended top bracket ("Over $50,000,000") returns (low, low) —
+    high == low is this codebase's encoding for "the form disclosed a floor
+    and no ceiling," and is what StockTradeSchema.amount_open_ended keys
+    off. It is deliberately not a fabricated upper bound: no real bracket
+    on any of these forms has equal bounds, so the equality is unambiguous,
+    and every consumer that shows a range shows this one as "$X+" rather
+    than inventing a ceiling the filing never stated.
+    """
     matches = AMOUNT_RE.findall(text or "")
-    if len(matches) < 2:
+    if not matches:
         return None
     try:
         low = float(matches[0].replace(",", ""))
-        high = float(matches[1].replace(",", ""))
-        return (low, high)
+        if len(matches) < 2:
+            return (low, low) if OPEN_ENDED_AMOUNT_RE.search(text or "") else None
+        return (low, float(matches[1].replace(",", "")))
     except ValueError:
         return None
 

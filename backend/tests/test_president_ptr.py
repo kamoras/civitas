@@ -22,8 +22,9 @@ from fastapi import HTTPException
 
 from app.models import President, PresidentTrade
 from app.pipeline.fetch.president_ptr import (
+    _filing_id_for,
+    _names_this_president,
     _parse_index,
-    _surname_matches,
     fetch_and_parse_ptr,
     fetch_ptr_filing_index,
 )
@@ -48,6 +49,16 @@ _SAMPLE_INDEX = """
     <td>Periodic Transaction Report</td><td>09/03/2025</td>
     <td><a href="/201/Presiden.nsf/files/zinberg-278t-090325.pdf">Download</a></td>
   </tr>
+  <tr>
+    <td>Trump, Eric F.</td><td>Advisor</td>
+    <td>Periodic Transaction Report</td><td>07/01/2025</td>
+    <td><a href="/201/Presiden.nsf/files/etrump-278t-070125.pdf">Download</a></td>
+  </tr>
+  <tr>
+    <td>Vance, James D.</td><td>Vice President</td>
+    <td>Periodic Transaction Report</td><td>08/12/2025</td>
+    <td><a href="/201/Presiden.nsf/files/vance-278t-081225.pdf">Download</a></td>
+  </tr>
 </table></body></html>
 """
 
@@ -57,7 +68,7 @@ class TestIndexParsing:
         filings = _parse_index(_SAMPLE_INDEX, _BASE, "Donald Trump")
 
         assert len(filings) == 1
-        assert filings[0]["doc_id"] == "trump-278t-111425"
+        assert filings[0]["doc_id"].startswith("trump-278t-111425-")
         assert filings[0]["filing_date"] == "2025-11-14"
         assert filings[0]["pdf_url"] == (
             "https://extapps2.oge.gov/201/Presiden.nsf/files/trump-278t-111425.pdf"
@@ -77,12 +88,106 @@ class TestIndexParsing:
     def test_a_different_president_matches_nothing_here(self):
         assert _parse_index(_SAMPLE_INDEX, _BASE, "Joseph Biden") == []
 
+    def test_an_iso_dated_row_is_parsed_and_a_nonsense_date_is_not(self):
+        """The ISO branch is a separate code path from the M/D/YYYY one and
+        went untested at first — it referenced a name the module never
+        imported, so any index printing ISO dates would have raised."""
+        html = (
+            '<table><tr><td>Trump, Donald J.</td><td>President</td>'
+            '<td>Periodic Transaction Report</td><td>2025-11-14</td>'
+            '<td><a href="https://extapps2.oge.gov/f/ptr-iso.pdf">D</a></td></tr></table>'
+        )
+        assert _parse_index(html, _BASE, "Donald Trump")[0]["filing_date"] == "2025-11-14"
+
+        nonsense = html.replace("2025-11-14", "2025-13-45")
+        assert _parse_index(nonsense, _BASE, "Donald Trump")[0]["filing_date"] is None
+
+    def test_a_link_pointing_off_the_allowed_hosts_is_not_counted_as_a_filing(self):
+        html = (
+            '<table><tr><td>Trump, Donald J.</td><td>President</td>'
+            '<td>Periodic Transaction Report</td><td>11/14/2025</td>'
+            '<td><a href="https://evil.example.com/ptr.pdf">D</a></td></tr></table>'
+        )
+        assert _parse_index(html, _BASE, "Donald Trump") == []
+
+    def test_a_non_table_layout_does_not_attribute_every_link_to_one_filer(self):
+        """Climbing to a shared ancestor would hand every anchor the same
+        text — one row naming the president would then claim every PDF on
+        the page."""
+        html = (
+            '<div>'
+            '<div><a href="https://extapps2.oge.gov/f/trump-278t.pdf">'
+            'Trump, Donald J. President Periodic Transaction Report</a></div>'
+            '<div><a href="https://extapps2.oge.gov/f/other-278t.pdf">'
+            'Zinberg, Joel Periodic Transaction Report</a></div>'
+            '</div>'
+        )
+        filings = _parse_index(html, _BASE, "Donald Trump")
+        assert len(filings) == 1
+        assert "trump-278t" in filings[0]["pdf_url"]
+
     def test_index_without_the_expected_markup_parses_to_nothing(self):
         assert _parse_index("<html><body>Site under maintenance</body></html>", _BASE, "Donald Trump") == []
 
-    def test_surname_matching_tolerates_the_indexs_lastname_first_format(self):
-        assert _surname_matches("Trump, Donald J. President", "Donald Trump") is True
-        assert _surname_matches("Trumbull, Lyman", "Donald Trump") is False
+    def test_a_relative_sharing_the_surname_is_not_the_president(self):
+        """Presidential relatives hold appointed positions and file their
+        own 278-Ts. Attributing one to the president would be a factual
+        claim about who traded what, not a near miss."""
+        filings = _parse_index(_SAMPLE_INDEX, _BASE, "Donald Trump")
+        assert all("etrump" not in f["pdf_url"] for f in filings)
+
+    def test_the_vice_presidents_filing_is_not_the_presidents(self):
+        filings = _parse_index(_SAMPLE_INDEX, _BASE, "James Vance")
+        # Surname matches and the position cell contains the word
+        # "President" — but "Vice President" is not the office, so only the
+        # given-name match can qualify this row, and here it does.
+        assert len(filings) == 1
+        assert "vance" in filings[0]["pdf_url"]
+
+        # ...and it is never picked up for the president himself.
+        assert all("vance" not in f["pdf_url"] for f in _parse_index(_SAMPLE_INDEX, _BASE, "Donald Trump"))
+
+
+class TestFilerMatching:
+    def test_matches_the_indexs_lastname_first_format(self):
+        assert _names_this_president(["Trump, Donald J.", "President"], "Donald Trump") is True
+
+    def test_a_near_miss_surname_is_not_a_match(self):
+        assert _names_this_president(["Trumbull, Lyman", "Senator"], "Donald Trump") is False
+
+    def test_a_formal_first_name_still_matches_via_the_office_cell(self):
+        """The roster's display name and the index's formal name disagree
+        for several presidents ("Jimmy" vs "James E."). The office cell is
+        what keeps that from rejecting a genuine presidential filing."""
+        assert _names_this_president(["Carter, James E.", "President"], "Jimmy Carter") is True
+
+    def test_the_office_fallback_does_not_accept_vice_president(self):
+        assert _names_this_president(["Carter, James E.", "Vice President"], "Jimmy Carter") is False
+
+    def test_the_office_fallback_does_not_accept_a_staff_title(self):
+        assert _names_this_president(
+            ["Carter, James E.", "Assistant to the President"], "Jimmy Carter"
+        ) is False
+
+    def test_initials_and_suffixes_in_the_roster_name_do_not_block_a_match(self):
+        assert _names_this_president(["Bush, George", "President"], "George H. W. Bush") is True
+
+    def test_an_empty_president_name_matches_nothing(self):
+        assert _names_this_president(["Trump, Donald J.", "President"], "") is False
+
+
+class TestFilingIds:
+    def test_generic_filenames_do_not_collide(self):
+        """A Domino attachment link ends in whatever the filer named the
+        file. Keying on the bare filename collapsed every "download.pdf"
+        into one id and silently dropped whole filings."""
+        a = _filing_id_for("https://extapps2.oge.gov/201/Presiden.nsf/a1b2/$FILE/download.pdf")
+        b = _filing_id_for("https://extapps2.oge.gov/201/Presiden.nsf/c3d4/$FILE/download.pdf")
+        assert a != b
+
+    def test_the_same_filing_keeps_one_id_across_host_and_query_changes(self):
+        base = _filing_id_for("https://extapps2.oge.gov/201/x/$FILE/ptr.pdf")
+        assert _filing_id_for("https://www.oge.gov/201/x/$FILE/ptr.pdf?open=1") == base
 
 
 class TestFetchIndex:
@@ -244,6 +349,20 @@ class TestIngestPresident:
         assert await self._ingest(db_session, self._rows()) == 0
         assert db_session.query(PresidentTrade).count() == 2
 
+    async def test_two_current_rows_resolve_to_the_later_presidency(self, db_session):
+        """A roster mid-transition can briefly carry two is_current rows;
+        an unordered pick would file the trades under whichever one the
+        query happened to return first."""
+        db_session.add(President(
+            id="biden-46", name="Joseph Biden", party="D", number=46,
+            term_start="2021-01-20", is_current=True,
+        ))
+        self._seed_president(db_session)
+
+        await self._ingest(db_session, self._rows())
+
+        assert {t.president_id for t in db_session.query(PresidentTrade).all()} == {"trump-47"}
+
     async def test_no_current_president_row_is_a_no_op(self, db_session):
         assert await self._ingest(db_session, self._rows()) == 0
         assert db_session.query(PresidentTrade).count() == 0
@@ -302,6 +421,33 @@ class TestTradesEndpoint:
         assert not any(
             key in body["trades"][0] for key in ("profit", "gain", "return", "pnl")
         )
+
+    def test_an_open_ended_bracket_is_flagged_and_never_given_a_ceiling(self, db_session):
+        """The form's top bracket discloses a floor and no maximum. The
+        stored high figure is a placeholder, and the API has to say so or a
+        client will render an invented upper bound as a disclosed one."""
+        from app.api import presidents
+
+        self._seed(db_session)
+        db_session.add(PresidentTrade(
+            president_id="trump-47", ticker=None, asset_name="Bitcoin",
+            owner="self", transaction_type="purchase",
+            transaction_date="2025-10-30", disclosure_date="2025-11-14",
+            days_to_disclose=15, amount_low=50000000.0, amount_high=50000000.0,
+            industry="CRYPTO", source_url="https://www.whitehouse.gov/x.pdf",
+            filing_id="f-open",
+        ))
+        db_session.commit()
+
+        body = json.loads(presidents.get_trades("trump-47", 1, 15, db_session).body)
+        assert body["trades"][0]["amountOpenEnded"] is True
+
+    def test_an_ordinary_bracket_is_not_flagged_open_ended(self, db_session):
+        from app.api import presidents
+
+        self._seed(db_session, trades=1)
+        body = json.loads(presidents.get_trades("trump-47", 1, 15, db_session).body)
+        assert body["trades"][0]["amountOpenEnded"] is False
 
     def test_a_president_with_no_filings_returns_an_empty_page_not_a_404(self, db_session):
         from app.api import presidents

@@ -317,7 +317,16 @@ async def _ingest_president(db: Session, client: httpx.AsyncClient) -> int:
     indexes these filings under the office, and president_ptr.py already
     requires the row to name this president before returning it.
     """
-    president = db.query(President).filter(President.is_current == True).first()  # noqa: E712
+    # Ordered, not just .first(): during a transition the roster can briefly
+    # carry two is_current rows, and an unordered pick would attribute the
+    # filings to whichever one the query happened to return — different
+    # answers on different runs. Highest number is the later presidency.
+    president = (
+        db.query(President)
+        .filter(President.is_current == True)  # noqa: E712
+        .order_by(President.number.desc())
+        .first()
+    )
     if president is None:
         logger.info("No current president row — skipping presidential PTR ingestion")
         return 0

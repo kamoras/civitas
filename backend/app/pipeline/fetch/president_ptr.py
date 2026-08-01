@@ -39,6 +39,7 @@ import hashlib
 import logging
 import re
 from dataclasses import asdict
+from datetime import datetime
 from difflib import SequenceMatcher
 from urllib.parse import urljoin, urlparse
 
@@ -84,12 +85,36 @@ _FILING_MAX_AGE_HOURS = 24 * 30
 # is* stays with the embedding classifier (see stock_pipeline.py).
 _PTR_FORM_MARKERS = ("278-t", "278t", "periodic transaction")
 
-# A surname match this close is the same name, not a coincidence — Ratcliff &
+# The annual report (OGE 278e) lists holdings and income in ranges — not
+# transactions. A row identifying as one is skipped even if it also carries
+# a periodic-transaction marker: parsing an annual report's holdings table
+# into the trades table would manufacture buy/sell events that were never
+# disclosed, so an ambiguous row resolves toward ingesting nothing.
+_ANNUAL_FORM_MARKERS = ("278-e", "278e", "annual report")
+
+# A name match this close is the same name, not a coincidence — Ratcliff &
 # Obershelp ratio, the same fuzzy-name technique donor_classifier_ai.py uses
 # for self-funded detection. Deliberately strict: the index lists hundreds of
 # PAS appointees, and ingesting another official's filing under the
 # president's own id would be a factual error, not a near miss.
-_SURNAME_MATCH_THRESHOLD = 0.92
+_NAME_MATCH_THRESHOLD = 0.92
+
+# Initials and "Jr."-style suffixes are dropped before matching: the index
+# and the UCSB roster disagree about them constantly ("Trump, Donald J." vs
+# "Donald Trump"), so requiring them would reject every real row.
+_MIN_NAME_TOKEN_LEN = 3
+
+# Exact cell values that identify the filer as the President. Matched
+# against a whole cell rather than searched for in the row text, which is
+# what keeps "Vice President" and "Assistant to the President" — both real
+# values in this index's position column — from reading as the office.
+# Documented data-format convention, same exception class as the form
+# markers above.
+_OFFICE_CELL_VALUES = {
+    "president",
+    "the president",
+    "president of the united states",
+}
 
 _DATE_PATTERNS = (
     re.compile(r"\b(\d{1,2}/\d{1,2}/\d{2,4})\b"),
@@ -99,27 +124,56 @@ _DATE_PATTERNS = (
 _rate_limiter = RateLimiter(settings.PRESIDENT_PTR_RPS)
 
 
-def _filing_id_for(pdf_url: str) -> str:
-    """Stable dedupe key for one filing.
+def _alert(subject: str, body: str, *, dedupe_key: str) -> None:
+    """Best-effort ops alert — lazily imported and never allowed to raise,
+    the same pattern member_lifecycle.py uses for mid-pipeline alerting."""
+    try:
+        from app.ops_alerts import send_ops_alert
+        send_ops_alert(subject, body, dedupe_key=dedupe_key)
+    except Exception:
+        logger.exception("Failed to send ops alert: %s", subject)
 
-    The filename is the natural key when the index links straight to a PDF;
-    a hash of the full URL is the fallback for Domino-style links whose last
-    path segment isn't unique on its own.
+
+def _filing_id_for(pdf_url: str) -> str:
+    """Stable, collision-free dedupe key for one filing.
+
+    Always carries a digest of the full path, never the bare filename: a
+    Domino attachment link ends in whatever the filer named the file, so
+    generic names ("download.pdf", "attachment.pdf") repeat across
+    documents, and a filename-only key would silently collapse every such
+    filing into the first one ingested — a whole filing's transactions
+    missing, with nothing to indicate it. The readable slug is kept as a
+    prefix so the id still identifies its filing at a glance.
+
+    Keyed on the path alone so a scheme/host/query change on an otherwise
+    identical link doesn't mint a second id and re-ingest the filing.
     """
-    last = urlparse(pdf_url).path.rstrip("/").rsplit("/", 1)[-1]
-    stem = re.sub(r"\.pdf$", "", last, flags=re.I).strip()
-    if len(stem) >= 8:
-        return stem
-    return hashlib.sha1(pdf_url.encode()).hexdigest()[:16]
+    path = urlparse(pdf_url).path.rstrip("/")
+    digest = hashlib.sha1(path.encode()).hexdigest()[:12]
+    stem = re.sub(r"\.pdf$", "", path.rsplit("/", 1)[-1], flags=re.I)
+    slug = re.sub(r"[^A-Za-z0-9_-]+", "-", stem).strip("-")[:40]
+    return f"{slug}-{digest}" if slug else digest
 
 
 def _row_date(text: str) -> str | None:
+    """First real date in a row, ISO-normalized, or None.
+
+    Both branches validate through strptime rather than trusting the shape
+    the regex matched — "2026-13-45" is regex-valid and calendar-nonsense,
+    and this value is stored, not just logged.
+    """
     for pattern in _DATE_PATTERNS:
         match = pattern.search(text)
         if not match:
             continue
         raw = match.group(1)
-        return normalize_date(raw) or (raw if raw.count("-") == 2 else None)
+        normalized = normalize_date(raw)
+        if normalized:
+            return normalized
+        try:
+            return datetime.strptime(raw, "%Y-%m-%d").strftime("%Y-%m-%d")
+        except ValueError:
+            return None
     return None
 
 
@@ -135,29 +189,81 @@ def _node_text(node) -> str:
     return " ".join(t.strip() for t in node.itertext() if t.strip())
 
 
-def _surname_matches(row_text: str, president_name: str) -> bool:
-    """True when the index row names this president.
+def _significant_name_tokens(name: str) -> list[str]:
+    """Name tokens worth matching on — initials and suffixes dropped."""
+    return [t for t in re.findall(r"[A-Za-z]+", (name or "").lower()) if len(t) >= _MIN_NAME_TOKEN_LEN]
 
-    Compares the president's surname against every token in the row rather
-    than substring-matching the full display name: the index prints filers
-    as "Trump, Donald J." while the roster stores "Donald Trump", so a
-    substring test on either form fails on the other.
+
+def _names_the_office(cells: list[str]) -> bool:
+    """True when one of the row's cells is exactly the President's office."""
+    return any(cell.strip().lower().strip(".") in _OFFICE_CELL_VALUES for cell in cells)
+
+
+def _names_this_president(cells: list[str], president_name: str) -> bool:
+    """True when this index row is a filing by this president.
+
+    Surname alone is not enough. The index lists hundreds of appointees and
+    presidential relatives have held appointed positions — matching on
+    surname would have filed Eric Trump's or Melania Trump's disclosures
+    under the president's own id, which is a factual error about who traded
+    what, not a near miss. So a row qualifies only when the given name(s)
+    also match, or when the row's position cell is exactly the office.
+
+    The office fallback is what keeps a roster/index first-name mismatch
+    ("Jimmy Carter" in the roster, "Carter, James E." in the index) from
+    rejecting a genuine presidential filing — and because it tests a whole
+    cell for the exact office, "Vice President" and "Assistant to the
+    President" don't satisfy it.
     """
-    surname = (president_name or "").strip().split()[-1:] or [""]
-    target = surname[0].lower()
-    if len(target) < 3:
+    tokens = _significant_name_tokens(president_name)
+    if not tokens:
         return False
-    # Known limit: another PAS filer who shares the president's surname
-    # would match too. Nothing else in the row is reliable enough to
-    # disambiguate on (the position column's wording isn't guaranteed), and
-    # the alternative — matching the full "Last, First M." string — fails
-    # outright whenever the index's name formatting differs at all, which
-    # is the far more likely failure. Worth revisiting once the live page's
-    # actual columns are confirmed.
-    for token in re.findall(r"[A-Za-z]+", row_text.lower()):
-        if SequenceMatcher(None, target, token).ratio() >= _SURNAME_MATCH_THRESHOLD:
-            return True
-    return False
+
+    row_tokens = re.findall(r"[A-Za-z]+", " ".join(cells).lower())
+
+    def present(target: str) -> bool:
+        return any(
+            SequenceMatcher(None, target, token).ratio() >= _NAME_MATCH_THRESHOLD
+            for token in row_tokens
+        )
+
+    surname, given = tokens[-1], tokens[:-1]
+    if not present(surname):
+        return False
+    if given and all(present(g) for g in given):
+        return True
+    return _names_the_office(cells)
+
+
+def _row_cells(anchor) -> list[str]:
+    """The text of each cell in the index row containing this anchor.
+
+    Cells, not one flattened string, because the office check has to test a
+    whole cell value ("President" exactly, so "Vice President" can't pass).
+    Falls back to the anchor's own text when the link isn't inside a table
+    row at all, so a layout that isn't a table still parses.
+    """
+    row = anchor
+    for _ in range(4):
+        parent = row.getparent()
+        if parent is None:
+            break
+        if parent.tag == "tr":
+            cells = [c for c in (_node_text(cell) for cell in parent.iter("td", "th")) if c]
+            if cells:
+                return cells
+            break
+        # Stop before an ancestor holding more than this one link. Climbing
+        # into it would hand every anchor on the page the same text — under
+        # which one row naming the president would attribute every PDF on
+        # the page to him. A non-table layout gets the tightest wrapper that
+        # still belongs to this link alone.
+        if len(parent.findall(".//a")) > 1:
+            break
+        row = parent
+
+    text = _node_text(row) or _node_text(anchor)
+    return [text] if text else []
 
 
 def _parse_index(page_html: str, base_url: str, president_name: str) -> list[dict]:
@@ -176,26 +282,23 @@ def _parse_index(page_html: str, base_url: str, president_name: str) -> list[dic
         if not href:
             continue
         pdf_url = urljoin(base_url, href)
-        if not urlparse(pdf_url).path.lower().endswith(".pdf"):
+        parsed = urlparse(pdf_url)
+        if not parsed.path.lower().endswith(".pdf"):
+            continue
+        # Checked here as well as at download time (fetch_and_parse_ptr):
+        # the download guard is the security boundary, but filtering here
+        # too keeps an off-host link from being counted as a filing this
+        # president made and then quietly yielding no rows.
+        if parsed.scheme != "https" or parsed.hostname not in _ALLOWED_PDF_HOSTS:
             continue
 
-        # Row text, falling back to the link's own text when the anchor
-        # isn't inside a table row.
-        row = anchor
-        for _ in range(4):
-            parent = row.getparent()
-            if parent is None or parent.tag == "tr":
-                row = parent if parent is not None else row
-                break
-            row = parent
-        row_text = _node_text(row if row is not None else anchor)
-        if not row_text:
-            row_text = _node_text(anchor)
-
-        haystack = f"{row_text} {pdf_url}".lower()
+        cells = _row_cells(anchor)
+        haystack = f"{' '.join(cells)} {pdf_url}".lower()
+        if any(marker in haystack for marker in _ANNUAL_FORM_MARKERS):
+            continue
         if not any(marker in haystack for marker in _PTR_FORM_MARKERS):
             continue
-        if not _surname_matches(row_text, president_name):
+        if not _names_this_president(cells, president_name):
             continue
 
         filing_id = _filing_id_for(pdf_url)
@@ -204,7 +307,7 @@ def _parse_index(page_html: str, base_url: str, president_name: str) -> list[dic
         seen.add(filing_id)
         filings.append({
             "doc_id": filing_id,
-            "filing_date": _row_date(row_text),
+            "filing_date": _row_date(" ".join(cells)),
             "pdf_url": pdf_url,
         })
 
@@ -243,10 +346,24 @@ async def fetch_ptr_filing_index(db: Session, president_name: str) -> list[dict]
         # and caching it would hide the breakage for a day at a time. See
         # this module's docstring on why that failure mode is the one to
         # guard against.
+        #
+        # Alerted, not just logged: nothing downstream can tell "the index
+        # markup moved" from "no filings exist" — both render as a card with
+        # no disclosure section — so a human has to look. Deduped per
+        # president so a genuinely-empty index (a just-inaugurated president
+        # who hasn't filed yet) costs one alert, not one per nightly run.
         logger.warning(
             "OGE disclosure index parsed to 0 periodic transaction reports for %s — "
             "page structure may have changed (see president_ptr.py module docstring)",
             president_name,
+        )
+        _alert(
+            "Presidential 278-T index parsed to zero filings",
+            f"{OGE_INDEX_URL} fetched successfully but yielded no periodic transaction "
+            f"reports for {president_name}. Either the index markup changed (see "
+            f"president_ptr.py's NOT LIVE-VERIFIED note) or this president has genuinely "
+            f"filed none yet — the parser cannot tell these apart. Check the live page.",
+            dedupe_key=f"president-ptr-empty-index-{president_name.lower().replace(' ', '-')}",
         )
         return []
 

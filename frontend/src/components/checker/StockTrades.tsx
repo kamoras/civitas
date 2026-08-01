@@ -31,9 +31,13 @@ const OWNER_LABEL: Record<StockTrade["owner"], string> = {
   dependent: "DEPENDENT",
 };
 
-function formatAmountRange(low: number, high: number): string {
+function formatAmountRange(trade: StockTrade): string {
   const fmt = (n: number) => `$${n.toLocaleString()}`;
-  return `${fmt(low)} – ${fmt(high)}`;
+  // The top bracket on these forms discloses a floor and no ceiling, so
+  // there is no upper figure to show — see StockTrade.amountOpenEnded.
+  return trade.amountOpenEnded
+    ? `${fmt(trade.amountLow)}+`
+    : `${fmt(trade.amountLow)} – ${fmt(trade.amountHigh)}`;
 }
 
 function TransactionBadge({ type }: { type: StockTrade["transactionType"] }) {
@@ -84,7 +88,15 @@ function TradeRow({ trade }: { trade: StockTrade }) {
       </div>
       <div className="flex items-center gap-2 flex-wrap text-[10px] text-matrix-green/40">
         <span>{OWNER_LABEL[trade.owner]}</span>
-        <span>{formatAmountRange(trade.amountLow, trade.amountHigh)}</span>
+        <span
+          title={
+            trade.amountOpenEnded
+              ? "The filing used the form's open-ended top bracket — it discloses a minimum and no maximum."
+              : undefined
+          }
+        >
+          {formatAmountRange(trade)}
+        </span>
         {trade.industry !== "UNCLASSIFIED" && <span>{trade.industry}</span>}
         <span>{trade.transactionDate}</span>
         <TimelinessBadge late={trade.late} daysToDisclose={trade.daysToDisclose} />

@@ -55,6 +55,29 @@ def test_parse_amount_range_missing_second_bound_returns_none():
     assert parse_amount_range("no numbers here") is None
 
 
+def test_parse_amount_range_open_ended_top_bracket():
+    """The top bracket states a floor and no ceiling. It used to fail to
+    parse, which dropped the row — so the largest disclosed transactions
+    were the ones missing from the record."""
+    assert parse_amount_range("Over $50,000,000") == (50000000.0, 50000000.0)
+    assert parse_amount_range("$50,000,001 +") == (50000001.0, 50000001.0)
+    assert parse_amount_range("$1,000,001 or more") == (1000001.0, 1000001.0)
+
+
+def test_parse_amount_range_open_ended_marker_is_required():
+    """A lone figure with no open-ended marker is an unparseable cell, not
+    an open-ended bracket — guessing which it was would invent a floor."""
+    assert parse_amount_range("$50,000,000") is None
+
+
+def test_parse_table_rows_keeps_an_open_ended_top_bracket_row():
+    rows = parse_table_rows(_table(
+        ["SP", "Bitcoin", "P", "10/30/2025", "11/14/2025", "Over $50,000,000"],
+    ))
+    assert len(rows) == 1
+    assert (rows[0].amount_low, rows[0].amount_high) == (50000000.0, 50000000.0)
+
+
 def _table(*rows):
     header = ["Owner", "Asset", "Transaction Type", "Date", "Notification Date", "Amount"]
     return [header, *rows]
