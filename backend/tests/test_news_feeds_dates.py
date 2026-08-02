@@ -4,6 +4,7 @@ HTML stripping applied to feed descriptions."""
 import logging
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
+from xml.etree import ElementTree
 from xml.sax.saxutils import escape
 
 from app.pipeline.fetch.news_feeds import (
@@ -11,6 +12,7 @@ from app.pipeline.fetch.news_feeds import (
     MAX_SUMMARY_CHARS,
     _extract_body_text,
     _parse_pub_date,
+    _extract_body_text,
     _parse_rss_feed,
     _strip_html,
     fetch_news_articles,
@@ -156,6 +158,91 @@ class TestStripHtml:
             "Test",
         )[0]
         assert entry.summary == "The committee voted Thursday."
+
+    def test_adjacent_blocks_are_not_welded_together(self):
+        """A plain "".join(itertext()) yields "Thursday.Grassley" — two
+        sentences fused into one token that no downstream stage can split,
+        since the action center's item splitter needs whitespace after the
+        period to see a boundary at all."""
+        entry = _parse_rss_feed(
+            """<?xml version="1.0"?>
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry>
+                <title>Committee advances the nomination</title>
+                <link href="https://example.com/f"/>
+                <content type="xhtml">
+                  <div xmlns="http://www.w3.org/1999/xhtml">
+                    <p>The committee voted Thursday.</p>
+                    <p>Grassley set the floor date.</p>
+                  </div>
+                </content>
+              </entry>
+            </feed>""".encode(),
+            "Test",
+        )[0]
+        assert entry.summary == (
+            "The committee voted Thursday. Grassley set the floor date."
+        )
+
+    def test_block_after_sentence_punctuation_does_not_double_the_boundary(self):
+        """"voted Thursday.; Grassley objected" states the break twice. Both
+        forms split identically downstream, so this is about the text that
+        reaches the embedding and the LLM prompt."""
+        assert _strip_html("<p>A vote was held.</p><p>B objected.</p>") == "A vote was held. B objected."
+        # A block that did NOT end a sentence still needs the separator.
+        assert _strip_html("<li>Ukraine aid clears</li><li>Powell pauses</li>") == (
+            "Ukraine aid clears; Powell pauses"
+        )
+
+    def test_semicolon_written_by_the_newsroom_is_left_alone(self):
+        """The redundant-boundary cleanup must only touch separators WE
+        inserted. Applied to source prose it rewrites the sentence:
+        "resumed in the U.S.; officials said" became "resumed in the U.S.
+        officials said", which reads as a different claim and reaches the
+        LLM prompt that way."""
+        article = _parse_rss_feed(
+            """<?xml version="1.0"?><rss><channel><item>
+              <title>Trade talks resume</title>
+              <link>https://example.com/t</link>
+              <description>Talks resumed in the U.S.; officials said a deal was near.</description>
+            </item></channel></rss>""".encode(),
+            "Test",
+        )[0]
+        assert article.summary == "Talks resumed in the U.S.; officials said a deal was near."
+
+    def test_malformed_xml_yields_no_articles(self):
+        """A feed serving garbage must not take the run down with it."""
+        assert _parse_rss_feed(b"<rss><channel><item>truncated", "Test") == []
+
+    def test_comment_text_is_not_treated_as_content(self):
+        """This parser drops comments, but the extractor should not depend
+        on that to avoid quoting "<!-- tracking beacon -->" into an article."""
+        el = ElementTree.Element("description")
+        el.text = "The Senate voted."
+        comment = ElementTree.Comment("tracking beacon")
+        comment.tail = " It goes to the House."
+        el.append(comment)
+        assert _extract_body_text(el) == "The Senate voted. It goes to the House."
+
+    def test_atom_categories_are_read_from_the_term_attribute(self):
+        """Atom labels categories with @term, not element text. A field that
+        is silently always-empty for one feed format is how the first reader
+        of it gets a wrong answer with no error."""
+        entry = _parse_rss_feed(
+            """<?xml version="1.0"?>
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry>
+                <title>Committee advances the nomination</title>
+                <link href="https://example.com/g"/>
+                <summary>The committee voted.</summary>
+                <category term="Politics"/>
+                <category term="Senate"/>
+                <category/>
+              </entry>
+            </feed>""".encode(),
+            "Test",
+        )[0]
+        assert entry.categories == ["Politics", "Senate"]
 
     def test_atom_prefers_published_over_updated(self):
         """<updated> is when the entry was last touched; <published> is when

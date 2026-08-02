@@ -120,6 +120,56 @@ def _extract_text(el: Element | None) -> str:
     return (el.text or "").strip()
 
 
+# Block-level markup carries an item boundary the plain text does not: a
+# WordPress feed's <li> or </p> is where one thought ends, and dropping it
+# silently welds two sentences together. Mapped to "; " so the boundary
+# survives as punctuation.
+_BLOCK_TAGS = frozenset({
+    "p", "div", "li", "ul", "ol", "br", "blockquote",
+    "h1", "h2", "h3", "h4", "h5", "h6",
+})
+_HTML_BLOCK_RE = re.compile(
+    r"<br\s*/?>|</?(?:p|div|li|ul|ol|h[1-6]|blockquote)\b[^>]*>",
+    re.IGNORECASE,
+)
+# A tag name (or "!" for comments/doctypes) must follow the "<", so a
+# less-than sign used as prose survives: "<[^>]*>" would swallow the middle
+# of "the margin was < 6 > the forecast" as if it were markup.
+_HTML_TAG_RE = re.compile(r"</?[a-zA-Z!][^>]*>")
+
+# Block boundaries are marked with a sentinel rather than written as "; "
+# straight away, so the cleanup below can tell a boundary WE inserted from
+# a semicolon the newsroom actually wrote. Rewriting the latter changes the
+# story: "resumed in the U.S.; officials said a deal was near" became
+# "resumed in the U.S. officials said a deal was near", which reads as a
+# different sentence and reaches the LLM prompt that way. NUL is not legal
+# in XML 1.0, so no feed can contain one and collide with this.
+_BLOCK_SEP = "\x00"
+_SEPARATOR_RUN_RE = re.compile(r"(?:\s*\x00\s*)+")
+# A block that already ended in sentence punctuation does not need the
+# separator on top of it — "voted Thursday.; Grassley objected" is the
+# boundary stated twice. Both forms split identically downstream (the
+# action center's item splitter takes ". " and "; " alike), so this is
+# purely about the text that reaches the embedding and the LLM prompt.
+_REDUNDANT_SEPARATOR_RE = re.compile(r"([.!?])\s*\x00\s*")
+
+
+def _collapse(text: str) -> str:
+    """Normalize whitespace and render inserted block boundaries as "; "."""
+    text = " ".join(text.split())  # the sentinel is not whitespace, so it survives
+    text = _SEPARATOR_RUN_RE.sub(_BLOCK_SEP, text)
+    text = _REDUNDANT_SEPARATOR_RE.sub(r"\1 ", text)
+    text = text.replace(_BLOCK_SEP, "; ")
+    return text.strip().strip(";").strip()
+
+
+def _local_name(tag: object) -> str:
+    """An element's tag without its "{namespace}" prefix, lowercased."""
+    if not isinstance(tag, str):
+        return ""  # comments and processing instructions carry a callable tag
+    return tag.rsplit("}", 1)[-1].lower()
+
+
 def _extract_body_text(el: Element | None) -> str:
     """Extract an element's full text, including any nested markup's.
 
@@ -130,25 +180,43 @@ def _extract_body_text(el: Element | None) -> str:
     silently — so descriptions read their text this way. For RSS, where
     the description is CDATA or escaped HTML and therefore childless, this
     is identical to .text.
+
+    Block boundaries become "; " for the same reason _strip_html does it,
+    and this is the whole reason a plain "".join(itertext()) is not enough:
+    joining the pieces of "<p>He voted Thursday.</p><p>Grassley objected.</p>"
+    yields "Thursday.Grassley", which welds two sentences into a token no
+    downstream stage can split — the action center's item splitter needs
+    whitespace after the period to see a boundary at all.
     """
     if el is None:
         return ""
-    return "".join(el.itertext()).strip()
+    parts: list[str] = []
 
+    def walk(node: Element) -> None:
+        if node.text:
+            parts.append(node.text)
+        for child in node:
+            name = _local_name(child.tag)
+            if not name:
+                # A comment or processing instruction. Its text is markup,
+                # not content ("<!-- tracking beacon -->"), so only the tail
+                # — which belongs to the parent's prose — carries on. This
+                # parser drops comments today; the extractor should not
+                # depend on that to avoid quoting one into an article.
+                if child.tail:
+                    parts.append(child.tail)
+                continue
+            is_block = name in _BLOCK_TAGS
+            if is_block:
+                parts.append(_BLOCK_SEP)
+            walk(child)
+            if is_block:
+                parts.append(_BLOCK_SEP)
+            if child.tail:
+                parts.append(child.tail)
 
-# Block-level markup carries an item boundary the plain text does not: a
-# WordPress feed's <li> or </p> is where one thought ends, and dropping it
-# silently welds two sentences together. Mapped to "; " so the boundary
-# survives as punctuation.
-_HTML_BLOCK_RE = re.compile(
-    r"<br\s*/?>|</?(?:p|div|li|ul|ol|h[1-6]|blockquote)\b[^>]*>",
-    re.IGNORECASE,
-)
-# A tag name (or "!" for comments/doctypes) must follow the "<", so a
-# less-than sign used as prose survives: "<[^>]*>" would swallow the middle
-# of "the margin was < 6 > the forecast" as if it were markup.
-_HTML_TAG_RE = re.compile(r"</?[a-zA-Z!][^>]*>")
-_HTML_SEPARATOR_RUN_RE = re.compile(r"(?:\s*;\s*)+")
+    walk(el)
+    return _collapse("".join(parts))
 
 
 def _strip_html(raw: str) -> str:
@@ -172,13 +240,11 @@ def _strip_html(raw: str) -> str:
     # still holds "&lt;p&gt;" here — stripping first would leave literal
     # tag text in the summary that no later stage knows to remove.
     text = unescape(raw)
-    text = _HTML_BLOCK_RE.sub("; ", text)
+    text = _HTML_BLOCK_RE.sub(_BLOCK_SEP, text)
     text = _HTML_TAG_RE.sub("", text)
-    text = " ".join(text.split())
     # "</p><p>" collapsed to ";  ;" above, and a leading/trailing block tag
     # leaves a dangling separator.
-    text = _HTML_SEPARATOR_RUN_RE.sub("; ", text)
-    return text.strip(" ;")
+    return _collapse(text)
 
 
 def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
@@ -246,6 +312,15 @@ def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
             _extract_text(entry.find("atom:published", ns))
             or _extract_text(entry.find("atom:updated", ns))
         )
+        # Atom puts the label in @term rather than in the element's text.
+        # Populated so the two branches produce the same shape of article:
+        # nothing reads categories today, and a field that is silently
+        # always-empty for one feed format is how the first reader of it
+        # gets a wrong answer with no error.
+        categories = [
+            term for c in entry.findall("atom:category", ns)
+            if (term := (c.get("term") or "").strip())
+        ]
         if not title or not link:
             continue
         if pub_date and pub_date < cutoff:
@@ -256,6 +331,7 @@ def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
             source_name=source_name,
             summary=_strip_html(desc)[:MAX_SUMMARY_CHARS] if desc else "",
             published=pub_date,
+            categories=categories,
         ))
 
     return articles

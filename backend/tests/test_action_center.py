@@ -1716,6 +1716,27 @@ class TestDigestFiltering:
         body = "Ukraine aid clears the Senate • Powell signals a pause • Texas sues"
         assert len(_split_body_items(body)) == 3
 
+    def test_html_bulleted_digest_survives_parsing_into_the_detector(self):
+        """End to end across the two modules, which is where the original
+        bug lived. A WordPress-style digest arrives as escaped <li> markup;
+        the feed parser has to turn that into item boundaries the detector
+        can split on, or the body check sees one undifferentiated blob."""
+        from app.pipeline.analyze.action_center import _digest_reason, _split_body_items
+        from app.pipeline.fetch.news_feeds import _parse_rss_feed
+
+        article = _parse_rss_feed(
+            """<?xml version="1.0"?><rss><channel><item>
+              <title>Your Wednesday roundup</title>
+              <link>https://example.com/d</link>
+              <description>&lt;ul&gt;&lt;li&gt;Israel and Hamas agreed to a framework&lt;/li&gt;&lt;li&gt;The Federal Reserve held rates steady&lt;/li&gt;&lt;li&gt;Wildfires forced evacuations across Oregon&lt;/li&gt;&lt;/ul&gt;</description>
+            </item></channel></rss>""".encode(),
+            "Test",
+        )[0]
+
+        assert "<" not in article.summary
+        assert len(_split_body_items(article.summary)) == 3
+        assert _digest_reason(article) == "body lists unrelated stories"
+
     def test_empty_input_short_circuits(self):
         from app.pipeline.analyze.action_center import _filter_policy_relevant
 
