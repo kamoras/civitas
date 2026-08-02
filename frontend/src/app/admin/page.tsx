@@ -1195,7 +1195,8 @@ function RunHistory({ runs }: { runs: PipelineRunInfo[] }) {
             const isHouse = r.pipelineType === "house";
             const isStockTrades = r.pipelineType === "stock_trades";
             const isSupplementary = r.pipelineType === "supplementary";
-            const isSenate = !isHouse && !isStockTrades && !isSupplementary;
+            const isElection = r.pipelineType === "election";
+            const isSenate = !isHouse && !isStockTrades && !isSupplementary && !isElection;
             const statusColor = r.status === "completed"
               ? "text-matrix-green"
               : r.status === "partial"
@@ -1212,7 +1213,7 @@ function RunHistory({ runs }: { runs: PipelineRunInfo[] }) {
               >
                 <td className="py-1.5 pr-3">
                   <span className={isSenate ? "text-matrix-green/50" : "text-neon-cyan/70"}>
-                    {isStockTrades ? "STOCK" : isHouse ? "HOUSE" : isSupplementary ? "SUPP" : "SENATE"}
+                    {isStockTrades ? "STOCK" : isHouse ? "HOUSE" : isSupplementary ? "SUPP" : isElection ? "ELECTION" : "SENATE"}
                   </span>
                 </td>
                 <td className="py-1.5 pr-3 text-matrix-green/70">{formatTime(r.startedAt)}</td>
@@ -1237,6 +1238,8 @@ function RunHistory({ runs }: { runs: PipelineRunInfo[] }) {
                     </>
                   ) : isSupplementary ? (
                     <>{r.presidentsUpdated ?? 0}P/{r.justicesSkipped ? "—" : (r.justicesScored ?? 0)}J</>
+                  ) : isElection ? (
+                    <>{r.candidatesSynced ?? 0}C/{r.financialsRefreshed ?? 0}F/{r.coverageItemsIngested ?? 0}N</>
                   ) : (
                     <>
                       {r.senatorsProcessed}/{r.senatorsTotal}

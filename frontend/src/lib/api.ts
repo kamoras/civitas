@@ -359,7 +359,7 @@ export interface PipelineStepInfo {
 
 export interface PipelineRunInfo {
   id: number;
-  pipelineType?: "senate" | "house" | "stock_trades" | "supplementary";
+  pipelineType?: "senate" | "house" | "stock_trades" | "supplementary" | "election";
   startedAt: string;
   completedAt: string | null;
   status: string;
@@ -387,6 +387,10 @@ export interface PipelineRunInfo {
   justicesScored?: number;
   justicesSkipped?: boolean;
   presidentsUpdated?: number;
+  // Election-only fields
+  candidatesSynced?: number;
+  financialsRefreshed?: number;
+  coverageItemsIngested?: number;
 }
 
 export interface HouseRunInfo {
