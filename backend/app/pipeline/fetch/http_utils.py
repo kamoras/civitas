@@ -96,7 +96,18 @@ async def fetch_with_retry(
     for attempt in range(1, retries + 1):
         try:
             logger.debug("%s: %s (attempt %d)", label, url, attempt)
-            resp = await client.request(method, actual_url, timeout=timeout, **request_kwargs)
+            # Hard backstop on top of `timeout=` below: confirmed live
+            # 2026-08-02, a House pipeline run sat wedged for 12h+ with a
+            # congress.gov connection stuck CLOSE_WAIT — httpx's own
+            # per-request timeout never fired (likely a stale pooled
+            # connection httpx handed back out without detecting the peer
+            # had already closed it). wait_for guarantees this call raises
+            # and retries/gives up within a bounded time no matter what
+            # state the client's connection pool gets into.
+            resp = await asyncio.wait_for(
+                client.request(method, actual_url, timeout=timeout, **request_kwargs),
+                timeout=timeout + 10,
+            )
 
             if resp.status_code == 429:
                 wait = backoff_s * attempt * rate_limit_backoff_multiplier
