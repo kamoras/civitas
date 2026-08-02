@@ -115,6 +115,10 @@ export interface StockTrade {
   late: boolean;
   amountLow: number;
   amountHigh: number;
+  /** The filing used the open-ended top bracket ("Over $50,000,000") — it
+   * stated a floor and no ceiling. When true, amountHigh is a placeholder
+   * equal to amountLow and must never be rendered as a real upper bound. */
+  amountOpenEnded: boolean;
   industry: string;
   sourceUrl: string;
   parseConfidence: "text" | "ocr";

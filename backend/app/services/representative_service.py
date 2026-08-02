@@ -23,7 +23,9 @@ from app.pipeline.analyze.sponsorship_analysis import (
 )
 from app.schemas import (
     PaginatedRepresentativesSchema,
+    PaginatedStockTradesSchema,
     RepresentativeSchema,
+    StockTradeSchema,
     STOCK_ACT_DISCLOSURE_DEADLINE_DAYS,
 )
 from app.services.pagination import paginate_bounds
@@ -598,11 +600,19 @@ def get_rep_stock_trades(
     rep_id: str,
     page: int = 1,
     per_page: int = 15,
-) -> dict | None:
+) -> PaginatedStockTradesSchema | None:
     """Return paginated STOCK Act trade disclosures for a representative.
 
     Informational only — see senator_service.get_senator_stock_trades for
     the scoring rationale (issue #45).
+
+    Built through StockTradeSchema like the Senate and presidential
+    equivalents, not as a hand-written dict. It was the hand-written one
+    until 2026-07-31, and it had already drifted: a field added to the
+    schema (amount_open_ended, which tells a client the filing disclosed a
+    floor and no ceiling) reached senators and the president but not the
+    House, so the same open-ended filing rendered as a real closed range on
+    one surface and correctly on the others. One serializer, one shape.
     """
     rep = db.query(Representative).filter(Representative.id == rep_id).first()
     if rep is None:
@@ -620,28 +630,27 @@ def get_rep_stock_trades(
         .all()
     )
 
-    return {
-        "trades": [
-            {
-                "ticker": t.ticker,
-                "assetName": t.asset_name,
-                "owner": t.owner,
-                "transactionType": t.transaction_type,
-                "transactionDate": t.transaction_date,
-                "disclosureDate": t.disclosure_date,
-                "daysToDisclose": t.days_to_disclose,
-                "late": t.days_to_disclose > STOCK_ACT_DISCLOSURE_DEADLINE_DAYS,
-                "amountLow": t.amount_low,
-                "amountHigh": t.amount_high,
-                "industry": t.industry,
-                "sourceUrl": t.source_url,
-                "parseConfidence": t.parse_confidence,
-            }
+    return PaginatedStockTradesSchema(
+        trades=[
+            StockTradeSchema(
+                ticker=t.ticker,
+                asset_name=t.asset_name,
+                owner=t.owner,
+                transaction_type=t.transaction_type,
+                transaction_date=t.transaction_date,
+                disclosure_date=t.disclosure_date,
+                days_to_disclose=t.days_to_disclose,
+                amount_low=t.amount_low,
+                amount_high=t.amount_high,
+                industry=t.industry,
+                source_url=t.source_url,
+                parse_confidence=t.parse_confidence,
+            )
             for t in trades_db
         ],
-        "total": total,
-        "page": page,
-        "perPage": per_page,
-        "totalPages": total_pages,
-        "lateCount": late_count,
-    }
+        total=total,
+        page=page,
+        per_page=per_page,
+        total_pages=total_pages,
+        late_count=late_count,
+    )

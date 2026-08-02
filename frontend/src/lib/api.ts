@@ -223,29 +223,44 @@ export async function fetchSenatorVotes(
   return fetchPaginatedVotes(Chamber.Senate, senatorId, options);
 }
 
+// Takes the URL segment directly rather than a Chamber, because the
+// president is a fourth filer group and not a chamber — the disclosure
+// endpoint is identical in shape (same OGE/PTR form fields, same 45-day
+// deadline) but "Chamber.President" would be a lie. The three exported
+// wrappers below keep call sites from passing an arbitrary segment.
 async function fetchPaginatedStockTrades(
-  chamber: Chamber,
+  pathSegment: string,
   entityId: string,
   options?: { page?: number; perPage?: number },
 ): Promise<PaginatedStockTrades> {
   const params = new URLSearchParams();
   if (options?.page) params.set("page", String(options.page));
   if (options?.perPage) params.set("per_page", String(options.perPage));
-  return requestJson(`${API_BASE}/${CHAMBER_PATH[chamber]}/${entityId}/stock-trades?${params}`, "Failed to load stock trades");
+  return requestJson(`${API_BASE}/${pathSegment}/${entityId}/stock-trades?${params}`, "Failed to load stock trades");
 }
 
 export async function fetchRepStockTrades(
   repId: string,
   options?: { page?: number; perPage?: number },
 ): Promise<PaginatedStockTrades> {
-  return fetchPaginatedStockTrades(Chamber.House, repId, options);
+  return fetchPaginatedStockTrades(CHAMBER_PATH[Chamber.House], repId, options);
 }
 
 export async function fetchSenatorStockTrades(
   senatorId: string,
   options?: { page?: number; perPage?: number },
 ): Promise<PaginatedStockTrades> {
-  return fetchPaginatedStockTrades(Chamber.Senate, senatorId, options);
+  return fetchPaginatedStockTrades(CHAMBER_PATH[Chamber.Senate], senatorId, options);
+}
+
+/** Disclosed buy/sell/exchange transactions from a president's OGE Form
+ * 278-T filings — securities and virtual currency alike. Ranges as filed;
+ * the form reports no profit figure and none is derived. */
+export async function fetchPresidentStockTrades(
+  presidentId: string,
+  options?: { page?: number; perPage?: number },
+): Promise<PaginatedStockTrades> {
+  return fetchPaginatedStockTrades("presidents", presidentId, options);
 }
 
 export async function fetchBillsInFlight(options?: {
@@ -366,6 +381,7 @@ export interface PipelineRunInfo {
   // Stock-trades-only fields
   houseTradesIngested?: number;
   senateTradesIngested?: number;
+  presidentTradesIngested?: number;
   // Supplementary-only fields
   exploreDocsIngested?: number;
   justicesScored?: number;
@@ -393,6 +409,7 @@ export interface StockTradesRunInfo {
   status: string;
   houseTradesIngested: number;
   senateTradesIngested: number;
+  presidentTradesIngested: number;
   elapsedSeconds: number | null;
   errorMessage: string | null;
   progressSteps?: PipelineStepInfo[] | null;

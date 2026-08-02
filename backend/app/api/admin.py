@@ -700,6 +700,7 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
             "status": last_stock_run.status,
             "houseTradesIngested": last_stock_run.house_trades_ingested,
             "senateTradesIngested": last_stock_run.senate_trades_ingested,
+            "presidentTradesIngested": last_stock_run.president_trades_ingested,
             "elapsedSeconds": _live_elapsed(last_stock_run),
             "errorMessage": last_stock_run.error_message,
             "progressSteps": _parse_progress_steps(last_stock_run),
@@ -826,6 +827,7 @@ async def admin_pipeline_history(
         _history_entry(r, "stock_trades", {
             "houseTradesIngested": r.house_trades_ingested,
             "senateTradesIngested": r.senate_trades_ingested,
+            "presidentTradesIngested": r.president_trades_ingested,
             "progressSteps": _parse_progress_steps(r),
         })
         for r in stock_runs

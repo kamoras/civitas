@@ -175,6 +175,7 @@ def _migrate_columns() -> None:
         ("house_pipeline_runs", "progress_detail", "TEXT"),
         ("supplementary_pipeline_runs", "progress_detail", "TEXT"),
         ("stock_trades_pipeline_runs", "progress_detail", "TEXT"),
+        ("stock_trades_pipeline_runs", "president_trades_ingested", "INTEGER DEFAULT 0"),
         ("key_votes", "opposing_party_unity_pct", "REAL"),
         ("rep_key_votes", "opposing_party_unity_pct", "REAL"),
         ("presidents", "election_margin", "REAL"),
@@ -690,6 +691,10 @@ def reset_all_data() -> dict:
             models.RepCampaignPromise,
             models.RepSponsoredBill,
             models.RepStockTrade,
+            # Before models.President below — the delete order here is
+            # child-then-parent throughout, and a president row's cascade
+            # would otherwise take these with it uncounted.
+            models.PresidentTrade,
             models.JusticeVote,
             models.MonitorUpdate,
             models.NationalMonitor,
