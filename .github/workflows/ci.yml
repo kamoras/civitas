@@ -188,7 +188,6 @@ jobs:
   backend-slow:
     name: Backend — Embedding Tests
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     # See frontend job's comment on why every job here has one of these —
     # this specific job is the one that actually hung 2026-07-25 (pip
     # install stalled 45+ minutes on a cold cache after requirements.txt
@@ -202,25 +201,73 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Needed by the requirements-changed check below, which diffs
+          # against the PR's base branch.
+          fetch-depth: 0
+
+      # These tests used to run on main pushes only, which left a hole:
+      # every classification threshold in this repo is calibrated against
+      # embedding output, and the embedding stack (torch, transformers,
+      # tokenizers, sentence-transformers) arrives via Dependabot. A bump
+      # that shifted embeddings would be caught *after* landing on main,
+      # not on the PR proposing it — and the fast suite can't see it,
+      # because it deselects everything that loads the model.
+      #
+      # So: still always on main, and now also on any PR that touches
+      # requirements.txt. Detected in-job rather than with a separate
+      # detector job or a third-party paths-filter action — a runner that
+      # starts and skips costs seconds, while pip install + the model
+      # download are what actually cost minutes.
+      # Note the failure direction: anything that leaves us unable to
+      # compute the diff runs the tests rather than skipping them. A skip
+      # and a pass look identical on the PR, so "couldn't tell" must not be
+      # allowed to resolve to "nothing to check."
+      - name: Does this run need the embedding tests?
+        id: check
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "Push to main — running embedding tests."
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base="origin/${{ github.base_ref }}"
+          git fetch --no-tags origin "${{ github.base_ref }}" >/dev/null 2>&1 || true
+          if ! git rev-parse --verify "$base" >/dev/null 2>&1; then
+            echo "::warning::Could not resolve $base — running embedding tests rather than assuming they are unnecessary."
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "$base...HEAD" | grep -qx 'backend/requirements.txt'; then
+            echo "requirements.txt changed — running embedding tests."
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "requirements.txt untouched — skipping embedding tests."
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Install system dependencies
+        if: steps.check.outputs.needed == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends gcc g++ libxml2-dev libxslt-dev
 
       - uses: actions/setup-python@v7
+        if: steps.check.outputs.needed == 'true'
         with:
           python-version: "3.13"
           cache: pip
           cache-dependency-path: backend/requirements.txt
 
       - run: pip install -r requirements.txt
+        if: steps.check.outputs.needed == 'true'
 
       - name: Cache sentence-transformer model
+        if: steps.check.outputs.needed == 'true'
         uses: actions/cache@v6
         with:
           path: ~/.cache/huggingface
           key: st-model-all-MiniLM-L6-v2
 
       - name: Run slow tests (loads embedding model)
+        if: steps.check.outputs.needed == 'true'
         run: python -m pytest tests/ -v -m slow
