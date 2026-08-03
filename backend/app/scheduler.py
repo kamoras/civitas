@@ -7,6 +7,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from app.config import settings
+from app.http_client import make_async_client
 from app.pipeline.senate_pipeline import run_senate_pipeline
 from app.pipeline.house_pipeline import run_house_pipeline, is_house_pipeline_running, house_pipeline_age
 from app.pipeline.supplementary_pipeline import (
@@ -369,14 +370,13 @@ def _election_coverage_refresh() -> None:
         coverage_tracker().start()
         try:
             from app.database import SessionLocal
-            import httpx
             from app.pipeline.analyze.election_bluesky import post_race_coverage_updates
             from app.pipeline.analyze.election_coverage import ingest_race_coverage
 
             async def _refresh():
                 db = SessionLocal()
                 try:
-                    async with httpx.AsyncClient() as client:
+                    async with make_async_client() as client:
                         ingested = await ingest_race_coverage(db, client)
                     posted = post_race_coverage_updates(db)
                     logger.info(

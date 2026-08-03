@@ -23,6 +23,7 @@ import urllib.parse
 
 import httpx
 
+from app.http_client import make_async_client
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -160,7 +161,7 @@ async def refresh_district_pvi(client: httpx.AsyncClient | None = None) -> bool:
     """
     own_client = client is None
     if own_client:
-        client = httpx.AsyncClient(follow_redirects=True)
+        client = make_async_client(follow_redirects=True)
     try:
         pairs = []
         for st, n in sorted(SEATS.items()):

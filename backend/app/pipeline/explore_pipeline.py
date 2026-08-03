@@ -25,6 +25,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
+from app.http_client import make_async_client
 from app.models import ExploreDocument, Justice, Representative, Senator
 from app.pipeline.cache import api_cache_set
 from app.pipeline.fetch.congressional_record import fetch_floor_remarks
@@ -137,7 +138,7 @@ async def _backfill_presidential_bodies(
 
     BATCH = 5
     filled: list[int] = []
-    async with httpx.AsyncClient() as backfill_client:
+    async with make_async_client() as backfill_client:
         for i in range(0, len(docs), BATCH):
             batch = docs[i : i + BATCH]
             urls = []
@@ -199,7 +200,7 @@ async def _backfill_rulemaking_bodies(db: Session) -> list[int]:
 
     BATCH = 8
     filled: list[int] = []
-    async with httpx.AsyncClient() as backfill_client:
+    async with make_async_client() as backfill_client:
         for i in range(0, len(docs), BATCH):
             batch = docs[i : i + BATCH]
             body_html_urls = []
@@ -253,7 +254,7 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
         senator_map = _senator_lookup(db)
         stats = {"senate_floor": 0, "house_floor": 0, "presidential": 0, "scotus": 0, "fr_rulemaking": 0}
 
-        async with httpx.AsyncClient() as client:
+        async with make_async_client() as client:
             # --- 1. Senate floor proceedings ---
             logger.info("Explore pipeline: fetching Senate floor proceedings...")
             try:

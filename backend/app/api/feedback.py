@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.api.rate_limit import WriteRateLimit
 from app.config import settings
+from app.http_client import make_async_client
 from app.schemas import CamelModel
 
 logger = logging.getLogger(__name__)
@@ -132,7 +133,7 @@ async def submit_feedback(body: FeedbackRequest, _rl: WriteRateLimit) -> Feedbac
     }
 
     try:
-        async with httpx.AsyncClient(timeout=_GITHUB_API_TIMEOUT) as client:
+        async with make_async_client(timeout=_GITHUB_API_TIMEOUT) as client:
             resp = await client.post(url, json=payload, headers=headers)
     except httpx.HTTPError:
         logger.exception("Feedback submission failed to reach GitHub")

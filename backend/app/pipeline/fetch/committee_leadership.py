@@ -30,6 +30,7 @@ import pathlib
 import httpx
 import yaml
 
+from app.http_client import make_async_client
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -148,7 +149,7 @@ async def refresh_committee_leadership_data(client: httpx.AsyncClient | None = N
     """
     own_client = client is None
     if own_client:
-        client = httpx.AsyncClient(follow_redirects=True)
+        client = make_async_client(follow_redirects=True)
     try:
         membership_raw = await _fetch_yaml("committee-membership-current.yaml", client)
         committees_raw = await _fetch_yaml("committees-current.yaml", client)

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.api.pipeline_runner import run_pipeline_in_thread
 from app.config import settings
 from app.database import get_db, get_visits_db
+from app.http_client import make_async_client
 from app.models import (
     ActionIssue,
     AnalysisCache,
@@ -436,7 +437,6 @@ async def admin_set_vacancy(
 @router.get("/dashboard", dependencies=[Depends(require_admin)])
 async def admin_dashboard(db: Session = Depends(get_db)):
     """Comprehensive admin dashboard with system health, data stats, and pipeline info."""
-    import httpx
 
     # --- System health ---
     db_status = "ok"
@@ -448,7 +448,7 @@ async def admin_dashboard(db: Session = Depends(get_db)):
     ollama_status = "unavailable"
     ollama_model = settings.OLLAMA_MODEL
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with make_async_client(timeout=5.0) as client:
             if settings.LLM_BACKEND == "llama-server":
                 resp = await client.get(f"{settings.LLAMA_SERVER_URL}/health")
             else:

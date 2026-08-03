@@ -35,9 +35,9 @@ rows now).
 import logging
 from datetime import datetime
 
-import httpx
 from sqlalchemy.orm import Session
 
+from app.http_client import make_async_client
 from app.models import President, ScoreSnapshot
 from app.pipeline.analyze.president_scorer import (
     PRESIDENT_ALGORITHM_VERSION,
@@ -153,7 +153,7 @@ async def run_president_pipeline(db: Session) -> dict:
     """
     logger.info("Starting president pipeline...")
 
-    async with httpx.AsyncClient() as client:
+    async with make_async_client() as client:
         logger.info("Fetching executive-order counts (UCSB, all presidents)...")
         eo_data = await fetch_historical_eo_counts(db)
         logger.info("EO data fetched for %d presidents", len(eo_data))

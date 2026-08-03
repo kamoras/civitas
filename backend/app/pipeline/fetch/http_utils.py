@@ -30,13 +30,22 @@ import httpx
 import requests
 
 from app.error_utils import redact_sensitive_params
+from app.http_client import DEFAULT_FETCH_TIMEOUT_S, bounded
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_RETRIES = 3
 DEFAULT_RETRY_BACKOFF_S = 2.0
-DEFAULT_FETCH_TIMEOUT_S = 30.0
+
+__all__ = [
+    "DEFAULT_FETCH_TIMEOUT_S",
+    "DEFAULT_MAX_RETRIES",
+    "DEFAULT_RETRY_BACKOFF_S",
+    "fetch_with_retry",
+    "fetch_with_retry_requests",
+    "redact_url",
+]
 
 # Two callers (congress.py, congressional_record.py) used to build their URL
 # with an API key embedded directly in the query string, which meant the raw
@@ -104,9 +113,16 @@ async def fetch_with_retry(
             # had already closed it). wait_for guarantees this call raises
             # and retries/gives up within a bounded time no matter what
             # state the client's connection pool gets into.
-            resp = await asyncio.wait_for(
+            # Hard wall-clock backstop on top of `timeout=` — see
+            # app/http_client.py for the CLOSE_WAIT hang this exists to
+            # bound. Redundant when `client` came from make_async_client()
+            # (its send() applies the same bound), and deliberately kept
+            # anyway: this function accepts any AsyncClient a caller hands
+            # it, and the bound has to hold for those too.
+            resp = await bounded(
                 client.request(method, actual_url, timeout=timeout, **request_kwargs),
-                timeout=timeout + 10,
+                timeout,
+                label=label,
             )
 
             if resp.status_code == 429:
@@ -173,7 +189,20 @@ async def fetch_with_retry_requests(
     for attempt in range(1, retries + 1):
         try:
             await rate_limiter.acquire()
-            resp = await asyncio.to_thread(requests.request, method, url, timeout=timeout, **request_kwargs)
+            # Same wall-clock backstop as fetch_with_retry. One honest
+            # caveat: cancelling a wait_for around asyncio.to_thread frees
+            # the *event loop*, not the worker thread — `requests` has no
+            # cancellation, so a truly wedged socket keeps its thread until
+            # urllib3's own socket timeout releases it. That is still the
+            # difference between "the pipeline continues" and "the pipeline
+            # is stopped for 12 hours", which is the failure being fixed;
+            # requests' timeout is a real per-socket-operation timeout and
+            # does fire, so the thread is not leaked indefinitely.
+            resp = await bounded(
+                asyncio.to_thread(requests.request, method, url, timeout=timeout, **request_kwargs),
+                timeout,
+                label=label,
+            )
 
             if resp.status_code == 429:
                 wait = backoff_s * attempt

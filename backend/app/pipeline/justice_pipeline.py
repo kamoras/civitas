@@ -3,9 +3,9 @@
 import json
 import logging
 
-import httpx
 from sqlalchemy.orm import Session
 
+from app.http_client import make_async_client
 from app.pipeline.analyze.justice_analyzer import analyze_justice_votes
 from app.pipeline.analyze.ollama_client import call_llm
 from app.pipeline.fetch.justice_votes import fetch_case_votes, fetch_current_justices
@@ -21,7 +21,7 @@ async def run_justice_pipeline(db: Session) -> dict:
     """
     logger.info("=== Justice pipeline starting ===")
 
-    async with httpx.AsyncClient(
+    async with make_async_client(
         headers={"User-Agent": "Civitas/1.0 (civic-transparency-tool) httpx/0.27"},
         follow_redirects=True,
     ) as client:

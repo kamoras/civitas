@@ -14,10 +14,10 @@ import urllib.request
 from collections.abc import AsyncIterator
 from typing import Any
 
-import httpx
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.http_client import make_async_client
 from app.pipeline.cache import analysis_cache_get, analysis_cache_set
 from app.database import SessionLocal
 
@@ -261,7 +261,7 @@ async def _stream_llama_server(
         "temperature": 0.0,
         "stream": True,
     }
-    async with httpx.AsyncClient(timeout=http_timeout) as client:
+    async with make_async_client(timeout=http_timeout) as client:
         async with client.stream("POST", url, json=body) as resp:
             resp.raise_for_status()
             async for line in resp.aiter_lines():
@@ -299,7 +299,7 @@ async def _stream_ollama(
             "temperature": 0.0,
         },
     }
-    async with httpx.AsyncClient(timeout=http_timeout) as client:
+    async with make_async_client(timeout=http_timeout) as client:
         async with client.stream("POST", url, json=body) as resp:
             resp.raise_for_status()
             async for line in resp.aiter_lines():

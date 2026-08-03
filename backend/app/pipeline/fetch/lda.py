@@ -23,6 +23,7 @@ import logging
 import httpx
 from sqlalchemy.orm import Session
 
+from app.http_client import make_async_client
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
 from app.pipeline.rate_limiter import RateLimiter
@@ -131,7 +132,7 @@ async def enrich_lobbying_matches_with_lda(matches: list[dict], db: Session, lda
     if not matches:
         return
 
-    async with httpx.AsyncClient() as lda_client:
+    async with make_async_client() as lda_client:
         for m in matches:
             try:
                 spend = await fetch_lobbying_spend(
