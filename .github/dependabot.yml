@@ -9,21 +9,70 @@ updates:
     labels:
       - dependencies
       - python
+    # requirements.txt pins the *whole resolved tree*, not just direct
+    # dependencies. That means Dependabot sees ~130 pinned lines and treats
+    # each as independently upgradable — but many of them are not. Some are
+    # held to an exact version by the package that pulls them in, so bumping
+    # one line on its own produces a requirements file that pip cannot
+    # resolve at all.
+    #
+    # This has now happened twice, both caught by CI at `pip install` with
+    # ResolutionImpossible (Backend — Fast Tests *and* Backend — Docker
+    # Image Builds, so an inconsistent tree cannot reach main):
+    #
+    #   PR #324  pydantic-core 2.46.4 -> 2.47.0, while pydantic 2.13.4
+    #            requires `pydantic-core==2.46.4` exactly.
+    #   PR #338  tokenizers 0.22.2 -> 0.23.1, while transformers requires
+    #            `tokenizers<=0.23.0` — and *every* published transformers,
+    #            up to 5.14.1, has that same cap.
+    #
+    # Auditing the installed tree for this shape (an exact `==` imposed by
+    # another pinned package) turns up the same trap waiting on the whole
+    # OpenTelemetry family, on pdfminer.six, and on torch's CUDA siblings.
+    # The two settings below handle the two distinct cases.
+    groups:
+      # Families whose members pin each other exactly. Grouping makes
+      # Dependabot bump the family as one unit, so the PR resolves; these
+      # never move independently in reality, only together.
+      #
+      #   opentelemetry-api  <- ==  opentelemetry-sdk, -semantic-conventions
+      #   opentelemetry-proto <- == -exporter-otlp-proto-{grpc,common}
+      #   opentelemetry-instrumentation <- == -instrumentation-{asgi,fastapi}
+      #   opentelemetry-util-http <- == -instrumentation-{asgi,fastapi}
+      #   (plus -semantic-conventions from four separate siblings)
+      opentelemetry:
+        patterns:
+          - "opentelemetry*"
+      # Deliberately NOT grouped, though the audit flagged them: torch pins
+      # cuda-toolkit/nvidia-*/triton exactly, and pdfplumber pins
+      # pdfminer.six exactly — but none of those children are themselves
+      # pinned in requirements.txt, so Dependabot never proposes them and a
+      # group for either family would be config that does nothing. Only the
+      # parents (torch, pdfplumber) are pinned, and bumping a parent alone
+      # resolves fine because pip is free to move the unpinned children.
+      # Add the group if a future `pip freeze` ever pins them.
+      #
+      # transformers caps tokenizers by *range* rather than `==`, so these
+      # can legitimately move — but only together, and only to a version the
+      # installed transformers actually allows. Grouped, Dependabot resolves
+      # the pair jointly instead of pushing tokenizers past the cap.
+      huggingface:
+        patterns:
+          - "transformers"
+          - "tokenizers"
+          - "safetensors"
+          # requirements.txt writes `huggingface_hub`; both spellings are
+          # listed because PEP 503 treats them as one name, same as the
+          # pydantic_core/pydantic-core pair below.
+          - "huggingface_hub"
+          - "huggingface-hub"
+          - "sentence-transformers"
     ignore:
-      # pydantic-core is not an independently upgradable dependency. It is
-      # pinned in requirements.txt only because that file pins the full
-      # resolved tree; the version is dictated by pydantic, which requires an
-      # *exact* match (pydantic 2.13.4 -> `pydantic-core==2.46.4`).
+      # pydantic-core is the one case where grouping cannot help: pydantic
+      # pins it with `==`, so there is exactly one correct pydantic-core for
+      # a given pydantic and no independent upgrade ever exists. It moves
+      # when pydantic moves, as part of that bump.
       #
-      # So a PR bumping pydantic-core on its own is unresolvable by
-      # construction, and it will keep being opened every time a
-      # pydantic-core release lands ahead of the pydantic release that uses
-      # it. That happened with pydantic-core 2.47.0 (PR #324): both backend
-      # CI jobs failed at `pip install` with ResolutionImpossible, since no
-      # published pydantic paired with it.
-      #
-      # pydantic-core moves when pydantic moves — Dependabot's pydantic PR
-      # updates both lines together, because it has to in order to resolve.
       # Both spellings are listed: requirements.txt writes `pydantic_core`,
       # and PEP 503 treats the two as the same name.
       - dependency-name: "pydantic-core"
