@@ -18,11 +18,11 @@ import logging
 import time
 from datetime import timedelta
 
-import httpx
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
+from app.http_client import make_async_client
 from app.models import (
     CampaignPromise,
     Donor,
@@ -738,7 +738,7 @@ async def run_senate_pipeline(
         # ========================================
         logger.info("--- Phase 1: FETCH ---")
 
-        async with httpx.AsyncClient() as client:
+        async with make_async_client() as client:
             # 1a. Fetch all current senators from Congress.gov
             logger.info("Fetching senator list from Congress.gov...")
             progress.begin("fetch_senators")
@@ -1540,7 +1540,7 @@ async def run_senate_pipeline(
             )
             progress.begin("fetch_sponsored_cosponsors", total=len(sponsored_bills_for_cosponsor))
             enriched_count = 0
-            async with httpx.AsyncClient() as enrich_client:
+            async with make_async_client() as enrich_client:
                 for sc_idx, sp_bill in enumerate(sponsored_bills_for_cosponsor):
                     bill_id = sp_bill["billId"]
                     if bill_id in cosponsors_map:
@@ -1671,7 +1671,7 @@ async def run_senate_pipeline(
         # bill's fetch_bill_actions() call below needs a live one (observed
         # 2026-07: closed-client failures on every single call here, burning
         # ~6s of retry backoff each across up to ~12,600 sponsored bills).
-        async with httpx.AsyncClient() as client:
+        async with make_async_client() as client:
             for senator_idx in range(len(senator_prepared)):
                 prepared = senator_prepared[senator_idx]
                 senator = prepared["senator"]

@@ -13,6 +13,7 @@ import re
 import httpx
 
 from app.config import settings
+from app.http_client import make_async_client
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
 
 logger = logging.getLogger(__name__)
@@ -61,7 +62,7 @@ async def fetch_comments(
         "sort": f"{'-' if sort_order == 'desc' else ''}{sort_by}",
     }
 
-    async with httpx.AsyncClient() as client:
+    async with make_async_client() as client:
         try:
             resp = await client.get(
                 f"{REG_BASE}/comments",
@@ -152,7 +153,7 @@ async def submit_comment(
         payload["data"]["attributes"]["organization"] = organization.strip()
         payload["data"]["attributes"]["submitterType"] = "ORGANIZATION"
 
-    async with httpx.AsyncClient() as client:
+    async with make_async_client() as client:
         try:
             resp = await client.post(
                 f"{REG_BASE}/comments",

@@ -1,10 +1,10 @@
-import httpx
 from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
+from app.http_client import make_async_client
 from app.models import PipelineRun
 from app.schemas import HealthSchema
 
@@ -21,7 +21,7 @@ async def health_check(db: Session = Depends(get_db)) -> HealthSchema:
 
     llm_status = "ok"
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with make_async_client(timeout=5.0) as client:
             if settings.LLM_BACKEND == "llama-server":
                 resp = await client.get(f"{settings.LLAMA_SERVER_URL}/health")
             else:

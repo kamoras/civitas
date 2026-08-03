@@ -27,6 +27,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
+from app.http_client import make_async_client
 from app.models import (
     PipelineRun, HousePipelineRun, PipelineStatus, President, PresidentTrade,
     Representative, Senator, StockTrade, RepStockTrade, StockTradesPipelineRun,
@@ -398,7 +399,7 @@ async def run_stock_trades_pipeline() -> dict:
         senate_count = 0
         president_count = 0
         error_parts: list[str] = []
-        async with httpx.AsyncClient() as client:
+        async with make_async_client() as client:
             progress.begin("house_ptr")
             try:
                 house_count = await _ingest_house(db, client)

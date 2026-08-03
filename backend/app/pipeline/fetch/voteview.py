@@ -88,6 +88,7 @@ import statistics
 
 import httpx
 
+from app.http_client import make_async_client
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -132,7 +133,7 @@ async def fetch_member_rows(
     url = MEMBERS_URL.format(letter=_CHAMBER_LETTER[chamber], congress=congress)
     own_client = client is None
     if own_client:
-        client = httpx.AsyncClient(follow_redirects=True)
+        client = make_async_client(follow_redirects=True)
     try:
         resp = await fetch_with_retry(
             client, _rate_limiter, "GET", url,

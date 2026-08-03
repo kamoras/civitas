@@ -232,7 +232,7 @@ def _patched_httpx(lines):
     canned wire-format lines instead of making a real network call — same
     role _patched_call plays for the non-streaming backend callers above."""
     return patch(
-        "app.pipeline.analyze.ollama_client.httpx.AsyncClient",
+        "app.pipeline.analyze.ollama_client.make_async_client",
         side_effect=lambda **kw: _FakeAsyncClient(lines),
     )
 

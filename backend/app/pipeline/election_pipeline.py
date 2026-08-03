@@ -41,6 +41,7 @@ from app.election_calendar import (
     next_election_day,
     seats_up_for_year,
 )
+from app.http_client import make_async_client
 from app.models import Candidate, ElectionPipelineRun, PipelineStatus, Race, RaceCoverageItem, ScoreSnapshot
 from app.pipeline.fetch.fec import fetch_all_candidates, fetch_candidate_financials
 from app.pipeline.progress_tracker import ProgressTracker
@@ -367,7 +368,7 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
     try:
         logger.info("=== ELECTION PIPELINE START (cycle %d) ===", cycle)
 
-        async with httpx.AsyncClient() as client:
+        async with make_async_client() as client:
             run.current_phase = "roster"
             db.commit()
             logger.info("--- Election: ROSTER SYNC ---")

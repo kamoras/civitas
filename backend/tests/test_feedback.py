@@ -70,7 +70,7 @@ class TestSubmitFeedback:
         mock_client.post = AsyncMock(return_value=mock_response)
 
         with patch("app.api.feedback.settings") as mock_settings, \
-             patch("app.api.feedback.httpx.AsyncClient") as mock_client_cls:
+             patch("app.api.feedback.make_async_client") as mock_client_cls:
             mock_settings.FEEDBACK_TOKEN = "fake-token"
             mock_settings.GITHUB_FEEDBACK_REPO = "kamoras/civitas"
             mock_client_cls.return_value.__aenter__.return_value = mock_client
@@ -92,7 +92,7 @@ class TestSubmitFeedback:
         mock_client.post = AsyncMock(return_value=mock_response)
 
         with patch("app.api.feedback.settings") as mock_settings, \
-             patch("app.api.feedback.httpx.AsyncClient") as mock_client_cls:
+             patch("app.api.feedback.make_async_client") as mock_client_cls:
             mock_settings.FEEDBACK_TOKEN = "fake-token"
             mock_settings.GITHUB_FEEDBACK_REPO = "kamoras/civitas"
             mock_client_cls.return_value.__aenter__.return_value = mock_client
@@ -109,7 +109,7 @@ class TestSubmitFeedback:
         mock_client.post = AsyncMock(side_effect=httpx.ConnectError("boom"))
 
         with patch("app.api.feedback.settings") as mock_settings, \
-             patch("app.api.feedback.httpx.AsyncClient") as mock_client_cls:
+             patch("app.api.feedback.make_async_client") as mock_client_cls:
             mock_settings.FEEDBACK_TOKEN = "fake-token"
             mock_settings.GITHUB_FEEDBACK_REPO = "kamoras/civitas"
             mock_client_cls.return_value.__aenter__.return_value = mock_client

@@ -15,11 +15,11 @@ import logging
 import time
 from datetime import timedelta
 
-import httpx
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
+from app.http_client import make_async_client
 from app.models import HousePipelineRun, PipelineStatus, Representative, ScoreSnapshot
 from app.pipeline.member_lifecycle import (
     CHAMBER_HOUSE,
@@ -127,7 +127,7 @@ async def run_house_pipeline() -> dict:
     try:
         logger.info("=== HOUSE PIPELINE START ===")
 
-        async with httpx.AsyncClient() as client:
+        async with make_async_client() as client:
             # ── PHASE 1: FETCH MEMBERS ──
             logger.info("--- House Phase 1: FETCH MEMBERS ---")
             progress.begin("fetch_members")

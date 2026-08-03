@@ -30,6 +30,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.http_client import make_async_client
 from app.models import RepSponsoredBill, SponsoredBill
 from app.pipeline.analyze.bill_stage import classify_bill_stage_from_actions
 from app.pipeline.cache import api_cache_get, api_cache_set
@@ -218,7 +219,7 @@ async def refresh_bill_statuses(db: Session | None = None) -> dict:
         try:
             now = utcnow()
             since = _window_start(db, now)
-            async with httpx.AsyncClient() as client:
+            async with make_async_client() as client:
                 recent = await _fetch_recently_updated(client, since)
                 summary = await _apply_updates(db, client, recent)
             # Only advance the window marker after a full successful pass, so
