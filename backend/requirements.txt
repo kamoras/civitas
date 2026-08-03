@@ -3,7 +3,7 @@ atproto>=0.0.50
 annotated-doc==0.0.4
 annotated-types==0.8.0
 anyio==4.14.2
-APScheduler==3.11.2
+APScheduler==3.11.3
 asgiref==3.11.1
 backoff==2.2.1
 bcrypt==5.0.0
