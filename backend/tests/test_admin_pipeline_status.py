@@ -95,9 +95,24 @@ async def test_history_includes_election_pipeline_type(db_session):
     from app.models import ElectionPipelineRun
     from app.api.admin import admin_pipeline_history
 
-    db_session.add(ElectionPipelineRun(status="completed", started_at=utcnow()))
+    db_session.add(ElectionPipelineRun(
+        status="completed",
+        started_at=utcnow(),
+        candidates_synced=6917,
+        financials_refreshed=500,
+        coverage_items_ingested=42,
+    ))
     db_session.commit()
 
     result = await admin_pipeline_history(limit=20, db=db_session)
     types = [r["pipelineType"] for r in result]
     assert "election" in types
+
+    # The admin run-history table renders an Election row's PROCESSED cell
+    # straight from these three keys (frontend: lib/pipelineRuns.ts). Assert
+    # the exact camelCase names, not just that the row exists — renaming one
+    # here would put the row back to showing zeros with nothing failing.
+    entry = next(r for r in result if r["pipelineType"] == "election")
+    assert entry["candidatesSynced"] == 6917
+    assert entry["financialsRefreshed"] == 500
+    assert entry["coverageItemsIngested"] == 42
