@@ -357,9 +357,26 @@ export interface PipelineStepInfo {
   completedAt?: string;
 }
 
+/**
+ * Every pipeline the backend records runs for (see `_history_entry` in
+ * `app/api/admin.py` — this list must match the labels passed there).
+ *
+ * Exported as a named type on purpose: anything that branches per pipeline
+ * type should key an exhaustive `Record<PipelineType, …>` off this, so adding
+ * a sixth pipeline is a compile error at every branch instead of silently
+ * falling through to whichever type happens to be the default. Election runs
+ * shipped as "SENATE" rows in the admin run history for exactly that reason.
+ */
+export type PipelineType =
+  | "senate"
+  | "house"
+  | "stock_trades"
+  | "supplementary"
+  | "election";
+
 export interface PipelineRunInfo {
   id: number;
-  pipelineType?: "senate" | "house" | "stock_trades" | "supplementary";
+  pipelineType?: PipelineType;
   startedAt: string;
   completedAt: string | null;
   status: string;
@@ -387,7 +404,36 @@ export interface PipelineRunInfo {
   justicesScored?: number;
   justicesSkipped?: boolean;
   presidentsUpdated?: number;
+  // Election-only fields
+  candidatesSynced?: number;
+  financialsRefreshed?: number;
+  coverageItemsIngested?: number;
 }
+
+/**
+ * A row from `GET /admin/pipeline_history`, which interleaves runs of every
+ * pipeline type.
+ *
+ * The senate-shaped counters above are declared required because
+ * `PipelineStatus.lastRun` — the Senate pipeline's own status object — always
+ * carries them. History rows do not: `_history_entry` only attaches each
+ * type's own `extra` fields, so a House or Election row genuinely has no
+ * `senatorsProcessed` and no `cacheHits` at runtime. Typing them as required
+ * there was a lie that let `r.cacheHits + r.cacheMisses` (NaN) type-check
+ * clean. This alias tells the truth for the mixed feed.
+ */
+type SenateOnlyRunFields =
+  | "currentPhase"
+  | "senatorsProcessed"
+  | "senatorsTotal"
+  | "senatorsFailed"
+  | "billsClassified"
+  | "llmCalls"
+  | "cacheHits"
+  | "cacheMisses";
+
+export type PipelineHistoryRun = Omit<PipelineRunInfo, SenateOnlyRunFields> &
+  Partial<Pick<PipelineRunInfo, SenateOnlyRunFields>>;
 
 export interface HouseRunInfo {
   id: number;
@@ -956,7 +1002,7 @@ export async function clearStuckStockTradesPipeline(token: string): Promise<{ cl
 }
 
 
-export async function fetchAdminPipelineHistory(token: string): Promise<PipelineRunInfo[]> {
+export async function fetchAdminPipelineHistory(token: string): Promise<PipelineHistoryRun[]> {
   return requestJson(`${API_BASE}/admin/pipeline/history?limit=20`, "History failed", {
     init: { headers: adminHeaders(token) },
   });

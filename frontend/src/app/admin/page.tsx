@@ -19,13 +19,14 @@ import {
   type AdminPipelineStatus,
   type ActionRefreshState,
   type HostStats,
-  type PipelineRunInfo,
+  type PipelineHistoryRun,
   type PipelineStepInfo,
   type UptimeInfo,
   type VisitorStatsDay,
   type VisitorBreakdown,
   type TopPageEntry,
 } from "@/lib/api";
+import { cacheHitRate, describeRun } from "@/lib/pipelineRuns";
 
 const PHASE_LABELS: Record<string, string> = {
   fetch: "FETCHING DATA",
@@ -1174,7 +1175,7 @@ function VisitorStats({ token }: { token: string }) {
 }
 
 // --- Run History Table ---
-function RunHistory({ runs }: { runs: PipelineRunInfo[] }) {
+function RunHistory({ runs }: { runs: PipelineHistoryRun[] }) {
   if (runs.length === 0) return <p className="text-matrix-green/40 text-xs">No pipeline runs recorded.</p>;
   return (
     <div className="overflow-x-auto">
@@ -1192,10 +1193,11 @@ function RunHistory({ runs }: { runs: PipelineRunInfo[] }) {
         </thead>
         <tbody>
           {runs.map((r) => {
-            const isHouse = r.pipelineType === "house";
-            const isStockTrades = r.pipelineType === "stock_trades";
-            const isSupplementary = r.pipelineType === "supplementary";
-            const isSenate = !isHouse && !isStockTrades && !isSupplementary;
+            // Every per-type decision comes from one exhaustive table (see
+            // lib/pipelineRuns.ts) rather than a chain of negations — that
+            // chain is what silently rendered Election runs as SENATE.
+            const display = describeRun(r);
+            const hitRate = display.hasLlmStats ? cacheHitRate(r) : null;
             const statusColor = r.status === "completed"
               ? "text-matrix-green"
               : r.status === "partial"
@@ -1211,8 +1213,8 @@ function RunHistory({ runs }: { runs: PipelineRunInfo[] }) {
                 className="border-b border-matrix-green/10 hover:bg-matrix-green/5"
               >
                 <td className="py-1.5 pr-3">
-                  <span className={isSenate ? "text-matrix-green/50" : "text-neon-cyan/70"}>
-                    {isStockTrades ? "STOCK" : isHouse ? "HOUSE" : isSupplementary ? "SUPP" : "SENATE"}
+                  <span className={display.hasLlmStats ? "text-matrix-green/50" : "text-neon-cyan/70"}>
+                    {display.label}
                   </span>
                 </td>
                 <td className="py-1.5 pr-3 text-matrix-green/70">{formatTime(r.startedAt)}</td>
@@ -1226,33 +1228,16 @@ function RunHistory({ runs }: { runs: PipelineRunInfo[] }) {
                 </td>
                 <td className="py-1.5 pr-3 text-matrix-green/60">{formatDuration(r.elapsedSeconds)}</td>
                 <td className="py-1.5 pr-3 text-right text-matrix-green/60">
-                  {isStockTrades ? (
-                    <>{r.houseTradesIngested ?? 0}H/{r.senateTradesIngested ?? 0}S/{r.presidentTradesIngested ?? 0}P</>
-                  ) : isHouse ? (
-                    <>
-                      {r.repsProcessed ?? 0}/{r.repsTotal ?? 0}
-                      {(r.repsFailed ?? 0) > 0 && (
-                        <span className="text-neon-pink ml-1">({r.repsFailed}F)</span>
-                      )}
-                    </>
-                  ) : isSupplementary ? (
-                    <>{r.presidentsUpdated ?? 0}P/{r.justicesSkipped ? "—" : (r.justicesScored ?? 0)}J</>
-                  ) : (
-                    <>
-                      {r.senatorsProcessed}/{r.senatorsTotal}
-                      {r.senatorsFailed > 0 && (
-                        <span className="text-neon-pink ml-1">({r.senatorsFailed}F)</span>
-                      )}
-                    </>
+                  {display.processed}
+                  {display.failed > 0 && (
+                    <span className="text-neon-pink ml-1">({display.failed}F)</span>
                   )}
                 </td>
                 <td className="py-1.5 pr-3 text-right text-matrix-green/60">
-                  {isSenate ? r.llmCalls : "—"}
+                  {display.hasLlmStats ? r.llmCalls ?? 0 : "—"}
                 </td>
                 <td className="py-1.5 text-right text-matrix-green/60">
-                  {isSenate && r.cacheHits + r.cacheMisses > 0
-                    ? `${Math.round((r.cacheHits / (r.cacheHits + r.cacheMisses)) * 100)}%`
-                    : "—"}
+                  {hitRate === null ? "—" : `${hitRate}%`}
                 </td>
               </tr>
             );
@@ -1694,7 +1679,7 @@ function AdminDashboardView({
 }) {
   const [dashboard, setDashboard] = useState<AdminDashboard | null>(null);
   const [pipelineStatus, setPipelineStatus] = useState<AdminPipelineStatus | null>(null);
-  const [history, setHistory] = useState<PipelineRunInfo[]>([]);
+  const [history, setHistory] = useState<PipelineHistoryRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [completionBanner, setCompletionBanner] = useState<{
     status: "completed" | "failed";
