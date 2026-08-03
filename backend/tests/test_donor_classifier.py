@@ -173,7 +173,7 @@ class TestHybridClassification:
             "app.pipeline.analyze.donor_classifier_ai._classify_remaining_via_nn",
             return_value={"COMPLETELY UNKNOWN ENTITY XYZ": {"type": "Org/Employees", "industry": "OTHER"}},
         ) as mock_nn:
-            result = await classify_donors_hybrid(donors, db_session=db_session)
+            await classify_donors_hybrid(donors, db_session=db_session)
             mock_nn.assert_called_once()
 
     @pytest.mark.asyncio

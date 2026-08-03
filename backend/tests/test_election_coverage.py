@@ -8,7 +8,7 @@ name ("surname_context") — and an item that still matches candidates in
 more than one race is dropped entirely rather than guessed or fanned out.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 from app.models import Candidate, Race, RaceCoverageItem
