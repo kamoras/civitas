@@ -43,19 +43,15 @@ updates:
       opentelemetry:
         patterns:
           - "opentelemetry*"
-      # torch pins its CUDA/Triton companions exactly (cuda-toolkit,
-      # nvidia-*, triton), so a lone nvidia-* bump is unresolvable.
-      torch:
-        patterns:
-          - "torch"
-          - "triton"
-          - "nvidia-*"
-          - "cuda-toolkit"
-      # pdfplumber pins pdfminer.six exactly.
-      pdf:
-        patterns:
-          - "pdfplumber"
-          - "pdfminer.six"
+      # Deliberately NOT grouped, though the audit flagged them: torch pins
+      # cuda-toolkit/nvidia-*/triton exactly, and pdfplumber pins
+      # pdfminer.six exactly — but none of those children are themselves
+      # pinned in requirements.txt, so Dependabot never proposes them and a
+      # group for either family would be config that does nothing. Only the
+      # parents (torch, pdfplumber) are pinned, and bumping a parent alone
+      # resolves fine because pip is free to move the unpinned children.
+      # Add the group if a future `pip freeze` ever pins them.
+      #
       # transformers caps tokenizers by *range* rather than `==`, so these
       # can legitimately move — but only together, and only to a version the
       # installed transformers actually allows. Grouped, Dependabot resolves
@@ -65,6 +61,9 @@ updates:
           - "transformers"
           - "tokenizers"
           - "safetensors"
+          # requirements.txt writes `huggingface_hub`; both spellings are
+          # listed because PEP 503 treats them as one name, same as the
+          # pydantic_core/pydantic-core pair below.
           - "huggingface_hub"
           - "huggingface-hub"
           - "sentence-transformers"
