@@ -11,6 +11,7 @@ from app.pipeline.analyze.sponsorship_analysis import (
     _build_cosponsorship_matrix,
     _cosponsorship_edge_weight,
     _rescale,
+    compute_bipartisanship_scores,
     compute_ideology_scores,
     compute_leadership_scores,
     describe_senator_position,
@@ -398,8 +399,6 @@ class TestPartyRelativeIdeologyLabels:
 
 
 # ── Bipartisanship (v5) ──────────────────────────────────────────
-
-from app.pipeline.analyze.sponsorship_analysis import compute_bipartisanship_scores
 
 
 class TestBipartisanship:

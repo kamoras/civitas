@@ -369,7 +369,8 @@ class TestBillPartyAlignmentQuality:
                 )
 
         correct = sum(
-            1 for p, l in zip(predictions, labels) if p == l or p == "bipartisan"
+            1 for pred, label in zip(predictions, labels)
+            if pred == label or pred == "bipartisan"
         )
         accuracy = correct / len(labels) if labels else 0.0
 

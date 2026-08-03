@@ -9,6 +9,25 @@ updates:
     labels:
       - dependencies
       - python
+    ignore:
+      # pydantic-core is not an independently upgradable dependency. It is
+      # pinned in requirements.txt only because that file pins the full
+      # resolved tree; the version is dictated by pydantic, which requires an
+      # *exact* match (pydantic 2.13.4 -> `pydantic-core==2.46.4`).
+      #
+      # So a PR bumping pydantic-core on its own is unresolvable by
+      # construction, and it will keep being opened every time a
+      # pydantic-core release lands ahead of the pydantic release that uses
+      # it. That happened with pydantic-core 2.47.0 (PR #324): both backend
+      # CI jobs failed at `pip install` with ResolutionImpossible, since no
+      # published pydantic paired with it.
+      #
+      # pydantic-core moves when pydantic moves — Dependabot's pydantic PR
+      # updates both lines together, because it has to in order to resolve.
+      # Both spellings are listed: requirements.txt writes `pydantic_core`,
+      # and PEP 503 treats the two as the same name.
+      - dependency-name: "pydantic-core"
+      - dependency-name: "pydantic_core"
 
   - package-ecosystem: npm
     directory: /frontend

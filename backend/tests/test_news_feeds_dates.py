@@ -12,7 +12,6 @@ from app.pipeline.fetch.news_feeds import (
     MAX_SUMMARY_CHARS,
     _extract_body_text,
     _parse_pub_date,
-    _extract_body_text,
     _parse_rss_feed,
     _strip_html,
     fetch_news_articles,

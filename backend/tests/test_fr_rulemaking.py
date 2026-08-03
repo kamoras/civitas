@@ -78,7 +78,6 @@ SAMPLE_PROPOSED_RULE = {
 
 def _mock_client(responses_by_type: dict[str, list[dict]]):
     """Build a mock client that returns different results per doc type."""
-    call_count = {"n": 0}
 
     async def mock_get(url, **kwargs):
         params = kwargs.get("params", {})
