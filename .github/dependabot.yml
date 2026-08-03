@@ -52,14 +52,14 @@ updates:
       # resolves fine because pip is free to move the unpinned children.
       # Add the group if a future `pip freeze` ever pins them.
       #
-      # transformers caps tokenizers by *range* rather than `==`, so these
-      # can legitimately move — but only together, and only to a version the
-      # installed transformers actually allows. Grouped, Dependabot resolves
-      # the pair jointly instead of pushing tokenizers past the cap.
+      # This family is grouped because its members move together in
+      # practice (transformers, huggingface_hub, safetensors, hf-xet and
+      # sentence-transformers all constrain one another). Note that
+      # tokenizers is deliberately NOT in this list — see the ignore
+      # section for why grouping turned out not to be the answer there.
       huggingface:
         patterns:
           - "transformers"
-          - "tokenizers"
           - "safetensors"
           # requirements.txt writes `huggingface_hub`; both spellings are
           # listed because PEP 503 treats them as one name, same as the
@@ -67,8 +67,16 @@ updates:
           - "huggingface_hub"
           - "huggingface-hub"
           - "sentence-transformers"
+          # hf-xet was missing from this list on the first attempt, and the
+          # very first grouped PR (#340) failed to install because of it:
+          # huggingface_hub 1.26.0 requires `hf-xet>=1.5.1` on every 64-bit
+          # platform, while hf-xet sat pinned at 1.4.3 outside the group.
+          # A group is only as good as its membership — a family member left
+          # out is exactly the lone-unresolvable-line problem this config
+          # exists to prevent, just one level down.
+          - "hf-xet"
     ignore:
-      # pydantic-core is the one case where grouping cannot help: pydantic
+      # pydantic-core is one case where grouping cannot help: pydantic
       # pins it with `==`, so there is exactly one correct pydantic-core for
       # a given pydantic and no independent upgrade ever exists. It moves
       # when pydantic moves, as part of that bump.
@@ -77,6 +85,24 @@ updates:
       # and PEP 503 treats the two as the same name.
       - dependency-name: "pydantic-core"
       - dependency-name: "pydantic_core"
+      # tokenizers turned out to be the same case, though it did not look
+      # like it. transformers caps it by *range* (`tokenizers<=0.23.0`), and
+      # the first version of this config grouped it with transformers on the
+      # theory that Dependabot would then resolve the pair jointly to
+      # something inside the cap. It does not: the very first grouped PR
+      # (#340) proposed transformers 5.14.1 *and* tokenizers 0.23.1
+      # together, which is unresolvable, because every published
+      # transformers — 5.14.1 included — still caps at <=0.23.0.
+      #
+      # The detail that settles it: tokenizers 0.23.0 was never released.
+      # PyPI has 0.23.0rc0 and then 0.23.1, nothing between. So `<=0.23.0`
+      # admits no published version above the pinned 0.22.2, and there is
+      # no tokenizers upgrade to take at all until transformers raises its
+      # cap — at which point transformers' own grouped bump carries it.
+      #
+      # Re-check this if transformers ever ships a wider cap; the ignore can
+      # come back out then.
+      - dependency-name: "tokenizers"
 
   - package-ecosystem: npm
     directory: /frontend
