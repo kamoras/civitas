@@ -68,15 +68,15 @@ export default function AccessibilityPage() {
           <Section title="CONFORMANCE STATUS">
             <P>
               Civitas conforms to{" "}
-              <Label>Web Content Accessibility Guidelines (WCAG) 2.1 Level AA</Label>.
-              Every page is checked against this standard automatically on every code
-              change (see Testing Approach below); no known non-conformances remain open.
-              If you find one, it&apos;s a bug — please report it below.
+              <Label>Web Content Accessibility Guidelines (WCAG) 2.1 Level AA</Label>. Every page is
+              checked against this standard automatically on every code change (see Testing Approach
+              below); no known non-conformances remain open. If you find one, it&apos;s a bug —
+              please report it below.
             </P>
             <div className="space-y-2 mt-4">
               <Row label="Standard" value="WCAG 2.1 Level AA" />
               <Row label="Status" value="Fully conformant" />
-              <Row label="Last reviewed" value="2026-07-27" />
+              <Row label="Last reviewed" value="2026-08-05" />
             </div>
           </Section>
 
@@ -91,49 +91,74 @@ export default function AccessibilityPage() {
               <Check>Focus trap management in mobile navigation menu</Check>
               <Check>Visible focus indicators on all interactive elements (2px cyan outline)</Check>
               <Check>
-                <Label>prefers-reduced-motion</Label> support — all animations disabled when requested
+                <Label>prefers-reduced-motion</Label> support — all animations disabled when
+                requested
               </Check>
               <Check>
                 <Label>prefers-contrast: more</Label> support — low-opacity text raised to full
                 opacity, partisan colors lightened for improved contrast
               </Check>
               <Check>
-                Plain-language summaries throughout — every score metric renders a
-                jargon-free one-line explanation next to its technical label (no toggle to
-                find), and each methodology section opens with an &ldquo;In short&rdquo;
-                summary before the citations and formulas
+                Plain-language summaries throughout — every score metric renders a jargon-free
+                one-line explanation next to its technical label (no toggle to find), and each
+                methodology section opens with an &ldquo;In short&rdquo; summary before the
+                citations and formulas
               </Check>
               <Check>
                 Score tooltips explain every metric — no number is shown without context; the
                 explanation text is always present in the page (not injected only on hover), so
                 it&apos;s reachable via CSS-only hover/focus even with JavaScript disabled
               </Check>
-              <Check>External links announce &ldquo;opens in new tab&rdquo; to screen readers</Check>
+              <Check>
+                <strong className="text-matrix-green">Reader-controlled display settings</strong>{" "}
+                (the <Label>[AA]</Label> control in the navigation bar) — text size
+                (100/112/125/150%), a <Label>Daylight</Label> positive-polarity theme for bright
+                rooms, a <Label>Legible type</Label> option that replaces the pixel display font
+                with a high x-height mono and lowers colour saturation, and a switch to turn off
+                glow, CRT scanlines and Matrix rain. Choices persist in the browser and are applied
+                before first paint, so the page never flashes the setting you turned off. This
+                addresses WCAG 2.1 <Label>1.4.8 Visual Presentation</Label> (Level AAA), which asks
+                that the reader be able to select foreground and background colours rather than the
+                author guessing one setting for every display and every room.
+              </Check>
+              <Check>
+                <strong className="text-matrix-green">Minimum rendered text size</strong> —
+                incidental labels are floored at 12px and scale with the reader&apos;s text-size
+                setting; body copy is set in a monospace face chosen for x-height rather than period
+                flavour. Default line height is 1.6.
+              </Check>
+              <Check>
+                External links announce &ldquo;opens in new tab&rdquo; to screen readers
+              </Check>
               <Check>Decorative elements marked aria-hidden to prevent screen reader noise</Check>
               <Check>Data tables use proper th scope attributes and accessible captions</Check>
-              <Check>Progress bars use role=&ldquo;progressbar&rdquo; with aria-valuenow/min/max</Check>
-              <Check>Loading and error states use role=&ldquo;status&rdquo; and role=&ldquo;alert&rdquo;</Check>
+              <Check>
+                Progress bars use role=&ldquo;progressbar&rdquo; with aria-valuenow/min/max
+              </Check>
+              <Check>
+                Loading and error states use role=&ldquo;status&rdquo; and role=&ldquo;alert&rdquo;
+              </Check>
               <Check>ESLint jsx-a11y plugin enforces ARIA correctness at development time</Check>
             </ul>
           </Section>
 
           <Section title="TESTING APPROACH">
             <P>
-              Accessibility is verified through a combination of automated and manual testing,
-              on every code change — not a one-time audit that goes stale:
+              Accessibility is verified through a combination of automated and manual testing, on
+              every code change — not a one-time audit that goes stale:
             </P>
             <ul className="space-y-2 mt-3">
               <Check>
-                <strong className="text-matrix-green">Automated Lighthouse CI gate</strong> —
-                every pull request builds the site and runs Lighthouse&apos;s accessibility
-                audit against every major route (home, leaderboard, bills, explore, and this
-                page among them); the build is blocked from merging unless every route scores
-                100/100. This has been the case on every change since the gate was added.
+                <strong className="text-matrix-green">Automated Lighthouse CI gate</strong> — every
+                pull request builds the site and runs Lighthouse&apos;s accessibility audit against
+                every major route (home, leaderboard, bills, explore, and this page among them); the
+                build is blocked from merging unless every route scores 100/100. This has been the
+                case on every change since the gate was added.
               </Check>
               <Check>
-                <strong className="text-matrix-green">ESLint jsx-a11y</strong> — runs on every
-                code change, enforcing ARIA attribute correctness, label associations, and
-                semantic role usage.
+                <strong className="text-matrix-green">ESLint jsx-a11y</strong> — runs on every code
+                change, enforcing ARIA attribute correctness, label associations, and semantic role
+                usage.
               </Check>
               <Check>
                 <strong className="text-matrix-green">Manual keyboard testing</strong> — All
@@ -141,18 +166,29 @@ export default function AccessibilityPage() {
                 submission) verified with keyboard-only navigation.
               </Check>
               <Check>
-                <strong className="text-matrix-green">Contrast verification</strong> — Every
-                text color and opacity level actually used in the codebase (2026-07 audit)
-                had its WCAG relative-luminance contrast ratio computed against the terminal
-                background; any combination below 4.5:1 is floored in CSS to the minimum
-                opacity, or substituted for a lighter shade, that clears it — enforced globally
-                so it can&apos;t be missed on a new component. Decorative pixel-font headings
-                (VT323, Press Start 2P) are scoped out of this floor deliberately: all body
-                text and data use Share Tech Mono or system monospace fonts instead.
+                <strong className="text-matrix-green">Contrast verification</strong> — Every text
+                color and opacity level actually used in the codebase (2026-07 audit) had its WCAG
+                relative-luminance contrast ratio computed against the terminal background; any
+                combination below 4.5:1 is floored in CSS to the minimum opacity, or substituted for
+                a lighter shade, that clears it — enforced globally so it can&apos;t be missed on a
+                new component. Decorative pixel-font headings (VT323, Press Start 2P) are scoped out
+                of this floor deliberately: all body text and data use Share Tech Mono or system
+                monospace fonts instead.
               </Check>
               <Check>
-                <strong className="text-matrix-green">Reduced motion</strong> — Animation
-                behavior verified with prefers-reduced-motion enabled in browser settings.
+                <strong className="text-matrix-green">Font metric audit</strong> — typefaces are
+                chosen on measured metrics, not period flavour. The 2026-08 pass measured x-height
+                and outline geometry directly from the shipped font files: body copy moved off a
+                0.400em-x-height face onto a 0.500em one, a 25% gain in apparent size at the same
+                nominal size and no layout change. The bitmap display face is drawn on an
+                8-cell-per-em grid, so it only rasterises crisply when font size × display scale
+                factor is a multiple of 8; it was removed from small labels, where nothing between
+                8px and 24px satisfies that on a display running at 125% scaling. Glow text-shadows,
+                whose blur radius exceeds the stroke width at small sizes, are dropped below 1rem.
+              </Check>
+              <Check>
+                <strong className="text-matrix-green">Reduced motion</strong> — Animation behavior
+                verified with prefers-reduced-motion enabled in browser settings.
               </Check>
             </ul>
           </Section>
@@ -175,7 +211,10 @@ export default function AccessibilityPage() {
                 }
               />
               <Row label="Response time" value="We aim to respond within 5 business days" />
-              <Row label="What to include" value="Describe what you were trying to do, what happened, your browser and OS, and any assistive technology you use" />
+              <Row
+                label="What to include"
+                value="Describe what you were trying to do, what happened, your browser and OS, and any assistive technology you use"
+              />
             </div>
           </Section>
 

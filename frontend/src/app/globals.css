@@ -4,13 +4,40 @@
 :root {
   --background: #0d0208;
   --foreground: #00ff41;
+
+  /* Reader-controlled root type scale (see useDisplaySettings). 1 = 100%.
+     Tailwind's named sizes are rem-based, so scaling the root size scales
+     them; the px arbitrary-value sizes are scaled explicitly in the floor
+     block further down. */
+  --civitas-text-scale: 1;
+
+  /* Smallest permitted rendered text. Apple's HIG puts its floor at 11pt
+     (~14.7px) and Material at 14sp; NN/g's usability testing lands on 16px
+     as the body minimum. This codebase's ~475 sub-11px call sites can't go
+     to 16px without reflowing every dense badge grid, so 12px is the
+     defensible compromise for incidental labels — body copy gets 1rem. */
+  --civitas-min-text: 12px;
 }
 
 /* ===== BASE STYLES ===== */
+html {
+  font-size: calc(100% * var(--civitas-text-scale));
+}
+
 body {
   color: var(--foreground);
   background: var(--background);
   overflow-x: hidden;
+  /* Was unset, so prose inherited the browser default of ~1.2 (and VT323's
+     short 0.4em x-height made lines look tighter still). WCAG 2.2 SC 1.4.12
+     requires content to survive a reader forcing 1.5; Baymard's reading
+     research finds comprehension degrades below ~1.4. Ship 1.6 as the
+     default rather than relying on ~64 scattered `leading-relaxed` classes. */
+  line-height: 1.6;
+  /* Keep glyph shapes stable rather than letting the renderer snap stems to
+     the pixel grid differently per weight — matters most for the monospace
+     data tables. */
+  text-rendering: optimizeLegibility;
 }
 
 ::selection {
@@ -276,8 +303,7 @@ body {
 }
 
 .neon-yellow {
-  text-shadow:
-    0 0 8px rgba(255, 255, 0, 0.5);
+  text-shadow: 0 0 8px rgba(255, 255, 0, 0.5);
 }
 
 /* ===== ASCII DIVIDER ===== */
@@ -439,18 +465,119 @@ body {
 
 /* ===== A11Y: MINIMUM FONT SIZE (always on) =====
    8-10px pixel-font badges/labels (bill-type tags, committee names, dates)
-   are common across the site (~450 Tailwind arbitrary-value call sites —
+   are common across the site (~475 Tailwind arbitrary-value call sites —
    too many to hand-edit, same reasoning as the contrast floor above).
-   Floored to 11px globally rather than per component; Tailwind v4 keeps
+   Floored globally rather than per component; Tailwind v4 keeps
    arbitrary-value class names literal in the DOM (`text-[9px]`, not
    hashed), so this attribute selector reliably matches every call site.
    Verified live against production (Playwright, Action Center's dense
    badge grid and a senator scorecard's sponsored-bill tag list) — 11px
-   doesn't overflow or wrap any of the bordered/padded badges it touches. */
+   doesn't overflow or wrap any of the bordered/padded badges it touches.
+
+   Raised 11px -> 12px (--civitas-min-text) in the 2026-08 readability pass.
+   11px was below every published platform floor (Apple HIG 11pt ~= 14.7px,
+   Material 14sp) and, because these px sizes are not rem-based, they were
+   also the one part of the type system a browser zoom/root-size change did
+   NOT move. Multiplying by the reader's scale here fixes both. text-[11px]
+   joins the group for the same reason — it was previously left un-scaled. */
 [class*="text-[8px]"],
 [class*="text-[9px]"],
-[class*="text-[10px]"] {
-  font-size: 11px !important;
+[class*="text-[10px]"],
+[class*="text-[11px]"] {
+  font-size: calc(var(--civitas-min-text) * var(--civitas-text-scale)) !important;
+}
+
+/* ===== LEGIBILITY: PIXEL FONT OFF ITS DESIGN GRID =====
+   Press Start 2P (`font-pixel`, ~290 call sites) is a bitmap face drawn on
+   an 8-cell-per-em grid — every outline coordinate in the latin set is a
+   multiple of 125/1000 em (verified with fontTools against the shipped
+   woff2). A cell therefore lands on a whole device pixel only when
+   `font-size x devicePixelRatio` is a multiple of 8. In practice:
+
+     dpr 1.00 (typical 1080p)      crisp at 8, 16, 24px
+     dpr 1.25 (Windows at 125%)    crisp at NO size between 8 and 24px
+     dpr 1.50 (Windows at 150%)    crisp at 16px only
+     dpr 2.00 (HiDPI / Retina)     crisp at 8, 12, 16, 20, 24px
+
+   Every other size resamples the bitmap onto fractional pixels, which the
+   rasteriser resolves by blurring the stems — the font's strokes are one
+   cell wide, so there is nothing left to anti-alias against. This is why
+   the site can be legible on one machine and mushy on the next, and it is
+   the most display-dependent defect in the type system. (The 11px a11y
+   floor above made this worse, not better: it moved labels off 8px, the one
+   crisp size at dpr 1.0, onto a size that is crisp at no scale factor.)
+
+   Fix: keep Press Start 2P for large display type, where it is on-grid
+   often enough and its 1.0em cap height carries the aesthetic, and hand the
+   small labels to Share Tech Mono — an outline face with no grid
+   constraint, so it rasterises cleanly at any size and scale factor. */
+[class*="font-pixel"][class*="text-[8px]"],
+[class*="font-pixel"][class*="text-[9px]"],
+[class*="font-pixel"][class*="text-[10px]"],
+[class*="font-pixel"][class*="text-[11px]"],
+[class*="font-pixel"][class*="text-xs"],
+[class*="font-pixel"][class*="text-sm"] {
+  font-family: var(--font-share-tech), ui-monospace, monospace !important;
+  /* Share Tech Mono's 0.500em x-height reads noticeably lighter than Press
+     Start 2P's 0.750em at the same nominal size; widen the tracking a touch
+     so these all-caps labels keep the blocky, spaced-out label texture the
+     design relies on without needing the bitmap face to get it. */
+  letter-spacing: 0.06em;
+}
+
+/* ===== LEGIBILITY: TRACKING ON SMALL CAPS =====
+   `tracking-widest` (0.1em) is applied at 206 call sites, overwhelmingly to
+   short all-caps labels at 10-12px. Letter-spacing research (Frontiers in
+   Psychology 2020, Chung IOVS 2002) finds added tracking helps letter-level
+   recognition but past a point costs word-level reading rate, because it
+   pulls the glyphs outside the span a reader takes in per fixation — and
+   these are already monospace faces, which are uniformly wider than a
+   proportional face to begin with. Ease it off only where the text is small
+   enough for the cost to outweigh the benefit; large display headings keep
+   the full 0.1em. */
+[class*="tracking-widest"][class*="text-[8px]"],
+[class*="tracking-widest"][class*="text-[9px]"],
+[class*="tracking-widest"][class*="text-[10px]"],
+[class*="tracking-widest"][class*="text-[11px]"],
+[class*="tracking-widest"][class*="text-xs"] {
+  letter-spacing: 0.05em !important;
+}
+
+/* ===== LEGIBILITY: GLOW ON SMALL TEXT =====
+   The neon-* helpers paint a 8px + 20px blur behind the glyph. On a 30px
+   heading that reads as a CRT bloom; on a 12px label the blur radius
+   exceeds the stroke width, so the halo fills the counters (the enclosed
+   space in a, e, o) and softens exactly the edges a reader needs. It also
+   stacks with the halation a bright saturated foreground already produces
+   on a near-black field for the ~47% of people with astigmatism, whose
+   dilated pupil in a dark UI spreads the same light further.
+
+   Keep the effect as brand texture on display type; drop it below 1rem. */
+.neon-green[class*="text-[8px]"],
+.neon-green[class*="text-[9px]"],
+.neon-green[class*="text-[10px]"],
+.neon-green[class*="text-[11px]"],
+.neon-green[class*="text-xs"],
+.neon-green[class*="text-sm"],
+.neon-cyan[class*="text-[8px]"],
+.neon-cyan[class*="text-[9px]"],
+.neon-cyan[class*="text-[10px]"],
+.neon-cyan[class*="text-[11px]"],
+.neon-cyan[class*="text-xs"],
+.neon-cyan[class*="text-sm"],
+.neon-pink[class*="text-[8px]"],
+.neon-pink[class*="text-[9px]"],
+.neon-pink[class*="text-[10px]"],
+.neon-pink[class*="text-[11px]"],
+.neon-pink[class*="text-xs"],
+.neon-pink[class*="text-sm"],
+.neon-yellow[class*="text-[8px]"],
+.neon-yellow[class*="text-[9px]"],
+.neon-yellow[class*="text-[10px]"],
+.neon-yellow[class*="text-[11px]"],
+.neon-yellow[class*="text-xs"],
+.neon-yellow[class*="text-sm"] {
+  text-shadow: none !important;
 }
 
 /* Tailwind's built-in animate-pulse dips to 50% opacity at its keyframe
@@ -463,7 +590,9 @@ body {
    of animate-pulse on persistent (non-loading-spinner) text so the dim
    phase never drops below the color's own safe floor. */
 @keyframes pulse-subtle {
-  50% { opacity: 0.92; }
+  50% {
+    opacity: 0.92;
+  }
 }
 .pulse-subtle {
   animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
@@ -502,6 +631,293 @@ a[target="_blank"]::after {
 a[target="_blank"] {
   position: relative;
 }
+
+/* =====================================================================
+   READER-CONTROLLED DISPLAY MODES
+   ---------------------------------------------------------------------
+   WCAG 2.2 SC 1.4.8 Visual Presentation asks that the reader be able to
+   select foreground and background colours and adjust spacing, rather than
+   the author guessing one setting for every display. That is the right
+   remedy here specifically because the failure modes this design has are
+   hardware- and room-dependent: pixel-grid aliasing depends on the display
+   scale factor, halation depends on the reader's eyes, and dark-on-light
+   vs light-on-dark depends on ambient light. Toggled by
+   useDisplaySettings, which writes these attributes onto <html>.
+   ===================================================================== */
+
+/* ---- EFFECTS OFF ---------------------------------------------------- */
+[data-effects="off"] .crt-overlay {
+  display: none;
+}
+
+[data-effects="off"] .neon-green,
+[data-effects="off"] .neon-cyan,
+[data-effects="off"] .neon-pink,
+[data-effects="off"] .neon-yellow,
+[data-effects="off"] .glitch::before,
+[data-effects="off"] .glitch::after {
+  text-shadow: none !important;
+}
+
+[data-effects="off"] .glitch::before,
+[data-effects="off"] .glitch::after {
+  display: none;
+}
+
+[data-effects="off"] .matrix-rain {
+  display: none;
+}
+
+/* ---- LEGIBLE TYPE --------------------------------------------------- */
+/* Both decorative faces lose to a text face on the two metrics that decide
+   apparent size and word recognition (measured from the shipped woff2):
+
+     face              x-height/em   at 14px    grid-constrained
+     VT323                 0.400      5.6px     no
+     Share Tech Mono       0.500      7.0px     no
+     Press Start 2P        0.750     10.5px     yes, 8 cells/em
+     JetBrains Mono        0.550      7.7px     no
+
+   VT323 is the outlier: 0.400em is the smallest x-height of anything
+   available, so the site's default body face renders lowercase 20% shorter
+   than Share Tech Mono and 27% shorter than JetBrains Mono at the same
+   nominal size. JetBrains Mono is the target here because it also
+   disambiguates 0/O and 1/l/I, which a site of bill numbers, roll-call
+   counts and dates leans on constantly. */
+[data-legible="on"] [class*="font-pixel"],
+[data-legible="on"] [class*="font-terminal"],
+[data-legible="on"] [class*="font-mono"],
+[data-legible="on"] body,
+[data-legible="on"] .btn-retro,
+[data-legible="on"] .ascii-divider {
+  font-family: var(--font-jetbrains), ui-monospace, monospace !important;
+}
+
+/* Press Start 2P's 1.0em cap height means display headings sized for it are
+   visually oversized once a normal text face replaces it; pull them back so
+   the hierarchy still reads. */
+[data-legible="on"] [class*="font-pixel"] {
+  letter-spacing: 0.02em;
+}
+
+/* Drop the fully-saturated foreground for a low-chroma reading layer.
+   Material's dark-theme guidance is explicit that saturated colours
+   "produce optical vibrations against a dark background, which can induce
+   eye strain", and recommends desaturated tones instead. These
+   substitutions hold luminance (and so contrast) roughly constant while
+   taking saturation from 100% down to ~13-53%:
+
+     #00ff41 -> #c8e6d0   13.70:1 -> 13.97:1   sat 100% -> 13%
+     #00ffff -> #7fe6e6   14.92:1 -> 12.79:1   sat 100% -> 45%
+     #ffff00 -> #e6d86b   17.44:1 -> 12.83:1   sat 100% -> 53%
+     #ff00ff -> #ff8fd9    5.97:1 ->  9.07:1   sat 100% -> 44%
+
+   Note pink *gains* contrast: #ff00ff was the one accent that sat near the
+   4.5:1 floor even at full opacity. All four clear AAA (7:1). */
+[data-legible="on"] {
+  --background: #101310;
+}
+
+[data-legible="on"] [class*="text-matrix-green"]:not(:hover) {
+  color: #c8e6d0 !important;
+}
+[data-legible="on"] [class*="text-neon-cyan"]:not(:hover) {
+  color: #7fe6e6 !important;
+}
+[data-legible="on"] [class*="text-neon-yellow"]:not(:hover) {
+  color: #e6d86b !important;
+}
+[data-legible="on"] [class*="text-neon-pink"]:not(:hover) {
+  color: #ff8fd9 !important;
+}
+[data-legible="on"] [class*="text-white"]:not(:hover) {
+  color: #eef2ee !important;
+}
+
+/* .btn-retro and .ascii-divider paint their own colour rather than carrying a
+   text-* utility, so the substitutions above miss them. */
+[data-legible="on"] .btn-retro {
+  color: #c8e6d0;
+  border-color: rgba(200, 230, 208, 0.5);
+}
+[data-legible="on"] .btn-retro:hover {
+  background: rgba(200, 230, 208, 0.1);
+  border-color: #c8e6d0;
+  color: #c8e6d0;
+  box-shadow: none;
+}
+[data-legible="on"] .btn-retro-pink {
+  color: #ff8fd9;
+  border-color: rgba(255, 143, 217, 0.5);
+}
+[data-legible="on"] .ascii-divider {
+  color: #7d8c82;
+}
+
+/* ---- DAYLIGHT (POSITIVE POLARITY) THEME ----------------------------- */
+/* Piepenbrock et al. (Ergonomics, 2013) found dark-on-light was read faster
+   and more accurately than light-on-dark across font sizes; the advantage
+   comes from the smaller pupil aperture a bright field produces, which
+   sharpens focus. That effect is strongest in exactly the condition the
+   reporter described — a lit room, where a dark UI is dimmer than its
+   surroundings and the eye is adapted to the room, not the screen.
+
+   The palette is remapped at the utility level rather than by rewriting
+   ~500 call sites. Tailwind v4 emits class names literally, so `~=` matches
+   a solid colour utility exactly while `*=` catches its /NN opacity
+   variants — the two need opposite treatment, since an alpha tint over a
+   light surface stays a usable tint but a solid neon fill does not.
+   Every text value below clears WCAG AA (4.5:1) on #f4f6f3. */
+[data-theme="light"] {
+  --background: #f4f6f3;
+  --foreground: #1c2620;
+  color-scheme: light;
+}
+
+[data-theme="light"] body {
+  background: #f4f6f3;
+  color: #1c2620;
+}
+
+/* Surfaces */
+[data-theme="light"] .terminal-window {
+  background: #ffffff;
+  border-color: rgba(28, 38, 32, 0.18);
+  box-shadow:
+    0 0 0 1px rgba(28, 38, 32, 0.04),
+    0 2px 10px rgba(28, 38, 32, 0.08);
+}
+
+[data-theme="light"] .terminal-titlebar {
+  background: rgba(28, 38, 32, 0.04);
+  border-bottom-color: rgba(28, 38, 32, 0.12);
+}
+
+[data-theme="light"] [class~="bg-crt-black"],
+[data-theme="light"] [class*="bg-crt-black/"],
+[data-theme="light"] [class~="bg-terminal-bg"],
+[data-theme="light"] [class~="bg-black"] {
+  background-color: #ffffff !important;
+}
+
+[data-theme="light"] [class~="bg-white"] {
+  background-color: #1c2620 !important;
+}
+
+/* Solid neon fills become readable solids; their /NN tints stay tints. */
+[data-theme="light"] [class~="bg-matrix-green"] {
+  background-color: #06642a !important;
+}
+[data-theme="light"] [class~="bg-neon-cyan"] {
+  background-color: #0b5c63 !important;
+}
+[data-theme="light"] [class~="bg-neon-yellow"] {
+  background-color: #6b5d00 !important;
+}
+[data-theme="light"] [class~="bg-neon-pink"] {
+  background-color: #8f1069 !important;
+}
+[data-theme="light"] [class~="bg-matrix-dark-green"] {
+  background-color: #d8e6dc !important;
+}
+
+/* Text. `:not(:hover)` matches the existing contrast-floor block above so a
+   component's hover-brightening class still reads as a distinct state. */
+[data-theme="light"] [class*="text-matrix-green"]:not(:hover) {
+  color: #06642a !important;
+}
+[data-theme="light"] [class*="text-neon-cyan"]:not(:hover) {
+  color: #0b5c63 !important;
+}
+[data-theme="light"] [class*="text-neon-yellow"]:not(:hover) {
+  color: #6b5d00 !important;
+}
+[data-theme="light"] [class*="text-neon-pink"]:not(:hover) {
+  color: #8f1069 !important;
+}
+[data-theme="light"] [class*="text-white"]:not(:hover) {
+  color: #1c2620 !important;
+}
+[data-theme="light"] [class*="text-dem-blue"] {
+  color: #064d8f !important;
+}
+[data-theme="light"] [class*="text-rep-red"] {
+  color: #a11414 !important;
+}
+[data-theme="light"] [class*="text-ind-purple"] {
+  color: #6b21a8 !important;
+}
+[data-theme="light"] [class*="text-red-400"]:not(:hover) {
+  color: #a11414 !important;
+}
+
+/* Text sitting on one of the remapped solid fills above has to invert too. */
+[data-theme="light"] [class~="bg-matrix-green"] [class*="text-"],
+[data-theme="light"] [class~="bg-neon-cyan"] [class*="text-"],
+[data-theme="light"] [class~="bg-neon-pink"] [class*="text-"],
+[data-theme="light"] [class~="bg-white"] [class*="text-"] {
+  color: #ffffff !important;
+}
+
+/* Borders: the dark theme's low-alpha neon hairlines vanish on white. */
+[data-theme="light"] [class*="border-matrix-green"],
+[data-theme="light"] [class*="border-neon-cyan"],
+[data-theme="light"] [class*="border-neon-yellow"],
+[data-theme="light"] [class*="border-neon-pink"],
+[data-theme="light"] [class*="border-white"] {
+  border-color: rgba(28, 38, 32, 0.22) !important;
+}
+
+/* Chrome that assumed a dark field */
+[data-theme="light"] .crt-overlay,
+[data-theme="light"] .matrix-rain {
+  display: none;
+}
+
+[data-theme="light"] .neon-green,
+[data-theme="light"] .neon-cyan,
+[data-theme="light"] .neon-pink,
+[data-theme="light"] .neon-yellow {
+  text-shadow: none !important;
+}
+
+[data-theme="light"] ::selection {
+  background: #06642a;
+  color: #ffffff;
+}
+
+[data-theme="light"] ::-webkit-scrollbar-track {
+  background: #e6eae6;
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: #06642a;
+}
+
+[data-theme="light"] .btn-retro {
+  color: #06642a;
+  border-color: rgba(6, 100, 42, 0.55);
+}
+[data-theme="light"] .btn-retro:hover {
+  background: rgba(6, 100, 42, 0.08);
+  border-color: #06642a;
+  color: #06642a;
+  box-shadow: none;
+}
+
+[data-theme="light"] *:focus-visible,
+[data-theme="light"] button:focus-visible,
+[data-theme="light"] a:focus-visible,
+[data-theme="light"] select:focus-visible,
+[data-theme="light"] input:focus-visible {
+  outline-color: #0b5c63;
+  box-shadow: none;
+}
+
+/* The always-on dark-theme contrast floor near the top of this file forces
+   specific rgb() values that only make sense against #0d0208. Those rules
+   and these carry equal !important weight, so order alone would not settle
+   it — the [data-theme="light"] ancestor gives these the higher specificity
+   they need to win. Same for the unconditional dem-blue/ind-purple swaps. */
 
 /* ===== CUSTOM UTILITIES ===== */
 @layer utilities {
