@@ -19,17 +19,18 @@ flowchart TB
         VOTEVIEW["Voteview<br/>DW-NOMINATE ideal points"]
         RSS["RSS — AP · NPR · PBS · BBC<br/>The Hill · Politico · Roll Call<br/>8 feeds, 7 newsrooms"]
         SOCIAL["Google Trends · Reddit"]
+        VSMART["Vote Smart<br/>statewide ballot measures<br/>optional, keyed"]
     end
 
     subgraph PIPE["Pipelines — APScheduler"]
         NIGHTLY["Nightly, 03:00 UTC<br/>senate → house → stock<br/>4-6h cold · 45-90m warm"]
         HOURLY["Hourly at :15<br/>Action Center refresh"]
         SUPP["Supplementary<br/>presidents · justices · explore"]
-        ELECT["Election pipeline<br/>races · candidates · coverage"]
+        ELECT["Election pipeline<br/>races · candidates · ballot measures · coverage"]
     end
 
     subgraph STORE["Persistence — /data volume"]
-        SQLITE[("SQLite civitas.db<br/>42 tables")]
+        SQLITE[("SQLite civitas.db<br/>44 tables")]
         VECDB[("sqlite-vec vectors.db<br/>vec_explore + vec_bills<br/>384-dim, cosine")]
     end
 
@@ -47,6 +48,7 @@ flowchart TB
     RSS --> HOURLY
     SOCIAL --> HOURLY
     VOTEVIEW --> NIGHTLY
+    VSMART --> ELECT
 
     PIPE -->|writes| SQLITE
     PIPE -->|upserts embeddings| VECDB

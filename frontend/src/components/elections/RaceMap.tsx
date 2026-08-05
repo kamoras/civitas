@@ -1,6 +1,7 @@
 "use client";
 
 import type { KeyboardEvent } from "react";
+import { FIPS_TO_STATE } from "@/lib/stateCodes";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 
 // Extracted from ElectionsTab.tsx (2026-07) so the Action Center teaser's
@@ -14,59 +15,10 @@ import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 // map doesn't depend on a third-party CDN at runtime.
 const GEO_URL = "/data/states-10m.json";
 
-export const FIPS_TO_STATE: Record<string, string> = {
-  "01": "AL",
-  "02": "AK",
-  "04": "AZ",
-  "05": "AR",
-  "06": "CA",
-  "08": "CO",
-  "09": "CT",
-  "10": "DE",
-  "11": "DC",
-  "12": "FL",
-  "13": "GA",
-  "15": "HI",
-  "16": "ID",
-  "17": "IL",
-  "18": "IN",
-  "19": "IA",
-  "20": "KS",
-  "21": "KY",
-  "22": "LA",
-  "23": "ME",
-  "24": "MD",
-  "25": "MA",
-  "26": "MI",
-  "27": "MN",
-  "28": "MS",
-  "29": "MO",
-  "30": "MT",
-  "31": "NE",
-  "32": "NV",
-  "33": "NH",
-  "34": "NJ",
-  "35": "NM",
-  "36": "NY",
-  "37": "NC",
-  "38": "ND",
-  "39": "OH",
-  "40": "OK",
-  "41": "OR",
-  "42": "PA",
-  "44": "RI",
-  "45": "SC",
-  "46": "SD",
-  "47": "TN",
-  "48": "TX",
-  "49": "UT",
-  "50": "VT",
-  "51": "VA",
-  "53": "WA",
-  "54": "WV",
-  "55": "WI",
-  "56": "WY",
-};
+// Re-exported so existing callers keep importing it from here; the map
+// itself lives in lib/stateCodes.ts so server modules can use it too.
+export { FIPS_TO_STATE };
+
 
 interface RaceMapProps {
   selectedState: string | null;

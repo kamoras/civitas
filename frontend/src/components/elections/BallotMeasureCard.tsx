@@ -8,8 +8,7 @@ import type { BallotMeasure } from "@/types/election";
  * model cannot be checked for the failure that matters most on a ballot
  * — saying a YES vote does the opposite of what it does — because the
  * platform's grounding checks verify that tokens came from the source,
- * not that the claim points the same direction (see
- * docs/ballot-measures.md §6.4).
+ * not that the claim points the same direction (AGENTS.md principle 7).
  */
 export default function BallotMeasureCard({ measure }: { measure: BallotMeasure }) {
   const removed = measure.status === "removed" || measure.status === "withdrawn";

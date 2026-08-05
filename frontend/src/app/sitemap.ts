@@ -1,11 +1,12 @@
 import type { MetadataRoute } from "next";
-import { FIPS_TO_STATE } from "@/components/elections/RaceMap";
+import { STATE_CODES } from "@/lib/stateCodes";
 
 const BASE = "https://civitas-research.org";
 
-// The same 51 codes the map renders as clickable regions — one source, so
-// a state the map can navigate to can never be one the sitemap omits.
-const STATE_CODES = Array.from(new Set(Object.values(FIPS_TO_STATE))).sort();
+// STATE_CODES comes from lib/stateCodes.ts, NOT from RaceMap: importing it
+// from that "use client" module gave this server module a client reference
+// instead of the object, and the sitemap silently shipped with no state
+// URLs at all. See that file's comment.
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();

@@ -1198,9 +1198,9 @@ class BallotMeasure(Base):
     never model-generated — same contract as RaceCoverageItem, and for
     the same reason: this is the one surface on the platform where a
     fabricated sentence could change how somebody votes. There is
-    deliberately no `plain_summary`-style column; see
-    docs/ballot-measures.md §6.4 for why the LLM layer was
-    ruled out rather than deferred.
+    deliberately no `plain_summary`-style column, and adding one is
+    ruled out rather than deferred — see AGENTS.md, Core Design
+    Principle 7 ("Ballot content is quoted, never generated").
     """
     __tablename__ = "ballot_measures"
     __table_args__ = (

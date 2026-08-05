@@ -28,7 +28,8 @@ external API calls to cloud AI services.
 │   members)       finance)   histories)   remarks)    cases)  GDP)            │
 │                                                                              │
 │  AP / NPR / PBS / BBC / The Hill / Politico / Roll Call (RSS)                │
-│  Google Trends     Reddit r/politics                                         │
+│  Google Trends     Reddit r/politics     Vote Smart (statewide ballot        │
+│                                           measures — optional, keyed)        │
 └──────────────────────────┬───────────────────────────────────────────────────┘
                            │  rate-limited HTTP
                            │  (Congress 1.2 RPS, FEC 0.25 RPS, GovInfo 1.0 RPS)
@@ -96,7 +97,7 @@ external API calls to cloud AI services.
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │  Next.js 16 frontend  (port 3000)                                            │
 │  /politicians  /bills  /leaderboard  /action  /explore  /compare             │
-│  /elections  /issue  /about  /changelog  /admin  /environmental              │
+│  /elections  /elections/states/<ST>  /issue  /about  /changelog  /admin       │
 │  /accessibility  /feedback                                                   │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -425,6 +426,38 @@ Every hour at :15
 **What makes a repost?** A newer article date is necessary but not sufficient — recap coverage rewords the same story under a fresher timestamp, which used to repost with nothing new to say. The new facts must also introduce either a named entity/figure or a story development (a veto, a court blocking an order, a failed override) that the facts *as of the last post* lacked. The baseline is `bsky_posted_facts`, not the live `facts` column: `facts` is rewritten on every hourly refresh whether or not anything was posted, so baselining on it let a development that surfaced between posts be absorbed and never read as new again. Rows that predate the column are backfilled from `facts` at startup — the poster is the only writer of `bsky_posted_facts` and it only ever sees issues the repost gate has already released, so a NULL baseline on an already-posted row could never resolve itself. The backfill is unconditional rather than fired once on the migration: the poster writes `bsky_posted_at` and `bsky_posted_facts` in the same commit, so a row with the first set and the second NULL can only predate the column, and a seeded row stops matching.
 
 **How do you tell a quiet news day from an over-suppressing gate?** Both look the same from outside: nothing on the Action Center, nothing on Bluesky. Roughly ten independent checks in this pipeline fail closed — the right default when the platform publishes under its own name, but it means silence is the shared failure mode of all of them. Every refresh records what came in (`articles_fetched`, `articles_policy_relevant`, `clusters_considered`), what published (`issues_new_topic`, `issues_matched_existing`, `bsky_reposts_allowed`), and what each gate dropped, including on the two abort paths that publish nothing at all. `GET /api/admin/action-metrics` reads the window back with those three groups totalled: healthy intake against near-zero output is a suppression problem, near-zero intake is a quiet cycle or a broken feed. Runs are hourly, so a gap in the series is itself a signal — a refresh that crashed or was still holding the lock leaves no row.
+
+---
+
+## Election Pipeline (Nightly)
+
+An independent pipeline (`app/pipeline/election_pipeline.py`) with no data dependency on the Senate/House/President runs. Six phases, each fault-isolated so one failure doesn't take the others down:
+
+```
+1. ROSTER SYNC ──── every declared FEC candidate for the cycle → Race / Candidate rows
+2. FINANCIAL ────── prioritized, watermarked batch of 500 (FEC allows 0.25 req/s and a
+   REFRESH            midterm cycle has ~6,900 candidates — the roster rotates over runs)
+3. BALLOT ───────── statewide ballot measures per state (Vote Smart), + a liveness
+   MEASURES           check on the official-ballot links the site hands users
+4. COVERAGE ─────── RSS + Bluesky matched to races by candidate name with mandatory
+   INGESTION          corroboration; tighter cadence in election season
+5. BLUESKY ──────── one grounded, source-backed sentence per notable coverage item
+6. SNAPSHOT ─────── changed-only fundraising snapshots for trend charts
+```
+
+### Ballot measures
+
+Statewide measures are shown at `/elections/states/<ST>` alongside that state's federal races. The rules the code enforces, all of which exist because this is the surface where an error can change a vote:
+
+- **Everything is verbatim.** Official ballot title, official summary, fiscal statement and the state's own YES/NO descriptions are stored and rendered exactly as published, with the source linked. **No LLM touches ballot content at any stage**, and there is no plain-language rewrite — `grounding.py` verifies that tokens in generated text came from the source, not that a claim points the same *direction* as its source, so a summary that inverts a measure's meaning ("a YES vote repeals this" where approval *retains*) would pass every check we have. `ungrounded_electoral_claims` is additionally inert on this corpus: it only fires when "ballot"/"voters" are absent from the source.
+- **Yes/no framing is lifted or left NULL**, never derived. The intuitive derivation inverts on a veto referendum.
+- **Keyed on election date, not cycle year.** Ohio can run an "Issue 1" in a May primary and a different "Issue 1" in November.
+- **Drafter attribution renders with each quote** (`title_authority` / `fiscal_authority`). Ballot titles are litigated precisely because they are contested, so naming the author is more neutral than the bare quote.
+- **Removed measures render as removed** for a 45-day grace window rather than disappearing, and a sync returning implausibly fewer measures than are on file is treated as a bad response, not as news.
+- **"No measures" and "not ingested" are different states.** `MeasureCoverage` carries `covered` / `confirmed_none` / `not_yet_covered` / `ingest_failed` per state per election, because an empty section on a state's ballot page reads as "nothing to research".
+- **Scope is stated on the page.** A ballot is defined per *ballot style*, not per state, so House districts, state legislative seats, county/municipal offices, judicial questions and local measures are enumerated as omissions above the content, with a link to the voter's own election office. Per-state official links are only shown after an automated check confirms they resolve; otherwise the page falls back to the USAGov directory.
+
+`VOTESMART_API_KEY` is optional — without it the phase is skipped and every state reports `not_yet_covered` rather than rendering an empty section.
 
 ---
 
@@ -917,7 +950,8 @@ civitas/
 │   │   ├── bills/            # Bills-in-motion — grouped by stage, sortable
 │   │   ├── compare/          # Side-by-side senator/representative comparison
 │   │   ├── explore/          # Semantic search over government documents
-│   │   ├── elections/        # Upcoming races, candidates, financials, state map
+│   │   ├── elections/        # State index, per-state ballot pages (federal contests
+│   │   │                     #   + statewide measures), race/candidate detail
 │   │   ├── leaderboard/      # Rankings across all branches (House paginated)
 │   │   ├── environmental/    # Environmental policy tracking
 │   │   ├── accessibility/    # Accessibility statement
@@ -949,6 +983,7 @@ See `.env.example` for all options. Key variables:
 | `DATABASE_URL` | No | SQLite path (default: `sqlite:///data/civitas.db`) |
 | `PIPELINE_CRON_SCHEDULE` | No | Cron schedule for nightly pipeline (default: `0 3 * * *`) |
 | `PIPELINE_CACHE_TTL_HOURS` | No | API response cache TTL (default: `72`) |
+| `VOTESMART_API_KEY` | No | Vote Smart API key — enables statewide ballot measures on the state ballot pages. Unset means the sync is skipped and every state reports "not yet covered", never "no measures" |
 | `BSKY_HANDLE` | No | Bluesky handle (e.g. `civitas-research.org`) |
 | `BSKY_APP_PASSWORD` | No | Bluesky app password (from Settings → App Passwords) |
 | `FEEDBACK_TOKEN` | No | Fine-grained GitHub PAT (Issues: write only) for the on-site feedback form; leave unset to disable it (returns 503, never silently drops) |

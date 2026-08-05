@@ -1,12 +1,13 @@
 """Official "see your real ballot" links, and the check that keeps them honest.
 
 The state ballot digest deliberately shows only the statewide portion of a
-ballot (see docs/ballot-analysis-feasibility.md §3 — a ballot is defined
-per ballot style, not per state, so a U.S. House district, county offices,
-judicial retentions and local questions cannot appear on a state page
-without misstating somebody's ballot). The link out to the voter's own
-election office is therefore not decoration: it is the part of the design
-that makes the omission honest.
+ballot: a ballot is defined per ballot style, not per state, so a U.S.
+House district, county offices, judicial retentions and local questions
+cannot appear on a state page without misstating somebody's ballot. The
+link out to the voter's own election office is therefore not decoration —
+it is the part of the design that makes the omission honest. (The
+user-facing version of this is the About page's "State Ballots & Ballot
+Measures" section.)
 
 Which is exactly why the per-state deep links are GATED. A 404 on that
 link, in election week, from a URL Civitas vouched for, strands the user

@@ -3,8 +3,7 @@
 Source: Vote Smart's Measure API (api.votesmart.org) — a free, keyed,
 nonpartisan API with a dedicated ballot-measure class returning the
 measure's official title, summary, ballot text, and the state's own
-yes/no framing. Chosen over the alternatives after the survey in
-docs/ballot-measures.md §5:
+yes/no framing. Chosen over the alternatives because:
 
   - Google Civic's voterInfoQuery is keyed on a voter ADDRESS, so using it
     would mean shipping visitor addresses off-box — the one thing this

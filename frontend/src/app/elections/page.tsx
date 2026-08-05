@@ -8,7 +8,8 @@ import MatrixRain from "@/components/effects/MatrixRain";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import GlitchText from "@/components/effects/GlitchText";
-import RaceMap, { FIPS_TO_STATE } from "@/components/elections/RaceMap";
+import RaceMap from "@/components/elections/RaceMap";
+import { STATE_CODES } from "@/lib/stateCodes";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import { formatPvi, stateBallotHref } from "@/lib/elections";
 import { fetchPviMap, fetchRaces } from "@/lib/api";
@@ -71,10 +72,6 @@ function ElectionsPageContent() {
 
   const counts = useMemo(() => summarize(races), [races]);
   const cycleYear = races?.[0]?.cycleYear;
-  const stateCodes = useMemo(
-    () => Array.from(new Set(Object.values(FIPS_TO_STATE))).sort(),
-    [],
-  );
 
   return (
     <div className="min-h-screen bg-crt-black text-matrix-green">
@@ -142,7 +139,7 @@ function ElectionsPageContent() {
                 ALL STATES
               </h2>
               <ul className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 list-none">
-                {stateCodes.map((code) => {
+                {STATE_CODES.map((code) => {
                   const count = counts[code];
                   const lean = pvi?.states[code] ?? null;
                   return (

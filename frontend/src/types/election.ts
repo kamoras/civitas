@@ -75,8 +75,9 @@ export interface RaceDetail {
 }
 
 /** One statewide ballot measure. Every text field is verbatim from
- * `sourceName` — nothing here is model-generated, by design (see
- * docs/ballot-measures.md §6.4). */
+ * `sourceName` — nothing here is model-generated, by design. See the
+ * About page's "State Ballots & Ballot Measures" section for the
+ * user-facing account, and AGENTS.md principle 7 for the rule. */
 export interface BallotMeasure {
   id: string;
   state: string;
