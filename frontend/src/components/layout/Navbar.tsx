@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ACTION_CENTER_HREF } from "@/lib/routes";
-import DisplaySettings from "@/components/DisplaySettings";
 
 
 const BSKY_PROFILE_URL = "https://bsky.app/profile/civitas-research.org";
@@ -136,17 +135,12 @@ export default function Navbar() {
           >
             [BSKY]
           </a>
-          <DisplaySettings />
         </div>
 
-        {/* Mobile: display settings sits outside the collapsible menu so it
-            stays reachable while the menu is open. */}
-        <div className="sm:hidden flex items-center gap-4">
-          <DisplaySettings />
         {/* Mobile hamburger */}
         <button
           ref={toggleRef}
-          className="text-matrix-green/70 hover:text-matrix-green font-mono text-sm tracking-widest transition-colors"
+          className="sm:hidden text-matrix-green/70 hover:text-matrix-green font-mono text-sm tracking-widest transition-colors"
           onClick={() => menuOpen ? closeMenu() : setMenuOpen(true)}
           aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
           aria-expanded={menuOpen}
@@ -154,7 +148,6 @@ export default function Navbar() {
         >
           {menuOpen ? "CLOSE" : "MENU"}
         </button>
-        </div>
       </div>
 
       {/* Mobile menu */}

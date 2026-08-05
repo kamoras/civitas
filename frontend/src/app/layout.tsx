@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
-import { VT323, Press_Start_2P, Share_Tech_Mono, JetBrains_Mono } from "next/font/google";
+import { VT323, Press_Start_2P, Share_Tech_Mono } from "next/font/google";
 import ConfigProvider from "@/components/providers/ConfigProvider";
-import { DISPLAY_SETTINGS_KEY } from "@/hooks/useDisplaySettings";
 import "./globals.css";
 
 const vt323 = VT323({
@@ -22,39 +21,6 @@ const shareTech = Share_Tech_Mono({
   variable: "--font-share-tech",
 });
 
-/**
- * Only referenced by the `data-legible="on"` rules in globals.css, so
- * `preload: false` keeps it out of the critical path — readers who never turn
- * the setting on never fetch it. Chosen over the three existing faces for the
- * highest x-height of any candidate measured (0.550em vs VT323's 0.400em) and
- * for disambiguating 0/O and 1/l/I, which matters on pages that are mostly
- * bill numbers, vote tallies and dates.
- */
-const jetbrains = JetBrains_Mono({
-  weight: ["400", "500"],
-  subsets: ["latin"],
-  variable: "--font-jetbrains",
-  preload: false,
-});
-
-/**
- * Applies saved display settings before first paint. Without this the page
- * paints the default terminal palette and then swaps, which is both a flash
- * and — for someone who turned the terminal palette off because it is hard
- * on their eyes — a flash of exactly the thing they opted out of.
- *
- * Kept in sync with applySettings() in useDisplaySettings.ts.
- */
-const BOOTSTRAP = `(function(){try{
-var s=JSON.parse(localStorage.getItem(${JSON.stringify(DISPLAY_SETTINGS_KEY)})||"{}");
-var e=document.documentElement;
-e.dataset.theme=s.theme==="light"?"light":"dark";
-e.dataset.legible=s.legible===true?"on":"off";
-e.dataset.effects=s.effects===false?"off":"on";
-var v=[100,112,125,150].indexOf(s.textScale)>-1?s.textScale:100;
-e.style.setProperty("--civitas-text-scale",String(v/100));
-}catch(_){}})();`;
-
 export const metadata: Metadata = {
   title: "CIVITAS // PUBLIC RECORD",
   description:
@@ -69,8 +35,7 @@ export const metadata: Metadata = {
   ],
   openGraph: {
     title: "CIVITAS // PUBLIC RECORD",
-    description:
-      "Congressional scorecards, campaign finance data, and civic actions — all sourced from public federal records.",
+    description: "Congressional scorecards, campaign finance data, and civic actions — all sourced from public federal records.",
     type: "website",
   },
 };
@@ -81,27 +46,29 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" data-theme="dark" data-legible="off" data-effects="on">
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: BOOTSTRAP }} />
-      </head>
+    <html lang="en">
       {/*
         `font-mono` (Share Tech Mono), not `font-terminal` (VT323).
-        This one word governs every element on the site that does not name a
-        font itself — including 114 of the 167 <p> elements, i.e. most of the
-        actual prose. VT323 has a 0.400em x-height, the smallest of any face
-        available here, so at the site's most common body size (text-sm, 14px)
-        its lowercase letters rendered 5.6px tall; Share Tech Mono's 0.500em
-        renders the same nominal size at 7.0px, a 25% gain in apparent size
-        for no layout change and no extra font download. VT323 remains
-        available as `font-terminal` for deliberate display use.
+        This governs every element that does not name a font itself, which is
+        most of the site's prose. Measured from the shipped woff2 files:
 
-        This also makes the accessibility statement true: it already claimed
-        "all body text and data use Share Tech Mono or system monospace
-        fonts", which was not the case while the body element said otherwise.
+                          x-height/em   advance/em
+          VT323               0.400        0.400
+          Share Tech Mono     0.500        0.540
+
+        Lowercase letters get 25% taller at the same nominal size — at
+        `text-sm` (14px, the most common body size) they were rendering 5.6px
+        tall. Share Tech Mono also has a slashed zero and distinguishes I/l/1,
+        where VT323's O/0 are near-identical ovals.
+
+        The cost, which is not free: the advance width is 35% wider, so lines
+        hold ~26% fewer characters and every fixed-width container that holds
+        inherited text gets tighter. Verified against the densest surfaces
+        (bill rows, stage flow, senator scorecard) before landing; see the two
+        width bumps in BillRow and BillStageFlow that this required.
       */}
       <body
-        className={`${vt323.variable} ${pressStart.variable} ${shareTech.variable} ${jetbrains.variable} font-mono antialiased`}
+        className={`${vt323.variable} ${pressStart.variable} ${shareTech.variable} font-mono antialiased`}
       >
         <ConfigProvider>
           <a

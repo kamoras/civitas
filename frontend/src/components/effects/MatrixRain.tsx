@@ -90,13 +90,5 @@ export default function MatrixRain() {
     };
   }, []);
 
-  // `matrix-rain` is the hook globals.css uses to hide this when the reader
-  // turns visual effects off or switches to the daylight theme.
-  return (
-    <canvas
-      ref={canvasRef}
-      className="matrix-rain fixed inset-0 -z-10 opacity-10"
-      aria-hidden="true"
-    />
-  );
+  return <canvas ref={canvasRef} className="fixed inset-0 -z-10 opacity-10" aria-hidden="true" />;
 }
