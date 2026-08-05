@@ -29,6 +29,12 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "sqlite:///data/civitas.db"
     DATA_GOV_API_KEY: str = ""
+    # Vote Smart (api.votesmart.org) — statewide ballot-measure ingestion.
+    # Optional: with no key the measure sync is skipped entirely and every
+    # state's ballot page renders an explicit "measures not yet ingested"
+    # block linking the state's own lookup, rather than an empty section
+    # that would read as "this state has no measures".
+    VOTESMART_API_KEY: str = ""
     OLLAMA_BASE_URL: str = "http://ollama:11434"
     OLLAMA_MODEL: str = "LiquidAI/lfm2.5-1.2b-instruct"
     # Optional larger model for the two PUBLIC-facing generation surfaces

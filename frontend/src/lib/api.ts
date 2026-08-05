@@ -4,7 +4,7 @@ import type { Justice, JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssuesResponse, MyRepsResponse } from "@/types/action";
 import type { PoliticianCard } from "@/types/politicians";
 import type { BillDetail, PaginatedBills } from "@/types/bill";
-import type { PviMap, RaceSummary } from "@/types/election";
+import type { PviMap, RaceSummary, StateBallot } from "@/types/election";
 import type {
   JusticeScoreBreakdown,
   PresidentScoreBreakdown,
@@ -1249,6 +1249,21 @@ export async function fetchRaces(): Promise<RaceSummary[]> {
 
 export async function fetchPviMap(): Promise<PviMap> {
   return cachedFetch(`${API_BASE}/elections/pvi`, TTL.LONG);
+}
+
+/** One state's statewide ballot: federal races + statewide measures.
+ *
+ * Deliberately TTL.SHORT, not the LONG tier this would otherwise fall
+ * into as "reference data". Ballot measures are certified and struck by
+ * courts continuously through a cycle, and a browser holding a
+ * struck-from-the-ballot measure for an hour after the backend corrected
+ * it is the specific failure this feature cannot have.
+ */
+export async function fetchStateBallot(state: string): Promise<StateBallot> {
+  return cachedFetch(
+    `${API_BASE}/elections/states/${encodeURIComponent(state)}/ballot`,
+    TTL.SHORT,
+  );
 }
 
 

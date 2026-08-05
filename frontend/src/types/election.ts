@@ -74,6 +74,80 @@ export interface RaceDetail {
   coverage: RaceCoverageItem[];
 }
 
+/** One statewide ballot measure. Every text field is verbatim from
+ * `sourceName` — nothing here is model-generated, by design (see
+ * docs/ballot-measures.md §6.4). */
+export interface BallotMeasure {
+  id: string;
+  state: string;
+  /** ISO date of the election this measure appears on. Load-bearing:
+   * a state can run the same measure number on a primary and a general
+   * ballot, so a measure without its election date is ambiguous. */
+  electionDate: string;
+  electionType: string;
+  number: string;
+  title: string;
+  measureType: string | null;
+  origin: string | null;
+  /** certified | removed | withdrawn | under_appeal. */
+  status: string;
+  officialTitle: string | null;
+  officialSummary: string | null;
+  fiscalImpact: string | null;
+  /** The state's OWN framing of what a yes/no vote does, verbatim. Null
+   * when the source publishes none — never inferred, because the
+   * intuitive inference is inverted on a veto referendum (where
+   * "approved" retains the law under challenge). */
+  yesMeans: string | null;
+  noMeans: string | null;
+  /** Who drafted the title / fiscal note (legislature, attorney general,
+   * legislative staff…). Rendered with the quote: ballot titles are
+   * frequently litigated as slanted, so naming the author is more
+   * neutral than the bare quote. */
+  titleAuthority: string | null;
+  fiscalAuthority: string | null;
+  sourceName: string;
+  sourceUrl: string | null;
+  asOf: string | null;
+}
+
+/** Whether we actually know this state's measures — "the source says
+ * none" and "we haven't ingested it" are different claims and must not
+ * render alike. */
+export interface MeasureCoverage {
+  status: "covered" | "confirmed_none" | "not_yet_covered" | "ingest_failed";
+  sourceName: string | null;
+  checkedAt: string | null;
+}
+
+/** Where to go for the parts of the ballot this page cannot show. */
+export interface OfficialLookup {
+  url: string;
+  label: string;
+  sourceName: string;
+  /** False = the generic national directory, because no verified
+   * state-specific link exists. The page words the link differently for
+   * each, rather than promising a state lookup it doesn't have. */
+  isStateSpecific: boolean;
+  verifiedAt: string | null;
+}
+
+export interface StateBallot {
+  state: string;
+  cycleYear: number;
+  electionDate: string;
+  electionType: string;
+  statePvi: number | null;
+  senateRaces: RaceSummary[];
+  houseRaces: RaceSummary[];
+  measures: BallotMeasure[];
+  measureCoverage: MeasureCoverage;
+  officialLookup: OfficialLookup;
+  /** What this page deliberately does not cover, enumerated by the
+   * backend so the limitation renders as content rather than a footnote. */
+  omits: string[];
+}
+
 /** Provenance block on the /pvi response. Optional end to end — older
  * backend responses (and cached ones) may omit it entirely. */
 export interface PviMeta {

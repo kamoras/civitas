@@ -1,0 +1,12 @@
+{
+  "_source": "USAGov state election office directory (https://www.usa.gov/election-office) and vote.gov",
+  "_method": "National directory used as the default target for every state. Per-state deep links live in `states` and are only ever SHOWN to a user after link_check.py has confirmed they resolve — see `states` note below.",
+  "_as_of": "2026-08-05",
+  "_note": "A dead link on 'here is how to see your real ballot', during election week, from a link Civitas vouched for, is the worst failure this feature has. So per-state URLs are gated: an entry is rendered only once `verified_at` is set by the liveness check (app/pipeline/fetch/ballot_lookup.py). Unverified or missing entries fall back to the national directory, which is stable and maintained by USAGov.",
+  "national_fallback": {
+    "url": "https://www.usa.gov/election-office",
+    "label": "Find your state or local election office",
+    "source_name": "USAGov"
+  },
+  "states": {}
+}
