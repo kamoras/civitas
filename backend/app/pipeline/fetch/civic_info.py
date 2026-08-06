@@ -18,12 +18,24 @@ county- or state-level, was chosen specifically to keep that error small —
 see docs/ballot-measures.md's town-selection notes — but it is still an
 error, and the frontend must say so next to whatever renders from here.
 
-SCHEMA CAVEAT: parsed from Google's public documentation, not a live
-response — no GOOGLE_CIVIC_API_KEY was available to verify against in the
-environment this was written in. Every field is read defensively (`_text`)
-for exactly that reason: an unverified assumption about a field name should
-cost us that field, not the whole lookup. Verify against a real response
-before trusting this in production (see town_directory.json's `_note`).
+Field names below are verified against Google's public Discovery Document
+(https://www.googleapis.com/discovery/v1/apis/civicinfo/v2/rest) — the
+same machine-readable schema Google's own client libraries are generated
+from, fetched with no API key required (discovery documents are public).
+Confirmed there: `contests` is the top-level response array; Contest
+carries both `office`/`candidates` (candidate contests) and
+`referendumTitle`/`referendumSubtitle`/`referendumText`/`referendumUrl`/
+`referendumPassageThreshold` (measures) on the SAME schema with no fixed
+`type` enum distinguishing them — confirming `type` free-texts across
+jurisdictions and referendumTitle's presence is the only reliable
+discriminator, as this module's parser already assumed; Candidate carries
+`name`/`party`/`candidateUrl` as used below. The one thing the schema
+can't confirm is DATA quality — whether a specific representative address
+actually geocodes to a useful result — which needs a real authenticated
+call the same way any first real use of GOOGLE_CIVIC_API_KEY does (no
+different in kind from VOTESMART_API_KEY needing its own first real run).
+Every field is still read defensively (`_text`) regardless: an upstream
+shape change later should cost us a field, not the whole lookup.
 """
 
 import logging
@@ -36,7 +48,13 @@ from app.pipeline.fetch.town_directory import address_for_town
 
 logger = logging.getLogger(__name__)
 
-CIVIC_BASE = "https://www.googleapis.com/civicinfo/v2"
+# Discovery document's rootUrl (https://civicinfo.googleapis.com/) + the
+# voterInfoQuery method's path (civicinfo/v2/voterinfo) — NOT
+# www.googleapis.com/civicinfo/v2, which is legacy generic routing that
+# happens to still work (confirmed live: it reaches the real API and
+# returns a real error, not a connection failure) but isn't the address
+# the API's own schema declares as canonical.
+CIVIC_BASE = "https://civicinfo.googleapis.com/civicinfo/v2"
 
 # Shorter than the platform's default 72h API cache, same reasoning as
 # ballot_measures.MEASURE_CACHE_TTL_HOURS: election content is corrected
