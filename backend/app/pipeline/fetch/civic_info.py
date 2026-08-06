@@ -18,24 +18,42 @@ county- or state-level, was chosen specifically to keep that error small —
 see docs/ballot-measures.md's town-selection notes — but it is still an
 error, and the frontend must say so next to whatever renders from here.
 
-Field names below are verified against Google's public Discovery Document
-(https://www.googleapis.com/discovery/v1/apis/civicinfo/v2/rest) — the
-same machine-readable schema Google's own client libraries are generated
-from, fetched with no API key required (discovery documents are public).
-Confirmed there: `contests` is the top-level response array; Contest
-carries both `office`/`candidates` (candidate contests) and
-`referendumTitle`/`referendumSubtitle`/`referendumText`/`referendumUrl`/
-`referendumPassageThreshold` (measures) on the SAME schema with no fixed
-`type` enum distinguishing them — confirming `type` free-texts across
-jurisdictions and referendumTitle's presence is the only reliable
-discriminator, as this module's parser already assumed; Candidate carries
-`name`/`party`/`candidateUrl` as used below. The one thing the schema
-can't confirm is DATA quality — whether a specific representative address
-actually geocodes to a useful result — which needs a real authenticated
-call the same way any first real use of GOOGLE_CIVIC_API_KEY does (no
-different in kind from VOTESMART_API_KEY needing its own first real run).
-Every field is still read defensively (`_text`) regardless: an upstream
-shape change later should cost us a field, not the whole lookup.
+Field names below are verified two ways, not assumed from prose:
+
+1. Against Google's public Discovery Document
+   (https://www.googleapis.com/discovery/v1/apis/civicinfo/v2/rest, no
+   API key needed) — the same machine-readable schema Google's own
+   client libraries are generated from. Confirmed there: `contests` is
+   the top-level response array; Contest carries both `office`/
+   `candidates` (candidate contests) and `referendumTitle`/
+   `referendumSubtitle`/`referendumText`/`referendumUrl`/
+   `referendumPassageThreshold` (measures) on the SAME schema with no
+   fixed `type` enum distinguishing them — confirming `type` free-texts
+   across jurisdictions and referendumTitle's presence is the only
+   reliable discriminator, as this parser already assumed; Candidate
+   carries `name`/`party`/`candidateUrl` as used below.
+
+2. Against a real authenticated call (2026-08-06, once a real
+   GOOGLE_CIVIC_API_KEY existed): confirmed the key works, the request
+   reaches Google and comes back well-formed, and — the thing the
+   schema alone couldn't show — that `contests` can be MISSING from the
+   response entirely, not just empty, when Google has election metadata
+   for an address but no contest-level data for it. `_parse_contests`'
+   `payload.get("contests") or []` already handled this; now it's a
+   verified real shape, not just defensive coding.
+
+ELECTION COVERAGE IS TIME-LIMITED, confirmed the same way: querying
+`elections.electionQuery` on 2026-08-06 listed only primaries within
+days of their own election date (MI, WY, FL, ...) — nothing for a
+November general three months out, for ANY state, not just the pilot
+towns'. voterInfoQuery without an explicit electionId auto-selects from
+that index and returns "Election unknown" when nothing matches, which
+every pilot town in town_directory.json does today. This is not a bug
+in this module or a wrong address — Google populates general-election
+data close to the election, and this feature's `ingest_failed` state is
+the correct, honest thing to show until that happens. Every field is
+still read defensively (`_text`) regardless: an upstream shape change
+later should cost us a field, not the whole lookup.
 """
 
 import logging
@@ -161,6 +179,18 @@ async def fetch_town_ballot(
         )
         response.raise_for_status()
         payload = response.json()
+    except httpx.HTTPStatusError as exc:
+        # HTTPStatusError's own message embeds the full request URL, which
+        # carries `key` as a query param (confirmed live: a dummy-key test
+        # run put the real key straight into this exact log line before
+        # this fix) — logging it via logger.exception() would put the
+        # live Civic Info key in the server logs on every non-2xx
+        # response. Status code only, never the exception's own message.
+        logger.warning(
+            "Civic Info lookup failed for %s, %s: HTTP %d",
+            town, state, exc.response.status_code,
+        )
+        return None
     except Exception:
         logger.exception("Civic Info lookup failed for %s, %s", town, state)
         return None

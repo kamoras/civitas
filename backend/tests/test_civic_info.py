@@ -84,6 +84,12 @@ def test_parse_contests_splits_candidates_and_measures():
 
 
 def test_parse_contests_empty_on_missing_key():
+    """Not hypothetical: a real voterInfoQuery response for a real
+    address + a real currently-indexed election (2026-08-04 MI primary,
+    live-verified with a real key) came back with `election`/`state`/
+    `normalizedInput` but no `contests` key at all — Google's coverage
+    is per-jurisdiction and doesn't guarantee contest-level data even
+    for an address it recognizes. This must not raise."""
     assert civic_info._parse_contests({}) == []
 
 
@@ -114,21 +120,21 @@ async def test_fetch_returns_none_for_uncurated_town(monkeypatch, db_session):
 # ── API ───────────────────────────────────────────────────────────────
 
 
-def test_state_towns_404s_on_unknown_state(db_session):
+def test_state_towns_404s_on_unknown_state():
     with pytest.raises(HTTPException) as exc:
-        elections.state_towns("ZZ", db=db_session)
+        elections.state_towns("ZZ")
     assert exc.value.status_code == 404
 
 
-def test_state_towns_empty_without_key(monkeypatch, db_session):
+def test_state_towns_empty_without_key(monkeypatch):
     monkeypatch.setattr(civic_info.settings, "GOOGLE_CIVIC_API_KEY", "")
-    data = _body(elections.state_towns("MA", db=db_session))
+    data = _body(elections.state_towns("MA"))
     assert data["towns"] == []
 
 
-def test_state_towns_lists_curated_entries_when_configured(monkeypatch, db_session):
+def test_state_towns_lists_curated_entries_when_configured(monkeypatch):
     monkeypatch.setattr(civic_info.settings, "GOOGLE_CIVIC_API_KEY", "test-key")
-    data = _body(elections.state_towns("MA", db=db_session))
+    data = _body(elections.state_towns("MA"))
     assert {t["name"] for t in data["towns"]} == {"Cambridge", "Somerville"}
 
 

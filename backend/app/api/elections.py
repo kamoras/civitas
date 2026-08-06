@@ -280,12 +280,16 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
 
 
 @router.get("/states/{state}/towns")
-def state_towns(state: str, db: Session = Depends(get_db)):
+def state_towns(state: str):
     """The curated town list for `state` — empty when GOOGLE_CIVIC_API_KEY
     isn't set or no town has been added for this state yet. Never an
     error: an empty list is exactly how the frontend knows not to offer
     the town selector, same as MeasureCoverage.NOT_YET_COVERED for
-    statewide measures."""
+    statewide measures.
+
+    No `db` dependency: towns_for_state reads a static bundled/volume JSON
+    file (town_directory.py), never the database — unlike town_ballot
+    below, which needs `db` for civic_info's response cache."""
     state = state.upper()
     if state not in BALLOT_STATE_CODES:
         raise HTTPException(status_code=404, detail="Unknown state")

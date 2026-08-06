@@ -121,6 +121,16 @@ async def fetch_state_measures(
         response = await client.get(url, params=params, timeout=30.0)
         response.raise_for_status()
         payload = response.json()
+    except httpx.HTTPStatusError as exc:
+        # HTTPStatusError's own message embeds the full request URL, which
+        # carries `key` as a query param — logging it via logger.exception()
+        # (or str(exc) at all) would put the live Vote Smart key in the
+        # server logs on every non-2xx response. Status code only.
+        logger.warning(
+            "Vote Smart measure fetch failed for %s %d: HTTP %d",
+            state, year, exc.response.status_code,
+        )
+        return None
     except Exception:
         logger.exception("Vote Smart measure fetch failed for %s %d", state, year)
         return None
@@ -191,6 +201,15 @@ async def fetch_measure_detail(
             response = await client.get(url, params=params, timeout=30.0)
             response.raise_for_status()
             payload = response.json()
+        except httpx.HTTPStatusError as exc:
+            # See fetch_state_measures' matching except clause: the key
+            # lives in the request URL, which HTTPStatusError's message
+            # embeds verbatim.
+            logger.warning(
+                "Vote Smart measure detail failed for %s: HTTP %d",
+                source_measure_id, exc.response.status_code,
+            )
+            return None
         except Exception:
             logger.exception("Vote Smart measure detail failed for %s", source_measure_id)
             return None
