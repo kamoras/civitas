@@ -32,6 +32,7 @@ from app.models import (
     NationalMonitor,
     PageView,
     PipelinePhaseTiming,
+    PipelineRateLimitStat,
     PipelineRun,
     PipelineStatus,
     President,
@@ -935,6 +936,21 @@ async def admin_pipeline_timings(
     for row in rows:
         by_run.setdefault(row.run_id, []).append(row)
 
+    rl_rows = (
+        db.query(PipelineRateLimitStat)
+        .filter(
+            PipelineRateLimitStat.run_kind == kind,
+            PipelineRateLimitStat.run_id.in_(recent_run_ids),
+        )
+        .all()
+    )
+    # (run_id, step_key) -> {source: (requests, blocked_seconds)}
+    rl_by_step: dict[tuple[int, str], dict] = {}
+    for row in rl_rows:
+        rl_by_step.setdefault((row.run_id, row.step_key), {})[row.source] = (
+            row.requests, row.blocked_seconds,
+        )
+
     run_entries = []
     phase_trend: dict[str, list] = {}
     for run_id in recent_run_ids:
@@ -967,6 +983,21 @@ async def admin_pipeline_timings(
                 {"runId": run_id, "seconds": entry["seconds"]}
             )
 
+        # Per-source rollup for the whole run, and the single number this
+        # endpoint exists to produce: what share of the run was spent
+        # inside a rate limiter rather than doing work. A run that is
+        # mostly blocked is throughput-bound on someone else's API and
+        # cannot be shortened by faster local hardware.
+        source_totals: dict[str, dict] = {}
+        for (r_id, _step_key), sources in rl_by_step.items():
+            if r_id != run_id:
+                continue
+            for source, (requests, blocked) in sources.items():
+                bucket = source_totals.setdefault(source, {"requests": 0, "blockedSeconds": 0.0})
+                bucket["requests"] += requests
+                bucket["blockedSeconds"] += blocked
+        total_blocked = round(sum(b["blockedSeconds"] for b in source_totals.values()), 1)
+
         starts = [s.started_at for s in steps if s.started_at]
         ends = [s.completed_at for s in steps if s.completed_at]
         run_entries.append({
@@ -975,6 +1006,19 @@ async def admin_pipeline_timings(
             "completedAt": max(ends).isoformat() if ends else None,
             "totalSeconds": total,
             "untimedSteps": len(steps) - len(timed),
+            "blockedSeconds": total_blocked,
+            "blockedPct": round(100.0 * total_blocked / total, 1) if total else 0.0,
+            "rateLimitSources": [
+                {
+                    "source": source,
+                    "requests": data["requests"],
+                    "blockedSeconds": round(data["blockedSeconds"], 1),
+                }
+                for source, data in sorted(
+                    source_totals.items(),
+                    key=lambda kv: kv[1]["blockedSeconds"], reverse=True,
+                )
+            ],
             "phases": phases,
             "steps": [
                 {
@@ -983,6 +1027,9 @@ async def admin_pipeline_timings(
                     "phase": s.phase,
                     "status": s.status,
                     "seconds": s.duration_seconds,
+                    "blockedSeconds": round(
+                        sum(b for _, b in rl_by_step.get((run_id, s.step_key), {}).values()), 1,
+                    ),
                 }
                 for s in sorted(
                     steps,

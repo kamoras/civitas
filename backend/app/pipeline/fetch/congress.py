@@ -817,7 +817,11 @@ async def fetch_recent_house_roll_calls(
     return results
 
 
-_platform_rate_limiter = RateLimiter(0.5)  # max 0.5 req/s to senator websites
+# Named explicitly: congress.py is the one module with two limiters, and
+# without a name both would auto-derive to "congress" and their very
+# different workloads (the Congress.gov API vs. scraping 535 members'
+# own websites) would be indistinguishable in the run accounting.
+_platform_rate_limiter = RateLimiter(0.5, name="member_websites")  # max 0.5 req/s to senator websites
 
 _STRIP_TAGS = {
     "script", "style", "nav", "header", "footer", "aside",
