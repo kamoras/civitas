@@ -1046,6 +1046,38 @@ async def admin_pipeline_timings(
     }
 
 
+@router.post("/pipeline/clear-fingerprints", dependencies=[Depends(require_admin)])
+async def admin_clear_fingerprints(
+    entity_type: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    """Force the next run to re-derive every member from scratch.
+
+    The escape hatch for incremental analysis: drop the stored input
+    fingerprints and the next run treats every member as changed. Use it
+    to compare an incremental run's output against a full one, or to
+    recover if a fingerprint is ever suspected of being too coarse.
+
+    Refuses while a pipeline is running — clearing fingerprints mid-run
+    would leave the run's own records inconsistent with what it skipped.
+    """
+    from app.api.pipeline import _is_pipeline_running
+    from app.pipeline.analyze.member_fingerprint import clear_fingerprints
+
+    if _is_pipeline_running(db):
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot clear fingerprints while the pipeline is running",
+        )
+
+    cleared = clear_fingerprints(db, entity_type)
+    return {
+        "cleared": cleared,
+        "entityType": entity_type or "all",
+        "message": f"Cleared {cleared} fingerprint(s) — next run re-derives from scratch",
+    }
+
+
 @router.post("/pipeline/trigger", dependencies=[Depends(require_admin)])
 async def admin_trigger_pipeline(
     senator: str | None = Query(default=None),

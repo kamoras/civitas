@@ -1276,6 +1276,38 @@ class PipelineRateLimitStat(Base):
     )
 
 
+class MemberAnalysisFingerprint(Base):
+    """Hash of the inputs that produced a member's last stored analysis.
+
+    The pipeline re-derives every senator and representative from scratch
+    on every run, but most members' inputs do not change from one night to
+    the next — no new votes, no new filings, no platform edits. Re-running
+    LLM synthesis and bill classification over identical inputs produces
+    identical output at full cost.
+
+    A run compares each member's freshly built input payload against this
+    fingerprint and skips re-derivation on a match. The stored scorecard
+    is left exactly as it was, which is what makes the skip safe: both
+    snapshot recorders (_record_score_snapshots, _record_rep_snapshots)
+    iterate every row in the table rather than only the members this run
+    touched, so a skipped member still gets today's trend point from its
+    existing scores.
+
+    The fingerprint folds in _compute_analysis_code_hash(), so any change
+    to analysis, transform, assemble, scoring, or config_definitions
+    invalidates every member at once — the same signal that already clears
+    the LLM and learned-classification caches. A stale scorecard from a
+    silently-changed algorithm is the one failure mode that would matter
+    here, and this closes it without a separate version to remember to bump.
+    """
+    __tablename__ = "member_analysis_fingerprints"
+
+    entity_type: Mapped[str] = mapped_column(String(32), primary_key=True)
+    entity_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    computed_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
 class BskySenatorSpotlight(Base):
     """Tracks which senators have been highlighted in daily Bluesky score posts."""
     __tablename__ = "bsky_senator_spotlights"

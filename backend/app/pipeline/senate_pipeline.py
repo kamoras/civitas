@@ -105,6 +105,11 @@ from app.pipeline.vector_store import (
 )
 from app.pipeline.analyze.cross_reference import analyze_senator_batch, precompute_senator_analysis
 from app.pipeline.analyze.donor_classifier_ai import classify_donors_hybrid
+from app.pipeline.analyze.member_fingerprint import (
+    compute_fingerprint,
+    load_fingerprints,
+    record_fingerprint,
+)
 from app.pipeline.analyze.ollama_client import get_llm_stats, reset_client, reset_stats
 from app.pipeline.analyze.policy_alignment import clear_alignment_cache
 from app.pipeline.analyze.score_calculator import calculate_confidence, calculate_scores
@@ -403,6 +408,47 @@ def upsert_senator(db: Session, data: dict) -> None:
         existing.sponsorship_description = data.get("sponsorshipDescription") or ""
 
     db.flush()
+
+
+def _senator_fingerprint_inputs(
+    prepared: dict,
+    platform_texts: dict,
+    leadership_scores: dict,
+    ideology_scores: dict,
+    bipartisanship_scores: dict,
+    attracted_bipartisanship_scores: dict,
+    official_titles_map: dict,
+    roll_call_data_map: dict,
+) -> dict:
+    """Everything the per-senator analyze body reads, as plain data.
+
+    Assembled explicitly rather than by hashing `prepared` wholesale: the
+    body also reads four cohort-level sponsorship scores and two global
+    lookup maps, and a fingerprint that missed them would keep serving a
+    stale scorecard after a cohort-wide recompute changed the inputs.
+
+    Only this senator's slice of the two global maps is included. Hashing
+    them whole would make every senator's fingerprint change whenever any
+    bill anywhere changed, which defeats the optimisation entirely.
+    """
+    senator = prepared.get("senator", {})
+    bio_id = senator.get("bioguideId", "")
+    sponsored = prepared.get("sponsoredBills", []) or []
+    bill_ids = sorted({sp.get("billId", "") for sp in sponsored if sp.get("billId")})
+
+    return {
+        "senator": senator,
+        "funding": prepared.get("funding", {}),
+        "votingRecord": prepared.get("votingRecord", {}),
+        "sponsoredBills": sponsored,
+        "platformText": platform_texts.get(bio_id, ""),
+        "leadershipScore": leadership_scores.get(bio_id),
+        "ideologyScore": ideology_scores.get(bio_id),
+        "bipartisanshipScore": bipartisanship_scores.get(bio_id),
+        "attractedBipartisanshipScore": attracted_bipartisanship_scores.get(bio_id),
+        "officialTitles": {b: official_titles_map.get(b, "") for b in bill_ids},
+        "rollCallData": {b: roll_call_data_map.get(b) for b in bill_ids},
+    }
 
 
 def _record_score_snapshots(db: Session) -> None:
@@ -1660,9 +1706,28 @@ async def run_senate_pipeline(
         pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
         db.commit()
 
+        # Incremental analysis: a member whose inputs are byte-identical to
+        # the last run's re-derives to byte-identical output, so the whole
+        # per-senator body below can be skipped. Off by default — see
+        # settings.PIPELINE_INCREMENTAL_ANALYSIS and
+        # analyze/member_fingerprint.py for why, and for why the score
+        # trends survive a skip.
+        incremental = settings.PIPELINE_INCREMENTAL_ANALYSIS
+        stored_fingerprints = (
+            load_fingerprints(db, "senator") if incremental else {}
+        )
+        # Only members already persisted are skippable. A fingerprint with
+        # no corresponding row would skip a senator into non-existence.
+        persisted_senator_ids = (
+            {s.id for s in db.query(Senator.id).all()} if incremental else set()
+        )
+        analysis_code_hash = _compute_analysis_code_hash() if incremental else ""
+        skipped_count = 0
+
         logger.info(
-            "Processing %d senators (producer-consumer: embedding prefetch + LLM)...",
+            "Processing %d senators (producer-consumer: embedding prefetch + LLM)%s...",
             len(senator_prepared),
+            " [incremental]" if incremental else "",
         )
 
         progress.begin("analyze_senators", total=len(senator_prepared))
@@ -1685,6 +1750,33 @@ async def run_senate_pipeline(
                     senator["name"],
                 )
                 progress.update("analyze_senators", done=senator_idx, detail=senator["name"])
+
+                fingerprint = ""
+                if incremental:
+                    fingerprint = compute_fingerprint(
+                        _senator_fingerprint_inputs(
+                            prepared, platform_texts,
+                            leadership_scores, ideology_scores,
+                            bipartisanship_scores, attracted_bipartisanship_scores,
+                            official_titles_map, roll_call_data_map,
+                        ),
+                        analysis_code_hash,
+                    )
+                    sid = senator.get("id")
+                    if (
+                        sid in persisted_senator_ids
+                        and stored_fingerprints.get(sid) == fingerprint
+                    ):
+                        logger.info("    unchanged since last run — skipping re-derivation")
+                        skipped_count += 1
+                        # Counts as processed: the senator's scorecard is
+                        # current, and reporting it as unprocessed would make
+                        # a healthy incremental run look like a partial one.
+                        success_count += 1
+                        pipeline_run.senators_processed = success_count
+                        db.commit()
+                        progress.update("analyze_senators", done=senator_idx + 1)
+                        continue
 
                 try:
                     analysis_input = _build_analysis_input(prepared, platform_texts)
@@ -1919,6 +2011,12 @@ async def run_senate_pipeline(
                     success_count += 1
 
                     upsert_senator(db, result)
+                    if incremental and fingerprint:
+                        # After the upsert, never before: a fingerprint
+                        # recorded for output that failed to persist would
+                        # skip this senator next run and make the failure
+                        # permanent.
+                        record_fingerprint(db, "senator", result["id"], fingerprint)
                     pipeline_run.senators_processed = success_count
                     incremental_stats = get_llm_stats()
                     pipeline_run.llm_calls = incremental_stats["total_calls"]
@@ -1948,8 +2046,16 @@ async def run_senate_pipeline(
 
         progress.complete(
             "analyze_senators",
-            detail=f"{success_count} OK, {fail_count} failed",
+            detail=(
+                f"{success_count} OK, {fail_count} failed"
+                + (f", {skipped_count} unchanged" if skipped_count else "")
+            ),
         )
+        if incremental:
+            logger.info(
+                "Incremental analysis: %d re-derived, %d skipped as unchanged",
+                success_count - skipped_count, skipped_count,
+            )
 
         # ========================================
         # PHASE 4: FINALIZE
