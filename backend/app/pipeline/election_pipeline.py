@@ -443,6 +443,68 @@ def _set_coverage(
     row.checked_at = utcnow()
 
 
+async def _sync_ca_measures(
+    db: Session, client: httpx.AsyncClient, election_day: str,
+) -> tuple[int, int, int]:
+    """California's statewide propositions via direct PDF parsing (see
+    ballot_measures_ca.py) — the user-directed replacement for Vote Smart
+    on this one state. Returns (synced, failed_states, marked_removed),
+    same shape the caller accumulates for every other state.
+
+    Every field ballot_measures_ca.fetch_ca_measures returns is already
+    the full raw+detail shape _upsert_measure expects (one PDF pass gets
+    everything Vote Smart would need two calls for), so each item is
+    passed as both `raw` and `detail` directly — no separate detail fetch.
+    """
+    from app.models import MeasureCoverage
+    from app.pipeline.fetch.ballot_measures_ca import SOURCE_NAME, fetch_ca_measures
+
+    year = int(election_day[:4])
+    try:
+        listed = await fetch_ca_measures(client, db, year, election_day)
+    except Exception:
+        logger.exception("CA measure fetch raised")
+        listed = None
+
+    if listed is None:
+        _set_coverage(
+            db, "CA", election_day, MeasureCoverage.INGEST_FAILED,
+            source_name=SOURCE_NAME, error="fetch failed",
+        )
+        db.commit()
+        return 0, 1, 0
+
+    if not listed:
+        _set_coverage(
+            db, "CA", election_day, MeasureCoverage.CONFIRMED_NONE,
+            count=0, source_name=SOURCE_NAME,
+        )
+        db.commit()
+        return 0, 0, 0
+
+    seen_ids: set[str] = set()
+    dates: set[str] = set()
+    synced = 0
+    for item in listed:
+        try:
+            _upsert_measure(db, item, item, SOURCE_NAME)
+            seen_ids.add(item["id"])
+            dates.add(item["election_date"])
+            synced += 1
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("Failed to sync CA measure %s — skipping", item.get("id"))
+
+    marked_removed = _reconcile_state_measures(db, "CA", dates, seen_ids) if dates else 0
+    _set_coverage(
+        db, "CA", election_day, MeasureCoverage.COVERED,
+        count=len(seen_ids), source_name=SOURCE_NAME,
+    )
+    db.commit()
+    return synced, 0, marked_removed
+
+
 async def _sync_ballot_measures(db: Session, client: httpx.AsyncClient, cycle: int) -> dict:
     """Sync statewide ballot measures for every state with federal races.
 
@@ -461,16 +523,29 @@ async def _sync_ballot_measures(db: Session, client: httpx.AsyncClient, cycle: i
     )
 
     election_day = next_election_day(utcnow().date()).isoformat()
+
+    # CA runs on its own direct-PDF path regardless of whether Vote Smart
+    # is configured — the whole point is that CA no longer depends on it.
+    # No fallback to Vote Smart on a CA failure either: this path is now
+    # the source of record for CA, so a failure here should read as
+    # ingest_failed, not silently serve a stale Vote Smart snapshot.
+    synced, failed, marked_removed = await _sync_ca_measures(db, client, election_day)
+
     if not is_configured():
-        # Leave every state NOT_YET_COVERED rather than writing
-        # CONFIRMED_NONE — with no key we have learned nothing, and
-        # recording "no measures" would be a claim we never checked.
-        logger.info("Ballot measure sync skipped — VOTESMART_API_KEY not set")
-        return {"skipped": True, "reason": "not_configured"}
+        # Leave every OTHER state NOT_YET_COVERED rather than writing
+        # CONFIRMED_NONE — with no key we have learned nothing about them,
+        # and recording "no measures" would be a claim we never checked.
+        # CA above is unaffected by this key entirely.
+        logger.info("Ballot measure sync for other states skipped — VOTESMART_API_KEY not set")
+        return {
+            "synced": synced, "failed_states": failed, "marked_removed": marked_removed,
+            "skipped_other_states": True,
+        }
 
     source_name = "Vote Smart"
-    synced = failed = marked_removed = 0
     for state in sorted(STATES_WITH_FEDERAL_RACES):
+        if state == "CA":
+            continue
         try:
             listed = await fetch_state_measures(client, db, state, cycle)
         except Exception:

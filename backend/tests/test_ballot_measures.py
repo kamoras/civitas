@@ -334,3 +334,79 @@ async def test_link_verification_clears_a_link_that_stops_resolving(monkeypatch,
     assert result["failed"] == 1
     saved = json.loads((tmp_path / "lookup.json").read_text())
     assert saved["states"]["GA"]["verified_at"] is None
+
+
+# ── CA direct-PDF path (replaces Vote Smart for this one state) ────────
+
+
+@pytest.mark.asyncio
+async def test_sync_ca_measures_upserts_directly_from_one_pdf_pass(monkeypatch, db_session):
+    """CA's fetch already returns the full raw+detail shape in one PDF
+    pass (unlike Vote Smart's list-then-per-item-detail calls) — confirm
+    _sync_ca_measures upserts straight from it and marks coverage."""
+    from app.pipeline.fetch import ballot_measures_ca
+
+    async def fake_fetch(client, db, year, election_date):
+        assert year == 2026
+        assert election_date == "2026-11-03"
+        return [ballot_measures_ca._to_measure(
+            {"number": "2", "title": "T", "origin": "the Legislature",
+             "official_summary": "S", "fiscal_impact": "F",
+             "yes_means": "Y", "no_means": "N"},
+            election_date, "https://vig.cdn.sos.ca.gov/2026/general/pdf/complete-vig.pdf",
+        )]
+
+    monkeypatch.setattr(ballot_measures_ca, "fetch_ca_measures", fake_fetch)
+    synced, failed, marked_removed = await election_pipeline._sync_ca_measures(
+        db_session, None, "2026-11-03",
+    )
+    assert (synced, failed, marked_removed) == (1, 0, 0)
+
+    m = db_session.query(BallotMeasure).filter(BallotMeasure.state == "CA").one()
+    assert m.id == "CA-2026-11-03-2"
+    assert m.yes_means == "Y"
+    assert m.source_name == ballot_measures_ca.SOURCE_NAME
+
+    coverage = db_session.query(MeasureCoverage).filter(
+        MeasureCoverage.state == "CA", MeasureCoverage.election_date == "2026-11-03",
+    ).one()
+    assert coverage.status == MeasureCoverage.COVERED
+    assert coverage.source_name == ballot_measures_ca.SOURCE_NAME
+
+
+@pytest.mark.asyncio
+async def test_sync_ca_measures_marks_ingest_failed_on_fetch_failure(monkeypatch, db_session):
+    from app.pipeline.fetch import ballot_measures_ca
+
+    async def fake_fetch(client, db, year, election_date):
+        return None
+
+    monkeypatch.setattr(ballot_measures_ca, "fetch_ca_measures", fake_fetch)
+    result = await election_pipeline._sync_ca_measures(db_session, None, "2026-11-03")
+    assert result == (0, 1, 0)
+
+    coverage = db_session.query(MeasureCoverage).filter(
+        MeasureCoverage.state == "CA", MeasureCoverage.election_date == "2026-11-03",
+    ).one()
+    assert coverage.status == MeasureCoverage.INGEST_FAILED
+
+
+@pytest.mark.asyncio
+async def test_sync_ballot_measures_runs_ca_even_without_a_votesmart_key(monkeypatch, db_session):
+    """The whole point: CA must not depend on VOTESMART_API_KEY at all."""
+    from app.pipeline.fetch import ballot_measures, ballot_measures_ca
+
+    monkeypatch.setattr(ballot_measures.settings, "VOTESMART_API_KEY", "")
+
+    async def fake_fetch(client, db, year, election_date):
+        return [ballot_measures_ca._to_measure(
+            {"number": "1", "title": "T", "origin": None, "official_summary": "S",
+             "fiscal_impact": None, "yes_means": None, "no_means": None},
+            election_date, "https://example.com/vig.pdf",
+        )]
+
+    monkeypatch.setattr(ballot_measures_ca, "fetch_ca_measures", fake_fetch)
+    result = await election_pipeline._sync_ballot_measures(db_session, None, 2026)
+    assert result["skipped_other_states"] is True
+    assert result["synced"] == 1
+    assert db_session.query(BallotMeasure).filter(BallotMeasure.state == "CA").count() == 1
