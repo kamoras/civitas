@@ -128,7 +128,9 @@ function TownSection({ state }: { state: string }) {
         if (!cancelled) setBallot(b);
       })
       .catch(() => {
-        if (!cancelled) setBallot({ status: "ingest_failed", address: null, contests: [] });
+        if (!cancelled) {
+          setBallot({ status: "ingest_failed", address: null, source: null, sourceUrl: null, contests: [] });
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -177,9 +179,29 @@ function TownSection({ state }: { state: string }) {
               {ballot.contests.map((item, i) => (
                 <TownContestCard key={i} item={item} />
               ))}
-              {ballot.address && (
+              {ballot.source && (
                 <p className="text-[10px] text-matrix-green/40">
-                  Resolved against {ballot.address} · Google Civic Information API
+                  {ballot.address
+                    ? `Resolved against ${ballot.address} · ${ballot.source}`
+                    : (() => {
+                        const href = safeHref(ballot.sourceUrl);
+                        return href ? (
+                          <>
+                            Source:{" "}
+                            <a
+                              href={href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label={`${ballot.source} (opens in new tab)`}
+                              className="text-neon-cyan/70 hover:text-neon-cyan"
+                            >
+                              {ballot.source} ↗
+                            </a>
+                          </>
+                        ) : (
+                          `Source: ${ballot.source}`
+                        );
+                      })()}
                 </p>
               )}
             </div>

@@ -24,7 +24,10 @@ from app.pipeline.analyze.score_calculator import (
     get_state_pvi_map,
 )
 from app.pipeline.election_pipeline import current_election_cycle
+from app.pipeline.fetch import ballot_pdf
 from app.pipeline.fetch.ballot_lookup import lookup_for_state
+from app.pipeline.fetch.ballot_pdf_sources import source_for_town as ballot_pdf_source_for_town
+from app.pipeline.fetch.ballot_pdf_sources import town_names_for_state as ballot_pdf_town_names_for_state
 from app.pipeline.fetch.civic_info import fetch_town_ballot
 from app.pipeline.fetch.civic_info import is_configured as civic_is_configured
 from app.pipeline.fetch.town_directory import address_for_town, towns_for_state
@@ -281,64 +284,129 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
 
 @router.get("/states/{state}/towns")
 def state_towns(state: str):
-    """The curated town list for `state` — empty when GOOGLE_CIVIC_API_KEY
-    isn't set or no town has been added for this state yet. Never an
-    error: an empty list is exactly how the frontend knows not to offer
-    the town selector, same as MeasureCoverage.NOT_YET_COVERED for
-    statewide measures.
+    """The curated town list for `state` — the union of two independent
+    sources, since a town needs covering by exactly one of them, never
+    both:
 
-    No `db` dependency: towns_for_state reads a static bundled/volume JSON
-    file (town_directory.py), never the database — unlike town_ballot
-    below, which needs `db` for civic_info's response cache."""
+    - Towns with a hand-verified official ballot PDF (ballot_pdf.py) —
+      always offered, no API key needed.
+    - Towns on the Google Civic representative-address path
+      (civic_info.py) — offered only when GOOGLE_CIVIC_API_KEY is set.
+
+    Never an error: an empty list is exactly how the frontend knows not
+    to offer the town selector, same as MeasureCoverage.NOT_YET_COVERED
+    for statewide measures.
+
+    No `db` dependency: both directories read a static bundled/volume
+    JSON file, never the database — unlike town_ballot below, which
+    needs `db` for the response caches."""
     state = state.upper()
     if state not in BALLOT_STATE_CODES:
         raise HTTPException(status_code=404, detail="Unknown state")
-    if not civic_is_configured():
-        return cached_json({"towns": []}, max_age=CACHE_TTL_DETAIL_S)
+
+    civic_towns = towns_for_state(state) if civic_is_configured() else []
+    civic_names = {t["name"].casefold() for t in civic_towns}
+
+    pdf_towns = [
+        {"name": name, "sourceName": (ballot_pdf_source_for_town(name) or {}).get("source_name") or ""}
+        for name in ballot_pdf_town_names_for_state(state)
+        if name.casefold() not in civic_names
+    ]
+
     return cached_json(
-        {"towns": towns_for_state(state)}, max_age=CACHE_TTL_DETAIL_S,
+        {"towns": pdf_towns + civic_towns}, max_age=CACHE_TTL_DETAIL_S,
     )
+
+
+def _pdf_contest_json(c: dict) -> dict:
+    """A ballot_pdf.py contest -> the same TownBallotItem shape the
+    frontend already renders for Google Civic contests. PDF-sourced
+    candidates carry no party/campaign-URL — the ballot itself doesn't
+    print either — so those fields are null, never guessed."""
+    return {
+        "kind": "contest",
+        "office": c["office"],
+        "candidates": [
+            {"name": cand["name"], "party": None, "candidateUrl": None}
+            for cand in c["candidates"]
+        ],
+    }
 
 
 @router.get("/states/{state}/towns/{town}/ballot")
 async def town_ballot(state: str, town: str, db: Session = Depends(get_db)):
-    """Contests and measures at `town`'s representative address.
+    """Contests and measures for `town`.
 
-    Live, on-demand — not a nightly pipeline phase like statewide measures,
-    since town lookups can't be pre-fetched for every curated town at any
-    meaningful scale ahead of a specific request. Bounded because the town
-    list is small and curated (not user-typed free text), and each lookup
-    is cached (civic_info.TOWN_CACHE_TTL_HOURS) so repeat visits to the
-    same town don't re-hit Google.
+    Two sources, tried in order:
+
+    1. A real, hand-verified official ballot PDF (ballot_pdf.py) — no API
+       key, no representative-address approximation, the town's own
+       published document. Only a handful of towns have one of these;
+       most jurisdictions gate their sample ballot behind an address
+       lookup with no static file to fetch at all (confirmed during
+       research: Cambridge MA, Ann Arbor MI).
+    2. Google Civic's voterInfoQuery against a fixed representative
+       address (civic_info.py) — the fallback for every other curated
+       town, an approximation rather than the town's own document.
+
+    Live, on-demand either way — not a nightly pipeline phase like
+    statewide measures, since town lookups can't be pre-fetched for every
+    curated town at any meaningful scale ahead of a specific request.
+    Bounded because the town list is small and curated (not user-typed
+    free text), and each lookup is cached so repeat visits don't re-fetch.
 
     `status` mirrors MeasureCoverage's tri-state discipline: not_yet_
-    covered when the town isn't in the directory (or no key is
-    configured), ingest_failed on a fetch/parse error, covered on
-    success — an empty contests list on success is real information
-    ("nothing local at this address this cycle"), unlike a fetch failure.
+    covered when the town isn't in either directory (or Google Civic
+    isn't configured and there's no PDF source either), ingest_failed on
+    a fetch/parse error, covered on success — an empty contests list on
+    success is real information ("nothing local at this address this
+    cycle"), unlike a fetch failure.
     """
     state = state.upper()
     if state not in BALLOT_STATE_CODES:
         raise HTTPException(status_code=404, detail="Unknown state")
 
-    if not civic_is_configured() or address_for_town(state, town) is None:
-        return cached_json(
-            {"status": "not_yet_covered", "address": None, "contests": []},
-            max_age=CACHE_TTL_DETAIL_S,
-        )
-
     async with make_async_client(timeout=30.0) as client:
+        if ballot_pdf.is_configured(town):
+            pdf_result = await ballot_pdf.fetch_town_ballot_pdf(client, db, town)
+            if pdf_result is not None:
+                source = ballot_pdf_source_for_town(town)
+                return cached_json({
+                    "status": "covered",
+                    "address": None,
+                    "source": (source or {}).get("source_name") or "the town's official ballot",
+                    "sourceUrl": pdf_result["sourceUrl"],
+                    "contests": [_pdf_contest_json(c) for c in pdf_result["contests"]],
+                }, max_age=CACHE_TTL_DETAIL_S)
+            # A configured PDF source that failed to fetch/parse is a real
+            # ingest failure, not a reason to silently fall through to
+            # the approximation below — that would quietly downgrade a
+            # known-real source to a guess without saying so.
+            return cached_json(
+                {"status": "ingest_failed", "address": None, "source": None, "sourceUrl": None, "contests": []},
+                max_age=CACHE_TTL_DETAIL_S,
+            )
+
+        if not civic_is_configured() or address_for_town(state, town) is None:
+            return cached_json(
+                {"status": "not_yet_covered", "address": None, "source": None, "sourceUrl": None, "contests": []},
+                max_age=CACHE_TTL_DETAIL_S,
+            )
+
         result = await fetch_town_ballot(client, db, state, town)
 
     if result is None:
         return cached_json(
-            {"status": "ingest_failed", "address": None, "contests": []},
+            {"status": "ingest_failed", "address": None, "source": None, "sourceUrl": None, "contests": []},
             max_age=CACHE_TTL_DETAIL_S,
         )
-    return cached_json(
-        {"status": "covered", "address": result["address"], "contests": result["contests"]},
-        max_age=CACHE_TTL_DETAIL_S,
-    )
+    return cached_json({
+        "status": "covered",
+        "address": result["address"],
+        "source": "Google Civic Information API",
+        "sourceUrl": None,
+        "contests": result["contests"],
+    }, max_age=CACHE_TTL_DETAIL_S)
 
 
 @router.get("/races/{race_id}")

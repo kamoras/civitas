@@ -198,12 +198,24 @@ export interface TownMeasure {
 export type TownBallotItem = TownContest | TownMeasure;
 
 export interface TownBallot {
-  /** not_yet_covered: town isn't curated (or no API key). ingest_failed:
-   * the live lookup failed. covered: succeeded — an empty `contests` is
-   * real information ("nothing local at this address"), not a failure. */
+  /** not_yet_covered: town isn't curated (or no source is configured).
+   * ingest_failed: the live lookup failed. covered: succeeded — an empty
+   * `contests` is real information ("nothing local at this address"),
+   * not a failure. */
   status: "not_yet_covered" | "ingest_failed" | "covered";
-  /** The representative address results were resolved against — WE chose
-   * this, never a visitor's own address. Null unless status is "covered". */
+  /** The representative address results were resolved against, when the
+   * source is Google Civic — WE chose this, never a visitor's own
+   * address. Null when the source is a town's own official ballot PDF
+   * (no representative-address approximation needed) or status isn't
+   * "covered". */
   address: string | null;
+  /** Which source actually answered — a town's own official ballot PDF
+   * when one is hand-verified to exist (see backend's
+   * ballot_pdf_sources.json), otherwise Google Civic's representative-
+   * address approximation. Null unless status is "covered". */
+  source: string | null;
+  /** Link to the real source document, when the source is a PDF. Null
+   * for Google Civic (no single document to link) or when not covered. */
+  sourceUrl: string | null;
   contests: TownBallotItem[];
 }
