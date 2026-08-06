@@ -111,6 +111,35 @@ def test_upsert_stores_verbatim_fields_and_clears_removed_status(db_session):
     assert m.status == "certified"
 
 
+def test_two_unnumbered_measures_same_state_and_date_both_persist(db_session):
+    """`number` defaults to "" whenever a source hasn't assigned one yet
+    (ballot_measures._text's fallback), and a state can have more than one
+    such measure at once early in a cycle. The state/date/number index is
+    partial (WHERE number != '') for exactly this reason — a plain
+    UniqueConstraint here collides on the second blank-numbered measure
+    and the per-measure try/except in _sync_ballot_measures silently
+    drops it, which is real data loss on the one dataset this feature
+    can't afford to lose rows from."""
+    election_pipeline._upsert_measure(
+        db_session,
+        {"id": "vs-1", "state": "GA", "number": "", "title": "First",
+         "election_date": "2026-11-03"},
+        {}, "Vote Smart",
+    )
+    db_session.commit()
+    election_pipeline._upsert_measure(
+        db_session,
+        {"id": "vs-2", "state": "GA", "number": "", "title": "Second",
+         "election_date": "2026-11-03"},
+        {}, "Vote Smart",
+    )
+    db_session.commit()
+
+    assert db_session.query(BallotMeasure).filter(
+        BallotMeasure.state == "GA", BallotMeasure.election_date == "2026-11-03",
+    ).count() == 2
+
+
 def test_missing_yes_no_framing_stays_null(db_session):
     """Never inferred — the intuitive inference is inverted on a veto
     referendum, where "approved" RETAINS the law under challenge."""

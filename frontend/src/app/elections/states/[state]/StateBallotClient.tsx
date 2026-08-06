@@ -9,6 +9,7 @@ import TerminalTitlebar from "@/components/TerminalTitlebar";
 import RaceCard from "@/components/elections/RaceCard";
 import BallotMeasureCard from "@/components/elections/BallotMeasureCard";
 import { formatPvi, pviColor } from "@/lib/elections";
+import { safeHref } from "@/lib/formatting";
 import type { StateBallot } from "@/types/election";
 
 /** The measures section, including the three ways it can be empty.
@@ -20,7 +21,7 @@ import type { StateBallot } from "@/types/election";
  * all — would silently tell a voter there is nothing to research.
  */
 function MeasuresSection({ ballot }: { ballot: StateBallot }) {
-  const { measures, measureCoverage, officialLookup, state } = ballot;
+  const { measures, measureCoverage, state } = ballot;
 
   if (measures.length > 0) {
     return (
@@ -82,6 +83,13 @@ function MeasuresSection({ ballot }: { ballot: StateBallot }) {
 
 export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   const { officialLookup } = ballot;
+  // officialLookup.url comes from state_ballot_lookup.json via the API,
+  // same external-data trust boundary CoverageFeed.tsx guards for article
+  // URLs. This is "the one link on the page whose failure strands the
+  // visitor" (election_pipeline.py), so on a malformed/unsafe URL this
+  // falls back to the same USAGov default the backend itself falls back
+  // to (ballot_lookup.py's lookup_for_state), rather than going dead.
+  const lookupHref = safeHref(officialLookup.url) || "https://www.usa.gov/election-office";
 
   return (
     <div className="min-h-screen bg-crt-black text-matrix-green">
@@ -140,7 +148,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                 ))}
               </ul>
               <a
-                href={officialLookup.url}
+                href={lookupHref}
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label={`${officialLookup.label} (opens in new tab)`}

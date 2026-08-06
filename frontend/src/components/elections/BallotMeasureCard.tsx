@@ -1,4 +1,5 @@
 import { measureStatusLabel } from "@/lib/elections";
+import { safeHref } from "@/lib/formatting";
 import type { BallotMeasure } from "@/types/election";
 
 /** One ballot measure.
@@ -12,6 +13,11 @@ import type { BallotMeasure } from "@/types/election";
  */
 export default function BallotMeasureCard({ measure }: { measure: BallotMeasure }) {
   const removed = measure.status === "removed" || measure.status === "withdrawn";
+  // Vote Smart-sourced, not user-controlled, but still external data
+  // rendered as an href — same guard CoverageFeed.tsx uses for article
+  // URLs from the news-feed pipeline, for the same reason (reject
+  // javascript:/data: before it reaches a real <a>).
+  const sourceHref = safeHref(measure.sourceUrl);
 
   return (
     <article
@@ -116,9 +122,9 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
           Quoted verbatim from {measure.sourceName || "the source"}
           {measure.asOf ? ` · as of ${measure.asOf.slice(0, 10)}` : ""}
         </p>
-        {measure.sourceUrl && (
+        {sourceHref && (
           <a
-            href={measure.sourceUrl}
+            href={sourceHref}
             target="_blank"
             rel="noopener noreferrer"
             aria-label={`Read the full text of ${measure.number || measure.title} at the source (opens in new tab)`}

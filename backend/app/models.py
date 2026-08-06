@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base, VisitsBase
@@ -1204,9 +1204,22 @@ class BallotMeasure(Base):
     """
     __tablename__ = "ballot_measures"
     __table_args__ = (
-        UniqueConstraint(
+        # Partial, not a plain UniqueConstraint: `number` defaults to ""
+        # whenever a source doesn't publish one yet (see
+        # pipeline/fetch/ballot_measures.py's `_text` fallback), and a
+        # state routinely has more than one such measure at once early in
+        # a cycle. A non-partial constraint on (state, election_date,
+        # number) collides on the second blank-numbered measure and the
+        # per-measure try/except in _sync_ballot_measures silently drops
+        # it — reproduced against this exact schema. Scoping the index to
+        # number != '' keeps the real guarantee (two DIFFERENT source ids
+        # never claim the same printed ballot number) without punishing
+        # the common case of a not-yet-numbered measure.
+        Index(
+            "uq_ballot_measure_state_date_number",
             "state", "election_date", "number",
-            name="uq_ballot_measure_state_date_number",
+            unique=True,
+            sqlite_where=text("number != ''"),
         ),
     )
 
