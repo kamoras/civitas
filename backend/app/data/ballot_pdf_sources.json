@@ -9,6 +9,8 @@
       "url": "https://s3.amazonaws.com/somervillema-live/s3fs-public/sample-ballot-20260901-middlesex-democratic-ward1-2.pdf",
       "source_name": "City of Somerville Elections Department",
       "description": "2026-09-01 Massachusetts State Primary, Democratic Party, Wards 1-2. One ward pair of several Somerville publishes; picking a single one is a known, documented approximation, same spirit as civic_info.py's representative-address choice.",
+      "election_name": "2026 Massachusetts State Primary (Democratic Party)",
+      "election_date": "2026-09-01",
       "column_bounds": [[0.0, 0.355], [0.355, 0.633], [0.633, 1.0]]
     }
   }

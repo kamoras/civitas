@@ -217,5 +217,14 @@ export interface TownBallot {
   /** Link to the real source document, when the source is a PDF. Null
    * for Google Civic (no single document to link) or when not covered. */
   sourceUrl: string | null;
+  /** Which election these contests are actually FOR — load-bearing, not
+   * decoration. Neither source is guaranteed to be answering for the
+   * SAME election the rest of the page (federal races, statewide
+   * measures) is titled for: a town's most recently published ballot
+   * PDF may be an earlier primary, and Google Civic auto-selects from
+   * whatever it has indexed, which is often not the upcoming general
+   * either. Null unless status is "covered". */
+  electionName: string | null;
+  electionDate: string | null;
   contests: TownBallotItem[];
 }

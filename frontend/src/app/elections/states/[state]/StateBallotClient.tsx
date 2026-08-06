@@ -96,7 +96,7 @@ function MeasuresSection({ ballot }: { ballot: StateBallot }) {
  * approximation, not a precinct-accurate lookup, and the copy below says
  * so: a town can contain more than one precinct.
  */
-function TownSection({ state }: { state: string }) {
+function TownSection({ state, pageElectionDate }: { state: string; pageElectionDate: string }) {
   const [towns, setTowns] = useState<TownEntry[] | null>(null);
   const [selected, setSelected] = useState("");
   const [ballot, setBallot] = useState<TownBallot | null>(null);
@@ -129,7 +129,10 @@ function TownSection({ state }: { state: string }) {
       })
       .catch(() => {
         if (!cancelled) {
-          setBallot({ status: "ingest_failed", address: null, source: null, sourceUrl: null, contests: [] });
+          setBallot({
+            status: "ingest_failed", address: null, source: null, sourceUrl: null,
+            electionName: null, electionDate: null, contests: [],
+          });
         }
       })
       .finally(() => {
@@ -176,6 +179,23 @@ function TownSection({ state }: { state: string }) {
         {selected && !loading && ballot?.status === "covered" && (
           ballot.contests.length > 0 ? (
             <div className="space-y-3">
+              {ballot.electionDate && ballot.electionDate !== pageElectionDate && (
+                // Load-bearing, not decoration: this source's most
+                // recently published ballot can be an EARLIER election
+                // (right now, a September primary) than the general
+                // election the rest of this page is titled for. Showing
+                // those candidates with no warning would misstate what's
+                // actually on the November ballot.
+                <div className="border border-neon-yellow/40 bg-neon-yellow/5 p-3">
+                  <p className="text-xs text-neon-yellow/90">
+                    These local races are from {selected}&apos;s{" "}
+                    {ballot.electionName || "most recently published ballot"}
+                    {ballot.electionDate ? ` (${ballot.electionDate})` : ""} —{" "}
+                    <strong>not</strong> the {pageElectionDate} general election above.{" "}
+                    {selected} has not yet published a ballot for that election.
+                  </p>
+                </div>
+              )}
               {ballot.contests.map((item, i) => (
                 <TownContestCard key={i} item={item} />
               ))}
@@ -306,7 +326,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
             </div>
           </section>
 
-          <TownSection state={ballot.state} />
+          <TownSection state={ballot.state} pageElectionDate={ballot.electionDate} />
 
           {ballot.senateRaces.length > 0 && (
             <section className="terminal-window mb-6">

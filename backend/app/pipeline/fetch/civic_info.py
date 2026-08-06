@@ -169,7 +169,7 @@ async def fetch_town_ballot(
     cache_key = f"civic-town-{state.upper()}-{town.casefold()}"
     cached = api_cache_get(db, "google_civic", cache_key, max_age_hours=TOWN_CACHE_TTL_HOURS)
     if cached is not None:
-        return {"contests": _parse_contests(cached), "address": address}
+        return _to_result(cached, address)
 
     try:
         response = await client.get(
@@ -196,4 +196,22 @@ async def fetch_town_ballot(
         return None
 
     api_cache_set(db, "google_civic", cache_key, payload, normal_ttl_hours=TOWN_CACHE_TTL_HOURS)
-    return {"contests": _parse_contests(payload), "address": address}
+    return _to_result(payload, address)
+
+
+def _to_result(payload: dict, address: str) -> dict:
+    # `election` is real per the Discovery Document (VoterInfoResponse's
+    # top-level `election` field) — surfaced so the caller can disclose
+    # WHICH election these contests are actually for. Google auto-selects
+    # from its own index (no electionId passed), and that index only
+    # carries elections close to their own date (verified live,
+    # 2026-08-06: only primaries indexed right now, nothing for a
+    # November general three months out) — so what comes back could be
+    # an odd/off-cycle election, not necessarily this cycle's general.
+    election = payload.get("election") or {}
+    return {
+        "contests": _parse_contests(payload),
+        "address": address,
+        "election_name": _text(election, "name"),
+        "election_date": _text(election, "electionDay"),
+    }

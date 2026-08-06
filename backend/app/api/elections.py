@@ -333,6 +333,16 @@ def _pdf_contest_json(c: dict) -> dict:
     }
 
 
+def _uncovered_town_ballot(status: str) -> dict:
+    """The not_yet_covered/ingest_failed shape, shared across both
+    sources' failure paths so the null fields can't drift out of sync
+    with the "covered" shape above."""
+    return {
+        "status": status, "address": None, "source": None, "sourceUrl": None,
+        "electionName": None, "electionDate": None, "contests": [],
+    }
+
+
 @router.get("/states/{state}/towns/{town}/ballot")
 async def town_ballot(state: str, town: str, db: Session = Depends(get_db)):
     """Contests and measures for `town`.
@@ -370,41 +380,43 @@ async def town_ballot(state: str, town: str, db: Session = Depends(get_db)):
         if ballot_pdf.is_configured(town):
             pdf_result = await ballot_pdf.fetch_town_ballot_pdf(client, db, town)
             if pdf_result is not None:
-                source = ballot_pdf_source_for_town(town)
+                source = ballot_pdf_source_for_town(town) or {}
                 return cached_json({
                     "status": "covered",
                     "address": None,
-                    "source": (source or {}).get("source_name") or "the town's official ballot",
+                    "source": source.get("source_name") or "the town's official ballot",
                     "sourceUrl": pdf_result["sourceUrl"],
+                    # Load-bearing, not decoration: this PDF is whichever
+                    # election the town most recently published (right now,
+                    # Somerville's Sept 2026 primary) — NOT necessarily the
+                    # cycle's November general the rest of the page is
+                    # titled for. Showing primary candidates under a page
+                    # that says "GENERAL ELECTION" without saying so would
+                    # be actively misleading, not just incomplete.
+                    "electionName": source.get("election_name"),
+                    "electionDate": source.get("election_date"),
                     "contests": [_pdf_contest_json(c) for c in pdf_result["contests"]],
                 }, max_age=CACHE_TTL_DETAIL_S)
             # A configured PDF source that failed to fetch/parse is a real
             # ingest failure, not a reason to silently fall through to
             # the approximation below — that would quietly downgrade a
             # known-real source to a guess without saying so.
-            return cached_json(
-                {"status": "ingest_failed", "address": None, "source": None, "sourceUrl": None, "contests": []},
-                max_age=CACHE_TTL_DETAIL_S,
-            )
+            return cached_json(_uncovered_town_ballot("ingest_failed"), max_age=CACHE_TTL_DETAIL_S)
 
         if not civic_is_configured() or address_for_town(state, town) is None:
-            return cached_json(
-                {"status": "not_yet_covered", "address": None, "source": None, "sourceUrl": None, "contests": []},
-                max_age=CACHE_TTL_DETAIL_S,
-            )
+            return cached_json(_uncovered_town_ballot("not_yet_covered"), max_age=CACHE_TTL_DETAIL_S)
 
         result = await fetch_town_ballot(client, db, state, town)
 
     if result is None:
-        return cached_json(
-            {"status": "ingest_failed", "address": None, "source": None, "sourceUrl": None, "contests": []},
-            max_age=CACHE_TTL_DETAIL_S,
-        )
+        return cached_json(_uncovered_town_ballot("ingest_failed"), max_age=CACHE_TTL_DETAIL_S)
     return cached_json({
         "status": "covered",
         "address": result["address"],
         "source": "Google Civic Information API",
         "sourceUrl": None,
+        "electionName": result["election_name"],
+        "electionDate": result["election_date"],
         "contests": result["contests"],
     }, max_age=CACHE_TTL_DETAIL_S)
 

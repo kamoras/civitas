@@ -10,9 +10,17 @@ page-title fragments ("STATE PRIMARY", "Y SOMERVILLE") bleeding into the
 first office name. All three are covered below so they can't regress.
 """
 
+import json
 import time
 
+import pytest
+
+from app.api import elections
 from app.pipeline.fetch import ballot_pdf
+
+
+def _body(response):
+    return json.loads(response.body)
 
 # One full column (of three) from the real PDF, including the page's
 # full-width title/instructions bleeding into the top of the crop, and a
@@ -214,6 +222,25 @@ def test_parse_column_empty_on_no_offices():
 def test_column_bounds_scale_to_page_width():
     bounds = ballot_pdf._column_bounds_px(648.0, [[0.0, 0.5], [0.5, 1.0]])
     assert bounds == [(0.0, 324.0), (324.0, 648.0)]
+
+
+@pytest.mark.asyncio
+async def test_town_ballot_discloses_which_election_the_pdf_is_for(monkeypatch, db_session):
+    """A PDF-sourced ballot can be for a DIFFERENT election than the page's
+    own "GENERAL ELECTION" header — right now, Somerville's only
+    published PDF is its September primary, not the November general.
+    Showing those candidates with no disclosure would be actively
+    misleading, not just incomplete — election_name/election_date from
+    ballot_pdf_sources.json must reach the API response."""
+    async def fake_fetch(client, db, town):
+        return {"contests": [{"office": "GOVERNOR", "candidates": [{"name": "TEST CANDIDATE"}]}],
+                "sourceUrl": "https://example.com/ballot.pdf"}
+
+    monkeypatch.setattr(ballot_pdf, "fetch_town_ballot_pdf", fake_fetch)
+    data = _body(await elections.town_ballot("MA", "Somerville", db=db_session))
+    assert data["status"] == "covered"
+    assert data["electionName"] == "2026 Massachusetts State Primary (Democratic Party)"
+    assert data["electionDate"] == "2026-09-01"
 
 
 def test_candidate_regex_is_not_vulnerable_to_catastrophic_backtracking():
