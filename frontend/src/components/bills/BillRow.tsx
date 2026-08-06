@@ -29,8 +29,12 @@ export default function BillRow({ bill }: { bill: BillInFlight }) {
       className="flex items-start gap-3 py-2 px-2 hover:bg-white/[0.02] transition-colors"
       style={{ boxShadow: `inset 2px 0 0 0 ${stageColor}55` }}
     >
+      {/* w-[100px], not w-[92px]: the global minimum-size floor moved this from
+          11px to 12px, and at 12px the longest stage names ("IN COMMITTEE",
+          "TO PRESIDENT") measure ~85px, which with the 12px of horizontal
+          padding overflowed the old 92px box and truncated. */}
       <span
-        className="shrink-0 mt-0.5 text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded border w-[92px] text-center truncate"
+        className="shrink-0 mt-0.5 text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded border w-[100px] text-center truncate"
         style={{ color: stageColor, borderColor: `${stageColor}4d`, backgroundColor: `${stageColor}1a` }}
         title={stageInfo?.name ?? bill.stage}
       >

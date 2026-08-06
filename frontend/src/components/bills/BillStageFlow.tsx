@@ -56,8 +56,11 @@ export default function BillStageFlow({ stageCounts, activeStage, onSelectStage 
               }`}
               style={isActive ? { boxShadow: `inset 2px 0 0 0 ${color}` } : undefined}
             >
+              {/* w-32 at base, not w-28: at the 12px minimum-size floor the
+                  longest stage label ("IN OTHER CHAMBER") measures ~113px and
+                  overflowed the 112px w-28 box. */}
               <span
-                className="w-28 sm:w-32 shrink-0 truncate text-[10px] font-mono uppercase tracking-wider"
+                className="w-32 shrink-0 truncate text-[10px] font-mono uppercase tracking-wider"
                 style={{ color: isActive ? color : undefined }}
               >
                 {info?.name ?? code}
