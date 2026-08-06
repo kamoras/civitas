@@ -20,6 +20,7 @@ flowchart TB
         RSS["RSS — AP · NPR · PBS · BBC<br/>The Hill · Politico · Roll Call<br/>8 feeds, 7 newsrooms"]
         SOCIAL["Google Trends · Reddit"]
         VSMART["Vote Smart<br/>statewide ballot measures<br/>optional, keyed"]
+        GCIVIC["Google Civic Info<br/>town-level local races<br/>optional, keyed, fixed address only"]
     end
 
     subgraph PIPE["Pipelines — APScheduler"]
@@ -59,6 +60,7 @@ flowchart TB
     SQLITE --> API
     VECDB --> API
     API -.->|on-demand summaries| LLAMA
+    API -->|on-demand, cached 12h| GCIVIC
     API -->|JSON| WEB
     WEB --> NGINX
     API --> NGINX

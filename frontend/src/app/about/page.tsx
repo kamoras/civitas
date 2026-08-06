@@ -939,6 +939,40 @@ export default function AboutPage() {
 
               <div>
                 <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">
+                  AN OPTIONAL TOWN SELECTOR — WITHOUT YOUR ADDRESS
+                </h3>
+                <P>
+                  Each state page also offers an optional town selector for a small,
+                  hand-picked list of towns, showing local races (city council, school
+                  board, local measures) the statewide content above cannot. This is
+                  NOT the address-based personal ballot the paragraph above rules out.
+                  It never asks for or sends your address anywhere. Instead it looks up
+                  a fixed, public address we chose for that town — its own town hall —
+                  so every visitor who picks the same town gets the identical lookup.
+                  Nothing about you or your visit ever leaves this server.
+                </P>
+                <P>
+                  It is still an approximation, and we say so next to the selector: a
+                  town can contain more than one precinct, so a race tied to your
+                  specific street may not appear, or a race tied to a different part of
+                  town might. Town, not county or state, is the level chosen to keep
+                  that error small — precinct results are resolved to the exact address
+                  looked up, so a wider &ldquo;representative&rdquo; address would have
+                  been a substantially larger error. Unset the town selector, or use
+                  the official lookup link above, for the real thing.
+                </P>
+                <P>
+                  This source also only carries data close to an election&apos;s own
+                  date — a general election months out is not yet indexed anywhere in
+                  it, for any town, in any state. If a town shows &ldquo;could not load
+                  local races right now&rdquo;, that is very likely why, not a wrong
+                  address or a broken selector; local races for the current general
+                  should appear as Election Day approaches.
+                </P>
+              </div>
+
+              <div>
+                <h3 className="text-xs text-matrix-green/50 tracking-widest mb-2">
                   MEASURES ARE QUOTED, NEVER REWRITTEN
                 </h3>
                 <P>
@@ -1557,6 +1591,7 @@ export default function AboutPage() {
               <Row label="FEC API (fec.gov)" value="Declared candidates for every federal race in the cycle, plus per-candidate fundraising totals, cash on hand, and disbursements" />
               <Row label="Vote Smart (votesmart.org)" value="Statewide ballot measures — official ballot title, official summary, fiscal impact, and the state's own yes/no descriptions, stored and displayed verbatim. Free API from a nonpartisan nonprofit; optional, and the feature reports which states it lacks rather than implying they have no measures" />
               <Row label="Secretary of State offices" value="The authoritative source for ballot text, linked from every measure. Direct per-state ingestion is the intended upgrade to Vote Smart" />
+              <Row label="Google Civic Information API" value="Powers the optional town-level local-races selector on a small, hand-picked list of towns. Called with a fixed, public address we chose for that town (its own town hall), never a visitor's own address — see State Ballots &amp; Ballot Measures above. Free API; optional, and unset means the selector doesn't appear" />
               <Row label="USAGov election office directory" value="Where each state ballot page sends you for the parts of your ballot that are not statewide. Per-state deep links are only shown after an automated check confirms the URL still resolves" />
               <Row label="MIT Election Lab / county canvasses" value="Presidential returns behind the Cook-PVI-style partisan lean shown per state and district (see the methodology note on the elections pages)" />
             </div>

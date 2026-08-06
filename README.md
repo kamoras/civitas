@@ -459,6 +459,8 @@ Statewide measures are shown at `/elections/states/<ST>` alongside that state's 
 
 `VOTESMART_API_KEY` is optional — without it the phase is skipped and every state reports `not_yet_covered` rather than rendering an empty section.
 
+An optional town selector on the same page surfaces LOCAL races (city council, school board, local measures) that a statewide page structurally can't show — a real ballot is defined per precinct, not per state, and the only address-keyed source (Google Civic's `voterInfoQuery`) requires an address. Rather than a visitor's own address, which this platform's architecture exists to never send off-box, it's called with a fixed, publicly-known representative address per town (town hall) from a small hand-curated pilot list (`backend/app/data/town_directory.json`) — every visitor who picks the same town sends the identical request, so nothing visitor-specific ever leaves the server. This is a real approximation, not a precinct-accurate lookup (a town can contain more than one precinct), and the page says so next to the selector. Gated on `GOOGLE_CIVIC_API_KEY`; unset means the selector doesn't appear and the statewide page above is unaffected.
+
 ---
 
 ## Bluesky Integration
@@ -984,6 +986,7 @@ See `.env.example` for all options. Key variables:
 | `PIPELINE_CRON_SCHEDULE` | No | Cron schedule for nightly pipeline (default: `0 3 * * *`) |
 | `PIPELINE_CACHE_TTL_HOURS` | No | API response cache TTL (default: `72`) |
 | `VOTESMART_API_KEY` | No | Vote Smart API key — enables statewide ballot measures on the state ballot pages. Unset means the sync is skipped and every state reports "not yet covered", never "no measures" |
+| `GOOGLE_CIVIC_API_KEY` | No | Google Civic Information API key — enables the optional town-level local-races selector on the state ballot pages (a small hand-curated pilot list, not all US towns). Unset means the selector doesn't appear |
 | `BSKY_HANDLE` | No | Bluesky handle (e.g. `civitas-research.org`) |
 | `BSKY_APP_PASSWORD` | No | Bluesky app password (from Settings → App Passwords) |
 | `FEEDBACK_TOKEN` | No | Fine-grained GitHub PAT (Issues: write only) for the on-site feedback form; leave unset to disable it (returns 503, never silently drops) |
