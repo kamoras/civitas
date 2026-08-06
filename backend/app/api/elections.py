@@ -16,6 +16,7 @@ from app.election_calendar import (
     CLASS_III_STATES,
     next_election_day,
 )
+from app.http_client import make_async_client
 from app.models import BallotMeasure, Candidate, MeasureCoverage, Race, RaceCoverageItem
 from app.pipeline.analyze.score_calculator import (
     get_district_pvi_map,
@@ -24,6 +25,9 @@ from app.pipeline.analyze.score_calculator import (
 )
 from app.pipeline.election_pipeline import current_election_cycle
 from app.pipeline.fetch.ballot_lookup import lookup_for_state
+from app.pipeline.fetch.civic_info import fetch_town_ballot
+from app.pipeline.fetch.civic_info import is_configured as civic_is_configured
+from app.pipeline.fetch.town_directory import address_for_town, towns_for_state
 from app.time_utils import utcnow
 
 # The 50 states, from the same class sets election_pipeline.py derives its
@@ -273,6 +277,64 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
             "DC's Delegate to the House (non-voting) is not covered here",
         ] if state == "DC" else []),
     }, max_age=CACHE_TTL_DETAIL_S)
+
+
+@router.get("/states/{state}/towns")
+def state_towns(state: str, db: Session = Depends(get_db)):
+    """The curated town list for `state` — empty when GOOGLE_CIVIC_API_KEY
+    isn't set or no town has been added for this state yet. Never an
+    error: an empty list is exactly how the frontend knows not to offer
+    the town selector, same as MeasureCoverage.NOT_YET_COVERED for
+    statewide measures."""
+    state = state.upper()
+    if state not in BALLOT_STATE_CODES:
+        raise HTTPException(status_code=404, detail="Unknown state")
+    if not civic_is_configured():
+        return cached_json({"towns": []}, max_age=CACHE_TTL_DETAIL_S)
+    return cached_json(
+        {"towns": towns_for_state(state)}, max_age=CACHE_TTL_DETAIL_S,
+    )
+
+
+@router.get("/states/{state}/towns/{town}/ballot")
+async def town_ballot(state: str, town: str, db: Session = Depends(get_db)):
+    """Contests and measures at `town`'s representative address.
+
+    Live, on-demand — not a nightly pipeline phase like statewide measures,
+    since town lookups can't be pre-fetched for every curated town at any
+    meaningful scale ahead of a specific request. Bounded because the town
+    list is small and curated (not user-typed free text), and each lookup
+    is cached (civic_info.TOWN_CACHE_TTL_HOURS) so repeat visits to the
+    same town don't re-hit Google.
+
+    `status` mirrors MeasureCoverage's tri-state discipline: not_yet_
+    covered when the town isn't in the directory (or no key is
+    configured), ingest_failed on a fetch/parse error, covered on
+    success — an empty contests list on success is real information
+    ("nothing local at this address this cycle"), unlike a fetch failure.
+    """
+    state = state.upper()
+    if state not in BALLOT_STATE_CODES:
+        raise HTTPException(status_code=404, detail="Unknown state")
+
+    if not civic_is_configured() or address_for_town(state, town) is None:
+        return cached_json(
+            {"status": "not_yet_covered", "address": None, "contests": []},
+            max_age=CACHE_TTL_DETAIL_S,
+        )
+
+    async with make_async_client(timeout=30.0) as client:
+        result = await fetch_town_ballot(client, db, state, town)
+
+    if result is None:
+        return cached_json(
+            {"status": "ingest_failed", "address": None, "contests": []},
+            max_age=CACHE_TTL_DETAIL_S,
+        )
+    return cached_json(
+        {"status": "covered", "address": result["address"], "contests": result["contests"]},
+        max_age=CACHE_TTL_DETAIL_S,
+    )
 
 
 @router.get("/races/{race_id}")

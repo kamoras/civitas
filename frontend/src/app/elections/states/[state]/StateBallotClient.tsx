@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import MatrixRain from "@/components/effects/MatrixRain";
@@ -8,9 +9,11 @@ import BackToTop from "@/components/BackToTop";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import RaceCard from "@/components/elections/RaceCard";
 import BallotMeasureCard from "@/components/elections/BallotMeasureCard";
+import TownContestCard from "@/components/elections/TownContestCard";
 import { formatPvi, pviColor } from "@/lib/elections";
 import { safeHref } from "@/lib/formatting";
-import type { StateBallot } from "@/types/election";
+import { fetchTownBallot, fetchTownsForState } from "@/lib/api";
+import type { StateBallot, TownBallot, TownEntry } from "@/types/election";
 
 /** The measures section, including the three ways it can be empty.
  *
@@ -78,6 +81,122 @@ function MeasuresSection({ ballot }: { ballot: StateBallot }) {
         </p>
       )}
     </div>
+  );
+}
+
+/** Local (town-level) races and measures — additive to the statewide
+ * content, never a replacement. Renders nothing when the backend has no
+ * curated towns for this state (feature unconfigured, or none added yet
+ * — see backend/app/data/town_directory.json), same "absence isn't an
+ * error" discipline as MeasuresSection above.
+ *
+ * Resolved against a fixed, public representative address (e.g. town
+ * hall) chosen by Civitas, never one a visitor types in — see
+ * GOOGLE_CIVIC_API_KEY's comment in config.py for why. That is a real
+ * approximation, not a precinct-accurate lookup, and the copy below says
+ * so: a town can contain more than one precinct.
+ */
+function TownSection({ state }: { state: string }) {
+  const [towns, setTowns] = useState<TownEntry[] | null>(null);
+  const [selected, setSelected] = useState("");
+  const [ballot, setBallot] = useState<TownBallot | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchTownsForState(state)
+      .then((t) => {
+        if (!cancelled) setTowns(t);
+      })
+      .catch(() => {
+        if (!cancelled) setTowns([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [state]);
+
+  useEffect(() => {
+    if (!selected) {
+      setBallot(null);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    fetchTownBallot(state, selected)
+      .then((b) => {
+        if (!cancelled) setBallot(b);
+      })
+      .catch(() => {
+        if (!cancelled) setBallot({ status: "ingest_failed", address: null, contests: [] });
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [state, selected]);
+
+  if (!towns || towns.length === 0) return null;
+
+  return (
+    <section className="terminal-window mb-6">
+      <TerminalTitlebar title="town.dat" />
+      <div className="p-6">
+        <h2 className="font-pixel text-xs text-matrix-green/50 mb-1">LOCAL RACES — BY TOWN</h2>
+        <p className="text-[11px] text-matrix-green/40 mb-3">
+          Optional and approximate: results are resolved against a fixed, public address
+          in the town you pick (e.g. town hall) — never an address you type in. If your
+          own precinct differs from that address within town limits, some local races
+          here may not match yours.
+        </p>
+        <select
+          value={selected}
+          onChange={(e) => setSelected(e.target.value)}
+          className="bg-crt-black border border-matrix-green/30 text-matrix-green font-mono text-xs px-3 py-2 mb-4"
+          aria-label="Select your town for local races (optional, approximate)"
+        >
+          <option value="">— statewide only —</option>
+          {towns.map((t) => (
+            <option key={t.name} value={t.name}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+
+        {selected && loading && (
+          <p className="text-xs text-matrix-green/40">
+            Loading {selected}&apos;s local races…
+          </p>
+        )}
+
+        {selected && !loading && ballot?.status === "covered" && (
+          ballot.contests.length > 0 ? (
+            <div className="space-y-3">
+              {ballot.contests.map((item, i) => (
+                <TownContestCard key={i} item={item} />
+              ))}
+              {ballot.address && (
+                <p className="text-[10px] text-matrix-green/40">
+                  Resolved against {ballot.address} · Google Civic Information API
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-matrix-green/60">
+              No local races on file for {selected} this cycle.
+            </p>
+          )
+        )}
+
+        {selected && !loading && ballot?.status === "ingest_failed" && (
+          <p className="text-xs text-neon-yellow/80">
+            Could not load {selected}&apos;s local races right now — try again shortly.
+          </p>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -164,6 +283,8 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
               </p>
             </div>
           </section>
+
+          <TownSection state={ballot.state} />
 
           {ballot.senateRaces.length > 0 && (
             <section className="terminal-window mb-6">

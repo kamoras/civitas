@@ -35,6 +35,21 @@ class Settings(BaseSettings):
     # block linking the state's own lookup, rather than an empty section
     # that would read as "this state has no measures".
     VOTESMART_API_KEY: str = ""
+    # Google Civic Information API (voterInfoQuery) — town-level ballot
+    # content (city council, school board, local measures) that a statewide
+    # page structurally can't show, since a real ballot is defined per
+    # precinct, not per state. voterInfoQuery is address-keyed, and sending
+    # a VISITOR's address off-box is exactly what this platform's
+    # architecture exists to prevent — so this is never called with a
+    # visitor's address. It's called with a fixed, publicly-known
+    # representative address per town (e.g. town hall, see
+    # app/data/town_directory.json), chosen by us, not typed by a user.
+    # That's a real approximation, not a precinct-accurate lookup: two
+    # addresses in the same town can be on different ballots. Optional:
+    # with no key, town lookups are skipped and the town selector doesn't
+    # appear — the statewide page (VOTESMART_API_KEY's feature) is
+    # unaffected either way.
+    GOOGLE_CIVIC_API_KEY: str = ""
     OLLAMA_BASE_URL: str = "http://ollama:11434"
     OLLAMA_MODEL: str = "LiquidAI/lfm2.5-1.2b-instruct"
     # Optional larger model for the two PUBLIC-facing generation surfaces

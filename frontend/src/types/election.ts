@@ -167,3 +167,43 @@ export interface PviMap {
   /** Methodology/provenance — treat as possibly missing. */
   meta?: PviMeta;
 }
+
+/** One curated town — see backend/app/data/town_directory.json. Not a
+ * directory of all US municipalities: a small, hand-picked list. */
+export interface TownEntry {
+  name: string;
+  /** The town's own government site (e.g. "City of Cambridge") — never a
+   * visitor's address; see GOOGLE_CIVIC_API_KEY's comment in config.py. */
+  sourceName: string;
+}
+
+export interface TownContest {
+  kind: "contest";
+  office: string;
+  candidates: { name: string; party: string | null; candidateUrl: string | null }[];
+}
+
+/** A local measure from Google Civic — same verbatim-only contract as
+ * BallotMeasure above, just a different upstream shape (no yes/no
+ * framing or authority fields; Google's schema doesn't carry them). */
+export interface TownMeasure {
+  kind: "measure";
+  title: string;
+  subtitle: string | null;
+  text: string | null;
+  url: string | null;
+  passageThreshold: string | null;
+}
+
+export type TownBallotItem = TownContest | TownMeasure;
+
+export interface TownBallot {
+  /** not_yet_covered: town isn't curated (or no API key). ingest_failed:
+   * the live lookup failed. covered: succeeded — an empty `contests` is
+   * real information ("nothing local at this address"), not a failure. */
+  status: "not_yet_covered" | "ingest_failed" | "covered";
+  /** The representative address results were resolved against — WE chose
+   * this, never a visitor's own address. Null unless status is "covered". */
+  address: string | null;
+  contests: TownBallotItem[];
+}
