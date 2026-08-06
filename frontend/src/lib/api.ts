@@ -1060,6 +1060,50 @@ export async function fetchAdminTopPages(
   });
 }
 
+export interface PhaseTimingPhase {
+  phase: string;
+  seconds: number;
+  pct: number;
+  steps: number;
+}
+
+export interface PhaseTimingStep {
+  stepKey: string;
+  label: string;
+  phase: string;
+  status: string;
+  seconds: number | null;
+}
+
+export interface PhaseTimingRun {
+  runId: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  totalSeconds: number;
+  untimedSteps: number;
+  phases: PhaseTimingPhase[];
+  steps: PhaseTimingStep[];
+}
+
+export interface PipelineTimings {
+  kind: string;
+  pipelineType: string;
+  runs: PhaseTimingRun[];
+  phaseTrend: Record<string, { runId: number; seconds: number }[]>;
+}
+
+export async function fetchAdminPipelineTimings(
+  token: string,
+  kind: string = "pipeline_runs",
+  runs: number = 10,
+): Promise<PipelineTimings> {
+  return requestJson(
+    `${API_BASE}/admin/pipeline/timings?kind=${encodeURIComponent(kind)}&runs=${runs}`,
+    "Pipeline timings failed",
+    { init: { headers: adminHeaders(token) } },
+  );
+}
+
 export interface VacancyResult {
   id: string;
   name: string;
