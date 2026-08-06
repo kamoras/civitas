@@ -456,18 +456,27 @@ li {
 }
 
 /* ===== A11Y: MINIMUM FONT SIZE (always on) =====
-   8-10px pixel-font badges/labels (bill-type tags, committee names, dates)
-   are common across the site (~450 Tailwind arbitrary-value call sites —
+   8-11px pixel-font badges/labels (bill-type tags, committee names, dates)
+   are common across the site (~470 Tailwind arbitrary-value call sites —
    too many to hand-edit, same reasoning as the contrast floor above).
-   Floored to 11px globally rather than per component; Tailwind v4 keeps
+   Floored to 12px globally rather than per component; Tailwind v4 keeps
    arbitrary-value class names literal in the DOM (`text-[9px]`, not
    hashed), so this attribute selector reliably matches every call site.
+   `text-[11px]` is in scope here too: it was exactly at the old 11px floor,
+   so raising the floor without extending this list would leave ~20 real
+   call sites (HeroSection, Marquee, BillStageFlow's leg-date column,
+   MetricTooltip, admin, …) sitting 1px under the new one. Checked each for
+   truncation risk — all either wrap, already declare `truncate` with a
+   `title` fallback, or sit in a comfortably wide fixed column — so bumping
+   them the same 1px the 8-10px group gets is safe by the same reasoning
+   BillRow/BillStageFlow already establish for badge fit.
    Verified live against production (Playwright, Action Center's dense
-   badge grid and a senator scorecard's sponsored-bill tag list) — 11px
+   badge grid and a senator scorecard's sponsored-bill tag list) — 12px
    doesn't overflow or wrap any of the bordered/padded badges it touches. */
 [class*="text-[8px]"],
 [class*="text-[9px]"],
-[class*="text-[10px]"] {
+[class*="text-[10px]"],
+[class*="text-[11px]"] {
   font-size: 12px !important;
 }
 
