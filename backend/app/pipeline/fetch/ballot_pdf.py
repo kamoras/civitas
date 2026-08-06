@@ -76,8 +76,18 @@ CACHE_TTL_HOURS = 12
 # — optional because an uncontested candidate (verified on the real PDF:
 # Attorney General, single candidate) has none at all, unlike every
 # contested race, which has one "+" per candidate slot on the line.
+#
+# The name group is deliberately just "word (space word)*", not the
+# earlier "word (space (LETTER-DOT | word))*": that had two overlapping
+# ways to match a single-letter-plus-period token like "J." — once via
+# the explicit `[A-Z]\.` branch, once via `[A-Z][A-Za-z.'-]*` matching
+# "J" then ".", since "." is already in that character class — and
+# CodeQL correctly flagged the resulting ambiguity as exponential-
+# backtracking-prone (catastrophic on adversarial input). Dropping the
+# redundant branch removes the ambiguity entirely; "J." still matches
+# fine through the one remaining path.
 _CANDIDATE_RE = re.compile(
-    r"^(?P<name>[A-Z][A-Za-z.'-]*(?:\s+(?:[A-Z]\.|[A-Z][A-Za-z.'-]*))*)"
+    r"^(?P<name>[A-Z][A-Za-z.'-]*(?:\s+[A-Z][A-Za-z.'-]*)*)"
     r"\s+(?P<address>\d+\s+.+?)"
     r"(?:\s+(?:\+\s*)+)?$",
 )

@@ -10,6 +10,8 @@ page-title fragments ("STATE PRIMARY", "Y SOMERVILLE") bleeding into the
 first office name. All three are covered below so they can't regress.
 """
 
+import time
+
 from app.pipeline.fetch import ballot_pdf
 
 # One full column (of three) from the real PDF, including the page's
@@ -212,3 +214,19 @@ def test_parse_column_empty_on_no_offices():
 def test_column_bounds_scale_to_page_width():
     bounds = ballot_pdf._column_bounds_px(648.0, [[0.0, 0.5], [0.5, 1.0]])
     assert bounds == [(0.0, 324.0), (324.0, 648.0)]
+
+
+def test_candidate_regex_is_not_vulnerable_to_catastrophic_backtracking():
+    """CodeQL flagged an earlier version of _CANDIDATE_RE: the name group
+    had two overlapping ways to match a "LETTER." token (an explicit
+    `[A-Z]\\.` branch, and separately via `[A-Z][A-Za-z.'-]*` since "."
+    is already in that character class), and the ambiguity was
+    exponential-backtracking-prone on adversarial input. A many-token
+    string that never reaches a valid address/trailing-+ shape used to
+    hang; it must now fail fast."""
+    evil_input = "A. " * 40 + "X"
+    start = time.monotonic()
+    result = ballot_pdf._CANDIDATE_RE.match(evil_input)
+    elapsed = time.monotonic() - start
+    assert result is None
+    assert elapsed < 1.0, f"regex took {elapsed:.2f}s — catastrophic backtracking regressed"
