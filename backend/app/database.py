@@ -704,6 +704,11 @@ def reset_all_data() -> dict:
             models.AnalysisCache,
             models.ExploreDocument,
             models.ScoreSnapshot,
+            # Before models.Senator/Representative: a fingerprint left
+            # behind after its member row is deleted would let the next
+            # incremental run skip re-deriving a member that no longer
+            # exists, so a reset would silently not rebuild it.
+            models.MemberAnalysisFingerprint,
             models.PipelineRun,
             models.Senator,
             models.Representative,
