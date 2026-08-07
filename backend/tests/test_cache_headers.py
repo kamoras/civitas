@@ -253,7 +253,32 @@ def test_middleware_is_mounted_on_the_real_app():
     ), "DataVersionCacheMiddleware is not mounted"
 
 
-def test_real_app_emits_headers_through_the_gzip_stack(monkeypatch):
+@pytest.fixture(scope="module")
+def real_client():
+    """The real app's lifespan for real: init_db, the scheduler, the
+    embedding-model preload thread, the visit consumer, the explore-index
+    bootstrap — all of it.
+
+    Module-scoped and shared by every "real app" test below rather than
+    each test opening its own `with TestClient(app)`. That lifespan is
+    heavyweight enough (spawns its own background threads, some touching
+    native extensions — torch, scipy, sqlite-vec) that cycling it more
+    than once per process is not just slow, it segfaulted here: two
+    separate start/stop cycles in the same pytest session reliably
+    crashed the interpreter, most likely a native-thread-teardown race
+    in the embedding-model preload rather than anything in the cache
+    middleware itself. One real lifespan per session, entered once,
+    reused by every test that needs it, sidesteps the whole class of
+    problem — the same reason nothing else in this suite does this
+    per-test.
+    """
+    from app.main import app
+
+    with TestClient(app) as client:
+        yield client
+
+
+def test_real_app_emits_headers_through_the_gzip_stack(monkeypatch, real_client):
     """Ordering check against the *real* middleware stack.
 
     A probe route rather than a live endpoint: the app's own engine has no
@@ -264,7 +289,7 @@ def test_real_app_emits_headers_through_the_gzip_stack(monkeypatch):
     short-circuits before the compressor and the weak ETag stays valid
     whether or not the body below was compressed.
     """
-    from app.main import app
+    app = real_client.app
 
     @app.get("/api/explore/__cache_probe")
     def _probe():
@@ -281,30 +306,26 @@ def test_real_app_emits_headers_through_the_gzip_stack(monkeypatch):
         app.router.routes.insert(0, app.router.routes.pop())
         monkeypatch.setattr(ch, "data_version", lambda: "run-v1")
 
-        with TestClient(app) as real_client:
-            resp = real_client.get(
-                "/api/explore/__cache_probe", headers={"Accept-Encoding": "gzip"},
-            )
-            assert resp.status_code == 200
-            assert resp.headers.get("Content-Encoding") == "gzip"
-            etag = resp.headers.get("ETag")
-            assert etag and etag.startswith('W/"')
+        resp = real_client.get(
+            "/api/explore/__cache_probe", headers={"Accept-Encoding": "gzip"},
+        )
+        assert resp.status_code == 200
+        assert resp.headers.get("Content-Encoding") == "gzip"
+        etag = resp.headers.get("ETag")
+        assert etag and etag.startswith('W/"')
 
-            conditional = real_client.get(
-                "/api/explore/__cache_probe",
-                headers={"If-None-Match": etag, "Accept-Encoding": "gzip"},
-            )
-            assert conditional.status_code == 304
-            assert conditional.content == b""
-            # A 304 must not claim a compressed body it does not have.
-            assert "Content-Encoding" not in conditional.headers
+        conditional = real_client.get(
+            "/api/explore/__cache_probe",
+            headers={"If-None-Match": etag, "Accept-Encoding": "gzip"},
+        )
+        assert conditional.status_code == 304
+        assert conditional.content == b""
+        # A 304 must not claim a compressed body it does not have.
+        assert "Content-Encoding" not in conditional.headers
     finally:
         app.router.routes[:] = original_routes
 
 
-def test_real_app_leaves_health_uncached(monkeypatch):
-    from app.main import app
-
+def test_real_app_leaves_health_uncached(monkeypatch, real_client):
     monkeypatch.setattr(ch, "data_version", lambda: "run-v1")
-    with TestClient(app) as real_client:
-        assert "ETag" not in real_client.get("/api/health").headers
+    assert "ETag" not in real_client.get("/api/health").headers
