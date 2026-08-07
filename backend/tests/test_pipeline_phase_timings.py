@@ -84,6 +84,23 @@ def test_skipped_and_failed_steps_are_recorded_with_their_status(db_session):
     assert by_key["fetch_b"].duration_seconds is not None
 
 
+def test_skip_after_begin_still_gets_a_completed_timestamp(db_session):
+    """A step that begin()s and is later skipped (e.g. a weekly-cadence
+    check that runs after begin()) must not lose its elapsed time the way
+    a step skipped before it ever started correctly does."""
+    run = PipelineRun(status="running")
+    tracker = _tracker(db_session, run)
+
+    tracker.begin("fetch_a")
+    tracker.skip("fetch_a", detail="weekly cadence")
+
+    row = db_session.query(PipelinePhaseTiming).one()
+    assert row.status == "skipped"
+    assert row.started_at is not None
+    assert row.completed_at is not None
+    assert row.duration_seconds is not None and row.duration_seconds >= 0
+
+
 def test_repeated_terminal_transitions_update_rather_than_collide(db_session):
     """A retried or resumed step drives the same key terminal twice. The
     unique constraint on (run_kind, run_id, step_key) makes that an update,

@@ -82,6 +82,11 @@ class ProgressTracker:
         if not step:
             return
         step["status"] = "skipped"
+        # Set even for a step skipped before begin() (no startedAt to pair
+        # it with, so _record_timing still reports duration_seconds=None) —
+        # a step skipped *after* begin() otherwise loses its elapsed time
+        # the same way complete()/fail() don't.
+        step["completedAt"] = _now_iso()
         if detail:
             step["detail"] = detail
         self._flush()
