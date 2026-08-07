@@ -396,6 +396,30 @@ def vague_singular_office_references(generated: str) -> list[str]:
     return sorted({m.group(0) for m in _VAGUE_SINGULAR_OFFICE_RE.finditer(generated or "")})
 
 
+# Anaphoric stand-ins for a person the piece could have just named. Live
+# case (issue 522, reported via Bluesky 2026-08-06): a title naming Trump
+# ("Trump comments on El-Sayed's Michigan run") was followed by a summary
+# that never named him, calling him "A political figure from Wayne County,
+# Michigan" (that location actually describes El-Sayed, not Trump) and
+# then "The individual referenced El-Sayed's decision..." — the same
+# vague-actor failure as _VAGUE_SINGULAR_OFFICE_RE, but for a specific
+# named person rather than a fixed office, so that regex didn't match.
+# Like that check, this doesn't compare against source material — the
+# phrasing is wrong regardless of what the source says.
+_VAGUE_PERSON_REFERENCE_RE = re.compile(
+    r"\b(?:a|an)\s+(?:political|public|prominent)\s+figure\b"
+    r"|\bthe\s+individual\b",
+    re.IGNORECASE,
+)
+
+
+def vague_person_references(generated: str) -> list[str]:
+    """Anaphoric placeholders ("a political figure," "the individual") used
+    in place of a name the piece already has (often right there in its own
+    title). See _VAGUE_PERSON_REFERENCE_RE for the live case."""
+    return sorted({m.group(0) for m in _VAGUE_PERSON_REFERENCE_RE.finditer(generated or "")})
+
+
 # Family/personal-relationship claims in the GENERATED text. Same fabrication
 # class as ungrounded_electoral_claims — the model inventing a *relationship*
 # between two grounded people, with no fabricated number or titled name for
@@ -585,5 +609,10 @@ def hedge_and_editorializing_violations(generated: str) -> list[str]:
     if vague_offices:
         problems.append(
             f"vague reference to a single-holder office ({', '.join(vague_offices)})"
+        )
+    vague_people = vague_person_references(generated)
+    if vague_people:
+        problems.append(
+            f"vague anaphoric reference to a person ({', '.join(vague_people)})"
         )
     return problems

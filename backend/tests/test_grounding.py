@@ -655,3 +655,47 @@ class TestVagueSingularOfficeReferences:
             "A U.S. president stated fines should be reversed."
         )
         assert any("single-holder office" in r for r in reasons)
+
+
+class TestVaguePersonReferences:
+    """Live case (issue 522, reported via Bluesky 2026-08-06): a title
+    naming Trump was followed by a summary that never named him, instead
+    calling him "A political figure from Wayne County, Michigan" (that
+    location actually describes El-Sayed) and "The individual referenced
+    El-Sayed's decision..." — a vague stand-in for a person the piece
+    could have just named, the same failure class as
+    vague_singular_office_references but for a person rather than an
+    office."""
+
+    def test_live_political_figure_case_flagged(self):
+        from app.pipeline.analyze.grounding import vague_person_references
+        assert vague_person_references(
+            "A political figure from Wayne County, Michigan, has voiced "
+            "concerns about voting integrity following a recent election "
+            "outcome."
+        ) == ["A political figure"]
+
+    def test_the_individual_flagged(self):
+        from app.pipeline.analyze.grounding import vague_person_references
+        assert vague_person_references(
+            "The individual referenced El-Sayed's decision to run again."
+        ) == ["The individual"]
+
+    def test_public_and_prominent_figure_flagged(self):
+        from app.pipeline.analyze.grounding import vague_person_references
+        assert vague_person_references("A public figure criticized the bill.") != []
+        assert vague_person_references("A prominent figure endorsed the candidate.") != []
+
+    def test_named_person_not_flagged(self):
+        from app.pipeline.analyze.grounding import vague_person_references
+        assert vague_person_references("Trump commented on the race.") == []
+        assert vague_person_references(
+            "El-Sayed ran for the first time in seven years."
+        ) == []
+
+    def test_included_in_hedge_and_editorializing_bundle(self):
+        from app.pipeline.analyze.grounding import hedge_and_editorializing_violations
+        reasons = hedge_and_editorializing_violations(
+            "A political figure from Wayne County, Michigan, voiced concerns."
+        )
+        assert any("vague anaphoric reference to a person" in r for r in reasons)
