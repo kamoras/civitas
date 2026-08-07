@@ -182,6 +182,18 @@ def test_number_guard_accepts_dropping_a_figure():
     )
 
 
+def test_number_guard_rejects_a_figure_reused_more_often_than_the_original():
+    """A plain set-containment check would accept this: every number in
+    the rewrite is a member of the original's number set. But 82 backing
+    two different claims when it only backed one originally means the
+    rewrite invented a second use for a real figure — exactly the
+    duplication-shaped half of a swap between two real numbers."""
+    assert not qa._numbers_are_preserved(
+        "Jane Doe scores 82, John Roe scores 31",
+        "Jane Doe scores 82, John Roe also scores 82",
+    )
+
+
 def test_number_guard_rejects_an_invented_figure():
     """The whole reason the optional LLM path is safe to have at all."""
     assert not qa._numbers_are_preserved(

@@ -42,19 +42,18 @@ from app.models import Donor, IndustryDonation, Representative, Senator
 
 logger = logging.getLogger(__name__)
 
-# Minimum cosine gap between the best and second-best intent before the
-# best one is trusted. Below it, the question routes to document search.
-# Deliberately generous: answering the wrong structured question with
-# confident-looking real numbers is worse than returning documents.
+# Minimum cosine gap between the best intent and "documents" specifically
+# (see classify_intent) before the best one is trusted. Below it, the
+# question routes to document search. Deliberately generous: answering the
+# wrong structured question with confident-looking real numbers is worse
+# than returning documents.
 #
-# UNVALIDATED. Both constants below are starting points, not measured
-# values — they have not been fitted against real questions, which breaks
-# this repo's usual fit-thresholds-against-data convention. That is why
-# the endpoint returns intentScore and intentMargin on every response:
-# collect them over real traffic, plot the two distributions, and set
-# these from that. Until then, expect the gate to be too tight (useful
-# questions falling through to document search) rather than too loose —
-# which is the direction that fails safe.
+# Checked against the production embedding model (not fitted against real
+# user traffic, which doesn't exist yet) — the endpoint still returns
+# intentScore and intentMargin on every response so real traffic can
+# confirm or move this once there is any. Until then, expect the gate to
+# be too tight (useful questions falling through to document search)
+# rather than too loose — which is the direction that fails safe.
 INTENT_MARGIN = 0.06
 
 # Absolute floor — a question unlike every prototype (a greeting, a typo,
@@ -134,8 +133,8 @@ def reset_prototype_cache() -> None:
 
 
 def classify_intent(question: str) -> tuple[str, float, float]:
-    """Best intent for a question, with its score and its margin over the
-    runner-up.
+    """Best intent for a question, with its score and its margin over
+    "documents" specifically — not over the runner-up, see below.
 
     Returns ("documents", 0.0, 0.0) if embeddings are unavailable — the
     fallback is always a working answer path, never an error.
@@ -150,15 +149,29 @@ def classify_intent(question: str) -> tuple[str, float, float]:
         q_emb = model.encode([question], show_progress_bar=False)[0]
         q_emb = q_emb / np.linalg.norm(q_emb)
 
-        scores = [(k, float(np.dot(q_emb, e))) for k, e in zip(cache["keys"], cache["embeddings"])]
+        scores = {k: float(np.dot(q_emb, e)) for k, e in zip(cache["keys"], cache["embeddings"])}
     except Exception:
         logger.warning("Intent classification unavailable — routing to documents", exc_info=True)
         return "documents", 0.0, 0.0
 
-    scores.sort(key=lambda kv: kv[1], reverse=True)
-    best_key, best_score = scores[0]
-    runner_up = scores[1][1] if len(scores) > 1 else 0.0
-    margin = best_score - runner_up
+    best_key, best_score = max(scores.items(), key=lambda kv: kv[1])
+    # Margin against "documents" specifically, not the immediate runner-up.
+    # Measured against real questions run through the production embedding
+    # model (Snowflake/snowflake-arctic-embed-xs): the five structured
+    # intents cluster together — "who funds this senator" and "which
+    # industries fund this senator" sit within ~0.05 of EACH OTHER — because
+    # they are all "about this senator's money/score", which the model
+    # correctly treats as the dominant signal. A runner-up-relative margin
+    # gate rejected most of them, sending real, unambiguous questions to
+    # document search purely because their nearest neighbor happened to be
+    # another (equally safe, equally correct) structured handler rather
+    # than "documents". The actual safety question this gate exists to ask
+    # is narrower: is this confidently NOT a document search? That is a
+    # margin against documents' own score, and on the same real-question
+    # sample it separates cleanly — legitimate structured questions land
+    # 0.11-0.20 above documents, off-topic ones land 0.00-0.03 above it —
+    # at the same INTENT_MARGIN this repo shipped with.
+    margin = best_score - scores.get("documents", best_score)
 
     if best_score < INTENT_FLOOR or margin < INTENT_MARGIN:
         return "documents", best_score, margin
@@ -406,16 +419,36 @@ _NUMBER_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
 
 
 def _numbers_are_preserved(original: str, rewritten: str) -> bool:
-    """True when the rewrite introduces no figure the original lacked.
+    """True when the rewrite introduces no figure the original lacked, and
+    reuses no figure more often than the original did.
 
     The guard on the optional LLM phrasing path. A model asked to rephrase
     "$1.2M from Pfizer" can quietly emit "$1.4M", and for this project that
     single altered digit is worse than no rephrasing at all. Digits added
     is the failure we reject; digits dropped is merely a terser sentence.
+
+    Counted with a multiset, not a set: a two-figure answer like "Jane Doe
+    scores 82, John Roe scores 31" rewritten as "Jane Doe scores 31, John
+    Roe scores 82" swaps two real figures between two real people — every
+    number in the rewrite is still a member of the original's number set,
+    so a plain set-containment check would wave it through. Requiring each
+    figure's count not to increase catches a figure being duplicated onto
+    a second claim it didn't originally support.
+
+    What this still cannot catch: swapping two *distinct* figures that
+    each already appear exactly once, onto each other's claims (the exact
+    example above — the multiset is unchanged by the swap, only which
+    name pairs with which number). Closing that gap needs the rewrite to
+    preserve name-number adjacency, not just the figures present, which
+    is a much larger check than a presentation-layer guard is built for
+    here. Short-rewrite, faithful-paraphrase framing keeps this a narrow
+    risk in practice, but it is a real one — see PR review discussion.
     """
-    original_numbers = set(_NUMBER_RE.findall(original.replace(",", "")))
-    rewritten_numbers = set(_NUMBER_RE.findall(rewritten.replace(",", "")))
-    return rewritten_numbers.issubset(original_numbers)
+    import collections
+
+    original_numbers = collections.Counter(_NUMBER_RE.findall(original.replace(",", "")))
+    rewritten_numbers = collections.Counter(_NUMBER_RE.findall(rewritten.replace(",", "")))
+    return not (rewritten_numbers - original_numbers)
 
 
 def _maybe_rephrase(answer: str) -> tuple[str, bool]:

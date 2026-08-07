@@ -16,6 +16,7 @@ def test_app_imports_and_has_routes():
     assert "/api/health" in paths
     assert any(p.startswith("/api/senators") for p in paths)
     assert any(p.startswith("/api/admin") for p in paths)
+    assert any(p.startswith("/api/qa") for p in paths)
 
 
 def test_scheduler_imports():
