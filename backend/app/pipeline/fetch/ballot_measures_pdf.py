@@ -16,12 +16,19 @@ output-shaping code around it (this module) is shared, so adding a state
 means writing one parse function + one registry entry
 (ballot_measure_pdf_sources.json), not a whole new pipeline.
 
-STRATEGIES maps a source's "strategy" key to that state's page-parser
-function: `page -> list[dict]` with keys number/title/origin/
-official_summary/fiscal_impact/yes_means/no_means/title_authority/
-fiscal_authority (see ballot_measures_ca.parse_quick_reference_page for
-the reference implementation and field-by-field contract). Add a new
-state's strategy function here.
+STRATEGIES maps a source's "strategy" key to that state's whole-document
+parser function: `pages -> list[dict]` (pdfplumber's `pdf.pages`, not one
+page) with keys number/title/origin/official_summary/fiscal_impact/
+yes_means/no_means/title_authority/fiscal_authority (see
+ballot_measures_ca.parse_document for the reference implementation and
+field-by-field contract). Operating on the whole document rather than one
+page at a time is deliberate: California's format happens to fit one
+proposition-pair per page, but Massachusetts's does not — a long ballot
+question's summary can fill an entire page on its own, pushing that
+question's "WHAT YOUR VOTE WILL DO" and fiscal-impact sections onto the
+NEXT page (verified on the real document). A strategy that only ever saw
+one page at a time could never stitch those back together; one that
+scans however many pages it needs can.
 """
 
 import io
@@ -32,12 +39,14 @@ import pdfplumber
 
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.ballot_measure_pdf_sources import source_for_state
-from app.pipeline.fetch.ballot_measures_ca import parse_quick_reference_page
+from app.pipeline.fetch.ballot_measures_ca import parse_document as parse_ca_document
+from app.pipeline.fetch.ballot_measures_ma import parse_information_for_voters as parse_ma_document
 
 logger = logging.getLogger(__name__)
 
 STRATEGIES = {
-    "ca_quick_reference": parse_quick_reference_page,
+    "ca_quick_reference": parse_ca_document,
+    "ma_information_for_voters": parse_ma_document,
 }
 
 # Longer than Vote Smart's 12h (MEASURE_CACHE_TTL_HOURS in
@@ -128,11 +137,11 @@ async def fetch_state_measures_pdf(
         return None
 
     try:
-        measures = []
         with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-            for page in pdf.pages:
-                for parsed in strategy(page):
-                    measures.append(_to_measure(state, parsed, election_date, url))
+            measures = [
+                _to_measure(state, parsed, election_date, url)
+                for parsed in strategy(pdf.pages)
+            ]
     except Exception:
         logger.exception("Ballot measure PDF parse failed for %s %d", state, year)
         return None

@@ -38,7 +38,7 @@ def test_is_configured_false_when_strategy_key_is_unregistered(monkeypatch):
 
 def test_is_configured_true_with_a_real_registered_strategy(monkeypatch):
     monkeypatch.setattr(pdf, "source_for_state", lambda state: _fake_source("fake_strategy"))
-    monkeypatch.setitem(pdf.STRATEGIES, "fake_strategy", lambda page: [])
+    monkeypatch.setitem(pdf.STRATEGIES, "fake_strategy", lambda pages: [])
     assert pdf.is_configured("ZZ") is True
 
 
@@ -76,7 +76,7 @@ async def test_fetch_returns_cached_result_without_a_fetch(monkeypatch, db_sessi
     from app.pipeline.cache import api_cache_set
 
     monkeypatch.setattr(pdf, "source_for_state", lambda state: _fake_source())
-    monkeypatch.setitem(pdf.STRATEGIES, "fake_strategy", lambda page: [])
+    monkeypatch.setitem(pdf.STRATEGIES, "fake_strategy", lambda pages: [])
     api_cache_set(db_session, "ballot_measure_pdf", "ZZ-2026", {"measures": [{"id": "ZZ-x"}]})
 
     async def fail_get(*a, **kw):
@@ -92,7 +92,7 @@ async def test_fetch_returns_none_on_http_failure(monkeypatch, db_session):
     import httpx
 
     monkeypatch.setattr(pdf, "source_for_state", lambda state: _fake_source())
-    monkeypatch.setitem(pdf.STRATEGIES, "fake_strategy", lambda page: [])
+    monkeypatch.setitem(pdf.STRATEGIES, "fake_strategy", lambda pages: [])
 
     class FakeResponse:
         status_code = 403
@@ -125,7 +125,7 @@ async def test_fetch_dispatches_to_the_registered_strategy_and_caches(monkeypatc
     monkeypatch.setattr(pdf.pdfplumber, "open", lambda buf: FakePdf())
     monkeypatch.setitem(
         pdf.STRATEGIES, "fake_strategy",
-        lambda page: [{"number": "1", "title": "T", "origin": None, "official_summary": "S",
+        lambda pages: [{"number": "1", "title": "T", "origin": None, "official_summary": "S",
                         "fiscal_impact": None, "yes_means": None, "no_means": None}],
     )
 

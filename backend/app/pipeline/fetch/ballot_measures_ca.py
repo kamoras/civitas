@@ -237,3 +237,15 @@ def parse_quick_reference_page(page) -> list[dict]:
         if parsed:
             results.append(parsed)
     return results
+
+
+def parse_document(pages) -> list[dict]:
+    """Every proposition across the whole PDF — registered under strategy
+    key "ca_quick_reference" in ballot_measure_pdf_sources.json (see
+    ballot_measures_pdf.py). A thin per-page loop suffices here: unlike
+    Massachusetts, California's format never splits one proposition's
+    fields across pages (verified against both real documents checked)."""
+    results = []
+    for page in pages:
+        results.extend(parse_quick_reference_page(page))
+    return results
