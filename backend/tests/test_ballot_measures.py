@@ -336,28 +336,40 @@ async def test_link_verification_clears_a_link_that_stops_resolving(monkeypatch,
     assert saved["states"]["GA"]["verified_at"] is None
 
 
-# ── CA direct-PDF path (replaces Vote Smart for this one state) ────────
+# ── generic direct-PDF path (replaces Vote Smart per registered state) ─
+
+
+def _fake_pdf_source(state="CA", source_name="Example Elections Office"):
+    return {"url_pattern": "https://example.com/{year}/ballot.pdf",
+            "source_name": source_name, "strategy": "fake"}
 
 
 @pytest.mark.asyncio
-async def test_sync_ca_measures_upserts_directly_from_one_pdf_pass(monkeypatch, db_session):
-    """CA's fetch already returns the full raw+detail shape in one PDF
-    pass (unlike Vote Smart's list-then-per-item-detail calls) — confirm
-    _sync_ca_measures upserts straight from it and marks coverage."""
-    from app.pipeline.fetch import ballot_measures_ca
+async def test_sync_pdf_measures_upserts_directly_from_one_pdf_pass(monkeypatch, db_session):
+    """A registered state's fetch already returns the full raw+detail
+    shape in one PDF pass (unlike Vote Smart's list-then-per-item-detail
+    calls) — confirm _sync_pdf_measures upserts straight from it and
+    marks coverage."""
+    from app.pipeline.fetch import ballot_measure_pdf_sources, ballot_measures_pdf
 
-    async def fake_fetch(client, db, year, election_date):
+    source = _fake_pdf_source()
+    monkeypatch.setattr(ballot_measure_pdf_sources, "configured_states", lambda: {"CA"})
+    monkeypatch.setattr(ballot_measure_pdf_sources, "source_for_state", lambda state: source)
+
+    async def fake_fetch(client, db, state, year, election_date):
+        assert state == "CA"
         assert year == 2026
         assert election_date == "2026-11-03"
-        return [ballot_measures_ca._to_measure(
+        return [ballot_measures_pdf._to_measure(
+            "CA",
             {"number": "2", "title": "T", "origin": "the Legislature",
              "official_summary": "S", "fiscal_impact": "F",
              "yes_means": "Y", "no_means": "N"},
-            election_date, "https://vig.cdn.sos.ca.gov/2026/general/pdf/complete-vig.pdf",
+            election_date, "https://example.com/2026/ballot.pdf",
         )]
 
-    monkeypatch.setattr(ballot_measures_ca, "fetch_ca_measures", fake_fetch)
-    synced, failed, marked_removed = await election_pipeline._sync_ca_measures(
+    monkeypatch.setattr(ballot_measures_pdf, "fetch_state_measures_pdf", fake_fetch)
+    synced, failed, marked_removed = await election_pipeline._sync_pdf_measures(
         db_session, None, "2026-11-03",
     )
     assert (synced, failed, marked_removed) == (1, 0, 0)
@@ -365,24 +377,27 @@ async def test_sync_ca_measures_upserts_directly_from_one_pdf_pass(monkeypatch, 
     m = db_session.query(BallotMeasure).filter(BallotMeasure.state == "CA").one()
     assert m.id == "CA-2026-11-03-2"
     assert m.yes_means == "Y"
-    assert m.source_name == ballot_measures_ca.SOURCE_NAME
+    assert m.source_name == source["source_name"]
 
     coverage = db_session.query(MeasureCoverage).filter(
         MeasureCoverage.state == "CA", MeasureCoverage.election_date == "2026-11-03",
     ).one()
     assert coverage.status == MeasureCoverage.COVERED
-    assert coverage.source_name == ballot_measures_ca.SOURCE_NAME
+    assert coverage.source_name == source["source_name"]
 
 
 @pytest.mark.asyncio
-async def test_sync_ca_measures_marks_ingest_failed_on_fetch_failure(monkeypatch, db_session):
-    from app.pipeline.fetch import ballot_measures_ca
+async def test_sync_pdf_measures_marks_ingest_failed_on_fetch_failure(monkeypatch, db_session):
+    from app.pipeline.fetch import ballot_measure_pdf_sources, ballot_measures_pdf
 
-    async def fake_fetch(client, db, year, election_date):
+    monkeypatch.setattr(ballot_measure_pdf_sources, "configured_states", lambda: {"CA"})
+    monkeypatch.setattr(ballot_measure_pdf_sources, "source_for_state", lambda state: _fake_pdf_source())
+
+    async def fake_fetch(client, db, state, year, election_date):
         return None
 
-    monkeypatch.setattr(ballot_measures_ca, "fetch_ca_measures", fake_fetch)
-    result = await election_pipeline._sync_ca_measures(db_session, None, "2026-11-03")
+    monkeypatch.setattr(ballot_measures_pdf, "fetch_state_measures_pdf", fake_fetch)
+    result = await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
     assert result == (0, 1, 0)
 
     coverage = db_session.query(MeasureCoverage).filter(
@@ -392,20 +407,24 @@ async def test_sync_ca_measures_marks_ingest_failed_on_fetch_failure(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_sync_ballot_measures_runs_ca_even_without_a_votesmart_key(monkeypatch, db_session):
-    """The whole point: CA must not depend on VOTESMART_API_KEY at all."""
-    from app.pipeline.fetch import ballot_measures, ballot_measures_ca
+async def test_sync_ballot_measures_runs_pdf_states_even_without_a_votesmart_key(monkeypatch, db_session):
+    """The whole point: a state with a registered PDF source must not
+    depend on VOTESMART_API_KEY at all."""
+    from app.pipeline.fetch import ballot_measure_pdf_sources, ballot_measures, ballot_measures_pdf
 
     monkeypatch.setattr(ballot_measures.settings, "VOTESMART_API_KEY", "")
+    monkeypatch.setattr(ballot_measure_pdf_sources, "configured_states", lambda: {"CA"})
+    monkeypatch.setattr(ballot_measure_pdf_sources, "source_for_state", lambda state: _fake_pdf_source())
 
-    async def fake_fetch(client, db, year, election_date):
-        return [ballot_measures_ca._to_measure(
+    async def fake_fetch(client, db, state, year, election_date):
+        return [ballot_measures_pdf._to_measure(
+            "CA",
             {"number": "1", "title": "T", "origin": None, "official_summary": "S",
              "fiscal_impact": None, "yes_means": None, "no_means": None},
-            election_date, "https://example.com/vig.pdf",
+            election_date, "https://example.com/2026/ballot.pdf",
         )]
 
-    monkeypatch.setattr(ballot_measures_ca, "fetch_ca_measures", fake_fetch)
+    monkeypatch.setattr(ballot_measures_pdf, "fetch_state_measures_pdf", fake_fetch)
     result = await election_pipeline._sync_ballot_measures(db_session, None, 2026)
     assert result["skipped_other_states"] is True
     assert result["synced"] == 1

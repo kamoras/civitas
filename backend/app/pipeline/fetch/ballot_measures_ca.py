@@ -1,17 +1,20 @@
-"""Direct parsing of California's own official Voter Information Guide PDF
-(vig.cdn.sos.ca.gov) — a real, no-API-key replacement for Vote Smart's role
-for California statewide propositions specifically.
+"""California's ballot-measure PDF strategy — parses the state's own
+official Voter Information Guide PDF (vig.cdn.sos.ca.gov). One of
+potentially many per-state strategies registered in
+ballot_measures_pdf.py's generic fetch/cache/upsert pipeline; this module
+owns only the page-parsing logic specific to California's document.
 
-WHY THIS EXISTS: the user asked to stop depending on Vote Smart's approval-
-gated signup and get the same data independently. Checked directly whether
-California publishes something better than a per-county composite ballot:
-it does — the Secretary of State's own "Quick Reference Guide" section is a
-purpose-built, state-level ballot-measure-only summary (title, origin,
-official summary, fiscal impact, and — critically — explicit "WHAT YOUR
-VOTE MEANS: YES.../NO..." framing in the state's own words, not derived).
-Two propositions per page, consistent format across election cycles
-(verified against real PDFs from two different elections: 2026 primary,
-36.7MB / 64 pages, and 2024 general, 5MB / 144 pages).
+WHY THIS EXISTS: the user asked to stop depending on Vote Smart's
+approval-gated signup and get the same data independently, state by
+state. Checked directly whether California publishes something better
+than a per-county composite ballot: it does — the Secretary of State's
+own "Quick Reference Guide" section is a purpose-built, state-level
+ballot-measure-only summary (title, origin, official summary, fiscal
+impact, and — critically — explicit "WHAT YOUR VOTE MEANS: YES.../NO..."
+framing in the state's own words, not derived). Two propositions per
+page, consistent format across election cycles (verified against real
+PDFs from two different elections: 2026 primary, 36.7MB / 64 pages, and
+2024 general, 5MB / 144 pages).
 
 REAL DOCUMENT, NOT ASSUMED: the November 2026 general election guide is not
 published yet at the standard CDN path (confirmed: HTTP 403 as of
@@ -46,72 +49,29 @@ built and verified against this exact real page's word coordinates:
 2. Bucket every word on the page by that fixed threshold into PropA/PropB.
 3. WITHIN each already-isolated side, apply a per-row largest-x-gap split
    AGAIN (now genuinely unambiguous — only 2 fragments per row within one
-   side) to separate YES from NO, and separately PRO from CON.
+   side) to separate YES from NO, and separately PRO from CON (see
+   ballot_measure_pdf_geometry.split_by_row_gap, shared with any other
+   state whose layout turns out to need the same technique).
 
 Verified end to end against Proposition 2 in the real 2024 guide: the
 reconstructed YES/NO text matches the source exactly, word for word.
 """
 
-import io
 import logging
 import re
-from collections import defaultdict
 
-import httpx
-import pdfplumber
-
-from app.pipeline.cache import api_cache_get, api_cache_set
+from app.pipeline.fetch.ballot_measure_pdf_geometry import (
+    clean_text,
+    lines_from_words,
+    looks_corrupted,
+    rows,
+    split_by_row_gap,
+)
 
 logger = logging.getLogger(__name__)
 
 TITLE_AUTHORITY = "California Attorney General"
 FISCAL_AUTHORITY = "California Legislative Analyst's Office"
-SOURCE_NAME = "California Secretary of State"
-
-# Longer than Vote Smart's 12h (MEASURE_CACHE_TTL_HOURS in
-# ballot_measures.py) — that shorter window exists because Vote Smart's
-# own feed can change under us mid-cycle; this module re-derives
-# everything from one static PDF the state republishes wholesale on the
-# rare occasion it changes, so there is nothing to catch by polling more
-# often. Matches the platform's general 72h API-cache default instead.
-CACHE_TTL_HOURS = 72
-
-
-def _rows(words: list[dict]) -> dict[int, list[dict]]:
-    bands: dict[int, list[dict]] = defaultdict(list)
-    for w in words:
-        bands[round(w["top"])].append(w)
-    return bands
-
-
-def _split_by_row_gap(words: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Per visual row, cut at the single largest x-gap between adjacent
-    words. Correct ONLY when each row has exactly two fragments — verified
-    this holds for the YES/NO and PRO/CON sub-zones once already isolated
-    to one outer side (see module docstring, phase 3)."""
-    left: list[dict] = []
-    right: list[dict] = []
-    for top in sorted(_rows(words)):
-        row = sorted(_rows(words)[top], key=lambda w: w["x0"])
-        if len(row) < 2:
-            left.extend(row)
-            continue
-        best_gap, best_idx = -1.0, len(row)
-        for i in range(len(row) - 1):
-            gap = row[i + 1]["x0"] - row[i]["x1"]
-            if gap > best_gap:
-                best_gap, best_idx = gap, i + 1
-        left.extend(row[:best_idx])
-        right.extend(row[best_idx:])
-    return left, right
-
-
-def _lines_from_words(words: list[dict]) -> list[str]:
-    bands = _rows(words)
-    return [
-        " ".join(w["text"] for w in sorted(bands[top], key=lambda w: w["x0"]))
-        for top in sorted(bands)
-    ]
 
 
 def _outer_boundary(page) -> float | None:
@@ -129,7 +89,7 @@ def _outer_boundary(page) -> float | None:
     summary_zone_end = min(what_tops)
     summary_words = [w for w in words if w["top"] < summary_zone_end]
     gaps = []
-    for top, row in _rows(summary_words).items():
+    for top, row in rows(summary_words).items():
         row = sorted(row, key=lambda w: w["x0"])
         if len(row) < 2:
             continue
@@ -141,56 +101,6 @@ def _outer_boundary(page) -> float | None:
     return gaps[len(gaps) // 2]  # median — robust to one or two odd rows
 
 
-def _text(raw: str | None) -> str | None:
-    if raw is None:
-        return None
-    cleaned = " ".join(raw.split())
-    return cleaned or None
-
-
-_CONTAMINATION_NGRAM = 3  # words
-
-
-def _looks_corrupted(text: str) -> bool:
-    """Two independent checks, both calibrated against real text (Prop 2,
-    correctly extracted; Prop 3, a real row-gap misclassification on a
-    wrapped line where the YES and NO sentences render with essentially
-    zero visual gap between them — confirmed on the actual PDF, not
-    hypothetical):
-
-    1. Doesn't end in terminal punctuation. A real official sentence from
-       this document always does; Prop 3's misclassified yes_means
-       trailed off mid-thought ("...There would be can") with nothing
-       after it to attribute — the row-gap split had run out of rows
-       assigned to that side before the sentence's own words did.
-    2. A 3+ word phrase repeats within the SAME string. Catches content
-       that got attributed to a side once correctly and then again
-       (Prop 3's no_means: "no change in who can marry" / "no change in
-       who marry" — not byte-identical, since a word dropped between the
-       two occurrences, so this is deliberately word-existence-based
-       rather than requiring an exact repeat).
-
-    Deliberately NOT "do yes_means and no_means share a phrase with each
-    other" — tried that first and it false-positived on Prop 2's already
-    verified-correct text, where YES and NO legitimately share a long
-    tail ("...build new or renovate existing public school and community
-    college facilities") differing only in "could"/"could not". Sharing
-    vocabulary across two independent, complete sentences is normal;
-    either signal above, within ONE sentence, is not.
-    """
-    if not text.rstrip().endswith((".", "!", "?")):
-        return True
-    words = [w.lower() for w in text.split()]
-    seen: set[tuple[str, ...]] = set()
-    for i in range(len(words) - _CONTAMINATION_NGRAM + 1):
-        ngram = tuple(words[i:i + _CONTAMINATION_NGRAM])
-        if ngram in seen:
-            return True
-        seen.add(ngram)
-    return False
-
-
-_TITLE_RE = re.compile(r"^PROP\b(.*)$")
 _YES_MEANS_RE = re.compile(r"A YES vote on this measure means:\s*(.*)$", re.IGNORECASE)
 _NO_MEANS_RE = re.compile(r"A NO vote on this measure means:\s*(.*)$", re.IGNORECASE)
 # A non-greedy capture with no reliable stop point (verified as a real
@@ -211,9 +121,9 @@ def _parse_side(
     """One proposition's fields, from its own already-isolated word set
     (see parse_quick_reference_page for how `summary_words`/
     `vote_means_words` get split to just this side)."""
-    summary_text = " ".join(_lines_from_words(summary_words))
+    summary_text = " ".join(lines_from_words(summary_words))
     origin_match = _ORIGIN_RE.search(summary_text)
-    origin = _text(origin_match.group(1)) if origin_match else None
+    origin = clean_text(origin_match.group(1)) if origin_match else None
 
     # "SUMMARY <origin line> <official summary...> Fiscal Impact: <...>
     # Supporters: <...> Opponents: <...>" — split on the fixed markers
@@ -223,27 +133,27 @@ def _parse_side(
     if origin_match:
         body = body[origin_match.end():]
     fiscal_split = _FISCAL_SPLIT_RE.split(body, maxsplit=1)
-    official_summary = _text(fiscal_split[0])
+    official_summary = clean_text(fiscal_split[0])
     fiscal_impact = None
     if len(fiscal_split) > 1:
         supporters_split = _SUPPORTERS_SPLIT_RE.split(fiscal_split[1], maxsplit=1)
-        fiscal_impact = _text(supporters_split[0])
+        fiscal_impact = clean_text(supporters_split[0])
 
-    yes_words, no_words = _split_by_row_gap(vote_means_words)
-    yes_text = " ".join(_lines_from_words(yes_words))
-    no_text = " ".join(_lines_from_words(no_words))
+    yes_words, no_words = split_by_row_gap(vote_means_words)
+    yes_text = " ".join(lines_from_words(yes_words))
+    no_text = " ".join(lines_from_words(no_words))
     yes_match = _YES_MEANS_RE.search(yes_text)
     no_match = _NO_MEANS_RE.search(no_text)
-    yes_means = _text(yes_match.group(1)) if yes_match else None
-    no_means = _text(no_match.group(1)) if no_match else None
-    if (yes_means and _looks_corrupted(yes_means)) or (no_means and _looks_corrupted(no_means)):
-        # See _looks_corrupted's docstring — both checks there are
-        # calibrated against this exact real failure (Prop 3's yes_means/
-        # no_means on a wrapped line where the row-gap split had nothing
-        # to find). Drop both rather than ship one that might be
-        # scrambled.
+    yes_means = clean_text(yes_match.group(1)) if yes_match else None
+    no_means = clean_text(no_match.group(1)) if no_match else None
+    if (yes_means and looks_corrupted(yes_means)) or (no_means and looks_corrupted(no_means)):
+        # See ballot_measure_pdf_geometry.looks_corrupted's docstring —
+        # both checks there are calibrated against this exact real
+        # failure (Prop 3's yes_means/no_means on a wrapped line where
+        # the row-gap split had nothing to find). Drop both rather than
+        # ship one that might be scrambled.
         logger.warning(
-            "Prop %s: yes_means/no_means text looks corrupted — "
+            "CA Prop %s: yes_means/no_means text looks corrupted — "
             "dropping both rather than risk shipping scrambled text", number,
         )
         yes_means = no_means = None
@@ -256,7 +166,7 @@ def _parse_side(
 
     return {
         "number": number,
-        "title": _text(title),
+        "title": clean_text(title),
         "origin": origin,
         "official_summary": official_summary,
         "fiscal_impact": fiscal_impact,
@@ -270,7 +180,9 @@ def _parse_side(
 def parse_quick_reference_page(page) -> list[dict]:
     """Both propositions on one Quick Reference Guide page, or [] if this
     page isn't in that format (caller should still check other pages —
-    this is a per-page result, not a whole-document verdict)."""
+    this is a per-page result, not a whole-document verdict). Registered
+    under strategy key "ca_quick_reference" in
+    ballot_measure_pdf_sources.json — see ballot_measures_pdf.py."""
     boundary = _outer_boundary(page)
     if boundary is None:
         return []
@@ -311,12 +223,12 @@ def parse_quick_reference_page(page) -> list[dict]:
         # aligned at the same x as the title that follows) — the first
         # short numeric-only line in the title zone.
         number = None
-        for line in _lines_from_words(title_words):
+        for line in lines_from_words(title_words):
             if line.strip().isdigit():
                 number = line.strip()
                 break
         title_text = " ".join(
-            line for line in _lines_from_words(title_words) if not line.strip().isdigit()
+            line for line in lines_from_words(title_words) if not line.strip().isdigit()
         )
         vote_means_words = [
             w for w in side_words if what_tops[0] <= w["top"] < vote_means_end
@@ -325,77 +237,3 @@ def parse_quick_reference_page(page) -> list[dict]:
         if parsed:
             results.append(parsed)
     return results
-
-
-def _pdf_url(year: int) -> str:
-    return f"https://vig.cdn.sos.ca.gov/{year}/general/pdf/complete-vig.pdf"
-
-
-def _to_measure(parsed: dict, election_date: str, source_url: str) -> dict:
-    """One parsed proposition -> the combined raw+detail shape
-    election_pipeline._upsert_measure expects. Unlike Vote Smart (a list
-    call, then a per-item detail call), this PDF already carries every
-    field in one pass, so the same dict is passed to _upsert_measure as
-    both `raw` and `detail` — there's nothing a second fetch would add.
-    """
-    return {
-        "id": f"CA-{election_date}-{parsed['number']}",
-        "state": "CA",
-        "election_date": election_date,
-        "number": parsed["number"],
-        "title": parsed["title"] or f"Proposition {parsed['number']}",
-        "official_title": parsed["title"],
-        "official_summary": parsed["official_summary"],
-        "fiscal_impact": parsed["fiscal_impact"],
-        "yes_means": parsed["yes_means"],
-        "no_means": parsed["no_means"],
-        "measure_type": None,
-        "origin": parsed["origin"],
-        "source_url": source_url,
-    }
-
-
-async def fetch_ca_measures(
-    client: httpx.AsyncClient, db, year: int, election_date: str,
-) -> list[dict] | None:
-    """Every California statewide proposition for `year`'s November
-    general, parsed directly from the state's own Voter Information Guide
-    PDF — no API key, no Vote Smart.
-
-    None on a fetch/parse failure (including the guide simply not being
-    published yet — confirmed HTTP 403 for the 2026 general as of
-    2026-08-06, same as every other not-yet-published source in this
-    codebase); [] if the guide is real and parses but genuinely contains
-    no Quick Reference Guide pages (verified real case: the 2026 primary
-    guide, which has none — CA propositions are general-election-only).
-    Same None-vs-[] discipline as ballot_measures.fetch_state_measures.
-    """
-    cache_key = f"ca-vig-{year}"
-    cached = api_cache_get(db, "ca_vig", cache_key, max_age_hours=CACHE_TTL_HOURS)
-    if cached is not None:
-        return cached.get("measures")
-
-    url = _pdf_url(year)
-    try:
-        response = await client.get(url, timeout=60.0)
-        response.raise_for_status()
-        pdf_bytes = response.content
-    except httpx.HTTPStatusError as exc:
-        logger.warning("CA VIG fetch failed for %d: HTTP %d", year, exc.response.status_code)
-        return None
-    except Exception:
-        logger.exception("CA VIG fetch failed for %d", year)
-        return None
-
-    try:
-        measures = []
-        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-            for page in pdf.pages:
-                for parsed in parse_quick_reference_page(page):
-                    measures.append(_to_measure(parsed, election_date, url))
-    except Exception:
-        logger.exception("CA VIG parse failed for %d", year)
-        return None
-
-    api_cache_set(db, "ca_vig", cache_key, {"measures": measures}, normal_ttl_hours=CACHE_TTL_HOURS)
-    return measures

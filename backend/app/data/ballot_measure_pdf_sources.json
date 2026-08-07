@@ -1,0 +1,13 @@
+{
+  "_source": "Hand-verified during research: checked each state's own Secretary of State (or equivalent) site directly for a plain, static, address-free official ballot-measure document (a voter guide/pamphlet covering proposition text), not an API, not a lookup tool.",
+  "_method": "Each entry here has a real, currently-or-recently-fetched document backing it and a registered parsing strategy in ballot_measures_pdf.py's STRATEGIES map. A state with no entry here still falls back to Vote Smart in election_pipeline._sync_ballot_measures — this file only ever ADDS coverage, it never removes a state's chance at data.",
+  "_as_of": "2026-08-06",
+  "states": {
+    "CA": {
+      "url_pattern": "https://vig.cdn.sos.ca.gov/{year}/general/pdf/complete-vig.pdf",
+      "source_name": "California Secretary of State",
+      "strategy": "ca_quick_reference",
+      "description": "Official Voter Information Guide, 'Quick Reference Guide' section. Verified against the real 2024 general (144 pages, 10 real propositions) and 2026 primary (64 pages, correctly zero propositions) guides. url_pattern's {year} is substituted at fetch time; the general-election path is the only one that carries propositions."
+    }
+  }
+}

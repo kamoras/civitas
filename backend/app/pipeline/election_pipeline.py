@@ -443,66 +443,82 @@ def _set_coverage(
     row.checked_at = utcnow()
 
 
-async def _sync_ca_measures(
+async def _sync_pdf_measures(
     db: Session, client: httpx.AsyncClient, election_day: str,
 ) -> tuple[int, int, int]:
-    """California's statewide propositions via direct PDF parsing (see
-    ballot_measures_ca.py) — the user-directed replacement for Vote Smart
-    on this one state. Returns (synced, failed_states, marked_removed),
-    same shape the caller accumulates for every other state.
+    """Every state with a registered direct-PDF ballot-measure source
+    (ballot_measure_pdf_sources.json — currently just CA, more states get
+    added there as they're researched and a parsing strategy is built for
+    them; see ballot_measures_pdf.py). Runs independently of
+    VOTESMART_API_KEY and does NOT fall back to Vote Smart on failure —
+    a state with a registered PDF source treats that source as its
+    record of truth, so a failure reads as ingest_failed rather than
+    silently serving a stale Vote Smart snapshot. Returns
+    (synced, failed_states, marked_removed), same shape the caller
+    accumulates for every other state.
 
-    Every field ballot_measures_ca.fetch_ca_measures returns is already
-    the full raw+detail shape _upsert_measure expects (one PDF pass gets
-    everything Vote Smart would need two calls for), so each item is
-    passed as both `raw` and `detail` directly — no separate detail fetch.
+    Every field ballot_measures_pdf.fetch_state_measures_pdf returns is
+    already the full raw+detail shape _upsert_measure expects (one PDF
+    pass gets everything Vote Smart would need two calls for), so each
+    item is passed as both `raw` and `detail` directly — no separate
+    detail fetch.
     """
     from app.models import MeasureCoverage
-    from app.pipeline.fetch.ballot_measures_ca import SOURCE_NAME, fetch_ca_measures
+    from app.pipeline.fetch.ballot_measure_pdf_sources import (
+        configured_states,
+        source_for_state,
+    )
+    from app.pipeline.fetch.ballot_measures_pdf import fetch_state_measures_pdf
 
     year = int(election_day[:4])
-    try:
-        listed = await fetch_ca_measures(client, db, year, election_day)
-    except Exception:
-        logger.exception("CA measure fetch raised")
-        listed = None
-
-    if listed is None:
-        _set_coverage(
-            db, "CA", election_day, MeasureCoverage.INGEST_FAILED,
-            source_name=SOURCE_NAME, error="fetch failed",
-        )
-        db.commit()
-        return 0, 1, 0
-
-    if not listed:
-        _set_coverage(
-            db, "CA", election_day, MeasureCoverage.CONFIRMED_NONE,
-            count=0, source_name=SOURCE_NAME,
-        )
-        db.commit()
-        return 0, 0, 0
-
-    seen_ids: set[str] = set()
-    dates: set[str] = set()
-    synced = 0
-    for item in listed:
+    synced = failed = marked_removed = 0
+    for state in sorted(configured_states()):
+        source_name = source_for_state(state)["source_name"]
         try:
-            _upsert_measure(db, item, item, SOURCE_NAME)
-            seen_ids.add(item["id"])
-            dates.add(item["election_date"])
-            synced += 1
-            db.commit()
+            listed = await fetch_state_measures_pdf(client, db, state, year, election_day)
         except Exception:
-            db.rollback()
-            logger.exception("Failed to sync CA measure %s — skipping", item.get("id"))
+            logger.exception("PDF measure fetch raised for %s", state)
+            listed = None
 
-    marked_removed = _reconcile_state_measures(db, "CA", dates, seen_ids) if dates else 0
-    _set_coverage(
-        db, "CA", election_day, MeasureCoverage.COVERED,
-        count=len(seen_ids), source_name=SOURCE_NAME,
-    )
-    db.commit()
-    return synced, 0, marked_removed
+        if listed is None:
+            _set_coverage(
+                db, state, election_day, MeasureCoverage.INGEST_FAILED,
+                source_name=source_name, error="fetch failed",
+            )
+            failed += 1
+            db.commit()
+            continue
+
+        if not listed:
+            _set_coverage(
+                db, state, election_day, MeasureCoverage.CONFIRMED_NONE,
+                count=0, source_name=source_name,
+            )
+            db.commit()
+            continue
+
+        seen_ids: set[str] = set()
+        dates: set[str] = set()
+        for item in listed:
+            try:
+                _upsert_measure(db, item, item, source_name)
+                seen_ids.add(item["id"])
+                dates.add(item["election_date"])
+                synced += 1
+                db.commit()
+            except Exception:
+                db.rollback()
+                logger.exception("Failed to sync %s measure %s — skipping", state, item.get("id"))
+
+        if dates:
+            marked_removed += _reconcile_state_measures(db, state, dates, seen_ids)
+        _set_coverage(
+            db, state, election_day, MeasureCoverage.COVERED,
+            count=len(seen_ids), source_name=source_name,
+        )
+        db.commit()
+
+    return synced, failed, marked_removed
 
 
 async def _sync_ballot_measures(db: Session, client: httpx.AsyncClient, cycle: int) -> dict:
@@ -516,6 +532,7 @@ async def _sync_ballot_measures(db: Session, client: httpx.AsyncClient, cycle: i
     "nothing to research", so "we don't know" has to be able to say so.
     """
     from app.models import BallotMeasure, MeasureCoverage
+    from app.pipeline.fetch.ballot_measure_pdf_sources import configured_states
     from app.pipeline.fetch.ballot_measures import (
         fetch_measure_detail,
         fetch_state_measures,
@@ -524,18 +541,20 @@ async def _sync_ballot_measures(db: Session, client: httpx.AsyncClient, cycle: i
 
     election_day = next_election_day(utcnow().date()).isoformat()
 
-    # CA runs on its own direct-PDF path regardless of whether Vote Smart
-    # is configured — the whole point is that CA no longer depends on it.
-    # No fallback to Vote Smart on a CA failure either: this path is now
-    # the source of record for CA, so a failure here should read as
+    # Every state with a registered direct-PDF source runs on that path
+    # regardless of whether Vote Smart is configured — the whole point is
+    # that these states no longer depend on it. No fallback to Vote Smart
+    # on a PDF-path failure either: a registered PDF source is that
+    # state's source of record, so a failure there should read as
     # ingest_failed, not silently serve a stale Vote Smart snapshot.
-    synced, failed, marked_removed = await _sync_ca_measures(db, client, election_day)
+    pdf_states = configured_states()
+    synced, failed, marked_removed = await _sync_pdf_measures(db, client, election_day)
 
     if not is_configured():
         # Leave every OTHER state NOT_YET_COVERED rather than writing
         # CONFIRMED_NONE — with no key we have learned nothing about them,
         # and recording "no measures" would be a claim we never checked.
-        # CA above is unaffected by this key entirely.
+        # PDF-sourced states above are unaffected by this key entirely.
         logger.info("Ballot measure sync for other states skipped — VOTESMART_API_KEY not set")
         return {
             "synced": synced, "failed_states": failed, "marked_removed": marked_removed,
@@ -543,9 +562,7 @@ async def _sync_ballot_measures(db: Session, client: httpx.AsyncClient, cycle: i
         }
 
     source_name = "Vote Smart"
-    for state in sorted(STATES_WITH_FEDERAL_RACES):
-        if state == "CA":
-            continue
+    for state in sorted(STATES_WITH_FEDERAL_RACES - pdf_states):
         try:
             listed = await fetch_state_measures(client, db, state, cycle)
         except Exception:
