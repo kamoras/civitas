@@ -1232,6 +1232,50 @@ class PipelinePhaseTiming(Base):
     )
 
 
+class PipelineRateLimitStat(Base):
+    """Per-step, per-source rate-limiter accounting for one pipeline run.
+
+    A phase duration says a step took four hours. It does not say whether
+    those hours were spent computing or spent inside RateLimiter.acquire()
+    deliberately sleeping to stay under the FEC's 0.25 RPS. Those two
+    readings point at opposite remedies — restructure the fetch phase, or
+    add compute — so the run data has to distinguish them.
+
+    `blocked_seconds` is wall time callers spent waiting for a grant, not
+    time spent on the HTTP request itself. A step whose blocked_seconds
+    approaches its phase duration is throughput-bound on someone else's
+    rate limit, and no amount of local hardware changes it.
+
+    Caveat, deliberately recorded rather than engineered away: counters
+    are global per limiter, and attribution is by time window. If two
+    pipelines genuinely overlap on the same source, each attributes the
+    other's waiting to whatever step it had open. The pipelines are
+    sequenced in practice (see house_pipeline's tracker and the hourly
+    action refresh's skip), so this is a known imprecision at the edges,
+    not a routine one — but it means a single surprising row deserves a
+    look at what else was running before it is believed.
+    """
+    __tablename__ = "pipeline_rate_limit_stats"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_kind: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    run_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    step_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Limiter name — the fetch module it was constructed in ("fec",
+    # "congress", "govinfo"), or an explicit name where a module has more
+    # than one limiter.
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    requests: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    blocked_seconds: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "run_kind", "run_id", "step_key", "source",
+            name="uq_rate_limit_stat_run_step_source",
+        ),
+    )
+
+
 class BskySenatorSpotlight(Base):
     """Tracks which senators have been highlighted in daily Bluesky score posts."""
     __tablename__ = "bsky_senator_spotlights"

@@ -1073,6 +1073,13 @@ export interface PhaseTimingStep {
   phase: string;
   status: string;
   seconds: number | null;
+  blockedSeconds: number;
+}
+
+export interface RateLimitSource {
+  source: string;
+  requests: number;
+  blockedSeconds: number;
 }
 
 export interface PhaseTimingRun {
@@ -1081,6 +1088,9 @@ export interface PhaseTimingRun {
   completedAt: string | null;
   totalSeconds: number;
   untimedSteps: number;
+  blockedSeconds: number;
+  blockedPct: number;
+  rateLimitSources: RateLimitSource[];
   phases: PhaseTimingPhase[];
   steps: PhaseTimingStep[];
 }

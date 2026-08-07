@@ -20,6 +20,8 @@ import time
 from datetime import datetime
 
 from sqlalchemy.orm import Session
+
+from app.pipeline import rate_limiter
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -34,6 +36,9 @@ class ProgressTracker:
         self._db = db
         self._start_time = start_time
         self._steps: dict[str, dict] = {}
+        # Rate-limiter counter snapshots taken at each step's begin(), so a
+        # terminal transition can persist the delta over that step's window.
+        self._rl_baselines: dict[str, dict] = {}
         for key, phase, label in steps:
             self._steps[key] = {
                 "key": key,
@@ -52,6 +57,10 @@ class ProgressTracker:
         if total is not None:
             step["total"] = total
             step["done"] = 0
+        # Baseline for this step's rate-limiter accounting. Taken here
+        # rather than at terminal time so the delta covers exactly the
+        # step's own window.
+        self._rl_baselines[key] = rate_limiter.snapshot()
         self._flush()
 
     def update(self, key: str, *, done: int | None = None, detail: str | None = None) -> None:
@@ -169,6 +178,60 @@ class ProgressTracker:
                 self._db.rollback()
             except Exception:
                 logger.debug("Phase timing rollback failed", exc_info=True)
+
+        self._record_rate_limit_stats(step, run_kind, run_id)
+
+    def _record_rate_limit_stats(self, step: dict, run_kind: str, run_id: int) -> None:
+        """Persist how much of this step was spent blocked on each source's
+        rate limiter.
+
+        Only sources with activity in the step's window get a row, so a
+        run's row count tracks what it actually touched rather than how
+        many fetch modules exist. A step that was never begin()'d has no
+        baseline and is skipped — without one there is no window to
+        attribute, and diffing against zero would charge the step with
+        every request the process has made since it started.
+
+        Same failure posture as the timing write: separate commit, all
+        exceptions swallowed. Diagnostics never take down a run.
+        """
+        from app.models import PipelineRateLimitStat
+
+        baseline = self._rl_baselines.pop(step["key"], None)
+        if baseline is None:
+            return
+
+        try:
+            deltas = rate_limiter.diff_snapshots(baseline, rate_limiter.snapshot())
+            if not deltas:
+                return
+            for source, (requests, blocked) in deltas.items():
+                row = (
+                    self._db.query(PipelineRateLimitStat)
+                    .filter_by(
+                        run_kind=run_kind, run_id=run_id,
+                        step_key=step["key"], source=source,
+                    )
+                    .one_or_none()
+                )
+                if row is None:
+                    row = PipelineRateLimitStat(
+                        run_kind=run_kind, run_id=run_id,
+                        step_key=step["key"], source=source,
+                    )
+                    self._db.add(row)
+                row.requests = requests
+                row.blocked_seconds = blocked
+            self._db.commit()
+        except Exception:
+            logger.debug(
+                "Rate limit stat write failed for %s/%s", run_kind, step.get("key"),
+                exc_info=True,
+            )
+            try:
+                self._db.rollback()
+            except Exception:
+                logger.debug("Rate limit stat rollback failed", exc_info=True)
 
 
 def _parse_iso(value) -> "datetime | None":

@@ -1152,6 +1152,21 @@ function PipelinePhaseTimings({ token }: { token: string }) {
                     </span>
                     <span className="text-matrix-green/70 text-[10px] font-terminal tabular-nums shrink-0">
                       {formatDuration(run.totalSeconds)}
+                      {run.blockedPct > 0 && (
+                        // Share of the run spent inside a rate limiter. A run
+                        // that is mostly blocked is throughput-bound on an
+                        // external API and will not get shorter on faster
+                        // local hardware.
+                        <span
+                          className={
+                            run.blockedPct >= 50
+                              ? "text-neon-pink ml-2"
+                              : "text-matrix-green/40 ml-2"
+                          }
+                        >
+                          {run.blockedPct}% blocked
+                        </span>
+                      )}
                     </span>
                   </div>
                   {/* Stacked bar: each phase's share of this run, widths
@@ -1190,6 +1205,23 @@ function PipelinePhaseTimings({ token }: { token: string }) {
                         </span>
                       </div>
                     ))}
+                    {run.rateLimitSources.length > 0 && (
+                      <div className="pt-1 mt-1 border-t border-matrix-green/10 space-y-0.5">
+                        <div className="text-matrix-green/30 text-[10px] font-pixel tracking-wider">
+                          BLOCKED ON RATE LIMITS
+                        </div>
+                        {run.rateLimitSources.map((s) => (
+                          <div key={s.source} className="flex justify-between gap-3">
+                            <span className="text-matrix-green/40 text-[10px] font-terminal truncate">
+                              {s.source} · {s.requests.toLocaleString()} req
+                            </span>
+                            <span className="text-matrix-green/40 text-[10px] font-terminal tabular-nums shrink-0">
+                              {formatDuration(s.blockedSeconds)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <div className="pt-1 mt-1 border-t border-matrix-green/10 space-y-0.5">
                       {run.steps.slice(0, 8).map((s) => (
                         <div key={s.stepKey} className="flex justify-between gap-3">
@@ -1199,6 +1231,12 @@ function PipelinePhaseTimings({ token }: { token: string }) {
                           </span>
                           <span className="text-matrix-green/40 text-[10px] font-terminal tabular-nums shrink-0">
                             {formatDuration(s.seconds)}
+                            {s.blockedSeconds > 0 && (
+                              <span className="text-matrix-green/25">
+                                {" "}
+                                ({formatDuration(s.blockedSeconds)} blocked)
+                              </span>
+                            )}
                           </span>
                         </div>
                       ))}
