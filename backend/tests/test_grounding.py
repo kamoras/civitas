@@ -681,10 +681,36 @@ class TestVaguePersonReferences:
             "The individual referenced El-Sayed's decision to run again."
         ) == ["The individual"]
 
-    def test_public_and_prominent_figure_flagged(self):
+    def test_public_figure_not_flagged(self):
+        # Deliberately excluded, unlike "political figure": "public figure"
+        # is the actual defamation-law term (NYT v. Sullivan) for whether a
+        # plaintiff must prove actual malice, and this pipeline already
+        # covers defamation cases — a real, correctly-sourced fact could
+        # legitimately use this exact phrase. Not grounded in an observed
+        # live incident the way "political figure" is, so it's left out
+        # until one occurs (same discipline as every other pattern here).
         from app.pipeline.analyze.grounding import vague_person_references
-        assert vague_person_references("A public figure criticized the bill.") != []
-        assert vague_person_references("A prominent figure endorsed the candidate.") != []
+        assert vague_person_references(
+            "A court ruled she is a public figure for purposes of the suit."
+        ) == []
+        assert vague_person_references("A prominent figure endorsed the candidate.") == []
+
+    def test_individual_mandate_and_legal_outcomes_not_flagged(self):
+        # "the individual" alone is a stock phrase in policy/legal coverage
+        # this pipeline already handles — only the reporting-verb
+        # construction from the live case ("the individual referenced/
+        # said/...") is in scope, not the bare phrase.
+        from app.pipeline.analyze.grounding import vague_person_references
+        assert vague_person_references(
+            "The individual mandate requires most Americans to carry "
+            "health insurance."
+        ) == []
+        assert vague_person_references(
+            "The individual was detained pending an immigration hearing."
+        ) == []
+        assert vague_person_references(
+            "The individual was charged with wire fraud."
+        ) == []
 
     def test_named_person_not_flagged(self):
         from app.pipeline.analyze.grounding import vague_person_references
