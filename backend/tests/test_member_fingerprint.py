@@ -32,6 +32,7 @@ BASE_INPUTS = {
     "attractedBipartisanshipScore": 0.3,
     "officialTitles": {"hr-1": "An Official Title"},
     "rollCallData": {"hr-1": None},
+    "ideologyBounds": (0.3, 0.7),
 }
 
 
@@ -60,6 +61,7 @@ def test_dict_key_order_does_not_affect_the_fingerprint():
         ("officialTitles", {"hr-1": "A Changed Official Title"}),
         ("rollCallData", {"hr-1": {"yea": 51, "nay": 49}}),
         ("senator", {"id": "S1", "name": "A Senator", "party": "R"}),
+        ("ideologyBounds", (0.25, 0.75)),
     ],
 )
 def test_every_tracked_input_changes_the_fingerprint(path, new_value):
@@ -117,6 +119,7 @@ def _inputs(**overrides):
         "attracted_bipartisanship_scores": {"B1": 0.3},
         "official_titles_map": {"hr-1": "Official"},
         "roll_call_data_map": {"hr-1": {"yea": 51}},
+        "ideology_bounds_by_party": {"D": (0.3, 0.7), "R": (0.2, 0.8)},
     }
     kwargs.update(overrides)
     return _senator_fingerprint_inputs(**kwargs)
@@ -160,6 +163,35 @@ def test_inputs_helper_detects_a_change_to_this_members_own_bill():
 
     assert compute_fingerprint(retitled, CODE_HASH) != compute_fingerprint(base, CODE_HASH)
     assert compute_fingerprint(revoted, CODE_HASH) != compute_fingerprint(base, CODE_HASH)
+
+
+def test_inputs_helper_captures_this_senators_party_ideology_bounds():
+    """score_calculator._constituent_alignment_core reads the cohort-wide
+    party_ideology_bounds() terciles (via write_party_ideology_bounds /
+    _party_ideology_bounds) for the Constituent Alignment score component,
+    and describe_senator_position reads the same value for the
+    progressive/moderate/centrist label. A senator whose own ideologyScore
+    is unchanged can still get a different score and label if some OTHER
+    senator's ideology score moved their shared party's terciles — this
+    must not be missed the way officialTitles/rollCallData deliberately
+    are not missed for cohort-wide bill changes."""
+    base = _inputs()
+    assert base["ideologyBounds"] == (0.3, 0.7)
+
+    shifted = _inputs(ideology_bounds_by_party={"D": (0.35, 0.75), "R": (0.2, 0.8)})
+    assert compute_fingerprint(shifted, CODE_HASH) != compute_fingerprint(base, CODE_HASH)
+
+
+def test_inputs_helper_ignores_the_other_partys_bounds():
+    """Only this senator's own party's bounds are relevant — scoped the
+    same conservative way as officialTitles/rollCallData, so a shift in
+    the OTHER party's distribution doesn't force an unnecessary
+    re-derivation of every senator in the unaffected party."""
+    base = _inputs()
+    other_party_shifted = _inputs(
+        ideology_bounds_by_party={"D": (0.3, 0.7), "R": (0.1, 0.9)}
+    )
+    assert compute_fingerprint(other_party_shifted, CODE_HASH) == compute_fingerprint(base, CODE_HASH)
 
 
 def test_inputs_helper_survives_a_member_with_no_sponsored_bills():

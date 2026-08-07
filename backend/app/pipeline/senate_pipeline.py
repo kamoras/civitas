@@ -419,6 +419,7 @@ def _senator_fingerprint_inputs(
     attracted_bipartisanship_scores: dict,
     official_titles_map: dict,
     roll_call_data_map: dict,
+    ideology_bounds_by_party: dict,
 ) -> dict:
     """Everything the per-senator analyze body reads, as plain data.
 
@@ -430,6 +431,19 @@ def _senator_fingerprint_inputs(
     Only this senator's slice of the two global maps is included. Hashing
     them whole would make every senator's fingerprint change whenever any
     bill anywhere changed, which defeats the optimisation entirely.
+
+    `ideology_bounds_by_party` is the same cohort-relative, recomputed-
+    every-run pattern: party_ideology_bounds() derives this senator's
+    party's (low, high) terciles from every scored member's ideology
+    score, and score_calculator._constituent_alignment_core reads it back
+    via write_party_ideology_bounds/_party_ideology_bounds for the
+    Constituent Alignment component (describe_senator_position reads it
+    too, for the progressive/moderate/centrist label). A senator whose
+    own ideologyScore is unchanged can still get a different score and
+    label if some OTHER senator's ideology score moved the party's
+    terciles — only this senator's own party's bounds are included, so a
+    shift in the other party's distribution correctly doesn't invalidate
+    this fingerprint.
     """
     senator = prepared.get("senator", {})
     bio_id = senator.get("bioguideId", "")
@@ -448,6 +462,7 @@ def _senator_fingerprint_inputs(
         "attractedBipartisanshipScore": attracted_bipartisanship_scores.get(bio_id),
         "officialTitles": {b: official_titles_map.get(b, "") for b in bill_ids},
         "rollCallData": {b: roll_call_data_map.get(b) for b in bill_ids},
+        "ideologyBounds": ideology_bounds_by_party.get(senator.get("party", "")),
     }
 
 
@@ -1759,6 +1774,7 @@ async def run_senate_pipeline(
                             leadership_scores, ideology_scores,
                             bipartisanship_scores, attracted_bipartisanship_scores,
                             official_titles_map, roll_call_data_map,
+                            ideology_bounds_by_party,
                         ),
                         analysis_code_hash,
                     )
