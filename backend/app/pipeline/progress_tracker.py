@@ -7,11 +7,17 @@ a failure or a slow phase in any of them was invisible until the whole run
 finished or timed out. Each pipeline defines its own STEPS list (key,
 phase, label) tuples and passes its own run row — any model with
 progress_detail: str | None and elapsed_seconds: float | None columns.
+
+Every terminal step transition also writes a durable PipelinePhaseTiming
+row. `progress_detail` is live-run state — it is overwritten on the next
+run and tells you nothing about the run before it. The timing rows are
+the history, and they are what makes "which step got slower" answerable.
 """
 
 import json
 import logging
 import time
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 from app.time_utils import utcnow
@@ -69,15 +75,22 @@ class ProgressTracker:
         if "total" in step and "done" not in step:
             step["done"] = step["total"]
         self._flush()
+        self._record_timing(step)
 
     def skip(self, key: str, *, detail: str | None = None) -> None:
         step = self._steps.get(key)
         if not step:
             return
         step["status"] = "skipped"
+        # Set even for a step skipped before begin() (no startedAt to pair
+        # it with, so _record_timing still reports duration_seconds=None) —
+        # a step skipped *after* begin() otherwise loses its elapsed time
+        # the same way complete()/fail() don't.
+        step["completedAt"] = _now_iso()
         if detail:
             step["detail"] = detail
         self._flush()
+        self._record_timing(step)
 
     def fail(self, key: str, *, detail: str | None = None) -> None:
         step = self._steps.get(key)
@@ -88,6 +101,7 @@ class ProgressTracker:
         if detail:
             step["detail"] = detail
         self._flush()
+        self._record_timing(step)
 
     def _flush(self) -> None:
         ordered = [self._steps[k] for k, _, _ in self._steps_def]
@@ -98,6 +112,72 @@ class ProgressTracker:
         except Exception:
             logger.debug("Progress commit failed, rolling back", exc_info=True)
             self._db.rollback()
+
+    def _record_timing(self, step: dict) -> None:
+        """Persist one durable timing row for a step that just reached a
+        terminal state.
+
+        Runs in its own transaction *after* `_flush` has committed, and
+        swallows every failure. Timing data is diagnostic; progress_detail
+        is what the admin dashboard and the stuck-run detection read. If
+        the two shared a transaction, a bad timing write would roll back
+        the progress update with it — so the operational write always
+        commits first and independently.
+
+        Idempotent per (run_kind, run_id, step_key): a step driven to a
+        terminal state twice (a retry, a resumed run) updates its existing
+        row rather than colliding with the unique constraint.
+        """
+        from app.models import PipelinePhaseTiming
+
+        run_id = getattr(self._run, "id", None)
+        run_kind = getattr(self._run, "__tablename__", None)
+        if run_id is None or run_kind is None:
+            # Run row was never flushed — nothing stable to key timings on.
+            return
+
+        started = _parse_iso(step.get("startedAt"))
+        completed = _parse_iso(step.get("completedAt"))
+        duration = None
+        if started and completed:
+            duration = round((completed - started).total_seconds(), 3)
+
+        try:
+            row = (
+                self._db.query(PipelinePhaseTiming)
+                .filter_by(run_kind=run_kind, run_id=run_id, step_key=step["key"])
+                .one_or_none()
+            )
+            if row is None:
+                row = PipelinePhaseTiming(
+                    run_kind=run_kind, run_id=run_id, step_key=step["key"],
+                )
+                self._db.add(row)
+            row.phase = step.get("phase", "")
+            row.label = step.get("label", "")
+            row.status = step.get("status", "done")
+            row.started_at = started
+            row.completed_at = completed
+            row.duration_seconds = duration
+            self._db.commit()
+        except Exception:
+            logger.debug(
+                "Phase timing write failed for %s/%s", run_kind, step.get("key"),
+                exc_info=True,
+            )
+            try:
+                self._db.rollback()
+            except Exception:
+                logger.debug("Phase timing rollback failed", exc_info=True)
+
+
+def _parse_iso(value) -> "datetime | None":
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _now_iso() -> str:

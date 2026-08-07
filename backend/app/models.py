@@ -1181,6 +1181,57 @@ class ElectionPipelineRun(Base):
     progress_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class PipelinePhaseTiming(Base):
+    """One row per completed pipeline step, durable across runs.
+
+    ProgressTracker already recorded startedAt/completedAt per step, but
+    only into the run row's `progress_detail` JSON blob — which is
+    overwritten by the next run and is not queryable. That made
+    "which step grew?" unanswerable: the only cross-run number retained
+    was the run's total `elapsed_seconds`, so a pipeline going from 90
+    minutes to 12 hours gave no signal about *where* the time went.
+
+    Deliberately a separate table rather than more columns on the five
+    run models: the step list differs per pipeline and changes over
+    time, so a row-per-step keyed by (run_kind, run_id) survives step
+    definitions being added, renamed, or dropped without a migration.
+
+    `run_kind` is the run model's __tablename__ (e.g. "pipeline_runs"),
+    derived by ProgressTracker from the row it was handed — no call site
+    passes it, so the five existing pipelines get timings with no change
+    to any of them.
+
+    `phase` is the coarse grouping already present in each pipeline's
+    STEPS tuples (fetch/transform/analyze/finalize). Rolling up on it is
+    the point: it separates time spent waiting on rate-limited external
+    APIs from time spent on local compute, which is the distinction that
+    decides whether more hardware would help at all.
+    """
+    __tablename__ = "pipeline_phase_timings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_kind: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    run_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    step_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    phase: Mapped[str] = mapped_column(String(32), nullable=False)
+    label: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    # "done" | "skipped" | "failed" — the ProgressTracker step vocabulary,
+    # not PipelineStatus (which describes a whole run).
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="done")
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Null for a step that was skipped before it ever began, or whose
+    # start timestamp was lost to a mid-run restart.
+    duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "run_kind", "run_id", "step_key",
+            name="uq_phase_timing_run_step",
+        ),
+    )
+
+
 class BskySenatorSpotlight(Base):
     """Tracks which senators have been highlighted in daily Bluesky score posts."""
     __tablename__ = "bsky_senator_spotlights"
