@@ -81,6 +81,19 @@ class Settings(BaseSettings):
     LLM_BACKEND: str = "llama-server"
     LLAMA_SERVER_URL: str = "http://host.docker.internal:8070"
     PIPELINE_CACHE_TTL_HOURS: int = 72
+    # Skip re-deriving a member whose analysis inputs are byte-identical to
+    # the last run's (see analyze/member_fingerprint.py). Defaults OFF: the
+    # saving is real but unproven against production data, and the failure
+    # mode of a too-coarse fingerprint is a stale scorecard. Turn it on
+    # deliberately, after a run with per-phase timings confirms where the
+    # time actually goes, and compare a skipped member's scorecard against
+    # a forced full re-derivation before trusting it.
+    PIPELINE_INCREMENTAL_ANALYSIS: bool = False
+    # Let the LLM rephrase a Q&A answer as prose. Off by default, and even
+    # when on the rewrite is discarded unless it preserves every figure
+    # exactly (services/qa.py::_numbers_are_preserved). Retrieval always
+    # produces the answer; this only ever changes how it reads.
+    QA_LLM_PHRASING: bool = False
     PIPELINE_LOG_LEVEL: str = "info"
     PIPELINE_CRON_SCHEDULE: str = "0 3 * * *"
     PIPELINE_TRIGGER_TOKEN: str = ""

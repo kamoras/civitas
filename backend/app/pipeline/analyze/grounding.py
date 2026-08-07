@@ -396,6 +396,50 @@ def vague_singular_office_references(generated: str) -> list[str]:
     return sorted({m.group(0) for m in _VAGUE_SINGULAR_OFFICE_RE.finditer(generated or "")})
 
 
+# Anaphoric stand-ins for a person the piece could have just named. Live
+# case (issue 522, reported via Bluesky 2026-08-06): a title naming Trump
+# ("Trump comments on El-Sayed's Michigan run") was followed by a summary
+# that never named him, calling him "A political figure from Wayne County,
+# Michigan" (that location actually describes El-Sayed, not Trump) and
+# then "The individual referenced El-Sayed's decision..." — the same
+# vague-actor failure as _VAGUE_SINGULAR_OFFICE_RE, but for a specific
+# named person rather than a fixed office, so that regex didn't match.
+# Like that check, this doesn't compare against source material — the
+# phrasing is wrong regardless of what the source says.
+#
+# Deliberately narrower than the live case's own wording might suggest:
+# "public figure"/"prominent figure" are NOT included even though they
+# read like natural siblings of "political figure" — "public figure" is
+# the actual First Amendment defamation-law term (NYT v. Sullivan: whether
+# a plaintiff must prove actual malice), and this pipeline already covers
+# defamation cases (see the "found guilty of defamation" grounding check
+# in action_center.py), so a real, correctly-sourced fact could legitimately
+# use that exact phrase. Every other pattern in this module is anchored to
+# an observed live incident — add these only if one actually occurs.
+#
+# "the individual" is scoped to only the reporting-verb construction from
+# the live case (a lookahead, so the flagged span stays "the individual"),
+# not the bare two-word phrase — this is a stock phrase in policy/legal
+# coverage this pipeline already handles ("the individual mandate," "the
+# individual was detained/charged/sentenced" in immigration or criminal-
+# justice coverage) and an unscoped match would false-positive on those.
+_VAGUE_PERSON_REFERENCE_RE = re.compile(
+    r"\b(?:a|an)\s+political\s+figure\b"
+    r"|\bthe\s+individual\b(?=\s+(?:referenced|said|stated|claimed|argued|"
+    r"noted|added|told|continued|explained|described|criticized|praised|"
+    r"condemned|announced)\b)",
+    re.IGNORECASE,
+)
+
+
+def vague_person_references(generated: str) -> list[str]:
+    """Anaphoric placeholders ("a political figure," "the individual
+    said/argued/...") used in place of a name the piece already has (often
+    right there in its own title). See _VAGUE_PERSON_REFERENCE_RE for the
+    live case and the deliberate scoping decisions."""
+    return sorted({m.group(0) for m in _VAGUE_PERSON_REFERENCE_RE.finditer(generated or "")})
+
+
 # Family/personal-relationship claims in the GENERATED text. Same fabrication
 # class as ungrounded_electoral_claims — the model inventing a *relationship*
 # between two grounded people, with no fabricated number or titled name for
@@ -585,5 +629,10 @@ def hedge_and_editorializing_violations(generated: str) -> list[str]:
     if vague_offices:
         problems.append(
             f"vague reference to a single-holder office ({', '.join(vague_offices)})"
+        )
+    vague_people = vague_person_references(generated)
+    if vague_people:
+        problems.append(
+            f"vague anaphoric reference to a person ({', '.join(vague_people)})"
         )
     return problems

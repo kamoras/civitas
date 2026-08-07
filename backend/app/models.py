@@ -1309,6 +1309,133 @@ class MeasureCoverage(Base):
     error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class PipelinePhaseTiming(Base):
+    """One row per completed pipeline step, durable across runs.
+
+    ProgressTracker already recorded startedAt/completedAt per step, but
+    only into the run row's `progress_detail` JSON blob — which is
+    overwritten by the next run and is not queryable. That made
+    "which step grew?" unanswerable: the only cross-run number retained
+    was the run's total `elapsed_seconds`, so a pipeline going from 90
+    minutes to 12 hours gave no signal about *where* the time went.
+
+    Deliberately a separate table rather than more columns on the five
+    run models: the step list differs per pipeline and changes over
+    time, so a row-per-step keyed by (run_kind, run_id) survives step
+    definitions being added, renamed, or dropped without a migration.
+
+    `run_kind` is the run model's __tablename__ (e.g. "pipeline_runs"),
+    derived by ProgressTracker from the row it was handed — no call site
+    passes it, so the five existing pipelines get timings with no change
+    to any of them.
+
+    `phase` is the coarse grouping already present in each pipeline's
+    STEPS tuples (fetch/transform/analyze/finalize). Rolling up on it is
+    the point: it separates time spent waiting on rate-limited external
+    APIs from time spent on local compute, which is the distinction that
+    decides whether more hardware would help at all.
+    """
+    __tablename__ = "pipeline_phase_timings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_kind: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    run_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    step_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    phase: Mapped[str] = mapped_column(String(32), nullable=False)
+    label: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    # "done" | "skipped" | "failed" — the ProgressTracker step vocabulary,
+    # not PipelineStatus (which describes a whole run).
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="done")
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Null for a step that was skipped before it ever began, or whose
+    # start timestamp was lost to a mid-run restart.
+    duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "run_kind", "run_id", "step_key",
+            name="uq_phase_timing_run_step",
+        ),
+    )
+
+
+class PipelineRateLimitStat(Base):
+    """Per-step, per-source rate-limiter accounting for one pipeline run.
+
+    A phase duration says a step took four hours. It does not say whether
+    those hours were spent computing or spent inside RateLimiter.acquire()
+    deliberately sleeping to stay under the FEC's 0.25 RPS. Those two
+    readings point at opposite remedies — restructure the fetch phase, or
+    add compute — so the run data has to distinguish them.
+
+    `blocked_seconds` is wall time callers spent waiting for a grant, not
+    time spent on the HTTP request itself. A step whose blocked_seconds
+    approaches its phase duration is throughput-bound on someone else's
+    rate limit, and no amount of local hardware changes it.
+
+    Caveat, deliberately recorded rather than engineered away: counters
+    are global per limiter, and attribution is by time window. If two
+    pipelines genuinely overlap on the same source, each attributes the
+    other's waiting to whatever step it had open. The pipelines are
+    sequenced in practice (see house_pipeline's tracker and the hourly
+    action refresh's skip), so this is a known imprecision at the edges,
+    not a routine one — but it means a single surprising row deserves a
+    look at what else was running before it is believed.
+    """
+    __tablename__ = "pipeline_rate_limit_stats"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_kind: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    run_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    step_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Limiter name — the fetch module it was constructed in ("fec",
+    # "congress", "govinfo"), or an explicit name where a module has more
+    # than one limiter.
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    requests: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    blocked_seconds: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "run_kind", "run_id", "step_key", "source",
+            name="uq_rate_limit_stat_run_step_source",
+        ),
+    )
+
+
+class MemberAnalysisFingerprint(Base):
+    """Hash of the inputs that produced a member's last stored analysis.
+
+    The pipeline re-derives every senator and representative from scratch
+    on every run, but most members' inputs do not change from one night to
+    the next — no new votes, no new filings, no platform edits. Re-running
+    LLM synthesis and bill classification over identical inputs produces
+    identical output at full cost.
+
+    A run compares each member's freshly built input payload against this
+    fingerprint and skips re-derivation on a match. The stored scorecard
+    is left exactly as it was, which is what makes the skip safe: both
+    snapshot recorders (_record_score_snapshots, _record_rep_snapshots)
+    iterate every row in the table rather than only the members this run
+    touched, so a skipped member still gets today's trend point from its
+    existing scores.
+
+    The fingerprint folds in _compute_analysis_code_hash(), so any change
+    to analysis, transform, assemble, scoring, or config_definitions
+    invalidates every member at once — the same signal that already clears
+    the LLM and learned-classification caches. A stale scorecard from a
+    silently-changed algorithm is the one failure mode that would matter
+    here, and this closes it without a separate version to remember to bump.
+    """
+    __tablename__ = "member_analysis_fingerprints"
+
+    entity_type: Mapped[str] = mapped_column(String(32), primary_key=True)
+    entity_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    computed_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
 class BskySenatorSpotlight(Base):
     """Tracks which senators have been highlighted in daily Bluesky score posts."""
     __tablename__ = "bsky_senator_spotlights"

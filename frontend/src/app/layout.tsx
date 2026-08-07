@@ -47,8 +47,28 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      {/*
+        `font-mono` (Share Tech Mono), not `font-terminal` (VT323).
+        This governs every element that does not name a font itself, which is
+        most of the site's prose. Measured from the shipped woff2 files:
+
+                          x-height/em   advance/em
+          VT323               0.400        0.400
+          Share Tech Mono     0.500        0.540
+
+        Lowercase letters get 25% taller at the same nominal size — at
+        `text-sm` (14px, the most common body size) they were rendering 5.6px
+        tall. Share Tech Mono also has a slashed zero and distinguishes I/l/1,
+        where VT323's O/0 are near-identical ovals.
+
+        The cost, which is not free: the advance width is 35% wider, so lines
+        hold ~26% fewer characters and every fixed-width container that holds
+        inherited text gets tighter. Verified against the densest surfaces
+        (bill rows, stage flow, senator scorecard) before landing; see the two
+        width bumps in BillRow and BillStageFlow that this required.
+      */}
       <body
-        className={`${vt323.variable} ${pressStart.variable} ${shareTech.variable} font-terminal antialiased`}
+        className={`${vt323.variable} ${pressStart.variable} ${shareTech.variable} font-mono antialiased`}
       >
         <ConfigProvider>
           <a

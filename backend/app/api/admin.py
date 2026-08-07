@@ -31,6 +31,8 @@ from app.models import (
     MonitorUpdate,
     NationalMonitor,
     PageView,
+    PipelinePhaseTiming,
+    PipelineRateLimitStat,
     PipelineRun,
     PipelineStatus,
     President,
@@ -874,6 +876,206 @@ async def admin_pipeline_history(
         key=lambda x: x["startedAt"] or "",
         reverse=True,
     )
+
+
+# Run-model __tablename__ -> the pipelineType label already used by
+# /pipeline/history, so both endpoints name the same pipeline the same way.
+PHASE_TIMING_KINDS = {
+    "pipeline_runs": "senate",
+    "house_pipeline_runs": "house",
+    "supplementary_pipeline_runs": "supplementary",
+    "stock_trades_pipeline_runs": "stock_trades",
+    "election_pipeline_runs": "election",
+}
+
+
+@router.get("/pipeline/timings", dependencies=[Depends(require_admin)])
+async def admin_pipeline_timings(
+    kind: str = Query(default="pipeline_runs"),
+    runs: int = Query(default=10, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """Per-phase durations for the last `runs` runs of one pipeline.
+
+    Answers the question a run's total elapsed_seconds cannot: when a
+    pipeline's wall-clock grows, which phase absorbed it. The `phases`
+    rollup groups by the coarse fetch/transform/analyze/finalize tag in
+    each pipeline's STEPS definition — the split that distinguishes time
+    blocked on rate-limited external APIs from local compute, and so the
+    split that determines whether faster hardware could help at all.
+    """
+    if kind not in PHASE_TIMING_KINDS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown pipeline kind '{kind}'. Valid: {sorted(PHASE_TIMING_KINDS)}",
+        )
+
+    recent_run_ids = [
+        r[0]
+        for r in db.query(PipelinePhaseTiming.run_id)
+        .filter(PipelinePhaseTiming.run_kind == kind)
+        .distinct()
+        .order_by(PipelinePhaseTiming.run_id.desc())
+        .limit(runs)
+        .all()
+    ]
+    if not recent_run_ids:
+        return {"kind": kind, "pipelineType": PHASE_TIMING_KINDS[kind], "runs": [], "phaseTrend": {}}
+
+    rows = (
+        db.query(PipelinePhaseTiming)
+        .filter(
+            PipelinePhaseTiming.run_kind == kind,
+            PipelinePhaseTiming.run_id.in_(recent_run_ids),
+        )
+        .order_by(PipelinePhaseTiming.run_id.desc(), PipelinePhaseTiming.id.asc())
+        .all()
+    )
+
+    by_run: dict[int, list] = {}
+    for row in rows:
+        by_run.setdefault(row.run_id, []).append(row)
+
+    rl_rows = (
+        db.query(PipelineRateLimitStat)
+        .filter(
+            PipelineRateLimitStat.run_kind == kind,
+            PipelineRateLimitStat.run_id.in_(recent_run_ids),
+        )
+        .all()
+    )
+    # (run_id, step_key) -> {source: (requests, blocked_seconds)}
+    rl_by_step: dict[tuple[int, str], dict] = {}
+    for row in rl_rows:
+        rl_by_step.setdefault((row.run_id, row.step_key), {})[row.source] = (
+            row.requests, row.blocked_seconds,
+        )
+
+    run_entries = []
+    phase_trend: dict[str, list] = {}
+    for run_id in recent_run_ids:
+        steps = by_run.get(run_id, [])
+        # A step still in flight, or one whose start timestamp was lost to a
+        # mid-run restart, has no duration — counting it as 0 would understate
+        # the total, so it is reported separately rather than silently folded in.
+        timed = [s for s in steps if s.duration_seconds is not None]
+        total = round(sum(s.duration_seconds for s in timed), 1)
+
+        phase_totals: dict[str, dict] = {}
+        for step in timed:
+            bucket = phase_totals.setdefault(step.phase or "", {"seconds": 0.0, "steps": 0})
+            bucket["seconds"] += step.duration_seconds
+            bucket["steps"] += 1
+
+        phases = [
+            {
+                "phase": phase,
+                "seconds": round(data["seconds"], 1),
+                "pct": round(100.0 * data["seconds"] / total, 1) if total else 0.0,
+                "steps": data["steps"],
+            }
+            for phase, data in sorted(
+                phase_totals.items(), key=lambda kv: kv[1]["seconds"], reverse=True
+            )
+        ]
+        for entry in phases:
+            phase_trend.setdefault(entry["phase"], []).append(
+                {"runId": run_id, "seconds": entry["seconds"]}
+            )
+
+        # Per-source rollup for the whole run, and the single number this
+        # endpoint exists to produce: what share of the run was spent
+        # inside a rate limiter rather than doing work. A run that is
+        # mostly blocked is throughput-bound on someone else's API and
+        # cannot be shortened by faster local hardware.
+        source_totals: dict[str, dict] = {}
+        for (r_id, _step_key), sources in rl_by_step.items():
+            if r_id != run_id:
+                continue
+            for source, (requests, blocked) in sources.items():
+                bucket = source_totals.setdefault(source, {"requests": 0, "blockedSeconds": 0.0})
+                bucket["requests"] += requests
+                bucket["blockedSeconds"] += blocked
+        total_blocked = round(sum(b["blockedSeconds"] for b in source_totals.values()), 1)
+
+        starts = [s.started_at for s in steps if s.started_at]
+        ends = [s.completed_at for s in steps if s.completed_at]
+        run_entries.append({
+            "runId": run_id,
+            "startedAt": min(starts).isoformat() if starts else None,
+            "completedAt": max(ends).isoformat() if ends else None,
+            "totalSeconds": total,
+            "untimedSteps": len(steps) - len(timed),
+            "blockedSeconds": total_blocked,
+            "blockedPct": round(100.0 * total_blocked / total, 1) if total else 0.0,
+            "rateLimitSources": [
+                {
+                    "source": source,
+                    "requests": data["requests"],
+                    "blockedSeconds": round(data["blockedSeconds"], 1),
+                }
+                for source, data in sorted(
+                    source_totals.items(),
+                    key=lambda kv: kv[1]["blockedSeconds"], reverse=True,
+                )
+            ],
+            "phases": phases,
+            "steps": [
+                {
+                    "stepKey": s.step_key,
+                    "label": s.label,
+                    "phase": s.phase,
+                    "status": s.status,
+                    "seconds": s.duration_seconds,
+                    "blockedSeconds": round(
+                        sum(b for _, b in rl_by_step.get((run_id, s.step_key), {}).values()), 1,
+                    ),
+                }
+                for s in sorted(
+                    steps,
+                    key=lambda s: (s.duration_seconds is None, -(s.duration_seconds or 0)),
+                )
+            ],
+        })
+
+    return {
+        "kind": kind,
+        "pipelineType": PHASE_TIMING_KINDS[kind],
+        "runs": run_entries,
+        "phaseTrend": phase_trend,
+    }
+
+
+@router.post("/pipeline/clear-fingerprints", dependencies=[Depends(require_admin)])
+async def admin_clear_fingerprints(
+    entity_type: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    """Force the next run to re-derive every member from scratch.
+
+    The escape hatch for incremental analysis: drop the stored input
+    fingerprints and the next run treats every member as changed. Use it
+    to compare an incremental run's output against a full one, or to
+    recover if a fingerprint is ever suspected of being too coarse.
+
+    Refuses while a pipeline is running — clearing fingerprints mid-run
+    would leave the run's own records inconsistent with what it skipped.
+    """
+    from app.api.pipeline import _is_pipeline_running
+    from app.pipeline.analyze.member_fingerprint import clear_fingerprints
+
+    if _is_pipeline_running(db):
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot clear fingerprints while the pipeline is running",
+        )
+
+    cleared = clear_fingerprints(db, entity_type)
+    return {
+        "cleared": cleared,
+        "entityType": entity_type or "all",
+        "message": f"Cleared {cleared} fingerprint(s) — next run re-derives from scratch",
+    }
 
 
 @router.post("/pipeline/trigger", dependencies=[Depends(require_admin)])

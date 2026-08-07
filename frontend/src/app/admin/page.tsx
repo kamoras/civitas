@@ -11,6 +11,7 @@ import {
   fetchAdminVisitorStats,
   fetchAdminVisitorBreakdown,
   fetchAdminTopPages,
+  fetchAdminPipelineTimings,
   setPoliticianVacancy,
   clearStuckHousePipeline,
   clearStuckStockTradesPipeline,
@@ -25,6 +26,7 @@ import {
   type VisitorStatsDay,
   type VisitorBreakdown,
   type TopPageEntry,
+  type PipelineTimings,
 } from "@/lib/api";
 import { cacheHitRate, describeRun } from "@/lib/pipelineRuns";
 
@@ -1060,6 +1062,201 @@ function BreakdownGroup({ title, entries }: { title: string; entries: { name: st
   );
 }
 
+const TIMING_KINDS: { kind: string; label: string }[] = [
+  { kind: "pipeline_runs", label: "SENATE" },
+  { kind: "house_pipeline_runs", label: "HOUSE" },
+  { kind: "supplementary_pipeline_runs", label: "SUPP" },
+  { kind: "stock_trades_pipeline_runs", label: "STOCK" },
+  { kind: "election_pipeline_runs", label: "ELECTION" },
+];
+
+/** Per-phase duration breakdown for recent runs.
+ *
+ * The run history already shows total elapsed time, which says a run got
+ * slower but not where. This splits each run by the fetch/transform/
+ * analyze/finalize tag on its steps — the split that separates waiting on
+ * rate-limited external APIs from local compute.
+ */
+function PipelinePhaseTimings({ token }: { token: string }) {
+  const [kind, setKind] = useState<string>("pipeline_runs");
+  const [timings, setTimings] = useState<PipelineTimings | null>(null);
+  // Which kind the current `timings` belongs to. Loading is derived from
+  // this rather than set synchronously inside the effect — the latter
+  // trips react-hooks/set-state-in-effect and causes a cascading render.
+  const [loadedKind, setLoadedKind] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<number | null>(null);
+  const loading = loadedKind !== kind;
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchAdminPipelineTimings(token, kind, 10)
+      .then((t) => {
+        if (!cancelled) setTimings(t);
+      })
+      .catch(() => {
+        if (!cancelled) setTimings(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadedKind(kind);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, kind]);
+
+  const runs = timings?.runs ?? [];
+  const maxTotal = Math.max(1, ...runs.map((r) => r.totalSeconds));
+
+  return (
+    <div className="terminal-window mb-6">
+      <TerminalTitlebar title="pipeline_phase_timings" />
+      <div className="p-4">
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {TIMING_KINDS.map((k) => (
+            <button
+              key={k.kind}
+              type="button"
+              onClick={() => setKind(k.kind)}
+              aria-pressed={kind === k.kind}
+              className={`px-2 py-1 text-[10px] font-pixel tracking-wider border transition-colors ${
+                kind === k.kind
+                  ? "border-matrix-green text-matrix-green"
+                  : "border-matrix-green/20 text-matrix-green/40 hover:text-matrix-green/70"
+              }`}
+            >
+              {k.label}
+            </button>
+          ))}
+        </div>
+
+        {loading ? (
+          <div className="text-matrix-green/40 text-xs font-terminal">Loading…</div>
+        ) : runs.length === 0 ? (
+          <div className="text-matrix-green/40 text-xs font-terminal">
+            No phase timings recorded yet — they are written as each run completes its steps.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {runs.map((run) => (
+              <div key={run.runId}>
+                <button
+                  type="button"
+                  onClick={() => setExpanded(expanded === run.runId ? null : run.runId)}
+                  aria-expanded={expanded === run.runId}
+                  className="w-full text-left"
+                >
+                  <div className="flex items-baseline justify-between gap-3 mb-1">
+                    <span className="text-matrix-green/40 text-[10px] font-terminal tabular-nums shrink-0">
+                      #{run.runId}
+                      {run.startedAt ? ` · ${run.startedAt.slice(5, 16).replace("T", " ")}` : ""}
+                    </span>
+                    <span className="text-matrix-green/70 text-[10px] font-terminal tabular-nums shrink-0">
+                      {formatDuration(run.totalSeconds)}
+                      {run.blockedPct > 0 && (
+                        // Share of the run spent inside a rate limiter. A run
+                        // that is mostly blocked is throughput-bound on an
+                        // external API and will not get shorter on faster
+                        // local hardware.
+                        <span
+                          className={
+                            run.blockedPct >= 50
+                              ? "text-neon-pink ml-2"
+                              : "text-matrix-green/40 ml-2"
+                          }
+                        >
+                          {run.blockedPct}% blocked
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  {/* Stacked bar: each phase's share of this run, widths
+                      relative to the slowest run in the window so runs are
+                      comparable to each other, not just internally. */}
+                  <div
+                    className="flex w-full h-2 bg-matrix-green/5 rounded-sm overflow-hidden"
+                    role="img"
+                    aria-label={run.phases
+                      .map((p) => `${p.phase} ${p.pct}%`)
+                      .join(", ")}
+                    style={{ width: `${(run.totalSeconds / maxTotal) * 100}%` }}
+                  >
+                    {run.phases.map((p, i) => (
+                      <div
+                        key={p.phase}
+                        className={
+                          ["bg-matrix-green", "bg-neon-yellow", "bg-neon-pink", "bg-matrix-green/40"][i % 4]
+                        }
+                        style={{ width: `${p.pct}%` }}
+                        title={`${p.phase}: ${formatDuration(p.seconds)} (${p.pct}%)`}
+                      />
+                    ))}
+                  </div>
+                </button>
+
+                {expanded === run.runId && (
+                  <div className="mt-2 pl-2 border-l border-matrix-green/10 space-y-1">
+                    {run.phases.map((p) => (
+                      <div key={p.phase} className="flex justify-between gap-3">
+                        <span className="text-matrix-green/60 text-[10px] font-terminal">
+                          {PHASE_LABELS[p.phase] ?? p.phase.toUpperCase()} ({p.steps})
+                        </span>
+                        <span className="text-matrix-green/60 text-[10px] font-terminal tabular-nums">
+                          {formatDuration(p.seconds)} · {p.pct}%
+                        </span>
+                      </div>
+                    ))}
+                    {run.rateLimitSources.length > 0 && (
+                      <div className="pt-1 mt-1 border-t border-matrix-green/10 space-y-0.5">
+                        <div className="text-matrix-green/30 text-[10px] font-pixel tracking-wider">
+                          BLOCKED ON RATE LIMITS
+                        </div>
+                        {run.rateLimitSources.map((s) => (
+                          <div key={s.source} className="flex justify-between gap-3">
+                            <span className="text-matrix-green/40 text-[10px] font-terminal truncate">
+                              {s.source} · {s.requests.toLocaleString()} req
+                            </span>
+                            <span className="text-matrix-green/40 text-[10px] font-terminal tabular-nums shrink-0">
+                              {formatDuration(s.blockedSeconds)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="pt-1 mt-1 border-t border-matrix-green/10 space-y-0.5">
+                      {run.steps.slice(0, 8).map((s) => (
+                        <div key={s.stepKey} className="flex justify-between gap-3">
+                          <span className="text-matrix-green/40 text-[10px] font-terminal truncate">
+                            {s.label || s.stepKey}
+                            {s.status !== "done" ? ` [${s.status}]` : ""}
+                          </span>
+                          <span className="text-matrix-green/40 text-[10px] font-terminal tabular-nums shrink-0">
+                            {formatDuration(s.seconds)}
+                            {s.blockedSeconds > 0 && (
+                              <span className="text-matrix-green/25">
+                                {" "}
+                                ({formatDuration(s.blockedSeconds)} blocked)
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    {run.untimedSteps > 0 && (
+                      <div className="text-matrix-green/30 text-[10px] font-terminal pt-1">
+                        {run.untimedSteps} step(s) without a duration — excluded from totals.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function VisitorStats({ token }: { token: string }) {
   const [days, setDays] = useState<VisitorStatsDay[]>([]);
   const [breakdown, setBreakdown] = useState<VisitorBreakdown | null>(null);
@@ -1932,6 +2129,9 @@ function AdminDashboardView({
 
         {/* Visitor Stats */}
         <VisitorStats token={token} />
+
+        {/* Pipeline Phase Timings */}
+        <PipelinePhaseTimings token={token} />
 
         {/* System Health */}
         <div className="grid grid-cols-1 mb-6">

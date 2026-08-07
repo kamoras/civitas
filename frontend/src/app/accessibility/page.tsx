@@ -146,9 +146,19 @@ export default function AccessibilityPage() {
                 had its WCAG relative-luminance contrast ratio computed against the terminal
                 background; any combination below 4.5:1 is floored in CSS to the minimum
                 opacity, or substituted for a lighter shade, that clears it — enforced globally
-                so it can&apos;t be missed on a new component. Decorative pixel-font headings
-                (VT323, Press Start 2P) are scoped out of this floor deliberately: all body
-                text and data use Share Tech Mono or system monospace fonts instead.
+                so it can&apos;t be missed on a new component. The floor is applied by text
+                colour and opacity, not by typeface — no font is exempt from it.
+              </Check>
+              <Check>
+                <strong className="text-matrix-green">Typeface metrics</strong> — typefaces
+                are chosen on measured metrics, not period flavour. Body copy is set in Share
+                Tech Mono, whose lowercase letters are 25% taller than the display face the
+                site previously inherited for prose, and which distinguishes 0/O and 1/l/I.
+                Some pages still set the display face explicitly for tabular and archival
+                content; those are being migrated. The bitmap label face is drawn on an
+                8-cell-per-em grid and only rasterises cleanly when font size × display scale
+                is a multiple of 8, so it is no longer used below 12px, where that condition
+                is met at almost no common display scale.
               </Check>
               <Check>
                 <strong className="text-matrix-green">Reduced motion</strong> — Animation
