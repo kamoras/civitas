@@ -16,11 +16,11 @@
       "description": "Official 'Information For Voters' guide. URL pattern verified stable across two real elections (2024 general, 5 real questions; 2022 general, 3 real questions) — same two-election bar CA's pattern was held to. All 8 real questions across both years parse with correct official_summary/fiscal_impact/yes_means/no_means."
     },
     "CO": {
-      "landing_page_url": "https://leg.colorado.gov/initiatives/ballot-information-booklet-blue-book",
+      "landing_page_url": "https://leg.colorado.gov",
       "keyword": "blue",
       "source_name": "Colorado Legislative Council",
       "strategy": "co_quick_ballot_reference",
-      "description": "Official 'Blue Book', 'Quick Ballot Reference Guide' section. Filename changes every cycle (verified: a different one-off convention nearly every year back to 2012) so this uses landing-page discovery, not url_pattern — verified the landing page's own link text ('Blue Book 2024', 'Blue Book 2022', ...) resolves the real PDF correctly across 3 real years (2024, 2022, 2020). Parser verified against 2024's format (14/14 measures, 12/14 clean yes/no); 2022 uses a different sub-format for legislature-referred amendments that isn't handled yet (see ballot_measures_co.py's module docstring) — those measures are safely dropped, not guessed."
+      "description": "Official 'Blue Book', 'Quick Ballot Reference Guide' section. Filename changes every cycle (verified: a different one-off convention nearly every year back to 2012), AND the exact listing page isn't guaranteed stable either (no state is bound to a particular site layout) — so landing_page_url is deliberately the bare legislature domain, not a specific sub-page. discover_pdf_url's bounded crawl (generic election-vocabulary link-following, same-domain only) finds the real PDF from there every time, verified live: 3 real years (2024, 2022, 2020), both from the exact listing page AND from this bare-domain starting point, with default crawl bounds. Note: colorado's Blue Book is published by the LEGISLATURE, not the Secretary of State — verified the SOS's own domain does not lead to it at all (correctly returns no match rather than guessing). Parser verified against 2024's format (14/14 measures, 12/14 clean yes/no); 2022 uses a different sub-format for legislature-referred amendments that isn't handled yet (see ballot_measures_co.py's module docstring) — those measures are safely dropped, not guessed."
     }
   }
 }

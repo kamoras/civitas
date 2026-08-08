@@ -196,6 +196,94 @@ async def test_discover_pdf_url_excludes_primary_by_default():
 
 
 @pytest.mark.asyncio
+async def test_discover_pdf_url_follows_a_link_to_find_the_pdf():
+    """A start page without a direct PDF match but with a link whose text
+    matches generic election vocabulary ("Ballot Information") must be
+    followed — this is what lets a human hand over a coarse starting
+    page (a state's homepage) rather than the exact listing page, since
+    no state's site layout is guaranteed stable either."""
+    pages = {
+        "https://example.com/": (
+            '<a href="https://example.com/elections/ballot-guide">Ballot Information</a>'
+        ),
+        "https://example.com/elections/ballot-guide": _CO_LANDING_HTML,
+    }
+
+    async def fake_get(url, timeout=None):
+        return SimpleNamespace(text=pages[url], raise_for_status=lambda: None)
+
+    client = SimpleNamespace(get=fake_get)
+    url = await pdf.discover_pdf_url(client, "https://example.com/", 2024, keyword="blue")
+    assert url == "https://content.leg.colorado.gov/sites/default/files/2024-blue-book-english-accessible.pdf"
+
+
+@pytest.mark.asyncio
+async def test_discover_pdf_url_never_follows_a_link_off_the_starting_domain():
+    """A link to an outside site (a news article, Ballotpedia, a
+    different state) must never be followed — real risk this guards
+    against: picking up the wrong state's or a third party's document."""
+    pages = {
+        "https://example.com/": (
+            '<a href="https://other-site.com/ballot-guide-2024.pdf">Ballot Guide 2024</a>'
+        ),
+    }
+
+    async def fake_get(url, timeout=None):
+        if url not in pages:
+            raise AssertionError(f"must never fetch off-domain url: {url}")
+        return SimpleNamespace(text=pages[url], raise_for_status=lambda: None)
+
+    client = SimpleNamespace(get=fake_get)
+    # The PDF link itself is off-domain but still matches year/keyword —
+    # confirm it's still returned (a matching link found ON the starting
+    # page is fine even if it points elsewhere; what must never happen is
+    # CRAWLING onto another domain to look for more links).
+    url = await pdf.discover_pdf_url(client, "https://example.com/", 2024, keyword="ballot")
+    assert url == "https://other-site.com/ballot-guide-2024.pdf"
+
+
+@pytest.mark.asyncio
+async def test_discover_pdf_url_does_not_follow_unrelated_links():
+    """A link with no election-vocabulary signal in its text/href must
+    not be followed — otherwise a bounded crawl degrades into crawling
+    an entire government website looking for anything."""
+    pages = {
+        "https://example.com/": (
+            '<a href="https://example.com/about-the-governor">About the Governor</a>'
+        ),
+    }
+    fetched = []
+
+    async def fake_get(url, timeout=None):
+        fetched.append(url)
+        return SimpleNamespace(text=pages.get(url, ""), raise_for_status=lambda: None)
+
+    client = SimpleNamespace(get=fake_get)
+    url = await pdf.discover_pdf_url(client, "https://example.com/", 2024)
+    assert url is None
+    assert fetched == ["https://example.com/"]
+
+
+@pytest.mark.asyncio
+async def test_discover_pdf_url_respects_max_depth():
+    """A chain of election-flavored links longer than max_depth must not
+    be fully traversed — the bound exists so a real crawl can't run
+    away indefinitely."""
+    pages = {
+        "https://example.com/a": '<a href="https://example.com/b">Ballot Measures</a>',
+        "https://example.com/b": '<a href="https://example.com/c">Ballot Guide</a>',
+        "https://example.com/c": '<a href="https://example.com/d.pdf">Ballot Guide 2024</a>',
+    }
+
+    async def fake_get(url, timeout=None):
+        return SimpleNamespace(text=pages.get(url, ""), raise_for_status=lambda: None)
+
+    client = SimpleNamespace(get=fake_get)
+    url = await pdf.discover_pdf_url(client, "https://example.com/a", 2024, keyword="ballot", max_depth=1)
+    assert url is None
+
+
+@pytest.mark.asyncio
 async def test_discover_pdf_url_returns_none_on_fetch_failure():
     async def fail_get(*a, **kw):
         raise Exception("network error")

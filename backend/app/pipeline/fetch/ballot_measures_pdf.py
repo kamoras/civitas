@@ -34,7 +34,7 @@ scans however many pages it needs can.
 import io
 import logging
 import re
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import httpx
 import pdfplumber
@@ -47,46 +47,88 @@ from app.pipeline.fetch.ballot_measures_ma import parse_information_for_voters a
 
 logger = logging.getLogger(__name__)
 
-_PDF_LINK_RE = re.compile(r'<a[^>]+href="([^"]+\.pdf)"[^>]*>(.*?)</a>', re.IGNORECASE | re.DOTALL)
+_PDF_LINK_RE = re.compile(r'<a[^>]+href=["\']([^"\']+\.pdf)["\'][^>]*>(.*?)</a>', re.IGNORECASE | re.DOTALL)
+_LINK_RE = re.compile(r'<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', re.IGNORECASE | re.DOTALL)
 _TAG_RE = re.compile(r"<[^>]+>")
+
+# No state is required to name its guide any particular thing — there's
+# no format spec to target, only convention. These are generic election-
+# vocabulary terms, not any one state's branding, used to recognize a
+# PAGE worth following, not to identify a specific document.
+_FOLLOW_KEYWORDS = ("ballot", "measure", "amendment", "proposition", "referendum", "initiative", "voter guide", "pamphlet", "blue book")
+
+
+def _matches(haystack: str, year: int, keyword: str | None, exclude: tuple[str, ...]) -> bool:
+    if any(x in haystack for x in exclude):
+        return False
+    if str(year) not in haystack:
+        return False
+    if keyword and keyword.lower() not in haystack:
+        return False
+    return True
 
 
 async def discover_pdf_url(
-    client: httpx.AsyncClient, landing_page_url: str, year: int,
+    client: httpx.AsyncClient, start_url: str, year: int,
     keyword: str | None = None, exclude: tuple[str, ...] = ("primary",),
+    max_pages: int = 8, max_depth: int = 2,
 ) -> str | None:
-    """This cycle's PDF link on a STABLE landing page, for states whose
-    exact PDF filename changes every cycle but whose landing page (and,
-    on every real one checked, the human-readable link text — "Blue Book
-    2024", "Blue Book 2023", ...) doesn't. This is what makes a source
-    entry evergreen without a human updating a URL each cycle: register
-    the landing page once, resolve the real file at fetch time.
+    """This cycle's ballot-guide PDF, starting from a state's own election
+    site — evergreen against BOTH failure modes states show in practice:
+    a PDF filename that changes every cycle (verified: Colorado's real
+    filename has no two years alike back to 2012), and a listing page
+    that itself moves or gets restructured (no state is bound to any
+    particular site layout — there's no format spec here, only whatever
+    convention that state's web team happens to use this year).
 
-    Matches a link whose href+text contains `year` (and `keyword`, if
-    given — a durable branding term like "blue book", not a filename),
-    excluding anything matching `exclude` (default: primary-election
-    guides, since this codebase always wants the general). None if no
-    confident match — never guesses the wrong document.
+    `start_url` doesn't have to be the exact page carrying the PDF link —
+    a shallow, bounded crawl (`max_depth` hops, `max_pages` total fetches)
+    follows same-domain links whose text/href matches generic election
+    vocabulary (_FOLLOW_KEYWORDS — "ballot", "voter guide", ... — terms
+    no state owns, not any one state's branding) until it finds a PDF
+    link matching `year` (and `keyword`, if given — a durable branding
+    term like "blue book", not a filename). Never leaves the starting
+    domain, so a page that happens to link an outside site (a news
+    article, a different state, Ballotpedia) can't pull this off course.
+
+    None if no confident match anywhere in the crawl — never guesses.
     """
-    try:
-        response = await client.get(landing_page_url, timeout=30.0)
-        response.raise_for_status()
-        html = response.text
-    except Exception:
-        logger.warning("Ballot measure PDF landing page fetch failed: %s", landing_page_url)
-        return None
+    start_domain = urlparse(start_url).netloc
+    visited: set[str] = set()
+    queue: list[tuple[str, int]] = [(start_url, 0)]
+    fetched = 0
 
-    best = None
-    for href, text in _PDF_LINK_RE.findall(html):
-        haystack = f"{href} {_TAG_RE.sub('', text)}".lower()
-        if any(x in haystack for x in exclude):
+    while queue and fetched < max_pages:
+        url, depth = queue.pop(0)
+        if url in visited:
             continue
-        if str(year) not in haystack:
+        visited.add(url)
+        try:
+            response = await client.get(url, timeout=30.0)
+            response.raise_for_status()
+            html = response.text
+        except Exception:
             continue
-        if keyword and keyword.lower() not in haystack:
+        fetched += 1
+
+        for href, text in _PDF_LINK_RE.findall(html):
+            haystack = f"{href} {_TAG_RE.sub('', text)}".lower()
+            if _matches(haystack, year, keyword, exclude):
+                return urljoin(url, href)
+
+        if depth >= max_depth:
             continue
-        best = href
-    return urljoin(landing_page_url, best) if best else None
+        for href, text in _LINK_RE.findall(html):
+            if href.lower().endswith(".pdf"):
+                continue
+            haystack = f"{href} {_TAG_RE.sub('', text)}".lower()
+            if not any(k in haystack for k in _FOLLOW_KEYWORDS):
+                continue
+            next_url = urljoin(url, href)
+            if urlparse(next_url).netloc == start_domain and next_url not in visited:
+                queue.append((next_url, depth + 1))
+
+    return None
 
 STRATEGIES = {
     "ca_quick_reference": parse_ca_document,
