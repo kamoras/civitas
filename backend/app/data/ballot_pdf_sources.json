@@ -1,0 +1,17 @@
+{
+  "_source": "Hand-verified during research: checked each jurisdiction's own election-office site directly for a plain, static, address-free sample-ballot PDF (not an API, not a lookup tool).",
+  "_method": "Proof-of-concept covering ONE jurisdiction, not a general directory. Most towns/counties checked during research (Cambridge MA, Ann Arbor MI, likely Franklin County OH) gate their sample ballot behind an address/voter-registration lookup with no static file at all — those cannot be added here no matter how the parser is written, and stay on the civic_info.py representative-address path instead (see backend/app/api/elections.py's town_ballot route: this source is tried first, civic_info.py is the fallback).",
+  "_as_of": "2026-08-06",
+  "_note": "url embeds the specific election's date (Somerville's own naming convention: sample-ballot-YYYYMMDD-...). This entry points at the 2026-09-01 state primary — the only real, currently-published ballot to build and test against. It will need a human to update this URL each election; there is no discovery mechanism, and pointing this at a stale URL after the primary passes will start failing (ingest_failed, not silently stale — see ballot_pdf.py's caching, which never persists a zero-contest parse). column_bounds (fractions of page width) are ALSO hand-verified per document, not auto-detected: tried detecting column gutters from word x-position density and it unreliably merged columns on this exact real PDF (the header/instructions text spans the full width and pollutes any density-based gutter search). Verified correct by manual inspection of this specific PDF's extracted text; will need re-verifying, not just re-pointing the url, if a future ballot's layout changes.",
+  "towns": {
+    "Somerville": {
+      "state": "MA",
+      "url": "https://s3.amazonaws.com/somervillema-live/s3fs-public/sample-ballot-20260901-middlesex-democratic-ward1-2.pdf",
+      "source_name": "City of Somerville Elections Department",
+      "description": "2026-09-01 Massachusetts State Primary, Democratic Party, Wards 1-2. One ward pair of several Somerville publishes; picking a single one is a known, documented approximation, same spirit as civic_info.py's representative-address choice.",
+      "election_name": "2026 Massachusetts State Primary (Democratic Party)",
+      "election_date": "2026-09-01",
+      "column_bounds": [[0.0, 0.355], [0.355, 0.633], [0.633, 1.0]]
+    }
+  }
+}

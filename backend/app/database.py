@@ -710,6 +710,19 @@ def reset_all_data() -> dict:
             # exists, so a reset would silently not rebuild it.
             models.MemberAnalysisFingerprint,
             models.PipelineRun,
+            # Election-cycle tables. These were omitted when the
+            # midterm-elections feature landed (2026-07), so an admin
+            # reset silently left the candidate roster, race coverage and
+            # run history behind while reporting a clean wipe — the same
+            # class of omission the drops list above was bitten by in
+            # #215. Child-then-parent, like every other pair here:
+            # Candidate/RaceCoverageItem cascade from Race.
+            models.Candidate,
+            models.RaceCoverageItem,
+            models.Race,
+            models.BallotMeasure,
+            models.MeasureCoverage,
+            models.ElectionPipelineRun,
             models.Senator,
             models.Representative,
             models.Justice,

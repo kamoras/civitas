@@ -1,0 +1,15 @@
+{
+  "_source": "Town hall / city hall addresses, spot-checked against each town's own government website.",
+  "_method": "A small, hand-curated pilot list — NOT a directory of all US municipalities. Each entry's `address` is a fixed, publicly-known civic building, never a visitor's own address (see GOOGLE_CIVIC_API_KEY's comment in config.py for why). fetch_town_ballot (app/pipeline/fetch/civic_info.py) calls voterInfoQuery with this address live, on a user picking the town — there is no separate pre-verification pass the way state_ballot_lookup.json's per-state links have, because a bad address here just surfaces as that town's ingest_failed on the next request rather than staying silently wrong between runs.",
+  "_as_of": "2026-08-06",
+  "_note": "Response field schema (contests/referendumTitle/candidates/etc.) is verified against Google's public Discovery Document (https://www.googleapis.com/discovery/v1/apis/civicinfo/v2/rest, no API key needed to fetch it). ALSO live-tested against a real GOOGLE_CIVIC_API_KEY (2026-08-06): the key and both pilot addresses work — Google reaches and recognizes them — but every one currently returns 'Election unknown', because Google's election index (elections.electionQuery) only carries primaries within days of their own date right now, nothing for the November general three months out, for any state. This is expected and will resolve itself as Google populates general-election data closer to 2026-11-03 — it is not a wrong address or a code bug, and re-testing before then will keep showing the same result. See civic_info.py's module docstring for the full verification trail. Expand this list by hand, the same way state_ballot_lookup.json's `states` entries are added one at a time.",
+  "towns": {
+    "MA": [
+      {"name": "Cambridge", "address": "795 Massachusetts Ave, Cambridge, MA 02139", "source_name": "City of Cambridge"},
+      {"name": "Somerville", "address": "93 Highland Avenue, Somerville, MA 02143", "source_name": "City of Somerville"}
+    ],
+    "MI": [
+      {"name": "Ann Arbor", "address": "301 E. Huron St., Ann Arbor, MI 48104", "source_name": "City of Ann Arbor"}
+    ]
+  }
+}

@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base, VisitsBase
@@ -1179,6 +1179,134 @@ class ElectionPipelineRun(Base):
     elapsed_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     progress_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class BallotMeasure(Base):
+    """One statewide ballot measure, as published by an official or
+    reference source (see pipeline/fetch/ballot_measures.py).
+
+    Keyed on ELECTION DATE, not cycle year. Ohio can run an "Issue 1" in a
+    May primary and a different "Issue 1" in the November general; a
+    cycle-year key collides them and the later sync silently overwrites
+    the earlier measure's text. The same reasoning rules the ballot NUMBER
+    out of the primary key: numbers are assigned late and get reassigned,
+    so `id` is the upstream source's own stable identifier (the same
+    "reuse the source's identifier" convention Candidate follows with
+    FEC's candidate_id) and `number` is an ordinary mutable column.
+
+    Every text column here is stored VERBATIM from its source and is
+    never model-generated — same contract as RaceCoverageItem, and for
+    the same reason: this is the one surface on the platform where a
+    fabricated sentence could change how somebody votes. There is
+    deliberately no `plain_summary`-style column, and adding one is
+    ruled out rather than deferred — see AGENTS.md, Core Design
+    Principle 7 ("Ballot content is quoted, never generated").
+    """
+    __tablename__ = "ballot_measures"
+    __table_args__ = (
+        # Partial, not a plain UniqueConstraint: `number` defaults to ""
+        # whenever a source doesn't publish one yet (see
+        # pipeline/fetch/ballot_measures.py's `_text` fallback), and a
+        # state routinely has more than one such measure at once early in
+        # a cycle. A non-partial constraint on (state, election_date,
+        # number) collides on the second blank-numbered measure and the
+        # per-measure try/except in _sync_ballot_measures silently drops
+        # it — reproduced against this exact schema. Scoping the index to
+        # number != '' keeps the real guarantee (two DIFFERENT source ids
+        # never claim the same printed ballot number) without punishing
+        # the common case of a not-yet-numbered measure.
+        Index(
+            "uq_ballot_measure_state_date_number",
+            "state", "election_date", "number",
+            unique=True,
+            sqlite_where=text("number != ''"),
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    state: Mapped[str] = mapped_column(String(2), nullable=False, index=True)
+    # ISO date string ("2026-11-03") rather than a Date column, matching
+    # ScoreSnapshot.date's convention — these are compared and grouped as
+    # strings everywhere they're used, never date-arithmetic'd.
+    election_date: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
+    election_type: Mapped[str] = mapped_column(String(16), nullable=False, default="general")
+    # Ballot number as printed ("Proposition 50", "Issue 1"). Mutable.
+    number: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    title: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+
+    measure_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    origin: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # certified | removed | withdrawn | under_appeal. A measure pulled from
+    # the ballot is rendered AS removed, never silently deleted — a voter
+    # who saw it last week needs to be told it's gone, and a bare absence
+    # can't say that. `under_appeal` exists because a flat "removed"
+    # during a pending appeal is itself a false statement.
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="certified")
+
+    official_title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    official_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fiscal_impact: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Lifted verbatim from the state's own yes/no framing where it
+    # publishes one. NULL means "this source publishes no such framing" —
+    # never inferred, because the inference that looks easiest (yes =
+    # enact) is exactly backwards on a veto referendum, where "approved"
+    # RETAINS the law under challenge.
+    yes_means: Mapped[str | None] = mapped_column(Text, nullable=True)
+    no_means: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Who wrote the title/fiscal note. Not decoration: ballot titles are
+    # among the most litigated documents in election law precisely because
+    # they are contested, so reprinting one unattributed under a
+    # non-partisan masthead launders its author's framing. Disclosing the
+    # author is MORE neutral than the bare quote.
+    title_authority: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    fiscal_authority: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    source_name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    source_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Watermark for the reconciliation grace period (see
+    # election_pipeline._sync_ballot_measures): a measure absent from a
+    # sync isn't deleted on the spot, because one truncated upstream
+    # response would otherwise blank a state's ballot.
+    last_seen_at: Mapped[datetime] = mapped_column(default=utcnow)
+    as_of: Mapped[datetime] = mapped_column(default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
+
+
+class MeasureCoverage(Base):
+    """Per-state, per-election record of what we actually know about that
+    state's measures — the difference between "this state has none" and
+    "we haven't ingested this state yet".
+
+    Without this row those two render identically (an empty section), and
+    a Texan looking at an empty section on a page titled as their state's
+    ballot concludes there is nothing to research. That is the same
+    null-is-not-zero discipline Candidate.last_financials_sync already
+    enforces per field ("awaiting FEC sync", never "$0"), applied at the
+    collection level.
+
+    Default for an unknown state is NOT_YET_COVERED, so a state we have
+    never synced is loud rather than blank.
+    """
+    __tablename__ = "measure_coverage"
+    __table_args__ = (
+        UniqueConstraint("state", "election_date", name="uq_measure_coverage_state_date"),
+    )
+
+    NOT_YET_COVERED = "not_yet_covered"
+    COVERED = "covered"
+    CONFIRMED_NONE = "confirmed_none"
+    INGEST_FAILED = "ingest_failed"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    state: Mapped[str] = mapped_column(String(2), nullable=False, index=True)
+    election_date: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default=NOT_YET_COVERED)
+    source_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    measure_count: Mapped[int] = mapped_column(Integer, default=0)
+    checked_at: Mapped[datetime] = mapped_column(default=utcnow)
+    error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class PipelinePhaseTiming(Base):

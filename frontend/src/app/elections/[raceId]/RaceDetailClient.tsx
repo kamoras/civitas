@@ -10,7 +10,7 @@ import CandidateCard from "@/components/elections/CandidateCard";
 import CoverageFeed from "@/components/elections/CoverageFeed";
 import RaceFinancials from "@/components/elections/RaceFinancials";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
-import { formatPvi, isActiveCandidate, pviColor, raceTitleLabel } from "@/lib/elections";
+import { formatPvi, isActiveCandidate, pviColor, raceTitleLabel, stateBallotHref } from "@/lib/elections";
 import type { RaceDetail } from "@/types/election";
 
 export default function RaceDetailClient({ race }: { race: RaceDetail }) {
@@ -26,11 +26,14 @@ export default function RaceDetailClient({ race }: { race: RaceDetail }) {
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
         <div className="max-w-3xl mx-auto">
+          {/* Back to the race's own state page, not the state index:
+              under the current IA a race is always reached THROUGH its
+              state, so /elections would drop the reader two levels. */}
           <Link
-            href="/elections"
+            href={stateBallotHref(race.state)}
             className="inline-block mb-6 font-mono text-xs text-matrix-green/50 hover:text-neon-cyan transition-colors"
           >
-            ← BACK TO RACES
+            ← BACK TO {race.state} BALLOT
           </Link>
 
           <div className="terminal-window mb-6">

@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState, useCallback } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import MatrixRain from "@/components/effects/MatrixRain";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
@@ -366,7 +366,6 @@ function ComparisonTable({
 }
 
 function ComparePageInner() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [leftSenator, setLeftSenator] = useState<Senator | null>(null);
   const [rightSenator, setRightSenator] = useState<Senator | null>(null);
@@ -440,9 +439,18 @@ function ComparePageInner() {
         params.set("rightId", right.id);
         params.set("rightChamber", rCh);
       }
-      router.replace(params.toString() ? `?${params}` : "/compare", { scroll: false });
+      // Deliberately NOT router.replace(): /compare is statically
+      // prerendered, and once the page was loaded WITH a query string
+      // Next's client router treats a same-route navigation as already
+      // satisfied and the address bar never updates — so arriving from a
+      // shared /compare?leftId=... link froze the URL there for the rest
+      // of the session. Same trap, same fix, as /action's replaceUrl.
+      // Only reproduces under `next build`.
+      window.history.replaceState(
+        null, "", params.toString() ? `?${params}` : "/compare",
+      );
     },
-    [router],
+    [],
   );
 
   const handleLeft = useCallback(

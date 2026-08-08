@@ -62,6 +62,7 @@ locally on a single self-hosted device with zero cloud AI calls.
 - **Branches covered**: Senate (100 senators), House (435 representatives), Presidents (historical + modern), Supreme Court (9 justices)
 - **News Feeds**: RSS parsing (AP, NPR, Reuters, PBS) + Google Trends + Reddit trending for Action Center
 - **Action Center**: National monitors (auto-detected ongoing concerns), year-in-review timeline, elections tab
+- **Elections**: State index → per-state ballot page (federal contests + statewide ballot measures, quoted verbatim) → race/candidate detail with FEC financials
 
 All services, models, and data run on-device. No data leaves the server.
 
@@ -74,7 +75,8 @@ civitas/
 │   │   ├── api/                 # FastAPI route handlers (senators, representatives, presidents, justices, explore, action, admin, health)
 │   │   ├── services/            # Business logic (senator_service, representative_service with paginated vote APIs)
 │   │   ├── pipeline/
-│   │   │   ├── fetch/           # API clients (Congress.gov, FEC, GovInfo, Senate.gov, Oyez, BLS, Federal Register)
+│   │   │   ├── fetch/           # API clients (Congress.gov, FEC, GovInfo, Senate.gov, Oyez, BLS, Federal Register,
+│   │   │   │                    #   Vote Smart ballot measures)
 │   │   │   ├── transform/       # Data normalization, embedding-based industry classification
 │   │   │   ├── analyze/         # Bill analysis, scoring, cross-referencing, LLM narratives, justice scoring
 │   │   │   ├── assemble/        # Scorecard builder + validator
@@ -96,9 +98,10 @@ civitas/
 ├── frontend/
 │   ├── src/
 │   │   ├── app/                 # Next.js App Router pages (action [issues/monitors/timeline/elections/branches/globe],
+│   │   │                        #   elections [state index, states/[ST] ballot, [raceId] detail],
 │   │   │                        #   politicians [directory + per-member profile], bills, compare, explore, leaderboard,
 │   │   │                        #   about, changelog, accessibility, environmental, feedback, admin)
-│   │   ├── components/          # React components (action, checker, president, justice, explore, home, effects)
+│   │   ├── components/          # React components (action, elections, checker, president, justice, explore, home, effects)
 │   │   ├── hooks/               # Custom React hooks
 │   │   ├── lib/                 # API client (with paginated vote fetching), utilities
 │   │   └── types/               # TypeScript type definitions
@@ -424,6 +427,44 @@ snapshot-history distribution checks — no named reference members, no
 hand-typed score ranges, per principle 1/3a), so the identical checks run
 for both chambers in `senate_pipeline.py` and `house_pipeline.py`.
 
+### 7. Ballot content is quoted, never generated
+
+Anything that describes what is on a voter's ballot — measure titles,
+summaries, fiscal statements, yes/no descriptions — is stored and rendered
+**verbatim from its source**, with the source linked and its drafter named.
+No LLM output reaches this surface at any stage, and `BallotMeasure` has no
+model-written column for one to land in. Do not add one.
+
+The reason is specific, not squeamishness. `grounding.py` verifies that the
+tokens in generated text appear in the source material. It has no
+representation of predicate *direction*, so a summary reading "a YES vote
+repeals this tax" — when the official text says approval **retains** it —
+passes every check in the module, because every word it used is in the
+source. That error class is undetectable by anything in the codebase, and it
+is the error class that changes votes. `ungrounded_electoral_claims` is worse
+than merely unhelpful here: its context regex only fires when `ballot` /
+`voters` are *absent* from the source, and every ballot-measure source
+contains both, so it returns `[]` on 100% of these inputs.
+
+Corollaries that follow from the same rule, all enforced in code:
+
+- `yes_means` / `no_means` are lifted from the state's own framing or left
+  NULL — **never derived from the title**. The obvious derivation ("yes
+  enacts it") inverts on a veto referendum, where approving retains the law
+  under challenge.
+- Absence must be able to say *which* absence it is. `MeasureCoverage` carries
+  `confirmed_none` vs `not_yet_covered` / `ingest_failed`, because an empty
+  measures section on a page about a state's ballot reads as "nothing to
+  research" — the same null-is-not-zero discipline `Candidate.last_financials_sync`
+  applies per field, applied at the collection level.
+- Removed measures are rendered as removed for a grace window, not deleted.
+- Scope is stated as content, not as a footnote: the API enumerates what a
+  statewide page omits (`omits`) and the page renders it above the measures.
+
+If a plain-language layer is ever revisited, the bar is a check that can
+detect polarity inversion and dropped qualifiers — which is not an extension
+of `grounding.py`, it is a different kind of check.
+
 ## Data Pipeline
 
 The pipeline runs nightly (configurable via `PIPELINE_CRON_SCHEDULE`) or can
@@ -643,6 +684,9 @@ SQLAlchemy ORM models are in `backend/app/models.py`. Key tables: `senators`,
 | Multi-word last name extraction + vote matching | `backend/app/pipeline/transform/normalize_members.py` |
 | LLM narrative generation | `backend/app/pipeline/analyze/cross_reference.py` |
 | Action Center analysis (news → issues → monitors → timeline) | `backend/app/pipeline/analyze/action_center.py` |
+| Election cycle pipeline (candidates, financials, ballot measures, coverage) | `backend/app/pipeline/election_pipeline.py` |
+| Statewide ballot-measure ingestion (verbatim, no LLM) | `backend/app/pipeline/fetch/ballot_measures.py` |
+| Official-ballot link table + liveness gating | `backend/app/pipeline/fetch/ballot_lookup.py` |
 | Explore hybrid search ranking (RRF fusion, priors, dedup, diversity) | `backend/app/services/explore_search.py` |
 | Explore keyword index (FTS5 + BM25F) | `backend/app/pipeline/lexical_index.py` |
 | Document citation graph + PageRank authority | `backend/app/pipeline/analyze/document_authority.py` |
@@ -660,7 +704,7 @@ SQLAlchemy ORM models are in `backend/app/models.py`. Key tables: `senators`,
 | Action Center API | `backend/app/api/action.py` |
 | Representative API routes | `backend/app/api/representatives.py` |
 | API routes | `backend/app/api/` (senators, representatives, presidents, justices, admin, explore, action, health) |
-| Frontend pages | `frontend/src/app/` (action [issues/monitors/timeline/elections/branches/globe], scorecard, leaderboard, explore, about, admin) |
+| Frontend pages | `frontend/src/app/` (action [issues/monitors/timeline/elections/branches/globe], elections [state index, states/[ST] ballot, [raceId] detail], scorecard, leaderboard, explore, about, admin) |
 | Frontend API client (incl. paginated vote fetching) | `frontend/src/lib/api.ts` |
 | Frontend types | `frontend/src/types/` |
 | Metric explanations (tooltips on all scorecard metrics) | `frontend/src/components/checker/MetricTooltip.tsx` |

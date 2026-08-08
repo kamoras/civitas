@@ -57,6 +57,36 @@ export function compareRaces(a: RaceLike, b: RaceLike): number {
   return (a.district ?? -1) - (b.district ?? -1);
 }
 
+/** Canonical href for a state's ballot page.
+ *
+ * Plural "states" deliberately, matching the API path
+ * (/api/elections/states/{ST}/ballot) — and note that the singular
+ * /elections/state would be swallowed by the sibling [raceId] dynamic
+ * segment and 404 as an unknown race, so the two spellings are not
+ * interchangeable here. Named rather than inlined for the reason
+ * ACTION_CENTER_HREF is (see lib/routes.ts): a URL shape with a
+ * non-obvious constraint attracts well-meaning "cleanup".
+ */
+export function stateBallotHref(state: string): string {
+  return `/elections/states/${encodeURIComponent(state.toUpperCase())}`;
+}
+
+/** Human label for a measure's status. `removed` is rendered, never
+ * hidden: a voter who saw a measure last week needs to be told a court
+ * struck it, and an absent card cannot say that. */
+export function measureStatusLabel(status: string): string {
+  switch (status) {
+    case "removed":
+      return "REMOVED FROM BALLOT";
+    case "withdrawn":
+      return "WITHDRAWN";
+    case "under_appeal":
+      return "UNDER APPEAL";
+    default:
+      return "ON THE BALLOT";
+  }
+}
+
 /** Parses an ISO-8601 timestamp, treating an offset-less string as UTC —
  * `new Date("2026-07-04T12:00:00")` would otherwise parse as viewer-local
  * time (repo precedent: admin/page.tsx's `new Date(startIso + "Z")`).

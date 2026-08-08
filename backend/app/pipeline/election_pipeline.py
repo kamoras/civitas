@@ -60,6 +60,7 @@ def current_election_cycle() -> int:
 ELECTION_PIPELINE_STEPS = [
     ("roster_sync",        "roster",   "Sync candidate roster"),
     ("financial_refresh",  "financial", "Refresh candidate financials"),
+    ("ballot_measures",    "measures", "Sync statewide ballot measures"),
     ("coverage_ingestion", "coverage", "Ingest race coverage"),
     ("bluesky_posting",    "posting",  "Post race coverage updates"),
     ("snapshot",           "snapshot", "Snapshot candidate fundraising"),
@@ -333,6 +334,324 @@ def _snapshot_candidates(db: Session) -> int:
     return written
 
 
+# A measure that stops appearing in the upstream feed is marked `removed`
+# and RENDERED as removed for this long before the row is deleted. Two
+# reasons it is a grace period rather than an immediate delete: a voter
+# who saw a measure last week needs to be told it was struck (a bare
+# absence cannot say that), and one truncated upstream response must not
+# silently blank a state's ballot. Same shape as member_lifecycle.py's
+# roster-reconciliation grace window.
+MEASURE_REMOVAL_GRACE_DAYS = 45
+
+# If a sync returns fewer than this fraction of the measures we already
+# had for a state, treat it as a bad response and keep the previous data
+# instead of reconciling. Certification churn is real (four certified and
+# seven removed across two states in a single July 2026 fortnight), but it
+# does not look like "12 measures became 1".
+MEASURE_SHRINK_FLOOR = 0.5
+
+
+def _upsert_measure(db: Session, raw: dict, detail: dict | None, source_name: str) -> None:
+    """Insert or update one measure. Every text field is verbatim source."""
+    from app.models import BallotMeasure
+
+    detail = detail or {}
+    election_date = detail.get("election_date") or raw.get("election_date")
+    if not election_date:
+        # No election date means we cannot say WHICH ballot this is on, and
+        # a measure rendered under the wrong election is worse than one
+        # not rendered at all (Ohio can run an "Issue 1" in both a May
+        # primary and a November general).
+        logger.warning("Skipping measure %s — no election date", raw.get("id"))
+        return
+
+    measure = db.query(BallotMeasure).filter(BallotMeasure.id == raw["id"]).first()
+    if measure is None:
+        measure = BallotMeasure(id=raw["id"])
+        db.add(measure)
+
+    measure.state = raw["state"]
+    measure.election_date = election_date
+    measure.number = raw.get("number") or ""
+    measure.title = raw.get("title") or ""
+    measure.official_title = detail.get("official_title")
+    measure.official_summary = detail.get("official_summary")
+    measure.fiscal_impact = detail.get("fiscal_impact")
+    measure.yes_means = detail.get("yes_means")
+    measure.no_means = detail.get("no_means")
+    measure.measure_type = detail.get("measure_type")
+    measure.origin = detail.get("origin")
+    measure.source_url = detail.get("source_url")
+    measure.source_name = source_name
+    # A measure that had been marked removed and is now back in the feed
+    # is certified again — the reconciliation below is the only writer of
+    # `removed`, so re-appearing must clear it.
+    measure.status = "certified"
+    measure.last_seen_at = utcnow()
+    measure.as_of = utcnow()
+
+
+def _reconcile_state_measures(
+    db: Session, state: str, election_dates: set[str], seen_ids: set[str],
+) -> int:
+    """Mark measures we no longer see as removed; delete long-gone ones."""
+    from app.models import BallotMeasure
+
+    stale = (
+        db.query(BallotMeasure)
+        .filter(
+            BallotMeasure.state == state,
+            BallotMeasure.election_date.in_(election_dates),
+            BallotMeasure.id.notin_(seen_ids) if seen_ids else True,
+        )
+        .all()
+    )
+    marked = 0
+    cutoff = utcnow() - timedelta(days=MEASURE_REMOVAL_GRACE_DAYS)
+    for measure in stale:
+        if measure.last_seen_at < cutoff:
+            db.delete(measure)
+            continue
+        if measure.status != "removed":
+            measure.status = "removed"
+            measure.as_of = utcnow()
+            marked += 1
+    return marked
+
+
+def _set_coverage(
+    db: Session, state: str, election_date: str, status: str,
+    count: int = 0, source_name: str | None = None, error: str | None = None,
+) -> None:
+    from app.models import MeasureCoverage
+
+    row = (
+        db.query(MeasureCoverage)
+        .filter(
+            MeasureCoverage.state == state,
+            MeasureCoverage.election_date == election_date,
+        )
+        .first()
+    )
+    if row is None:
+        row = MeasureCoverage(state=state, election_date=election_date)
+        db.add(row)
+    row.status = status
+    row.measure_count = count
+    row.source_name = source_name
+    row.error_detail = error
+    row.checked_at = utcnow()
+
+
+async def _sync_pdf_measures(
+    db: Session, client: httpx.AsyncClient, election_day: str,
+) -> tuple[int, int, int]:
+    """Every state with a registered direct-PDF ballot-measure source
+    (ballot_measure_pdf_sources.json — currently just CA, more states get
+    added there as they're researched and a parsing strategy is built for
+    them; see ballot_measures_pdf.py). Runs independently of
+    VOTESMART_API_KEY and does NOT fall back to Vote Smart on failure —
+    a state with a registered PDF source treats that source as its
+    record of truth, so a failure reads as ingest_failed rather than
+    silently serving a stale Vote Smart snapshot. Returns
+    (synced, failed_states, marked_removed), same shape the caller
+    accumulates for every other state.
+
+    Every field ballot_measures_pdf.fetch_state_measures_pdf returns is
+    already the full raw+detail shape _upsert_measure expects (one PDF
+    pass gets everything Vote Smart would need two calls for), so each
+    item is passed as both `raw` and `detail` directly — no separate
+    detail fetch.
+    """
+    from app.models import MeasureCoverage
+    from app.pipeline.fetch.ballot_measure_pdf_sources import (
+        configured_states,
+        source_for_state,
+    )
+    from app.pipeline.fetch.ballot_measures_pdf import fetch_state_measures_pdf
+
+    year = int(election_day[:4])
+    synced = failed = marked_removed = 0
+    for state in sorted(configured_states()):
+        source_name = source_for_state(state)["source_name"]
+        try:
+            listed = await fetch_state_measures_pdf(client, db, state, year, election_day)
+        except Exception:
+            logger.exception("PDF measure fetch raised for %s", state)
+            listed = None
+
+        if listed is None:
+            _set_coverage(
+                db, state, election_day, MeasureCoverage.INGEST_FAILED,
+                source_name=source_name, error="fetch failed",
+            )
+            failed += 1
+            db.commit()
+            continue
+
+        if not listed:
+            _set_coverage(
+                db, state, election_day, MeasureCoverage.CONFIRMED_NONE,
+                count=0, source_name=source_name,
+            )
+            db.commit()
+            continue
+
+        seen_ids: set[str] = set()
+        dates: set[str] = set()
+        for item in listed:
+            try:
+                _upsert_measure(db, item, item, source_name)
+                seen_ids.add(item["id"])
+                dates.add(item["election_date"])
+                synced += 1
+                db.commit()
+            except Exception:
+                db.rollback()
+                logger.exception("Failed to sync %s measure %s — skipping", state, item.get("id"))
+
+        if dates:
+            marked_removed += _reconcile_state_measures(db, state, dates, seen_ids)
+        _set_coverage(
+            db, state, election_day, MeasureCoverage.COVERED,
+            count=len(seen_ids), source_name=source_name,
+        )
+        db.commit()
+
+    return synced, failed, marked_removed
+
+
+async def _sync_ballot_measures(db: Session, client: httpx.AsyncClient, cycle: int) -> dict:
+    """Sync statewide ballot measures for every state with federal races.
+
+    The distinction this function exists to preserve: a state with no
+    measures and a state we failed to ingest must never render the same
+    way. `fetch_state_measures` returns [] for the former and None for the
+    latter, and those map onto CONFIRMED_NONE and INGEST_FAILED here. An
+    empty measures section on a page titled as a state's ballot reads as
+    "nothing to research", so "we don't know" has to be able to say so.
+    """
+    from app.models import BallotMeasure, MeasureCoverage
+    from app.pipeline.fetch.ballot_measure_pdf_sources import configured_states
+    from app.pipeline.fetch.ballot_measures import (
+        fetch_measure_detail,
+        fetch_state_measures,
+        is_configured,
+    )
+
+    election_day = next_election_day(utcnow().date()).isoformat()
+
+    # Every state with a registered direct-PDF source runs on that path
+    # regardless of whether Vote Smart is configured — the whole point is
+    # that these states no longer depend on it. No fallback to Vote Smart
+    # on a PDF-path failure either: a registered PDF source is that
+    # state's source of record, so a failure there should read as
+    # ingest_failed, not silently serve a stale Vote Smart snapshot.
+    pdf_states = configured_states()
+    synced, failed, marked_removed = await _sync_pdf_measures(db, client, election_day)
+
+    if not is_configured():
+        # Leave every OTHER state NOT_YET_COVERED rather than writing
+        # CONFIRMED_NONE — with no key we have learned nothing about them,
+        # and recording "no measures" would be a claim we never checked.
+        # PDF-sourced states above are unaffected by this key entirely.
+        logger.info("Ballot measure sync for other states skipped — VOTESMART_API_KEY not set")
+        return {
+            "synced": synced, "failed_states": failed, "marked_removed": marked_removed,
+            "skipped_other_states": True,
+        }
+
+    source_name = "Vote Smart"
+    for state in sorted(STATES_WITH_FEDERAL_RACES - pdf_states):
+        try:
+            listed = await fetch_state_measures(client, db, state, cycle)
+        except Exception:
+            logger.exception("Measure fetch raised for %s", state)
+            listed = None
+
+        if listed is None:
+            _set_coverage(
+                db, state, election_day, MeasureCoverage.INGEST_FAILED,
+                source_name=source_name, error="fetch failed",
+            )
+            failed += 1
+            db.commit()
+            continue
+
+        if not listed:
+            _set_coverage(
+                db, state, election_day, MeasureCoverage.CONFIRMED_NONE,
+                count=0, source_name=source_name,
+            )
+            db.commit()
+            continue
+
+        existing = (
+            db.query(BallotMeasure).filter(BallotMeasure.state == state).count()
+        )
+        if existing and len(listed) < existing * MEASURE_SHRINK_FLOOR:
+            # Implausible shrink — keep what we have, say so loudly, and do
+            # NOT reconcile. See MEASURE_SHRINK_FLOOR.
+            logger.warning(
+                "Measure sync for %s returned %d rows against %d on file — "
+                "keeping existing data", state, len(listed), existing,
+            )
+            _set_coverage(
+                db, state, election_day, MeasureCoverage.INGEST_FAILED,
+                count=existing, source_name=source_name,
+                error=f"implausible shrink: {len(listed)} vs {existing}",
+            )
+            failed += 1
+            db.commit()
+            continue
+
+        seen_ids: set[str] = set()
+        dates: set[str] = set()
+        for raw in listed:
+            try:
+                detail = await fetch_measure_detail(client, db, raw["source_measure_id"])
+                _upsert_measure(db, raw, detail, source_name)
+                date = (detail or {}).get("election_date") or raw.get("election_date")
+                if date:
+                    seen_ids.add(raw["id"])
+                    dates.add(date)
+                    synced += 1
+                db.commit()
+            except Exception:
+                db.rollback()
+                logger.exception("Failed to sync measure %s — skipping", raw.get("id"))
+
+        if dates:
+            marked_removed += _reconcile_state_measures(db, state, dates, seen_ids)
+        _set_coverage(
+            db, state, election_day, MeasureCoverage.COVERED,
+            count=len(seen_ids), source_name=source_name,
+        )
+        db.commit()
+
+    if failed:
+        # Fail loud: a silently-broken adapter and a quiet week look
+        # identical from the outside, and this is the one dataset where
+        # that ambiguity costs a vote.
+        try:
+            from app.ops_alerts import send_ops_alert
+            send_ops_alert(
+                "Ballot measure ingest failed",
+                f"{failed} state(s) failed to ingest statewide ballot measures "
+                f"for {election_day}. Those states render as 'not yet covered' "
+                f"rather than 'no measures' until this clears.",
+                dedupe_key="ballot-measure-ingest",
+            )
+        except Exception:
+            logger.exception("Could not send ballot-measure ops alert")
+
+    return {
+        "synced": synced,
+        "failed_states": failed,
+        "marked_removed": marked_removed,
+    }
+
+
 def _prune_stale_coverage(db: Session) -> int:
     """Delete coverage items older than COVERAGE_RETENTION_DAYS — see that
     constant's comment. Returns rows deleted."""
@@ -398,6 +717,39 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                 db.rollback()
                 logger.exception("Financial refresh phase failed — continuing")
                 progress.fail("financial_refresh")
+
+            run.current_phase = "measures"
+            db.commit()
+            logger.info("--- Election: BALLOT MEASURES ---")
+            progress.begin("ballot_measures")
+            try:
+                measure_result = await _sync_ballot_measures(db, client, cycle)
+                if measure_result.get("skipped"):
+                    progress.complete("ballot_measures", detail="skipped (no API key)")
+                else:
+                    detail = (
+                        f"{measure_result['synced']} measures, "
+                        f"{measure_result['failed_states']} states failed"
+                    )
+                    logger.info("Ballot measures: %s", detail)
+                    progress.complete("ballot_measures", detail=detail)
+            except Exception:
+                db.rollback()
+                logger.exception("Ballot measure sync failed — continuing")
+                progress.fail("ballot_measures")
+
+            # Verify the official-ballot links we hand users. Cheap, and
+            # the one link on the page whose failure strands the visitor.
+            try:
+                from app.pipeline.fetch.ballot_lookup import refresh_link_verification
+                link_result = await refresh_link_verification(client)
+                if link_result["failed"]:
+                    logger.warning(
+                        "%d state ballot-lookup links failed verification and are "
+                        "now hidden", link_result["failed"],
+                    )
+            except Exception:
+                logger.exception("Ballot lookup link verification failed — continuing")
 
             # Coverage + posting share an in-process tracker with the
             # 15-minute election-season refresh (scheduler.py) so the two
