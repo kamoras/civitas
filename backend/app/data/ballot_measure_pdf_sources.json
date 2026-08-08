@@ -21,6 +21,14 @@
       "source_name": "Colorado Legislative Council",
       "strategy": "co_quick_ballot_reference",
       "description": "Official 'Blue Book', 'Quick Ballot Reference Guide' section. Filename changes every cycle (verified: a different one-off convention nearly every year back to 2012), AND the exact listing page isn't guaranteed stable either (no state is bound to a particular site layout) — so landing_page_url is deliberately the bare legislature domain, not a specific sub-page. discover_pdf_url's bounded crawl (generic election-vocabulary link-following, same-domain only) finds the real PDF from there every time, verified live: 3 real years (2024, 2022, 2020), both from the exact listing page AND from this bare-domain starting point, with default crawl bounds. Note: colorado's Blue Book is published by the LEGISLATURE, not the Secretary of State — verified the SOS's own domain does not lead to it at all (correctly returns no match rather than guessing). Parser verified against 2024's format (14/14 measures, 12/14 clean yes/no); 2022 uses a different sub-format for legislature-referred amendments that isn't handled yet (see ballot_measures_co.py's module docstring) — those measures are safely dropped, not guessed."
+    },
+    "LA": {
+      "landing_page_url": "https://www.sos.la.gov/elections-voting/types-of-elections",
+      "keyword": ["nov", "constitutional"],
+      "exclude": ["primary", "summary"],
+      "source_name": "Louisiana Secretary of State",
+      "strategy": "la_proposed_amendments",
+      "description": "'Proposed Constitutional Amendments' guide, plain single-column text. All amendments are legislature-referred (Louisiana has no citizen-initiative process for constitutional amendments), so origin is fixed; the document publishes no explicit 'A YES vote means.../A NO vote means...' framing (only the ballot question itself) and no fiscal impact statement, so yes_means/no_means/fiscal_impact stay null rather than being inferred from the question's phrasing. Old site URLs 404'd after a site redesign; landing_page_url points at the current site. keyword requires BOTH terms present (a lone 'nov' also matches an unrelated 'November Presidential Election' link on the real page); exclude drops both the primary-election variant AND a same-year 'Statement of Proposed Constitutional Amendment...Summary' document that carries a confusingly similar link label but a different, unhandled layout. Verified against all 4 real general-election years on record (2026, 2024, 2022, 2020) — 2022's document has a per-page footer ('Prepared by the Louisiana Secretary of State N') and 2020/2022 both have a per-page running header ('<date> PROPOSED CONSTITUTIONAL AMENDMENTS'); both are stripped from the full joined text before splitting so a page-boundary-spanning amendment can't pick either up."
     }
   }
 }

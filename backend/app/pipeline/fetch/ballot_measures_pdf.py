@@ -43,6 +43,7 @@ from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.ballot_measure_pdf_sources import source_for_state
 from app.pipeline.fetch.ballot_measures_ca import parse_document as parse_ca_document
 from app.pipeline.fetch.ballot_measures_co import parse_document as parse_co_document
+from app.pipeline.fetch.ballot_measures_la import parse_document as parse_la_document
 from app.pipeline.fetch.ballot_measures_ma import parse_information_for_voters as parse_ma_document
 
 logger = logging.getLogger(__name__)
@@ -58,19 +59,19 @@ _TAG_RE = re.compile(r"<[^>]+>")
 _FOLLOW_KEYWORDS = ("ballot", "measure", "amendment", "proposition", "referendum", "initiative", "voter guide", "pamphlet", "blue book")
 
 
-def _matches(haystack: str, year: int, keyword: str | None, exclude: tuple[str, ...]) -> bool:
+def _matches(haystack: str, year: int, keywords: tuple[str, ...], exclude: tuple[str, ...]) -> bool:
     if any(x in haystack for x in exclude):
         return False
     if str(year) not in haystack:
         return False
-    if keyword and keyword.lower() not in haystack:
+    if any(k.lower() not in haystack for k in keywords):
         return False
     return True
 
 
 async def discover_pdf_url(
     client: httpx.AsyncClient, start_url: str, year: int,
-    keyword: str | None = None, exclude: tuple[str, ...] = ("primary",),
+    keyword: str | tuple[str, ...] | None = None, exclude: tuple[str, ...] = ("primary",),
     max_pages: int = 8, max_depth: int = 2,
 ) -> str | None:
     """This cycle's ballot-guide PDF, starting from a state's own election
@@ -86,13 +87,18 @@ async def discover_pdf_url(
     follows same-domain links whose text/href matches generic election
     vocabulary (_FOLLOW_KEYWORDS — "ballot", "voter guide", ... — terms
     no state owns, not any one state's branding) until it finds a PDF
-    link matching `year` (and `keyword`, if given — a durable branding
-    term like "blue book", not a filename). Never leaves the starting
+    link matching `year` (and `keyword`, if given — one or more durable
+    branding terms like "blue book", not a filename; ALL must be present
+    when more than one is given — verified necessary on Louisiana's real
+    archive, where "nov" alone also matched an unrelated "November 2024
+    Presidential Election" link, needing "nov" AND "constitutional"
+    together to pick the right document). Never leaves the starting
     domain, so a page that happens to link an outside site (a news
     article, a different state, Ballotpedia) can't pull this off course.
 
     None if no confident match anywhere in the crawl — never guesses.
     """
+    keywords = (keyword,) if isinstance(keyword, str) else tuple(keyword or ())
     start_domain = urlparse(start_url).netloc
     visited: set[str] = set()
     queue: list[tuple[str, int]] = [(start_url, 0)]
@@ -113,7 +119,7 @@ async def discover_pdf_url(
 
         for href, text in _PDF_LINK_RE.findall(html):
             haystack = f"{href} {_TAG_RE.sub('', text)}".lower()
-            if _matches(haystack, year, keyword, exclude):
+            if _matches(haystack, year, keywords, exclude):
                 return urljoin(url, href)
 
         if depth >= max_depth:
@@ -134,6 +140,7 @@ STRATEGIES = {
     "ca_quick_reference": parse_ca_document,
     "ma_information_for_voters": parse_ma_document,
     "co_quick_ballot_reference": parse_co_document,
+    "la_proposed_amendments": parse_la_document,
 }
 
 # Longer than Vote Smart's 12h (MEASURE_CACHE_TTL_HOURS in
@@ -209,8 +216,14 @@ async def fetch_state_measures_pdf(
         return cached.get("measures")
 
     if "landing_page_url" in source:
+        keyword = source.get("keyword")
+        discover_kwargs = {}
+        if isinstance(keyword, list):
+            keyword = tuple(keyword)
+        if "exclude" in source:
+            discover_kwargs["exclude"] = tuple(source["exclude"])
         url = await discover_pdf_url(
-            client, source["landing_page_url"], year, source.get("keyword"),
+            client, source["landing_page_url"], year, keyword, **discover_kwargs,
         )
         if url is None:
             logger.warning("Could not discover current ballot measure PDF for %s %d", state, year)
