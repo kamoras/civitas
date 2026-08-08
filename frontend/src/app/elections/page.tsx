@@ -7,6 +7,7 @@ import MatrixRain from "@/components/effects/MatrixRain";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import GlitchText from "@/components/effects/GlitchText";
+import Link from "next/link";
 import RaceMap from "@/components/elections/RaceMap";
 import RaceCard from "@/components/elections/RaceCard";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
@@ -142,16 +143,24 @@ function ElectionsPageContent() {
               </div>
 
               {selectedState && (
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                   <h2 className="font-pixel text-sm text-white/90">
                     {selectedState} — {formatPvi(pvi?.states[selectedState] ?? null)}
                   </h2>
-                  <button
-                    onClick={() => setSelectedState(null)}
-                    className="font-mono text-[10px] text-matrix-green/50 hover:text-matrix-green tracking-widest"
-                  >
-                    CLEAR FILTER ✕
-                  </button>
+                  <div className="flex items-center gap-4">
+                    <Link
+                      href={`/elections/states/${selectedState}`}
+                      className="font-pixel text-[10px] px-2.5 py-1.5 border border-neon-cyan/40 text-neon-cyan/90 hover:bg-neon-cyan/10 transition-colors"
+                    >
+                      VIEW {selectedState}&apos;S BALLOT →
+                    </Link>
+                    <button
+                      onClick={() => setSelectedState(null)}
+                      className="font-mono text-[10px] text-matrix-green/50 hover:text-matrix-green tracking-widest"
+                    >
+                      CLEAR FILTER ✕
+                    </button>
+                  </div>
                 </div>
               )}
 

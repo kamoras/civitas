@@ -74,6 +74,57 @@ export interface RaceDetail {
   coverage: RaceCoverageItem[];
 }
 
+/** A candidate's matching Senator/Representative scorecard row — only
+ * ever present for a real, uniquely-identified match (see backend's
+ * elections.py _incumbent_link); never a guess. */
+export interface IncumbentRecord {
+  id: string;
+  /** Weighted overall Representation Score, 0-100 (score_calculator.
+   * compute_overall_score — the same formula the leaderboard and
+   * profile page use, not a separately-derived number). */
+  score: number;
+}
+
+/** CandidateSummary plus incumbentRecord — only the ballot endpoint
+ * (GET /elections/states/{state}) populates this; other endpoints'
+ * candidates don't carry it. */
+export interface BallotCandidate extends CandidateSummary {
+  /** Null unless this candidate is a sitting Senator/Representative AND
+   * a real, unambiguous match was found — never populated as a guess. */
+  incumbentRecord: IncumbentRecord | null;
+}
+
+/** One federal race with EVERY candidate — RaceDetail minus the
+ * coverage feed, which stays one click away on the race-detail page.
+ * Backs the ballot-centric per-state view (StateBallot below), which
+ * must show every real option, not RaceSummary's top-2-by-funds. */
+export interface RaceWithCandidates {
+  id: string;
+  cycleYear: number;
+  office: string;
+  state: string;
+  district: number | null;
+  isSpecial: boolean;
+  pvi: number | null;
+  /** See RaceSummary.pviLevel. */
+  pviLevel: "district" | "state" | null;
+  candidates: BallotCandidate[];
+}
+
+/** Every federal race on one state's ballot this cycle — GET
+ * /elections/states/{state}. Deliberately federal-races-only: no
+ * statewide ballot measures or local races here (a separate feature). */
+export interface StateBallot {
+  state: string;
+  cycleYear: number;
+  electionDate: string;
+  /** Statewide PVI — null only if the underlying PVI map lacks this
+   * state, never a fabricated 0. */
+  statePvi: number | null;
+  senateRaces: RaceWithCandidates[];
+  houseRaces: RaceWithCandidates[];
+}
+
 /** Provenance block on the /pvi response. Optional end to end — older
  * backend responses (and cached ones) may omit it entirely. */
 export interface PviMeta {
