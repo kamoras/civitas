@@ -153,3 +153,107 @@ async def test_fetch_dispatches_to_the_registered_strategy_and_caches(monkeypatc
     client2 = SimpleNamespace(get=fail_get)
     cached_result = await pdf.fetch_state_measures_pdf(client2, db_session, "ZZ", 2026, "2026-11-03")
     assert cached_result == result
+
+
+# ── landing-page discovery (evergreen states whose filename changes each
+# cycle but whose landing page, and its link text, doesn't) ────────────
+
+
+_CO_LANDING_HTML = """
+<a href="https://content.leg.colorado.gov/sites/default/files/2024-blue-book-english-accessible.pdf" class="link-primary">Blue Book 2024</a>
+<a href="https://content.leg.colorado.gov/sites/default/files/images/blue_book_2022_english_for_web.pdf" class="link-primary">Blue Book 2022</a>
+<a href="https://content.leg.colorado.gov/sites/default/files/2024-primary-summary.pdf" class="link-primary">2024 Primary Summary</a>
+"""
+
+
+@pytest.mark.asyncio
+async def test_discover_pdf_url_matches_year_and_keyword():
+    async def fake_get(url, timeout=None):
+        return SimpleNamespace(text=_CO_LANDING_HTML, raise_for_status=lambda: None)
+
+    client = SimpleNamespace(get=fake_get)
+    url = await pdf.discover_pdf_url(
+        client, "https://example.com/blue-book", 2024, keyword="blue",
+    )
+    assert url == "https://content.leg.colorado.gov/sites/default/files/2024-blue-book-english-accessible.pdf"
+
+
+@pytest.mark.asyncio
+async def test_discover_pdf_url_excludes_primary_by_default():
+    """A link matching the year but not the keyword (or matching
+    "primary") must not win — real failure this guards against: without
+    the keyword filter, 2024's primary-summary link would tie on year
+    alone."""
+    async def fake_get(url, timeout=None):
+        return SimpleNamespace(
+            text='<a href="https://x.com/2024-primary-summary.pdf">2024 Primary Summary</a>',
+            raise_for_status=lambda: None,
+        )
+
+    client = SimpleNamespace(get=fake_get)
+    url = await pdf.discover_pdf_url(client, "https://example.com", 2024)
+    assert url is None
+
+
+@pytest.mark.asyncio
+async def test_discover_pdf_url_returns_none_on_fetch_failure():
+    async def fail_get(*a, **kw):
+        raise Exception("network error")
+
+    client = SimpleNamespace(get=fail_get)
+    url = await pdf.discover_pdf_url(client, "https://example.com", 2024)
+    assert url is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_uses_discovery_when_source_has_a_landing_page(monkeypatch, db_session):
+    monkeypatch.setattr(pdf, "source_for_state", lambda state: {
+        "landing_page_url": "https://example.com/blue-book", "keyword": "blue",
+        "source_name": "Example", "strategy": "fake_strategy",
+    })
+    monkeypatch.setitem(pdf.STRATEGIES, "fake_strategy", lambda pages: [])
+
+    async def fake_discover(client, landing_page_url, year, keyword=None):
+        assert landing_page_url == "https://example.com/blue-book"
+        assert keyword == "blue"
+        return "https://example.com/resolved-2026.pdf"
+
+    monkeypatch.setattr(pdf, "discover_pdf_url", fake_discover)
+
+    class FakePdf:
+        pages = []
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    monkeypatch.setattr(pdf.pdfplumber, "open", lambda buf: FakePdf())
+
+    fetched_urls = []
+    async def fake_get(url, timeout=None):
+        fetched_urls.append(url)
+        return SimpleNamespace(content=b"%PDF-fake", raise_for_status=lambda: None)
+
+    client = SimpleNamespace(get=fake_get)
+    result = await pdf.fetch_state_measures_pdf(client, db_session, "ZZ", 2026, "2026-11-03")
+    assert result == []
+    assert fetched_urls == ["https://example.com/resolved-2026.pdf"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_returns_none_when_discovery_finds_nothing(monkeypatch, db_session):
+    monkeypatch.setattr(pdf, "source_for_state", lambda state: {
+        "landing_page_url": "https://example.com/blue-book",
+        "source_name": "Example", "strategy": "fake_strategy",
+    })
+    monkeypatch.setitem(pdf.STRATEGIES, "fake_strategy", lambda pages: [])
+
+    async def fake_discover(*a, **kw):
+        return None
+
+    monkeypatch.setattr(pdf, "discover_pdf_url", fake_discover)
+
+    async def fail_get(*a, **kw):
+        raise AssertionError("should not fetch a PDF — nothing was discovered")
+
+    client = SimpleNamespace(get=fail_get)
+    result = await pdf.fetch_state_measures_pdf(client, db_session, "ZZ", 2026, "2026-11-03")
+    assert result is None

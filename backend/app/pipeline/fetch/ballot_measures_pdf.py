@@ -33,6 +33,8 @@ scans however many pages it needs can.
 
 import io
 import logging
+import re
+from urllib.parse import urljoin
 
 import httpx
 import pdfplumber
@@ -40,13 +42,56 @@ import pdfplumber
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.ballot_measure_pdf_sources import source_for_state
 from app.pipeline.fetch.ballot_measures_ca import parse_document as parse_ca_document
+from app.pipeline.fetch.ballot_measures_co import parse_document as parse_co_document
 from app.pipeline.fetch.ballot_measures_ma import parse_information_for_voters as parse_ma_document
 
 logger = logging.getLogger(__name__)
 
+_PDF_LINK_RE = re.compile(r'<a[^>]+href="([^"]+\.pdf)"[^>]*>(.*?)</a>', re.IGNORECASE | re.DOTALL)
+_TAG_RE = re.compile(r"<[^>]+>")
+
+
+async def discover_pdf_url(
+    client: httpx.AsyncClient, landing_page_url: str, year: int,
+    keyword: str | None = None, exclude: tuple[str, ...] = ("primary",),
+) -> str | None:
+    """This cycle's PDF link on a STABLE landing page, for states whose
+    exact PDF filename changes every cycle but whose landing page (and,
+    on every real one checked, the human-readable link text — "Blue Book
+    2024", "Blue Book 2023", ...) doesn't. This is what makes a source
+    entry evergreen without a human updating a URL each cycle: register
+    the landing page once, resolve the real file at fetch time.
+
+    Matches a link whose href+text contains `year` (and `keyword`, if
+    given — a durable branding term like "blue book", not a filename),
+    excluding anything matching `exclude` (default: primary-election
+    guides, since this codebase always wants the general). None if no
+    confident match — never guesses the wrong document.
+    """
+    try:
+        response = await client.get(landing_page_url, timeout=30.0)
+        response.raise_for_status()
+        html = response.text
+    except Exception:
+        logger.warning("Ballot measure PDF landing page fetch failed: %s", landing_page_url)
+        return None
+
+    best = None
+    for href, text in _PDF_LINK_RE.findall(html):
+        haystack = f"{href} {_TAG_RE.sub('', text)}".lower()
+        if any(x in haystack for x in exclude):
+            continue
+        if str(year) not in haystack:
+            continue
+        if keyword and keyword.lower() not in haystack:
+            continue
+        best = href
+    return urljoin(landing_page_url, best) if best else None
+
 STRATEGIES = {
     "ca_quick_reference": parse_ca_document,
     "ma_information_for_voters": parse_ma_document,
+    "co_quick_ballot_reference": parse_co_document,
 }
 
 # Longer than Vote Smart's 12h (MEASURE_CACHE_TTL_HOURS in
@@ -121,7 +166,15 @@ async def fetch_state_measures_pdf(
     if cached is not None:
         return cached.get("measures")
 
-    url = source["url_pattern"].format(year=year)
+    if "landing_page_url" in source:
+        url = await discover_pdf_url(
+            client, source["landing_page_url"], year, source.get("keyword"),
+        )
+        if url is None:
+            logger.warning("Could not discover current ballot measure PDF for %s %d", state, year)
+            return None
+    else:
+        url = source["url_pattern"].format(year=year)
     try:
         response = await client.get(url, timeout=60.0)
         response.raise_for_status()
