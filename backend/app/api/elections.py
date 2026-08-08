@@ -93,20 +93,38 @@ def _race_summary(race: Race, state_pvi: dict, district_pvi: dict) -> dict:
     }
 
 
-def _incumbent_link(cand: Candidate, race: Race, db: Session) -> dict | None:
+def _last_name_matches(last_name: str, full_name: str) -> bool:
+    """True if `last_name` (FEC's — possibly multi-word, e.g. "van
+    hollen") exactly matches the TRAILING tokens of `full_name`.
+    Deliberately token-exact rather than a raw substring check: a
+    substring match would let "lee" match "leeman" by coincidence,
+    which is exactly the kind of wrong-person attribution
+    _incumbent_link's docstring warns against. Token-trailing (not
+    single-last-token) so multi-word surnames like "Van Hollen" still
+    match against a full name of "Chris Van Hollen"."""
+    cand_tokens = last_name.split()
+    name_tokens = full_name.lower().split()
+    return bool(cand_tokens) and name_tokens[-len(cand_tokens):] == cand_tokens
+
+
+def _incumbent_link(
+    cand: Candidate, race: Race, reps_by_district: dict[int, Representative], senators: list[Senator],
+) -> dict | None:
     """{id, score} for this candidate's matching Senator/Representative
     scorecard row, or None — only ever populated for a real, uniquely-
     identified match; never a guess (a wrong match here would attribute
     one member's voting record to a different person on the ballot).
 
-    House matches on the exact (state, district) key — no ambiguity
-    possible, since a district has exactly one representative. Senate
-    has no seat-class field to key on (Senator only stores `state`, and
-    a state has two), so it matches on state + last name, checked
-    UNIQUE within that state's sitting senators before trusting it —
-    the only real disambiguator available given the schema, and safe
-    because two senators from the same state sharing a last name is not
-    a real scenario this needs to handle "close enough".
+    House matches on the exact (state, district) key via `reps_by_district`
+    — no ambiguity possible, since a district has exactly one
+    representative. Senate has no seat-class field to key on (Senator only
+    stores `state`, and a state has two), so it matches on state + last
+    name against `senators` (pre-filtered to this race's state), checked
+    UNIQUE before trusting it — the only real disambiguator available
+    given the schema, and safe because two senators from the same state
+    sharing a last name is not a real scenario this needs to handle
+    "close enough". Both lookups are precomputed once per state_ballot
+    call (not queried per-candidate here) — see that function.
     """
     if cand.incumbent_challenge != "I":
         return None
@@ -117,26 +135,22 @@ def _incumbent_link(cand: Candidate, race: Race, db: Session) -> dict | None:
         return None
 
     if race.office == "H":
-        rep = (
-            db.query(Representative)
-            .filter(Representative.state == race.state, Representative.district == (race.district or 0))
-            .first()
-        )
-        if rep and last_name in rep.name.lower():
+        rep = reps_by_district.get(race.district or 0)
+        if rep and _last_name_matches(last_name, rep.name):
             return {"id": rep.id, "score": compute_overall_score(rep)}
         return None
 
     if race.office == "S":
-        matches = [
-            s for s in db.query(Senator).filter(Senator.state == race.state, Senator.is_current).all()
-            if last_name in s.name.lower()
-        ]
+        matches = [s for s in senators if _last_name_matches(last_name, s.name)]
         if len(matches) == 1:
             return {"id": matches[0].id, "score": compute_overall_score(matches[0])}
     return None
 
 
-def _race_full(race: Race, state_pvi: dict, district_pvi: dict, db: Session) -> dict:
+def _race_full(
+    race: Race, state_pvi: dict, district_pvi: dict,
+    reps_by_district: dict[int, Representative], senators: list[Senator],
+) -> dict:
     """Same shape as race_detail's response, minus coverage — this backs
     the per-state ballot view, which needs every candidate (not just the
     top-2-by-funds _race_summary uses for the map/directory) but not the
@@ -154,7 +168,7 @@ def _race_full(race: Race, state_pvi: dict, district_pvi: dict, db: Session) -> 
         "pvi": pvi,
         "pviLevel": pvi_level,
         "candidates": [
-            {**_candidate_summary(c), "incumbentRecord": _incumbent_link(c, race, db)}
+            {**_candidate_summary(c), "incumbentRecord": _incumbent_link(c, race, reps_by_district, senators)}
             for c in candidates
         ],
     }
@@ -178,7 +192,16 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
     )
     state_pvi = get_state_pvi_map()
     district_pvi = get_district_pvi_map()
-    full = [_race_full(r, state_pvi, district_pvi, db) for r in races]
+    # Fetched once per request, not once per incumbent candidate — a
+    # state can have up to ~50 House races, and querying Representative/
+    # Senator inside _incumbent_link per candidate would be exactly the
+    # N+1 shape the .candidates selectinload above already exists to
+    # avoid for a different relationship.
+    reps_by_district = {
+        r.district: r for r in db.query(Representative).filter(Representative.state == state).all()
+    }
+    senators = db.query(Senator).filter(Senator.state == state, Senator.is_current).all()
+    full = [_race_full(r, state_pvi, district_pvi, reps_by_district, senators) for r in races]
     senate_races = [r for r in full if r["office"] == "S"]
     house_races = sorted(
         (r for r in full if r["office"] == "H"),

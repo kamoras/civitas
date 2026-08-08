@@ -200,6 +200,78 @@ class TestIncumbentRecordLink:
         data = _body(elections.state_ballot("GA", db_session))
         assert data["senateRaces"][0]["candidates"][0]["incumbentRecord"] is None
 
+    def test_senate_last_name_match_is_token_exact_not_substring(self, db_session):
+        """A candidate's last name being a SUBSTRING of an unrelated
+        senator's name must not count as a match — "lee" inside
+        "leeman" is coincidence, not identity. Real regression this
+        guards: an earlier version used `last_name in name.lower()`."""
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "S1", "2026-SEN-GA", "LEE, JANE", incumbent_challenge="I")
+        _senator(db_session, "SEN-1", "Robert Leeman", "GA")
+        db_session.commit()
+
+        data = _body(elections.state_ballot("GA", db_session))
+        assert data["senateRaces"][0]["candidates"][0]["incumbentRecord"] is None
+
+    def test_senate_multi_word_last_name_still_matches(self, db_session):
+        """The token-exact match must still handle a multi-word surname
+        like "Van Hollen" — this is exactly why the fix matches
+        TRAILING tokens rather than just the single last word."""
+        _race(db_session, "2026-SEN-MD", "MD")
+        _candidate(db_session, "S1", "2026-SEN-MD", "VAN HOLLEN, CHRIS", incumbent_challenge="I")
+        _senator(db_session, "SEN-VH", "Chris Van Hollen", "MD")
+        db_session.commit()
+
+        data = _body(elections.state_ballot("MD", db_session))
+        assert data["senateRaces"][0]["candidates"][0]["incumbentRecord"]["id"] == "SEN-VH"
+
+    def test_house_incumbent_matching_also_uses_token_exact_match(self, db_session):
+        """Same substring-coincidence guard applies to the House path."""
+        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+        _candidate(db_session, "H1", "2026-HOUSE-GA-6", "LEE, JANE", incumbent_challenge="I")
+        _representative(db_session, "R-1", "Robert Leeman", "GA", 6)
+        db_session.commit()
+
+        data = _body(elections.state_ballot("GA", db_session))
+        assert data["houseRaces"][0]["candidates"][0]["incumbentRecord"] is None
+
+    def test_incumbent_matching_does_not_query_per_candidate(self, db_session, monkeypatch):
+        """Representative/Senator must be fetched once per request, not
+        once per incumbent — a state can have ~50 House races, and
+        querying inside the per-candidate loop would be exactly the N+1
+        shape .candidates' selectinload already exists to avoid for a
+        different relationship. Regression test for that fix."""
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "S1", "2026-SEN-GA", "OSSOFF, JON", incumbent_challenge="I")
+        _senator(db_session, "SEN-OSSOFF", "Jon Ossoff", "GA")
+        for d in range(1, 4):
+            rid = f"2026-HOUSE-GA-{d}"
+            _race(db_session, rid, "GA", office="H", district=d)
+            _candidate(db_session, f"H{d}", rid, f"REP{d}, PAT", incumbent_challenge="I")
+            _representative(db_session, f"R-{d}", f"Pat Rep{d}", "GA", d)
+        db_session.commit()
+
+        query_counts: dict[str, int] = {"Representative": 0, "Senator": 0}
+        original_query = db_session.query
+
+        def counting_query(*args, **kwargs):
+            for arg in args:
+                name = getattr(arg, "__name__", None)
+                if name in query_counts:
+                    query_counts[name] += 1
+            return original_query(*args, **kwargs)
+
+        monkeypatch.setattr(db_session, "query", counting_query)
+        data = _body(elections.state_ballot("GA", db_session))
+
+        assert query_counts["Representative"] == 1
+        assert query_counts["Senator"] == 1
+        # Sanity: the batched lookups still produced correct matches.
+        assert data["senateRaces"][0]["candidates"][0]["incumbentRecord"]["id"] == "SEN-OSSOFF"
+        assert all(
+            r["candidates"][0]["incumbentRecord"] is not None for r in data["houseRaces"]
+        )
+
     def test_incumbent_score_matches_the_shared_compute_overall_score_formula(self, db_session):
         """Not a separately-derived number — the exact same formula the
         leaderboard and profile page use, so a score can't read
