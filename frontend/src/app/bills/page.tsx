@@ -41,9 +41,7 @@ function BillsPageContent() {
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => setDebouncedSearch(search), 300);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [search]);
 
   // The stage-flow funnel is a global overview of the whole pipeline,
@@ -52,13 +50,9 @@ function BillsPageContent() {
   useEffect(() => {
     let cancelled = false;
     fetchBillsInFlight({ sort: "recent", page: 1, perPage: 1 })
-      .then((res) => {
-        if (!cancelled) setStageCounts(res.stageCounts);
-      })
+      .then((res) => { if (!cancelled) setStageCounts(res.stageCounts); })
       .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   const chamberParam = chamber === "all" ? undefined : chamber;
@@ -79,6 +73,7 @@ function BillsPageContent() {
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
         <div className="max-w-6xl mx-auto">
+
           <div className="text-center mb-8">
             <GlitchText
               as="h1"
@@ -124,7 +119,11 @@ function BillsPageContent() {
 
           <TerminalTitlebar title="bill_pipeline.dat" />
           <div className="border border-t-0 border-matrix-green/20 bg-crt-black/40 p-4 mb-6">
-            <BillStageFlow stageCounts={stageCounts} activeStage={stage} onSelectStage={setStage} />
+            <BillStageFlow
+              stageCounts={stageCounts}
+              activeStage={stage}
+              onSelectStage={setStage}
+            />
 
             <div className="flex flex-wrap gap-3 items-center mt-5 pt-4 border-t border-matrix-green/10">
               <input
@@ -169,12 +168,7 @@ function BillsPageContent() {
 
               {(stage || chamber !== "all" || party !== "ALL" || search) && (
                 <button
-                  onClick={() => {
-                    setStage(null);
-                    setChamber("all");
-                    setParty("ALL");
-                    setSearch("");
-                  }}
+                  onClick={() => { setStage(null); setChamber("all"); setParty("ALL"); setSearch(""); }}
                   className="font-mono text-[9px] text-matrix-green/30 hover:text-matrix-green/60 transition-colors tracking-widest"
                 >
                   CLEAR
@@ -192,16 +186,11 @@ function BillsPageContent() {
               onViewAll={() => setMode("all")}
             />
           ) : stage ? (
-            <BillStageGroup
-              stageCode={stage}
-              chamber={chamberParam}
-              party={partyParam}
-              q={qParam}
-              forceExpanded
-            />
+            <BillStageGroup stageCode={stage} chamber={chamberParam} party={partyParam} q={qParam} forceExpanded />
           ) : (
             <AllBillsGroups chamber={chamberParam} party={partyParam} q={qParam} />
           )}
+
         </div>
       </main>
       <BackToTop />
@@ -219,9 +208,7 @@ export default function BillsPage() {
 }
 
 function AllBillsGroups({
-  chamber,
-  party,
-  q,
+  chamber, party, q,
 }: {
   chamber?: "senate" | "house";
   party?: "D" | "R" | "I";
@@ -231,23 +218,15 @@ function AllBillsGroups({
   // already reflects the chamber/party/q filters server-side, so the
   // groups no longer each probe for their own count (which used to fan
   // out ~8 parallel requests per filter change).
-  const [stageTotals, setStageTotals] = useState<Record<string, number> | "loading" | "error">(
-    "loading"
-  );
+  const [stageTotals, setStageTotals] = useState<Record<string, number> | "loading" | "error">("loading");
 
   useEffect(() => {
     let cancelled = false;
     setStageTotals("loading");
     fetchBillsInFlight({ chamber, party, q, sort: "recent", page: 1, perPage: 1 })
-      .then((res) => {
-        if (!cancelled) setStageTotals(res.stageCounts);
-      })
-      .catch(() => {
-        if (!cancelled) setStageTotals("error");
-      }); // fail open — groups fall back to probing their own counts
-    return () => {
-      cancelled = true;
-    };
+      .then((res) => { if (!cancelled) setStageTotals(res.stageCounts); })
+      .catch(() => { if (!cancelled) setStageTotals("error"); }); // fail open — groups fall back to probing their own counts
+    return () => { cancelled = true; };
   }, [chamber, party, q]);
 
   if (stageTotals === "loading") {
@@ -282,11 +261,7 @@ function AllBillsGroups({
 }
 
 function HotBillsList({
-  stage,
-  chamber,
-  party,
-  q,
-  onViewAll,
+  stage, chamber, party, q, onViewAll,
 }: {
   stage: string | null;
   chamber?: "senate" | "house";
@@ -302,25 +277,14 @@ function HotBillsList({
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setPage(1);
-  }, [stage, chamber, party, q]);
+  useEffect(() => { setPage(1); }, [stage, chamber, party, q]);
 
   useEffect(() => {
     let cancelled = false;
     const isFirstPage = page === 1;
-    if (isFirstPage) setLoading(true);
-    else setLoadingMore(true);
+    if (isFirstPage) setLoading(true); else setLoadingMore(true);
 
-    fetchBillsInFlight({
-      stage: stage ?? undefined,
-      chamber,
-      party,
-      q,
-      sort: "hot",
-      page,
-      perPage: PER_PAGE,
-    })
+    fetchBillsInFlight({ stage: stage ?? undefined, chamber, party, q, sort: "hot", page, perPage: PER_PAGE })
       .then((res) => {
         if (cancelled) return;
         setResults((prev) => (isFirstPage ? res.bills : [...prev, ...res.bills]));
@@ -328,19 +292,10 @@ function HotBillsList({
         setTotalPages(res.totalPages);
         setError(null);
       })
-      .catch((err) => {
-        if (!cancelled) setError(err.message || "Failed to load bills");
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-          setLoadingMore(false);
-        }
-      });
+      .catch((err) => { if (!cancelled) setError(err.message || "Failed to load bills"); })
+      .finally(() => { if (!cancelled) { setLoading(false); setLoadingMore(false); } });
 
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [stage, chamber, party, q, page]);
 
   if (loading) {
@@ -357,10 +312,7 @@ function HotBillsList({
     return (
       <div className="text-center py-16 font-mono text-xs text-matrix-green/30 tracking-widest space-y-3">
         <p>NOTHING CURRENTLY TRENDING IN ACTION CENTER FOR THIS FILTER</p>
-        <button
-          onClick={onViewAll}
-          className="font-mono text-[10px] text-neon-cyan hover:underline tracking-widest"
-        >
+        <button onClick={onViewAll} className="font-mono text-[10px] text-neon-cyan hover:underline tracking-widest">
           VIEW ALL BILLS INSTEAD
         </button>
       </div>
@@ -370,8 +322,7 @@ function HotBillsList({
   return (
     <>
       <p className="font-mono text-[10px] text-matrix-green/30 mb-3 tracking-widest">
-        SHOWING {results.length.toLocaleString()} OF {total.toLocaleString()} BILL
-        {total !== 1 ? "S" : ""}
+        SHOWING {results.length.toLocaleString()} OF {total.toLocaleString()} BILL{total !== 1 ? "S" : ""}
       </p>
       <div className="border border-matrix-green/10 divide-y divide-matrix-green/10">
         {results.map((bill) => (
@@ -386,9 +337,7 @@ function HotBillsList({
             disabled={loadingMore}
             className="font-mono text-[10px] tracking-widest px-4 py-2 border border-matrix-green/20 text-matrix-green/60 hover:text-matrix-green hover:border-matrix-green/40 disabled:opacity-40 disabled:cursor-wait transition-colors"
           >
-            {loadingMore
-              ? "LOADING..."
-              : `LOAD MORE (${(total - results.length).toLocaleString()} REMAINING)`}
+            {loadingMore ? "LOADING..." : `LOAD MORE (${(total - results.length).toLocaleString()} REMAINING)`}
           </button>
         </div>
       )}
