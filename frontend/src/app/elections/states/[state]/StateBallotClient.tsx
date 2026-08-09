@@ -107,9 +107,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
               {ballot.statePvi !== null && (
                 <p className={`font-pixel text-sm mt-2 ${pviColor(ballot.statePvi)}`}>
                   {formatPvi(ballot.statePvi)}{" "}
-                  <span className="font-mono text-[10px] text-matrix-green/40">
-                    statewide lean
-                  </span>
+                  <span className="font-mono text-[10px] text-matrix-green/40">statewide lean</span>
                 </p>
               )}
             </div>
@@ -121,10 +119,10 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                 THIS IS NOT YOUR FULL BALLOT
               </h2>
               <p className="text-xs text-matrix-green/70">
-                This page shows federal races only — U.S. Senate and House. Ballots are printed
-                per precinct, so state and local races, ballot questions, and judicial retention
-                votes are not shown here. Check with your local election office for everything
-                else on your ballot.
+                This page shows federal races only — U.S. Senate and House. Ballots are printed per
+                precinct, so state and local races, ballot questions, and judicial retention votes
+                are not shown here. Check with your local election office for everything else on
+                your ballot.
               </p>
             </div>
           </section>

@@ -62,7 +62,6 @@ export function districtCountiesLabel(counties: string[] | null, max = 3): strin
   return `${short.slice(0, max).join(", ")} & ${short.length - max} more`;
 }
 
-
 /** Parses an ISO-8601 timestamp, treating an offset-less string as UTC —
  * `new Date("2026-07-04T12:00:00")` would otherwise parse as viewer-local
  * time (repo precedent: admin/page.tsx's `new Date(startIso + "Z")`).

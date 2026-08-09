@@ -14,6 +14,11 @@ import { formatPvi, pviColor } from "@/lib/elections";
 import { fetchPviMap } from "@/lib/api";
 import type { PviMap } from "@/types/election";
 
+// Flat, unchanging fill — no hover-brighten variant — so DC reads as
+// visibly non-interactive rather than inviting a click that silently
+// does nothing (see onStateClick below).
+const DC_FILL = "rgba(255, 255, 255, 0.06)";
+
 function pviFillColor(pvi: number | null): string {
   if (pvi == null) return "rgba(0, 255, 65, 0.15)";
   if (pvi === 0) return "rgba(255, 255, 255, 0.2)";
@@ -111,8 +116,12 @@ export default function ElectionsPage() {
                   onStateClick={(state) => {
                     if (state !== "DC") goToBallot(state);
                   }}
-                  getFillColor={(state) => pviFillColor(pvi.states[state] ?? null)}
-                  getHoverFillColor={(state) => pviHoverColor(pvi.states[state] ?? null)}
+                  getFillColor={(state) =>
+                    state === "DC" ? DC_FILL : pviFillColor(pvi.states[state] ?? null)
+                  }
+                  getHoverFillColor={(state) =>
+                    state === "DC" ? DC_FILL : pviHoverColor(pvi.states[state] ?? null)
+                  }
                 />
                 <PviMethodologyNote meta={pvi.meta} />
               </div>
@@ -126,7 +135,9 @@ export default function ElectionsPage() {
                     className="flex items-center justify-between border border-matrix-green/20 bg-terminal-bg/50 px-3 py-2 hover:border-neon-cyan/40 transition-colors"
                   >
                     <span className="font-pixel text-xs text-white/90">{state}</span>
-                    <span className={`font-pixel text-[9px] ${pviColor(pvi.states[state] ?? null)}`}>
+                    <span
+                      className={`font-pixel text-[9px] ${pviColor(pvi.states[state] ?? null)}`}
+                    >
                       {formatPvi(pvi.states[state] ?? null)}
                     </span>
                   </Link>
