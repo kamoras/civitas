@@ -129,6 +129,41 @@ def test_state_pvi_is_included_at_top_level(db_session):
     assert isinstance(data["statePvi"], int)
 
 
+def test_house_race_includes_its_district_counties(db_session):
+    """Lets a voter who knows their county but not their district number
+    recognize their district in the picker (real Census-sourced data —
+    see county_district_crosswalk.json)."""
+    _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+    db_session.commit()
+
+    data = _body(elections.state_ballot("GA", db_session))
+    counties = data["houseRaces"][0]["counties"]
+    assert counties
+    assert all("County" in c or "(part)" in c for c in counties)
+
+
+def test_senate_race_has_no_counties_field_populated(db_session):
+    """Counties are a House-district concept — a statewide Senate race
+    must not claim a county list."""
+    _race(db_session, "2026-SEN-GA", "GA")
+    db_session.commit()
+
+    data = _body(elections.state_ballot("GA", db_session))
+    assert data["senateRaces"][0]["counties"] is None
+
+
+def test_house_race_with_no_crosswalk_entry_gets_null_counties(db_session):
+    """A district number outside the real 1..N range for that state
+    (bad data, not a real district) must not silently return an empty or
+    wrong county list — null, same never-guess discipline as PVI
+    fallback."""
+    _race(db_session, "2026-HOUSE-GA-99", "GA", office="H", district=99)
+    db_session.commit()
+
+    data = _body(elections.state_ballot("GA", db_session))
+    assert data["houseRaces"][0]["counties"] is None
+
+
 class TestIncumbentRecordLink:
     """The wrong match here would attribute one member's voting record
     to a different person on the ballot — every case here is either a

@@ -8,7 +8,7 @@ import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import BallotRaceOptions from "@/components/elections/BallotRaceOptions";
-import { formatPvi, pviColor, raceShortLabel } from "@/lib/elections";
+import { districtCountiesLabel, formatPvi, pviColor, raceShortLabel } from "@/lib/elections";
 import type { StateBallot } from "@/types/election";
 
 function HouseSection({ houseRaces }: { houseRaces: StateBallot["houseRaces"] }) {
@@ -46,11 +46,15 @@ function HouseSection({ houseRaces }: { houseRaces: StateBallot["houseRaces"] })
           aria-label="Select your district"
         >
           <option value="">— select your district —</option>
-          {houseRaces.map((r) => (
-            <option key={r.id} value={r.id}>
-              {raceShortLabel(r)}
-            </option>
-          ))}
+          {houseRaces.map((r) => {
+            const countiesLabel = districtCountiesLabel(r.counties);
+            return (
+              <option key={r.id} value={r.id}>
+                {raceShortLabel(r)}
+                {countiesLabel ? ` — ${countiesLabel}` : ""}
+              </option>
+            );
+          })}
         </select>
 
         {selected && (
@@ -64,6 +68,11 @@ function HouseSection({ houseRaces }: { houseRaces: StateBallot["houseRaces"] })
                 )}
               </span>
             </div>
+            {selected.counties && (
+              <p className="text-[11px] text-matrix-green/40 mb-3">
+                Covers: {selected.counties.join(", ")}
+              </p>
+            )}
             <BallotRaceOptions race={selected} />
           </div>
         )}
@@ -98,9 +107,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
               {ballot.statePvi !== null && (
                 <p className={`font-pixel text-sm mt-2 ${pviColor(ballot.statePvi)}`}>
                   {formatPvi(ballot.statePvi)}{" "}
-                  <span className="font-mono text-[10px] text-matrix-green/40">
-                    statewide lean
-                  </span>
+                  <span className="font-mono text-[10px] text-matrix-green/40">statewide lean</span>
                 </p>
               )}
             </div>
@@ -112,10 +119,10 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                 THIS IS NOT YOUR FULL BALLOT
               </h2>
               <p className="text-xs text-matrix-green/70">
-                This page shows federal races only — U.S. Senate and House. Ballots are printed
-                per precinct, so state and local races, ballot questions, and judicial retention
-                votes are not shown here. Check with your local election office for everything
-                else on your ballot.
+                This page shows federal races only — U.S. Senate and House. Ballots are printed per
+                precinct, so state and local races, ballot questions, and judicial retention votes
+                are not shown here. Check with your local election office for everything else on
+                your ballot.
               </p>
             </div>
           </section>

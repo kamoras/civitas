@@ -48,13 +48,18 @@ export function raceTitleLabel(race: RaceLike): string {
   return `${race.state}-${districtToken(race.district)} House`;
 }
 
-/** Race-grid sort: state A→Z, Senate before House within a state, then
- * district ascending (at-large 0 first; Senate's null district never
- * competes with House numbers because office sorts first). */
-export function compareRaces(a: RaceLike, b: RaceLike): number {
-  if (a.state !== b.state) return a.state < b.state ? -1 : 1;
-  if (a.office !== b.office) return a.office === "S" ? -1 : 1;
-  return (a.district ?? -1) - (b.district ?? -1);
+/** "Rockdale, Newton, DeKalb (part) & 2 more" — a short, scannable hint
+ * for a district picker, for a voter who knows their county but not
+ * their district number. Drops the generic " County" suffix (kept for
+ * Louisiana's "Parish"/Alaska's "Borough"/Virginia's "city" etc., which
+ * carry real information); "(part)" is left as-is since it means that
+ * county is split across districts. Null in, null out — a district
+ * missing from the crosswalk stays unlabeled, never a guessed list. */
+export function districtCountiesLabel(counties: string[] | null, max = 3): string | null {
+  if (!counties || counties.length === 0) return null;
+  const short = counties.map((c) => c.replace(/ County\b/, ""));
+  if (short.length <= max) return short.join(", ");
+  return `${short.slice(0, max).join(", ")} & ${short.length - max} more`;
 }
 
 /** Parses an ISO-8601 timestamp, treating an offset-less string as UTC —

@@ -152,3 +152,12 @@ class TestPviMap:
         assert "states" in meta
         assert "districts" in meta
         assert "not" in meta["note"]  # the "measures lean, not who will win" caveat
+
+    def test_includes_cycle_year(self):
+        """Lets /elections's directory page get its header year from the
+        same fetch it already makes for map coloring, instead of a
+        second fetch of every race."""
+        from app.pipeline.election_pipeline import current_election_cycle
+
+        data = _body(elections.pvi_map())
+        assert data["cycleYear"] == current_election_cycle()
