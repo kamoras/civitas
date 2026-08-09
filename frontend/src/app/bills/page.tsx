@@ -83,6 +83,15 @@ function BillsPageContent() {
             <p className="font-mono text-xs text-matrix-green/40">
               WHERE {totalMoving.toLocaleString()} BILLS SIT IN THE LEGISLATIVE PIPELINE RIGHT NOW
             </p>
+            {/* Verified live (2026-08 review): this total is genuinely
+                correct — it's the pipeline breakdown below MINUS
+                Introduced and Referred — but without this line it reads
+                as a bug next to a "Referred to Committee" count in the
+                tens of thousands sitting directly below it. */}
+            <p className="font-mono text-xs text-matrix-green/25 mt-1">
+              Excludes bills only introduced or automatically referred to committee — nearly every
+              bill clears that step within days; this counts what&apos;s moved further.
+            </p>
           </div>
 
           <div className="flex justify-center gap-2 mb-4">

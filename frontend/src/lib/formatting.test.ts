@@ -29,6 +29,15 @@ describe("formatCurrency", () => {
   it("formats zero", () => {
     expect(formatCurrency(0)).toBe("$0");
   });
+
+  it("rounds sub-thousand cents rather than showing them raw", () => {
+    // Real FEC cash-on-hand figures carry cents; showing "$383.2" next
+    // to "$200" in the same list read as inconsistent/buggy, not as
+    // real precision (2026-08 review of live production data).
+    expect(formatCurrency(383.2)).toBe("$383");
+    expect(formatCurrency(944.54)).toBe("$945");
+    expect(formatCurrency(-781.22)).toBe("-$781");
+  });
 });
 
 describe("localDateStr", () => {
