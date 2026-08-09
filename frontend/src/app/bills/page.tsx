@@ -88,7 +88,7 @@ function BillsPageContent() {
                 Introduced and Referred — but without this line it reads
                 as a bug next to a "Referred to Committee" count in the
                 tens of thousands sitting directly below it. */}
-            <p className="font-mono text-[10px] text-matrix-green/25 mt-1">
+            <p className="font-mono text-xs text-matrix-green/25 mt-1">
               Excludes bills only introduced or automatically referred to committee — nearly every
               bill clears that step within days; this counts what&apos;s moved further.
             </p>
