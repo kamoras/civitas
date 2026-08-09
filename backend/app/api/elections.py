@@ -79,6 +79,19 @@ def _iso_utc(dt) -> str | None:
     return iso if ("+" in iso or iso.endswith("Z")) else iso + "Z"
 
 
+def _coverage_item(item: RaceCoverageItem) -> dict:
+    return {
+        "id": item.id,
+        "sourceType": item.source_type,
+        "sourceName": item.source_name,
+        "title": item.title,
+        "url": item.url,
+        "summary": item.summary,
+        "author": item.author,
+        "publishedAt": _iso_utc(item.published_at),
+    }
+
+
 def _candidate_summary(cand: Candidate) -> dict:
     return {
         "id": cand.id,
@@ -205,6 +218,55 @@ def _race_full(
     }
 
 
+# How many state-wide coverage items the ballot page's top-of-page teaser
+# shows. STATE_COVERAGE_QUERY_LIMIT is deliberately larger than this: a
+# state with many races can have the same story matched under more than
+# one race (see _state_coverage's dedup), so the raw query needs headroom
+# above the post-dedup count actually shown.
+STATE_COVERAGE_LIMIT = 20
+STATE_COVERAGE_QUERY_LIMIT = 100
+
+
+def _state_coverage(db: Session, races: list[Race]) -> list[dict]:
+    """Every race's coverage for this state, newest first, deduplicated
+    by URL and capped to STATE_COVERAGE_LIMIT — backs the ballot page's
+    top-of-page coverage feed (front and center, not one click away on a
+    per-race page, per 2026-08 review). A single story can match
+    candidates in two different races within the same state (e.g. an
+    article about both the Senate race and a House race) — the
+    RaceCoverageItem table's uniqueness is per (race_id, url), so the
+    same url can legitimately appear as separate rows across races;
+    deduped here so the reader doesn't see one headline twice. Each item
+    carries a `race` sub-object (id/office/district) so the frontend can
+    label which race it's about via the same raceShortLabel() every
+    other race label on this page already uses — not a second copy of
+    that formatting logic."""
+    races_by_id = {r.id: r for r in races}
+    if not races_by_id:
+        return []
+    rows = (
+        db.query(RaceCoverageItem)
+        .filter(RaceCoverageItem.race_id.in_(races_by_id.keys()))
+        .order_by(RaceCoverageItem.published_at.desc().nullslast(), RaceCoverageItem.fetched_at.desc())
+        .limit(STATE_COVERAGE_QUERY_LIMIT)
+        .all()
+    )
+    seen_urls: set[str] = set()
+    coverage = []
+    for item in rows:
+        if item.url in seen_urls:
+            continue
+        seen_urls.add(item.url)
+        race = races_by_id[item.race_id]
+        coverage.append({
+            **_coverage_item(item),
+            "race": {"id": race.id, "office": race.office, "district": race.district},
+        })
+        if len(coverage) >= STATE_COVERAGE_LIMIT:
+            break
+    return coverage
+
+
 @router.get("/states/{state}")
 def state_ballot(state: str, db: Session = Depends(get_db)):
     """Every federal (Senate + House) race on `state`'s ballot this
@@ -246,6 +308,7 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         "statePvi": state_pvi.get(state),
         "senateRaces": senate_races,
         "houseRaces": house_races,
+        "coverage": _state_coverage(db, races),
     }, max_age=CACHE_TTL_LIST_S)
 
 
@@ -320,19 +383,7 @@ def race_detail(race_id: str, db: Session = Depends(get_db)):
         "pvi": pvi,
         "pviLevel": pvi_level,
         "candidates": [_candidate_summary(c) for c in candidates],
-        "coverage": [
-            {
-                "id": item.id,
-                "sourceType": item.source_type,
-                "sourceName": item.source_name,
-                "title": item.title,
-                "url": item.url,
-                "summary": item.summary,
-                "author": item.author,
-                "publishedAt": _iso_utc(item.published_at),
-            }
-            for item in coverage
-        ],
+        "coverage": [_coverage_item(item) for item in coverage],
     }, max_age=CACHE_TTL_DETAIL_S)
 
 

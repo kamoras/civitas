@@ -58,6 +58,12 @@ export interface RaceCoverageItem {
   summary: string;
   author: string | null;
   publishedAt: string | null;
+  /** Which race this item is about — only populated on the state
+   * ballot's aggregated coverage feed (GET /elections/states/{state}),
+   * which spans every race in the state; a single-race feed like
+   * RaceDetail's doesn't need it since the page context already says
+   * which race. */
+  race?: { id: string; office: string; district: number | null };
 }
 
 export interface RaceDetail {
@@ -95,9 +101,10 @@ export interface BallotCandidate extends CandidateSummary {
 }
 
 /** One federal race with EVERY candidate — RaceDetail minus the
- * coverage feed, which stays one click away on the race-detail page.
- * Backs the ballot-centric per-state view (StateBallot below), which
- * must show every real option, not RaceSummary's top-2-by-funds. */
+ * coverage feed, which is aggregated separately across the whole state
+ * (StateBallot.coverage below) rather than repeated per-race. Backs the
+ * ballot-centric per-state view (StateBallot below), which must show
+ * every real option, not RaceSummary's top-2-by-funds. */
 export interface RaceWithCandidates {
   id: string;
   cycleYear: number;
@@ -130,6 +137,11 @@ export interface StateBallot {
   statePvi: number | null;
   senateRaces: RaceWithCandidates[];
   houseRaces: RaceWithCandidates[];
+  /** Every race's news/Bluesky coverage in this state, newest first,
+   * deduplicated by url and capped to a teaser count (see backend's
+   * _state_coverage) — shown front-and-center at the top of the ballot
+   * page rather than requiring a click into a specific race. */
+  coverage: RaceCoverageItem[];
 }
 
 /** Provenance block on the /pvi response. Optional end to end — older

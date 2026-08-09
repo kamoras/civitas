@@ -4,6 +4,7 @@ import {
   formatPvi,
   isActiveCandidate,
   parseUtc,
+  raceBadgeLabel,
   raceShortLabel,
   raceTitleLabel,
 } from "./elections";
@@ -40,6 +41,12 @@ describe("race labels", () => {
   it("does not conflate a null district (Senate) with at-large 0", () => {
     expect(raceShortLabel({ office: "H", state: "TX", district: null })).toBe("TX HOUSE");
     expect(raceShortLabel({ office: "H", state: "TX", district: 0 })).toBe("TX-AL");
+  });
+
+  it("raceBadgeLabel omits the state for a page already scoped to one", () => {
+    expect(raceBadgeLabel(senate)).toBe("SENATE");
+    expect(raceBadgeLabel(house)).toBe("HOUSE-7");
+    expect(raceBadgeLabel(atLarge)).toBe("HOUSE-AL");
   });
 });
 

@@ -3,12 +3,13 @@ view. Same direct-router-call convention as test_elections_api.py.
 """
 
 import json
+from datetime import datetime
 
 import pytest
 from fastapi import HTTPException
 
 from app.api import elections
-from app.models import Candidate, Race, Representative, Senator
+from app.models import Candidate, Race, RaceCoverageItem, Representative, Senator
 
 
 def _body(response):
@@ -19,6 +20,16 @@ def _race(db, race_id, state, office="S", district=None, cycle_year=2026):
     r = Race(id=race_id, cycle_year=cycle_year, office=office, state=state, district=district)
     db.add(r)
     return r
+
+
+def _coverage(db, race_id, url, **overrides):
+    defaults = dict(
+        source_type="news", source_name="AP News", title="A story", summary="Summary.",
+    )
+    defaults.update(overrides)
+    item = RaceCoverageItem(race_id=race_id, url=url, **defaults)
+    db.add(item)
+    return item
 
 
 def _candidate(db, cand_id, race_id, name, **overrides):
@@ -325,3 +336,77 @@ class TestIncumbentRecordLink:
         assert data["senateRaces"][0]["candidates"][0]["incumbentRecord"]["score"] == (
             compute_overall_score(senator)
         )
+
+
+class TestStateCoverage:
+    """Front-and-center top-of-page coverage teaser (2026-08 review: news
+    coverage and funding shouldn't require a click-through)."""
+
+    def test_aggregates_coverage_across_senate_and_house_races(self, db_session):
+        _race(db_session, "2026-SEN-GA", "GA", office="S")
+        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+        _coverage(db_session, "2026-SEN-GA", "https://apnews.com/senate-story", title="Senate race")
+        _coverage(db_session, "2026-HOUSE-GA-6", "https://apnews.com/house-story", title="House race")
+        db_session.commit()
+
+        data = _body(elections.state_ballot("GA", db_session))
+        urls = {item["url"] for item in data["coverage"]}
+        assert urls == {"https://apnews.com/senate-story", "https://apnews.com/house-story"}
+
+    def test_each_item_carries_which_race_its_about(self, db_session):
+        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+        _coverage(db_session, "2026-HOUSE-GA-6", "https://apnews.com/a")
+        db_session.commit()
+
+        data = _body(elections.state_ballot("GA", db_session))
+        assert data["coverage"][0]["race"] == {
+            "id": "2026-HOUSE-GA-6", "office": "H", "district": 6,
+        }
+
+    def test_deduplicates_the_same_story_matched_to_two_races(self, db_session):
+        """A single article can name candidates from two different races
+        in the same state (e.g. covers both the Senate and a House
+        race), producing two DB rows with the same url under different
+        race_ids — the reader must not see the same headline twice."""
+        _race(db_session, "2026-SEN-GA", "GA", office="S")
+        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+        _coverage(db_session, "2026-SEN-GA", "https://apnews.com/both-races")
+        _coverage(db_session, "2026-HOUSE-GA-6", "https://apnews.com/both-races")
+        db_session.commit()
+
+        data = _body(elections.state_ballot("GA", db_session))
+        assert len(data["coverage"]) == 1
+
+    def test_excludes_coverage_from_a_different_state(self, db_session):
+        _race(db_session, "2026-SEN-GA", "GA", office="S")
+        _race(db_session, "2026-SEN-CA", "CA", office="S")
+        _coverage(db_session, "2026-SEN-GA", "https://apnews.com/ga-story")
+        _coverage(db_session, "2026-SEN-CA", "https://apnews.com/ca-story")
+        db_session.commit()
+
+        data = _body(elections.state_ballot("GA", db_session))
+        assert [item["url"] for item in data["coverage"]] == ["https://apnews.com/ga-story"]
+
+    def test_empty_list_not_missing_key_when_no_coverage(self, db_session):
+        _race(db_session, "2026-SEN-GA", "GA")
+        db_session.commit()
+
+        data = _body(elections.state_ballot("GA", db_session))
+        assert data["coverage"] == []
+
+    def test_ordered_newest_first(self, db_session):
+        _race(db_session, "2026-SEN-GA", "GA")
+        _coverage(
+            db_session, "2026-SEN-GA", "https://apnews.com/older",
+            published_at=datetime(2026, 7, 1),
+        )
+        _coverage(
+            db_session, "2026-SEN-GA", "https://apnews.com/newer",
+            published_at=datetime(2026, 7, 20),
+        )
+        db_session.commit()
+
+        data = _body(elections.state_ballot("GA", db_session))
+        assert [item["url"] for item in data["coverage"]] == [
+            "https://apnews.com/newer", "https://apnews.com/older",
+        ]

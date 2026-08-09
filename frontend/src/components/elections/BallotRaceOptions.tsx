@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { isActiveCandidate } from "@/lib/elections";
+import { formatCurrency } from "@/lib/formatting";
 import { getScoreColor } from "@/lib/representation";
 import type { RaceWithCandidates } from "@/types/election";
 
@@ -26,9 +27,12 @@ function getPartyMeta(party: string) {
 }
 
 /** One race's candidates, presented as ballot choices — a marker, name,
- * and party, not the fundraising-focused CandidateCard. This page
- * answers "what are my options", not "who's raising the most money";
- * a link through to the existing race-detail page covers that. */
+ * party, and cash-on-hand, not the full fundraising-focused
+ * CandidateCard (raised total, FEC profile link, etc.). This page
+ * answers "what are my options", including the headline money figure,
+ * inline rather than behind a click (2026-08 review); the deeper
+ * financial history and per-race coverage archive stay one link away
+ * on race-detail. */
 export default function BallotRaceOptions({ race }: { race: RaceWithCandidates }) {
   const active = race.candidates.filter(isActiveCandidate);
   const otherCount = race.candidates.length - active.length;
@@ -62,6 +66,18 @@ export default function BallotRaceOptions({ race }: { race: RaceWithCandidates }
                 <span className={`text-[10px] font-pixel shrink-0 ${pm.color}`}>
                   {pm.label.toUpperCase()}
                 </span>
+                {/* Null lastFinancialsSync means "never synced", not
+                    "raised $0" — omit the figure entirely rather than
+                    show a number that reads as zero (same discipline
+                    CandidateCard's "AWAITING FEC SYNC" state applies). */}
+                {c.lastFinancialsSync && c.cashOnHand != null && (
+                  <span
+                    className="text-[10px] font-pixel shrink-0 text-white/60 tabular-nums"
+                    title={`Cash on hand as of ${c.lastFinancialsSync.slice(0, 10)}`}
+                  >
+                    {formatCurrency(c.cashOnHand)} CASH
+                  </span>
+                )}
                 {c.incumbentChallenge === "I" && (
                   <span className="text-[9px] font-pixel px-1.5 py-0.5 border border-matrix-green/20 text-matrix-green/50 shrink-0">
                     INCUMBENT
@@ -91,7 +107,7 @@ export default function BallotRaceOptions({ race }: { race: RaceWithCandidates }
         href={`/elections/${race.id}`}
         className="inline-block mt-3 text-[11px] text-neon-cyan/70 hover:text-neon-cyan transition-colors"
       >
-        View fundraising &amp; coverage for this race →
+        Full race detail &amp; fundraising history →
       </Link>
     </div>
   );
