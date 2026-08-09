@@ -8,6 +8,7 @@ import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import BallotRaceOptions from "@/components/elections/BallotRaceOptions";
+import CoverageFeed from "@/components/elections/CoverageFeed";
 import { districtCountiesLabel, formatPvi, pviColor, raceShortLabel } from "@/lib/elections";
 import type { StateBallot } from "@/types/election";
 
@@ -112,6 +113,21 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
               )}
             </div>
           </div>
+
+          {/* Front and center, not one click away on a per-race page —
+              a voter's first question is usually "what's being said
+              about my ballot", not just "who's on it" (2026-08 review). */}
+          <section className="terminal-window mb-6">
+            <TerminalTitlebar title="coverage.dat" />
+            <div className="p-6">
+              <h2 className="font-pixel text-xs text-matrix-green/50 mb-3">
+                NEWS COVERAGE — {ballot.state}
+              </h2>
+              <div className="max-h-[420px] overflow-y-auto pr-2">
+                <CoverageFeed items={ballot.coverage} />
+              </div>
+            </div>
+          </section>
 
           <section className="terminal-window mb-6 border-t-2 border-t-neon-cyan/40">
             <div className="p-5">

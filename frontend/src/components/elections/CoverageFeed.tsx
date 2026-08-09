@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { safeHref } from "@/lib/formatting";
-import { parseUtc } from "@/lib/elections";
+import { parseUtc, raceBadgeLabel } from "@/lib/elections";
 import type { RaceCoverageItem } from "@/types/election";
 
 const RECENT_THRESHOLD_MS = 24 * 60 * 60 * 1000;
@@ -78,6 +78,11 @@ export default function CoverageFeed({ items }: { items: RaceCoverageItem[] }) {
               <span className="text-[10px] text-matrix-green/30 font-pixel">
                 via {item.sourceName}
               </span>
+              {item.race && (
+                <span className="text-[9px] font-pixel px-1.5 py-0.5 border border-neon-cyan/20 text-neon-cyan/60">
+                  {raceBadgeLabel(item.race)}
+                </span>
+              )}
             </div>
             <p className="text-sm text-matrix-green/80 leading-relaxed mb-1">{item.summary}</p>
             {href ? (

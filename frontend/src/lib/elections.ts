@@ -48,6 +48,16 @@ export function raceTitleLabel(race: RaceLike): string {
   return `${race.state}-${districtToken(race.district)} House`;
 }
 
+/** Same idea as raceShortLabel but without the state prefix — "SENATE" /
+ * "HOUSE-7" / "HOUSE-AL" — for badges inside a page already scoped to
+ * one state (e.g. the state ballot's aggregated coverage feed), where
+ * repeating the state on every item would be redundant. */
+export function raceBadgeLabel(race: { office: string; district: number | null }): string {
+  if (race.office === "S") return "SENATE";
+  if (race.district == null) return "HOUSE";
+  return `HOUSE-${districtToken(race.district)}`;
+}
+
 /** "Rockdale, Newton, DeKalb (part) & 2 more" — a short, scannable hint
  * for a district picker, for a voter who knows their county but not
  * their district number. Drops the generic " County" suffix (kept for
