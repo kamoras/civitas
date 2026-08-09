@@ -37,7 +37,7 @@ export function localDateStr(d: Date = new Date()): string {
 export function formatUtcDate(
   dateStr: string,
   opts: Intl.DateTimeFormatOptions = { year: "numeric", month: "long", day: "numeric" },
-  locale?: string
+  locale?: string,
 ): string {
   if (!dateStr) return "";
   try {
@@ -64,7 +64,7 @@ export function formatWeekRange(startDate: string, endDate: string): string {
   const startFmt = start.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   const endFmt = end.toLocaleDateString(
     "en-US",
-    start.getMonth() === end.getMonth() ? { day: "numeric" } : { month: "short", day: "numeric" }
+    start.getMonth() === end.getMonth() ? { day: "numeric" } : { month: "short", day: "numeric" },
   );
   return `${startFmt}–${endFmt}, ${end.getFullYear()}`;
 }
