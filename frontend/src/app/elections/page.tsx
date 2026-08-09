@@ -1,19 +1,18 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import MatrixRain from "@/components/effects/MatrixRain";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import GlitchText from "@/components/effects/GlitchText";
 import Link from "next/link";
-import RaceMap from "@/components/elections/RaceMap";
-import RaceCard from "@/components/elections/RaceCard";
+import RaceMap, { FIPS_TO_STATE } from "@/components/elections/RaceMap";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
-import { compareRaces, formatPvi } from "@/lib/elections";
-import { fetchPviMap, fetchRaces } from "@/lib/api";
-import type { PviMap, RaceSummary } from "@/types/election";
+import { formatPvi, pviColor } from "@/lib/elections";
+import { fetchPviMap } from "@/lib/api";
+import type { PviMap } from "@/types/election";
 
 function pviFillColor(pvi: number | null): string {
   if (pvi == null) return "rgba(0, 255, 65, 0.15)";
@@ -27,62 +26,34 @@ function pviHoverColor(pvi: number | null): string {
   return pvi > 0 ? "rgba(255, 60, 60, 0.5)" : "rgba(60, 120, 255, 0.5)";
 }
 
-function ElectionsPageContent() {
+// DC has no voting House/Senate race (STATES_WITH_FEDERAL_RACES on the
+// backend excludes it the same way) even though it's clickable on the
+// map's SVG — filtered out of both the map's click target and the
+// directory grid rather than letting either lead to a 404.
+const STATES = Array.from(new Set(Object.values(FIPS_TO_STATE)))
+  .filter((s) => s !== "DC")
+  .sort();
+
+export default function ElectionsPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  // Derived from the URL (not one-shot useState) so the filter is
-  // shareable, back-button-able, and cross-navigation between
-  // /elections?state=GA and ?state=TX works.
-  const selectedState = searchParams.get("state") || null;
-  const setSelectedState = (state: string | null) => {
-    router.replace(state ? `/elections?state=${encodeURIComponent(state)}` : "/elections", {
-      scroll: false,
-    });
-  };
-  const [races, setRaces] = useState<RaceSummary[] | null>(null);
   const [pvi, setPvi] = useState<PviMap | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchRaces(), fetchPviMap()])
-      .then(([r, p]) => {
-        if (cancelled) return;
-        setRaces(r);
-        setPvi(p);
+    fetchPviMap()
+      .then((p) => {
+        if (!cancelled) setPvi(p);
       })
       .catch((err) => {
-        if (!cancelled) setError(err.message || "Failed to load races");
+        if (!cancelled) setError(err.message || "Failed to load election data");
       });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const filteredRaces = useMemo(() => {
-    if (!races) return [];
-    const list = selectedState ? races.filter((r) => r.state === selectedState) : races;
-    // State A→Z, Senate before House within a state, district ascending.
-    return list.slice().sort(compareRaces);
-  }, [races, selectedState]);
-
-  // Races are already sorted state-first, so a single pass groups them —
-  // 500+ flat cards was the reported source of confusion; state headers
-  // make the directory scannable without adding a new endpoint or dependency.
-  const groupedRaces = useMemo(() => {
-    const groups: { state: string; races: RaceSummary[] }[] = [];
-    for (const race of filteredRaces) {
-      const last = groups[groups.length - 1];
-      if (last && last.state === race.state) last.races.push(race);
-      else groups.push({ state: race.state, races: [race] });
-    }
-    return groups;
-  }, [filteredRaces]);
-
-  // cycleYear comes from already-fetched race data, not recomputed here —
-  // the backend (election_pipeline.current_election_cycle) is the source
-  // of truth for which cycle is "current".
-  const cycleYear = races?.[0]?.cycleYear;
+  const goToBallot = (state: string) => router.push(`/elections/states/${state}`);
 
   return (
     <div className="min-h-screen bg-crt-black text-matrix-green">
@@ -93,11 +64,11 @@ function ElectionsPageContent() {
           <div className="text-center mb-8">
             <GlitchText
               as="h1"
-              text={cycleYear ? `${cycleYear} MIDTERM ELECTIONS` : "MIDTERM ELECTIONS"}
+              text={pvi?.cycleYear ? `${pvi.cycleYear} MIDTERM ELECTIONS` : "MIDTERM ELECTIONS"}
               className="font-pixel text-xl sm:text-3xl text-matrix-green neon-green mb-2 block"
             />
             <p className="font-mono text-xs text-matrix-green/40">
-              EVERY SENATE AND HOUSE RACE — CANDIDATES, FUNDRAISING, AND LIVE COVERAGE
+              FIND YOUR STATE&apos;S BALLOT — CANDIDATES, PARTISAN LEAN, AND LIVE COVERAGE
             </p>
           </div>
 
@@ -105,17 +76,19 @@ function ElectionsPageContent() {
             <div className="text-center py-16 font-mono text-xs text-red-400/60">{error}</div>
           )}
 
-          {!error && !races && (
+          {!error && !pvi && (
             <div className="text-center py-16 font-mono text-xs text-matrix-green/30 tracking-widest animate-pulse">
               LOADING...
             </div>
           )}
 
-          {races && (
+          {pvi && (
             <>
               <div className="terminal-window p-4 mb-6">
                 <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                  <h3 className="font-pixel text-xs text-matrix-green/50">{">"} SELECT A STATE</h3>
+                  <h3 className="font-pixel text-xs text-matrix-green/50">
+                    {">"} CLICK A STATE FOR ITS BALLOT
+                  </h3>
                   <div className="flex items-center gap-3 flex-wrap">
                     <span className="flex items-center gap-1.5 text-[10px] text-matrix-green/40">
                       <span
@@ -134,58 +107,31 @@ function ElectionsPageContent() {
                   </div>
                 </div>
                 <RaceMap
-                  selectedState={selectedState}
-                  onStateClick={(state) => setSelectedState(selectedState === state ? null : state)}
-                  getFillColor={(state) => pviFillColor(pvi?.states[state] ?? null)}
-                  getHoverFillColor={(state) => pviHoverColor(pvi?.states[state] ?? null)}
+                  selectedState={null}
+                  onStateClick={(state) => {
+                    if (state !== "DC") goToBallot(state);
+                  }}
+                  getFillColor={(state) => pviFillColor(pvi.states[state] ?? null)}
+                  getHoverFillColor={(state) => pviHoverColor(pvi.states[state] ?? null)}
                 />
-                <PviMethodologyNote meta={pvi?.meta} />
+                <PviMethodologyNote meta={pvi.meta} />
               </div>
 
-              {selectedState && (
-                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                  <h2 className="font-pixel text-sm text-white/90">
-                    {selectedState} — {formatPvi(pvi?.states[selectedState] ?? null)}
-                  </h2>
-                  <div className="flex items-center gap-4">
-                    <Link
-                      href={`/elections/states/${selectedState}`}
-                      className="font-pixel text-[10px] px-2.5 py-1.5 border border-neon-cyan/40 text-neon-cyan/90 hover:bg-neon-cyan/10 transition-colors"
-                    >
-                      VIEW {selectedState}&apos;S BALLOT →
-                    </Link>
-                    <button
-                      onClick={() => setSelectedState(null)}
-                      className="font-mono text-[10px] text-matrix-green/50 hover:text-matrix-green tracking-widest"
-                    >
-                      CLEAR FILTER ✕
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {filteredRaces.length === 0 ? (
-                <div className="text-center py-16 font-mono text-xs text-matrix-green/30 tracking-widest">
-                  NO RACES ON RECORD FOR THIS STATE YET
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {groupedRaces.map((group) => (
-                    <div key={group.state}>
-                      {!selectedState && (
-                        <h3 className="font-pixel text-xs text-neon-cyan/60 mb-2 tracking-widest">
-                          {group.state}
-                        </h3>
-                      )}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {group.races.map((race) => (
-                          <RaceCard key={race.id} race={race} />
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <h2 className="font-pixel text-xs text-matrix-green/50 mb-3">{">"} ALL STATES</h2>
+              <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-2">
+                {STATES.map((state) => (
+                  <Link
+                    key={state}
+                    href={`/elections/states/${state}`}
+                    className="flex items-center justify-between border border-matrix-green/20 bg-terminal-bg/50 px-3 py-2 hover:border-neon-cyan/40 transition-colors"
+                  >
+                    <span className="font-pixel text-xs text-white/90">{state}</span>
+                    <span className={`font-pixel text-[9px] ${pviColor(pvi.states[state] ?? null)}`}>
+                      {formatPvi(pvi.states[state] ?? null)}
+                    </span>
+                  </Link>
+                ))}
+              </div>
             </>
           )}
         </div>
@@ -193,13 +139,5 @@ function ElectionsPageContent() {
       <BackToTop />
       <Footer />
     </div>
-  );
-}
-
-export default function ElectionsPage() {
-  return (
-    <Suspense fallback={null}>
-      <ElectionsPageContent />
-    </Suspense>
   );
 }

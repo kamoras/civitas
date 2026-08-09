@@ -3,7 +3,9 @@
 existing /action/elections endpoint (that endpoint is unchanged; this is
 a separate, fuller namespace for the new candidate-research feature)."""
 
+import json
 import logging
+import pathlib
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, selectinload
@@ -22,6 +24,30 @@ from app.pipeline.election_pipeline import STATES_WITH_FEDERAL_RACES, current_el
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
+
+_COUNTY_CROSSWALK_PATH = (
+    pathlib.Path(__file__).resolve().parent.parent / "data" / "county_district_crosswalk.json"
+)
+_district_counties_cache: dict[str, list[str]] | None = None
+
+
+def _district_counties() -> dict[str, list[str]]:
+    """"ST-N" -> sorted county names (a "(part)" suffix means that county
+    also has population in another district) — lets a voter who doesn't
+    know their district number recognize their county instead. District
+    boundaries only change after redistricting (once a decade), so this
+    is a static bundled file, not an auto-refreshed one like
+    district_pvi.json. Empty dict (never a guess) if the file is
+    missing."""
+    global _district_counties_cache
+    if _district_counties_cache is None:
+        try:
+            data = json.loads(_COUNTY_CROSSWALK_PATH.read_text())
+            _district_counties_cache = data["districts"]
+        except Exception:
+            logger.exception("county_district_crosswalk.json unavailable")
+            _district_counties_cache = {}
+    return _district_counties_cache
 
 router = APIRouter(prefix="/elections")
 
@@ -158,6 +184,10 @@ def _race_full(
     page."""
     candidates = sorted(race.candidates, key=lambda c: (c.cash_on_hand or 0.0), reverse=True)
     pvi, pvi_level = _pvi_for_race(race, state_pvi, district_pvi)
+    counties = None
+    if race.office == "H":
+        key = f"{race.state}-{race.district if race.district is not None else 0}"
+        counties = _district_counties().get(key)
     return {
         "id": race.id,
         "cycleYear": race.cycle_year,
@@ -167,6 +197,7 @@ def _race_full(
         "isSpecial": race.is_special,
         "pvi": pvi,
         "pviLevel": pvi_level,
+        "counties": counties,
         "candidates": [
             {**_candidate_summary(c), "incumbentRecord": _incumbent_link(c, race, reps_by_district, senators)}
             for c in candidates
@@ -250,6 +281,11 @@ def pvi_map():
             "states": get_state_pvi_map(),
             "districts": get_district_pvi_map(),
             "meta": get_pvi_meta(),
+            # Lets the /elections directory page show "{cycleYear} MIDTERM
+            # ELECTIONS" from the same fetch it already makes for map
+            # coloring, instead of a second fetch of every race just to
+            # read one field off the first result.
+            "cycleYear": current_election_cycle(),
         },
         max_age=CACHE_TTL_LIST_S,
     )

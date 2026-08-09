@@ -108,6 +108,13 @@ export interface RaceWithCandidates {
   pvi: number | null;
   /** See RaceSummary.pviLevel. */
   pviLevel: "district" | "state" | null;
+  /** House races only (null for Senate): this district's counties, from
+   * the Census Bureau's block-to-district assignment. A "(part)" suffix
+   * means that county also has population in another district. Lets a
+   * voter who knows their county but not their district number pick it
+   * out. Null (not []) if this district isn't in the bundled crosswalk —
+   * never a guess. */
+  counties: string[] | null;
   candidates: BallotCandidate[];
 }
 
@@ -142,4 +149,8 @@ export interface PviMap {
   districts: Record<string, number>;
   /** Methodology/provenance — treat as possibly missing. */
   meta?: PviMeta;
+  /** current_election_cycle() — same source of truth as every race's
+   * own cycleYear, included here so the /elections directory page can
+   * label its header from this one fetch. */
+  cycleYear?: number;
 }

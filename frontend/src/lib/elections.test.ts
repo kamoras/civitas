@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  compareRaces,
+  districtCountiesLabel,
   formatPvi,
   isActiveCandidate,
   parseUtc,
@@ -43,23 +43,29 @@ describe("race labels", () => {
   });
 });
 
-describe("compareRaces", () => {
-  it("sorts state A→Z, Senate before House, then district ascending", () => {
-    const races = [
-      { office: "H", state: "GA", district: 7 },
-      { office: "H", state: "AK", district: 0 },
-      { office: "S", state: "GA", district: null },
-      { office: "H", state: "GA", district: 2 },
-      { office: "S", state: "AK", district: null },
-    ];
-    const sorted = races.slice().sort(compareRaces);
-    expect(sorted).toEqual([
-      { office: "S", state: "AK", district: null },
-      { office: "H", state: "AK", district: 0 },
-      { office: "S", state: "GA", district: null },
-      { office: "H", state: "GA", district: 2 },
-      { office: "H", state: "GA", district: 7 },
-    ]);
+describe("districtCountiesLabel", () => {
+  it("returns null for null or empty input", () => {
+    expect(districtCountiesLabel(null)).toBeNull();
+    expect(districtCountiesLabel([])).toBeNull();
+  });
+
+  it("drops the generic County suffix but keeps Parish/Borough/city", () => {
+    expect(districtCountiesLabel(["Fulton County", "Orleans Parish", "Denali Borough"])).toBe(
+      "Fulton, Orleans Parish, Denali Borough"
+    );
+  });
+
+  it("keeps a (part) tag attached to its county", () => {
+    expect(districtCountiesLabel(["Fulton County (part)"])).toBe("Fulton (part)");
+  });
+
+  it("truncates long lists with a remainder count", () => {
+    const counties = ["A County", "B County", "C County", "D County", "E County"];
+    expect(districtCountiesLabel(counties, 3)).toBe("A, B, C & 2 more");
+  });
+
+  it("does not truncate when exactly at the max", () => {
+    expect(districtCountiesLabel(["A County", "B County"], 3)).toBe("A, B");
   });
 });
 
