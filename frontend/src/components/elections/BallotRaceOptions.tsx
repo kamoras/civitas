@@ -73,7 +73,11 @@ export default function BallotRaceOptions({ race }: { race: RaceWithCandidates }
                 {c.lastFinancialsSync && c.cashOnHand != null && (
                   <span
                     className="text-[10px] font-pixel shrink-0 text-white/60 tabular-nums"
-                    title={`Cash on hand as of ${c.lastFinancialsSync.slice(0, 10)}`}
+                    title={
+                      c.cashOnHand < 0
+                        ? `As of ${c.lastFinancialsSync.slice(0, 10)}: the campaign's debts exceed its cash on hand (real FEC data, not an error)`
+                        : `Cash on hand as of ${c.lastFinancialsSync.slice(0, 10)}`
+                    }
                   >
                     {formatCurrency(c.cashOnHand)} CASH
                   </span>
