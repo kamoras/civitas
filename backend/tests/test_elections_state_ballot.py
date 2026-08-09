@@ -377,6 +377,24 @@ class TestStateCoverage:
         data = _body(elections.state_ballot("GA", db_session))
         assert len(data["coverage"]) == 1
 
+    def test_deduplicated_story_picks_a_race_deterministically(self, db_session):
+        """The two rows for a deduplicated story share the same
+        published_at/fetched_at (same article, same ingest pass), so
+        which race's badge wins must not depend on undefined SQL tie-
+        break order — the `.id` tiebreaker makes it repeatable across
+        calls rather than however the DB happens to return tied rows."""
+        _race(db_session, "2026-SEN-GA", "GA", office="S")
+        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+        _coverage(db_session, "2026-SEN-GA", "https://apnews.com/both-races")
+        _coverage(db_session, "2026-HOUSE-GA-6", "https://apnews.com/both-races")
+        db_session.commit()
+
+        winners = {
+            _body(elections.state_ballot("GA", db_session))["coverage"][0]["race"]["id"]
+            for _ in range(5)
+        }
+        assert len(winners) == 1
+
     def test_excludes_coverage_from_a_different_state(self, db_session):
         _race(db_session, "2026-SEN-GA", "GA", office="S")
         _race(db_session, "2026-SEN-CA", "CA", office="S")

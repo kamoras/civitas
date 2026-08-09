@@ -238,16 +238,25 @@ def _state_coverage(db: Session, races: list[Race]) -> list[dict]:
     same url can legitimately appear as separate rows across races;
     deduped here so the reader doesn't see one headline twice. Each item
     carries a `race` sub-object (id/office/district) so the frontend can
-    label which race it's about via the same raceShortLabel() every
-    other race label on this page already uses — not a second copy of
-    that formatting logic."""
+    label which race it's about via lib/elections.ts's raceBadgeLabel()
+    — not a second copy of that formatting logic.
+
+    The two (or more) rows for a deduplicated story share the same
+    published_at/fetched_at (same article, ingested in the same pass),
+    so the `.id` tiebreaker decides — deterministically, not whichever
+    row SQL happens to return first for a tied sort key — which race's
+    badge is shown for it."""
     races_by_id = {r.id: r for r in races}
     if not races_by_id:
         return []
     rows = (
         db.query(RaceCoverageItem)
         .filter(RaceCoverageItem.race_id.in_(races_by_id.keys()))
-        .order_by(RaceCoverageItem.published_at.desc().nullslast(), RaceCoverageItem.fetched_at.desc())
+        .order_by(
+            RaceCoverageItem.published_at.desc().nullslast(),
+            RaceCoverageItem.fetched_at.desc(),
+            RaceCoverageItem.id.asc(),
+        )
         .limit(STATE_COVERAGE_QUERY_LIMIT)
         .all()
     )
