@@ -762,6 +762,24 @@ function LeaderboardContent() {
           <p className="text-matrix-green/50 text-lg">
             {branch === "house" ? "House members" : branch === "president" ? "Presidents" : branch === "scotus" ? "Justices" : "Senators"} ranked by constituent representation score
           </p>
+          {/* Verified live (2026-08 review): the top of this ranking
+              skews heavily Democratic — a real, honestly-disclosed
+              pattern (party-correlated funding behavior, not a
+              party term in the formula), but the explanation for it
+              lived only in About's much longer methodology essay with
+              no link from here. */}
+          {(branch === "senate" || branch === "house") && (
+            <p className="text-matrix-green/30 text-xs mt-2">
+              Why does one party tend to rank higher?{" "}
+              <Link
+                href="/about#known-limitations"
+                className="underline underline-offset-2 hover:text-matrix-green/60"
+              >
+                See the funding-behavior explanation
+              </Link>
+              .
+            </p>
+          )}
           <div className="ascii-divider mt-4 text-matrix-green/20" aria-hidden="true">
             {"═".repeat(60)}
           </div>
