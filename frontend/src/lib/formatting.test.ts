@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { formatCurrency, formatUtcDate, formatWeekRange, localDateStr, safeHref } from "./formatting";
+import {
+  formatCurrency,
+  formatUtcDate,
+  formatWeekRange,
+  localDateStr,
+  safeHref,
+} from "./formatting";
 
 describe("formatCurrency", () => {
   it("formats billions", () => {
@@ -29,6 +35,15 @@ describe("formatCurrency", () => {
   it("formats zero", () => {
     expect(formatCurrency(0)).toBe("$0");
   });
+
+  it("rounds sub-thousand cents rather than showing them raw", () => {
+    // Real FEC cash-on-hand figures carry cents; showing "$383.2" next
+    // to "$200" in the same list read as inconsistent/buggy, not as
+    // real precision (2026-08 review of live production data).
+    expect(formatCurrency(383.2)).toBe("$383");
+    expect(formatCurrency(944.54)).toBe("$945");
+    expect(formatCurrency(-781.22)).toBe("-$781");
+  });
 });
 
 describe("localDateStr", () => {
@@ -43,8 +58,9 @@ describe("localDateStr", () => {
 
 describe("formatUtcDate", () => {
   it("formats a date string using the given locale/options", () => {
-    expect(formatUtcDate("2026-07-04", { year: "numeric", month: "long", day: "numeric" }, "en-US"))
-      .toBe("July 4, 2026");
+    expect(
+      formatUtcDate("2026-07-04", { year: "numeric", month: "long", day: "numeric" }, "en-US")
+    ).toBe("July 4, 2026");
   });
 
   it("returns an empty string for an empty input", () => {
@@ -54,7 +70,11 @@ describe("formatUtcDate", () => {
   it("preserves the calendar date regardless of local timezone", () => {
     // Parsed as local noon specifically so a UTC-negative timezone can't
     // roll the date back to the previous day.
-    const result = formatUtcDate("2026-01-01", { year: "numeric", month: "numeric", day: "numeric" }, "en-US");
+    const result = formatUtcDate(
+      "2026-01-01",
+      { year: "numeric", month: "numeric", day: "numeric" },
+      "en-US"
+    );
     expect(result).toContain("2026");
     expect(result).toMatch(/1\/1\/2026|1\/1\/26/);
   });

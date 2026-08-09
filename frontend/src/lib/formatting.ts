@@ -14,7 +14,12 @@ export function formatCurrency(amount: number): string {
   if (abs >= 1_000) {
     return `${sign}$${(abs / 1_000).toFixed(0)}K`;
   }
-  return `${sign}$${abs.toLocaleString()}`;
+  // Rounded, not raw — FEC cash-on-hand figures carry cents (e.g.
+  // 383.2, 944.54), and every other tier above already drops sub-unit
+  // precision (a $1.2M figure doesn't show its cents either); showing
+  // "$383.2" vs "$200" side by side in the same list read as
+  // inconsistent/buggy rather than as real precision (2026-08 review).
+  return `${sign}$${Math.round(abs).toLocaleString()}`;
 }
 
 /** Returns the local date as "YYYY-MM-DD" — never UTC, so it matches the user's calendar. */
@@ -32,7 +37,7 @@ export function localDateStr(d: Date = new Date()): string {
 export function formatUtcDate(
   dateStr: string,
   opts: Intl.DateTimeFormatOptions = { year: "numeric", month: "long", day: "numeric" },
-  locale?: string,
+  locale?: string
 ): string {
   if (!dateStr) return "";
   try {
@@ -59,7 +64,7 @@ export function formatWeekRange(startDate: string, endDate: string): string {
   const startFmt = start.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   const endFmt = end.toLocaleDateString(
     "en-US",
-    start.getMonth() === end.getMonth() ? { day: "numeric" } : { month: "short", day: "numeric" },
+    start.getMonth() === end.getMonth() ? { day: "numeric" } : { month: "short", day: "numeric" }
   );
   return `${startFmt}–${endFmt}, ${end.getFullYear()}`;
 }
