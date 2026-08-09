@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cached_json
 from app.database import get_db
 from app.election_calendar import next_election_day
+from app.http_client import make_async_client
 from app.models import Candidate, Race, RaceCoverageItem, Representative, Senator
 from app.pipeline.analyze.score_calculator import (
     compute_overall_score,
@@ -194,8 +195,21 @@ def _race_full(
     the per-state ballot view, which needs every candidate (not just the
     top-2-by-funds _race_summary uses for the map/directory) but not the
     news feed, which stays one click away on the existing race-detail
-    page."""
-    candidates = sorted(race.candidates, key=lambda c: (c.cash_on_hand or 0.0), reverse=True)
+    page.
+
+    If a registered state source (state_candidate_sources.json /
+    state_candidates.py) has confirmed any candidate in this race as an
+    actual general-election nominee, ONLY confirmed candidates are shown
+    — an FEC filer who lost their primary/runoff isn't a real ballot
+    option (2026-08 fix: TX's Senate race listed 19 FEC filers as if all
+    still running, months after the real primary/runoff resolved). A
+    race with no confirmed data at all (not yet covered, or genuinely
+    pre-primary) falls back to every active FEC filer, unchanged from
+    before this existed."""
+    candidates = race.candidates
+    if any(c.confirmed_general for c in candidates):
+        candidates = [c for c in candidates if c.confirmed_general]
+    candidates = sorted(candidates, key=lambda c: (c.cash_on_hand or 0.0), reverse=True)
     pvi, pvi_level = _pvi_for_race(race, state_pvi, district_pvi)
     counties = None
     if race.office == "H":
@@ -415,3 +429,64 @@ def candidate_detail(candidate_id: str, db: Session = Depends(get_db)):
             "district": race.district,
         } if race else None,
     }, max_age=CACHE_TTL_DETAIL_S)
+
+
+_CENSUS_GEOCODER_URL = "https://geocoding.geo.census.gov/geocoder/geographies/onelineaddress"
+
+
+@router.get("/geocode")
+async def geocode_address(address: str):
+    """State + House district for a US mailing address, via the Census
+    Bureau's free, no-key geocoder — lets the ballot page auto-select a
+    visitor's district instead of requiring the manual dropdown (2026-08,
+    address collection scoped explicitly: optional, resolve-only, never
+    stored). The address is passed straight through to Census and never
+    logged, cached, or persisted here — only the resolved state/district
+    numbers are returned.
+
+    {"state": None, "district": None} for an address Census can't match
+    or that doesn't resolve to a congressional district (e.g. outside the
+    US) — never a guess. A malformed/empty address is a 400, not a
+    silent null result, so the frontend can tell "you typed something
+    Census rejected" apart from "a real address with no match"."""
+    address = (address or "").strip()
+    if not address:
+        raise HTTPException(status_code=400, detail="address is required")
+    if len(address) > 200:
+        raise HTTPException(status_code=400, detail="address is too long")
+
+    try:
+        async with make_async_client(timeout=15.0) as client:
+            response = await client.get(
+                _CENSUS_GEOCODER_URL,
+                params={
+                    "address": address,
+                    "benchmark": "Public_AR_Current",
+                    "vintage": "Current_Current",
+                    "layers": "54",
+                    "format": "json",
+                },
+            )
+            response.raise_for_status()
+            payload = response.json()
+    except Exception:
+        # Never log `address` itself (a real visitor-entered street
+        # address) — only that the lookup failed.
+        logger.exception("Census geocode lookup failed")
+        raise HTTPException(status_code=502, detail="Could not resolve that address right now.")
+
+    matches = (payload.get("result") or {}).get("addressMatches") or []
+    if not matches:
+        return {"state": None, "district": None}
+
+    match = matches[0]
+    state = (match.get("addressComponents") or {}).get("state")
+    districts = (match.get("geographies") or {}).get("119th Congressional Districts") or []
+    if not state or not districts:
+        return {"state": None, "district": None}
+
+    cd = districts[0].get("CD119")
+    if cd is None or not str(cd).isdigit():
+        return {"state": None, "district": None}
+
+    return {"state": state, "district": int(cd)}

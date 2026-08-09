@@ -1,0 +1,12 @@
+{
+  "_source": "Hand-verified during research: each state's own Secretary of State (or equivalent) official candidate database, checked directly (live network inspection of the real API/page, not scraped from a third party like Ballotpedia) for a machine-readable, no-key, official source that distinguishes a real confirmed general-election candidate from an FEC filer who lost their primary or runoff.",
+  "_method": "A state with no entry here is simply not yet covered — the ballot page falls back to its prior behavior (every active FEC filer shown) for that state, same as any other partial-coverage feature in this app (ballot measures, county-district crosswalk). This file only ever ADDS accuracy, never removes a state's chance at showing candidates.",
+  "_as_of": "2026-08-09",
+  "states": {
+    "TX": {
+      "source_name": "Texas Secretary of State (Civix Candidate Bio Portal)",
+      "strategy": "tx_civix",
+      "description": "Official statewide candidate database, verified live via network inspection (not scraping the rendered Angular SPA): GET .../getElectionsByYear/{year} to find the current cycle's 'GE' (General Election) id, then POST .../findQualifiedCandidates with that id. cdOfficeType='FD' isolates federal races; txOfficeName parses to office+district ('U. S. SENATOR' / 'U. S. REPRESENTATIVE DISTRICT N'); cdFilingStatus='CG' ('Candidate in the General Election') is the authoritative confirmed-nominee flag, verified against known-correct 2026 ground truth (Paxton beat Cornyn in the May runoff; Paxton alone carries CG, Cornyn is absent from the GE-scoped query entirely). No API key, no auth."
+    }
+  }
+}

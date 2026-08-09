@@ -708,6 +708,14 @@ class Candidate(Base):
     # Stored raw (source data, not a classification decision) — the API/
     # frontend use it to separate active candidates from paper filers.
     candidate_status: Mapped[str | None] = mapped_column(String(1), nullable=True)
+    # True only when a registered state source (state_candidate_sources.json
+    # / state_candidates.py — currently just TX) has confirmed this
+    # candidate is actually on the general-election ballot, not just an
+    # FEC filer. Only ever set True by a real match; never set False to
+    # mean "lost" — for a state/race with no coverage yet, or a candidate
+    # a source's data doesn't mention, this simply stays False, same
+    # never-fabricate discipline as cash_on_hand/last_financials_sync.
+    confirmed_general: Mapped[bool] = mapped_column(Boolean, default=False)
     # Watermark for the rotating per-candidate Bluesky coverage search
     # (election_coverage.py) — same bounded-batch design as
     # last_financials_sync for the FEC totals refresh.

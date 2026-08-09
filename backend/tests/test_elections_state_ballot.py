@@ -107,6 +107,38 @@ def test_candidate_list_is_not_truncated_to_top_two(db_session):
     assert len(data["senateRaces"][0]["candidates"]) == 5
 
 
+def test_confirmed_candidates_filter_out_defeated_primary_fec_filers(db_session):
+    """The real bug this fix addresses, verified live on production: TX's
+    2026 Senate race listed 8 Republicans + 6 Democrats as active ballot
+    options months after the actual primary/runoff had already resolved
+    to exactly one nominee per party. Once ANY candidate in a race is
+    confirmed_general, only confirmed candidates show — an unconfirmed
+    FEC filer (who may well have lost their primary) is not a real
+    ballot option."""
+    _race(db_session, "2026-SEN-GA", "GA")
+    _candidate(db_session, "WINNER", "2026-SEN-GA", "PAXTON, KEN", confirmed_general=True)
+    _candidate(db_session, "LOSER", "2026-SEN-GA", "CORNYN, JOHN", confirmed_general=False)
+    db_session.commit()
+
+    data = _body(elections.state_ballot("GA", db_session))
+    candidates = data["senateRaces"][0]["candidates"]
+    assert [c["id"] for c in candidates] == ["WINNER"]
+
+
+def test_no_confirmed_data_falls_back_to_every_fec_filer(db_session):
+    """A race with no confirmed_general candidates at all (state not
+    covered yet, or genuinely pre-primary) is unchanged from before this
+    feature existed — never narrows to zero just because nothing's been
+    confirmed."""
+    _race(db_session, "2026-SEN-GA", "GA")
+    _candidate(db_session, "A", "2026-SEN-GA", "SMITH, JANE", confirmed_general=False)
+    _candidate(db_session, "B", "2026-SEN-GA", "DOE, JOHN", confirmed_general=False)
+    db_session.commit()
+
+    data = _body(elections.state_ballot("GA", db_session))
+    assert len(data["senateRaces"][0]["candidates"]) == 2
+
+
 def test_pvi_fallback_matches_race_detail_behavior(db_session):
     """House PVI prefers the district map, flagged 'district'; falls
     back to statewide, flagged 'state' — same contract race_detail

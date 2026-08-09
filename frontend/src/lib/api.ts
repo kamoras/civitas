@@ -4,7 +4,7 @@ import type { Justice, JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssuesResponse, MyRepsResponse } from "@/types/action";
 import type { PoliticianCard } from "@/types/politicians";
 import type { BillDetail, PaginatedBills } from "@/types/bill";
-import type { PviMap, RaceSummary } from "@/types/election";
+import type { GeocodeResult, PviMap, RaceSummary } from "@/types/election";
 import type {
   JusticeScoreBreakdown,
   PresidentScoreBreakdown,
@@ -47,7 +47,7 @@ const TTL = {
 async function requestJson<T>(
   url: string,
   errorLabel: string,
-  opts?: { camelize?: boolean; init?: RequestInit },
+  opts?: { camelize?: boolean; init?: RequestInit }
 ): Promise<T> {
   const res = await fetch(url, opts?.init);
   if (!res.ok) throw new Error(`${errorLabel}: ${res.status}`);
@@ -140,11 +140,11 @@ export interface PaginatedReps {
 export async function fetchRepresentativesByState(
   state: string,
   page: number = 1,
-  perPage: number = 10,
+  perPage: number = 10
 ): Promise<PaginatedReps> {
   return requestJson(
     `${API_BASE}/representatives?state=${state}&page=${page}&per_page=${perPage}`,
-    "Failed to load representatives",
+    "Failed to load representatives"
   );
 }
 
@@ -157,7 +157,9 @@ export async function fetchRepresentative(repId: string): Promise<Senator> {
 // 5-minute TTL: this is deterministic derived data that only changes once
 // a day at most (the nightly pipeline run).
 
-export async function fetchSenatorScoreBreakdown(senatorId: string): Promise<RepresentationScoreBreakdown> {
+export async function fetchSenatorScoreBreakdown(
+  senatorId: string
+): Promise<RepresentationScoreBreakdown> {
   return cachedFetch(`${API_BASE}/senators/${senatorId}/score-breakdown`, TTL.MEDIUM);
 }
 
@@ -186,11 +188,14 @@ export interface PaginatedLeaderboard {
 export async function fetchRepLeaderboard(
   page: number = 1,
   perPage: number = 50,
-  party?: string,
+  party?: string
 ): Promise<PaginatedLeaderboard> {
   const params = new URLSearchParams({ page: String(page), per_page: String(perPage) });
   if (party) params.set("party", party);
-  return requestJson(`${API_BASE}/representatives/leaderboard?${params}`, "Failed to load house leaderboard");
+  return requestJson(
+    `${API_BASE}/representatives/leaderboard?${params}`,
+    "Failed to load house leaderboard"
+  );
 }
 
 // Shared by the fetchRepVotes/fetchSenatorVotes and fetchRepStockTrades/
@@ -199,26 +204,29 @@ export async function fetchRepLeaderboard(
 async function fetchPaginatedVotes(
   chamber: Chamber,
   entityId: string,
-  options?: { category?: "recent" | "key"; page?: number; perPage?: number; filter?: string },
+  options?: { category?: "recent" | "key"; page?: number; perPage?: number; filter?: string }
 ): Promise<PaginatedVotes> {
   const params = new URLSearchParams();
   if (options?.category) params.set("category", options.category);
   if (options?.page) params.set("page", String(options.page));
   if (options?.perPage) params.set("per_page", String(options.perPage));
   if (options?.filter) params.set("filter", options.filter);
-  return requestJson(`${API_BASE}/${CHAMBER_PATH[chamber]}/${entityId}/votes?${params}`, "Failed to load votes");
+  return requestJson(
+    `${API_BASE}/${CHAMBER_PATH[chamber]}/${entityId}/votes?${params}`,
+    "Failed to load votes"
+  );
 }
 
 export async function fetchRepVotes(
   repId: string,
-  options?: { category?: "recent" | "key"; page?: number; perPage?: number; filter?: string },
+  options?: { category?: "recent" | "key"; page?: number; perPage?: number; filter?: string }
 ): Promise<PaginatedVotes> {
   return fetchPaginatedVotes(Chamber.House, repId, options);
 }
 
 export async function fetchSenatorVotes(
   senatorId: string,
-  options?: { category?: "recent" | "key"; page?: number; perPage?: number; filter?: string },
+  options?: { category?: "recent" | "key"; page?: number; perPage?: number; filter?: string }
 ): Promise<PaginatedVotes> {
   return fetchPaginatedVotes(Chamber.Senate, senatorId, options);
 }
@@ -231,24 +239,27 @@ export async function fetchSenatorVotes(
 async function fetchPaginatedStockTrades(
   pathSegment: string,
   entityId: string,
-  options?: { page?: number; perPage?: number },
+  options?: { page?: number; perPage?: number }
 ): Promise<PaginatedStockTrades> {
   const params = new URLSearchParams();
   if (options?.page) params.set("page", String(options.page));
   if (options?.perPage) params.set("per_page", String(options.perPage));
-  return requestJson(`${API_BASE}/${pathSegment}/${entityId}/stock-trades?${params}`, "Failed to load stock trades");
+  return requestJson(
+    `${API_BASE}/${pathSegment}/${entityId}/stock-trades?${params}`,
+    "Failed to load stock trades"
+  );
 }
 
 export async function fetchRepStockTrades(
   repId: string,
-  options?: { page?: number; perPage?: number },
+  options?: { page?: number; perPage?: number }
 ): Promise<PaginatedStockTrades> {
   return fetchPaginatedStockTrades(CHAMBER_PATH[Chamber.House], repId, options);
 }
 
 export async function fetchSenatorStockTrades(
   senatorId: string,
-  options?: { page?: number; perPage?: number },
+  options?: { page?: number; perPage?: number }
 ): Promise<PaginatedStockTrades> {
   return fetchPaginatedStockTrades(CHAMBER_PATH[Chamber.Senate], senatorId, options);
 }
@@ -258,7 +269,7 @@ export async function fetchSenatorStockTrades(
  * the form reports no profit figure and none is derived. */
 export async function fetchPresidentStockTrades(
   presidentId: string,
-  options?: { page?: number; perPage?: number },
+  options?: { page?: number; perPage?: number }
 ): Promise<PaginatedStockTrades> {
   return fetchPaginatedStockTrades("presidents", presidentId, options);
 }
@@ -367,12 +378,7 @@ export interface PipelineStepInfo {
  * falling through to whichever type happens to be the default. Election runs
  * shipped as "SENATE" rows in the admin run history for exactly that reason.
  */
-export type PipelineType =
-  | "senate"
-  | "house"
-  | "stock_trades"
-  | "supplementary"
-  | "election";
+export type PipelineType = "senate" | "house" | "stock_trades" | "supplementary" | "election";
 
 export interface PipelineRunInfo {
   id: number;
@@ -503,7 +509,7 @@ function camelizeKeys(obj: unknown): unknown {
       Object.entries(obj as Record<string, unknown>).map(([k, v]) => [
         snakeToCamel(k),
         camelizeKeys(v),
-      ]),
+      ])
     );
   }
   return obj;
@@ -536,7 +542,9 @@ export async function fetchCurrentPresident(): Promise<President | null> {
 }
 
 export async function fetchJusticeLeaderboard(): Promise<JusticeLeaderboardEntry[]> {
-  return requestJson(`${API_BASE}/justices/leaderboard`, "Failed to load justice leaderboard", { camelize: true });
+  return requestJson(`${API_BASE}/justices/leaderboard`, "Failed to load justice leaderboard", {
+    camelize: true,
+  });
 }
 
 export async function fetchJustice(id: string): Promise<Justice> {
@@ -597,9 +605,7 @@ export const EXPLORE_HIGHLIGHT_END = "\u0003";
  * Register body can contain anything, and a highlighted excerpt is
  * attacker-adjacent text going straight into a page.
  */
-export function splitHighlights(
-  snippet: string,
-): { text: string; match: boolean }[] {
+export function splitHighlights(snippet: string): { text: string; match: boolean }[] {
   if (!snippet) return [];
 
   // Scan once, emitting a segment at every marker. Both sentinels are
@@ -660,7 +666,14 @@ export interface ExploreStats {
 
 export async function searchExplore(
   query: string,
-  options?: { docType?: string; chamber?: string; limit?: number; commentableOnly?: boolean; sort?: "relevance" | "date"; politicianId?: string },
+  options?: {
+    docType?: string;
+    chamber?: string;
+    limit?: number;
+    commentableOnly?: boolean;
+    sort?: "relevance" | "date";
+    politicianId?: string;
+  }
 ): Promise<ExploreResponse> {
   const params = new URLSearchParams({ q: query });
   if (options?.docType) params.set("doc_type", options.docType);
@@ -754,7 +767,7 @@ export async function fetchExploreDocument(id: number): Promise<ExploreDocumentD
 // this file only forwards bytes, it doesn't parse the marker format.
 export async function streamExploreDocumentSummary(
   id: number,
-  onDelta: (fullTextSoFar: string) => void,
+  onDelta: (fullTextSoFar: string) => void
 ): Promise<ExploreDocumentSummary> {
   const res = await fetch(`${API_BASE}/explore/${id}/summary`, { method: "POST" });
   if (!res.ok || !res.body) throw new Error(`Summary failed: ${res.status}`);
@@ -777,7 +790,11 @@ export async function streamExploreDocumentSummary(
       if (!line.startsWith("data:")) continue;
       const parsed = JSON.parse(line.slice("data:".length).trim());
       if (parsed.done) {
-        return { summary: parsed.summary ?? "", keyPoints: parsed.keyPoints ?? [], impact: parsed.impact ?? "" };
+        return {
+          summary: parsed.summary ?? "",
+          keyPoints: parsed.keyPoints ?? [],
+          impact: parsed.impact ?? "",
+        };
       }
       if (typeof parsed.delta === "string") {
         fullText += parsed.delta;
@@ -816,7 +833,7 @@ export interface CommentSubmitResult {
 
 export async function fetchDocumentComments(
   docId: number,
-  page: number = 1,
+  page: number = 1
 ): Promise<CommentsResponse> {
   const params = new URLSearchParams({ page: String(page) });
   return requestJson(`${API_BASE}/explore/${docId}/comments?${params}`, "Failed to load comments");
@@ -826,7 +843,7 @@ export async function submitDocumentComment(
   docId: number,
   comment: string,
   name: string = "Anonymous",
-  organization: string = "",
+  organization: string = ""
 ): Promise<CommentSubmitResult> {
   const params = new URLSearchParams({
     comment,
@@ -983,24 +1000,29 @@ export async function fetchAdminPipelineStatus(token: string): Promise<AdminPipe
   });
 }
 
-export async function clearStuckHousePipeline(token: string): Promise<{ cleared: number; message: string }> {
+export async function clearStuckHousePipeline(
+  token: string
+): Promise<{ cleared: number; message: string }> {
   return requestJson(`${API_BASE}/admin/pipeline/clear-stuck-house`, "Clear failed", {
     init: { method: "POST", headers: adminHeaders(token) },
   });
 }
 
-export async function clearStuckSupplementaryPipeline(token: string): Promise<{ cleared: number; message: string }> {
+export async function clearStuckSupplementaryPipeline(
+  token: string
+): Promise<{ cleared: number; message: string }> {
   return requestJson(`${API_BASE}/admin/pipeline/clear-stuck-supplementary`, "Clear failed", {
     init: { method: "POST", headers: adminHeaders(token) },
   });
 }
 
-export async function clearStuckStockTradesPipeline(token: string): Promise<{ cleared: number; message: string }> {
+export async function clearStuckStockTradesPipeline(
+  token: string
+): Promise<{ cleared: number; message: string }> {
   return requestJson(`${API_BASE}/admin/pipeline/clear-stuck-stock-trades`, "Clear failed", {
     init: { method: "POST", headers: adminHeaders(token) },
   });
 }
-
 
 export async function fetchAdminPipelineHistory(token: string): Promise<PipelineHistoryRun[]> {
   return requestJson(`${API_BASE}/admin/pipeline/history?limit=20`, "History failed", {
@@ -1021,7 +1043,7 @@ export interface VisitorStatsDay {
 
 export async function fetchAdminVisitorStats(
   token: string,
-  days: number = 30,
+  days: number = 30
 ): Promise<VisitorStatsDay[]> {
   return requestJson(`${API_BASE}/admin/visitor-stats?days=${days}`, "Visitor stats failed", {
     init: { headers: adminHeaders(token) },
@@ -1051,10 +1073,7 @@ export interface TopPageEntry {
   views: number;
 }
 
-export async function fetchAdminTopPages(
-  token: string,
-  days: number = 7,
-): Promise<TopPageEntry[]> {
+export async function fetchAdminTopPages(token: string, days: number = 7): Promise<TopPageEntry[]> {
   return requestJson(`${API_BASE}/admin/top-pages?days=${days}`, "Top pages failed", {
     init: { headers: adminHeaders(token) },
   });
@@ -1105,12 +1124,12 @@ export interface PipelineTimings {
 export async function fetchAdminPipelineTimings(
   token: string,
   kind: string = "pipeline_runs",
-  runs: number = 10,
+  runs: number = 10
 ): Promise<PipelineTimings> {
   return requestJson(
     `${API_BASE}/admin/pipeline/timings?kind=${encodeURIComponent(kind)}&runs=${runs}`,
     "Pipeline timings failed",
-    { init: { headers: adminHeaders(token) } },
+    { init: { headers: adminHeaders(token) } }
   );
 }
 
@@ -1127,14 +1146,14 @@ export async function setPoliticianVacancy(
   politicianId: string,
   isCurrent: boolean,
   reason?: string,
-  leftOfficeDate?: string,
+  leftOfficeDate?: string
 ): Promise<VacancyResult> {
   const params = new URLSearchParams({ is_current: String(isCurrent) });
   if (reason) params.set("reason", reason);
   if (leftOfficeDate) params.set("left_office_date", leftOfficeDate);
   const res = await fetch(
     `${API_BASE}/admin/politicians/${encodeURIComponent(politicianId)}/vacancy?${params}`,
-    { method: "POST", headers: adminHeaders(token) },
+    { method: "POST", headers: adminHeaders(token) }
   );
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -1142,8 +1161,6 @@ export async function setPoliticianVacancy(
   }
   return res.json();
 }
-
-
 
 export async function fetchConfig(): Promise<AppConfig> {
   if (_cachedConfig) return _cachedConfig;
@@ -1159,7 +1176,6 @@ export async function fetchConfig(): Promise<AppConfig> {
   return DEFAULT_CONFIG;
 }
 
-
 export async function fetchActionIssues(date?: string): Promise<ActionIssuesResponse> {
   const params = date ? `?date=${date}` : "";
   // Cached + de-duped like the other Action Center endpoints. The backend
@@ -1171,7 +1187,7 @@ export async function fetchActionIssues(date?: string): Promise<ActionIssuesResp
 
 export async function submitPulseVote(
   issueId: number,
-  stance: "concerned" | "not_priority",
+  stance: "concerned" | "not_priority"
 ): Promise<{ issueId: number; concernedCount: number; notPriorityCount: number }> {
   return requestJson(`${API_BASE}/action/pulse`, "Pulse vote failed", {
     init: {
@@ -1305,6 +1321,13 @@ export async function fetchPviMap(): Promise<PviMap> {
   return cachedFetch(`${API_BASE}/elections/pvi`, TTL.LONG);
 }
 
+/** Not cached — every address is a distinct, user-entered, one-off
+ * lookup; caching would just hold addresses in memory for no benefit. */
+export async function fetchDistrictForAddress(address: string): Promise<GeocodeResult> {
+  const res = await fetch(`${API_BASE}/elections/geocode?address=${encodeURIComponent(address)}`);
+  if (!res.ok) throw new Error(`Failed to resolve address: ${res.status}`);
+  return res.json();
+}
 
 export interface MonitorUpdate {
   id: number;
@@ -1341,7 +1364,6 @@ export async function fetchMonitors(): Promise<{ monitors: NationalMonitor[] }> 
 export async function fetchMonitorDetail(slug: string): Promise<NationalMonitorDetail> {
   return cachedFetch(`${API_BASE}/action/monitors/${encodeURIComponent(slug)}`, TTL.MEDIUM);
 }
-
 
 export interface TimelineEntry {
   date: string;
@@ -1428,7 +1450,7 @@ export interface FeedbackSubmission {
 }
 
 export async function submitFeedback(
-  submission: FeedbackSubmission,
+  submission: FeedbackSubmission
 ): Promise<{ ok: boolean; issueUrl: string | null }> {
   const res = await fetch(`${API_BASE}/feedback`, {
     method: "POST",

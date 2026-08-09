@@ -9,10 +9,17 @@ import BackToTop from "@/components/BackToTop";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import BallotRaceOptions from "@/components/elections/BallotRaceOptions";
 import CoverageFeed from "@/components/elections/CoverageFeed";
+import AddressLookup from "@/components/elections/AddressLookup";
 import { districtCountiesLabel, formatPvi, pviColor, raceShortLabel } from "@/lib/elections";
 import type { StateBallot } from "@/types/election";
 
-function HouseSection({ houseRaces }: { houseRaces: StateBallot["houseRaces"] }) {
+function HouseSection({
+  state,
+  houseRaces,
+}: {
+  state: string;
+  houseRaces: StateBallot["houseRaces"];
+}) {
   const [selectedId, setSelectedId] = useState("");
   const selected = houseRaces.find((r) => r.id === selectedId) || null;
 
@@ -23,12 +30,12 @@ function HouseSection({ houseRaces }: { houseRaces: StateBallot["houseRaces"] })
         <h2 className="font-pixel text-xs text-matrix-green/50 mb-1">
           U.S. HOUSE — {houseRaces.length} {houseRaces.length === 1 ? "DISTRICT" : "DISTRICTS"}
         </h2>
-        {/* You vote in exactly one of these, and Civitas deliberately
-            doesn't collect an address to know which — same self-chosen
-            pattern already established for local-races-by-town. */}
+        {/* You vote in exactly one of these. The address lookup below is
+            optional and resolve-only (never stored) — entering your
+            address is not required; the dropdown works on its own. */}
         <p className="text-[11px] text-matrix-green/40 mb-3">
-          You vote in exactly one of these. Civitas does not ask for your address, so pick your
-          district below, or{" "}
+          You vote in exactly one of these. Enter your address below to find it automatically, or
+          pick it from the dropdown, or{" "}
           <a
             href="https://www.house.gov/representatives/find-your-representative"
             target="_blank"
@@ -40,6 +47,13 @@ function HouseSection({ houseRaces }: { houseRaces: StateBallot["houseRaces"] })
           </a>
           .
         </p>
+        <AddressLookup
+          ballotState={state}
+          onResolved={(district) => {
+            const match = houseRaces.find((r) => r.district === district);
+            if (match) setSelectedId(match.id);
+          }}
+        />
         <select
           value={selectedId}
           onChange={(e) => setSelectedId(e.target.value)}
@@ -171,7 +185,9 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
             </section>
           )}
 
-          {ballot.houseRaces.length > 0 && <HouseSection houseRaces={ballot.houseRaces} />}
+          {ballot.houseRaces.length > 0 && (
+            <HouseSection state={ballot.state} houseRaces={ballot.houseRaces} />
+          )}
 
           {!hasFederalRaces && (
             <p className="text-sm text-matrix-green/40">

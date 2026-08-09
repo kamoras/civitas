@@ -58,11 +58,12 @@ def current_election_cycle() -> int:
     return next_election_day(utcnow().date()).year
 
 ELECTION_PIPELINE_STEPS = [
-    ("roster_sync",        "roster",   "Sync candidate roster"),
-    ("financial_refresh",  "financial", "Refresh candidate financials"),
-    ("coverage_ingestion", "coverage", "Ingest race coverage"),
-    ("bluesky_posting",    "posting",  "Post race coverage updates"),
-    ("snapshot",           "snapshot", "Snapshot candidate fundraising"),
+    ("roster_sync",          "roster",              "Sync candidate roster"),
+    ("financial_refresh",    "financial",           "Refresh candidate financials"),
+    ("confirmed_candidates", "confirmed_candidates", "Confirm general-election candidates"),
+    ("coverage_ingestion",   "coverage",             "Ingest race coverage"),
+    ("bluesky_posting",      "posting",              "Post race coverage updates"),
+    ("snapshot",             "snapshot",             "Snapshot candidate fundraising"),
 ]
 
 # Candidates refreshed per run at FEC's 0.25 req/s rate limit — 500 candidates
@@ -398,6 +399,24 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                 db.rollback()
                 logger.exception("Financial refresh phase failed — continuing")
                 progress.fail("financial_refresh")
+
+            run.current_phase = "confirmed_candidates"
+            db.commit()
+            logger.info("--- Election: CONFIRMED CANDIDATES ---")
+            progress.begin("confirmed_candidates")
+            try:
+                from app.pipeline.fetch.state_candidates import sync_confirmed_candidates
+
+                confirm_result = await sync_confirmed_candidates(db, client, cycle)
+                confirmed_total = sum(r["confirmed"] for r in confirm_result.values())
+                logger.info("Confirmed candidates: %s", confirm_result)
+                progress.complete(
+                    "confirmed_candidates", detail=f"{confirmed_total} confirmed",
+                )
+            except Exception:
+                db.rollback()
+                logger.exception("Confirmed-candidate sync failed — continuing")
+                progress.fail("confirmed_candidates")
 
             # Coverage + posting share an in-process tracker with the
             # 15-minute election-season refresh (scheduler.py) so the two
