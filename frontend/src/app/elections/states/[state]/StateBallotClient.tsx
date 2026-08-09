@@ -52,6 +52,7 @@ function HouseSection({
           onResolved={(district) => {
             const match = houseRaces.find((r) => r.district === district);
             if (match) setSelectedId(match.id);
+            return match != null;
           }}
         />
         <select

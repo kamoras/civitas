@@ -33,7 +33,7 @@ async def _call(address: str, matches):
     mock_client.get = AsyncMock(return_value=_census_response(matches))
     with patch("app.api.elections.make_async_client") as mock_client_cls:
         mock_client_cls.return_value.__aenter__.return_value = mock_client
-        return await geocode_address(address), mock_client
+        return await geocode_address(address, _rl=None), mock_client
 
 
 class TestGeocodeAddress:
@@ -61,13 +61,13 @@ class TestGeocodeAddress:
     @pytest.mark.asyncio
     async def test_empty_address_is_a_400_not_a_silent_null(self):
         with pytest.raises(HTTPException) as exc:
-            await geocode_address("   ")
+            await geocode_address("   ", _rl=None)
         assert exc.value.status_code == 400
 
     @pytest.mark.asyncio
     async def test_overlong_address_is_a_400(self):
         with pytest.raises(HTTPException) as exc:
-            await geocode_address("x" * 500)
+            await geocode_address("x" * 500, _rl=None)
         assert exc.value.status_code == 400
 
     @pytest.mark.asyncio
@@ -77,7 +77,7 @@ class TestGeocodeAddress:
         with patch("app.api.elections.make_async_client") as mock_client_cls:
             mock_client_cls.return_value.__aenter__.return_value = mock_client
             with pytest.raises(HTTPException) as exc:
-                await geocode_address("100 Main St")
+                await geocode_address("100 Main St", _rl=None)
         assert exc.value.status_code == 502
 
     @pytest.mark.asyncio
@@ -88,7 +88,7 @@ class TestGeocodeAddress:
             mock_client_cls.return_value.__aenter__.return_value = mock_client
             with caplog.at_level("ERROR"):
                 with pytest.raises(HTTPException):
-                    await geocode_address("100 Very Identifiable Private Lane")
+                    await geocode_address("100 Very Identifiable Private Lane", _rl=None)
         assert "Very Identifiable Private Lane" not in caplog.text
 
     @pytest.mark.asyncio

@@ -9,9 +9,12 @@ interface AddressLookupProps {
    * DIFFERENT state points the visitor at that state's page instead of
    * silently doing nothing. */
   ballotState: string;
-  /** Called with a real, resolved (ballotState-matching) district number
-   * — the caller owns actually selecting it. */
-  onResolved: (district: number) => void;
+  /** Called with a real, resolved (ballotState-matching) district number —
+   * the caller owns actually selecting it. Returns whether that district
+   * was actually found among this state's races: Census's district data
+   * can be on a different vintage than Civitas's own race data, so a
+   * resolved district isn't guaranteed to match one we have. */
+  onResolved: (district: number) => boolean;
 }
 
 type Status =
@@ -19,7 +22,8 @@ type Status =
   | { kind: "loading" }
   | { kind: "error"; message: string }
   | { kind: "wrong-state"; state: string }
-  | { kind: "no-match" };
+  | { kind: "no-match" }
+  | { kind: "district-not-found"; district: number };
 
 /** Optional address -> district lookup, resolved server-side via the free
  * Census Bureau geocoder (GET /elections/geocode) — an alternative to the
@@ -45,8 +49,10 @@ export default function AddressLookup({ ballotState, onResolved }: AddressLookup
         setStatus({ kind: "wrong-state", state: result.state });
         return;
       }
-      setStatus({ kind: "idle" });
-      onResolved(result.district);
+      const found = onResolved(result.district);
+      setStatus(
+        found ? { kind: "idle" } : { kind: "district-not-found", district: result.district }
+      );
     } catch {
       setStatus({ kind: "error", message: "Could not resolve that address right now." });
     }
@@ -88,6 +94,12 @@ export default function AddressLookup({ ballotState, onResolved }: AddressLookup
             view {status.state}&apos;s ballot instead
           </Link>
           .
+        </p>
+      )}
+      {status.kind === "district-not-found" && (
+        <p className="text-[11px] text-neon-yellow/70 mt-1.5">
+          Found district {status.district}, but it&apos;s not in our House data for {ballotState}{" "}
+          yet — use the dropdown below.
         </p>
       )}
       {status.kind === "error" && (

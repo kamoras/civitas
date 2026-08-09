@@ -93,6 +93,20 @@ class TestListRaces:
         assert synced["lastFinancialsSync"] == "2026-07-20T08:30:00Z"
         assert unsynced["lastFinancialsSync"] is None
 
+    def test_confirmed_candidates_filter_out_defeated_primary_fec_filers(self, db_session):
+        """Same filtering as the ballot page and race-detail route — a
+        defeated-primary FEC filer shouldn't count toward candidateCount
+        or edge out the real nominee for a topCandidates slot just
+        because they raised more before losing."""
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "WINNER", "2026-SEN-GA", "PAXTON, KEN", confirmed_general=True, cash_on_hand=1.0)
+        _candidate(db_session, "LOSER", "2026-SEN-GA", "CORNYN, JOHN", confirmed_general=False, cash_on_hand=999.0)
+        db_session.commit()
+
+        data = _body(elections.list_races(db_session))
+        assert data[0]["candidateCount"] == 1
+        assert [c["id"] for c in data[0]["topCandidates"]] == ["WINNER"]
+
 
 class TestRaceDetail:
     def test_404_for_unknown_race(self, db_session):
@@ -118,6 +132,21 @@ class TestRaceDetail:
         assert data["coverage"][0]["summary"] == "Tight race."  # verbatim
         # Explicit Z suffix — see _iso_utc (naive ISO parses as local time in JS).
         assert data["coverage"][0]["publishedAt"] == "2026-07-19T14:00:00Z"
+
+    def test_confirmed_candidates_filter_out_defeated_primary_fec_filers(self, db_session):
+        """Same real bug as test_elections_state_ballot's version of this
+        test, but for the direct race-detail route: BallotRaceOptions
+        links every ballot row to /elections/{race.id}, which calls this
+        function — a candidate list unfiltered here would let the exact
+        19-candidates bug resurface one click after the state-ballot page
+        fixed it."""
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "WINNER", "2026-SEN-GA", "PAXTON, KEN", confirmed_general=True)
+        _candidate(db_session, "LOSER", "2026-SEN-GA", "CORNYN, JOHN", confirmed_general=False)
+        db_session.commit()
+
+        data = _body(elections.race_detail("2026-SEN-GA", db_session))
+        assert [c["id"] for c in data["candidates"]] == ["WINNER"]
 
 
 class TestCandidateDetail:

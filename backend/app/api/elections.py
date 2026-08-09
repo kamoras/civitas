@@ -10,6 +10,7 @@ import pathlib
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, selectinload
 
+from app.api.public import RateLimit
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cached_json
 from app.database import get_db
 from app.election_calendar import next_election_day
@@ -111,9 +112,29 @@ def _candidate_summary(cand: Candidate) -> dict:
     }
 
 
+def _confirmed_or_all(candidates: list[Candidate]) -> list[Candidate]:
+    """If a registered state source (state_candidate_sources.json /
+    state_candidates.py) has confirmed any candidate in this race as an
+    actual general-election nominee, return ONLY confirmed candidates — an
+    FEC filer who lost their primary/runoff isn't a real ballot option
+    (2026-08 fix: TX's Senate race listed 19 FEC filers as if all still
+    running, months after the real primary/runoff resolved). A race with
+    no confirmed data at all (not yet covered, or genuinely pre-primary)
+    returns every active FEC filer, unchanged from before this existed.
+
+    Shared by every endpoint that lists a race's candidates
+    (_race_summary, _race_full, race_detail) — the bug this guards
+    against previously resurfaced via race_detail even after _race_full
+    was fixed, since a race's full candidate list is reachable from more
+    than one route."""
+    if any(c.confirmed_general for c in candidates):
+        return [c for c in candidates if c.confirmed_general]
+    return candidates
+
+
 def _race_summary(race: Race, state_pvi: dict, district_pvi: dict) -> dict:
     candidates = sorted(
-        race.candidates,
+        _confirmed_or_all(race.candidates),
         key=lambda c: (c.cash_on_hand or 0.0),
         reverse=True,
     )
@@ -195,21 +216,9 @@ def _race_full(
     the per-state ballot view, which needs every candidate (not just the
     top-2-by-funds _race_summary uses for the map/directory) but not the
     news feed, which stays one click away on the existing race-detail
-    page.
-
-    If a registered state source (state_candidate_sources.json /
-    state_candidates.py) has confirmed any candidate in this race as an
-    actual general-election nominee, ONLY confirmed candidates are shown
-    — an FEC filer who lost their primary/runoff isn't a real ballot
-    option (2026-08 fix: TX's Senate race listed 19 FEC filers as if all
-    still running, months after the real primary/runoff resolved). A
-    race with no confirmed data at all (not yet covered, or genuinely
-    pre-primary) falls back to every active FEC filer, unchanged from
-    before this existed."""
-    candidates = race.candidates
-    if any(c.confirmed_general for c in candidates):
-        candidates = [c for c in candidates if c.confirmed_general]
-    candidates = sorted(candidates, key=lambda c: (c.cash_on_hand or 0.0), reverse=True)
+    page. Confirmed-general filtering (see _confirmed_or_all) applies
+    here too, same as race_detail."""
+    candidates = sorted(_confirmed_or_all(race.candidates), key=lambda c: (c.cash_on_hand or 0.0), reverse=True)
     pvi, pvi_level = _pvi_for_race(race, state_pvi, district_pvi)
     counties = None
     if race.office == "H":
@@ -379,14 +388,15 @@ def pvi_map():
 
 @router.get("/races/{race_id}")
 def race_detail(race_id: str, db: Session = Depends(get_db)):
-    """Full race detail: all candidates, financials, coverage feed."""
+    """Full race detail: candidates (confirmed nominees only where known,
+    see _confirmed_or_all), financials, coverage feed."""
     race = db.query(Race).filter(Race.id == race_id).first()
     if race is None:
         raise HTTPException(status_code=404, detail="Race not found")
 
     state_pvi = get_state_pvi_map()
     district_pvi = get_district_pvi_map()
-    candidates = sorted(race.candidates, key=lambda c: (c.cash_on_hand or 0.0), reverse=True)
+    candidates = sorted(_confirmed_or_all(race.candidates), key=lambda c: (c.cash_on_hand or 0.0), reverse=True)
     coverage = (
         db.query(RaceCoverageItem)
         .filter(RaceCoverageItem.race_id == race_id)
@@ -435,7 +445,7 @@ _CENSUS_GEOCODER_URL = "https://geocoding.geo.census.gov/geocoder/geographies/on
 
 
 @router.get("/geocode")
-async def geocode_address(address: str):
+async def geocode_address(address: str, _rl: RateLimit):
     """State + House district for a US mailing address, via the Census
     Bureau's free, no-key geocoder — lets the ballot page auto-select a
     visitor's district instead of requiring the manual dropdown (2026-08,
@@ -443,6 +453,12 @@ async def geocode_address(address: str):
     stored). The address is passed straight through to Census and never
     logged, cached, or persisted here — only the resolved state/district
     numbers are returned.
+
+    Rate-limited (same RateLimit as qa.py's LLM-calling /ask) — this is
+    the only /elections endpoint that makes a per-request outbound call
+    to a third party rather than just querying the local DB, so it's the
+    one route in this file an unauthenticated caller could otherwise use
+    to hammer Census on Civitas's behalf for free.
 
     {"state": None, "district": None} for an address Census can't match
     or that doesn't resolve to a congressional district (e.g. outside the
