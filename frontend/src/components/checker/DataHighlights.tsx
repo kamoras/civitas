@@ -28,6 +28,13 @@ export default function DataHighlights({ senator, chamber = "senate" }: DataHigh
       .finally(() => setLoading(false));
   }, [senator.id, chamber]);
 
+  // Both `highlights` (fetched from /highlights, see backend's
+  // build_highlights) and `staticComments` (generateCommentary, this
+  // file's client-side fallback) are template-filled facts from FEC/
+  // Congress.gov data — neither is LLM output (both backend routes'
+  // own docstrings say "no LLM, pure data"). The "source" caption below
+  // used to say "AI-generated" for the fetched path, which was simply
+  // wrong — corrected to say what actually happens (2026-08 review).
   const comments = highlights ?? staticComments;
 
   const title = loading ? "DATA HIGHLIGHTS [GENERATING...]" : "DATA HIGHLIGHTS";
@@ -37,7 +44,7 @@ export default function DataHighlights({ senator, chamber = "senate" }: DataHigh
       title={title}
       titleColor="text-neon-yellow neon-yellow"
       summary={comments[0]?.slice(0, 80) + (comments[0]?.length > 80 ? "..." : "")}
-      source={highlights ? "AI-generated" : undefined}
+      source={highlights ? "Auto-generated from data" : undefined}
     >
       <div className="space-y-3">
         {comments.map((comment, i) => (
@@ -47,7 +54,9 @@ export default function DataHighlights({ senator, chamber = "senate" }: DataHigh
         ))}
       </div>
       {highlights && (
-        <div className="text-[10px] text-matrix-green/25 mt-3">AI-generated · fec.gov · congress.gov</div>
+        <div className="text-[10px] text-matrix-green/25 mt-3">
+          Auto-generated from data (no LLM) · fec.gov · congress.gov
+        </div>
       )}
     </CollapsibleSection>
   );
