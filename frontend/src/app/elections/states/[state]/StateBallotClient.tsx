@@ -10,6 +10,7 @@ import TerminalTitlebar from "@/components/TerminalTitlebar";
 import BallotRaceOptions from "@/components/elections/BallotRaceOptions";
 import CoverageFeed from "@/components/elections/CoverageFeed";
 import AddressLookup from "@/components/elections/AddressLookup";
+import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import { districtCountiesLabel, formatPvi, pviColor, raceShortLabel } from "@/lib/elections";
 import type { StateBallot } from "@/types/election";
 
@@ -121,10 +122,17 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
               </h1>
               <p className="font-mono text-xs text-matrix-green/50">{ballot.electionDate}</p>
               {ballot.statePvi !== null && (
-                <p className={`font-pixel text-sm mt-2 ${pviColor(ballot.statePvi)}`}>
-                  {formatPvi(ballot.statePvi)}{" "}
-                  <span className="font-mono text-[10px] text-matrix-green/40">statewide lean</span>
-                </p>
+                <>
+                  <p className={`font-pixel text-sm mt-2 ${pviColor(ballot.statePvi)}`}>
+                    {formatPvi(ballot.statePvi)}{" "}
+                    <span className="font-mono text-[10px] text-matrix-green/40">statewide lean</span>
+                  </p>
+                  {/* This is the newest page showing a raw PVI figure — the
+                      map and per-race pages already explain it, this one
+                      didn't (2026-08 review): "R+12"/"D+8" means nothing
+                      to a reader who hasn't seen Cook PVI notation before. */}
+                  <PviMethodologyNote />
+                </>
               )}
             </div>
           </div>
