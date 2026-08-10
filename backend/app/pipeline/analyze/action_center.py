@@ -633,8 +633,18 @@ _DIGEST_TITLE_PATTERNS = re.compile(
 _DIGEST_TITLE_PREFIX_PATTERNS = re.compile(
     # Optional source tag: "NPR:", "AP —", "Morning Edition - ". A dash only
     # separates a tag when it is spaced; unspaced it is a compound word, and
-    # "Wrap-up first look at the budget" is not a product name.
+    # "Wrap-up first look at the budget" is not a product name. Then an
+    # optional leading article ("The Up First newsletter: ...", NPR's real
+    # title format for that product) — live-missed case (issue 492, 2026-08):
+    # "The" is too long to be swallowed as part of the source-tag group (it
+    # has no colon/dash of its own within 20 chars of "The"), so without this
+    # the whole prefix pattern silently failed to match and the article fell
+    # through to _multi_topic_body, which has its own gap for titles that
+    # name every bundled story (see that function's docstring). An article
+    # is not a source tag, so this is a separate, unconditional skip, not
+    # folded into the source-tag group above.
     r"^(?:[A-Za-z][\w.&' ]{0,20}?(?::\s*|\s+[—–|-]\s+))?"
+    r"(?:(?:the|a|an)\s+)?"
     r"(up first|first up|top stories|today's headlines|headlines\s*:"
     r"|(?:daily|morning|evening|nightly)\s+"
     r"(?:brief|briefing|digest|rundown|wire|wrap|newsletter))\b",
