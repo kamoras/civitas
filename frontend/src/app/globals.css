@@ -480,6 +480,56 @@ li {
   font-size: 12px !important;
 }
 
+/* ===== LEGIBILITY: PROSE PARAGRAPH SIZE =====
+   Reader feedback, twice: the site is hard to read. The floor rule above
+   fixes badges and labels; it does nothing for running prose, which is the
+   part people actually sit and read. Measured live on /about — 98 of the
+   101 real paragraphs render at 14px, against a 16px browser/web default.
+   Monospace compounds it: Share Tech Mono's 0.500em x-height reads smaller
+   than a proportional face at the same nominal size, so nominal 14px here
+   is doing the work of roughly 13px elsewhere.
+
+   Scoped to `p` on purpose. Prose is what needs the bump; the same tokens
+   on a span or div are badges, table cells, and stat readouts, where a
+   size change is a layout change. Line-height comes along for free —
+   `leading-relaxed`/`leading-snug` are unitless, so they scale with the
+   new size instead of tightening against it (measured: 1.60 ratio holds).
+
+   Same start-or-space anchoring the pixel-font block below explains, so a
+   variant-prefixed `sm:text-sm` on some other element's base size never
+   matches. The breakpoint hazard documented there does not apply: the only
+   two `<p>` carrying both tokens (`action/page.tsx`, `BillDetailClient`)
+   pair `text-sm` with `sm:text-base`, which is 16px — the same value this
+   rule sets, so desktop is unchanged and only mobile moves 14px -> 16px,
+   which is the improvement being asked for. */
+p[class^="text-sm"],
+p[class*=" text-sm"] {
+  font-size: 16px !important;
+}
+
+/* ===== LEGIBILITY: PARAGRAPH SPACING =====
+   Second half of the same feedback: the text reads as dense. Measured on
+   /about, paragraph spacing is not merely tight, it is inconsistent — of
+   the consecutive prose pairs there, 28 sit 16px apart and 21 sit at
+   literally 0px, running one paragraph straight into the next with only
+   line-height between them. Identical-looking prose (same classes, same
+   container) spaced two different ways is a missing `mb-*`, not a design.
+
+   `margin-top` on the second paragraph rather than `margin-bottom` on the
+   first, because adjacent-sibling margins COLLAPSE in normal flow: the gap
+   becomes max(prev's bottom, this top), never the sum. So the pairs already
+   at 16px stay exactly 16px and only the 0px pairs move — a floor, not an
+   increase. Verified every affected parent is `display: block` (collapsing
+   does not happen in flex/grid, where this would instead be additive).
+
+   1em, so it tracks the font size set above rather than pinning a px value
+   that drifts if the size changes again. Measured across /about, /action,
+   /bills, /leaderboard, /elections and a politician page: 21 zero-gap pairs
+   on /about go to 0, every other page is untouched, no overflow anywhere. */
+p + p {
+  margin-top: 1em;
+}
+
 /* ===== LEGIBILITY: PIXEL FONT OFF ITS DESIGN GRID =====
    Press Start 2P (`font-pixel`) is a bitmap face. Across the latin set every
    outline coordinate is a multiple of 125/1000 em — an 8-cell-per-em grid,
