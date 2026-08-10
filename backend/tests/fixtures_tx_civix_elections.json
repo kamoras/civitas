@@ -1,0 +1,37 @@
+[
+  {
+    "idElection": 53814,
+    "txElectionName": "2026 DEMOCRATIC PRIMARY ELECTION",
+    "cdElectionType": "P",
+    "cdElectionCategory": "SW",
+    "dtElectionDate": "2026-03-03"
+  },
+  {
+    "idElection": 53813,
+    "txElectionName": "2026 REPUBLICAN PRIMARY ELECTION",
+    "cdElectionType": "P",
+    "cdElectionCategory": "SW",
+    "dtElectionDate": "2026-03-03"
+  },
+  {
+    "idElection": 53815,
+    "txElectionName": "2026 NOVEMBER GENERAL ELECTION",
+    "cdElectionType": "GE",
+    "cdElectionCategory": "SW",
+    "dtElectionDate": "2026-11-03"
+  },
+  {
+    "idElection": 58314,
+    "txElectionName": "2026 DEMOCRATIC PRIMARY RUNOFF ELECTION",
+    "cdElectionType": "RU",
+    "cdElectionCategory": "SW",
+    "dtElectionDate": "2026-05-26"
+  },
+  {
+    "idElection": 58315,
+    "txElectionName": "2026 REPUBLICAN PRIMARY RUNOFF ELECTION",
+    "cdElectionType": "RU",
+    "cdElectionCategory": "SW",
+    "dtElectionDate": "2026-05-26"
+  }
+]

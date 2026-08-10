@@ -144,6 +144,17 @@ export interface StateBallot {
   coverage: RaceCoverageItem[];
 }
 
+/** GET /elections/geocode response — resolves a mailing address to a
+ * state + House district via the Census Bureau's free geocoder, so the
+ * ballot page can auto-select a visitor's district instead of requiring
+ * the manual dropdown. Both null (never a guess) when Census can't match
+ * the address or it doesn't resolve to a congressional district. The
+ * address itself is never returned, logged, or stored server-side. */
+export interface GeocodeResult {
+  state: string | null;
+  district: number | null;
+}
+
 /** Provenance block on the /pvi response. Optional end to end — older
  * backend responses (and cached ones) may omit it entirely. */
 export interface PviMeta {
