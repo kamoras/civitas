@@ -507,6 +507,29 @@ p[class*=" text-sm"] {
   font-size: 16px !important;
 }
 
+/* ===== LEGIBILITY: PARAGRAPH SPACING =====
+   Second half of the same feedback: the text reads as dense. Measured on
+   /about, paragraph spacing is not merely tight, it is inconsistent — of
+   the consecutive prose pairs there, 28 sit 16px apart and 21 sit at
+   literally 0px, running one paragraph straight into the next with only
+   line-height between them. Identical-looking prose (same classes, same
+   container) spaced two different ways is a missing `mb-*`, not a design.
+
+   `margin-top` on the second paragraph rather than `margin-bottom` on the
+   first, because adjacent-sibling margins COLLAPSE in normal flow: the gap
+   becomes max(prev's bottom, this top), never the sum. So the pairs already
+   at 16px stay exactly 16px and only the 0px pairs move — a floor, not an
+   increase. Verified every affected parent is `display: block` (collapsing
+   does not happen in flex/grid, where this would instead be additive).
+
+   1em, so it tracks the font size set above rather than pinning a px value
+   that drifts if the size changes again. Measured across /about, /action,
+   /bills, /leaderboard, /elections and a politician page: 21 zero-gap pairs
+   on /about go to 0, every other page is untouched, no overflow anywhere. */
+p + p {
+  margin-top: 1em;
+}
+
 /* ===== LEGIBILITY: PIXEL FONT OFF ITS DESIGN GRID =====
    Press Start 2P (`font-pixel`) is a bitmap face. Across the latin set every
    outline coordinate is a multiple of 125/1000 em — an 8-cell-per-em grid,
