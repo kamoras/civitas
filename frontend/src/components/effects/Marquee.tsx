@@ -9,7 +9,7 @@ export default function Marquee({ items }: { items: string[] }) {
 
   return (
     <div
-      className="w-full overflow-hidden border-y border-matrix-green/10 bg-crt-black/60 py-2.5"
+      className="group w-full overflow-hidden border-y border-matrix-green/10 bg-crt-black/60 py-2.5"
       aria-label="Site information"
     >
       <div className="sr-only">
@@ -27,7 +27,12 @@ export default function Marquee({ items }: { items: string[] }) {
         // width, and needs it to equal the doubled content's width for the
         // shift to land exactly one copy over (see tailwind.config.ts's
         // marquee keyframe comment).
-        className={`inline-block whitespace-nowrap font-mono text-[11px] tracking-widest text-matrix-green/40 ${reducedMotion ? "" : "animate-marquee"}`}
+        //
+        // group-hover pauses it: this text is real first-visit content (data
+        // sources, the no-tracking privacy stance), not decorative filler,
+        // and at 30s/loop and 11px there was previously no way for a mouse
+        // user to stop it and actually read a given item (2026-08 review).
+        className={`inline-block whitespace-nowrap font-mono text-[11px] tracking-widest text-matrix-green/40 ${reducedMotion ? "" : "animate-marquee group-hover:[animation-play-state:paused]"}`}
       >
         {reducedMotion ? text : doubled}
       </div>
