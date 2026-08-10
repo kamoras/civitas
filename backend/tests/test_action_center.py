@@ -1552,6 +1552,12 @@ class TestDigestFiltering:
         # Feeds emit the typographic apostrophe far more often than the
         # ASCII one; matching only the ASCII spelling missed this entirely.
         "Today\u2019s headlines from the Capitol",
+        # Live-missed case (issue 492, 2026-08): NPR's real title format for
+        # this product leads with "The", which is too long to be absorbed by
+        # the source-tag group (no colon of its own within 20 chars) and was
+        # not otherwise skipped, so the whole prefix pattern silently failed.
+        "The Up First newsletter: Trump weighs birthright citizenship order",
+        "An evening briefing on troop levels",
     ])
     def test_recurring_digest_titles_are_dropped(self, title):
         from app.pipeline.analyze.action_center import _digest_reason
