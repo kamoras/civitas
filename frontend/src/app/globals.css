@@ -480,6 +480,33 @@ li {
   font-size: 12px !important;
 }
 
+/* ===== LEGIBILITY: PROSE PARAGRAPH SIZE =====
+   Reader feedback, twice: the site is hard to read. The floor rule above
+   fixes badges and labels; it does nothing for running prose, which is the
+   part people actually sit and read. Measured live on /about — 98 of the
+   101 real paragraphs render at 14px, against a 16px browser/web default.
+   Monospace compounds it: Share Tech Mono's 0.500em x-height reads smaller
+   than a proportional face at the same nominal size, so nominal 14px here
+   is doing the work of roughly 13px elsewhere.
+
+   Scoped to `p` on purpose. Prose is what needs the bump; the same tokens
+   on a span or div are badges, table cells, and stat readouts, where a
+   size change is a layout change. Line-height comes along for free —
+   `leading-relaxed`/`leading-snug` are unitless, so they scale with the
+   new size instead of tightening against it (measured: 1.60 ratio holds).
+
+   Same start-or-space anchoring the pixel-font block below explains, so a
+   variant-prefixed `sm:text-sm` on some other element's base size never
+   matches. The breakpoint hazard documented there does not apply: the only
+   two `<p>` carrying both tokens (`action/page.tsx`, `BillDetailClient`)
+   pair `text-sm` with `sm:text-base`, which is 16px — the same value this
+   rule sets, so desktop is unchanged and only mobile moves 14px -> 16px,
+   which is the improvement being asked for. */
+p[class^="text-sm"],
+p[class*=" text-sm"] {
+  font-size: 16px !important;
+}
+
 /* ===== LEGIBILITY: PIXEL FONT OFF ITS DESIGN GRID =====
    Press Start 2P (`font-pixel`) is a bitmap face. Across the latin set every
    outline coordinate is a multiple of 125/1000 em — an 8-cell-per-em grid,
