@@ -3,14 +3,55 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 
-function Section({ title, children, id }: { title: string; children: React.ReactNode; id?: string }) {
+// Collapsed by default (2026-08). Reader feedback that the site reads dense
+// was partly about volume, not just spacing: this page measured 10,766 words
+// across 102 paragraphs — roughly 33 screens of continuous scrolling, with a
+// single 588-word paragraph and 48 paragraphs over 60 words. Every other page
+// on the site measures under ~1,000. The 2026-07 pass at this same complaint
+// added the `Gist` lead-ins, which help per section but made the page longer
+// overall; nothing ever collapsed the technical depth underneath them.
+//
+// Nothing is removed — this is a methodology page and every word of it stays
+// one click away, which is the point of publishing it. Collapsing turns the
+// wall into a 15-item index a reader can actually navigate.
+//
+// Native <details> rather than the shared CollapsibleSection: that one is a
+// client component built around useState, and this page is a server
+// component with no other interactivity. <details> keeps it that way, and
+// brings keyboard support and find-in-page expansion for free.
+//
+// `defaultOpen` covers two cases: the lead section, so the page never opens
+// on a bare list of closed boxes, and any section carrying an `id`, because
+// that id is a deep-link target (the leaderboard links to
+// /about#known-limitations) and fragment-navigation auto-expansion of a
+// closed <details> is too recent to rely on across browsers.
+function Section({
+  title,
+  children,
+  id,
+  defaultOpen = false,
+}: {
+  title: string;
+  children: React.ReactNode;
+  id?: string;
+  defaultOpen?: boolean;
+}) {
   return (
     <section className="terminal-window mb-6" id={id}>
       <TerminalTitlebar title={`${title.toLowerCase().replace(/ /g, "_")}.txt`} />
-      <div className="p-6 space-y-4">
-        <h2 className="text-neon-cyan font-terminal text-sm tracking-widest">{title}</h2>
-        {children}
-      </div>
+      <details className="group" open={defaultOpen || Boolean(id)}>
+        <summary className="p-6 flex items-center gap-3 cursor-pointer list-none [&::-webkit-details-marker]:hidden hover:bg-matrix-green/5 transition-colors">
+          <span
+            aria-hidden="true"
+            className="text-matrix-green/40 font-mono text-sm group-hover:text-matrix-green transition-colors"
+          >
+            <span className="group-open:hidden">+</span>
+            <span className="hidden group-open:inline">−</span>
+          </span>
+          <h2 className="text-neon-cyan font-terminal text-sm tracking-widest">{title}</h2>
+        </summary>
+        <div className="px-6 pb-6 space-y-4">{children}</div>
+      </details>
     </section>
   );
 }
@@ -82,7 +123,7 @@ export default function AboutPage() {
           </div>
 
           {/* ── Philosophy ── */}
-          <Section title="OUR APPROACH">
+          <Section title="OUR APPROACH" defaultOpen>
             <P>
               Civitas is an open-data AI/ML platform that aggregates data from official
               U.S. government sources into unified transparency scorecards for senators,
