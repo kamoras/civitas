@@ -36,6 +36,7 @@ from sqlalchemy.orm import Session
 from app.models import Candidate, Race
 from app.pipeline.fetch.state_candidate_sources import configured_states, source_for_state
 from app.pipeline.fetch.state_candidates_clarity import fetch_confirmed_candidates as _fetch_clarity
+from app.pipeline.fetch.state_candidates_tabular import fetch_confirmed_candidates as _fetch_tabular
 from app.pipeline.fetch.state_candidates_tx import fetch_confirmed_candidates as _fetch_tx
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,7 @@ logger = logging.getLogger(__name__)
 STRATEGIES = {
     "tx_civix": _fetch_tx,
     "clarity": _fetch_clarity,
+    "tabular": _fetch_tabular,
 }
 
 # A state's own party lettering (mostly single-letter) doesn't match FEC's

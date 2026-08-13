@@ -9,6 +9,26 @@
       "runoff_threshold_pct": null,
       "description": "Official statewide results feed, verified live 2026-08-12 against the real 2026 primary (EID 126592): elections.json -> current_ver.txt -> json/sum.json, no API key or auth. All 18 federal contests (8 districts x 2 parties, plus both Senate primaries) parse cleanly. Ground-truthed against the CO-01 Democratic primary, where the feed shows Melat Kiros 83,855 (53.2%) defeating 15-term incumbent Diana DeGette 62,715 with Wanda James third — matching what actually happened on 2026-06-30. runoff_threshold_pct is null because Colorado awards its primary to the plurality leader outright, so the top vote-getter IS the nominee; a runoff state must set this or its runoff-bound leader would be mislabeled."
     },
+    "NC": {
+      "source_name": "North Carolina State Board of Elections (public results export)",
+      "strategy": "tabular",
+      "runoff_threshold_pct": 30.0,
+      "discovery": {
+        "mode": "s3_listing",
+        "bucket_url": "https://s3.amazonaws.com/dl.ncsbe.gov",
+        "prefix": "ENRS/{year}",
+        "file_regex": "results_pct_\\d{8}\\.zip"
+      },
+      "format": {
+        "delimiter": "\t",
+        "encoding": "latin-1",
+        "contest_column": "Contest Name",
+        "choice_column": "Choice",
+        "party_column": "Choice Party",
+        "votes_column": "Total Votes"
+      },
+      "description": "Official statewide precinct-results export, verified live 2026-08-12 against the real 2026-03-03 primary: the S3 listing at dl.ncsbe.gov resolves ENRS/2026 -> results_pct_20260303.zip (1.4 MB, 103,517 rows, 49,884 federal) with no key or auth, yielding 21 federal contests. Ground-truthed on Virginia Foxx taking NC-05 Republican with 74.5% and Valerie Foushee NC-04 Democratic with 49.2%. runoff_threshold_pct is 30 because North Carolina nominates on 30%+1 and sends anything below to a second primary — NC-01 Republican was won on 39.5%, which clears it, but a sub-30% leader must not be confirmed while a second primary is still possible."
+    },
     "TX": {
       "source_name": "Texas Secretary of State (Civix Candidate Bio Portal)",
       "strategy": "tx_civix",

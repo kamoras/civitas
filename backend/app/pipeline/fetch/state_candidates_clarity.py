@@ -51,6 +51,12 @@ import re
 import httpx
 
 from app.pipeline.fetch.http_utils import fetch_with_retry
+from app.pipeline.fetch.state_candidates_common import (
+    normalize_party as _parse_party,
+    parse_office as _parse_office,
+    pick_nominee,
+    surname as _surname,
+)
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -64,35 +70,6 @@ _HEADERS = {"User-Agent": "Civitas civic-transparency-platform contact@civitas-r
 
 # Three small requests per state per run — a polite pace is plenty.
 _rate_limiter = RateLimiter(rps=1.0)
-
-# "Representative to the 120th United States Congress - District 1 -
-# Democratic Party". The ordinal ("120th") advances every Congress and the
-# label wording varies between Clarity states, so match on the stable
-# parts only: the chamber word and the district number.
-_HOUSE_RE = re.compile(
-    r"(?:United States Congress|U\.?\s*S\.?\s*(?:House|Representative))"
-    r".*?District\s+(\d+)",
-    re.IGNORECASE | re.DOTALL,
-)
-_SENATE_RE = re.compile(r"(?:United States|U\.?\s*S\.?)\s*Senator", re.IGNORECASE)
-
-# A federal contest label that names a chamber but NO district is an
-# at-large House seat (AK, DE, MT, ND, SD, VT, WY) — FEC models those as
-# district 0, which is what _race_id_for already falls back to.
-_HOUSE_AT_LARGE_RE = re.compile(
-    r"(?:United States Congress|U\.?\s*S\.?\s*(?:House|Representative))", re.IGNORECASE,
-)
-
-# Clarity spells the party out in the contest name; the shared matcher in
-# state_candidates.py speaks the states' own single-letter codes.
-_PARTY_WORDS = {
-    "democratic": "D", "democrat": "D", "republican": "R", "libertarian": "L",
-    "green": "G", "constitution": "C", "independent": "I",
-}
-
-# Name suffixes that must not be mistaken for the surname when splitting
-# Clarity's display name ("Dwayne L. Romero" -> "Romero").
-_NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
 
 _PRESIDENTIAL_RE = re.compile(r"presidential", re.IGNORECASE)
 _PRIMARY_RE = re.compile(r"primary", re.IGNORECASE)
@@ -109,73 +86,16 @@ def _is_primary(election: dict, year: int) -> bool:
     return bool(_PRIMARY_RE.search(name)) and not _PRESIDENTIAL_RE.search(name)
 
 
-def _parse_office(contest_name: str) -> tuple[str, int | None] | None:
-    """("S", None) / ("H", 3) / ("H", None) for an at-large seat, or None
-    for any contest this doesn't positively recognise as federal — a state
-    legislative or judicial race must never be guessed into a federal one."""
-    name = contest_name or ""
-    if _SENATE_RE.search(name):
-        return "S", None
-    m = _HOUSE_RE.search(name)
-    if m:
-        return "H", int(m.group(1))
-    if _HOUSE_AT_LARGE_RE.search(name):
-        return "H", None
-    return None
-
-
-def _parse_party(contest_name: str) -> str | None:
-    """Clarity scopes a primary contest to one party in the contest name
-    itself ("... - Democratic Party"). No recognised party word means this
-    isn't a partisan primary contest we can attribute — skipped, never
-    defaulted to a major party."""
-    lowered = (contest_name or "").lower()
-    for word, code in _PARTY_WORDS.items():
-        if re.search(rf"\b{word}\b", lowered):
-            return code
-    return None
-
-
-def _surname(display_name: str) -> str | None:
-    """Clarity prints "First [Middle] Last"; the shared matcher compares
-    against the surname FEC stores before the comma. Trailing generational
-    suffixes are dropped so "Robert Cruz Jr." yields "Cruz"."""
-    tokens = [t for t in re.split(r"\s+", (display_name or "").strip()) if t]
-    while tokens and tokens[-1].strip(".,").lower() in _NAME_SUFFIXES:
-        tokens.pop()
-    if not tokens:
-        return None
-    return tokens[-1].strip(".,")
-
-
 def _nominee(contest: dict, runoff_threshold_pct: float | None) -> tuple[str, float] | None:
-    """Top vote-getter as (name, pct), or None when this contest can't
-    safely name one: no choices, no votes cast yet, an exact tie, or a
-    leader who failed to clear a runoff state's threshold."""
+    """Unwrap Clarity's positionally-aligned `CH`/`V` arrays and hand them
+    to the shared winner rule. A length mismatch between the two means the
+    envelope isn't what this adapter understands, so nothing is derived
+    from it rather than pairing a name with the wrong candidate's votes."""
     names = contest.get("CH") or []
     votes = contest.get("V") or []
-    pcts = contest.get("PCT") or []
     if not names or len(votes) != len(names):
         return None
-
-    ranked = sorted(zip(names, votes), key=lambda t: t[1], reverse=True)
-    if ranked[0][1] <= 0:
-        return None
-    # A tie has no winner to report — the state will resolve it (recount,
-    # runoff, draw), and guessing either way would be fabrication.
-    if len(ranked) > 1 and ranked[0][1] == ranked[1][1]:
-        return None
-
-    top_name = ranked[0][0]
-    idx = names.index(top_name)
-    pct = float(pcts[idx]) if idx < len(pcts) else 0.0
-
-    if runoff_threshold_pct is not None and pct < runoff_threshold_pct:
-        # ponytail: withholds the whole contest in runoff states until the
-        # leader clears the bar; the real upgrade is fetching that state's
-        # separate runoff election feed and merging it in.
-        return None
-    return top_name, pct
+    return pick_nominee(list(zip(names, votes)), runoff_threshold_pct)
 
 
 async def _get(client: httpx.AsyncClient, url: str, label: str) -> httpx.Response | None:
