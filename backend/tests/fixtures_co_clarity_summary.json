@@ -1,0 +1,80 @@
+{
+ "Contests": [
+  {
+   "C": "United States Senator - Democratic Party",
+   "CH": [
+    "Julie Gonzales",
+    "John Hickenlooper"
+   ],
+   "V": [
+    422488,
+    472870
+   ],
+   "PCT": [
+    47.1864885330784,
+    52.8135114669216
+   ],
+   "W": [
+    0,
+    0
+   ]
+  },
+  {
+   "C": "Representative to the 120th United States Congress - District 1 - Democratic Party",
+   "CH": [
+    "Melat Kiros",
+    "Diana DeGette",
+    "Wanda James"
+   ],
+   "V": [
+    83855,
+    62715,
+    11075
+   ],
+   "PCT": [
+    53.1922991531606,
+    39.7824225316375,
+    7.02527831520188
+   ],
+   "W": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "C": "Representative to the 120th United States Congress - District 4 - Republican Party",
+   "CH": [
+    "Lauren Boebert"
+   ],
+   "V": [
+    92651
+   ],
+   "PCT": [
+    100
+   ],
+   "W": [
+    0
+   ]
+  },
+  {
+   "C": "Governor - Democratic Party",
+   "CH": [
+    "Phil Weiser",
+    "Michael Bennet"
+   ],
+   "V": [
+    505459,
+    383138
+   ],
+   "PCT": [
+    56.8828163948337,
+    43.1171836051663
+   ],
+   "W": [
+    0,
+    0
+   ]
+  }
+ ]
+}

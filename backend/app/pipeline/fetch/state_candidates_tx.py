@@ -91,9 +91,14 @@ async def _find_general_election_id(client: httpx.AsyncClient, year: int) -> int
     return None
 
 
-async def fetch_confirmed_candidates(client: httpx.AsyncClient, year: int) -> list[dict] | None:
+async def fetch_confirmed_candidates(
+    client: httpx.AsyncClient, year: int, state: str = "TX", source: dict | None = None,
+) -> list[dict] | None:
     """Every confirmed general-election federal candidate in Texas for
-    `year`, or None on a fetch failure or if no "GE" election is indexed
+    `year`. `state`/`source` are part of the shared STRATEGIES signature
+    (see state_candidates.py) and unused here — Civix's portal is a single
+    Texas deployment, so unlike the Clarity adapter this one serves exactly
+    one state. Returns None on a fetch failure or if no "GE" election is indexed
     yet for that year (e.g. queried too early in the cycle) — the tri-
     state None-vs-[] discipline this codebase uses throughout (a real
     empty result is not the same as "couldn't check").

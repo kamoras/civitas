@@ -1,8 +1,14 @@
 {
   "_source": "Hand-verified during research: each state's own Secretary of State (or equivalent) official candidate database, checked directly (live network inspection of the real API/page, not scraped from a third party like Ballotpedia) for a machine-readable, no-key, official source that distinguishes a real confirmed general-election candidate from an FEC filer who lost their primary or runoff.",
   "_method": "A state with no entry here is simply not yet covered — the ballot page falls back to its prior behavior (every active FEC filer shown) for that state, same as any other partial-coverage feature in this app (ballot measures, county-district crosswalk). This file only ever ADDS accuracy, never removes a state's chance at showing candidates.",
-  "_as_of": "2026-08-09",
+  "_as_of": "2026-08-12",
   "states": {
+    "CO": {
+      "source_name": "Colorado Secretary of State (Clarity Election Night Reporting)",
+      "strategy": "clarity",
+      "runoff_threshold_pct": null,
+      "description": "Official statewide results feed, verified live 2026-08-12 against the real 2026 primary (EID 126592): elections.json -> current_ver.txt -> json/sum.json, no API key or auth. All 18 federal contests (8 districts x 2 parties, plus both Senate primaries) parse cleanly. Ground-truthed against the CO-01 Democratic primary, where the feed shows Melat Kiros 83,855 (53.2%) defeating 15-term incumbent Diana DeGette 62,715 with Wanda James third — matching what actually happened on 2026-06-30. runoff_threshold_pct is null because Colorado awards its primary to the plurality leader outright, so the top vote-getter IS the nominee; a runoff state must set this or its runoff-bound leader would be mislabeled."
+    },
     "TX": {
       "source_name": "Texas Secretary of State (Civix Candidate Bio Portal)",
       "strategy": "tx_civix",

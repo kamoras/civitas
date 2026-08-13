@@ -35,12 +35,18 @@ from sqlalchemy.orm import Session
 
 from app.models import Candidate, Race
 from app.pipeline.fetch.state_candidate_sources import configured_states, source_for_state
+from app.pipeline.fetch.state_candidates_clarity import fetch_confirmed_candidates as _fetch_clarity
 from app.pipeline.fetch.state_candidates_tx import fetch_confirmed_candidates as _fetch_tx
 
 logger = logging.getLogger(__name__)
 
+# Every strategy takes the SAME (client, cycle, state, source) arguments so
+# one adapter can serve many states — a state whose vendor is already here
+# is a state_candidate_sources.json entry, never new code. Only a genuinely
+# different vendor earns a new module.
 STRATEGIES = {
     "tx_civix": _fetch_tx,
+    "clarity": _fetch_clarity,
 }
 
 # A state's own party lettering (mostly single-letter) doesn't match FEC's
@@ -111,7 +117,7 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
             continue
 
         try:
-            records = await strategy(client, cycle)
+            records = await strategy(client, cycle, state, source)
         except Exception:
             logger.exception("Confirmed-candidate fetch raised for %s", state)
             records = None
