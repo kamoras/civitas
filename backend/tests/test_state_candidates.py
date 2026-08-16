@@ -9,6 +9,7 @@ import pytest
 
 from app.models import Candidate, Race
 from app.pipeline.fetch import state_candidates as sc
+from app.pipeline.fetch.state_candidate_sources import configured_states
 
 
 def _race(db, race_id, state, office="S", district=None, cycle_year=2026):
@@ -27,8 +28,14 @@ class TestIsConfigured:
     def test_true_for_a_registered_state_with_a_real_strategy(self):
         assert sc.is_configured("TX") is True
 
+    def test_true_for_every_registered_state(self):
+        """Each entry must name a strategy that actually exists — a typo'd
+        key is a config bug that would silently drop that state."""
+        for state in configured_states():
+            assert sc.is_configured(state) is True, state
+
     def test_false_for_an_unregistered_state(self):
-        assert sc.is_configured("CA") is False
+        assert sc.is_configured("ZZ") is False
 
 
 class TestMatchCandidate:

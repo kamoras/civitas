@@ -33,6 +33,7 @@ import csv
 import io
 import logging
 import re
+import xml.etree.ElementTree as ET
 import zipfile
 from collections import defaultdict
 
@@ -40,7 +41,7 @@ import httpx
 
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
-    normalize_party, parse_office, pick_nominee, surname,
+    normalize_party, parse_office, pick_nominees, surname,
 )
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -99,11 +100,59 @@ async def _discover_url(
     return None
 
 
+_XL_NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+
+
+def _xlsx_rows(payload: bytes) -> list[dict] | None:
+    """Rows from a .xlsx workbook's first sheet, read with the standard
+    library alone — an xlsx IS a zip of XML, so this needs no Excel
+    dependency for the several states (CA among them) that publish results
+    only in that format.
+
+    Values come from the shared-string table when the cell says so
+    (t="s"), otherwise inline. Anything else (formulas, rich text beyond
+    its text runs) yields an empty cell rather than raising, on the same
+    principle as _text elsewhere: a shape change should cost a field, not
+    the whole download.
+    """
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(payload))
+        shared = [
+            "".join(t.text or "" for t in si.iter(f"{_XL_NS}t"))
+            for si in ET.fromstring(archive.read("xl/sharedStrings.xml"))
+        ]
+        sheet = ET.fromstring(archive.read("xl/worksheets/sheet1.xml"))
+    except (zipfile.BadZipFile, KeyError, ET.ParseError):
+        logger.warning("Results download was not a readable xlsx workbook")
+        return None
+
+    def cell(c) -> str:
+        v = c.find(f"{_XL_NS}v")
+        if v is None or v.text is None:
+            return ""
+        if c.get("t") == "s":
+            try:
+                return shared[int(v.text)]
+            except (ValueError, IndexError):
+                return ""
+        return v.text
+
+    rows = [[cell(c) for c in row.iter(f"{_XL_NS}c")] for row in sheet.iter(f"{_XL_NS}row")]
+    if not rows:
+        return None
+    header = rows[0]
+    return [dict(zip(header, r)) for r in rows[1:]]
+
+
 def _rows(payload: bytes, fmt: dict) -> list[dict] | None:
     """Delimited rows from the download, transparently unzipping a
-    single-file archive. None when the payload isn't what was configured."""
+    single-file archive or reading an xlsx workbook. None when the payload
+    isn't what was configured."""
     encoding = fmt.get("encoding") or "utf-8"
     delimiter = fmt.get("delimiter") or ","
+
+    if fmt.get("format") == "xlsx":
+        return _xlsx_rows(payload)
 
     if payload[:2] == b"PK":
         try:
@@ -138,23 +187,28 @@ def _votes(raw: str) -> int:
 
 
 def _tally(rows: list[dict], fmt: dict) -> dict[str, dict]:
-    """Sum votes per (contest, choice) across every precinct row, keeping
-    each contest's party column value for the fallback attribution."""
+    """Sum votes per (contest, choice) across every precinct/county row,
+    keeping each CHOICE's own party. Party is per-candidate rather than
+    per-contest because a top-two state's contest isn't party-scoped at all
+    — "United States Representative District 10" holds every party's
+    candidates in one race."""
     contest_col = fmt.get("contest_column") or "Contest Name"
     choice_col = fmt.get("choice_column") or "Choice"
     party_col = fmt.get("party_column")
     votes_col = fmt.get("votes_column") or "Total Votes"
 
-    tally: dict[str, dict] = defaultdict(lambda: {"choices": defaultdict(int), "party": ""})
+    tally: dict[str, dict] = defaultdict(
+        lambda: {"votes": defaultdict(int), "party": {}},
+    )
     for row in rows:
         contest = (row.get(contest_col) or "").strip()
         choice = (row.get(choice_col) or "").strip()
         if not contest or not choice:
             continue
         entry = tally[contest]
-        entry["choices"][choice] += _votes(row.get(votes_col) or "")
-        if party_col and not entry["party"]:
-            entry["party"] = (row.get(party_col) or "").strip()
+        entry["votes"][choice] += _votes(row.get(votes_col) or "")
+        if party_col and choice not in entry["party"]:
+            entry["party"][choice] = (row.get(party_col) or "").strip()
     return tally
 
 
@@ -170,6 +224,7 @@ async def fetch_confirmed_candidates(
     """
     st = state.upper()
     threshold = source.get("runoff_threshold_pct")
+    advance_count = int(source.get("advance_count") or 1)
     fmt = source.get("format") or {}
 
     url = await _discover_url(client, st, year, source.get("discovery") or {})
@@ -195,21 +250,29 @@ async def fetch_confirmed_candidates(
         parsed = parse_office(contest)
         if parsed is None:
             continue
-        # The contest label carries the primary's party in every export
-        # seen live ("US HOUSE OF REPRESENTATIVES DISTRICT 01 (REP)"); the
-        # per-row party column is the fallback for a label that omits it.
-        party = normalize_party(contest) or normalize_party(entry["party"])
-        if party is None:
-            continue
-        won = pick_nominee(list(entry["choices"].items()), threshold)
-        if won is None:
-            continue
-        last_name = surname(won[0])
-        if not last_name:
-            continue
         office, district = parsed
-        results.append({
-            "office": office, "district": district,
-            "party": party, "last_name": last_name,
-        })
+        # A party-primary label carries its party ("US HOUSE OF
+        # REPRESENTATIVES DISTRICT 01 (REP)"); a top-two label doesn't,
+        # so each candidate's own party column is the fallback.
+        contest_party = normalize_party(contest)
+        for name, _pct in pick_nominees(
+            list(entry["votes"].items()), threshold, advance_count,
+        ):
+            party = contest_party or normalize_party(entry["party"].get(name, ""))
+            if party is None:
+                # In a one-nominee party primary an unattributable contest
+                # is a label we don't understand, so it's skipped. Under
+                # top-two the party is incidental — an independent or
+                # no-party-preference candidate really can advance — so
+                # they're kept, and the matcher falls back to surname.
+                if advance_count == 1:
+                    continue
+                party = ""
+            last_name = surname(name)
+            if not last_name:
+                continue
+            results.append({
+                "office": office, "district": district,
+                "party": party, "last_name": last_name,
+            })
     return results

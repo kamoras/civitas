@@ -70,12 +70,117 @@ class TestTally:
         row's value is a fraction of the real total."""
         rows = tb._rows(_fixture_bytes(), _FORMAT)
         tally = tb._tally(rows, _FORMAT)
-        foxx = tally["US HOUSE OF REPRESENTATIVES DISTRICT 05 (REP)"]["choices"]
+        foxx = tally["US HOUSE OF REPRESENTATIVES DISTRICT 05 (REP)"]["votes"]
         name = next(n for n in foxx if "Foxx" in n)
         single_row = max(
             tb._votes(r["Total Votes"]) for r in rows if r["Choice"] == name
         )
         assert foxx[name] > single_row
+
+
+def _workbook(rows: list[list[str]]) -> bytes:
+    """Minimal real .xlsx: a zip of the two XML parts _xlsx_rows reads,
+    with every cell a shared-string reference (t="s"), which is how the
+    California workbook actually encodes its text."""
+    table = []
+    for row in rows:
+        for cell in row:
+            if cell not in table:
+                table.append(cell)
+    ns = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+    shared = f"<sst {ns}>" + "".join(f"<si><t>{v}</t></si>" for v in table) + "</sst>"
+    body = "".join(
+        "<row>" + "".join(
+            f'<c t="s"><v>{table.index(c)}</v></c>' for c in row
+        ) + "</row>"
+        for row in rows
+    )
+    sheet = f"<worksheet {ns}><sheetData>{body}</sheetData></worksheet>"
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("xl/sharedStrings.xml", shared)
+        zf.writestr("xl/worksheets/sheet1.xml", sheet)
+    return buf.getvalue()
+
+
+class TestXlsxRows:
+    """An xlsx is a zip of XML, so the standard library reads it — no
+    Excel dependency for the states (California among them) that publish
+    results in no other machine-readable format."""
+
+    def test_reads_a_workbook_into_header_keyed_rows(self):
+        payload = _workbook([
+            ["Contest Name", "Candidate Name", "Vote Total"],
+            ["United States Representative District 10", "Mark DeSaulnier", "9830"],
+        ])
+        rows = tb._rows(payload, {"format": "xlsx"})
+        assert rows == [{
+            "Contest Name": "United States Representative District 10",
+            "Candidate Name": "Mark DeSaulnier",
+            "Vote Total": "9830",
+        }]
+
+    def test_non_workbook_payload_returns_none_rather_than_raising(self):
+        assert tb._rows(b"not a zip at all", {"format": "xlsx"}) is None
+        assert tb._rows(b"PK\x03\x04corrupt", {"format": "xlsx"}) is None
+
+
+class TestTopTwo:
+    """California runs one all-party contest and advances the top two, so
+    a same-party pair is a correct result, not a bug."""
+
+    _FMT = {
+        "delimiter": "\t", "encoding": "utf-8",
+        "contest_column": "Contest Name", "choice_column": "Candidate Name",
+        "party_column": "Party Name", "votes_column": "Vote Total",
+    }
+    _TSV = (
+        "Contest Name\tCandidate Name\tParty Name\tVote Total\n"
+        "United States Representative District 4\tMike Thompson\tDemocratic\t900\n"
+        "United States Representative District 4\tNiki Jones\tDemocratic\t700\n"
+        "United States Representative District 4\tRon Bauer\tRepublican\t300\n"
+        "United States Representative District 9\tPat Nolan\tNo Party Preference\t800\n"
+        "United States Representative District 9\tAmy Reed\tDemocratic\t600\n"
+        "United States Representative District 9\tJoe Katz\tRepublican\t100\n"
+    ).encode()
+
+    async def _run(self, monkeypatch, advance_count):
+        async def fake_discover(client, state, year, discovery):
+            return "https://example.gov/sov.tsv"
+
+        async def fake_get(client, url, label):
+            return _Resp(content=self._TSV)
+
+        monkeypatch.setattr(tb, "_discover_url", fake_discover)
+        monkeypatch.setattr(tb, "_get", fake_get)
+        return await tb.fetch_confirmed_candidates(
+            None, 2026, "CA",
+            {"advance_count": advance_count, "format": self._FMT},
+        )
+
+    @pytest.mark.asyncio
+    async def test_advances_two_of_the_same_party(self, monkeypatch):
+        records = await self._run(monkeypatch, 2)
+        d4 = [r for r in records if r["district"] == 4]
+        assert sorted(r["last_name"] for r in d4) == ["Jones", "Thompson"]
+        assert all(r["party"] == "D" for r in d4)
+
+    @pytest.mark.asyncio
+    async def test_no_party_preference_candidate_still_advances(self, monkeypatch):
+        """Party is incidental under top-two — dropping an NPP leader
+        would hide the actual front-runner."""
+        records = await self._run(monkeypatch, 2)
+        nolan = next(r for r in records if r["last_name"] == "Nolan")
+        assert nolan["party"] == ""
+
+    @pytest.mark.asyncio
+    async def test_same_data_as_a_party_primary_would_take_only_the_leader(
+        self, monkeypatch,
+    ):
+        """Guards the advance_count switch itself: one-nominee semantics
+        must still drop everyone but the winner."""
+        records = await self._run(monkeypatch, 1)
+        assert [r["last_name"] for r in records if r["district"] == 4] == ["Thompson"]
 
 
 class TestDiscoverUrl:

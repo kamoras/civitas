@@ -24,7 +24,8 @@ import re
 # REPRESENTATIVES", "U.S. Representative"); the ordinal in Colorado's label
 # advances every Congress, so nothing cycle-specific is matched.
 _CHAMBER_HOUSE = (
-    r"(?:United\s+States\s+Congress|U\.?\s*S\.?\s*(?:House|Representative))"
+    r"(?:United\s+States\s+(?:Congress|Representative)"
+    r"|U\.?\s*S\.?\s*(?:House|Representative))"
 )
 _HOUSE_DISTRICT_RE = re.compile(
     rf"{_CHAMBER_HOUSE}.*?District\s+0*(\d+)", re.IGNORECASE | re.DOTALL,
@@ -96,37 +97,65 @@ def surname(display_name: str) -> str | None:
     return tokens[-1].strip(".,")
 
 
-def pick_nominee(
-    choices: list[tuple[str, int]], runoff_threshold_pct: float | None,
-) -> tuple[str, float] | None:
-    """Winner of one contest as (name, pct) from [(name, votes), ...], or
-    None when no nominee can be named safely.
+def pick_nominees(
+    choices: list[tuple[str, int]],
+    runoff_threshold_pct: float | None = None,
+    advance_count: int = 1,
+) -> list[tuple[str, float]]:
+    """Who advances to the general from one contest, as [(name, pct), ...]
+    from [(name, votes), ...]. Empty when nobody can be named safely.
 
-    None on: an empty field, no votes cast yet, an exact tie for the lead
-    (the state resolves those by recount/runoff/draw — guessing either way
-    would be fabrication), or a leader who failed to clear a runoff state's
-    threshold.
+    `advance_count` is the state's own rule, not a tuning knob. Most states
+    run a party primary and send ONE nominee per party. The top-two states
+    (CA, WA) and top-four (AK) run a single all-party contest and advance
+    that many regardless of party, so a top-two contest legitimately sends
+    two candidates of the SAME party to the general — treating it as a
+    one-winner race would silently drop a real ballot option.
 
-    The threshold is the load-bearing safety rule. Where a plurality wins
-    outright the top vote-getter IS the nominee, but states that send a
-    sub-threshold leader to a second primary (NC at 30%, and the 50% runoff
-    states TX/GA/MS/AL/AR/OK/SC) would otherwise have a runoff-bound
-    candidate confirmed as the winner of a race still being decided.
+    Nobody advances on: an empty field, or no votes cast yet. A tie
+    spanning the cutoff truncates to whoever is strictly above it — the
+    state resolves ties by recount or draw, and guessing which tied
+    candidate advanced would be fabrication.
+
+    `runoff_threshold_pct` applies only to one-nominee party primaries,
+    where it is the load-bearing safety rule: states that send a
+    sub-threshold leader to a second primary (NC at 30%, and the 50%
+    runoff states TX/GA/MS/AL/AR/OK/SC) would otherwise have a
+    runoff-bound candidate confirmed as the winner of a race still being
+    decided.
     """
     ranked = sorted(
-        [(n, v) for n, v in choices if isinstance(v, int)],
+        [(n, v) for n, v in choices if isinstance(v, int) and v > 0],
         key=lambda t: t[1], reverse=True,
     )
-    if not ranked or ranked[0][1] <= 0:
-        return None
-    if len(ranked) > 1 and ranked[0][1] == ranked[1][1]:
-        return None
+    if not ranked:
+        return []
 
-    total = sum(v for _, v in ranked)
-    pct = 100.0 * ranked[0][1] / total if total else 0.0
-    if runoff_threshold_pct is not None and pct < runoff_threshold_pct:
+    # Truncate at a tie that straddles the cutoff: everyone strictly above
+    # the tied vote count advanced, and who broke the tie isn't ours to say.
+    cutoff = min(advance_count, len(ranked))
+    if cutoff < len(ranked) and ranked[cutoff - 1][1] == ranked[cutoff][1]:
+        tied_at = ranked[cutoff][1]
+        ranked = [r for r in ranked if r[1] > tied_at]
+        if not ranked:
+            return []
+    else:
+        ranked = ranked[:cutoff]
+
+    total = sum(v for _, v in choices if isinstance(v, int) and v > 0)
+    out = [(n, 100.0 * v / total if total else 0.0) for n, v in ranked]
+
+    if advance_count == 1 and runoff_threshold_pct is not None:
         # ponytail: withholds the contest until the leader clears the bar;
         # the upgrade is fetching that state's second-primary/runoff feed
         # and merging it in.
-        return None
-    return ranked[0][0], pct
+        out = [(n, p) for n, p in out if p >= runoff_threshold_pct]
+    return out
+
+
+def pick_nominee(
+    choices: list[tuple[str, int]], runoff_threshold_pct: float | None,
+) -> tuple[str, float] | None:
+    """Single-nominee convenience wrapper for the party-primary adapters."""
+    won = pick_nominees(choices, runoff_threshold_pct, advance_count=1)
+    return won[0] if won else None

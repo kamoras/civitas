@@ -9,6 +9,24 @@
       "runoff_threshold_pct": null,
       "description": "Official statewide results feed, verified live 2026-08-12 against the real 2026 primary (EID 126592): elections.json -> current_ver.txt -> json/sum.json, no API key or auth. All 18 federal contests (8 districts x 2 parties, plus both Senate primaries) parse cleanly. Ground-truthed against the CO-01 Democratic primary, where the feed shows Melat Kiros 83,855 (53.2%) defeating 15-term incumbent Diana DeGette 62,715 with Wanda James third — matching what actually happened on 2026-06-30. runoff_threshold_pct is null because Colorado awards its primary to the plurality leader outright, so the top vote-getter IS the nominee; a runoff state must set this or its runoff-bound leader would be mislabeled."
     },
+    "CA": {
+      "source_name": "California Secretary of State (certified Statement of Vote)",
+      "strategy": "tabular",
+      "advance_count": 2,
+      "runoff_threshold_pct": null,
+      "discovery": {
+        "mode": "direct_url",
+        "url": "https://elections.cdn.sos.ca.gov/sov/{year}-primary/sov/csv-voter-nominated.xlsx"
+      },
+      "format": {
+        "format": "xlsx",
+        "contest_column": "Contest Name",
+        "choice_column": "Candidate Name",
+        "party_column": "Party Name",
+        "votes_column": "Vote Total"
+      },
+      "description": "Certified Statement of Vote workbook for voter-nominated (top-two) offices, verified live 2026-08-15: county-level rows carrying Contest Name ('United States Representative District 10'), Candidate Name, Party Name and Vote Total, read with the standard library since an xlsx is a zip of XML and no Excel dependency is warranted. All 52 congressional districts are present; California has no Senate seat on the 2026 ballot. advance_count is 2 because California runs a single all-party primary and sends the TOP TWO to the general regardless of party — modelling it as one nominee per party would silently drop a real ballot option, including the same-party runoffs California regularly produces. runoff_threshold_pct is null: there is no runoff, the top two simply advance."
+    },
     "NC": {
       "source_name": "North Carolina State Board of Elections (public results export)",
       "strategy": "tabular",
