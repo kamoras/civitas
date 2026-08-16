@@ -409,5 +409,13 @@ def _collect(
                 "office": office, "district": district,
                 "party": party, "last_name": last_name,
             })
-        if records:
-            by_seat[(office, district, contest_party or "")] = records
+        # Keyed by each record's OWN party, not the contest's. A runoff must
+        # replace its primary's answer for the same seat-and-party, but two
+        # party primaries held the same day (Virginia runs separate
+        # Democratic and Republican elections) are different races that must
+        # both survive — keying on the contest would let the second silently
+        # erase the first.
+        for record in records:
+            by_seat.setdefault((office, district, record["party"]), []).clear()
+        for record in records:
+            by_seat[(office, district, record["party"])].append(record)

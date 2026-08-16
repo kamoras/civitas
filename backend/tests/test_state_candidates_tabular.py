@@ -256,6 +256,24 @@ class TestRunoffOverride:
         assert [r["last_name"] for r in records] == ["Collins"]
 
     @pytest.mark.asyncio
+    async def test_two_same_day_party_primaries_do_not_erase_each_other(
+        self, monkeypatch,
+    ):
+        """Virginia runs separate Democratic and Republican primary
+        elections on the same day. They are different races for the same
+        seat, so the second stage must not overwrite the first."""
+        dem = (
+            "Contest Name\tChoice\tChoice Party\tTotal Votes\n"
+            "Member, U.S. House of Representatives District 2\tElaine Luria\tDemocratic\t900\n"
+        ).encode()
+        rep = (
+            "Contest Name\tChoice\tChoice Party\tTotal Votes\n"
+            "Member, U.S. House of Representatives District 2\tJen Kiggans\tRepublican\t800\n"
+        ).encode()
+        records = await self._run(monkeypatch, [dem, rep])
+        assert sorted(r["last_name"] for r in records) == ["Kiggans", "Luria"]
+
+    @pytest.mark.asyncio
     async def test_runoff_is_not_itself_thresholded(self, monkeypatch):
         """A runoff is decisive by construction — applying the 50% rule to
         it again would discard the very result that resolves the race."""
