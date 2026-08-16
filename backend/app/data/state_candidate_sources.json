@@ -27,6 +27,30 @@
       },
       "description": "Certified Statement of Vote workbook for voter-nominated (top-two) offices, verified live 2026-08-15: county-level rows carrying Contest Name ('United States Representative District 10'), Candidate Name, Party Name and Vote Total, read with the standard library since an xlsx is a zip of XML and no Excel dependency is warranted. All 52 congressional districts are present; California has no Senate seat on the 2026 ballot. advance_count is 2 because California runs a single all-party primary and sends the TOP TWO to the general regardless of party — modelling it as one nominee per party would silently drop a real ballot option, including the same-party runoffs California regularly produces. runoff_threshold_pct is null: there is no runoff, the top two simply advance."
     },
+    "WA": {
+      "source_name": "Washington Secretary of State (official results portal)",
+      "strategy": "tabular",
+      "advance_count": 2,
+      "runoff_threshold_pct": null,
+      "discovery": {
+        "mode": "sos_api_report",
+        "jurisdiction_url": "https://results.votewa.gov/results/public/api/jurisdictions/Washington",
+        "election_url": "https://results.votewa.gov/results/public/api/elections/washington/{election_id}",
+        "cdn_url": "https://results.votewa.gov/cdn/results/{jurisdiction_id}/{blob}",
+        "election_name_regex": "Primary",
+        "report_name": "All Results Excel",
+        "require_official": true
+      },
+      "format": {
+        "format": "xlsx",
+        "contest_column": "Office Name",
+        "choice_column": "Ballot Name",
+        "party_column": "Party",
+        "votes_column": "Total",
+        "exclude_choices": ["Ballots Cast", "Over Votes", "Under Votes"]
+      },
+      "description": "Same portal software as Georgia's, reached through the identical sos_api_report discovery — which is the whole point of the vendor-adapter split: Washington cost a config entry, not a module. Verified live 2026-08-15 (publicElectionId 20260804, 'U.S. Representative - Congressional District N', 976 rows). advance_count is 2: Washington is a top-two state like California, and its party column is free-text candidate PREFERENCE ('Prefers Cascade Democrat Party', 'Prefers No Kings Party'), which is only ever a tiebreak here, never the match signal. require_official is set because Washington votes by mail and was still counting on 2026-08-15 — isOfficialResults was false, so this state correctly confirms nobody until certification on 2026-08-18, then lights up on its own. No Washington Senate seat is on the 2026 ballot."
+    },
     "GA": {
       "source_name": "Georgia Secretary of State (official results portal)",
       "strategy": "tabular",

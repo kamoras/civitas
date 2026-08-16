@@ -129,6 +129,19 @@ async def _sos_api_report_urls(
             payload = resp.json() or {}
         except ValueError:
             continue
+        # This portal publishes running counts the night of the election and
+        # flips isOfficialResults only at certification. A slow-counting
+        # state can still be tallying for two weeks afterwards, and a
+        # confirmed nominee derived from a count that is still moving is
+        # exactly the kind of wrong this whole module exists to avoid — so
+        # an uncertified election yields nothing and simply lights up on
+        # its own once the state certifies.
+        if discovery.get("require_official") and not payload.get("isOfficialResults"):
+            logger.info(
+                "%s election %s is not certified yet — not confirming nominees from it",
+                state, election_id,
+            )
+            continue
         wanted = discovery.get("report_name") or ""
         blob = next(
             (

@@ -329,6 +329,33 @@ class TestSosApiReportDiscovery:
         monkeypatch.setattr(tb, "_get", self._fake_get())
         assert await tb._discover_urls(None, "GA", 2030, self._DISCOVERY) == []
 
+    @pytest.mark.asyncio
+    async def test_uncertified_election_is_refused_when_official_required(
+        self, monkeypatch,
+    ):
+        """The live case: Washington was still counting its 2026-08-04
+        primary days later. Confirming a nominee from a count that is still
+        moving is exactly the failure this module exists to prevent, so an
+        uncertified election yields nothing and lights up on its own at
+        certification."""
+        async def fake_get(client, url, label):
+            if "jurisdictions" in url:
+                return _Resp(json_body=self._JURISDICTION)
+            return _Resp(json_body={
+                "isOfficialResults": False,
+                "publicReportCategories": [
+                    {"reports": [{"reportName": "Total Votes Excel", "blobName": "x.xlsx"}]},
+                ],
+            })
+
+        monkeypatch.setattr(tb, "_get", fake_get)
+        strict = dict(self._DISCOVERY, require_official=True)
+        assert await tb._discover_urls(None, "WA", 2026, strict) == []
+        # Without the flag the same payload is still usable — the gate is
+        # opt-in per state, since a portal that never sets the field would
+        # otherwise be permanently withheld.
+        assert await tb._discover_urls(None, "WA", 2026, self._DISCOVERY) != []
+
 
 class TestDiscoverUrl:
     @pytest.mark.asyncio
