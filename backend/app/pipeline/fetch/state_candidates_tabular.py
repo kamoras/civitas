@@ -15,14 +15,16 @@ whole state, of which 49,884 are federal, resolving to 21 federal contests.
 Ground-truthed on recognisable outcomes — Virginia Foxx taking the NC-05
 Republican primary with 74.5%, Valerie Foushee NC-04 Democratic with 49.2%.
 
-TWO DISCOVERY MODES, because the file's URL must never be hardcoded to one
-cycle's date:
+THREE DISCOVERY MODES, because the file's URL must never be hardcoded to
+one cycle's date:
 
-  s3_listing  — list an S3 bucket prefix and pick the matching key. North
-                Carolina publishes to dl.ncsbe.gov this way, one folder per
-                election date (ENRS/2026_03_03/).
-  direct_url  — a stable URL template with {year} substituted, for states
-                that keep one predictable path per cycle.
+  s3_listing      — list an S3 bucket prefix and pick the matching key. North
+                    Carolina publishes to dl.ncsbe.gov this way, one folder
+                    per election date (ENRS/2026_03_03/).
+  direct_url      — a stable URL template with {year} substituted, for states
+                    that keep one predictable path per cycle.
+  sos_api_report  — the Enhanced Voting results portal's own three-hop API
+                    (GA, WA, VA); see _sos_api_report_urls.
 
 Results are aggregated across precinct rows: these exports are one row per
 precinct per choice, so a candidate's real total is the SUM over every row
@@ -111,7 +113,20 @@ async def _sos_api_report_urls(
                 return entry.get("publicElectionId")
         return None
 
-    stages = [_match(discovery.get("election_name_regex"))]
+    # A list of patterns is a state that decides its nominees across more
+    # than one election held the SAME day: Virginia runs its Democratic and
+    # Republican primaries as two separate elections in this portal, and
+    # both are needed. Kept as one-pattern-one-election rather than
+    # letting a single pattern match many, so a loose regex can't silently
+    # start pulling in a special election.
+    # ponytail: every non-runoff stage still gets the runoff threshold only
+    # if it's first (see fetch_confirmed_candidates); a state that ever
+    # combines same-day primaries WITH a runoff needs that to become a
+    # per-stage flag.
+    patterns = discovery.get("election_name_regex") or []
+    if isinstance(patterns, str):
+        patterns = [patterns]
+    stages = [_match(p) for p in patterns]
     runoff = _match(discovery.get("runoff_name_regex"))
     if runoff:
         stages.append(runoff)
@@ -304,12 +319,26 @@ def _tally(rows: list[dict], fmt: dict) -> dict[str, dict]:
     # an empty choice id and party). Counting it would both double the
     # denominator and, in an uncontested race, win the contest outright.
     excluded = {c.casefold() for c in (fmt.get("exclude_choices") or [])}
+    # Some states name the office in a way that is only unambiguous
+    # alongside another column: Virginia's federal label is "Member, House
+    # of Representatives (10th District)" — no "U.S.", which parse_office
+    # deliberately refuses so a state lower chamber can't slip through, and
+    # an ordinal parse_office doesn't read. Where the export carries its own
+    # district-type column, that is the discriminator the label lacks, so
+    # the contest is keyed by a canonical label instead. Any party in the
+    # original label is lost by that rewrite, so a state configured this way
+    # must also carry a party_column (Virginia does).
+    type_col = fmt.get("district_type_column")
+    district_col = fmt.get("district_column")
 
     tally: dict[str, dict] = defaultdict(
         lambda: {"votes": defaultdict(int), "party": {}},
     )
     for row in rows:
         contest = (row.get(contest_col) or "").strip()
+        if type_col and (row.get(type_col) or "").strip().casefold() == "congressional":
+            digits = re.search(r"\d+", row.get(district_col) or "")
+            contest = f"U.S. House District {int(digits.group())}" if digits else "U.S. House"
         choice = (row.get(choice_col) or "").strip()
         if not contest or not choice or choice.casefold() in excluded:
             continue

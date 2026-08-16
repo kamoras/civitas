@@ -51,6 +51,29 @@
       },
       "description": "Same portal software as Georgia's, reached through the identical sos_api_report discovery — which is the whole point of the vendor-adapter split: Washington cost a config entry, not a module. Verified live 2026-08-15 (publicElectionId 20260804, 'U.S. Representative - Congressional District N', 976 rows). advance_count is 2: Washington is a top-two state like California, and its party column is free-text candidate PREFERENCE ('Prefers Cascade Democrat Party', 'Prefers No Kings Party'), which is only ever a tiebreak here, never the match signal. require_official is set because Washington votes by mail and was still counting on 2026-08-15 — isOfficialResults was false, so this state correctly confirms nobody until certification on 2026-08-18, then lights up on its own. No Washington Senate seat is on the 2026 ballot."
     },
+    "VA": {
+      "source_name": "Virginia Department of Elections (official results portal)",
+      "strategy": "tabular",
+      "runoff_threshold_pct": null,
+      "discovery": {
+        "mode": "sos_api_report",
+        "jurisdiction_url": "https://enr.elections.virginia.gov/results/public/api/jurisdictions/Virginia",
+        "election_url": "https://enr.elections.virginia.gov/results/public/api/elections/Virginia/{election_id}",
+        "cdn_url": "https://enr.elections.virginia.gov/cdn/results/{jurisdiction_id}/{blob}",
+        "election_name_regex": ["Democratic Primary", "Republican Primary"],
+        "report_name": "Election Results",
+        "require_official": true
+      },
+      "format": {
+        "contest_column": "OfficeTitle",
+        "choice_column": "CandidateName",
+        "party_column": "Party",
+        "votes_column": "TOTAL_VOTES",
+        "district_type_column": "DistrictType",
+        "district_column": "DistrictName"
+      },
+      "description": "Third state on the same Enhanced Voting portal as Georgia and Washington, so again a config entry rather than a module. Two things make Virginia different, and both are why it waited: it runs its Democratic and Republican primaries as two SEPARATE elections on the same day (publicElectionIds 2026-August-Democratic-Primary and 2026-August-Republican-Primary, both 2026-08-04), hence a list of election patterns; and its federal label is 'Member, House of Representatives (2nd District)' with no 'U.S.' prefix, which parse_office deliberately refuses so a state lower chamber can't slip through — the export's own DistrictType == 'congressional' column is the discriminator instead. Verified live 2026-08-16 against the real CSVs: Elaine Luria taking the VA-02 Democratic primary, Don Beyer VA-08, Tom Perriello VA-05. Virginia nominates on a plurality, so there is no runoff threshold. require_official is set and both primaries were still uncertified 12 days out, so Virginia confirms nobody until the state board certifies, then lights up on its own. Only contested races appear in these files — an unopposed nominee is simply absent, and that seat keeps the FEC-filer fallback."
+    },
     "GA": {
       "source_name": "Georgia Secretary of State (official results portal)",
       "strategy": "tabular",

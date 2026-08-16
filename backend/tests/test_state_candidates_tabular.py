@@ -286,6 +286,69 @@ class TestRunoffOverride:
         assert [r["last_name"] for r in records] == ["Collins"]
 
 
+class TestDistrictTypeColumn:
+    """Virginia's export names its federal races "Member, House of
+    Representatives (2nd District)" — no "U.S." prefix, and an ordinal
+    parse_office doesn't read. Its own DistrictType column is the
+    discriminator the label lacks. Rows are the real 2026-08-04 shape.
+    """
+
+    _FMT = {
+        "delimiter": ",", "encoding": "utf-8",
+        "contest_column": "OfficeTitle", "choice_column": "CandidateName",
+        "party_column": "Party", "votes_column": "TOTAL_VOTES",
+        "district_type_column": "DistrictType", "district_column": "DistrictName",
+    }
+    _CSV = (
+        "CandidateName,TOTAL_VOTES,Party,DistrictType,DistrictName,OfficeTitle\n"
+        "Elaine G. Luria,33658,Democratic,congressional,02,"
+        '"Member, House of Representatives (2nd District)"\n'
+        "Patrick B. Mosolf,566,Democratic,congressional,02,"
+        '"Member, House of Representatives (2nd District)"\n'
+        "Bert Mizusawa,85,Republican,state,United States Of America,"
+        '"Member, United States Senate"\n'
+        "Some Supervisor,999,Democratic,county,ARLINGTON COUNTY,"
+        '"Member County Board (Arlington County)"\n'
+    ).encode()
+
+    def test_congressional_rows_are_keyed_by_their_district_number(self):
+        tally = tb._tally(tb._rows(self._CSV, self._FMT), self._FMT)
+        assert "U.S. House District 2" in tally
+        # The zero-padded "02" must not become district 0 or "02".
+        assert tb.parse_office("U.S. House District 2") == ("H", 2)
+
+    def test_senate_and_local_rows_keep_their_own_label(self):
+        """Only congressional rows are rewritten: the Senate label already
+        parses, and a county board race must stay unrecognisable."""
+        tally = tb._tally(tb._rows(self._CSV, self._FMT), self._FMT)
+        assert "Member, United States Senate" in tally
+        assert tb.parse_office("Member County Board (Arlington County)") is None
+
+    @pytest.mark.asyncio
+    async def test_yields_the_federal_nominees_only(self, monkeypatch):
+        async def fake_discover(client, state, year, discovery):
+            return ["https://example.gov/va.csv"]
+
+        async def fake_get(client, url, label):
+            return _Resp(content=self._CSV)
+
+        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
+        monkeypatch.setattr(tb, "_get", fake_get)
+        records = await tb.fetch_confirmed_candidates(
+            None, 2026, "VA", {"format": self._FMT},
+        )
+        assert records == [
+            {"office": "H", "district": 2, "party": "D", "last_name": "Luria"},
+            {"office": "S", "district": None, "party": "R", "last_name": "Mizusawa"},
+        ]
+
+    def test_without_the_column_the_house_label_is_refused(self):
+        """Pins why the config exists — and that parse_office still won't
+        guess a federal seat out of an unprefixed "House of
+        Representatives", which is a state chamber's name in many states."""
+        assert tb.parse_office("Member, House of Representatives (2nd District)") is None
+
+
 class TestSosApiReportDiscovery:
     """Georgia's portal hides its workbook behind a three-hop API, and the
     blob filename carries a GUID that changes on every republish — so it
@@ -333,6 +396,40 @@ class TestSosApiReportDiscovery:
         # 2024's General Primary matches the same name pattern and must be
         # excluded by the electionDate year alone.
         assert "2024" not in urls[0]
+
+    @pytest.mark.asyncio
+    async def test_a_list_of_patterns_fetches_every_matching_election(
+        self, monkeypatch,
+    ):
+        """Virginia publishes its two same-day party primaries as separate
+        elections, so both must be discovered — one pattern each, rather
+        than one loose pattern, so a special election can't slip in."""
+        jurisdiction = {"id": "va", "elections": [
+            {"publicElectionId": "2026-August-Democratic-Primary",
+             "electionDate": "2026-08-04",
+             "name": [{"text": "2026 August Democratic Primary"}]},
+            {"publicElectionId": "2026-August-Republican-Primary",
+             "electionDate": "2026-08-04",
+             "name": [{"text": "2026 August Republican Primary"}]},
+        ]}
+
+        async def fake_get(client, url, label):
+            if "jurisdictions" in url:
+                return _Resp(json_body=jurisdiction)
+            return _Resp(json_body={"publicReportCategories": [{"reports": [
+                {"reportName": "Total Votes Excel",
+                 "blobName": f"{url.rsplit('/', 1)[-1]}.csv"},
+            ]}]})
+
+        monkeypatch.setattr(tb, "_get", fake_get)
+        urls = await tb._discover_urls(None, "VA", 2026, dict(
+            self._DISCOVERY,
+            election_name_regex=["Democratic Primary", "Republican Primary"],
+            runoff_name_regex=None,
+        ))
+
+        assert len(urls) == 2
+        assert "Democratic" in urls[0] and "Republican" in urls[1]
 
     @pytest.mark.asyncio
     async def test_blob_name_is_url_quoted(self, monkeypatch):
