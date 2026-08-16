@@ -33,6 +33,37 @@ class TestParseOffice:
         assert common.parse_office("Governor") is None
 
 
+class TestOfficeFromColumns:
+    """The second route to the same answer, for a state whose LABEL can't
+    identify a federal seat — Virginia's real 2026 rows. Every value comes
+    from that state's config entry, so no state name appears in the code.
+    """
+
+    _SPEC = {
+        "type_column": "DistrictType", "type_value": "congressional",
+        "district_column": "DistrictName",
+    }
+
+    def test_reads_the_district_from_the_configured_columns(self):
+        row = {"DistrictType": "congressional", "DistrictName": "02",
+               "OfficeTitle": "Member, House of Representatives (2nd District)"}
+        assert common.office_from_columns(row, self._SPEC) == ("H", 2)
+        # And the label alone must still be refused — "House of
+        # Representatives" without "U.S." is a state chamber in many states.
+        assert common.parse_office(row["OfficeTitle"]) is None
+
+    def test_a_row_the_marker_does_not_match_is_not_federal(self):
+        row = {"DistrictType": "county", "DistrictName": "ARLINGTON COUNTY"}
+        assert common.office_from_columns(row, self._SPEC) is None
+
+    def test_no_spec_configured_means_this_route_is_off(self):
+        assert common.office_from_columns({"DistrictType": "congressional"}, None) is None
+
+    def test_a_congressional_row_with_no_number_is_an_at_large_seat(self):
+        row = {"DistrictType": "congressional", "DistrictName": ""}
+        assert common.office_from_columns(row, self._SPEC) == ("H", None)
+
+
 class TestNormalizeParty:
     def test_reads_spelled_out_and_abbreviated_forms(self):
         assert common.normalize_party("... - Democratic Party") == "D"

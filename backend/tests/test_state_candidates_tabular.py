@@ -286,7 +286,7 @@ class TestRunoffOverride:
         assert [r["last_name"] for r in records] == ["Collins"]
 
 
-class TestDistrictTypeColumn:
+class TestHouseFromColumns:
     """Virginia's export names its federal races "Member, House of
     Representatives (2nd District)" — no "U.S." prefix, and an ordinal
     parse_office doesn't read. Its own DistrictType column is the
@@ -297,7 +297,10 @@ class TestDistrictTypeColumn:
         "delimiter": ",", "encoding": "utf-8",
         "contest_column": "OfficeTitle", "choice_column": "CandidateName",
         "party_column": "Party", "votes_column": "TOTAL_VOTES",
-        "district_type_column": "DistrictType", "district_column": "DistrictName",
+        "house_from_columns": {
+            "type_column": "DistrictType", "type_value": "congressional",
+            "district_column": "DistrictName",
+        },
     }
     _CSV = (
         "CandidateName,TOTAL_VOTES,Party,DistrictType,DistrictName,OfficeTitle\n"
@@ -311,17 +314,20 @@ class TestDistrictTypeColumn:
         '"Member County Board (Arlington County)"\n'
     ).encode()
 
-    def test_congressional_rows_are_keyed_by_their_district_number(self):
+    def test_the_office_is_resolved_from_the_columns(self):
         tally = tb._tally(tb._rows(self._CSV, self._FMT), self._FMT)
-        assert "U.S. House District 2" in tally
+        entry = tally["Member, House of Representatives (2nd District)"]
         # The zero-padded "02" must not become district 0 or "02".
-        assert tb.parse_office("U.S. House District 2") == ("H", 2)
+        assert entry["office"] == ("H", 2)
 
-    def test_senate_and_local_rows_keep_their_own_label(self):
-        """Only congressional rows are rewritten: the Senate label already
-        parses, and a county board race must stay unrecognisable."""
+    def test_rows_the_spec_does_not_cover_fall_back_to_the_label(self):
+        """Only the configured office is resolved from columns: the Senate
+        label already parses on its own, and a county board race must stay
+        unrecognisable to both routes."""
         tally = tb._tally(tb._rows(self._CSV, self._FMT), self._FMT)
-        assert "Member, United States Senate" in tally
+        assert tally["Member, United States Senate"]["office"] is None
+        assert tb.parse_office("Member, United States Senate") == ("S", None)
+        assert tally["Member County Board (Arlington County)"]["office"] is None
         assert tb.parse_office("Member County Board (Arlington County)") is None
 
     @pytest.mark.asyncio

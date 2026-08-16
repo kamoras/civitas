@@ -70,6 +70,35 @@ def parse_office(contest_name: str) -> tuple[str, int | None] | None:
     return None
 
 
+def office_from_columns(row: dict, spec: dict | None) -> tuple[str, int | None] | None:
+    """The same ("H", 3) answer as parse_office, taken from a results row's
+    OWN columns instead of its label, or None when `spec` is unset or the
+    row isn't the federal office it describes.
+
+    Some states name the office in a way that is only unambiguous next to
+    another column — Virginia's is "Member, House of Representatives (2nd
+    District)", with no "U.S." prefix (which parse_office must keep
+    refusing, since that is a STATE chamber's name in many states) and an
+    ordinal it doesn't read. Those states carry their own district-type
+    column, and it says plainly what the label can't.
+
+    Every value here comes from the state's entry in
+    state_candidate_sources.json, never from code: the discriminating
+    column, the value that marks a congressional seat, and the column
+    holding the district number. A state that publishes a column with some
+    other name and some other marker is still a config entry.
+    """
+    if not spec:
+        return None
+    marker = (row.get(spec.get("type_column")) or "").strip().casefold()
+    if not marker or marker != str(spec.get("type_value") or "").strip().casefold():
+        return None
+    # Zero-padded ("05") in Virginia's export; an at-large seat has no
+    # number at all, which parse_office already models as district None.
+    digits = re.search(r"\d+", row.get(spec.get("district_column")) or "")
+    return "H", int(digits.group()) if digits else None
+
+
 def normalize_party(text: str) -> str | None:
     """Single-letter party code for `text` (a contest label or a party
     column), or None when no party is positively recognised. Never defaults

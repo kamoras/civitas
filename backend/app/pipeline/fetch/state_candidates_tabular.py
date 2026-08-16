@@ -45,7 +45,7 @@ import httpx
 
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
-    normalize_party, parse_office, pick_nominees, surname,
+    normalize_party, office_from_columns, parse_office, pick_nominees, surname,
 )
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -347,26 +347,17 @@ def _tally(rows: list[dict], fmt: dict) -> dict[str, dict]:
     # an empty choice id and party). Counting it would both double the
     # denominator and, in an uncontested race, win the contest outright.
     excluded = {c.casefold() for c in (fmt.get("exclude_choices") or [])}
-    # Some states name the office in a way that is only unambiguous
-    # alongside another column: Virginia's federal label is "Member, House
-    # of Representatives (10th District)" — no "U.S.", which parse_office
-    # deliberately refuses so a state lower chamber can't slip through, and
-    # an ordinal parse_office doesn't read. Where the export carries its own
-    # district-type column, that is the discriminator the label lacks, so
-    # the contest is keyed by a canonical label instead. Any party in the
-    # original label is lost by that rewrite, so a state configured this way
-    # must also carry a party_column (Virginia does).
-    type_col = fmt.get("district_type_column")
-    district_col = fmt.get("district_column")
+    # Where the label alone can't identify the office, the row's own
+    # columns do (see office_from_columns). Resolving it here, per row,
+    # keeps ONE notion of "which office is this contest" for every state:
+    # the label, unless the state's config names the columns that say so.
+    office_spec = fmt.get("house_from_columns")
 
     tally: dict[str, dict] = defaultdict(
-        lambda: {"votes": defaultdict(int), "party": {}},
+        lambda: {"votes": defaultdict(int), "party": {}, "office": None},
     )
     for row in rows:
         contest = (row.get(contest_col) or "").strip()
-        if type_col and (row.get(type_col) or "").strip().casefold() == "congressional":
-            digits = re.search(r"\d+", row.get(district_col) or "")
-            contest = f"U.S. House District {int(digits.group())}" if digits else "U.S. House"
         choice = (row.get(choice_col) or "").strip()
         if not contest or not choice or choice.casefold() in excluded:
             continue
@@ -374,6 +365,8 @@ def _tally(rows: list[dict], fmt: dict) -> dict[str, dict]:
         entry["votes"][choice] += _votes(row.get(votes_col) or "")
         if party_col and choice not in entry["party"]:
             entry["party"][choice] = (row.get(party_col) or "").strip()
+        if entry["office"] is None:
+            entry["office"] = office_from_columns(row, office_spec)
     return tally
 
 
@@ -435,7 +428,7 @@ def _collect(
     """Fold one results file into `by_seat`, replacing (not appending to)
     any seat it covers so a later stage's answer wins outright."""
     for contest, entry in _tally(rows, fmt).items():
-        parsed = parse_office(contest)
+        parsed = entry["office"] or parse_office(contest)
         if parsed is None:
             continue
         office, district = parsed
