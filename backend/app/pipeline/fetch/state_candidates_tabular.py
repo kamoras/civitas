@@ -95,7 +95,7 @@ def _settled(payload: dict, settle_days: int | None) -> bool:
 
 async def _sos_api_report_urls(
     client: httpx.AsyncClient, state: str, year: int, discovery: dict,
-) -> list[str]:
+) -> list[dict]:
     """Three-hop discovery for a Secretary-of-State results portal that
     publishes its data as report blobs behind a JSON API (Georgia's, live
     2026-08-15): the jurisdiction document lists every election and the
@@ -107,7 +107,10 @@ async def _sos_api_report_urls(
     carries a fresh GUID every publish) is read from the API each run.
 
     Returns the primary first and, when the state ran one, its runoff
-    second, so the caller can let the runoff override.
+    second, so the caller can let the runoff override. An election that
+    exists but is being withheld by the certification gate is returned
+    WITH NO URL, so the caller can tell "this state has nothing certified
+    yet" (healthy, confirms nobody) from "nothing found at all" (broken).
     """
     resp = await _get(
         client, discovery.get("jurisdiction_url") or "", f"{state} jurisdiction",
@@ -143,20 +146,16 @@ async def _sos_api_report_urls(
     # both are needed. Kept as one-pattern-one-election rather than
     # letting a single pattern match many, so a loose regex can't silently
     # start pulling in a special election.
-    # ponytail: every non-runoff stage still gets the runoff threshold only
-    # if it's first (see fetch_confirmed_candidates); a state that ever
-    # combines same-day primaries WITH a runoff needs that to become a
-    # per-stage flag.
     patterns = discovery.get("election_name_regex") or []
     if isinstance(patterns, str):
         patterns = [patterns]
-    stages = [_match(p) for p in patterns]
+    stages = [(_match(p), False) for p in patterns]
     runoff = _match(discovery.get("runoff_name_regex"))
     if runoff:
-        stages.append(runoff)
+        stages.append((runoff, True))
 
-    urls = []
-    for election_id in [s for s in stages if s]:
+    found: list[dict] = []
+    for election_id, is_runoff in [s for s in stages if s[0]]:
         resp = await _get(
             client,
             (discovery.get("election_url") or "").format(election_id=election_id),
@@ -184,6 +183,7 @@ async def _sos_api_report_urls(
                 "%s election %s is not certified yet — not confirming nominees from it",
                 state, election_id,
             )
+            found.append({"url": None, "runoff": is_runoff})
             continue
         wanted = discovery.get("report_name") or ""
         blob = next(
@@ -196,23 +196,29 @@ async def _sos_api_report_urls(
             None,
         )
         if blob:
-            urls.append(
-                (discovery.get("cdn_url") or "").format(
+            found.append({
+                "url": (discovery.get("cdn_url") or "").format(
                     jurisdiction_id=jurisdiction_id, blob=quote(blob),
-                )
-            )
-    return urls
+                ),
+                "runoff": is_runoff,
+            })
+    return found
 
 
 async def _discover_urls(
     client: httpx.AsyncClient, state: str, year: int, discovery: dict,
-) -> list[str]:
-    """This cycle's results file(s), never a hardcoded per-cycle path.
+) -> list[dict]:
+    """This cycle's results stage(s), never a hardcoded per-cycle path.
+    Every mode returns the SAME shape — {"url", "runoff"} per stage — so
+    the fetch below treats a state the same way whatever its vendor is.
 
-    More than one is returned only where a state's nominees genuinely need
-    more than one election to determine: a runoff state's second contest
-    decides every race its primary left short of the threshold, so it is
-    ordered last and overrides.
+    More than one stage comes back only where a state's nominees genuinely
+    need more than one election to determine: a runoff state's second
+    contest decides every race its primary left short of the threshold (so
+    it is ordered last and overrides, and the threshold does not apply to
+    it), and a state like Virginia holds a separate election per party on
+    the same day. A stage with a null url exists but is being withheld —
+    see _sos_api_report_urls.
     """
     mode = discovery.get("mode")
 
@@ -221,7 +227,7 @@ async def _discover_urls(
 
     if mode == "direct_url":
         template = discovery.get("url") or ""
-        return [template.format(year=year)] if template else []
+        return [{"url": template.format(year=year), "runoff": False}] if template else []
 
     if mode == "s3_listing":
         bucket = (discovery.get("bucket_url") or "").rstrip("/")
@@ -240,7 +246,7 @@ async def _discover_urls(
         # Earliest key wins: within a cycle the first matching election is
         # the primary that decides nominees. A later folder is the general,
         # whose results can't confirm a nominee for the race it IS.
-        return [f"{bucket}/{sorted(keys)[0]}"]
+        return [{"url": f"{bucket}/{sorted(keys)[0]}", "runoff": False}]
 
     logger.error("Unknown results discovery mode %r for %s", mode, state)
     return []
@@ -374,8 +380,13 @@ async def fetch_confirmed_candidates(
     client: httpx.AsyncClient, year: int, state: str, source: dict,
 ) -> list[dict] | None:
     """Every confirmed federal nominee `state` produced for `year`, or None
-    on a fetch/parse failure or when the cycle's results aren't published
-    yet — the tri-state None-vs-[] discipline used throughout this codebase.
+    on a fetch/parse failure — the tri-state None-vs-[] discipline used
+    throughout this codebase.
+
+    [] is the meaningful middle: the state's results were reached and are
+    simply not confirmable yet (nothing certified). Returning None for that
+    would report a perfectly healthy state as a failed fetch every run, for
+    the weeks between its election and its certification.
 
     Each item: {"office", "district", "party", "last_name"}, matched against
     Civitas's FEC-derived Candidate rows by state_candidates.py, not here.
@@ -385,20 +396,27 @@ async def fetch_confirmed_candidates(
     advance_count = int(source.get("advance_count") or 1)
     fmt = source.get("format") or {}
 
-    urls = await _discover_urls(client, st, year, source.get("discovery") or {})
-    if not urls:
+    stages = await _discover_urls(client, st, year, source.get("discovery") or {})
+    if not stages:
         logger.warning("No %d results file discoverable for %s — skipping", year, st)
         return None
+    usable = [s for s in stages if s.get("url")]
+    if not usable:
+        logger.info(
+            "%s has %d %d election(s) published but none certified yet — confirming nobody",
+            st, len(stages), year,
+        )
+        return []
 
     # Keyed by seat-and-party so a runoff replaces whatever its primary
-    # said about the same race. The primary is the only stage the runoff
-    # threshold applies to: a runoff is decisive by construction, its
-    # winner having beaten the only other candidate left.
+    # said about the same race. The runoff threshold applies to primary
+    # stages only: a runoff is decisive by construction, its winner having
+    # beaten the only other candidate left.
     by_seat: dict[tuple, list[dict]] = {}
     parsed_any = False
 
-    for index, url in enumerate(urls):
-        resp = await _get(client, url, f"{st} results export")
+    for stage in usable:
+        resp = await _get(client, stage["url"], f"{st} results export")
         if resp is None:
             return None
         payload = resp.content
@@ -411,7 +429,11 @@ async def fetch_confirmed_candidates(
             logger.warning("No parsable rows in the results export for %s", st)
             return None
         parsed_any = True
-        _collect(rows, fmt, by_seat, threshold if index == 0 else None, advance_count)
+        _collect(
+            rows, fmt, by_seat,
+            None if stage["runoff"] else threshold,
+            advance_count,
+        )
 
     if not parsed_any:
         return None

@@ -146,7 +146,7 @@ class TestTopTwo:
 
     async def _run(self, monkeypatch, advance_count):
         async def fake_discover(client, state, year, discovery):
-            return ["https://example.gov/sov.tsv"]
+            return [{"url": "https://example.gov/sov.tsv", "runoff": False}]
 
         async def fake_get(client, url, label):
             return _Resp(content=self._TSV)
@@ -232,7 +232,11 @@ class TestRunoffOverride:
 
     async def _run(self, monkeypatch, payloads):
         async def fake_discover(client, state, year, discovery):
-            return [f"https://example.gov/{i}" for i in range(len(payloads))]
+            # Last stage is the runoff, as real discovery orders them.
+            return [
+                {"url": f"https://example.gov/{i}", "runoff": i == len(payloads) - 1 and len(payloads) > 1}
+                for i in range(len(payloads))
+            ]
 
         seen = iter(payloads)
 
@@ -333,7 +337,7 @@ class TestHouseFromColumns:
     @pytest.mark.asyncio
     async def test_yields_the_federal_nominees_only(self, monkeypatch):
         async def fake_discover(client, state, year, discovery):
-            return ["https://example.gov/va.csv"]
+            return [{"url": "https://example.gov/va.csv", "runoff": False}]
 
         async def fake_get(client, url, label):
             return _Resp(content=self._CSV)
@@ -397,11 +401,12 @@ class TestSosApiReportDiscovery:
         urls = await tb._discover_urls(None, "GA", 2026, self._DISCOVERY)
 
         assert len(urls) == 2
-        assert "GeneralPrimary51926" in urls[0]
-        assert "Runoff" in urls[1]
+        assert "GeneralPrimary51926" in urls[0]["url"]
+        assert urls[0]["runoff"] is False
+        assert "Runoff" in urls[1]["url"] and urls[1]["runoff"] is True
         # 2024's General Primary matches the same name pattern and must be
         # excluded by the electionDate year alone.
-        assert "2024" not in urls[0]
+        assert "2024" not in urls[0]["url"]
 
     @pytest.mark.asyncio
     async def test_a_list_of_patterns_fetches_every_matching_election(
@@ -435,15 +440,18 @@ class TestSosApiReportDiscovery:
         ))
 
         assert len(urls) == 2
-        assert "Democratic" in urls[0] and "Republican" in urls[1]
+        assert "Democratic" in urls[0]["url"] and "Republican" in urls[1]["url"]
+        # Same-day party primaries are both primaries — neither overrides
+        # the other, and both are subject to any runoff threshold.
+        assert [u["runoff"] for u in urls] == [False, False]
 
     @pytest.mark.asyncio
     async def test_blob_name_is_url_quoted(self, monkeypatch):
         """The real blob names contain spaces."""
         monkeypatch.setattr(tb, "_get", self._fake_get())
         urls = await tb._discover_urls(None, "GA", 2026, self._DISCOVERY)
-        assert " " not in urls[0]
-        assert "%20" in urls[0]
+        assert " " not in urls[0]["url"]
+        assert "%20" in urls[0]["url"]
 
     @pytest.mark.asyncio
     async def test_a_cycle_with_no_matching_election_yields_nothing(self, monkeypatch):
@@ -471,11 +479,32 @@ class TestSosApiReportDiscovery:
 
         monkeypatch.setattr(tb, "_get", fake_get)
         strict = dict(self._DISCOVERY, require_official=True)
-        assert await tb._discover_urls(None, "WA", 2026, strict) == []
+        withheld = await tb._discover_urls(None, "WA", 2026, strict)
+        assert withheld and all(s["url"] is None for s in withheld)
         # Without the flag the same payload is still usable — the gate is
         # opt-in per state, since a portal that never sets the field would
         # otherwise be permanently withheld.
-        assert await tb._discover_urls(None, "WA", 2026, self._DISCOVERY) != []
+        usable = await tb._discover_urls(None, "WA", 2026, self._DISCOVERY)
+        assert usable and all(s["url"] for s in usable)
+
+    @pytest.mark.asyncio
+    async def test_a_withheld_state_is_empty_not_a_failed_fetch(self, monkeypatch):
+        """The distinction the pipeline reports on: a state that published
+        results nobody has certified yet is HEALTHY and confirms nobody
+        ([]), while a state whose file can't be found at all is a failure
+        (None). Collapsing the two would report Washington and Virginia as
+        broken every run for the weeks between voting and certification."""
+        async def withheld(client, state, year, discovery):
+            return [{"url": None, "runoff": False}]
+
+        async def nothing(client, state, year, discovery):
+            return []
+
+        monkeypatch.setattr(tb, "_discover_urls", withheld)
+        assert await tb.fetch_confirmed_candidates(None, 2026, "WA", {}) == []
+
+        monkeypatch.setattr(tb, "_discover_urls", nothing)
+        assert await tb.fetch_confirmed_candidates(None, 2026, "WA", {}) is None
 
     @pytest.mark.asyncio
     async def test_settle_days_releases_an_election_the_portal_never_flagged(
@@ -518,7 +547,7 @@ class TestDiscoverUrl:
             None, "XX", 2026,
             {"mode": "direct_url", "url": "https://example.gov/{year}/results.csv"},
         )
-        assert url == ["https://example.gov/2026/results.csv"]
+        assert url == [{"url": "https://example.gov/2026/results.csv", "runoff": False}]
 
     @pytest.mark.asyncio
     async def test_s3_listing_picks_the_earliest_matching_key(self, monkeypatch):
@@ -544,7 +573,7 @@ class TestDiscoverUrl:
             "file_regex": r"results_pct_\d{8}\.zip",
         })
         assert len(url) == 1
-        assert url[0].endswith("ENRS/2026_03_03/results_pct_20260303.zip")
+        assert url[0]["url"].endswith("ENRS/2026_03_03/results_pct_20260303.zip")
 
     @pytest.mark.asyncio
     async def test_unknown_mode_returns_nothing(self):
@@ -557,7 +586,7 @@ class TestFetchConfirmedCandidates:
         self, monkeypatch,
     ):
         async def fake_discover(client, state, year, discovery):
-            return ["https://example.gov/results.zip"]
+            return [{"url": "https://example.gov/results.zip", "runoff": False}]
 
         async def fake_get(client, url, label):
             return _Resp(content=_fixture_bytes())
@@ -585,7 +614,7 @@ class TestFetchConfirmedCandidates:
     @pytest.mark.asyncio
     async def test_download_failure_returns_none(self, monkeypatch):
         async def fake_discover(client, state, year, discovery):
-            return ["https://example.gov/results.zip"]
+            return [{"url": "https://example.gov/results.zip", "runoff": False}]
 
         async def fake_get(client, url, label):
             return None
@@ -599,7 +628,7 @@ class TestFetchConfirmedCandidates:
         """A URL that has silently started serving something enormous is a
         config failure, not something to parse."""
         async def fake_discover(client, state, year, discovery):
-            return ["https://example.gov/results.zip"]
+            return [{"url": "https://example.gov/results.zip", "runoff": False}]
 
         async def fake_get(client, url, label):
             return _Resp(content=b"x" * (tb.MAX_DOWNLOAD_BYTES + 1))

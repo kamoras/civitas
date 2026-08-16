@@ -709,7 +709,7 @@ class Candidate(Base):
     # frontend use it to separate active candidates from paper filers.
     candidate_status: Mapped[str | None] = mapped_column(String(1), nullable=True)
     # True only when a registered state source (state_candidate_sources.json
-    # / state_candidates.py — currently just TX) has confirmed this
+    # / state_candidates.py — every state with an entry there) has confirmed this
     # candidate is actually on the general-election ballot, not just an
     # FEC filer. Only ever set True by a real match; never set False to
     # mean "lost" — for a state/race with no coverage yet, or a candidate

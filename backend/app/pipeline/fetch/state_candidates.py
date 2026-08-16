@@ -4,13 +4,24 @@ source (state_candidate_sources.json) — no API key beyond what each
 state's own strategy needs, no guessing.
 
 Deliberately NOT one parser that guesses an arbitrary state's candidate-
-data shape. Every state's Secretary of State (or equivalent) publishes its
-own system — Texas's is a REST JSON API (see state_candidates_tx.py);
-other states may need a completely different strategy, or none yet. So
-each state gets its own small, hand-verified fetch function, built against
-that state's real, currently-fetched data — but the matching/flagging code
-around it (this module) is shared, same STRATEGIES-dispatch shape as
-ballot_measures_pdf.py.
+data shape, and equally deliberately NOT one fetcher per state — 50 of
+those is the maintenance trap this design exists to avoid. States don't
+each build their own system; they buy one from a handful of vendors. So a
+strategy here is a VENDOR (Civix, Clarity, or a bulk tabular export
+including the Enhanced Voting portal), and every state it serves is an
+entry in state_candidate_sources.json — which URLs, which columns, which
+nomination rule — never new code.
+
+The invariant that keeps it that way: no state's name or state-specific
+literal appears in any fetch module. A state that needs something nobody
+has needed yet (Virginia's district-type column, Utah's never-flipped
+certification flag) gets that capability added to its adapter FOR EVERY
+STATE, plus a config key, never a branch on its name. Shared parsing
+lives in state_candidates_common.py; the config contract is indexed in
+state_candidate_sources.json's own _contract field.
+
+The matching/flagging code around all of it (this module) is shared, same
+STRATEGIES-dispatch shape as ballot_measures_pdf.py.
 
 Matching a state's reported (office, district, party, last_name) against
 Civitas's own FEC-derived Candidate rows compares surname to surname
@@ -70,9 +81,11 @@ def is_configured(state: str) -> bool:
 
 def _race_id_for(cycle: int, state: str, office: str, district: int | None) -> str:
     """Same id convention election_pipeline._race_id uses for a REGULAR
-    race. No state currently registered here (just TX) has a special
-    election on this cycle's federal ballot — a future state that does
-    would need this taught the "-SPECIAL" suffix too."""
+    race. Nothing registered here reaches a special election: every
+    adapter's discovery matches that state's PRIMARY by name, so a
+    special's results are never fetched in the first place. A state whose
+    special general shares this cycle's ballot would need both that
+    discovery and this id taught the "-SPECIAL" suffix."""
     if office == "S":
         return f"{cycle}-SEN-{state}"
     return f"{cycle}-HOUSE-{state}-{district if district is not None else 0}"
