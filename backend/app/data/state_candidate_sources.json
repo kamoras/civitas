@@ -39,7 +39,8 @@
         "cdn_url": "https://results.votewa.gov/cdn/results/{jurisdiction_id}/{blob}",
         "election_name_regex": "Primary",
         "report_name": "All Results Excel",
-        "require_official": true
+        "require_official": true,
+        "settle_days": 30
       },
       "format": {
         "format": "xlsx",
@@ -49,7 +50,7 @@
         "votes_column": "Total",
         "exclude_choices": ["Ballots Cast", "Over Votes", "Under Votes"]
       },
-      "description": "Same portal software as Georgia's, reached through the identical sos_api_report discovery — which is the whole point of the vendor-adapter split: Washington cost a config entry, not a module. Verified live 2026-08-15 (publicElectionId 20260804, 'U.S. Representative - Congressional District N', 976 rows). advance_count is 2: Washington is a top-two state like California, and its party column is free-text candidate PREFERENCE ('Prefers Cascade Democrat Party', 'Prefers No Kings Party'), which is only ever a tiebreak here, never the match signal. require_official is set because Washington votes by mail and was still counting on 2026-08-15 — isOfficialResults was false, so this state correctly confirms nobody until certification on 2026-08-18, then lights up on its own. No Washington Senate seat is on the 2026 ballot."
+      "description": "Same portal software as Georgia's, reached through the identical sos_api_report discovery — which is the whole point of the vendor-adapter split: Washington cost a config entry, not a module. Verified live 2026-08-15 (publicElectionId 20260804, 'U.S. Representative - Congressional District N', 976 rows). advance_count is 2: Washington is a top-two state like California, and its party column is free-text candidate PREFERENCE ('Prefers Cascade Democrat Party', 'Prefers No Kings Party'), which is only ever a tiebreak here, never the match signal. require_official is set because Washington votes by mail and was still counting on 2026-08-15 — isOfficialResults was false, so this state correctly confirms nobody until certification on 2026-08-18, then lights up on its own. settle_days is the failsafe under that gate: Utah proved the portal's official flag is not reliably flipped, so a certified-but-unflagged election still counts once it is 30 days past. No Washington Senate seat is on the 2026 ballot."
     },
     "VA": {
       "source_name": "Virginia Department of Elections (official results portal)",
@@ -62,7 +63,8 @@
         "cdn_url": "https://enr.elections.virginia.gov/cdn/results/{jurisdiction_id}/{blob}",
         "election_name_regex": ["Democratic Primary", "Republican Primary"],
         "report_name": "Election Results",
-        "require_official": true
+        "require_official": true,
+        "settle_days": 30
       },
       "format": {
         "contest_column": "OfficeTitle",
@@ -72,7 +74,31 @@
         "district_type_column": "DistrictType",
         "district_column": "DistrictName"
       },
-      "description": "Third state on the same Enhanced Voting portal as Georgia and Washington, so again a config entry rather than a module. Two things make Virginia different, and both are why it waited: it runs its Democratic and Republican primaries as two SEPARATE elections on the same day (publicElectionIds 2026-August-Democratic-Primary and 2026-August-Republican-Primary, both 2026-08-04), hence a list of election patterns; and its federal label is 'Member, House of Representatives (2nd District)' with no 'U.S.' prefix, which parse_office deliberately refuses so a state lower chamber can't slip through — the export's own DistrictType == 'congressional' column is the discriminator instead. Verified live 2026-08-16 against the real CSVs: Elaine Luria taking the VA-02 Democratic primary, Don Beyer VA-08, Tom Perriello VA-05. Virginia nominates on a plurality, so there is no runoff threshold. require_official is set and both primaries were still uncertified 12 days out, so Virginia confirms nobody until the state board certifies, then lights up on its own. Only contested races appear in these files — an unopposed nominee is simply absent, and that seat keeps the FEC-filer fallback."
+      "description": "Third state on the same Enhanced Voting portal as Georgia and Washington, so again a config entry rather than a module. Two things make Virginia different, and both are why it waited: it runs its Democratic and Republican primaries as two SEPARATE elections on the same day (publicElectionIds 2026-August-Democratic-Primary and 2026-August-Republican-Primary, both 2026-08-04), hence a list of election patterns; and its federal label is 'Member, House of Representatives (2nd District)' with no 'U.S.' prefix, which parse_office deliberately refuses so a state lower chamber can't slip through — the export's own DistrictType == 'congressional' column is the discriminator instead. Verified live 2026-08-16 against the real CSVs: Elaine Luria taking the VA-02 Democratic primary, Don Beyer VA-08, Tom Perriello VA-05. Virginia nominates on a plurality, so there is no runoff threshold. require_official is set and both primaries were still uncertified 12 days out, so Virginia confirms nobody until the state board certifies, then lights up on its own — or, under settle_days, 30 days out if this portal never flips its official flag (Utah's never did). Only contested races appear in these files — an unopposed nominee is simply absent, and that seat keeps the FEC-filer fallback."
+    },
+    "UT": {
+      "source_name": "Utah Lieutenant Governor's Office (official results portal)",
+      "strategy": "tabular",
+      "runoff_threshold_pct": null,
+      "discovery": {
+        "mode": "sos_api_report",
+        "jurisdiction_url": "https://electionresults.utah.gov/results/public/api/jurisdictions/Utah",
+        "election_url": "https://electionresults.utah.gov/results/public/api/elections/Utah/{election_id}",
+        "cdn_url": "https://electionresults.utah.gov/cdn/results/{jurisdiction_id}/{blob}",
+        "election_name_regex": "Utah Primary Election",
+        "report_name": "All Results Excel",
+        "require_official": true,
+        "settle_days": 30
+      },
+      "format": {
+        "format": "xlsx",
+        "contest_column": "Office Name",
+        "choice_column": "Ballot Name",
+        "party_column": "Party",
+        "votes_column": "Total",
+        "exclude_choices": ["Ballots Cast", "Over Votes", "Under Votes"]
+      },
+      "description": "Fourth state on the Enhanced Voting portal, found on 2026-08-16 by probing /results/public/ across state results hosts — pure config, no code. Verified live against the real 2026-06-23 primary workbook: Ben McAdams taking the UT-01 Democratic primary, Blake Moore UT-02 and Celeste Maloy UT-03 on the Republican side (district numbers are the post-2026-redistricting map, which is exactly why they come from the state's own feed rather than being inferred). Only 3 federal contests exist — Utah's convention/signature path means most seats never reach a primary ballot, and an unopposed nominee is simply absent here. The name pattern excludes Utah's odd-year MUNICIPAL primary. Utah is why settle_days exists: this primary was canvassed and certified on 2026-07-22, its signed state canvass report is published on this very portal, and isOfficialResults was STILL false a month later — so require_official alone would have confirmed nobody here forever."
     },
     "GA": {
       "source_name": "Georgia Secretary of State (official results portal)",

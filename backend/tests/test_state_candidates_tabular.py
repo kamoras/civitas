@@ -471,6 +471,39 @@ class TestSosApiReportDiscovery:
         # otherwise be permanently withheld.
         assert await tb._discover_urls(None, "WA", 2026, self._DISCOVERY) != []
 
+    @pytest.mark.asyncio
+    async def test_settle_days_releases_an_election_the_portal_never_flagged(
+        self, monkeypatch,
+    ):
+        """Utah's 2026 primary was canvassed and certified on 2026-07-22 —
+        the signed state canvass report sits on this same portal — and
+        isOfficialResults was still false a month later. Without the
+        window, that state confirms nobody forever while looking healthy."""
+        async def fake_get(client, url, label):
+            if "jurisdictions" in url:
+                return _Resp(json_body=self._JURISDICTION)
+            return _Resp(json_body={
+                "isOfficialResults": False,
+                "electionDate": "2026-05-19",
+                "publicReportCategories": [
+                    {"reports": [{"reportName": "Total Votes Excel", "blobName": "x.xlsx"}]},
+                ],
+            })
+
+        monkeypatch.setattr(tb, "_get", fake_get)
+        strict = dict(self._DISCOVERY, require_official=True, settle_days=30)
+        assert await tb._discover_urls(None, "GA", 2026, strict) != []
+
+    def test_an_election_inside_the_window_is_still_withheld(self):
+        assert tb._settled({"electionDate": "2999-01-01"}, 30) is False
+
+    def test_no_window_configured_never_releases(self):
+        """settle_days is opt-in: without it require_official is absolute."""
+        assert tb._settled({"electionDate": "2000-01-01"}, None) is False
+
+    def test_an_unparsable_election_date_does_not_release(self):
+        assert tb._settled({"electionDate": None}, 30) is False
+
 
 class TestDiscoverUrl:
     @pytest.mark.asyncio

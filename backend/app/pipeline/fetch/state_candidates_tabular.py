@@ -38,6 +38,7 @@ import re
 import xml.etree.ElementTree as ET
 import zipfile
 from collections import defaultdict
+from datetime import UTC, date, datetime
 from urllib.parse import quote
 
 import httpx
@@ -67,6 +68,29 @@ async def _get(client: httpx.AsyncClient, url: str, label: str) -> httpx.Respons
         client, _rate_limiter, "GET", url, timeout=120.0,
         log_label=label, headers=_HEADERS,
     )
+
+
+def _settled(payload: dict, settle_days: int | None) -> bool:
+    """True once an election is far enough past that counting is over,
+    whatever its official flag says.
+
+    This is the failsafe under require_official, and it exists because the
+    flag is not reliably flipped: Utah's 2026 primary was canvassed and
+    certified in July — its own signed state canvass report is published on
+    the same portal — and isOfficialResults was still false a month later.
+    Without this, a state whose office never ticks that box would confirm
+    nobody forever, silently, which looks exactly like working code.
+
+    The window is the state's certification deadline, from config, not a
+    guess about how fast a count goes.
+    """
+    if not settle_days:
+        return False
+    try:
+        held = date.fromisoformat(str(payload.get("electionDate") or "")[:10])
+    except ValueError:
+        return False
+    return (datetime.now(UTC).date() - held).days >= int(settle_days)
 
 
 async def _sos_api_report_urls(
@@ -151,7 +175,11 @@ async def _sos_api_report_urls(
         # exactly the kind of wrong this whole module exists to avoid — so
         # an uncertified election yields nothing and simply lights up on
         # its own once the state certifies.
-        if discovery.get("require_official") and not payload.get("isOfficialResults"):
+        if (
+            discovery.get("require_official")
+            and not payload.get("isOfficialResults")
+            and not _settled(payload, discovery.get("settle_days"))
+        ):
             logger.info(
                 "%s election %s is not certified yet — not confirming nominees from it",
                 state, election_id,
