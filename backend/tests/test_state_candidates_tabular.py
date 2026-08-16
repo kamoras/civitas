@@ -146,12 +146,12 @@ class TestTopTwo:
 
     async def _run(self, monkeypatch, advance_count):
         async def fake_discover(client, state, year, discovery):
-            return "https://example.gov/sov.tsv"
+            return ["https://example.gov/sov.tsv"]
 
         async def fake_get(client, url, label):
             return _Resp(content=self._TSV)
 
-        monkeypatch.setattr(tb, "_discover_url", fake_discover)
+        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
         monkeypatch.setattr(tb, "_get", fake_get)
         return await tb.fetch_confirmed_candidates(
             None, 2026, "CA",
@@ -183,14 +183,161 @@ class TestTopTwo:
         assert [r["last_name"] for r in records if r["district"] == 4] == ["Thompson"]
 
 
+class TestExcludeChoices:
+    """Georgia's workbook appends a per-contest "Total Votes" row in the
+    same shape as a candidate — with an empty party and choice id. Left in,
+    it doubles the denominator and wins any uncontested race outright."""
+
+    _FMT = dict(_FORMAT, exclude_choices=["Total Votes"])
+    _TSV = (
+        "Contest Name\tChoice\tChoice Party\tTotal Votes\n"
+        "US House of Representatives - District 13 - Rep\tJonathan Chavez\tREP\t25547\n"
+        "US House of Representatives - District 13 - Rep\tTotal Votes\t\t25547\n"
+    ).encode()
+
+    def test_summary_row_is_not_counted_as_a_candidate(self):
+        tally = tb._tally(tb._rows(self._TSV, self._FMT), self._FMT)
+        votes = tally["US House of Representatives - District 13 - Rep"]["votes"]
+        assert set(votes) == {"Jonathan Chavez"}
+
+    def test_without_exclusion_the_summary_row_would_win(self):
+        """Pins why the config exists: the uncontested candidate ties the
+        summary row, and a tie yields nobody at all."""
+        tally = tb._tally(tb._rows(self._TSV, _FORMAT), _FORMAT)
+        votes = tally["US House of Representatives - District 13 - Rep"]["votes"]
+        assert "Total Votes" in votes
+
+
+class TestRunoffOverride:
+    """A runoff state's second contest decides every race its primary left
+    short of the threshold. Georgia's 2026 Senate is the live case: nobody
+    cleared 50% in May, and Collins beat Dooley in the June runoff."""
+
+    _FMT = {
+        "delimiter": "\t", "encoding": "utf-8",
+        "contest_column": "Contest Name", "choice_column": "Choice",
+        "party_column": "Choice Party", "votes_column": "Total Votes",
+    }
+    _PRIMARY = (
+        "Contest Name\tChoice\tChoice Party\tTotal Votes\n"
+        "US Senate - Rep\tMike Collins\tREP\t369642\n"
+        "US Senate - Rep\tDerek Dooley\tREP\t300000\n"
+        "US Senate - Rep\tBuddy Carter\tREP\t229223\n"
+    ).encode()
+    _RUNOFF = (
+        "Contest Name\tChoice\tChoice Party\tTotal Votes\n"
+        "US Senate - Rep\tMike Collins\tREP\t500000\n"
+        "US Senate - Rep\tDerek Dooley\tREP\t400000\n"
+    ).encode()
+
+    async def _run(self, monkeypatch, payloads):
+        async def fake_discover(client, state, year, discovery):
+            return [f"https://example.gov/{i}" for i in range(len(payloads))]
+
+        seen = iter(payloads)
+
+        async def fake_get(client, url, label):
+            return _Resp(content=next(seen))
+
+        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
+        monkeypatch.setattr(tb, "_get", fake_get)
+        return await tb.fetch_confirmed_candidates(
+            None, 2026, "GA",
+            {"runoff_threshold_pct": 50.0, "format": self._FMT},
+        )
+
+    @pytest.mark.asyncio
+    async def test_primary_alone_confirms_nobody_below_the_threshold(self, monkeypatch):
+        assert await self._run(monkeypatch, [self._PRIMARY]) == []
+
+    @pytest.mark.asyncio
+    async def test_runoff_resolves_the_seat_the_primary_left_open(self, monkeypatch):
+        records = await self._run(monkeypatch, [self._PRIMARY, self._RUNOFF])
+        assert [r["last_name"] for r in records] == ["Collins"]
+
+    @pytest.mark.asyncio
+    async def test_runoff_is_not_itself_thresholded(self, monkeypatch):
+        """A runoff is decisive by construction — applying the 50% rule to
+        it again would discard the very result that resolves the race."""
+        close = (
+            "Contest Name\tChoice\tChoice Party\tTotal Votes\n"
+            "US Senate - Rep\tMike Collins\tREP\t51\n"
+            "US Senate - Rep\tDerek Dooley\tREP\t49\n"
+        ).encode()
+        records = await self._run(monkeypatch, [self._PRIMARY, close])
+        assert [r["last_name"] for r in records] == ["Collins"]
+
+
+class TestSosApiReportDiscovery:
+    """Georgia's portal hides its workbook behind a three-hop API, and the
+    blob filename carries a GUID that changes on every republish — so it
+    must be read each run, never hardcoded."""
+
+    _JURISDICTION = {
+        "id": "09378a07-e6cf-4f66-be7c-ca4aa534f99a",
+        "elections": [
+            {"publicElectionId": "GeneralPrimary51926", "electionDate": "2026-05-19",
+             "name": [{"languageId": "en", "text": "May 19, 2026 - General Primary"}]},
+            {"publicElectionId": "06162026GeneralPrimaryRunoff", "electionDate": "2026-06-16",
+             "name": [{"languageId": "en", "text": "June 16th, 2026 General Primary Runoff"}]},
+            {"publicElectionId": "GeneralPrimary2024", "electionDate": "2024-05-21",
+             "name": [{"languageId": "en", "text": "May 21, 2024 - General Primary"}]},
+        ],
+    }
+    _DISCOVERY = {
+        "mode": "sos_api_report",
+        "jurisdiction_url": "https://example.gov/api/jurisdictions/Georgia",
+        "election_url": "https://example.gov/api/elections/Georgia/{election_id}",
+        "cdn_url": "https://example.gov/cdn/{jurisdiction_id}/{blob}",
+        "election_name_regex": "General Primary(?!.*Runoff)",
+        "runoff_name_regex": "General Primary Runoff",
+        "report_name": "Total Votes Excel",
+    }
+
+    def _fake_get(self):
+        async def fake_get(client, url, label):
+            if "jurisdictions" in url:
+                return _Resp(json_body=self._JURISDICTION)
+            blob = f"Total Votes {url.rsplit('/', 1)[-1]}.xlsx"
+            return _Resp(json_body={"publicReportCategories": [
+                {"reports": [{"reportName": "Total Votes Excel", "blobName": blob}]},
+            ]})
+        return fake_get
+
+    @pytest.mark.asyncio
+    async def test_returns_primary_then_runoff_for_the_right_cycle(self, monkeypatch):
+        monkeypatch.setattr(tb, "_get", self._fake_get())
+        urls = await tb._discover_urls(None, "GA", 2026, self._DISCOVERY)
+
+        assert len(urls) == 2
+        assert "GeneralPrimary51926" in urls[0]
+        assert "Runoff" in urls[1]
+        # 2024's General Primary matches the same name pattern and must be
+        # excluded by the electionDate year alone.
+        assert "2024" not in urls[0]
+
+    @pytest.mark.asyncio
+    async def test_blob_name_is_url_quoted(self, monkeypatch):
+        """The real blob names contain spaces."""
+        monkeypatch.setattr(tb, "_get", self._fake_get())
+        urls = await tb._discover_urls(None, "GA", 2026, self._DISCOVERY)
+        assert " " not in urls[0]
+        assert "%20" in urls[0]
+
+    @pytest.mark.asyncio
+    async def test_a_cycle_with_no_matching_election_yields_nothing(self, monkeypatch):
+        monkeypatch.setattr(tb, "_get", self._fake_get())
+        assert await tb._discover_urls(None, "GA", 2030, self._DISCOVERY) == []
+
+
 class TestDiscoverUrl:
     @pytest.mark.asyncio
     async def test_direct_url_substitutes_the_cycle_year(self):
-        url = await tb._discover_url(
+        url = await tb._discover_urls(
             None, "XX", 2026,
             {"mode": "direct_url", "url": "https://example.gov/{year}/results.csv"},
         )
-        assert url == "https://example.gov/2026/results.csv"
+        assert url == ["https://example.gov/2026/results.csv"]
 
     @pytest.mark.asyncio
     async def test_s3_listing_picks_the_earliest_matching_key(self, monkeypatch):
@@ -209,17 +356,18 @@ class TestDiscoverUrl:
             return _Resp(text=listing)
 
         monkeypatch.setattr(tb, "_get", fake_get)
-        url = await tb._discover_url(None, "NC", 2026, {
+        url = await tb._discover_urls(None, "NC", 2026, {
             "mode": "s3_listing",
             "bucket_url": "https://s3.amazonaws.com/dl.ncsbe.gov",
             "prefix": "ENRS/{year}",
             "file_regex": r"results_pct_\d{8}\.zip",
         })
-        assert url.endswith("ENRS/2026_03_03/results_pct_20260303.zip")
+        assert len(url) == 1
+        assert url[0].endswith("ENRS/2026_03_03/results_pct_20260303.zip")
 
     @pytest.mark.asyncio
-    async def test_unknown_mode_returns_none(self):
-        assert await tb._discover_url(None, "XX", 2026, {"mode": "carrier_pigeon"}) is None
+    async def test_unknown_mode_returns_nothing(self):
+        assert await tb._discover_urls(None, "XX", 2026, {"mode": "carrier_pigeon"}) == []
 
 
 class TestFetchConfirmedCandidates:
@@ -228,12 +376,12 @@ class TestFetchConfirmedCandidates:
         self, monkeypatch,
     ):
         async def fake_discover(client, state, year, discovery):
-            return "https://example.gov/results.zip"
+            return ["https://example.gov/results.zip"]
 
         async def fake_get(client, url, label):
             return _Resp(content=_fixture_bytes())
 
-        monkeypatch.setattr(tb, "_discover_url", fake_discover)
+        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
         monkeypatch.setattr(tb, "_get", fake_get)
         records = await tb.fetch_confirmed_candidates(
             None, 2026, "NC", {"runoff_threshold_pct": 30.0, "format": _FORMAT},
@@ -248,20 +396,20 @@ class TestFetchConfirmedCandidates:
     @pytest.mark.asyncio
     async def test_undiscoverable_file_returns_none_not_empty(self, monkeypatch):
         async def fake_discover(client, state, year, discovery):
-            return None
+            return []
 
-        monkeypatch.setattr(tb, "_discover_url", fake_discover)
+        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
         assert await tb.fetch_confirmed_candidates(None, 2026, "NC", {}) is None
 
     @pytest.mark.asyncio
     async def test_download_failure_returns_none(self, monkeypatch):
         async def fake_discover(client, state, year, discovery):
-            return "https://example.gov/results.zip"
+            return ["https://example.gov/results.zip"]
 
         async def fake_get(client, url, label):
             return None
 
-        monkeypatch.setattr(tb, "_discover_url", fake_discover)
+        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
         monkeypatch.setattr(tb, "_get", fake_get)
         assert await tb.fetch_confirmed_candidates(None, 2026, "NC", {}) is None
 
@@ -270,17 +418,21 @@ class TestFetchConfirmedCandidates:
         """A URL that has silently started serving something enormous is a
         config failure, not something to parse."""
         async def fake_discover(client, state, year, discovery):
-            return "https://example.gov/results.zip"
+            return ["https://example.gov/results.zip"]
 
         async def fake_get(client, url, label):
             return _Resp(content=b"x" * (tb.MAX_DOWNLOAD_BYTES + 1))
 
-        monkeypatch.setattr(tb, "_discover_url", fake_discover)
+        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
         monkeypatch.setattr(tb, "_get", fake_get)
         assert await tb.fetch_confirmed_candidates(None, 2026, "NC", {}) is None
 
 
 class _Resp:
-    def __init__(self, text="", content=b""):
+    def __init__(self, text="", content=b"", json_body=None):
         self.text = text
         self.content = content
+        self._json = json_body
+
+    def json(self):
+        return self._json

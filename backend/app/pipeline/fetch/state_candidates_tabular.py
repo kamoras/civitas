@@ -36,6 +36,7 @@ import re
 import xml.etree.ElementTree as ET
 import zipfile
 from collections import defaultdict
+from urllib.parse import quote
 
 import httpx
 
@@ -66,38 +67,127 @@ async def _get(client: httpx.AsyncClient, url: str, label: str) -> httpx.Respons
     )
 
 
-async def _discover_url(
+async def _sos_api_report_urls(
     client: httpx.AsyncClient, state: str, year: int, discovery: dict,
-) -> str | None:
-    """Resolve this cycle's results file, never a hardcoded per-cycle path."""
+) -> list[str]:
+    """Three-hop discovery for a Secretary-of-State results portal that
+    publishes its data as report blobs behind a JSON API (Georgia's, live
+    2026-08-15): the jurisdiction document lists every election and the
+    portal's own id; the election document names its report blobs; the
+    blob itself is the workbook.
+
+    Nothing here is hardcoded to a cycle — the election is matched by its
+    `electionDate` YEAR plus a name pattern, and the blob filename (which
+    carries a fresh GUID every publish) is read from the API each run.
+
+    Returns the primary first and, when the state ran one, its runoff
+    second, so the caller can let the runoff override.
+    """
+    resp = await _get(
+        client, discovery.get("jurisdiction_url") or "", f"{state} jurisdiction",
+    )
+    if resp is None:
+        return []
+    try:
+        jurisdiction = resp.json() or {}
+    except ValueError:
+        return []
+
+    jurisdiction_id = jurisdiction.get("id")
+    elections = jurisdiction.get("elections") or []
+    if not jurisdiction_id:
+        return []
+
+    def _name(entry: dict) -> str:
+        return " ".join(n.get("text", "") for n in entry.get("name") or [])
+
+    def _match(pattern: str | None) -> str | None:
+        if not pattern:
+            return None
+        for entry in elections:
+            if not str(entry.get("electionDate") or "").startswith(str(year)):
+                continue
+            if re.search(pattern, _name(entry), re.IGNORECASE):
+                return entry.get("publicElectionId")
+        return None
+
+    stages = [_match(discovery.get("election_name_regex"))]
+    runoff = _match(discovery.get("runoff_name_regex"))
+    if runoff:
+        stages.append(runoff)
+
+    urls = []
+    for election_id in [s for s in stages if s]:
+        resp = await _get(
+            client,
+            (discovery.get("election_url") or "").format(election_id=election_id),
+            f"{state} election {election_id}",
+        )
+        if resp is None:
+            continue
+        try:
+            payload = resp.json() or {}
+        except ValueError:
+            continue
+        wanted = discovery.get("report_name") or ""
+        blob = next(
+            (
+                report.get("blobName")
+                for category in payload.get("publicReportCategories") or []
+                for report in category.get("reports") or []
+                if report.get("reportName") == wanted and report.get("blobName")
+            ),
+            None,
+        )
+        if blob:
+            urls.append(
+                (discovery.get("cdn_url") or "").format(
+                    jurisdiction_id=jurisdiction_id, blob=quote(blob),
+                )
+            )
+    return urls
+
+
+async def _discover_urls(
+    client: httpx.AsyncClient, state: str, year: int, discovery: dict,
+) -> list[str]:
+    """This cycle's results file(s), never a hardcoded per-cycle path.
+
+    More than one is returned only where a state's nominees genuinely need
+    more than one election to determine: a runoff state's second contest
+    decides every race its primary left short of the threshold, so it is
+    ordered last and overrides.
+    """
     mode = discovery.get("mode")
+
+    if mode == "sos_api_report":
+        return await _sos_api_report_urls(client, state, year, discovery)
 
     if mode == "direct_url":
         template = discovery.get("url") or ""
-        return template.format(year=year) if template else None
+        return [template.format(year=year)] if template else []
 
     if mode == "s3_listing":
         bucket = (discovery.get("bucket_url") or "").rstrip("/")
         prefix = (discovery.get("prefix") or "").format(year=year)
         pattern = discovery.get("file_regex")
         if not bucket or not pattern:
-            return None
+            return []
         resp = await _get(
             client, f"{bucket}/?list-type=2&prefix={prefix}", f"{state} results listing",
         )
         if resp is None:
-            return None
+            return []
         keys = [k for k in _KEY_RE.findall(resp.text) if re.search(pattern, k)]
         if not keys:
-            return None
+            return []
         # Earliest key wins: within a cycle the first matching election is
-        # the primary that decides nominees. A later folder is the general
-        # (whose results can't confirm a nominee for a race it IS) or a
-        # second primary, which the runoff threshold already withholds.
-        return f"{bucket}/{sorted(keys)[0]}"
+        # the primary that decides nominees. A later folder is the general,
+        # whose results can't confirm a nominee for the race it IS.
+        return [f"{bucket}/{sorted(keys)[0]}"]
 
     logger.error("Unknown results discovery mode %r for %s", mode, state)
-    return None
+    return []
 
 
 _XL_NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
@@ -196,6 +286,11 @@ def _tally(rows: list[dict], fmt: dict) -> dict[str, dict]:
     choice_col = fmt.get("choice_column") or "Choice"
     party_col = fmt.get("party_column")
     votes_col = fmt.get("votes_column") or "Total Votes"
+    # Several exports append a per-contest summary row that sits in the
+    # same shape as a candidate ("Total Votes" in Georgia's workbook, with
+    # an empty choice id and party). Counting it would both double the
+    # denominator and, in an uncontested race, win the contest outright.
+    excluded = {c.casefold() for c in (fmt.get("exclude_choices") or [])}
 
     tally: dict[str, dict] = defaultdict(
         lambda: {"votes": defaultdict(int), "party": {}},
@@ -203,7 +298,7 @@ def _tally(rows: list[dict], fmt: dict) -> dict[str, dict]:
     for row in rows:
         contest = (row.get(contest_col) or "").strip()
         choice = (row.get(choice_col) or "").strip()
-        if not contest or not choice:
+        if not contest or not choice or choice.casefold() in excluded:
             continue
         entry = tally[contest]
         entry["votes"][choice] += _votes(row.get(votes_col) or "")
@@ -227,25 +322,48 @@ async def fetch_confirmed_candidates(
     advance_count = int(source.get("advance_count") or 1)
     fmt = source.get("format") or {}
 
-    url = await _discover_url(client, st, year, source.get("discovery") or {})
-    if url is None:
+    urls = await _discover_urls(client, st, year, source.get("discovery") or {})
+    if not urls:
         logger.warning("No %d results file discoverable for %s — skipping", year, st)
         return None
 
-    resp = await _get(client, url, f"{st} results export")
-    if resp is None:
-        return None
-    payload = resp.content
-    if len(payload) > MAX_DOWNLOAD_BYTES:
-        logger.warning("Results download for %s exceeds the size ceiling", st)
-        return None
+    # Keyed by seat-and-party so a runoff replaces whatever its primary
+    # said about the same race. The primary is the only stage the runoff
+    # threshold applies to: a runoff is decisive by construction, its
+    # winner having beaten the only other candidate left.
+    by_seat: dict[tuple, list[dict]] = {}
+    parsed_any = False
 
-    rows = _rows(payload, fmt)
-    if not rows:
-        logger.warning("No parsable rows in the results export for %s", st)
-        return None
+    for index, url in enumerate(urls):
+        resp = await _get(client, url, f"{st} results export")
+        if resp is None:
+            return None
+        payload = resp.content
+        if len(payload) > MAX_DOWNLOAD_BYTES:
+            logger.warning("Results download for %s exceeds the size ceiling", st)
+            return None
 
-    results = []
+        rows = _rows(payload, fmt)
+        if not rows:
+            logger.warning("No parsable rows in the results export for %s", st)
+            return None
+        parsed_any = True
+        _collect(rows, fmt, by_seat, threshold if index == 0 else None, advance_count)
+
+    if not parsed_any:
+        return None
+    return [record for records in by_seat.values() for record in records]
+
+
+def _collect(
+    rows: list[dict],
+    fmt: dict,
+    by_seat: dict[tuple, list[dict]],
+    threshold: float | None,
+    advance_count: int,
+) -> None:
+    """Fold one results file into `by_seat`, replacing (not appending to)
+    any seat it covers so a later stage's answer wins outright."""
     for contest, entry in _tally(rows, fmt).items():
         parsed = parse_office(contest)
         if parsed is None:
@@ -255,9 +373,12 @@ async def fetch_confirmed_candidates(
         # REPRESENTATIVES DISTRICT 01 (REP)"); a top-two label doesn't,
         # so each candidate's own party column is the fallback.
         contest_party = normalize_party(contest)
-        for name, _pct in pick_nominees(
-            list(entry["votes"].items()), threshold, advance_count,
-        ):
+        won = pick_nominees(list(entry["votes"].items()), threshold, advance_count)
+        if not won:
+            continue
+
+        records = []
+        for name, _pct in won:
             party = contest_party or normalize_party(entry["party"].get(name, ""))
             if party is None:
                 # In a one-nominee party primary an unattributable contest
@@ -271,8 +392,9 @@ async def fetch_confirmed_candidates(
             last_name = surname(name)
             if not last_name:
                 continue
-            results.append({
+            records.append({
                 "office": office, "district": district,
                 "party": party, "last_name": last_name,
             })
-    return results
+        if records:
+            by_seat[(office, district, contest_party or "")] = records

@@ -56,6 +56,12 @@ class TestSurname:
         assert common.surname("Dwayne L. Romero") == "Romero"
         assert common.surname("Robert Cruz Jr.") == "Cruz"
 
+    def test_strips_a_parenthetical_incumbency_marker(self):
+        """Georgia's ballot names carry "(I)" for incumbents — without
+        stripping it, every sitting member's surname became "(I)"."""
+        assert common.surname('Earl L. "Buddy" Carter (I)') == "Carter"
+        assert common.surname("Sanford Bishop (I)") == "Bishop"
+
 
 class TestPickNominees:
     def test_single_nominee_party_primary(self):

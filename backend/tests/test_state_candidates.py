@@ -68,6 +68,14 @@ class TestMatchCandidate:
 
 
 class TestSyncConfirmedCandidates:
+    @pytest.fixture(autouse=True)
+    def _only_texas(self, monkeypatch):
+        """Scope the sync loop to the one state each test mocks. Without
+        this, every other registered state runs its real strategy against
+        the live Secretary-of-State endpoint — turning this file into a
+        slow, flaky, network-dependent suite the moment a state is added."""
+        monkeypatch.setattr(sc, "configured_states", lambda: {"TX"})
+
     @pytest.mark.asyncio
     async def test_flags_a_matched_candidate(self, db_session, monkeypatch):
         _race(db_session, "2026-SEN-TX", "TX", office="S")

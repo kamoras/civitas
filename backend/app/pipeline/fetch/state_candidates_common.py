@@ -88,8 +88,14 @@ def normalize_party(text: str) -> str | None:
 def surname(display_name: str) -> str | None:
     """Trailing token of a "First [Middle] Last" display name, which is
     what the shared matcher compares against the surname FEC stores before
-    the comma. "Robert Cruz Jr." -> "Cruz"."""
-    tokens = [t for t in re.split(r"\s+", (display_name or "").strip()) if t]
+    the comma. "Robert Cruz Jr." -> "Cruz".
+
+    Parenthetical annotations are stripped first: Georgia's ballot names
+    carry an incumbency marker, and "Earl L. Carter (I)" would otherwise
+    yield a surname of "(I)" for every sitting member in the state.
+    """
+    cleaned = re.sub(r"\([^)]*\)", " ", display_name or "")
+    tokens = [t for t in re.split(r"\s+", cleaned.strip()) if t]
     while tokens and tokens[-1].strip(".,").lower() in _NAME_SUFFIXES:
         tokens.pop()
     if not tokens:

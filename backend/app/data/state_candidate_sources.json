@@ -27,6 +27,29 @@
       },
       "description": "Certified Statement of Vote workbook for voter-nominated (top-two) offices, verified live 2026-08-15: county-level rows carrying Contest Name ('United States Representative District 10'), Candidate Name, Party Name and Vote Total, read with the standard library since an xlsx is a zip of XML and no Excel dependency is warranted. All 52 congressional districts are present; California has no Senate seat on the 2026 ballot. advance_count is 2 because California runs a single all-party primary and sends the TOP TWO to the general regardless of party — modelling it as one nominee per party would silently drop a real ballot option, including the same-party runoffs California regularly produces. runoff_threshold_pct is null: there is no runoff, the top two simply advance."
     },
+    "GA": {
+      "source_name": "Georgia Secretary of State (official results portal)",
+      "strategy": "tabular",
+      "runoff_threshold_pct": 50.0,
+      "discovery": {
+        "mode": "sos_api_report",
+        "jurisdiction_url": "https://results.sos.ga.gov/results/public/api/jurisdictions/Georgia",
+        "election_url": "https://results.sos.ga.gov/results/public/api/elections/Georgia/{election_id}",
+        "cdn_url": "https://results.sos.ga.gov/cdn/results/{jurisdiction_id}/{blob}",
+        "election_name_regex": "General Primary(?!.*Runoff)",
+        "runoff_name_regex": "General Primary Runoff",
+        "report_name": "Total Votes Excel"
+      },
+      "format": {
+        "format": "xlsx",
+        "contest_column": "Office Name",
+        "choice_column": "Ballot Name",
+        "party_column": "Party",
+        "votes_column": "Total",
+        "exclude_choices": ["Total Votes"]
+      },
+      "description": "Official statewide totals workbook, discovered live 2026-08-15 through the portal's own API rather than any hardcoded path: jurisdictions/Georgia lists every election (publicElectionId 'GeneralPrimary51926' for the 2026-05-19 General Primary) plus the portal id, the election document names its report blobs, and the blob GUID — which changes on every republish — is read each run. 30 federal contests. Georgia nominates on a majority, so runoff_threshold_pct is 50 AND the 2026-06-16 General Primary Runoff is fetched as a second stage that overrides the primary for every race it decides; without that merge the runoff seats would stay permanently unconfirmed. exclude_choices drops the per-contest 'Total Votes' summary row, which sits in the same shape as a candidate and would otherwise double the denominator and win uncontested races outright."
+    },
     "NC": {
       "source_name": "North Carolina State Board of Elections (public results export)",
       "strategy": "tabular",
