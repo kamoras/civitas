@@ -227,6 +227,35 @@ class TestLooksFederal:
         ]) is True
 
 
+class TestRobots:
+    """A weekly sweep of fifty government sites is what robots.txt is
+    for, and a crawler that ignores it earns a block that takes the whole
+    feature down."""
+
+    @pytest.mark.asyncio
+    async def test_a_disallowed_path_is_not_read(self, monkeypatch):
+        class _Resp:
+            text = "User-agent: *\nDisallow: /private/"
+
+        async def fake_get(client, url, label, timeout=20.0, probe=False):
+            return _Resp()
+
+        monkeypatch.setattr(crawler, "_get", fake_get)
+        monkeypatch.setattr(crawler, "_robots", {})
+        assert await crawler._allowed(None, "https://x.gov/private/results.csv") is False
+        assert await crawler._allowed(None, "https://x.gov/elections/results.csv") is True
+
+    @pytest.mark.asyncio
+    async def test_no_robots_file_means_permitted(self, monkeypatch):
+        """What the standard says absence means."""
+        async def fake_get(client, url, label, timeout=20.0, probe=False):
+            return None
+
+        monkeypatch.setattr(crawler, "_get", fake_get)
+        monkeypatch.setattr(crawler, "_robots", {})
+        assert await crawler._allowed(None, "https://x.gov/anything") is True
+
+
 @pytest.mark.asyncio
 class TestDiscoverSourceSafety:
     async def test_a_file_that_parses_into_nothing_federal_is_not_adopted(

@@ -37,10 +37,12 @@ official filer list for the same races is rejected, whatever it parsed
 into. That check is what makes automatic discovery safe enough to act on.
 """
 
+import asyncio
 import logging
 import re
 from collections import defaultdict
 from urllib.parse import urljoin, urlparse
+from urllib.robotparser import RobotFileParser
 
 import httpx
 
@@ -52,6 +54,11 @@ logger = logging.getLogger(__name__)
 
 _HEADERS = {"User-Agent": "Civitas civic-transparency-platform contact@civitas-research.org"}
 _rate_limiter = RateLimiter(rps=1.0)
+# Probing is one request each to fifty DIFFERENT hosts, and a rate limit
+# exists to be polite to ONE host — serialising the whole sweep through
+# the download limiter turns a ten-minute weekly job into an hour of
+# mostly-idle waiting. Each host still sees at most a couple of requests.
+_probe_limiter = RateLimiter(rps=5.0, name="state_source_crawler_probe")
 
 CLARITY_BASE = "https://results.enr.clarityelections.com"
 
@@ -116,16 +123,48 @@ _NOT_STATEWIDE_RE = re.compile(
 )
 
 
-async def _get(client: httpx.AsyncClient, url: str, label: str, timeout: float = 20.0):
+async def _get(
+    client: httpx.AsyncClient, url: str, label: str, timeout: float = 20.0,
+    probe: bool = False,
+):
     # ONE attempt (retries counts attempts, not extra tries) and no 4xx
     # retry: most of what a crawler asks for is expected to be absent — a
     # host that doesn't exist, a state not on this vendor — and retrying
     # every miss three times turns a sweep of 50 states into a sweep
     # nobody will wait for.
     return await fetch_with_retry(
-        client, _rate_limiter, "GET", url, timeout=timeout,
-        retries=1, retry_on_4xx=False, log_label=label, headers=_HEADERS,
+        client, _probe_limiter if probe else _rate_limiter, "GET", url,
+        timeout=timeout, retries=1, retry_on_4xx=False,
+        log_label=label, headers=_HEADERS,
     )
+
+
+_robots: dict[str, RobotFileParser | None] = {}
+
+
+async def _allowed(client: httpx.AsyncClient, url: str) -> bool:
+    """Whether this state's site says a robot may read this path.
+
+    A weekly sweep of fifty government sites is exactly the kind of thing
+    robots.txt exists to govern, and a crawler that ignores it earns a
+    block that takes the whole feature down with it. Fetched once per host
+    per process; a site with no robots.txt, or one that can't be read, is
+    treated as permitting — that is what the standard says absence means.
+    """
+    host = urlparse(url).netloc
+    if host not in _robots:
+        parser = RobotFileParser()
+        resp = await _get(
+            client, f"https://{host}/robots.txt", f"{host} robots.txt",
+            timeout=8.0, probe=True,
+        )
+        if resp is None:
+            _robots[host] = None
+        else:
+            parser.parse(resp.text.splitlines())
+            _robots[host] = parser
+    parser = _robots[host]
+    return parser is None or parser.can_fetch(_HEADERS["User-Agent"], url)
 
 
 def _hosts_for(state: str) -> list[str]:
@@ -208,18 +247,24 @@ async def _probe_enhanced_voting(
     reports in free text, so the host is probed and the report chosen by
     what it looks like rather than by anything written down."""
     name = _STATE_NAMES.get(state.upper(), "")
-    for host in _hosts_for(state):
+    hosts = _hosts_for(state)
+
+    async def ask(host: str):
         resp = await _get(
             client, f"https://{host}/results/public/api/jurisdictions/{name}",
-            f"{state} portal probe", timeout=8.0,
+            f"{state} portal probe", timeout=8.0, probe=True,
         )
         if resp is None:
-            continue
+            return None
         try:
-            jurisdiction = resp.json()
+            body = resp.json()
         except ValueError:
-            continue
-        if not isinstance(jurisdiction, dict) or not jurisdiction.get("id"):
+            return None
+        return body if isinstance(body, dict) and body.get("id") else None
+
+    answers = await asyncio.gather(*[ask(h) for h in hosts])
+    for host, jurisdiction in zip(hosts, answers):
+        if jurisdiction is None:
             continue
 
         def _label(entry: dict) -> str:
@@ -364,6 +409,9 @@ async def _probe_pages(
             if url in seen or len(seen) >= 10 or len(found) > 60:
                 return
             seen.add(url)
+            if not await _allowed(client, url):
+                logger.info("%s: robots.txt disallows %s — not reading it", state, url)
+                return
             resp = await _get(client, url, f"{state} page scan", timeout=15.0)
             if resp is None or "html" not in resp.headers.get("content-type", ""):
                 return
@@ -685,6 +733,9 @@ async def _read(client: httpx.AsyncClient, url: str, label: str):
     shape that read it, or (None, None)."""
     from app.pipeline.fetch.state_candidates_tabular import MAX_DOWNLOAD_BYTES, _rows
 
+    if not await _allowed(client, url):
+        logger.info("%s: robots.txt disallows %s — not downloading it", label, url)
+        return None, None
     resp = await _get(client, url, label, timeout=90.0)
     if resp is None or len(resp.content) > MAX_DOWNLOAD_BYTES:
         return None, None
