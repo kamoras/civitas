@@ -49,6 +49,7 @@ from app.time_utils import utcnow
 from app.pipeline.fetch.state_candidate_sources import (
     _load as _sources_file,
     configured_states,
+    discovered_states,
     save_discovered,
     source_for_state,
 )
@@ -173,7 +174,7 @@ async def crawl_for_new_sources(
             outcomes[state] = "error"
             continue
         if not found:
-            outcomes[state] = "none"
+            outcomes[state] = await _forget_if_broken(client, cycle, state)
             continue
 
         strategy = STRATEGIES.get(found.get("strategy"))
@@ -203,6 +204,31 @@ async def crawl_for_new_sources(
         outcomes[state] = f"adopted ({matched}/{len(records)} matched)"
         logger.info("Adopted a discovered source for %s: %s", state, found.get("_evidence"))
     return outcomes
+
+
+async def _forget_if_broken(client: httpx.AsyncClient, cycle: int, state: str) -> str:
+    """Drop a previously discovered source that has stopped working.
+
+    The other half of self-healing: finding a state's new location is only
+    useful if the dead one goes away. A source that still fetches is kept
+    even when this week's crawl didn't re-find it (a page can be down for
+    an hour), so only one that actually fails is forgotten — and the state
+    then falls back to showing every FEC filer, which is where it was
+    before anything was discovered.
+    """
+    if state not in discovered_states():
+        return "none"
+    source = source_for_state(state) or {}
+    strategy = STRATEGIES.get(source.get("strategy"))
+    records = await strategy(client, cycle, state, source) if strategy else None
+    if records is not None:
+        return "kept"
+    logger.warning(
+        "Forgetting the discovered source for %s — it no longer fetches: %s",
+        state, source.get("source_name"),
+    )
+    save_discovered(state, None)
+    return "forgotten"
 
 
 def _confirmed_match(db: Session, cycle: int, state: str, record: dict):

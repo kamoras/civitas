@@ -103,6 +103,57 @@ class TestCrawlAdoption:
         assert saved == {}
 
 
+class TestForgetsBrokenDiscoveries:
+    """The other half of self-healing: finding a state's new location only
+    helps if the dead one goes away."""
+
+    @pytest.mark.asyncio
+    async def test_a_discovered_source_that_stopped_fetching_is_forgotten(
+        self, db_session, monkeypatch,
+    ):
+        saved = {"ZZ": {"strategy": "tabular"}}
+
+        async def nothing_found(client, state, cycle, rules=None):
+            return None
+
+        async def broken(client, cycle, state, source):
+            return None
+
+        monkeypatch.setattr(sc, "discover_source", nothing_found)
+        monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"ZZ": ["example.gov"]})
+        monkeypatch.setattr(sc, "STRATEGIES", {"tabular": broken})
+        monkeypatch.setattr(sc, "discovered_states", lambda: {"ZZ"})
+        monkeypatch.setattr(sc, "source_for_state", lambda st: saved.get(st))
+        monkeypatch.setattr(sc, "save_discovered", lambda st, src: saved.pop(st))
+        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert outcomes["ZZ"] == "forgotten"
+        assert saved == {}
+
+    @pytest.mark.asyncio
+    async def test_one_that_still_fetches_survives_a_crawl_that_missed_it(
+        self, db_session, monkeypatch,
+    ):
+        """A page can be down for an hour; that is not a reason to drop a
+        working source."""
+        saved = {"ZZ": {"strategy": "tabular"}}
+
+        async def nothing_found(client, state, cycle, rules=None):
+            return None
+
+        async def working(client, cycle, state, source):
+            return []
+
+        monkeypatch.setattr(sc, "discover_source", nothing_found)
+        monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"ZZ": ["example.gov"]})
+        monkeypatch.setattr(sc, "STRATEGIES", {"tabular": working})
+        monkeypatch.setattr(sc, "discovered_states", lambda: {"ZZ"})
+        monkeypatch.setattr(sc, "source_for_state", lambda st: saved.get(st))
+        monkeypatch.setattr(sc, "save_discovered", lambda st, src: saved.pop(st))
+        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert outcomes["ZZ"] == "kept"
+        assert "ZZ" in saved
+
+
 class TestIsConfigured:
     def test_true_for_a_registered_state_with_a_real_strategy(self):
         assert sc.is_configured("TX") is True
