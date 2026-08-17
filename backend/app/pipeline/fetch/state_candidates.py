@@ -55,7 +55,7 @@ from app.pipeline.fetch.state_candidate_sources import (
     states_with_filings,
 )
 from app.pipeline.fetch import state_election_dates as election_dates
-from app.pipeline.fetch.state_candidate_filings import fetch_primary_candidates
+from app.pipeline.fetch.state_candidate_filings import fetch_ballot_candidates
 from app.pipeline.fetch.state_source_crawler import (
     ELECTION_DOMAINS,
     discover_filings,
@@ -261,14 +261,15 @@ async def _adopt_filings(
     candidate_source = {**base, "filings": {
         k: v for k, v in filings.items() if not k.startswith("_")
     }}
-    found = await fetch_primary_candidates(client, cycle, state, candidate_source)
+    found = await fetch_ballot_candidates(client, cycle, state, candidate_source)
     if not found:
         return "none"
-    records, held = found
+    records = found["primary"] + found["general"]
+    held = found["primary_date"]
     matched = sum(1 for r in records if _confirmed_match(db, cycle, state, r) is not None)
     if not matched:
         logger.info(
-            "Not adopting a filing list for %s: it lists %d primary candidates, none "
+            "Not adopting a filing list for %s: it lists %d ballot candidates, none "
             "of whom are on file for those races — %s",
             state, len(records), filings.get("_evidence"),
         )
@@ -408,44 +409,51 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
     return results
 
 
-async def sync_primary_ballots(db: Session, client: httpx.AsyncClient, cycle: int) -> dict:
-    """Flag every candidate a state lists on its PRIMARY ballot, for the
-    states that publish a filing list, and record the primary's date.
+async def sync_ballot_filings(db: Session, client: httpx.AsyncClient, cycle: int) -> dict:
+    """Flag what a state's own candidate filing list says about both its
+    ballots, and record its primary date.
 
-    This is what the ballot page has to work with for most of a cycle —
-    before any primary, a race's only other answer is every active FEC
-    filer, including people who never filed with the state at all. It is
-    strictly weaker than a confirmed nominee and never overrides one: see
-    api/elections.py's _confirmed_or_all, where a state that has confirmed
-    nominees keeps them.
+    Its PRIMARY list is what the ballot page has to work with for most of
+    a cycle — before any primary, a race's only other answer is every
+    active FEC filer, including people who never filed with the state at
+    all. It is weaker than a confirmed nominee and never overrides one.
+
+    Its GENERAL list is the state naming its November ballot outright, so
+    it confirms candidates exactly as a results file does — and it is the
+    ONLY way to see a Libertarian or Green candidate, who reaches November
+    without appearing in any primary and is therefore invisible to
+    confirmation derived from primary results.
     """
     results: dict[str, dict] = {}
     for state in sorted(states_with_filings()):
         source = source_for_state(state) or {}
         try:
-            found = await fetch_primary_candidates(client, cycle, state, source)
+            found = await fetch_ballot_candidates(client, cycle, state, source)
         except Exception:
-            logger.exception("Primary-ballot fetch raised for %s", state)
+            logger.exception("Ballot-filing fetch raised for %s", state)
             found = None
         if found is None:
-            results[state] = {"listed": 0, "unmatched": 0, "status": "fetch_failed"}
+            results[state] = {"primary": 0, "general": 0, "unmatched": 0,
+                              "status": "fetch_failed"}
             continue
 
-        records, held = found
-        if held:
-            election_dates.save(state, cycle, {"primary": held})
-        listed = unmatched = 0
-        for record in records:
-            match = _confirmed_match(db, cycle, state, record)
-            if match is None:
-                unmatched += 1
-                continue
-            if not match.on_primary_ballot:
-                match.on_primary_ballot = True
-                db.commit()
-            listed += 1
+        if found["primary_date"]:
+            election_dates.save(state, cycle, {"primary": found["primary_date"]})
+        counts = {"primary": 0, "general": 0}
+        unmatched = 0
+        for kind, flag in (("primary", "on_primary_ballot"),
+                           ("general", "confirmed_general")):
+            for record in found[kind]:
+                match = _confirmed_match(db, cycle, state, record)
+                if match is None:
+                    unmatched += 1
+                    continue
+                if not getattr(match, flag):
+                    setattr(match, flag, True)
+                    db.commit()
+                counts[kind] += 1
         results[state] = {
-            "listed": listed, "unmatched": unmatched,
-            "primary_date": held, "status": "ok",
+            **counts, "unmatched": unmatched,
+            "primary_date": found["primary_date"], "status": "ok",
         }
     return results

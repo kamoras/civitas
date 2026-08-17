@@ -209,9 +209,10 @@
           "contest_column": "contest_name",
           "choice_column": "name_on_ballot",
           "party_column": "party_contest",
-          "election_date_column": "election_dt"
+          "election_date_column": "election_dt",
+          "candidate_party_column": "party_candidate"
         },
-        "description": "Who is on the PRIMARY ballot, months before any result exists, plus the primary's own date — verified live 2026-08-17 against the real file (8,300 rows, one per county per candidate, all 14 districts and the Senate seat present, primary dated 03/03/2026). Only office, ballot name, party and election date are read: the same file also carries every candidate's home address, phone and email, which this platform has no reason to hold. A filing with no party is an unaffiliated candidate who faces no primary and files straight for November — real, but not a primary fact, so it is skipped rather than guessed into somebody's primary."
+        "description": "Who is on the ballot — BOTH ballots — months before any result exists, plus the primary's own date. Verified live 2026-08-17 against the real file (8,300 rows, one per county per candidate; 71 federal primary candidates dated 03/03/2026, and 42 on the general ballot dated 11/03/2026). The general list is why this matters beyond the pre-primary window: 15 of those 42 are Libertarian or Green candidates who never appear in ANY primary, so confirming nominees from primary results cannot see them — and since a race with any confirmed candidate shows only confirmed candidates, they were being dropped from the page. North Carolina records the primary a candidate ran in (party_contest, empty for November) separately from the candidate's own party (party_candidate, which is where LIB/GRE appear), hence both columns. Only office, ballot name, party and election date are read: the same file also carries every candidate's home address, phone and email, which this platform has no reason to hold."
       }
     },
     "TX": {
