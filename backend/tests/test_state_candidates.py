@@ -24,6 +24,85 @@ def _candidate(db, cand_id, race_id, name, party="REP", **overrides):
     return c
 
 
+class TestCrawlAdoption:
+    """The one path that can add a state with nobody reading it first, so
+    the bar is positive proof: the nominees a discovered source names must
+    be candidates on file for those races."""
+
+    @staticmethod
+    def _patch(monkeypatch, records, found=None):
+        saved = {}
+
+        async def fake_discover(client, state, cycle, rules=None):
+            return found if found is not None else {
+                "strategy": "tabular", "_evidence": "a results file somewhere",
+            }
+
+        async def fake_fetch(client, cycle, state, source):
+            return records
+
+        monkeypatch.setattr(sc, "discover_source", fake_discover)
+        monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"ZZ": ["example.gov"]})
+        monkeypatch.setattr(sc, "STRATEGIES", {"tabular": fake_fetch})
+        monkeypatch.setattr(sc, "save_discovered", lambda st, src: saved.update({st: src}))
+        return saved
+
+    @pytest.mark.asyncio
+    async def test_adopts_a_source_whose_nominees_are_real_candidates(
+        self, db_session, monkeypatch,
+    ):
+        _race(db_session, "2026-HOUSE-ZZ-3", "ZZ", "H", 3)
+        _candidate(db_session, "c1", "2026-HOUSE-ZZ-3", "FLOOD, MIKE", party="REP")
+        db_session.commit()
+        saved = self._patch(
+            monkeypatch,
+            [{"office": "H", "district": 3, "party": "R", "last_name": "Flood"}],
+        )
+        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert outcomes["ZZ"].startswith("adopted")
+        assert "ZZ" in saved
+
+    @pytest.mark.asyncio
+    async def test_rejects_a_source_naming_people_who_are_not_in_the_race(
+        self, db_session, monkeypatch,
+    ):
+        """What a wrong column looks like: a file that parses beautifully
+        into names no filer in that race shares."""
+        _race(db_session, "2026-HOUSE-ZZ-3", "ZZ", "H", 3)
+        _candidate(db_session, "c1", "2026-HOUSE-ZZ-3", "FLOOD, MIKE", party="REP")
+        db_session.commit()
+        saved = self._patch(
+            monkeypatch,
+            [{"office": "H", "district": 3, "party": "R", "last_name": "Nobody"}],
+        )
+        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert outcomes["ZZ"] == "rejected"
+        assert saved == {}
+
+    @pytest.mark.asyncio
+    async def test_a_source_claiming_nothing_yet_is_not_adopted_on_faith(
+        self, db_session, monkeypatch,
+    ):
+        """A state still counting claims no nominees, so nothing can be
+        proved — and a first version adopted exactly such files (a
+        candidate filing list, a headerless export) because nothing could
+        contradict them. It waits for the next crawl instead."""
+        saved = self._patch(monkeypatch, [])
+        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert outcomes["ZZ"] == "unproven"
+        assert saved == {}
+
+    @pytest.mark.asyncio
+    async def test_a_hand_verified_state_is_never_crawled_over(
+        self, db_session, monkeypatch,
+    ):
+        saved = self._patch(monkeypatch, [])
+        monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"TX": ["sos.texas.gov"]})
+        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert outcomes == {}
+        assert saved == {}
+
+
 class TestIsConfigured:
     def test_true_for_a_registered_state_with_a_real_strategy(self):
         assert sc.is_configured("TX") is True
