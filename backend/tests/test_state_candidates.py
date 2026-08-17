@@ -18,6 +18,11 @@ def _race(db, race_id, state, office="S", district=None, cycle_year=2026):
     return r
 
 
+async def _ok(*_args, **_kwargs):
+    """A source that fetches fine and simply has nothing to report."""
+    return []
+
+
 def _candidate(db, cand_id, race_id, name, party="REP", **overrides):
     c = Candidate(id=cand_id, race_id=race_id, name=name, party=party, **overrides)
     db.add(c)
@@ -93,14 +98,42 @@ class TestCrawlAdoption:
         assert saved == {}
 
     @pytest.mark.asyncio
-    async def test_a_hand_verified_state_is_never_crawled_over(
+    async def test_a_working_hand_verified_state_is_left_alone(
         self, db_session, monkeypatch,
     ):
         saved = self._patch(monkeypatch, [])
         monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"TX": ["sos.texas.gov"]})
+        monkeypatch.setattr(sc, "STRATEGIES", {"tx_civix": _ok})
         outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
         assert outcomes == {}
         assert saved == {}
+
+    @pytest.mark.asyncio
+    async def test_a_BROKEN_hand_verified_state_is_crawled_for_a_replacement(
+        self, db_session, monkeypatch,
+    ):
+        """A state that moves hosts between cycles is the whole reason
+        locations aren't trusted to stay put — so when a hand-written one
+        stops fetching, a replacement is looked for instead of the state
+        going dark until someone edits a URL. Its LAW still comes from the
+        hand-written entry."""
+        seen_rules = {}
+
+        async def fake_discover(client, state, cycle, rules=None):
+            seen_rules.update(rules or {})
+            return None
+
+        async def broken(client, cycle, state, source):
+            return None
+
+        monkeypatch.setattr(sc, "discover_source", fake_discover)
+        monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"GA": ["sos.ga.gov"]})
+        monkeypatch.setattr(sc, "STRATEGIES", {"tabular": broken})
+        outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
+        assert "GA" in outcomes
+        # Georgia nominates on a majority — that rule is law, and must be
+        # carried into whatever replacement gets found.
+        assert seen_rules["runoff_threshold_pct"] == 50.0
 
 
 class TestForgetsBrokenDiscoveries:

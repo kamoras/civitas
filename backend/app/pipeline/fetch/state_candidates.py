@@ -161,12 +161,29 @@ async def crawl_for_new_sources(
     lost by waiting — a source adopted the week after certification is
     still months before the general.
     """
-    hand_verified = set((_sources_file().get("states") or {}).keys())
+    hand_verified = (_sources_file().get("states") or {})
     outcomes: dict[str, str] = {}
     for state in sorted(ELECTION_DOMAINS):
-        if state in hand_verified:
-            continue
-        rules = {}
+        hand = hand_verified.get(state)
+        # A hand-verified state is left alone while its source works. When
+        # it STOPS working — a state moves hosts between cycles, which is
+        # the whole reason locations aren't trusted to stay put — it gets
+        # crawled like any other, so a replacement can be found without
+        # anyone editing a URL. Its LAW still comes from the hand-written
+        # entry; only the location is rediscovered.
+        if hand:
+            strategy = STRATEGIES.get(hand.get("strategy"))
+            still_works = await strategy(client, cycle, state, hand) if strategy else None
+            if still_works is not None:
+                continue
+            logger.warning(
+                "Hand-verified source for %s is not fetching — looking for a "
+                "replacement location", state,
+            )
+        rules = {
+            k: v for k, v in (hand or {}).items()
+            if k in ("runoff_threshold_pct", "advance_count")
+        }
         try:
             found = await discover_source(client, state, cycle, rules)
         except Exception:
@@ -204,6 +221,18 @@ async def crawl_for_new_sources(
         outcomes[state] = f"adopted ({matched}/{len(records)} matched)"
         logger.info("Adopted a discovered source for %s: %s", state, found.get("_evidence"))
     return outcomes
+
+
+async def _no_strategy(*_args, **_kwargs) -> None:
+    return None
+
+
+def _discovered_source(state: str) -> dict | None:
+    """What the crawler last proved for `state`, ignoring the
+    hand-verified entry that normally shadows it."""
+    from app.pipeline.fetch.state_candidate_sources import _load_discovered
+
+    return _load_discovered().get(state.upper())
 
 
 async def _forget_if_broken(client: httpx.AsyncClient, cycle: int, state: str) -> str:
@@ -264,6 +293,16 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
             logger.exception("Confirmed-candidate fetch raised for %s", state)
             records = None
 
+        if records is None:
+            # A hand-verified source that has broken falls back to whatever
+            # the crawler last proved for this state, rather than the state
+            # going dark until someone edits a URL.
+            spare = _discovered_source(state)
+            if spare and spare != source:
+                logger.info("Falling back to the discovered source for %s", state)
+                records = await STRATEGIES.get(spare.get("strategy"), _no_strategy)(
+                    client, cycle, state, spare,
+                )
         if records is None:
             results[state] = {"confirmed": 0, "unmatched": 0, "status": "fetch_failed"}
             continue
