@@ -19,9 +19,13 @@ function candidate(overrides: Partial<BallotCandidate>): BallotCandidate {
   };
 }
 
-function race(candidates: BallotCandidate[]): RaceWithCandidates {
+function race(
+  candidates: BallotCandidate[],
+  candidateSource: RaceWithCandidates["candidateSource"] = "confirmed",
+): RaceWithCandidates {
   return {
     id: "2026-SEN-TX",
+    candidateSource,
     cycleYear: 2026,
     office: "S",
     state: "TX",
@@ -67,5 +71,18 @@ describe("BallotRaceOptions", () => {
     );
     const badge = screen.getByText("$3.2M CASH");
     expect(badge.title).toBe("Cash on hand as of 2026-08-01");
+  });
+
+  it("says when a list is raw FEC filers rather than real ballot options", () => {
+    // Three quite different lists get shown in the same shape; a reader
+    // can't tell a state-confirmed nominee from someone who merely filed
+    // paperwork unless the page says so.
+    render(<BallotRaceOptions race={race([candidate({ name: "SOMEONE, A" })], "filers")} />);
+    expect(screen.getByText(/never appear on a ballot/i)).toBeInTheDocument();
+  });
+
+  it("says when a list is a primary ballot, not a decided nomination", () => {
+    render(<BallotRaceOptions race={race([candidate({ name: "SOMEONE, A" })], "primary")} />);
+    expect(screen.getByText(/aren't decided until the primary/i)).toBeInTheDocument();
   });
 });

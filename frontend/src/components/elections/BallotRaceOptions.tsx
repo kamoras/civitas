@@ -26,6 +26,18 @@ function getPartyMeta(party: string) {
   return PARTY_META[party] ?? { label: party, color: "text-white/50" };
 }
 
+/** What this race's list actually IS. Three quite different things get
+ * shown in the same shape — nominees a state has confirmed, people merely
+ * on a primary ballot, and raw FEC filers who may never appear on any
+ * ballot — and a reader can't tell them apart without being told. The
+ * backend decides which (RaceWithCandidates.candidateSource); this only
+ * puts it into words. */
+const SOURCE_NOTE: Record<RaceWithCandidates["candidateSource"], string> = {
+  confirmed: "Confirmed by this state as general-election nominees.",
+  primary: "On this state's primary ballot — the nominees aren't decided until the primary.",
+  filers: "Everyone who has filed with the FEC for this race. This state's official candidate list isn't covered yet, so some of these may never appear on a ballot.",
+};
+
 /** One race's candidates, presented as ballot choices — a marker, name,
  * party, and cash-on-hand, not the full fundraising-focused
  * CandidateCard (raised total, FEC profile link, etc.). This page
@@ -106,6 +118,9 @@ export default function BallotRaceOptions({ race }: { race: RaceWithCandidates }
           + {otherCount} other FEC {otherCount === 1 ? "filer" : "filers"} (paper filings or
           prior-cycle records, not shown as ballot options).
         </p>
+      )}
+      {active.length > 0 && (
+        <p className="text-[10px] text-matrix-green/40 mt-2">{SOURCE_NOTE[race.candidateSource]}</p>
       )}
       <Link
         href={`/elections/${race.id}`}

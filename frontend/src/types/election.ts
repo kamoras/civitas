@@ -115,6 +115,14 @@ export interface RaceWithCandidates {
   pvi: number | null;
   /** See RaceSummary.pviLevel. */
   pviLevel: "district" | "state" | null;
+  /** WHICH answer this race's candidate list is, decided by the backend
+   * (never re-derived here): "confirmed" = a state has confirmed these as
+   * general-election nominees; "primary" = no nominee yet, but the state
+   * lists these as on its primary ballot; "filers" = nobody has confirmed
+   * anything, so this is every active FEC filer, some of whom may never
+   * appear on a ballot. Three quite different things, and the page says
+   * which one a reader is looking at. */
+  candidateSource: "confirmed" | "primary" | "filers";
   /** House races only (null for Senate): this district's counties, from
    * the Census Bureau's block-to-district assignment. A "(part)" suffix
    * means that county also has population in another district. Lets a
@@ -132,6 +140,10 @@ export interface StateBallot {
   state: string;
   cycleYear: number;
   electionDate: string;
+  /** This state's own primary date, read from the state's election feed.
+   * Null when that state publishes nothing this can be read from — an
+   * unknown date is shown as unknown, never guessed. */
+  primaryDate: string | null;
   /** Statewide PVI — null only if the underlying PVI map lacks this
    * state, never a fabricated 0. */
   statePvi: number | null;

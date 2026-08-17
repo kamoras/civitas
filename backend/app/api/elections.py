@@ -23,6 +23,7 @@ from app.pipeline.analyze.score_calculator import (
     get_state_pvi_map,
 )
 from app.pipeline.election_pipeline import STATES_WITH_FEDERAL_RACES, current_election_cycle
+from app.pipeline.fetch.state_election_dates import primary_date
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -142,6 +143,27 @@ def _confirmed_or_all(candidates: list[Candidate]) -> list[Candidate]:
     return candidates
 
 
+def _candidate_source(candidates: list[Candidate]) -> str:
+    """WHICH of _confirmed_or_all's three answers a race's list is, so the
+    page can say so instead of presenting three quite different things as
+    one list. Computed here rather than in the frontend, which must not
+    re-derive what the filter already decided.
+
+    "confirmed"  — a state has confirmed these as general-election
+                   nominees.
+    "primary"    — no nominee yet, but the state lists these as being on
+                   its primary ballot.
+    "filers"     — nobody has confirmed anything for this race, so this is
+                   every active FEC filer, some of whom may never appear on
+                   a ballot.
+    """
+    if any(c.confirmed_general for c in candidates):
+        return "confirmed"
+    if any(c.on_primary_ballot for c in candidates):
+        return "primary"
+    return "filers"
+
+
 def _race_summary(race: Race, state_pvi: dict, district_pvi: dict) -> dict:
     candidates = sorted(
         _confirmed_or_all(race.candidates),
@@ -244,6 +266,7 @@ def _race_full(
         "pvi": pvi,
         "pviLevel": pvi_level,
         "counties": counties,
+        "candidateSource": _candidate_source(race.candidates),
         "candidates": [
             {**_candidate_summary(c), "incumbentRecord": _incumbent_link(c, race, reps_by_district, senators)}
             for c in candidates
@@ -347,6 +370,10 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         "state": state,
         "cycleYear": current_election_cycle(),
         "electionDate": next_election_day(utcnow().date()).isoformat(),
+        # Read from this state's own election feed (state_election_dates.py),
+        # never a calendar maintained here — null for a state whose source
+        # doesn't date itself, which is the honest answer.
+        "primaryDate": primary_date(state, current_election_cycle()),
         "statePvi": state_pvi.get(state),
         "senateRaces": senate_races,
         "houseRaces": house_races,

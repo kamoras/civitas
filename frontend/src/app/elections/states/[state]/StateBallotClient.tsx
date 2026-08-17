@@ -121,6 +121,14 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                 {ballot.state} — {ballot.cycleYear} GENERAL ELECTION
               </h1>
               <p className="font-mono text-xs text-matrix-green/50">{ballot.electionDate}</p>
+              {/* The primary is read from this state's own election feed,
+                  so a state we don't cover simply doesn't get this line —
+                  an unknown date is left unknown rather than guessed. */}
+              {ballot.primaryDate && (
+                <p className="font-mono text-xs text-matrix-green/40 mt-0.5">
+                  PRIMARY: {ballot.primaryDate}
+                </p>
+              )}
               {ballot.statePvi !== null && (
                 <>
                   <p className={`font-pixel text-sm mt-2 ${pviColor(ballot.statePvi)}`}>
