@@ -64,6 +64,15 @@ _rate_limiter = RateLimiter(rps=1.0)
 # loudly rather than be parsed into nonsense or held in memory.
 MAX_DOWNLOAD_BYTES = 80 * 1024 * 1024
 
+# How long after an election to keep withholding when a state asks for the
+# certification gate but names no deadline of its own. Utah proved a
+# portal's official flag can simply never be flipped, so a gate with no
+# failsafe is a gate that never opens — and a discovered source has no
+# statutory deadline to quote. Every state certifies a primary well inside
+# a month, and a nominee named a month late is still named months before
+# the general.
+DEFAULT_SETTLE_DAYS = 30
+
 _KEY_RE = re.compile(r"<Key>([^<]+)</Key>")
 
 
@@ -102,6 +111,31 @@ def _settled(held: str | None, settle_days: int | None) -> bool:
     return (datetime.now(UTC).date() - held_on).days >= int(settle_days)
 
 
+def _held_from_rows(rows: list[dict], fmt: dict) -> str | None:
+    """The election's own date, read out of the results rows, for a file
+    whose URL doesn't carry one. Florida stamps every row with
+    "08/18/2026"; a state that stamps none simply stays undatable, and an
+    undatable file can't clear the certification gate — refusing is the
+    safe end of that trade."""
+    column = fmt.get("held_column")
+    if not column:
+        return None
+    for row in rows[:200]:
+        raw = str(row.get(column) or "").strip()
+        for pattern, order in ((r"(\d{4})-(\d{2})-(\d{2})", "ymd"),
+                               (r"(\d{1,2})/(\d{1,2})/(\d{4})", "mdy")):
+            m = re.match(pattern, raw)
+            if not m:
+                continue
+            y, mo, d = (m.group(1), m.group(2), m.group(3)) if order == "ymd" \
+                else (m.group(3), m.group(1), m.group(2))
+            try:
+                return date(int(y), int(mo), int(d)).isoformat()
+            except ValueError:
+                continue
+    return None
+
+
 def _withheld(stage: dict, discovery: dict) -> bool:
     """Whether this stage's results are still too unsettled to name a
     nominee from. One rule for every vendor: a state that asks for the gate
@@ -116,7 +150,15 @@ def _withheld(stage: dict, discovery: dict) -> bool:
         return False
     if stage.get("official"):
         return False
-    return not _settled(stage.get("held"), discovery.get("settle_days"))
+    if stage.get("held") is None and stage.get("official") is None:
+        # Nothing yet says how fresh this is. Don't refuse it here — the
+        # file itself may carry its election date, which is only readable
+        # once downloaded (see _held_from_rows), and this same check runs
+        # again with that answer before a single vote is counted.
+        return False
+    return not _settled(
+        stage.get("held"), discovery.get("settle_days", DEFAULT_SETTLE_DAYS),
+    )
 
 
 def _stage(url: str | None, runoff: bool = False, held: str | None = None,
@@ -294,21 +336,36 @@ async def _discover_urls(
         resp = await _get(client, discovery.get("page_url") or "", f"{state} downloads page")
         if resp is None or not pattern:
             return []
-        links = sorted({m.group(0) for m in re.finditer(pattern, resp.text)})
+        # Literal token, not str.format: a link regex is full of {n}
+        # quantifiers that format() would try to fill in.
+        links = sorted({
+            m.group(0) for m in re.finditer(pattern.replace("{year}", str(year)), resp.text)
+        })
         # Same rule s3_listing applies, for a page that shows one election
         # at a time: a file dated on this cycle's federal election day IS
         # the general, and the general's results can't confirm a nominee
         # for the race they decide. Left in, this state would quietly start
-        # "confirming" November's winners every four years.
+        # "confirming" November's winners every four years. A file that
+        # dates itself to another cycle entirely is somebody's archive.
         general = next_election_day(date(year, 1, 1)).isoformat()
-        primaries = [ln for ln in links if _date_in(ln) and _date_in(ln) != general]
-        if not primaries:
+        wanted = [
+            ln for ln in links
+            if _date_in(ln) is None
+            or (_date_in(ln) != general and _date_in(ln).startswith(str(year)))
+        ]
+        if not wanted:
             logger.info(
                 "%s's downloads page lists no %d primary results file yet", state, year,
             )
             return []
-        first = min(primaries, key=lambda ln: _date_in(ln))
-        return [_stage(first, held=_date_in(first))]
+        # Several links are one election published per office, not several
+        # elections: Illinois posts a separate CSV for every congressional
+        # district. Where they ARE dated, the earliest is the primary.
+        dated = [ln for ln in wanted if _date_in(ln)]
+        if dated:
+            earliest = min(_date_in(ln) for ln in dated)
+            wanted = [ln for ln in wanted if _date_in(ln) == earliest]
+        return [_stage(ln, held=_date_in(ln)) for ln in wanted]
 
     logger.error("Unknown results discovery mode %r for %s", mode, state)
     return []
@@ -490,6 +547,7 @@ async def fetch_confirmed_candidates(
     # beaten the only other candidate left.
     by_seat: dict[tuple, list[dict]] = {}
     parsed_any = False
+    withheld_any = False
 
     for stage in usable:
         resp = await _get(client, stage["url"], f"{st} results export")
@@ -504,6 +562,17 @@ async def fetch_confirmed_candidates(
         if not rows:
             logger.warning("No parsable rows in the results export for %s", st)
             return None
+        if stage.get("held") is None:
+            dated = {**stage, "held": _held_from_rows(rows, fmt)}
+            if _withheld(dated, discovery) or (
+                discovery.get("require_official") and dated["held"] is None
+            ):
+                logger.info(
+                    "%s: results at %s are not settled enough to name nominees from",
+                    st, stage["url"],
+                )
+                withheld_any = True
+                continue
         parsed_any = True
         _collect(
             rows, fmt, by_seat,
@@ -512,7 +581,9 @@ async def fetch_confirmed_candidates(
         )
 
     if not parsed_any:
-        return None
+        # Withheld is healthy and empty; nothing parsed at all is a
+        # failure. Same distinction the discovery gate makes.
+        return [] if withheld_any else None
     return [record for records in by_seat.values() for record in records]
 
 

@@ -45,7 +45,14 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.models import Candidate, Race
-from app.pipeline.fetch.state_candidate_sources import configured_states, source_for_state
+from app.time_utils import utcnow
+from app.pipeline.fetch.state_candidate_sources import (
+    _load as _sources_file,
+    configured_states,
+    save_discovered,
+    source_for_state,
+)
+from app.pipeline.fetch.state_source_crawler import ELECTION_DOMAINS, discover_source
 from app.pipeline.fetch.state_candidates_clarity import fetch_confirmed_candidates as _fetch_clarity
 from app.pipeline.fetch.state_candidates_tabular import fetch_confirmed_candidates as _fetch_tabular
 from app.pipeline.fetch.state_candidates_tx import fetch_confirmed_candidates as _fetch_tx
@@ -128,6 +135,83 @@ def _match_candidate(
         if len(party_matches) == 1:
             return party_matches[0]
     return None
+
+
+async def crawl_for_new_sources(
+    db: Session, client: httpx.AsyncClient, cycle: int,
+) -> dict:
+    """Look for a usable results source in every state that doesn't have a
+    hand-verified one, and keep the ones that prove out. Returns per-state
+    outcomes for the run report.
+
+    Adoption needs POSITIVE proof, because this is the one path that adds
+    a state with nobody reading it first: a discovered source is kept only
+    if the nominees it names can be matched to Civitas's own FEC-derived
+    candidates for those same races. Parsing cleanly is not enough, and
+    neither is producing nothing — a first version of this accepted
+    Nebraska's candidate FILING list (its numeric column is the number of
+    seats to elect, so every candidate "tied") and a Hawaii file with no
+    real headers, purely because neither claimed a nominee anybody could
+    contradict.
+
+    So a state whose results aren't certified yet is simply not adopted
+    yet: it claims nothing, nothing can be proved, and the next weekly
+    crawl picks it up once its nominees are real and checkable. Nothing is
+    lost by waiting — a source adopted the week after certification is
+    still months before the general.
+    """
+    hand_verified = set((_sources_file().get("states") or {}).keys())
+    outcomes: dict[str, str] = {}
+    for state in sorted(ELECTION_DOMAINS):
+        if state in hand_verified:
+            continue
+        rules = {}
+        try:
+            found = await discover_source(client, state, cycle, rules)
+        except Exception:
+            logger.exception("Source discovery raised for %s", state)
+            outcomes[state] = "error"
+            continue
+        if not found:
+            outcomes[state] = "none"
+            continue
+
+        strategy = STRATEGIES.get(found.get("strategy"))
+        records = await strategy(client, cycle, state, found) if strategy else None
+        if records is None:
+            outcomes[state] = "unusable"
+            continue
+        matched = sum(
+            1 for record in records
+            if _confirmed_match(db, cycle, state, record) is not None
+        )
+        if not matched:
+            logger.info(
+                "Not adopting a source for %s: it names %d nominee(s), %d of whom are "
+                "candidates on file for those races — %s",
+                state, len(records), matched, found.get("_evidence"),
+            )
+            outcomes[state] = "unproven" if not records else "rejected"
+            continue
+        save_discovered(state, {k: v for k, v in found.items() if not k.startswith("_")}
+                        | {"source_name": found.get("_evidence", "discovered"),
+                           "description": f"Found automatically on {utcnow().date().isoformat()}: "
+                                          f"{found.get('_evidence')}. Nomination rules are NOT "
+                                          f"inferred — a state needing a runoff threshold, a "
+                                          f"convention rule or top-two counting still needs a "
+                                          f"hand-verified entry, which overrides this one."})
+        outcomes[state] = f"adopted ({matched}/{len(records)} matched)"
+        logger.info("Adopted a discovered source for %s: %s", state, found.get("_evidence"))
+    return outcomes
+
+
+def _confirmed_match(db: Session, cycle: int, state: str, record: dict):
+    race = db.query(Race).filter(
+        Race.id == _race_id_for(cycle, state, record["office"], record["district"]),
+    ).first()
+    if race is None:
+        return None
+    return _match_candidate(race.candidates, record["last_name"], record["party"])
 
 
 async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycle: int) -> dict:

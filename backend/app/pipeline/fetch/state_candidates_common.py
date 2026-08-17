@@ -23,12 +23,25 @@ import re
 # Chamber wording varies ("United States Congress", "US HOUSE OF
 # REPRESENTATIVES", "U.S. Representative"); the ordinal in Colorado's label
 # advances every Congress, so nothing cycle-specific is matched.
+# The word "Congress" is itself decisive — no state legislature is called
+# one, so "Representative in Congress" (Florida) and "1ST CONGRESS"
+# (Illinois) are safe to recognise, while a bare "House of
+# Representatives" is NOT and must keep being refused (it is a state
+# chamber's name in most states; see office_from_columns for how a state
+# that publishes only that label is handled).
 _CHAMBER_HOUSE = (
     r"(?:United\s+States\s+(?:Congress|Representative)"
-    r"|U\.?\s*S\.?\s*(?:House|Representative))"
+    r"|U\.?\s*S\.?\s*(?:House|Representative)"
+    r"|(?:Representative\s+in\s+|\d+(?:st|nd|rd|th)\s+)Congress)"
 )
+# Both orders occur live: "District 5" (most states) and "5th District"
+# / "1ST CONGRESS" (Florida's and Illinois' own labels).
 _HOUSE_DISTRICT_RE = re.compile(
     rf"{_CHAMBER_HOUSE}.*?District\s+0*(\d+)", re.IGNORECASE | re.DOTALL,
+)
+_HOUSE_ORDINAL_RE = re.compile(
+    rf"(?:0*(\d+)(?:st|nd|rd|th)\s+(?:District|Congress)|{_CHAMBER_HOUSE}[^\d]*0*(\d+)(?:st|nd|rd|th))",
+    re.IGNORECASE | re.DOTALL,
 )
 _HOUSE_RE = re.compile(_CHAMBER_HOUSE, re.IGNORECASE)
 # "Senator" (Colorado) and "Senate" (North Carolina) both appear live.
@@ -62,6 +75,13 @@ def parse_office(contest_name: str) -> tuple[str, int | None] | None:
     name = contest_name or ""
     if _SENATE_RE.search(name):
         return "S", None
+    if _HOUSE_RE.search(name):
+        # An ordinal district only counts once the label is already known
+        # to be federal — "5th District" alone says nothing about which
+        # chamber it belongs to.
+        m = _HOUSE_ORDINAL_RE.search(name)
+        if m:
+            return "H", int(m.group(1) or m.group(2))
     m = _HOUSE_DISTRICT_RE.search(name)
     if m:
         return "H", int(m.group(1))

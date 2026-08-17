@@ -24,6 +24,31 @@ class TestParseOffice:
     def test_leading_zero_district_is_not_octal_or_string(self):
         assert common.parse_office("US HOUSE OF REPRESENTATIVES DISTRICT 022") == ("H", 22)
 
+    def test_congress_is_decisive_wherever_it_appears(self):
+        """No state legislature is called a Congress, so these forms are
+        safe — and a crawler meeting an unfamiliar state's labels needs
+        them: Florida writes "Representative in Congress, District 2",
+        Illinois just "1ST CONGRESS"."""
+        assert common.parse_office("Representative in Congress, District 2") == ("H", 2)
+        assert common.parse_office("1ST CONGRESS") == ("H", 1)
+        assert common.parse_office("10TH CONGRESS") == ("H", 10)
+        # No number at all is an at-large seat, not a parse failure.
+        assert common.parse_office("Representative in Congress") == ("H", None)
+
+    def test_an_ordinal_district_needs_the_chamber_to_be_federal_first(self):
+        """"5th District" on its own belongs to no chamber in particular —
+        recognising it alone would sweep in judicial and state races."""
+        assert common.parse_office("5th District Judge") is None
+        assert common.parse_office("Member, House of Representatives (2nd District)") is None
+        assert common.parse_office("State Representative 3rd District") is None
+
+    def test_the_ordinal_of_a_congress_is_not_a_district(self):
+        """Colorado numbers the CONGRESS itself ("120th United States
+        Congress"), which must never be read as district 120."""
+        assert common.parse_office(
+            "Representative to the 120th United States Congress - District 1 - Democratic Party",
+        ) == ("H", 1)
+
     def test_state_races_that_look_federal_are_rejected(self):
         """The live regression control: North Carolina's own legislature
         uses "HOUSE OF REPRESENTATIVES DISTRICT nnn" too."""
