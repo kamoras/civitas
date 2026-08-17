@@ -85,4 +85,12 @@ describe("BallotRaceOptions", () => {
     render(<BallotRaceOptions race={race([candidate({ name: "SOMEONE, A" })], "primary")} />);
     expect(screen.getByText(/aren't decided until the primary/i)).toBeInTheDocument();
   });
+
+  it("admits when a confirmed list can't include third-party candidates", () => {
+    // Confirming nominees from primary results cannot see a Libertarian
+    // who never ran in one — a short ballot presented as complete is
+    // worse than a short ballot that says so.
+    render(<BallotRaceOptions race={race([candidate({ name: "SOMEONE, A" })], "nominees")} />);
+    expect(screen.getByText(/without running in a primary/i)).toBeInTheDocument();
+  });
 });

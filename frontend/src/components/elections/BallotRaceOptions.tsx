@@ -33,7 +33,9 @@ function getPartyMeta(party: string) {
  * backend decides which (RaceWithCandidates.candidateSource); this only
  * puts it into words. */
 const SOURCE_NOTE: Record<RaceWithCandidates["candidateSource"], string> = {
-  confirmed: "Confirmed by this state as general-election nominees.",
+  confirmed: "This state's official general-election ballot for this race.",
+  nominees:
+    "Nominees confirmed by this state's primary results. Candidates who reach the general election without running in a primary — Libertarian, Green or independent — aren't covered for this state yet, so this list may be short.",
   primary: "On this state's primary ballot — the nominees aren't decided until the primary.",
   filers: "Everyone who has filed with the FEC for this race. This state's official candidate list isn't covered yet, so some of these may never appear on a ballot.",
 };

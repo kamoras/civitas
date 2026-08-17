@@ -23,6 +23,7 @@ from app.pipeline.analyze.score_calculator import (
     get_state_pvi_map,
 )
 from app.pipeline.election_pipeline import STATES_WITH_FEDERAL_RACES, current_election_cycle
+from app.pipeline.fetch.state_candidate_sources import source_for_state
 from app.pipeline.fetch.state_election_dates import primary_date
 from app.time_utils import utcnow
 
@@ -143,14 +144,19 @@ def _confirmed_or_all(candidates: list[Candidate]) -> list[Candidate]:
     return candidates
 
 
-def _candidate_source(candidates: list[Candidate]) -> str:
+def _candidate_source(candidates: list[Candidate], state: str) -> str:
     """WHICH of _confirmed_or_all's three answers a race's list is, so the
     page can say so instead of presenting three quite different things as
     one list. Computed here rather than in the frontend, which must not
     re-derive what the filter already decided.
 
-    "confirmed"  — a state has confirmed these as general-election
-                   nominees.
+    "confirmed"  — the state has named its whole November ballot, minor
+                   parties included.
+    "nominees"   — the state has confirmed nominees, but only from PRIMARY
+                   results, which structurally cannot see a Libertarian,
+                   Green or independent candidate who never ran in one. The
+                   list is real and incomplete, and saying so is the
+                   difference between a short ballot and a wrong one.
     "primary"    — no nominee yet, but the state lists these as being on
                    its primary ballot.
     "filers"     — nobody has confirmed anything for this race, so this is
@@ -158,7 +164,8 @@ def _candidate_source(candidates: list[Candidate]) -> str:
                    a ballot.
     """
     if any(c.confirmed_general for c in candidates):
-        return "confirmed"
+        source = source_for_state(state) or {}
+        return "confirmed" if source.get("general_ballot_complete") else "nominees"
     if any(c.on_primary_ballot for c in candidates):
         return "primary"
     return "filers"
@@ -266,7 +273,7 @@ def _race_full(
         "pvi": pvi,
         "pviLevel": pvi_level,
         "counties": counties,
-        "candidateSource": _candidate_source(race.candidates),
+        "candidateSource": _candidate_source(race.candidates, race.state),
         "candidates": [
             {**_candidate_summary(c), "incumbentRecord": _incumbent_link(c, race, reps_by_district, senators)}
             for c in candidates
