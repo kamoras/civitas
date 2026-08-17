@@ -62,6 +62,11 @@ backend/.cache/
 
 # database files (never commit data to the repo)
 backend/*.db
+# runtime state the app writes when it runs outside Docker: the dev
+# database, and the two directories the election feature keeps its
+# discovered sources and read-back election dates in. All of it is
+# regenerated on the next run and none of it belongs in git.
+backend/data/
 
 # python
 *.egg-info/
