@@ -408,6 +408,7 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                 from app.pipeline.fetch.state_candidates import (
                     crawl_for_new_sources,
                     sync_confirmed_candidates,
+                    sync_primary_ballots,
                 )
 
                 # Weekly, not nightly: this sweeps every state that has no
@@ -428,6 +429,14 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                 confirm_result = await sync_confirmed_candidates(db, client, cycle)
                 confirmed_total = sum(r["confirmed"] for r in confirm_result.values())
                 logger.info("Confirmed candidates: %s", confirm_result)
+
+                # Who is on each state's PRIMARY ballot — the answer for
+                # the months before any primary, when the alternative is
+                # showing every FEC filer. Never overrides a confirmed
+                # nominee; see _confirmed_or_all.
+                primary_result = await sync_primary_ballots(db, client, cycle)
+                if primary_result:
+                    logger.info("Primary ballots: %s", primary_result)
                 progress.complete(
                     "confirmed_candidates", detail=f"{confirmed_total} confirmed",
                 )

@@ -122,6 +122,14 @@ def _confirmed_or_all(candidates: list[Candidate]) -> list[Candidate]:
     no confirmed data at all (not yet covered, or genuinely pre-primary)
     returns every active FEC filer, unchanged from before this existed.
 
+    Failing that, a race whose state publishes a candidate FILING list
+    falls back to whoever is actually on that state's PRIMARY ballot,
+    which is the best answer available for the months before a primary
+    happens — an FEC filer who never filed with the state is not a ballot
+    option either. Deliberately the weaker rule and only reached when no
+    nominee is confirmed: being on a primary ballot says nothing about
+    surviving it.
+
     Shared by every endpoint that lists a race's candidates
     (_race_summary, _race_full, race_detail) — the bug this guards
     against previously resurfaced via race_detail even after _race_full
@@ -129,6 +137,8 @@ def _confirmed_or_all(candidates: list[Candidate]) -> list[Candidate]:
     than one route."""
     if any(c.confirmed_general for c in candidates):
         return [c for c in candidates if c.confirmed_general]
+    if any(c.on_primary_ballot for c in candidates):
+        return [c for c in candidates if c.on_primary_ballot]
     return candidates
 
 

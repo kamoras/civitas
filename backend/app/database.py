@@ -118,6 +118,7 @@ def _migrate_columns() -> None:
     inspector = inspect(engine)
     additions: list[tuple[str, str, str]] = [
         ("candidates", "confirmed_general", "BOOLEAN DEFAULT 0"),
+        ("candidates", "on_primary_ballot", "BOOLEAN DEFAULT 0"),
         ("action_issues", "related_senators", "TEXT DEFAULT '[]'"),
         ("action_issues", "related_monitor_slugs", "TEXT DEFAULT '[]'"),
         ("action_issues", "concerned_count", "INTEGER DEFAULT 0"),

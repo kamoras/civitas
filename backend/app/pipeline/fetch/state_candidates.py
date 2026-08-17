@@ -52,8 +52,15 @@ from app.pipeline.fetch.state_candidate_sources import (
     discovered_states,
     save_discovered,
     source_for_state,
+    states_with_filings,
 )
-from app.pipeline.fetch.state_source_crawler import ELECTION_DOMAINS, discover_source
+from app.pipeline.fetch import state_election_dates as election_dates
+from app.pipeline.fetch.state_candidate_filings import fetch_primary_candidates
+from app.pipeline.fetch.state_source_crawler import (
+    ELECTION_DOMAINS,
+    discover_filings,
+    discover_source,
+)
 from app.pipeline.fetch.state_candidates_clarity import fetch_confirmed_candidates as _fetch_clarity
 from app.pipeline.fetch.state_candidates_tabular import fetch_confirmed_candidates as _fetch_tabular
 from app.pipeline.fetch.state_candidates_tx import fetch_confirmed_candidates as _fetch_tx
@@ -175,6 +182,13 @@ async def crawl_for_new_sources(
             strategy = STRATEGIES.get(hand.get("strategy"))
             still_works = await strategy(client, cycle, state, hand) if strategy else None
             if still_works is not None:
+                # A primary date moves once a cycle, so it is read on the
+                # weekly pass rather than nightly — off the same feed the
+                # state's results already come from, never a stored
+                # calendar anybody has to maintain.
+                await _refresh_dates(client, cycle, state, hand)
+                if not hand.get("filings"):
+                    outcomes[state] = await _adopt_filings(db, client, cycle, state, hand)
                 continue
             logger.warning(
                 "Hand-verified source for %s is not fetching — looking for a "
@@ -192,6 +206,13 @@ async def crawl_for_new_sources(
             continue
         if not found:
             outcomes[state] = await _forget_if_broken(client, cycle, state)
+            # A state with no usable RESULTS source can still publish a
+            # filing list, and before its primary that is the only answer
+            # there is — so it is looked for either way.
+            if outcomes[state] in ("none", "forgotten"):
+                filings = await _adopt_filings(db, client, cycle, state, {})
+                if filings != "none":
+                    outcomes[state] = filings
             continue
 
         strategy = STRATEGIES.get(found.get("strategy"))
@@ -221,6 +242,61 @@ async def crawl_for_new_sources(
         outcomes[state] = f"adopted ({matched}/{len(records)} matched)"
         logger.info("Adopted a discovered source for %s: %s", state, found.get("_evidence"))
     return outcomes
+
+
+async def _adopt_filings(
+    db: Session, client: httpx.AsyncClient, cycle: int, state: str, base: dict,
+) -> str:
+    """Find and keep a state's candidate filing list, under the same bar
+    the results sources face: the people it says are on the ballot have to
+    be candidates on file for those races."""
+    try:
+        filings = await discover_filings(client, state, cycle)
+    except Exception:
+        logger.exception("Filing-list discovery raised for %s", state)
+        return "none"
+    if not filings:
+        return "none"
+
+    candidate_source = {**base, "filings": {
+        k: v for k, v in filings.items() if not k.startswith("_")
+    }}
+    found = await fetch_primary_candidates(client, cycle, state, candidate_source)
+    if not found:
+        return "none"
+    records, held = found
+    matched = sum(1 for r in records if _confirmed_match(db, cycle, state, r) is not None)
+    if not matched:
+        logger.info(
+            "Not adopting a filing list for %s: it lists %d primary candidates, none "
+            "of whom are on file for those races — %s",
+            state, len(records), filings.get("_evidence"),
+        )
+        return "filings rejected"
+
+    stored = dict(_discovered_source(state) or base or {})
+    stored["filings"] = candidate_source["filings"]
+    stored.setdefault("source_name", filings["_evidence"])
+    save_discovered(state, stored)
+    if held:
+        election_dates.save(state, cycle, {"primary": held})
+    logger.info(
+        "Adopted a candidate filing list for %s (%d/%d matched, primary %s): %s",
+        state, matched, len(records), held, filings.get("_evidence"),
+    )
+    return f"filings adopted ({matched}/{len(records)} matched)"
+
+
+async def _refresh_dates(
+    client: httpx.AsyncClient, cycle: int, state: str, source: dict,
+) -> None:
+    try:
+        dates = await election_dates.discover_dates(client, cycle, state, source)
+    except Exception:
+        logger.exception("Election-date read raised for %s", state)
+        return
+    if dates:
+        election_dates.save(state, cycle, dates)
 
 
 async def _no_strategy(*_args, **_kwargs) -> None:
@@ -329,4 +405,47 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
 
         results[state] = {"confirmed": confirmed, "unmatched": unmatched, "status": "ok"}
 
+    return results
+
+
+async def sync_primary_ballots(db: Session, client: httpx.AsyncClient, cycle: int) -> dict:
+    """Flag every candidate a state lists on its PRIMARY ballot, for the
+    states that publish a filing list, and record the primary's date.
+
+    This is what the ballot page has to work with for most of a cycle —
+    before any primary, a race's only other answer is every active FEC
+    filer, including people who never filed with the state at all. It is
+    strictly weaker than a confirmed nominee and never overrides one: see
+    api/elections.py's _confirmed_or_all, where a state that has confirmed
+    nominees keeps them.
+    """
+    results: dict[str, dict] = {}
+    for state in sorted(states_with_filings()):
+        source = source_for_state(state) or {}
+        try:
+            found = await fetch_primary_candidates(client, cycle, state, source)
+        except Exception:
+            logger.exception("Primary-ballot fetch raised for %s", state)
+            found = None
+        if found is None:
+            results[state] = {"listed": 0, "unmatched": 0, "status": "fetch_failed"}
+            continue
+
+        records, held = found
+        if held:
+            election_dates.save(state, cycle, {"primary": held})
+        listed = unmatched = 0
+        for record in records:
+            match = _confirmed_match(db, cycle, state, record)
+            if match is None:
+                unmatched += 1
+                continue
+            if not match.on_primary_ballot:
+                match.on_primary_ballot = True
+                db.commit()
+            listed += 1
+        results[state] = {
+            "listed": listed, "unmatched": unmatched,
+            "primary_date": held, "status": "ok",
+        }
     return results

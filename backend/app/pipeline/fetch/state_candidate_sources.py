@@ -116,7 +116,15 @@ def source_for_state(state: str) -> dict[str, str] | None:
 
 
 def configured_states() -> set[str]:
-    """Every state with a source at all, hand-verified or discovered —
-    drives the sync loop in election_pipeline.py."""
-    data = _load()
-    return set((data.get("states") or {}).keys()) | set(_load_discovered())
+    """Every state with a RESULTS source, hand-verified or discovered —
+    drives the confirmed-nominee sync in election_pipeline.py."""
+    entries = {**_load_discovered(), **(_load().get("states") or {})}
+    return {state for state, entry in entries.items() if entry.get("strategy")}
+
+
+def states_with_filings() -> set[str]:
+    """Every state with a candidate FILING list registered — a state can
+    have one without having a results source yet, which is the normal
+    situation before its primary."""
+    entries = {**_load_discovered(), **(_load().get("states") or {})}
+    return {state for state, entry in entries.items() if entry.get("filings")}

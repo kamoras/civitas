@@ -685,6 +685,89 @@ def infer_format(rows: list[dict]) -> dict | None:
     return fmt
 
 
+_FILING_HINT_RE = re.compile(r"candidat|filing|qualif|ballot", re.IGNORECASE)
+_DATE_VALUE_RE = re.compile(r"\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{4}")
+
+
+def infer_filing_format(rows: list[dict]) -> dict | None:
+    """The column roles in a candidate FILING list — which is a results
+    file with the results removed, so the one thing infer_format leans on
+    hardest (a real vote count) is exactly what isn't there.
+
+    What identifies one instead: contests that parse as federal offices, a
+    party column, a name column, and — the reason this is worth reading at
+    all — a column of election DATES, which is where a state's primary
+    date comes from. Without a date column this returns None: a filing
+    list that can't say which election it is for can't be used to say who
+    is on a primary ballot rather than a general one.
+    """
+    if not rows:
+        return None
+    columns = [c for c in rows[0] if c]
+    sample = rows[: min(len(rows), 4000)]
+    values = {c: [str(r.get(c) or "").strip() for r in sample] for c in columns}
+    distinct = {c: {v for v in values[c] if v} for c in columns}
+
+    contest_col = max(
+        columns,
+        key=lambda c: sum(1 for v in distinct[c] if parse_office(v)),
+        default=None,
+    )
+    if not contest_col or not any(parse_office(v) for v in distinct[contest_col]):
+        return None
+
+    date_col = next(
+        (c for c in columns
+         if distinct[c] and len(distinct[c]) <= 8
+         and all(_DATE_VALUE_RE.match(v) for v in distinct[c])),
+        None,
+    )
+    if not date_col:
+        return None
+
+    party_col = max(
+        (c for c in columns
+         if c != contest_col and 0 < len(distinct[c]) <= 12
+         and sum(1 for v in distinct[c] if normalize_party(v)) >= max(1, len(distinct[c]) // 2)),
+        key=lambda c: sum(1 for v in distinct[c] if normalize_party(v)) / len(distinct[c]),
+        default=None,
+    )
+    if not party_col:
+        return None
+
+    # The name column is the one that varies most WITHIN a contest and
+    # reads like a person — same test the results inference uses, and for
+    # the same reason: a county column varies too, by hundreds.
+    groups: dict[str, list[dict]] = defaultdict(list)
+    for row in sample:
+        groups[str(row.get(contest_col) or "")].append(row)
+    contests = [g for g in groups.values() if g][:8]
+
+    def repeats(column: str) -> float:
+        seen = [{str(r.get(column) or "").strip() for r in g if r.get(column)} for g in contests]
+        seen = [v for v in seen if v]
+        if len(seen) < 2:
+            return 0.0
+        scores = [len(a & b) / len(a | b) for i, a in enumerate(seen) for b in seen[i + 1:]]
+        return sum(scores) / len(scores) if scores else 0.0
+
+    named = [
+        c for c in columns
+        if c not in (contest_col, party_col, date_col) and len(distinct[c]) > 1
+        and sum(1 for v in distinct[c] if _NAME_LIKE_RE.fullmatch(v)) / len(distinct[c]) >= 0.8
+    ]
+    if not named:
+        return None
+    # A filing list carries a candidate's home address, phone and email
+    # beside their name. Only these four roles are ever read.
+    return {
+        "contest_column": contest_col,
+        "choice_column": min(named, key=repeats),
+        "party_column": party_col,
+        "election_date_column": date_col,
+    }
+
+
 def _shape_of(payload: bytes) -> dict | None:
     """How to READ the download — workbook, or delimited with which
     delimiter — decided from the bytes rather than from a file extension,
@@ -836,6 +919,48 @@ async def discover_source(
         return {
             **rules, "strategy": "tabular", "discovery": discovery, "format": fmt,
             "_evidence": f"results file linked from {page}",
+        }
+    return None
+
+
+async def discover_filings(
+    client: httpx.AsyncClient, state: str, cycle: int,
+) -> dict | None:
+    """A `filings` block for `state` — where its candidate FILING list
+    lives and how to read it — or None.
+
+    Worth its own pass because it answers a different question from
+    results, at a different time: who is on the primary ballot, months
+    before anyone votes, and when that primary is. States publish these
+    beside their results, so the same page crawl finds them; what differs
+    is the shape (see infer_filing_format).
+    """
+    from app.pipeline.fetch import state_candidates_tabular as tabular
+
+    st = state.upper()
+    pages = await _probe_pages(client, st, cycle)
+    candidates = [
+        (page, link) for page, link in pages if _FILING_HINT_RE.search(link)
+    ]
+    for page, link in candidates[:6]:
+        rows, shape = await _read(client, link, f"{st} candidate filing list")
+        if not rows:
+            continue
+        fmt = infer_filing_format(rows)
+        if not fmt:
+            continue
+        discovery = {
+            "mode": "landing_page",
+            "page_url": page,
+            "link_regex": _generalise(link),
+        }
+        stages = await tabular._discover_urls(client, st, cycle, discovery)
+        if not any(s.get("url") == link for s in stages):
+            continue
+        return {
+            "discovery": discovery,
+            "format": {**shape, **fmt},
+            "_evidence": f"candidate filing list linked from {page}",
         }
     return None
 

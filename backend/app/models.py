@@ -716,6 +716,14 @@ class Candidate(Base):
     # a source's data doesn't mention, this simply stays False, same
     # never-fabricate discipline as cash_on_hand/last_financials_sync.
     confirmed_general: Mapped[bool] = mapped_column(Boolean, default=False)
+    # True when a registered state source lists this candidate on a PRIMARY
+    # ballot — the same never-fabricate discipline as confirmed_general, and
+    # the answer for the months BEFORE a primary, when no results exist yet
+    # and an FEC filer list is all there otherwise is. Weaker than
+    # confirmed_general and never a substitute for it: being on the primary
+    # ballot says nothing about surviving it, so once a state confirms
+    # nominees, those win (see _confirmed_or_all).
+    on_primary_ballot: Mapped[bool] = mapped_column(Boolean, default=False)
     # Watermark for the rotating per-candidate Bluesky coverage search
     # (election_coverage.py) — same bounded-batch design as
     # last_financials_sync for the FEC totals refresh.

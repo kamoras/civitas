@@ -46,7 +46,11 @@ class TestCrawlAdoption:
         async def fake_fetch(client, cycle, state, source):
             return records
 
+        async def no_filings(client, state, cycle):
+            return None
+
         monkeypatch.setattr(sc, "discover_source", fake_discover)
+        monkeypatch.setattr(sc, "discover_filings", no_filings)
         monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"ZZ": ["example.gov"]})
         monkeypatch.setattr(sc, "STRATEGIES", {"tabular": fake_fetch})
         monkeypatch.setattr(sc, "save_discovered", lambda st, src: saved.update({st: src}))
@@ -98,14 +102,18 @@ class TestCrawlAdoption:
         assert saved == {}
 
     @pytest.mark.asyncio
-    async def test_a_working_hand_verified_state_is_left_alone(
+    async def test_a_working_hand_verified_states_source_is_left_alone(
         self, db_session, monkeypatch,
     ):
+        """Its results source is never replaced while it works — though the
+        state is still checked for a candidate filing list, which answers a
+        different question."""
         saved = self._patch(monkeypatch, [])
         monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"TX": ["sos.texas.gov"]})
         monkeypatch.setattr(sc, "STRATEGIES", {"tx_civix": _ok})
+        monkeypatch.setattr(sc, "_refresh_dates", _ok)
         outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
-        assert outcomes == {}
+        assert outcomes.get("TX", "none") == "none"
         assert saved == {}
 
     @pytest.mark.asyncio
@@ -126,7 +134,11 @@ class TestCrawlAdoption:
         async def broken(client, cycle, state, source):
             return None
 
+        async def no_filings(client, state, cycle):
+            return None
+
         monkeypatch.setattr(sc, "discover_source", fake_discover)
+        monkeypatch.setattr(sc, "discover_filings", no_filings)
         monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"GA": ["sos.ga.gov"]})
         monkeypatch.setattr(sc, "STRATEGIES", {"tabular": broken})
         outcomes = await sc.crawl_for_new_sources(db_session, None, 2026)
@@ -152,7 +164,11 @@ class TestForgetsBrokenDiscoveries:
         async def broken(client, cycle, state, source):
             return None
 
+        async def no_filings(client, state, cycle):
+            return None
+
         monkeypatch.setattr(sc, "discover_source", nothing_found)
+        monkeypatch.setattr(sc, "discover_filings", no_filings)
         monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"ZZ": ["example.gov"]})
         monkeypatch.setattr(sc, "STRATEGIES", {"tabular": broken})
         monkeypatch.setattr(sc, "discovered_states", lambda: {"ZZ"})
@@ -176,7 +192,11 @@ class TestForgetsBrokenDiscoveries:
         async def working(client, cycle, state, source):
             return []
 
+        async def no_filings(client, state, cycle):
+            return None
+
         monkeypatch.setattr(sc, "discover_source", nothing_found)
+        monkeypatch.setattr(sc, "discover_filings", no_filings)
         monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"ZZ": ["example.gov"]})
         monkeypatch.setattr(sc, "STRATEGIES", {"tabular": working})
         monkeypatch.setattr(sc, "discovered_states", lambda: {"ZZ"})
