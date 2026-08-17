@@ -38,6 +38,38 @@ class TestIsConfigured:
         assert sc.is_configured("ZZ") is False
 
 
+class TestMultiWordSurname:
+    """A state publishes a display name, so all that can be taken from
+    "Debbie Wasserman Schultz" without guessing is the trailing token —
+    while FEC keeps the whole surname before the comma. Every state is
+    affected; Florida's real 2024 file is just where it surfaced."""
+
+    def test_matches_a_two_word_fec_surname(self):
+        candidates = [
+            Candidate(id="1", race_id="r", name="WASSERMAN SCHULTZ, DEBBIE", party="DEM"),
+        ]
+        assert sc._match_candidate(candidates, "Schultz", "D").id == "1"
+
+    def test_still_prefers_an_exact_surname_over_the_fallback(self):
+        """An exact match must win outright — the fallback exists for the
+        candidate the exact pass cannot see, and must never pull a
+        different person in ahead of a real match."""
+        candidates = [
+            Candidate(id="1", race_id="r", name="SCHULTZ, BOB", party="REP"),
+            Candidate(id="2", race_id="r", name="WASSERMAN SCHULTZ, DEBBIE", party="DEM"),
+        ]
+        assert sc._match_candidate(candidates, "Schultz", "R").id == "1"
+
+    def test_two_candidates_ending_in_the_same_token_stay_ambiguous(self):
+        """The never-guess rule still governs: two same-party candidates
+        the fallback can't tell apart yield nobody."""
+        candidates = [
+            Candidate(id="1", race_id="r", name="WASSERMAN SCHULTZ, DEBBIE", party="DEM"),
+            Candidate(id="2", race_id="r", name="VAN SCHULTZ, ANA", party="DEM"),
+        ]
+        assert sc._match_candidate(candidates, "Schultz", "D") is None
+
+
 class TestMatchCandidate:
     def test_matches_a_unique_surname(self):
         candidates = [Candidate(id="1", race_id="r", name="PAXTON, KEN", party="REP")]

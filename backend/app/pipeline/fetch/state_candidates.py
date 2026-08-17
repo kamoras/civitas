@@ -103,6 +103,23 @@ def _match_candidate(
 ) -> Candidate | None:
     target = last_name.strip().lower()
     matches = [c for c in candidates if _candidate_surname(c.name) == target]
+    if not matches:
+        # A MULTI-WORD surname survives on the FEC side ("WASSERMAN
+        # SCHULTZ, DEBBIE") but not on the state's, because a state
+        # publishes a display name and the trailing token is all that can
+        # be taken from "Debbie Wasserman Schultz" without guessing where
+        # the surname begins. Falling back to the FEC surname's own last
+        # token matches them up. Deliberately only a fallback, and still
+        # inside one race's small candidate list, so the
+        # never-guess-between-two rule below is what decides anything
+        # ambiguous. Affects every state, not just the one that surfaced
+        # it: Florida's 2024 file is where it showed up, but a Wasserman
+        # Schultz, a Van Drew or a De La Cruz would have gone unmatched
+        # anywhere.
+        matches = [
+            c for c in candidates
+            if _candidate_surname(c.name).split()[-1:] == [target]
+        ]
     if len(matches) == 1:
         return matches[0]
     if len(matches) > 1:

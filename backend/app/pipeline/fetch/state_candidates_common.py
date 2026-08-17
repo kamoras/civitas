@@ -154,10 +154,13 @@ def pick_nominees(
 
     `runoff_threshold_pct` applies only to one-nominee party primaries,
     where it is the load-bearing safety rule: states that send a
-    sub-threshold leader to a second primary (NC at 30%, and the 50%
-    runoff states TX/GA/MS/AL/AR/OK/SC) would otherwise have a
-    runoff-bound candidate confirmed as the winner of a race still being
-    decided.
+    sub-threshold leader somewhere else to be decided would otherwise have
+    that candidate confirmed as the winner of a race still being settled.
+    "Somewhere else" is not always a runoff — it is a second primary in NC
+    (30%) and the 50% runoff states TX/GA/MS/AL/AR/OK/SC, but a party
+    CONVENTION in Iowa (35%, Iowa Code 43.52), where a sub-threshold
+    leader may end up not being the nominee at all. The threshold is the
+    state's own rule from config either way.
     """
     ranked = sorted(
         [(n, v) for n, v in choices if isinstance(v, int) and v > 0],

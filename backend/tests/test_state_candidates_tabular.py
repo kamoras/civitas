@@ -359,6 +359,127 @@ class TestHouseFromColumns:
         assert tb.parse_office("Member, House of Representatives (2nd District)") is None
 
 
+class TestColumnJoining:
+    """Florida splits across columns what other states keep in one label:
+    a contest is (RaceName, PartyCode) and a candidate is (first, last).
+    Rows are the real 2026-08-18 file's shape."""
+
+    _FMT = {
+        "delimiter": "\t",
+        "contest_column": ["RaceName", "PartyCode"],
+        "choice_column": ["CanNameFirst", "CanNameLast"],
+        "party_column": "PartyCode", "votes_column": "CanVotes",
+        "house_from_columns": {
+            "type_column": "RaceCode", "type_value": "USR",
+            "district_column": "Juris1num",
+        },
+    }
+    _TSV = (
+        "RaceCode\tRaceName\tPartyCode\tJuris1num\tCanNameFirst\tCanNameLast\tCanVotes\n"
+        "USR\tRepresentative in Congress, District 25\tDEM\t025\tDebbie\tWasserman Schultz\t900\n"
+        "USR\tRepresentative in Congress, District 25\tDEM\t025\tJen\tPerelman\t400\n"
+        "USR\tRepresentative in Congress, District 25\tREP\t025\tCarla\tSpalding\t700\n"
+    ).encode()
+
+    def test_the_party_code_keeps_two_primaries_for_one_seat_apart(self):
+        """Without the party column in the key, both parties' primaries
+        for a seat tally as ONE race and the bigger one wins the seat
+        outright — the Democratic winner here would beat the Republican
+        winner and the seat would show a single nominee."""
+        tally = tb._tally(tb._rows(self._TSV, self._FMT), self._FMT)
+        assert set(tally) == {
+            "Representative in Congress, District 25 DEM",
+            "Representative in Congress, District 25 REP",
+        }
+
+    @pytest.mark.asyncio
+    async def test_yields_one_nominee_per_party(self, monkeypatch):
+        async def fake_discover(client, state, year, discovery):
+            return [tb._stage("https://example.gov/fl.txt")]
+
+        async def fake_get(client, url, label):
+            return _Resp(content=self._TSV)
+
+        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
+        monkeypatch.setattr(tb, "_get", fake_get)
+        records = await tb.fetch_confirmed_candidates(
+            None, 2026, "FL", {"format": self._FMT},
+        )
+        assert sorted((r["party"], r["last_name"]) for r in records) == [
+            ("D", "Schultz"), ("R", "Spalding"),
+        ]
+        assert all(r["district"] == 25 for r in records)
+
+
+class TestLandingPageDiscovery:
+    """Florida publishes one dated file per election and no way to list
+    them, so the link comes off the page the state keeps current."""
+
+    _DISCOVERY = {
+        "mode": "landing_page",
+        "page_url": "https://example.gov/Downloads",
+        "link_regex": r"https://files\.example\.gov/\d{8}_Results\.txt",
+    }
+
+    def _page(self, *names):
+        links = "".join(f'<a href="https://files.example.gov/{n}">x</a>' for n in names)
+        return f"<html>{links}</html>"
+
+    @pytest.mark.asyncio
+    async def test_reads_this_cycles_file_off_the_page(self, monkeypatch):
+        async def fake_get(client, url, label):
+            return _Resp(text=self._page("20260818_Results.txt"))
+
+        monkeypatch.setattr(tb, "_get", fake_get)
+        stages = await tb._discover_urls(None, "FL", 2026, self._DISCOVERY)
+        assert stages == [tb._stage(
+            "https://files.example.gov/20260818_Results.txt", held="2026-08-18",
+        )]
+
+    @pytest.mark.asyncio
+    async def test_the_general_elections_own_file_is_never_used(self, monkeypatch):
+        """After November the page shows the GENERAL's file. Confirming
+        nominees from the election they are nominees FOR would be
+        backwards — and would quietly start naming November's winners."""
+        async def fake_get(client, url, label):
+            return _Resp(text=self._page("20261103_Results.txt"))
+
+        monkeypatch.setattr(tb, "_get", fake_get)
+        assert await tb._discover_urls(None, "FL", 2026, self._DISCOVERY) == []
+
+    @pytest.mark.asyncio
+    async def test_with_both_listed_the_primary_wins(self, monkeypatch):
+        async def fake_get(client, url, label):
+            return _Resp(text=self._page("20261103_Results.txt", "20260818_Results.txt"))
+
+        monkeypatch.setattr(tb, "_get", fake_get)
+        stages = await tb._discover_urls(None, "FL", 2026, self._DISCOVERY)
+        assert [s["held"] for s in stages] == ["2026-08-18"]
+
+
+class TestWithheld:
+    """One gate for every vendor: a state that asks for it names nobody
+    until its own certification flag says so, or its certification
+    deadline passes."""
+
+    _GATED = {"require_official": True, "settle_days": 30}
+
+    def test_a_certified_stage_passes(self):
+        assert tb._withheld(tb._stage("u", official=True), self._GATED) is False
+
+    def test_an_uncertified_recent_stage_is_withheld(self):
+        assert tb._withheld(tb._stage("u", held="2999-01-01"), self._GATED) is True
+
+    def test_a_vendor_with_no_flag_at_all_passes_on_the_deadline(self):
+        """Florida publishes no certification flag anywhere — the window
+        is the only gate it has."""
+        assert tb._withheld(tb._stage("u", held="2000-01-01"), self._GATED) is False
+        assert tb._withheld(tb._stage("u", held="2999-01-01"), self._GATED) is True
+
+    def test_a_state_that_does_not_ask_for_the_gate_is_never_withheld(self):
+        assert tb._withheld(tb._stage("u", held="2999-01-01"), {}) is False
+
+
 class TestSosApiReportDiscovery:
     """Georgia's portal hides its workbook behind a three-hop API, and the
     blob filename carries a GUID that changes on every republish — so it
@@ -478,14 +599,15 @@ class TestSosApiReportDiscovery:
             })
 
         monkeypatch.setattr(tb, "_get", fake_get)
+        stages = await tb._discover_urls(None, "WA", 2026, self._DISCOVERY)
+        # Discovery reports what the portal said; the gate decides.
+        assert stages and all(s["official"] is False for s in stages)
         strict = dict(self._DISCOVERY, require_official=True)
-        withheld = await tb._discover_urls(None, "WA", 2026, strict)
-        assert withheld and all(s["url"] is None for s in withheld)
+        assert all(tb._withheld(s, strict) for s in stages)
         # Without the flag the same payload is still usable — the gate is
         # opt-in per state, since a portal that never sets the field would
         # otherwise be permanently withheld.
-        usable = await tb._discover_urls(None, "WA", 2026, self._DISCOVERY)
-        assert usable and all(s["url"] for s in usable)
+        assert not any(tb._withheld(s, self._DISCOVERY) for s in stages)
 
     @pytest.mark.asyncio
     async def test_a_withheld_state_is_empty_not_a_failed_fetch(self, monkeypatch):
@@ -547,7 +669,7 @@ class TestDiscoverUrl:
             None, "XX", 2026,
             {"mode": "direct_url", "url": "https://example.gov/{year}/results.csv"},
         )
-        assert url == [{"url": "https://example.gov/2026/results.csv", "runoff": False}]
+        assert url == [tb._stage("https://example.gov/2026/results.csv")]
 
     @pytest.mark.asyncio
     async def test_s3_listing_picks_the_earliest_matching_key(self, monkeypatch):

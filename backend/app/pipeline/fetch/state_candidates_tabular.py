@@ -15,7 +15,7 @@ whole state, of which 49,884 are federal, resolving to 21 federal contests.
 Ground-truthed on recognisable outcomes — Virginia Foxx taking the NC-05
 Republican primary with 74.5%, Valerie Foushee NC-04 Democratic with 49.2%.
 
-THREE DISCOVERY MODES, because the file's URL must never be hardcoded to
+FOUR DISCOVERY MODES, because the file's URL must never be hardcoded to
 one cycle's date:
 
   s3_listing      — list an S3 bucket prefix and pick the matching key. North
@@ -24,7 +24,10 @@ one cycle's date:
   direct_url      — a stable URL template with {year} substituted, for states
                     that keep one predictable path per cycle.
   sos_api_report  — the Enhanced Voting results portal's own three-hop API
-                    (GA, WA, VA); see _sos_api_report_urls.
+                    (GA, WA, VA, UT); see _sos_api_report_urls.
+  landing_page    — read this cycle's file off the page the state keeps
+                    current (FL), for a state that publishes one dated file
+                    per election and no way to list them.
 
 Results are aggregated across precinct rows: these exports are one row per
 precinct per choice, so a candidate's real total is the SUM over every row
@@ -43,6 +46,7 @@ from urllib.parse import quote
 
 import httpx
 
+from app.election_calendar import next_election_day
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     normalize_party, office_from_columns, parse_office, pick_nominees, surname,
@@ -70,16 +74,21 @@ async def _get(client: httpx.AsyncClient, url: str, label: str) -> httpx.Respons
     )
 
 
-def _settled(payload: dict, settle_days: int | None) -> bool:
+def _settled(held: str | None, settle_days: int | None) -> bool:
     """True once an election is far enough past that counting is over,
-    whatever its official flag says.
+    whatever any official flag says.
 
-    This is the failsafe under require_official, and it exists because the
-    flag is not reliably flipped: Utah's 2026 primary was canvassed and
-    certified in July — its own signed state canvass report is published on
-    the same portal — and isOfficialResults was still false a month later.
-    Without this, a state whose office never ticks that box would confirm
-    nobody forever, silently, which looks exactly like working code.
+    The failsafe under require_official, and it exists because that flag is
+    not reliably flipped: Utah's 2026 primary was canvassed and certified in
+    July — its own signed state canvass report is published on the same
+    portal — and isOfficialResults was still false a month later. Without
+    this, a state whose office never ticks that box would confirm nobody
+    forever, silently, which looks exactly like working code.
+
+    For a state that publishes no such flag at ALL (Florida's election-night
+    file is just a file, and it starts filling with partial counts the
+    moment polls close), this is the only gate there is — which is why it
+    applies to every discovery mode, not just the portal one.
 
     The window is the state's certification deadline, from config, not a
     guess about how fast a count goes.
@@ -87,10 +96,47 @@ def _settled(payload: dict, settle_days: int | None) -> bool:
     if not settle_days:
         return False
     try:
-        held = date.fromisoformat(str(payload.get("electionDate") or "")[:10])
+        held_on = date.fromisoformat(str(held or "")[:10])
     except ValueError:
         return False
-    return (datetime.now(UTC).date() - held).days >= int(settle_days)
+    return (datetime.now(UTC).date() - held_on).days >= int(settle_days)
+
+
+def _withheld(stage: dict, discovery: dict) -> bool:
+    """Whether this stage's results are still too unsettled to name a
+    nominee from. One rule for every vendor: a state that asks for the gate
+    (require_official) gets it, and passes only on its own certification
+    flag or, failing that, its certification deadline.
+
+    A stage carries whatever its source knows — `official` is None where the
+    vendor publishes no such flag, `held` is None where nothing dates the
+    file — and an unknown never counts as a yes.
+    """
+    if not discovery.get("require_official"):
+        return False
+    if stage.get("official"):
+        return False
+    return not _settled(stage.get("held"), discovery.get("settle_days"))
+
+
+def _stage(url: str | None, runoff: bool = False, held: str | None = None,
+           official: bool | None = None) -> dict:
+    """One results file to fold in, in the shape every discovery mode
+    returns so the fetch below treats all states alike."""
+    return {"url": url, "runoff": runoff, "held": held, "official": official}
+
+
+def _date_in(text: str) -> str | None:
+    """The YYYYMMDD an election file names itself with, as an ISO date —
+    Florida's 20260818_ElecResultsFL.txt, North Carolina's ENRS/2026_03_03/.
+    None when nothing in the string dates it."""
+    m = re.search(r"(\d{4})[-_]?(\d{2})[-_]?(\d{2})", text or "")
+    if not m:
+        return None
+    try:
+        return date(int(m.group(1)), int(m.group(2)), int(m.group(3))).isoformat()
+    except ValueError:
+        return None
 
 
 async def _sos_api_report_urls(
@@ -107,10 +153,10 @@ async def _sos_api_report_urls(
     carries a fresh GUID every publish) is read from the API each run.
 
     Returns the primary first and, when the state ran one, its runoff
-    second, so the caller can let the runoff override. An election that
-    exists but is being withheld by the certification gate is returned
-    WITH NO URL, so the caller can tell "this state has nothing certified
-    yet" (healthy, confirms nobody) from "nothing found at all" (broken).
+    second, so the caller can let the runoff override. Each stage carries
+    the portal's own certification flag and election date; whether that is
+    settled enough to name a nominee from is _withheld's single call for
+    every vendor, not a decision taken here.
     """
     resp = await _get(
         client, discovery.get("jurisdiction_url") or "", f"{state} jurisdiction",
@@ -167,24 +213,9 @@ async def _sos_api_report_urls(
             payload = resp.json() or {}
         except ValueError:
             continue
-        # This portal publishes running counts the night of the election and
-        # flips isOfficialResults only at certification. A slow-counting
-        # state can still be tallying for two weeks afterwards, and a
-        # confirmed nominee derived from a count that is still moving is
-        # exactly the kind of wrong this whole module exists to avoid — so
-        # an uncertified election yields nothing and simply lights up on
-        # its own once the state certifies.
-        if (
-            discovery.get("require_official")
-            and not payload.get("isOfficialResults")
-            and not _settled(payload, discovery.get("settle_days"))
-        ):
-            logger.info(
-                "%s election %s is not certified yet — not confirming nominees from it",
-                state, election_id,
-            )
-            found.append({"url": None, "runoff": is_runoff})
-            continue
+        # This portal publishes running counts the night of the election
+        # and flips isOfficialResults only at certification, so both facts
+        # travel with the stage for _withheld to judge.
         wanted = discovery.get("report_name") or ""
         blob = next(
             (
@@ -196,12 +227,14 @@ async def _sos_api_report_urls(
             None,
         )
         if blob:
-            found.append({
-                "url": (discovery.get("cdn_url") or "").format(
+            found.append(_stage(
+                (discovery.get("cdn_url") or "").format(
                     jurisdiction_id=jurisdiction_id, blob=quote(blob),
                 ),
-                "runoff": is_runoff,
-            })
+                runoff=is_runoff,
+                held=str(payload.get("electionDate") or "")[:10] or None,
+                official=bool(payload.get("isOfficialResults")),
+            ))
     return found
 
 
@@ -209,16 +242,16 @@ async def _discover_urls(
     client: httpx.AsyncClient, state: str, year: int, discovery: dict,
 ) -> list[dict]:
     """This cycle's results stage(s), never a hardcoded per-cycle path.
-    Every mode returns the SAME shape — {"url", "runoff"} per stage — so
-    the fetch below treats a state the same way whatever its vendor is.
+    Every mode returns the SAME _stage shape, carrying whatever that source
+    knows about how settled its results are, so the fetch below treats a
+    state the same way whatever its vendor is.
 
     More than one stage comes back only where a state's nominees genuinely
     need more than one election to determine: a runoff state's second
     contest decides every race its primary left short of the threshold (so
     it is ordered last and overrides, and the threshold does not apply to
     it), and a state like Virginia holds a separate election per party on
-    the same day. A stage with a null url exists but is being withheld —
-    see _sos_api_report_urls.
+    the same day.
     """
     mode = discovery.get("mode")
 
@@ -227,7 +260,10 @@ async def _discover_urls(
 
     if mode == "direct_url":
         template = discovery.get("url") or ""
-        return [{"url": template.format(year=year), "runoff": False}] if template else []
+        # No date and no flag: a state on this mode publishes one settled
+        # file per cycle (California's certified Statement of Vote), so
+        # there is nothing here for the gate to read.
+        return [_stage(template.format(year=year))] if template else []
 
     if mode == "s3_listing":
         bucket = (discovery.get("bucket_url") or "").rstrip("/")
@@ -246,7 +282,33 @@ async def _discover_urls(
         # Earliest key wins: within a cycle the first matching election is
         # the primary that decides nominees. A later folder is the general,
         # whose results can't confirm a nominee for the race it IS.
-        return [{"url": f"{bucket}/{sorted(keys)[0]}", "runoff": False}]
+        key = sorted(keys)[0]
+        return [_stage(f"{bucket}/{key}", held=_date_in(key))]
+
+    if mode == "landing_page":
+        # For a state that publishes one dated file per election and gives
+        # no way to list them: read the link off the page the state itself
+        # keeps current (Florida's floridaelectionwatch.gov/Downloads), so
+        # the cycle's date is never written down here.
+        pattern = discovery.get("link_regex")
+        resp = await _get(client, discovery.get("page_url") or "", f"{state} downloads page")
+        if resp is None or not pattern:
+            return []
+        links = sorted({m.group(0) for m in re.finditer(pattern, resp.text)})
+        # Same rule s3_listing applies, for a page that shows one election
+        # at a time: a file dated on this cycle's federal election day IS
+        # the general, and the general's results can't confirm a nominee
+        # for the race they decide. Left in, this state would quietly start
+        # "confirming" November's winners every four years.
+        general = next_election_day(date(year, 1, 1)).isoformat()
+        primaries = [ln for ln in links if _date_in(ln) and _date_in(ln) != general]
+        if not primaries:
+            logger.info(
+                "%s's downloads page lists no %d primary results file yet", state, year,
+            )
+            return []
+        first = min(primaries, key=lambda ln: _date_in(ln))
+        return [_stage(first, held=_date_in(first))]
 
     logger.error("Unknown results discovery mode %r for %s", mode, state)
     return []
@@ -338,6 +400,18 @@ def _votes(raw: str) -> int:
         return 0
 
 
+def _cell(row: dict, spec) -> str:
+    """One configured field's value. A LIST of columns is joined, for an
+    export that splits across columns what others keep in one: Florida
+    names a contest by race AND party code, and a candidate by first name
+    AND last name, so joining is what gives the shared parsing the single
+    label and the single display name it works on everywhere else."""
+    columns = spec if isinstance(spec, list) else [spec]
+    return " ".join(
+        (row.get(c) or "").strip() for c in columns if (row.get(c) or "").strip()
+    )
+
+
 def _tally(rows: list[dict], fmt: dict) -> dict[str, dict]:
     """Sum votes per (contest, choice) across every precinct/county row,
     keeping each CHOICE's own party. Party is per-candidate rather than
@@ -363,8 +437,8 @@ def _tally(rows: list[dict], fmt: dict) -> dict[str, dict]:
         lambda: {"votes": defaultdict(int), "party": {}, "office": None},
     )
     for row in rows:
-        contest = (row.get(contest_col) or "").strip()
-        choice = (row.get(choice_col) or "").strip()
+        contest = _cell(row, contest_col)
+        choice = _cell(row, choice_col)
         if not contest or not choice or choice.casefold() in excluded:
             continue
         entry = tally[contest]
@@ -396,14 +470,16 @@ async def fetch_confirmed_candidates(
     advance_count = int(source.get("advance_count") or 1)
     fmt = source.get("format") or {}
 
-    stages = await _discover_urls(client, st, year, source.get("discovery") or {})
+    discovery = source.get("discovery") or {}
+    stages = await _discover_urls(client, st, year, discovery)
     if not stages:
         logger.warning("No %d results file discoverable for %s — skipping", year, st)
         return None
-    usable = [s for s in stages if s.get("url")]
+    usable = [s for s in stages if s.get("url") and not _withheld(s, discovery)]
     if not usable:
         logger.info(
-            "%s has %d %d election(s) published but none certified yet — confirming nobody",
+            "%s has %d %d election(s) published but none settled enough to name "
+            "nominees from — confirming nobody",
             st, len(stages), year,
         )
         return []
