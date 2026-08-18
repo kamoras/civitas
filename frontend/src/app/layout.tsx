@@ -1,8 +1,21 @@
 import type { Metadata } from "next";
-import { VT323, Press_Start_2P, Share_Tech_Mono } from "next/font/google";
+import { Archivo, VT323, Press_Start_2P, Share_Tech_Mono } from "next/font/google";
 import ConfigProvider from "@/components/providers/ConfigProvider";
 import "./globals.css";
 
+// Display and prose. 400 for body, 600 for headings, 800 for the blunt
+// statement type the masthead is built on — a grotesque at heavy weight
+// reads broadsheet and poster, where a bookish serif reads endowment.
+const archivo = Archivo({
+  weight: ["400", "600", "800"],
+  subsets: ["latin"],
+  variable: "--font-archivo",
+  display: "swap",
+});
+
+// DEPRECATED — kept loaded only so the ~150 call sites still naming
+// `font-terminal` keep rendering while they migrate off it. See the
+// fontFamily note in tailwind.config.ts.
 const vt323 = VT323({
   weight: "400",
   subsets: ["latin"],
@@ -68,7 +81,7 @@ export default function RootLayout({
         width bumps in BillRow and BillStageFlow that this required.
       */}
       <body
-        className={`${vt323.variable} ${pressStart.variable} ${shareTech.variable} font-mono antialiased`}
+        className={`${archivo.variable} ${vt323.variable} ${pressStart.variable} ${shareTech.variable} font-mono antialiased`}
       >
         <ConfigProvider>
           <a

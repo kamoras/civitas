@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ACTION_CENTER_HREF } from "@/lib/routes";
+import RecordsBand from "./RecordsBand";
 
 
 const BSKY_PROFILE_URL = "https://bsky.app/profile/civitas-research.org";
@@ -80,26 +81,32 @@ export default function Navbar() {
   return (
     <header
       role="banner"
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        scrolled || menuOpen ? "bg-crt-black/95 backdrop-blur-md" : "bg-transparent"
-      } border-b border-matrix-green/10`}
+      className={`fixed top-0 left-0 right-0 z-50 transition-colors duration-300 ${
+        scrolled || menuOpen ? "bg-surface-base/95 backdrop-blur-md" : "bg-surface-base/80"
+      }`}
     >
+      {/*
+        The band lives inside the fixed header rather than above it so every
+        page picks it up without touching its own layout: the header is ~79px
+        tall with the band, and all 19 pages already clear a fixed navbar with
+        `pt-24` (96px). Keep it to one line on mobile — a second line would
+        push past that margin.
+      */}
+      <RecordsBand />
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999]
-                   focus:bg-crt-black focus:text-neon-cyan focus:border focus:border-neon-cyan/60
+                   focus:bg-surface-base focus:text-phos focus:border focus:border-phos/60
                    focus:px-4 focus:py-2 focus:font-mono focus:text-xs focus:tracking-widest
                    focus:outline-none"
       >
         SKIP TO MAIN CONTENT
       </a>
-    <nav
-      aria-label="Main navigation"
-    >
+    <nav aria-label="Main navigation" className="border-b-3 border-white/15">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
         <Link
           href="/"
-          className="font-pixel text-[10px] sm:text-xs text-matrix-green hover:text-neon-cyan transition-colors tracking-widest"
+          className="font-pixel text-[10px] sm:text-xs text-ink-hi hover:text-phos transition-colors tracking-widest"
         >
           CIVITAS
         </Link>
@@ -115,10 +122,10 @@ export default function Navbar() {
                 aria-current={active ? "page" : undefined}
                 className={
                   active
-                    ? "text-neon-cyan font-mono text-xs tracking-widest uppercase transition-colors border-b border-neon-cyan/50 pb-0.5"
+                    ? "bg-phos text-surface-base font-mono text-xs tracking-widest uppercase px-2 py-0.5"
                     : accent
-                      ? "text-neon-cyan/60 hover:text-neon-cyan font-mono text-xs tracking-widest uppercase transition-colors"
-                      : "text-matrix-green/50 hover:text-matrix-green/90 font-mono text-xs tracking-widest uppercase transition-colors"
+                      ? "text-ink-hi hover:text-phos font-mono text-xs tracking-widest uppercase transition-colors"
+                      : "text-ink-lo hover:text-ink-hi font-mono text-xs tracking-widest uppercase transition-colors"
                 }
               >
                 {label}
@@ -131,7 +138,7 @@ export default function Navbar() {
             rel="noopener noreferrer"
             aria-label="Civitas on Bluesky (opens in new tab)"
             title="Follow Civitas on Bluesky"
-            className="text-neon-cyan/50 hover:text-neon-cyan font-mono text-xs tracking-widest transition-colors"
+            className="text-ink-lo hover:text-phos font-mono text-xs tracking-widest transition-colors"
           >
             [BSKY]
           </a>
@@ -140,7 +147,7 @@ export default function Navbar() {
         {/* Mobile hamburger */}
         <button
           ref={toggleRef}
-          className="sm:hidden text-matrix-green/70 hover:text-matrix-green font-mono text-sm tracking-widest transition-colors"
+          className="sm:hidden text-ink-lo hover:text-ink-hi font-mono text-sm tracking-widest transition-colors"
           onClick={() => menuOpen ? closeMenu() : setMenuOpen(true)}
           aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
           aria-expanded={menuOpen}
@@ -155,7 +162,7 @@ export default function Navbar() {
         <div
           ref={menuRef}
           id="mobile-menu"
-          className="sm:hidden bg-crt-black/98 border-t border-matrix-green/10 px-6 py-8 flex flex-col gap-5"
+          className="sm:hidden bg-surface-base/[0.98] border-t border-white/[0.07] px-6 py-8 flex flex-col items-start gap-5"
         >
           {NAV_LINKS.map(({ href, label, accent }) => {
             const active = isActive(href);
@@ -167,10 +174,10 @@ export default function Navbar() {
                 onClick={closeMenu}
                 className={
                   active
-                    ? "text-neon-cyan font-mono text-sm tracking-widest uppercase transition-colors"
+                    ? "self-start bg-phos text-surface-base font-mono text-sm tracking-widest uppercase px-2 py-0.5"
                     : accent
-                      ? "text-neon-cyan/60 hover:text-neon-cyan font-mono text-sm tracking-widest uppercase transition-colors"
-                      : "text-matrix-green/50 hover:text-matrix-green font-mono text-sm tracking-widest uppercase transition-colors"
+                      ? "text-ink-hi hover:text-phos font-mono text-sm tracking-widest uppercase transition-colors"
+                      : "text-ink-lo hover:text-ink-hi font-mono text-sm tracking-widest uppercase transition-colors"
                 }
               >
                 {label}
@@ -183,7 +190,7 @@ export default function Navbar() {
             rel="noopener noreferrer"
             aria-label="Civitas on Bluesky (opens in new tab)"
             onClick={closeMenu}
-            className="text-neon-cyan/50 hover:text-neon-cyan font-mono text-sm tracking-widest transition-colors"
+            className="text-ink-lo hover:text-phos font-mono text-sm tracking-widest transition-colors"
           >
             [BSKY]
           </a>

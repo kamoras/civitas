@@ -327,6 +327,14 @@ li {
 }
 
 /* ===== A11Y: MINIMUM TEXT CONTRAST (always on) =====
+   NOTE (Direction C): this whole block is what the `ink`/`phos` tokens in
+   tailwind.config.ts exist to delete. It stays for now because it protects
+   ~500 call sites that still write `matrix-green/40` and friends, and
+   removing it before those migrate would regress contrast site-wide rather
+   than fix it. The new tokens are solid hex and carry no `/NN` step, so
+   none of the attribute selectors below can match them — the two systems
+   do not interact. Each page that migrates shrinks this block; it comes
+   out entirely when the last legacy step is gone.
    WCAG AA requires 4.5:1 for normal text on the #0d0208 background.
    Measured (alpha-composited over #0d0208, then WCAG relative-luminance
    contrast against #0d0208 — 2026-07 audit, not the "40% passes" claim
@@ -644,5 +652,82 @@ a[target="_blank"] {
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+}
+
+
+/* ===== DIRECTION C: PUBLIC-RECORDS REGISTER =====
+   Two devices that Tailwind cannot express cleanly. Everything else in the
+   direction — rule weights, density, docket refs, the request slip — is
+   plain utilities over the tokens in tailwind.config.ts. */
+
+/* Two-colour misregistration on the wordmark.
+
+   This is the SAME magenta/cyan offset the .glitch rules above already use,
+   held still. Animated it reads as a Matrix effect, which argues against a
+   site whose whole claim is deterministic, auditable scoring; frozen, the
+   identical offset reads as cheap two-plate printing — an independent press
+   rather than a conspiracy. Same DNA, opposite connotation, no new assets.
+
+   The plates are aria-hidden duplicates of the wordmark, so assistive tech
+   reads "CIVITAS" once. They are absolutely positioned against the base
+   copy, which stays in flow and sets the box. */
+.overprint {
+  position: relative;
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.overprint > .overprint-plate {
+  position: absolute;
+  top: 0;
+  left: 0;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.overprint > .overprint-plate.magenta {
+  color: #ff6bd6;
+  transform: translate(-3px, 1px);
+}
+
+.overprint > .overprint-plate.cyan {
+  color: #4de3e8;
+  transform: translate(3px, -1px);
+}
+
+/* Forced-colors mode replaces our palette wholesale, so the two plates
+   collapse onto the base copy as one smeared word. Drop them there. */
+@media (forced-colors: active) {
+  .overprint > .overprint-plate {
+    display: none;
+  }
+}
+
+/* Rubber stamp — the governance disclosure, asserted rather than murmured.
+
+   The double ring is one box-shadow rather than a wrapper element: an inset
+   of the page colour, then the outer halo, which reads as ink bleed around
+   a stamped border. The rotation is deliberate and small; anything past
+   ~3deg starts to read as a sticker. */
+.stamp {
+  display: inline-block;
+  border: 2px solid #ff6bd6;
+  box-shadow:
+    0 0 0 1px #0d0208,
+    0 0 0 3px rgba(255, 107, 214, 0.35);
+  color: #ff6bd6;
+  font-family: var(--font-share-tech), ui-monospace, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  padding: 8px 13px;
+  transform: rotate(-2.5deg);
+}
+
+/* The tilt is decoration, not information — straighten it when a reader has
+   asked for less visual noise. The stamp still reads as a stamp. */
+@media (prefers-reduced-motion: reduce) {
+  .stamp {
+    transform: none;
   }
 }
