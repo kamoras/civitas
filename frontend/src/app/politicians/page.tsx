@@ -71,7 +71,7 @@ const US_STATES = [
 
 function partyDot(party: string) {
   const cls = party === "D" ? "bg-dem-blue" : party === "R" ? "bg-signal-red" : "bg-ind-purple";
-  return <span className={`inline-block w-2 h-2  ${cls} mr-1.5`} />;
+  return <span className={`inline-block w-2 h-2 ${cls} mr-1.5`} />;
 }
 
 function ScoreBar({ score }: { score: number }) {
@@ -232,7 +232,7 @@ function PoliticiansPageContent() {
   return (
     <div className="min-h-screen bg-surface-base text-ink-hi">
       <Navbar />
-      <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
+      <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-7xl mx-auto">
           <div className="mb-8 border-b-3 border-phos pb-5">
             <h1 className="font-display font-semibold text-xl sm:text-3xl text-ink-hi mb-2">

@@ -149,7 +149,7 @@ export default function RecordsBand() {
 
             The two halves of this band do not fit on one row until ~768px, so
             showing this from 640px wrapped the band and put the fixed header
-            at 102px, past the 96px every page reserves with `pt-24`. Below
+            at 102px, past the clearance every page reserves. Below
             `lg` the wordmark immediately underneath already says "CIVITAS",
             so nothing is lost. Measured across 320-1280px. */}
         <span className="hidden font-mono text-xs tracking-[0.16em] text-ink-lo lg:inline">
@@ -168,7 +168,7 @@ export default function RecordsBand() {
             <>
               {/* Dropped on mobile. The full string wraps to a second line
                   on narrow phones and pushes this fixed header past the 96px
-                  (`pt-24`) every page reserves for it — measured across every
+                  (`--header-clearance`) every page reserves for it — measured across every
                   run-state label at 320-1280px, not guessed. The run number is
                   the least load-bearing part; the timestamp and the state are
                   what make a stale record visible.

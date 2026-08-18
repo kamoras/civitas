@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Navbar from "@/components/layout/Navbar";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import Footer from "@/components/layout/Footer";
+import PageMasthead from "@/components/layout/PageMasthead";
 import BackToTop from "@/components/BackToTop";
 import { submitFeedback, type FeedbackSubmission } from "@/lib/api";
 
@@ -64,19 +65,15 @@ export default function FeedbackPage() {
   return (
     <div className="min-h-screen bg-surface-base text-ink-hi">
       <Navbar />
-      <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
+      <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-2xl mx-auto">
-          <header className="mb-8 border-b-3 border-phos pb-5">
-            <p className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
-              Feedback · bugs, ideas, access barriers
-            </p>
-            <h1 className="mt-3 font-display text-3xl font-extrabold uppercase leading-none tracking-[-0.02em] text-ink-hi sm:text-4xl">
-              Feedback
-            </h1>
-            <p className="mt-3 max-w-2xl font-display text-base leading-relaxed text-ink-lo">
-              Report a bug, suggest an idea, or flag an accessibility barrier.
-            </p>
-          </header>
+          <PageMasthead
+            className="mb-8"
+            eyebrow="Feedback · bugs, ideas, access barriers"
+            title="Feedback"
+          >
+            <p>Report a bug, suggest an idea, or flag an accessibility barrier.</p>
+          </PageMasthead>
 
           <TerminalTitlebar title="Feedback" />
           <div className="border border-t-0 border-white/[0.07] bg-surface-base p-6">

@@ -118,7 +118,7 @@ function VoteCard({ vote, expandable = false }: { vote: KeyVote; expandable?: bo
 
   if (!expandable) {
     return (
-      <div className={`terminal-window p-3 ${borderClass}`}>
+      <div className={`panel p-3 ${borderClass}`}>
         <div className="flex items-center gap-2 flex-wrap">
           <VoteBadge vote={vote.vote} />
           <span className="text-ink text-sm">{vote.billName}</span>
@@ -141,7 +141,7 @@ function VoteCard({ vote, expandable = false }: { vote: KeyVote; expandable?: bo
   }
 
   return (
-    <div className={`terminal-window ${borderClass}`}>
+    <div className={`panel ${borderClass}`}>
       <button
         onClick={() => setExpanded(!expanded)}
         aria-expanded={expanded}
@@ -389,7 +389,7 @@ function PaginatedVoteList({
 
   if (!data && loading) {
     return (
-      <div className="terminal-window p-4 text-center" role="status" aria-live="polite">
+      <div className="panel p-4 text-center" role="status" aria-live="polite">
         <span className="text-ink-lo text-sm animate-pulse">Loading votes...</span>
       </div>
     );
@@ -397,7 +397,7 @@ function PaginatedVoteList({
 
   if (error) {
     return (
-      <div className="terminal-window p-4 text-center" role="alert">
+      <div className="panel p-4 text-center" role="alert">
         <span className="text-signal-red text-sm">{error}</span>
       </div>
     );
@@ -474,7 +474,7 @@ export default function VotingRecord({
 
   const statBoxes = (
     <div className="grid grid-cols-3 gap-2 mb-2 text-center text-sm">
-      <div className="terminal-window p-3">
+      <div className="panel p-3">
         <div className="text-xl font-display font-semibold text-ink-hi">
           {totalVotes.toLocaleString()}
         </div>
@@ -484,7 +484,7 @@ export default function VotingRecord({
           </MetricTooltip>
         </div>
       </div>
-      <div className="terminal-window p-3">
+      <div className="panel p-3">
         <div className="text-xl font-display font-semibold text-signal-cyan">
           {Math.round(partyLoyaltyPct)}%
         </div>
@@ -495,7 +495,7 @@ export default function VotingRecord({
         </div>
         <div className="text-xs text-ink-lo">votes with party line</div>
       </div>
-      <div className="terminal-window p-3">
+      <div className="panel p-3">
         <div className="text-xl font-display font-semibold text-signal-amber">
           {partyIndependencePct}%
         </div>
@@ -542,7 +542,7 @@ export default function VotingRecord({
               KEY VOTES — LONG-TERM SUMMARY
             </div>
             {votingSummary && (
-              <div className="terminal-window p-3 mb-3">
+              <div className="panel p-3 mb-3">
                 <p className="text-base text-ink leading-relaxed">{votingSummary}</p>
               </div>
             )}

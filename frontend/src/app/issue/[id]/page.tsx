@@ -73,7 +73,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
         <main
           id="main-content"
           tabIndex={-1}
-          className="pt-24 pb-16 px-4 min-h-screen flex items-center justify-center"
+          className="pt-[var(--header-clearance)] pb-16 px-4 min-h-screen flex items-center justify-center"
         >
           <div className="text-center space-y-4 relative z-10">
             <div className="text-2xl font-mono text-ink-hi">ISSUE NOT FOUND</div>
@@ -104,7 +104,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
       <main
         id="main-content"
         tabIndex={-1}
-        className="min-h-screen text-ink-hi font-mono pt-24 pb-16 px-4"
+        className="min-h-screen text-ink-hi font-mono pt-[var(--header-clearance)] pb-16 px-4"
       >
         <div className="max-w-3xl mx-auto relative z-10">
           {/* Nav */}
@@ -135,7 +135,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
                 day: "numeric",
               })}
             </div>
-            <MonitorChips slugs={issue.relatedMonitorSlugs} className="" />
+            <MonitorChips slugs={issue.relatedMonitorSlugs} />
           </header>
 
           {/* Full story */}

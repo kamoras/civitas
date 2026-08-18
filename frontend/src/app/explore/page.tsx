@@ -97,7 +97,7 @@ function ResultCard({ result, query }: { result: ExploreResult; query: string })
   const remaining = commentOpen ? daysUntilClose(result.commentsCloseOn) : 0;
 
   return (
-    <div className={`border  transition-all ${chamberBg(result.chamber)}`}>
+    <div className={`border transition-all ${chamberBg(result.chamber)}`}>
       <Link href={detailHref} className="block p-4 hover:brightness-125">
         <div className="flex items-start justify-between gap-3 mb-2">
           <div className="flex items-center gap-2 flex-wrap">
@@ -287,7 +287,7 @@ function ExplorePageInner() {
   return (
     <>
       <Navbar />
-      <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
+      <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-4xl mx-auto">
           {/* Header */}
           <div className="mb-8 border-b-3 border-phos pb-5">
@@ -315,7 +315,7 @@ function ExplorePageInner() {
 
           {/* Search form */}
           <form onSubmit={handleSubmit} className="mb-6">
-            <div className="terminal-window">
+            <div className="panel">
               <TerminalTitlebar title="Query" />
               <div className="p-4">
                 <label htmlFor="explore-search" className="sr-only">

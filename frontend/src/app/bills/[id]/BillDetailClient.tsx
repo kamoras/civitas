@@ -33,7 +33,7 @@ export default function BillDetailClient({ bill }: { bill: BillDetail }) {
   return (
     <div className="min-h-screen bg-surface-base text-ink-hi">
       <Navbar />
-      <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
+      <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-3xl mx-auto">
           <Link
             href="/bills"
@@ -42,12 +42,12 @@ export default function BillDetailClient({ bill }: { bill: BillDetail }) {
             ← BACK TO BILLS
           </Link>
 
-          <div className="terminal-window mb-6">
+          <div className="panel mb-6">
             <TerminalTitlebar title={bill.billId.toLowerCase()} />
             <div className="p-6">
               <div className="flex flex-wrap items-center gap-2 mb-3">
                 <span
-                  className="font-mono text-xs uppercase tracking-widest px-2 py-0.5 border "
+                  className="font-mono text-xs uppercase tracking-widest px-2 py-0.5 border"
                   style={{
                     color: stageColor,
                     borderColor: `${stageColor}4d`,
@@ -88,7 +88,7 @@ export default function BillDetailClient({ bill }: { bill: BillDetail }) {
                     className="w-8 h-8 rounded-full object-cover border border-white/[0.07]"
                   />
                 )}
-                <span className={`px-1.5 py-0.5  border text-xs font-mono ${party.className}`}>
+                <span className={`px-1.5 py-0.5 border text-xs font-mono ${party.className}`}>
                   {party.label}
                 </span>
                 <span className="text-sm">{bill.sponsorName}</span>
@@ -137,7 +137,7 @@ export default function BillDetailClient({ bill }: { bill: BillDetail }) {
           </div>
 
           {bill.policyAreas.length > 0 && (
-            <div className="terminal-window mb-6">
+            <div className="panel mb-6">
               <TerminalTitlebar title="Policy areas" />
               <div className="p-6 space-y-3">
                 {bill.policyAreas.map((area) => (
@@ -172,7 +172,7 @@ export default function BillDetailClient({ bill }: { bill: BillDetail }) {
           )}
 
           {bill.relatedIssues.length > 0 && (
-            <div className="terminal-window">
+            <div className="panel">
               <TerminalTitlebar title="Mentions" />
               <div className="p-6">
                 <ul className="space-y-2">

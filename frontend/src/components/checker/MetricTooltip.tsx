@@ -27,7 +27,7 @@ export default function MetricTooltip({ text, children }: MetricTooltipProps) {
 
   // Position the tooltip in viewport coordinates (position: fixed) rather
   // than as an absolutely-positioned child of the trigger. The trigger
-  // lives inside `.terminal-window`, which sets `overflow: hidden` — an
+  // lives inside `.panel`, which sets `overflow: hidden` — an
   // absolutely-positioned popover near the card's edge is clipped by that
   // ancestor no matter how high its z-index, because overflow clipping and
   // stacking order are independent. Portaling to <body> and positioning

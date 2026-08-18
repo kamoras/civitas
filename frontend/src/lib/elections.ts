@@ -22,6 +22,16 @@ export function formatPvi(pvi: number | null): string {
   return pvi > 0 ? `R+${pvi}` : `D+${Math.abs(pvi)}`;
 }
 
+/** Solid palette hex, so a lean figure never renders below the contrast floor.
+ * Lives here beside pviColor rather than being redeclared per page — it was
+ * copy-pasted into the elections hub and the race page, which is how two
+ * copies drift. */
+export function pviTextColor(pvi: number | null): string {
+  if (pvi == null) return "text-ink-min";
+  if (pvi === 0) return "text-ink";
+  return pvi > 0 ? "text-signal-red" : "text-dem-blue";
+}
+
 export function pviColor(pvi: number | null): string {
   if (pvi == null) return "text-ink-min";
   if (pvi === 0) return "text-ink";

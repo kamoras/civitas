@@ -88,7 +88,7 @@ export default function Navbar() {
         The band lives inside the fixed header rather than above it so every
         page picks it up without touching its own layout: the header is ~79px
         tall with the band, and all 19 pages already clear a fixed navbar with
-        `pt-24` (96px). Keep it to one line on mobile — a second line would
+        `--header-clearance` (6rem). Keep it to one line on mobile — a second line would
         push past that margin.
       */}
       <RecordsBand />
@@ -116,7 +116,7 @@ export default function Navbar() {
           900px, so from 640px up they wrapped to two or three rows. On main
           that merely made a 41px header 57px, which nothing depended on. With
           the records band above it, the same wrap produced a 114px header
-          between 640 and 740px — past the 96px (`pt-24`) all 19 pages reserve
+          between 640 and 740px — past the clearance every page reserves
           for the fixed header, clipping the top of their content. Measured
           across 320-1280px; a four-width spot check missed it entirely.
 

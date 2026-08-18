@@ -103,7 +103,7 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
               }
             }}
             aria-pressed={filter === "all"}
-            className={`terminal-window p-2 transition-colors cursor-pointer ${filter === "all" ? "border-phos/40 bg-white/[0.03]" : "hover:bg-white/[0.03]"}`}
+            className={`panel p-2 transition-colors cursor-pointer ${filter === "all" ? "border-phos/40 bg-white/[0.03]" : "hover:bg-white/[0.03]"}`}
           >
             <div className="text-xl font-display font-semibold text-ink-hi">{bills.length}</div>
             <div className="text-xs text-ink-min">
@@ -126,7 +126,7 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
             }}
             aria-pressed={filter === "law"}
             aria-disabled={lawCount === 0}
-            className={`terminal-window p-2 transition-colors ${lawCount === 0 ? "cursor-default" : "cursor-pointer"} ${filter === "law" ? "border-signal-cyan/40 bg-signal-cyan/10" : lawCount > 0 ? "hover:bg-white/[0.03]" : ""}`}
+            className={`panel p-2 transition-colors ${lawCount === 0 ? "cursor-default" : "cursor-pointer"} ${filter === "law" ? "border-signal-cyan/40 bg-signal-cyan/10" : lawCount > 0 ? "hover:bg-white/[0.03]" : ""}`}
           >
             <div
               className={`text-xl font-display font-semibold ${lawCount > 0 ? "text-signal-cyan" : "text-ink-min"}`}
@@ -153,7 +153,7 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
             }}
             aria-pressed={filter === "advancing"}
             aria-disabled={advancedCount === 0}
-            className={`terminal-window p-2 transition-colors ${advancedCount === 0 ? "cursor-default" : "cursor-pointer"} ${filter === "advancing" ? "border-signal-amber/40 bg-signal-amber/10" : advancedCount > 0 ? "hover:bg-white/[0.03]" : ""}`}
+            className={`panel p-2 transition-colors ${advancedCount === 0 ? "cursor-default" : "cursor-pointer"} ${filter === "advancing" ? "border-signal-amber/40 bg-signal-amber/10" : advancedCount > 0 ? "hover:bg-white/[0.03]" : ""}`}
           >
             <div
               className={`text-xl font-display font-semibold ${advancedCount > 0 ? "text-signal-amber" : "text-ink-min"}`}
@@ -185,7 +185,7 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
             return (
               <div
                 key={bill.billId}
-                className={`terminal-window p-2.5 border-l-4 ${
+                className={`panel p-2.5 border-l-4 ${
                   bill.isLaw ? "border-l-signal-cyan" : "border-l-white/[0.07]"
                 }`}
               >

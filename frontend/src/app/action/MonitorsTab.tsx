@@ -86,7 +86,7 @@ export default function MonitorsTab() {
 
   if (fetchError) {
     return (
-      <div className="terminal-window max-w-lg mx-auto p-8 text-center space-y-4" role="alert">
+      <div className="panel max-w-lg mx-auto p-8 text-center space-y-4" role="alert">
         <div className="font-mono text-sm text-signal-red">CONNECTION ERROR</div>
         <p className="text-ink-lo text-base">Could not load monitors.</p>
         <button
@@ -108,7 +108,7 @@ export default function MonitorsTab() {
 
   if (monitors.length === 0) {
     return (
-      <div className="terminal-window max-w-lg mx-auto p-8 text-center space-y-4">
+      <div className="panel max-w-lg mx-auto p-8 text-center space-y-4">
         <div className="font-mono text-sm text-signal-amber">NO ACTIVE MONITORS</div>
         <p className="text-ink-lo text-base">
           National monitors are automatically created when an issue persists across multiple days in
@@ -129,7 +129,7 @@ export default function MonitorsTab() {
           <button
             key={m.slug}
             onClick={() => openMonitor(m.slug)}
-            className={`terminal-window p-4 text-left transition-colors hover:border-signal-amber/40 ${
+            className={`panel p-4 text-left transition-colors hover:border-signal-amber/40 ${
               selected?.slug === m.slug ? "border-signal-amber/40" : ""
             }`}
             aria-label={`View monitor: ${m.title}`}
@@ -169,7 +169,7 @@ export default function MonitorsTab() {
       {selected && !detailLoading && (
         <div
           ref={detailRef}
-          className="terminal-window border-t-2 border-t-amber-400/50 p-5 sm:p-6 scroll-mt-4"
+          className="panel border-t-2 border-t-amber-400/50 p-5 sm:p-6 scroll-mt-4"
           role="region"
           aria-label={`Monitor: ${selected.title}`}
         >

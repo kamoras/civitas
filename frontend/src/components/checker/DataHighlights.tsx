@@ -48,7 +48,7 @@ export default function DataHighlights({ senator, chamber = "senate" }: DataHigh
     >
       <div className="space-y-3">
         {comments.map((comment, i) => (
-          <div key={i} className="terminal-window p-4 border-l-2 border-l-signal-amber">
+          <div key={i} className="panel p-4 border-l-2 border-l-signal-amber">
             <p className="text-base text-ink leading-relaxed">{comment}</p>
           </div>
         ))}

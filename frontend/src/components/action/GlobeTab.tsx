@@ -84,7 +84,7 @@ export default function GlobeTab() {
 
   if (countries.length === 0) {
     return (
-      <div className="terminal-window max-w-md mx-auto p-6 text-center">
+      <div className="panel max-w-md mx-auto p-6 text-center">
         <div className="text-ink-lo">No international news found in current feeds.</div>
       </div>
     );
@@ -122,7 +122,7 @@ export default function GlobeTab() {
       {selected && (
         <div
           ref={detailRef}
-          className="terminal-window border-t-2 border-t-green-400/50 p-5 sm:p-6 scroll-mt-4"
+          className="panel border-t-2 border-t-green-400/50 p-5 sm:p-6 scroll-mt-4"
           role="region"
           aria-label={`U.S. and ${selected.country} news`}
         >
@@ -184,7 +184,7 @@ export default function GlobeTab() {
                   globeRef.current.pointOfView({ lat: c.lat, lng: c.lng, altitude: 1.8 }, 800);
                 }
               }}
-              className="terminal-window p-2.5 text-left hover:border-green-400/30 transition-colors"
+              className="panel p-2.5 text-left hover:border-green-400/30 transition-colors"
               aria-label={`View news about ${c.country}`}
             >
               <div className="font-mono text-xs text-phos-mid truncate">{c.country}</div>

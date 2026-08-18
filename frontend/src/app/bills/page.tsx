@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import Footer from "@/components/layout/Footer";
+import PageMasthead from "@/components/layout/PageMasthead";
 import BackToTop from "@/components/BackToTop";
 import BillStageFlow, { ALL_STAGE_CODES } from "@/components/bills/BillStageFlow";
 import BillStageGroup from "@/components/bills/BillStageGroup";
@@ -74,16 +75,14 @@ function BillsPageContent() {
   return (
     <div className="min-h-screen bg-surface-base text-ink-hi">
       <Navbar />
-      <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
+      <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-6xl mx-auto">
-          <header className="mb-8 border-b-3 border-phos pb-5">
-            <p className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
-              Bills · legislative pipeline
-            </p>
-            <h1 className="mt-3 font-display text-3xl font-extrabold uppercase leading-none tracking-[-0.02em] text-ink-hi sm:text-4xl">
-              Bills in motion
-            </h1>
-            <p className="mt-3 max-w-2xl font-display text-base leading-relaxed text-ink-lo">
+          <PageMasthead
+            className="mb-8"
+            eyebrow="Bills · legislative pipeline"
+            title="Bills in motion"
+          >
+            <p>
               Where {totalMoving.toLocaleString()} bills sit in the legislative pipeline right now.
             </p>
             {/* Verified live (2026-08 review): this total is genuinely
@@ -95,7 +94,7 @@ function BillsPageContent() {
               Excludes bills only introduced or automatically referred to committee — nearly every
               bill clears that step within days; this counts what&apos;s moved further.
             </p>
-          </header>
+          </PageMasthead>
 
           <div className="flex justify-center gap-2 mb-4">
             <button

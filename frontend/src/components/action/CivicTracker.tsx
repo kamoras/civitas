@@ -198,7 +198,7 @@ export default function CivicActionWidget() {
     >
       {/* Expanded panel */}
       {open && (
-        <div className="terminal-window w-72 max-h-96 flex flex-col shadow-xl shadow-black/50">
+        <div className="panel w-72 max-h-96 flex flex-col shadow-xl shadow-black/50">
           <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.07]">
             <div>
               <span className="font-mono text-xs text-signal-cyan tracking-wider">
@@ -285,7 +285,7 @@ export default function CivicActionWidget() {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-label={open ? "Close civic action tracker" : "Open civic action tracker"}
-        className="terminal-window px-3 py-2 flex items-center gap-2 hover:border-signal-cyan/40 transition-colors"
+        className="panel px-3 py-2 flex items-center gap-2 hover:border-signal-cyan/40 transition-colors"
       >
         <span className="text-xs font-mono text-signal-cyan">
           {open ? "✕ ACTIONS" : "MY ACTIONS"}

@@ -3,12 +3,13 @@
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import PageMasthead from "@/components/layout/PageMasthead";
 import BackToTop from "@/components/BackToTop";
 import CandidateCard from "@/components/elections/CandidateCard";
 import CoverageFeed from "@/components/elections/CoverageFeed";
 import RaceFinancials from "@/components/elections/RaceFinancials";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
-import { formatPvi, isActiveCandidate, raceTitleLabel } from "@/lib/elections";
+import { formatPvi, pviTextColor, isActiveCandidate, raceTitleLabel } from "@/lib/elections";
 import type { RaceDetail } from "@/types/election";
 
 /* The `.dat` titlebars come off here for the same reason they came off the
@@ -16,13 +17,6 @@ import type { RaceDetail } from "@/types/election";
    four stacked fake window chromes were the loudest thing on the page.
    Sections are now separated by the rule weights the rest of the register
    uses. */
-
-/** Solid palette hex — a lean figure must never render below the contrast floor. */
-function pviTextColor(pvi: number | null): string {
-  if (pvi == null) return "text-ink-min";
-  if (pvi === 0) return "text-ink";
-  return pvi > 0 ? "text-signal-red" : "text-dem-blue";
-}
 
 function SectionHeading({ children, aside }: { children: React.ReactNode; aside?: string }) {
   return (
@@ -43,7 +37,11 @@ export default function RaceDetailClient({ race }: { race: RaceDetail }) {
   return (
     <div className="min-h-screen bg-surface-base text-ink">
       <Navbar />
-      <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-24 sm:px-6">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="px-4 pb-16 pt-[var(--header-clearance)] sm:px-6"
+      >
         <div className="mx-auto max-w-4xl">
           <Link
             href="/elections"
@@ -53,17 +51,10 @@ export default function RaceDetailClient({ race }: { race: RaceDetail }) {
           </Link>
 
           {/* ── Masthead ── */}
-          <header className="border-b-3 border-phos pb-5">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <p className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
-                  Race · {race.id}
-                </p>
-                <h1 className="mt-3 font-display text-3xl font-extrabold uppercase leading-none tracking-[-0.02em] text-ink-hi sm:text-4xl">
-                  {race.cycleYear} {raceTitleLabel(race)}
-                </h1>
-              </div>
-
+          <PageMasthead
+            eyebrow={`Race · ${race.id}`}
+            title={`${race.cycleYear} ${raceTitleLabel(race)}`}
+            aside={
               <div className="text-right">
                 <p className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
                   Partisan lean
@@ -75,9 +66,9 @@ export default function RaceDetailClient({ race }: { race: RaceDetail }) {
                   <p className="font-mono text-xs text-ink-min">statewide</p>
                 )}
               </div>
-            </div>
-
-            <div className="mt-3 flex flex-wrap items-center gap-3 font-mono text-xs text-ink-lo">
+            }
+          >
+            <span className="flex flex-wrap items-center gap-3 font-mono text-xs text-ink-lo">
               <span>
                 {race.candidates.length} {race.candidates.length === 1 ? "candidate" : "candidates"}{" "}
                 on record
@@ -87,12 +78,11 @@ export default function RaceDetailClient({ race }: { race: RaceDetail }) {
                   SPECIAL ELECTION
                 </span>
               )}
-            </div>
-
-            <div className="mt-3">
+            </span>
+            <span className="mt-3 block">
               <PviMethodologyNote />
-            </div>
-          </header>
+            </span>
+          </PageMasthead>
 
           {/* ── Candidates ── */}
           <section className="mt-10">

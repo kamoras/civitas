@@ -36,7 +36,7 @@ function Section({
   defaultOpen?: boolean;
 }) {
   return (
-    <section className="terminal-window mb-6" id={id}>
+    <section className="panel mb-6" id={id}>
       <TerminalTitlebar title={title.toLowerCase().replace(/ /g, "_")} />
       <details className="group" open={defaultOpen || Boolean(id)}>
         <summary className="p-6 flex items-center gap-3 cursor-pointer list-none [&::-webkit-details-marker]:hidden hover:bg-white/[0.03] transition-colors">
@@ -112,7 +112,7 @@ export default function AboutPage() {
   return (
     <>
       <Navbar />
-      <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
+      <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-3xl mx-auto">
           <div className="mb-10 border-b-3 border-phos pb-5">
             <h1 className="font-display font-semibold text-xl sm:text-3xl text-ink-hi tracking-widest mb-2">

@@ -245,7 +245,7 @@ function CommentsSection({
 
   return (
     <div className="mt-6">
-      <div className="terminal-window">
+      <div className="panel">
         <TerminalTitlebar title="Public comments" />
         <div className="p-5">
           <div className="flex items-center justify-between mb-4">
@@ -554,7 +554,7 @@ export default function ExploreDetailPage() {
     return (
       <>
         <Navbar />
-        <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
+        <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
           <div className="max-w-3xl mx-auto text-center py-20">
             <span className="text-ink-hi font-mono animate-pulse">Loading document...</span>
           </div>
@@ -568,7 +568,7 @@ export default function ExploreDetailPage() {
     return (
       <>
         <Navbar />
-        <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
+        <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
           <div className="max-w-3xl mx-auto text-center py-20">
             <p className="text-signal-magenta text-base mb-4">{error || "Document not found"}</p>
             <Link
@@ -602,7 +602,7 @@ export default function ExploreDetailPage() {
   return (
     <>
       <Navbar />
-      <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
+      <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-3xl mx-auto">
           {/* Back link */}
           <Link
@@ -651,7 +651,7 @@ export default function ExploreDetailPage() {
           )}
 
           {/* Document header */}
-          <div className={`border  p-6 mb-6 ${chamberBorder(doc.chamber)} bg-surface-base`}>
+          <div className={`border p-6 mb-6 ${chamberBorder(doc.chamber)} bg-surface-base`}>
             <div className="flex items-center gap-2 flex-wrap mb-3">
               <span className={`text-xs font-mono tracking-wider ${chamberColor(doc.chamber)}`}>
                 {chamberLabel(doc.chamber)}
@@ -697,7 +697,7 @@ export default function ExploreDetailPage() {
           </div>
 
           {/* AI Analysis section */}
-          <div className="terminal-window mb-6">
+          <div className="panel mb-6">
             <TerminalTitlebar title="Analysis" />
             <div className="p-5">
               {summaryStreaming && !displayedSummary && (
@@ -755,7 +755,7 @@ export default function ExploreDetailPage() {
           </div>
 
           {/* Document body */}
-          <div className="terminal-window">
+          <div className="panel">
             <TerminalTitlebar title="Document" />
             <div className="p-5">
               {doc.summary && doc.summary !== doc.body?.slice(0, 300) && (

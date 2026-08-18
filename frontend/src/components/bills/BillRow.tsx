@@ -55,7 +55,7 @@ export default function BillRow({ bill }: { bill: BillInFlight }) {
           </Link>
           {bill.mentionCount > 0 && (
             <span
-              className="shrink-0 text-xs font-mono text-signal-cyan border border-white/15 bg-signal-cyan/10 px-1.5 py-0.5 "
+              className="shrink-0 text-xs font-mono text-signal-cyan border border-white/15 bg-signal-cyan/10 px-1.5 py-0.5"
               title={`Referenced in ${bill.mentionCount} current Action Center issue${bill.mentionCount === 1 ? "" : "s"}`}
             >
               ACTIVE ×{bill.mentionCount}
@@ -75,7 +75,7 @@ export default function BillRow({ bill }: { bill: BillInFlight }) {
                 className="w-4 h-4 rounded-full object-cover border border-white/[0.07]"
               />
             )}
-            <span className={`px-1  border text-xs ${party.className}`}>{party.label}</span>
+            <span className={`px-1 border text-xs ${party.className}`}>{party.label}</span>
             <span className="text-ink">{bill.sponsorName}</span>
           </Link>
           <span className="text-ink-min">· {bill.sponsorState}</span>

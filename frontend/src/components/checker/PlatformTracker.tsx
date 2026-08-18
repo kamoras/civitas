@@ -36,7 +36,7 @@ function PartisanDepthPanel({
   const oppositeParty = senatorParty === "R" ? "D" : "R";
 
   return (
-    <div className="terminal-window p-4 mb-4">
+    <div className="panel p-4 mb-4">
       <div className="flex items-baseline justify-between mb-3">
         <h4 className="text-sm font-mono text-signal-cyan">
           {">"}{" "}
@@ -75,7 +75,7 @@ function PartisanDepthPanel({
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-2 mb-3 text-center">
-        <div className="terminal-window p-2 min-w-0">
+        <div className="panel p-2 min-w-0">
           <div
             className={`text-sm font-mono ${depth.overallParty === "R" ? "text-signal-red" : depth.overallParty === "D" ? "text-blue-400" : "text-ink-hi"}`}
           >
@@ -87,7 +87,7 @@ function PartisanDepthPanel({
             </MetricTooltip>
           </div>
         </div>
-        <div className="terminal-window p-2 min-w-0">
+        <div className="panel p-2 min-w-0">
           <div className="text-sm font-mono text-ink-hi">{depth.totalPositions}</div>
           <div className="text-xs text-ink-min">
             <MetricTooltip text="Number of policy areas where this senator has cast votes. Each area's lean is derived from how they voted on D-leaning vs R-leaning bills in that area.">
@@ -95,7 +95,7 @@ function PartisanDepthPanel({
             </MetricTooltip>
           </div>
         </div>
-        <div className="terminal-window p-2 min-w-0">
+        <div className="panel p-2 min-w-0">
           <div
             className={`text-sm font-mono ${depth.crossPartyCount > 0 ? "text-signal-cyan" : "text-ink-min"}`}
           >
@@ -196,7 +196,7 @@ export default function PlatformTracker({
     >
       {hasPartisan && <PartisanDepthPanel depth={partisanDepth} senatorParty={senatorParty} />}
       {platformSummary && (
-        <div className="terminal-window p-3">
+        <div className="panel p-3">
           <p className="text-base text-ink leading-relaxed">{platformSummary}</p>
         </div>
       )}

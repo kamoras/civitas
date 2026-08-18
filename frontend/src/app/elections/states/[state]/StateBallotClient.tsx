@@ -24,7 +24,7 @@ function HouseSection({
   const selected = houseRaces.find((r) => r.id === selectedId) || null;
 
   return (
-    <section className="terminal-window mb-6">
+    <section className="panel mb-6">
       <TerminalTitlebar title="House" />
       <div className="p-6">
         <h2 className="font-mono text-xs text-ink-lo mb-1">
@@ -101,7 +101,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   return (
     <div className="min-h-screen bg-surface-base text-ink-hi">
       <Navbar />
-      <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
+      <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-3xl mx-auto">
           <Link
             href="/elections"
@@ -110,7 +110,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
             ← ALL STATES
           </Link>
 
-          <div className="terminal-window mb-6">
+          <div className="panel mb-6">
             <TerminalTitlebar title={`${ballot.state.toLowerCase()}-ballot`} />
             <div className="p-6">
               <h1 className="font-display font-semibold text-lg sm:text-2xl text-ink-hi mb-1">
@@ -136,7 +136,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
           {/* Front and center, not one click away on a per-race page —
               a voter's first question is usually "what's being said
               about my ballot", not just "who's on it" (2026-08 review). */}
-          <section className="terminal-window mb-6">
+          <section className="panel mb-6">
             <TerminalTitlebar title="Coverage" />
             <div className="p-6">
               <h2 className="font-mono text-xs text-ink-lo mb-3">NEWS COVERAGE — {ballot.state}</h2>
@@ -146,7 +146,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
             </div>
           </section>
 
-          <section className="terminal-window mb-6 border-t-2 border-t-signal-cyan/40">
+          <section className="panel mb-6 border-t-2 border-t-signal-cyan/40">
             <div className="p-5">
               <h2 className="font-mono text-xs text-signal-cyan mb-2">
                 THIS IS NOT YOUR FULL BALLOT
@@ -161,7 +161,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
           </section>
 
           {ballot.senateRaces.length > 0 && (
-            <section className="terminal-window mb-6">
+            <section className="panel mb-6">
               <TerminalTitlebar title="Senate" />
               <div className="p-6">
                 <h2 className="font-mono text-xs text-ink-lo mb-3">U.S. SENATE</h2>

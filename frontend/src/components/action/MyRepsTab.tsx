@@ -130,9 +130,7 @@ function RepresentativeCard({ person, district }: { person: MyRepSenator; distri
   const s = person.scores;
 
   return (
-    <div
-      className={`terminal-window border ${PARTY_BORDER[person.party]} ${PARTY_BG[person.party]} p-5`}
-    >
+    <div className={`panel border ${PARTY_BORDER[person.party]} ${PARTY_BG[person.party]} p-5`}>
       <div className="flex items-start justify-between gap-3 mb-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2 mb-1">
@@ -262,7 +260,7 @@ export default function MyRepsTab({
 
   if (!userState) {
     return (
-      <div className="terminal-window max-w-md mx-auto p-8 text-center space-y-5">
+      <div className="panel max-w-md mx-auto p-8 text-center space-y-5">
         <div className="font-mono text-sm text-signal-cyan mb-2">SELECT YOUR STATE</div>
         <p className="text-ink-lo text-base leading-relaxed">
           Choose your state to see your senators, their scores, and how they connect to today&apos;s
@@ -297,7 +295,7 @@ export default function MyRepsTab({
 
   if (fetchError) {
     return (
-      <div className="terminal-window max-w-lg mx-auto p-8 text-center space-y-4" role="alert">
+      <div className="panel max-w-lg mx-auto p-8 text-center space-y-4" role="alert">
         <div className="font-mono text-sm text-signal-red">CONNECTION ERROR</div>
         <p className="text-ink-lo text-base">Could not load representative data.</p>
         <button
@@ -333,7 +331,7 @@ export default function MyRepsTab({
       </div>
 
       {repIssues.length > 0 && (
-        <div className="terminal-window border border-signal-magenta/40 bg-signal-magenta/10 p-4 space-y-3">
+        <div className="panel border border-signal-magenta/40 bg-signal-magenta/10 p-4 space-y-3">
           <div className="font-mono text-xs text-ink-lo">{">"} YOUR REPS IN THE NEWS</div>
           <div className="space-y-2">
             {repIssues.map((iss) => (
@@ -384,7 +382,7 @@ export default function MyRepsTab({
           )}
         </div>
       ) : (
-        <div className="terminal-window p-8 text-center">
+        <div className="panel p-8 text-center">
           <div className="font-mono text-sm text-signal-amber">NO REPRESENTATIVE DATA</div>
           <p className="text-ink-lo text-base mt-2">
             Senator and representative data for {stateName} is not yet available. Run the pipeline

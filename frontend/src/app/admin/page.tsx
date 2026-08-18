@@ -89,7 +89,7 @@ function formatTime(iso: string | null | undefined): string {
 function StatusDot({ ok }: { ok: boolean }) {
   return (
     <span
-      className={`inline-block w-2 h-2  ${ok ? "bg-phos" : "bg-signal-magenta"}`}
+      className={`inline-block w-2 h-2 ${ok ? "bg-phos" : "bg-signal-magenta"}`}
       aria-label={ok ? "Healthy" : "Unhealthy"}
     />
   );
@@ -118,7 +118,7 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
   return (
     <div className="min-h-screen bg-surface-base flex items-center justify-center px-4">
       <div className="w-full max-w-md">
-        <div className="terminal-window">
+        <div className="panel">
           <TerminalTitlebar title="Sign in" />
           <div className="p-6">
             <h1 className="font-mono text-sm text-ink-hi tracking-widest mb-6 text-center">
@@ -590,7 +590,7 @@ function UptimeTracker({
   }
 
   return (
-    <div className="terminal-window mb-6">
+    <div className="panel mb-6">
       <TerminalTitlebar title="Uptime">
         <span className="ml-auto text-ink-lo text-xs font-mono mr-2">
           live
@@ -725,7 +725,7 @@ function SystemMonitor({ token, initialStats }: { token: string; initialStats?: 
   const loadPct = stats.loadAvg ? Math.round((stats.loadAvg[0] / stats.cpuCount) * 100) : 0;
 
   return (
-    <div className="terminal-window mb-6">
+    <div className="panel mb-6">
       <TerminalTitlebar title="System monitor">
         <span className="ml-auto text-ink-lo text-xs font-mono mr-2">
           live
@@ -910,7 +910,7 @@ function VacancyControl({ token }: { token: string }) {
   };
 
   return (
-    <div className="terminal-window mb-6">
+    <div className="panel mb-6">
       <TerminalTitlebar title="Seat vacancies" />
       <div className="p-4 space-y-3">
         <p className="text-ink-min text-xs font-mono">
@@ -1061,7 +1061,7 @@ function PipelinePhaseTimings({ token }: { token: string }) {
   const maxTotal = Math.max(1, ...runs.map((r) => r.totalSeconds));
 
   return (
-    <div className="terminal-window mb-6">
+    <div className="panel mb-6">
       <TerminalTitlebar title="Phase timings" />
       <div className="p-4">
         <div className="flex flex-wrap gap-1.5 mb-4">
@@ -1234,7 +1234,7 @@ function VisitorStats({ token }: { token: string }) {
   const maxCount = Math.max(1, ...days.map((d) => d.uniqueVisitors));
 
   return (
-    <div className="terminal-window mb-6">
+    <div className="panel mb-6">
       <TerminalTitlebar title="Visits" />
       <div className="p-4">
         <div className="flex items-baseline justify-between mb-4">
@@ -1498,7 +1498,7 @@ function PipelineRunDetailCard({
 }) {
   if (!run) return null;
   return (
-    <div className="terminal-window mb-6">
+    <div className="panel mb-6">
       <TerminalTitlebar title={title} />
       <div className="p-4">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm font-mono">
@@ -2077,7 +2077,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
         {/* System Health */}
         <div className="grid grid-cols-1 mb-6">
           {/* System Health */}
-          <div className="terminal-window">
+          <div className="panel">
             <TerminalTitlebar title="System health" />
             <div className="p-4 space-y-2 text-sm font-mono">
               <div className="flex justify-between">
@@ -2313,20 +2313,20 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
         </div>
 
         {/* Action Center */}
-        <div className="terminal-window mb-6">
+        <div className="panel mb-6">
           <TerminalTitlebar title="Action center" />
           <ActionCenterStatus ac={pipelineStatus?.actionRefresh ?? null} />
         </div>
 
         {/* Data Stats */}
-        <div className="terminal-window mb-6">
+        <div className="panel mb-6">
           <TerminalTitlebar title="Data inventory" />
           {d && <DataInventory data={d.data} />}
         </div>
 
         {/* Vector DB & ML Metrics */}
         {d?.system.vectorDb && (
-          <div className="terminal-window mb-6">
+          <div className="panel mb-6">
             <TerminalTitlebar title="Vector index" />
             <div className="p-4 space-y-4">
               {d.system.vectorDb.status !== "ok" ? (
@@ -2626,7 +2626,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
 
         {/* Last Run Details */}
         {d?.pipeline.lastRun && (
-          <div className="terminal-window mb-6">
+          <div className="panel mb-6">
             <TerminalTitlebar title="Last run" />
             <div className="p-4">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm font-mono">
@@ -2776,7 +2776,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
 
         {/* LLM Stats */}
         {d?.llm && Object.keys(d.llm).length > 0 && (
-          <div className="terminal-window mb-6">
+          <div className="panel mb-6">
             <TerminalTitlebar title="Model stats" />
             <div className="p-4">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm font-mono">
@@ -2796,7 +2796,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
         )}
 
         {/* Pipeline History */}
-        <div className="terminal-window mb-6">
+        <div className="panel mb-6">
           <TerminalTitlebar title="Run history" />
           <div className="p-4">
             <RunHistory runs={history} />

@@ -6,6 +6,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import PageMasthead from "@/components/layout/PageMasthead";
 import { fetchActionIssues, fetchOpenComments, OpenCommentItem } from "@/lib/api";
 import { useUserState } from "@/hooks/useUserState";
 import { formatUtcDate } from "@/lib/formatting";
@@ -559,11 +560,7 @@ function IssuesTab({
 
   if (loading) {
     return (
-      <div
-        className="terminal-window max-w-md mx-auto p-6 text-center"
-        role="status"
-        aria-live="polite"
-      >
+      <div className="panel max-w-md mx-auto p-6 text-center" role="status" aria-live="polite">
         <div className="text-ink-lo font-mono text-xs tracking-widest animate-pulse">
           SCANNING NEWS FEEDS...
         </div>
@@ -573,7 +570,7 @@ function IssuesTab({
 
   if (fetchError) {
     return (
-      <div className="terminal-window max-w-lg mx-auto p-6 text-center" role="alert">
+      <div className="panel max-w-lg mx-auto p-6 text-center" role="alert">
         <div className="text-signal-red font-mono text-sm tracking-widest mb-2">
           CONNECTION ERROR
         </div>
@@ -593,11 +590,7 @@ function IssuesTab({
 
   if (!heroIssue) {
     return (
-      <div
-        className="terminal-window max-w-lg mx-auto p-6 text-center"
-        role="status"
-        aria-live="polite"
-      >
+      <div className="panel max-w-lg mx-auto p-6 text-center" role="status" aria-live="polite">
         <div className="text-signal-amber font-mono text-sm tracking-widest mb-2">
           NO ISSUES YET
         </div>
@@ -658,7 +651,7 @@ function IssuesTab({
       )}
 
       {/* State selector bar */}
-      <div className="flex items-center justify-between terminal-window p-3">
+      <div className="flex items-center justify-between panel p-3">
         <div className="flex items-center gap-2">
           <span className="text-xs font-mono tracking-widest text-ink-min">PERSONALIZE</span>
           {userState && (
@@ -745,7 +738,7 @@ function OpenCommentsBanner() {
         {items.map((item) => (
           <div
             key={item.id}
-            className="terminal-window border border-signal-amber/40 bg-signal-amber/10 p-3 min-w-[220px] max-w-[260px] flex-shrink-0 snap-start flex flex-col gap-1.5"
+            className="panel border border-signal-amber/40 bg-signal-amber/10 p-3 min-w-[220px] max-w-[260px] flex-shrink-0 snap-start flex flex-col gap-1.5"
           >
             <p className="text-xs text-ink leading-snug line-clamp-3 flex-1">{item.title}</p>
             {item.agencyName && (
@@ -870,20 +863,16 @@ function ActionPageInner() {
   return (
     <>
       <Navbar />
-      <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
+      <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-4xl mx-auto relative z-10">
-          <header className="mb-6 border-b-3 border-phos pb-5">
-            <p className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
-              Action Center · what is moving right now
-            </p>
-            <h1 className="mt-3 font-display text-3xl font-extrabold uppercase leading-none tracking-[-0.02em] text-ink-hi sm:text-4xl">
-              Today on the record
-            </h1>
-            <p className="mt-3 max-w-2xl font-display text-base leading-relaxed text-ink-lo">
-              Issues surfaced from news and social coverage, the monitors tracking them, and the
-              members of Congress who can act. Every item links back to its source.
-            </p>
-          </header>
+          <PageMasthead
+            className="mb-6"
+            eyebrow="Action Center · what is moving right now"
+            title="Today on the record"
+          >
+            Issues surfaced from news and social coverage, the monitors tracking them, and the
+            members of Congress who can act. Every item links back to its source.
+          </PageMasthead>
 
           {/* Open comment periods banner */}
           <OpenCommentsBanner />

@@ -126,10 +126,7 @@ export default function SenatorCard({
   const hasLobbyingMatches = senator.lobbyingMatches && senator.lobbyingMatches.length > 0;
 
   return (
-    <div
-      id={`senator-${senator.id}`}
-      className={`terminal-window border-t-2 ${PARTY_BORDER[senator.party]}`}
-    >
+    <div id={`senator-${senator.id}`} className={`panel border-t-2 ${PARTY_BORDER[senator.party]}`}>
       <TerminalTitlebar title={senator.id} />
 
       <div className="p-4 sm:p-6 space-y-6">
@@ -140,7 +137,7 @@ export default function SenatorCard({
             <img
               src={thumbnailUrl}
               alt={senator.name}
-              className={`w-16 h-16  object-cover border-2 ${PARTY_BORDER[senator.party]} shrink-0`}
+              className={`w-16 h-16 object-cover border-2 ${PARTY_BORDER[senator.party]} shrink-0`}
             />
           ) : (
             <div

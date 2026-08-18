@@ -102,7 +102,7 @@ function SenatorSelector({
       : houseStates.map((s) => ({ code: s.code, name: s.name }));
 
   return (
-    <div className="terminal-window p-4 space-y-3">
+    <div className="panel p-4 space-y-3">
       <div className="font-mono text-xs text-ink-lo tracking-widest">
         {label} — SELECT LEGISLATOR
       </div>
@@ -235,7 +235,7 @@ function ComparisonTable({
   const rightScorecardUrl = `/politicians/${right.id}`;
 
   return (
-    <div className="terminal-window overflow-hidden">
+    <div className="panel overflow-hidden">
       {/* Header */}
       <div className="grid grid-cols-3 border-b border-white/[0.07] bg-white/[0.03]">
         <div className="p-3 text-center">
@@ -484,9 +484,9 @@ function ComparePageInner() {
     return (
       <>
         <Navbar />
-        <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
+        <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
           <div className="max-w-5xl mx-auto">
-            <div className="terminal-window p-8 text-center">
+            <div className="panel p-8 text-center">
               <div className="font-mono text-xs text-ink-min tracking-widest animate-pulse">
                 LOADING...
               </div>
@@ -501,7 +501,7 @@ function ComparePageInner() {
   return (
     <>
       <Navbar />
-      <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
+      <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-5xl mx-auto">
           <div className="mb-8 border-b-3 border-phos pb-5">
             <h1 className="font-display font-semibold text-xl sm:text-3xl text-ink-hi tracking-widest mb-2">
@@ -536,7 +536,7 @@ function ComparePageInner() {
               rightChamber={rightChamber}
             />
           ) : (
-            <div className="terminal-window p-8 text-center space-y-4">
+            <div className="panel p-8 text-center space-y-4">
               <div className="font-mono text-sm text-ink-min">
                 {!leftSenator && !rightSenator
                   ? "SELECT TWO LEGISLATORS ABOVE TO COMPARE"

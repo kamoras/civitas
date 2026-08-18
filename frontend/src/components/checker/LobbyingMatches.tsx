@@ -19,7 +19,7 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
       </div>
       <div className="space-y-4">
         {matches.map((match, i) => (
-          <div key={i} className="terminal-window p-4 border-l-2 border-l-signal-cyan/40">
+          <div key={i} className="panel p-4 border-l-2 border-l-signal-cyan/40">
             <div className="flex items-center gap-2 mb-2 flex-wrap">
               <span className="text-signal-cyan text-sm font-bold">{match.lobbyistOrg}</span>
               <span className="text-xs px-1.5 py-0.5 border border-white/[0.07] text-ink-min">

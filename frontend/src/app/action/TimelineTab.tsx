@@ -70,7 +70,7 @@ function EventCard({ event }: { event: UpcomingEvent }) {
   const days = daysUntil(event.date);
   const style = EVENT_STYLES[event.category] ?? EVENT_STYLES.congress;
   return (
-    <div className={`terminal-window border-l-4 ${style.border} p-4 sm:p-5`}>
+    <div className={`panel border-l-4 ${style.border} p-4 sm:p-5`}>
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -177,7 +177,7 @@ function WeekCard({ week }: { week: TimelineWeek }) {
   const label = week.isCurrent ? "CURRENT WEEK" : formatWeekRange(week.startDate, week.endDate);
 
   return (
-    <div className="border border-white/[0.07] ">
+    <div className="border border-white/[0.07]">
       <button
         onClick={() => setExpanded((v) => !v)}
         className="w-full text-left px-3 py-2.5 flex items-center justify-between hover:bg-white/[0.01] transition-colors"
@@ -236,7 +236,7 @@ function MonthCard({
   const monthEvents = eventsByMonth[month.month] ?? [];
 
   return (
-    <div className="terminal-window">
+    <div className="panel">
       <button
         onClick={() => setExpanded((v) => !v)}
         className="w-full text-left p-4 sm:p-5 flex items-center justify-between"
@@ -284,7 +284,7 @@ function MonthCard({
                     className={`block border-l-2 ${style.border} pl-3 py-2 hover:bg-white/[0.02] transition-colors`}
                   >
                     <div className="flex items-center gap-2 mb-0.5">
-                      <span className={`w-2 h-2  ${style.dot}`} aria-hidden="true" />
+                      <span className={`w-2 h-2 ${style.dot}`} aria-hidden="true" />
                       <span className="text-xs text-ink-min font-mono">{ev.date}</span>
                       <span className={`text-xs font-mono px-1.5 py-0.5 border ${style.badge}`}>
                         {style.badgeText}
@@ -364,7 +364,7 @@ export default function TimelineTab() {
 
   if (fetchError) {
     return (
-      <div className="terminal-window max-w-lg mx-auto p-8 text-center space-y-4" role="alert">
+      <div className="panel max-w-lg mx-auto p-8 text-center space-y-4" role="alert">
         <div className="font-mono text-sm text-signal-red">CONNECTION ERROR</div>
         <p className="text-ink-lo text-base">Could not load timeline data.</p>
       </div>
@@ -376,7 +376,7 @@ export default function TimelineTab() {
     (data.totalDays === 0 && (!data.upcomingEvents || data.upcomingEvents.length === 0))
   ) {
     return (
-      <div className="terminal-window max-w-lg mx-auto p-8 text-center space-y-4">
+      <div className="panel max-w-lg mx-auto p-8 text-center space-y-4">
         <div className="font-mono text-sm text-ind-purple">NO TIMELINE DATA YET</div>
         <p className="text-ink-lo text-base">
           The timeline builds automatically as issues are tracked each day. Check back as the year
@@ -401,7 +401,7 @@ export default function TimelineTab() {
   return (
     <div className="space-y-6">
       {/* Year header */}
-      <div className="terminal-window border-t-2 border-t-purple-400/50 p-5 sm:p-6 text-center">
+      <div className="panel border-t-2 border-t-purple-400/50 p-5 sm:p-6 text-center">
         <h2 className="font-display font-semibold text-xl sm:text-2xl text-ind-purple mb-2">
           {isYearComplete ? `${data.year} YEAR IN REVIEW` : `${data.year} — IN PROGRESS`}
         </h2>
@@ -429,7 +429,7 @@ export default function TimelineTab() {
 
       {/* Year summary (if complete year) */}
       {data.yearSummary && (
-        <div className="terminal-window border-l-4 border-l-purple-400/50 p-5">
+        <div className="panel border-l-4 border-l-purple-400/50 p-5">
           <div className="text-xs font-mono tracking-widest text-ind-purple mb-2">
             YEAR IN REVIEW — {data.year}
           </div>
@@ -489,7 +489,7 @@ export default function TimelineTab() {
           {futureMonthsFromEvents.map((monthNum) => {
             const monthEvents = eventsByMonth[monthNum];
             return (
-              <div key={monthNum} className="terminal-window">
+              <div key={monthNum} className="panel">
                 <details>
                   <summary className="w-full text-left p-4 sm:p-5 flex items-center justify-between cursor-pointer list-none">
                     <div className="flex items-center gap-3">
@@ -512,7 +512,7 @@ export default function TimelineTab() {
                           className={`block border-l-2 ${style.border} pl-3 py-2 hover:bg-white/[0.02] transition-colors`}
                         >
                           <div className="flex items-center gap-2 mb-0.5">
-                            <span className={`w-2 h-2  ${style.dot}`} aria-hidden="true" />
+                            <span className={`w-2 h-2 ${style.dot}`} aria-hidden="true" />
                             <span className="text-xs text-ink-min font-mono">{ev.date}</span>
                             <span
                               className={`text-xs font-mono px-1.5 py-0.5 border ${style.badge}`}
@@ -535,7 +535,7 @@ export default function TimelineTab() {
 
       {/* Monitors */}
       {data.monitors.length > 0 && (
-        <div className="terminal-window p-4 sm:p-5">
+        <div className="panel p-4 sm:p-5">
           <h3 className="font-mono text-sm text-signal-amber mb-3">
             {">"} ONGOING MONITORS ({data.year})
           </h3>
@@ -544,7 +544,7 @@ export default function TimelineTab() {
               <Link
                 key={m.slug}
                 href={ACTION_CENTER_MONITORS_HREF}
-                className="flex items-center justify-between text-sm hover:bg-white/[0.02] transition-colors px-2 py-1.5 -mx-2 "
+                className="flex items-center justify-between text-sm hover:bg-white/[0.02] transition-colors px-2 py-1.5 -mx-2"
               >
                 <span className="text-ink">{m.title}</span>
                 <div className="flex items-center gap-2 shrink-0">
@@ -552,7 +552,7 @@ export default function TimelineTab() {
                     {m.updateCount} update{m.updateCount !== 1 ? "s" : ""}
                   </span>
                   <span
-                    className={`w-2 h-2  ${m.status === "active" ? "bg-green-400" : "bg-signal-amber/10"}`}
+                    className={`w-2 h-2 ${m.status === "active" ? "bg-green-400" : "bg-signal-amber/10"}`}
                     aria-hidden="true"
                   />
                 </div>

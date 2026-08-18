@@ -57,7 +57,7 @@ function SenatorRow({ senator }: { senator: ElectionSenator }) {
 function StatePanel({ stateData, onClose }: { stateData: ElectionState; onClose: () => void }) {
   return (
     <div
-      className="terminal-window border-t-2 border-t-signal-cyan p-5"
+      className="panel border-t-2 border-t-signal-cyan p-5"
       role="region"
       aria-label={`${stateData.state} election details`}
     >
@@ -167,7 +167,7 @@ export default function ElectionsTab() {
 
   if (loading) {
     return (
-      <div className="terminal-window max-w-md mx-auto p-6 text-center">
+      <div className="panel max-w-md mx-auto p-6 text-center">
         <div className="text-signal-cyan animate-pulse text-lg">{">"} LOADING ELECTION DATA...</div>
       </div>
     );
@@ -175,7 +175,7 @@ export default function ElectionsTab() {
 
   if (!data) {
     return (
-      <div className="terminal-window max-w-md mx-auto p-6 text-center">
+      <div className="panel max-w-md mx-auto p-6 text-center">
         <div className="text-ink-lo">Election data unavailable.</div>
       </div>
     );
@@ -187,7 +187,7 @@ export default function ElectionsTab() {
   return (
     <div className="space-y-6">
       {/* Countdown header */}
-      <div className="terminal-window border-t-2 border-t-signal-amber p-6 text-center">
+      <div className="panel border-t-2 border-t-signal-amber p-6 text-center">
         {el.isElectionDay ? (
           <div>
             <div className="font-display font-semibold text-2xl sm:text-4xl text-signal-amber animate-pulse mb-3">
@@ -236,7 +236,7 @@ export default function ElectionsTab() {
       </div>
 
       {/* Interactive US map */}
-      <div className="terminal-window p-4">
+      <div className="panel p-4">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h3 className="font-mono text-xs text-ink-lo">{">"} SELECT A STATE</h3>
           <div className="flex items-center gap-3 flex-wrap">
@@ -271,7 +271,7 @@ export default function ElectionsTab() {
         />
       </div>
 
-      <details className="terminal-window p-4 mt-4">
+      <details className="panel p-4 mt-4">
         <summary className="font-mono text-xs text-ink-lo hover:text-phos cursor-pointer">
           List all states (keyboard accessible)
         </summary>
@@ -298,7 +298,7 @@ export default function ElectionsTab() {
       )}
 
       {!selectedData && (
-        <div className="terminal-window p-4 text-center">
+        <div className="panel p-4 text-center">
           <p className="text-ink-min text-base">
             Click a state on the map to see its races and representatives.
           </p>

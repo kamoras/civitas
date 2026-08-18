@@ -12,7 +12,7 @@ import { parseUtc } from "@/lib/formatting";
 /**
  * The dense, dated index of what has recently entered the record.
  *
- * Replaces ActionPreview's single hero card on the homepage. The point of the
+ * Replaces the single hero card the homepage used to show. The point of the
  * change is the docket reference on every row: an entry you can quote at
  * someone is worth more to a research site than a headline, and it is a
  * filing-cabinet habit rather than a product feed.

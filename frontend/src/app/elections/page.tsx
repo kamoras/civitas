@@ -4,17 +4,18 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import PageMasthead from "@/components/layout/PageMasthead";
 import BackToTop from "@/components/BackToTop";
 import Link from "next/link";
 import RaceMap, { FIPS_TO_STATE } from "@/components/elections/RaceMap";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
-import { formatPvi } from "@/lib/elections";
+import { formatPvi, pviTextColor } from "@/lib/elections";
 import { fetchPviMap } from "@/lib/api";
 import type { PviMap } from "@/types/election";
 
 /*
   Second page onto the records palette, after the homepage. Same recipe:
-  drop the MatrixRain canvas and the glitch heading, set headings in the
+  drop the canvas animation and the glitch heading, set headings in the
   display face, move figures to mono, carry hierarchy on the three rule
   weights, and state the provenance instead of burying it at 9px.
 
@@ -40,13 +41,6 @@ function pviHoverColor(pvi: number | null): string {
   if (pvi == null) return "rgba(0, 255, 65, 0.30)";
   if (pvi === 0) return "rgba(255, 255, 255, 0.42)";
   return pvi > 0 ? "rgba(255, 92, 92, 0.55)" : "rgba(102, 153, 255, 0.55)";
-}
-
-/** Solid palette hex, so a lean figure never renders below the contrast floor. */
-function pviTextColor(pvi: number | null): string {
-  if (pvi == null) return "text-ink-min";
-  if (pvi === 0) return "text-ink";
-  return pvi > 0 ? "text-signal-red" : "text-dem-blue";
 }
 
 // DC has no voting House/Senate race (STATES_WITH_FEDERAL_RACES on the
@@ -95,21 +89,20 @@ export default function ElectionsPage() {
   return (
     <div className="min-h-screen bg-surface-base text-ink">
       <Navbar />
-      <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4 sm:px-6">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="pt-[var(--header-clearance)] pb-16 px-4 sm:px-6"
+      >
         <div className="mx-auto max-w-7xl">
           {/* ── Masthead ── */}
-          <header className="border-b-3 border-phos pb-5">
-            <p className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
-              Elections · partisan lean by state
-            </p>
-            <h1 className="mt-3 font-display text-3xl font-extrabold uppercase leading-none tracking-[-0.02em] text-ink-hi sm:text-4xl">
-              {pvi?.cycleYear ? `${pvi.cycleYear} midterm ballot` : "Midterm ballot"}
-            </h1>
-            <p className="mt-3 max-w-2xl font-display text-base leading-relaxed text-ink-lo">
-              Pick a state for its candidates, their filings and the coverage we have ingested.
-              Shading is partisan lean, not a forecast.
-            </p>
-          </header>
+          <PageMasthead
+            eyebrow="Elections · partisan lean by state"
+            title={pvi?.cycleYear ? `${pvi.cycleYear} midterm ballot` : "Midterm ballot"}
+          >
+            Pick a state for its candidates, their filings and the coverage we have ingested.
+            Shading is partisan lean, not a forecast.
+          </PageMasthead>
 
           {error && (
             <div

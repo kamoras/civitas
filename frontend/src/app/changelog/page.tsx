@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="terminal-window mb-6">
+    <section className="panel mb-6">
       <TerminalTitlebar title={title.toLowerCase().replace(/ /g, "_")} />
       <div className="p-6 space-y-4">
         <h2 className="text-signal-cyan font-mono text-sm tracking-widest">{title}</h2>
@@ -30,7 +30,7 @@ export default function ChangelogPage() {
   return (
     <>
       <Navbar />
-      <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
+      <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-3xl mx-auto">
           <div className="mb-10 border-b-3 border-phos pb-5">
             <h1 className="font-display font-semibold text-xl sm:text-3xl text-ink-hi tracking-widest mb-2">

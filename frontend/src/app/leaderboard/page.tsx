@@ -232,7 +232,7 @@ function CurrentPresidentSpotlight({
 }) {
   if (loading) {
     return (
-      <div className="terminal-window p-6 text-center mb-6" role="status" aria-live="polite">
+      <div className="panel p-6 text-center mb-6" role="status" aria-live="polite">
         <p className="text-ink-lo font-mono text-xs tracking-widest animate-pulse">
           LOADING CURRENT PRESIDENT...
         </p>
@@ -270,7 +270,7 @@ function PresidentLeaderboard({
   const router = useRouter();
   if (loading) {
     return (
-      <div className="terminal-window p-8 text-center" role="status" aria-live="polite">
+      <div className="panel p-8 text-center" role="status" aria-live="polite">
         <p className="text-ink-lo font-mono text-xs tracking-widest animate-pulse">
           LOADING PRESIDENTIAL DATA...
         </p>
@@ -279,7 +279,7 @@ function PresidentLeaderboard({
   }
   if (error) {
     return (
-      <div className="terminal-window p-8 text-center border-signal-red/40" role="alert">
+      <div className="panel p-8 text-center border-signal-red/40" role="alert">
         <p className="text-signal-red">
           {">"} ERROR: {error}
         </p>
@@ -289,7 +289,7 @@ function PresidentLeaderboard({
 
   return (
     <>
-      <div className="terminal-window overflow-hidden">
+      <div className="panel overflow-hidden">
         <TerminalTitlebar title={`${entries.length} presidents`} />
 
         {/* Desktop table */}
@@ -355,7 +355,7 @@ function PresidentLeaderboard({
                     </td>
                     <td className="px-3 py-3 text-center">
                       <span
-                        className={`text-xs px-2 py-0.5 border  ${presParty(entry.party).bg} ${presParty(entry.party).color}`}
+                        className={`text-xs px-2 py-0.5 border ${presParty(entry.party).bg} ${presParty(entry.party).color}`}
                       >
                         {presParty(entry.party).label}
                       </span>
@@ -463,7 +463,7 @@ function JusticeLeaderboard({
   const router = useRouter();
   if (loading) {
     return (
-      <div className="terminal-window p-8 text-center" role="status" aria-live="polite">
+      <div className="panel p-8 text-center" role="status" aria-live="polite">
         <p className="text-ink-lo font-mono text-xs tracking-widest animate-pulse">
           LOADING SCOTUS DATA...
         </p>
@@ -472,7 +472,7 @@ function JusticeLeaderboard({
   }
   if (error) {
     return (
-      <div className="terminal-window p-8 text-center border-signal-red/40" role="alert">
+      <div className="panel p-8 text-center border-signal-red/40" role="alert">
         <p className="text-signal-red">
           {">"} ERROR: {error}
         </p>
@@ -482,7 +482,7 @@ function JusticeLeaderboard({
 
   return (
     <>
-      <div className="terminal-window overflow-hidden">
+      <div className="panel overflow-hidden">
         <TerminalTitlebar title={`${entries.length} justices`} />
 
         {/* Desktop table */}
@@ -550,7 +550,7 @@ function JusticeLeaderboard({
                       </div>
                     </td>
                     <td className="px-3 py-3 text-center">
-                      <span className={`text-xs px-2 py-0.5 border  ${pp.bg} ${pp.color}`}>
+                      <span className={`text-xs px-2 py-0.5 border ${pp.bg} ${pp.color}`}>
                         {pp.label}
                       </span>
                     </td>
@@ -806,7 +806,7 @@ function LeaderboardContent() {
       <main
         id="main-content"
         tabIndex={-1}
-        className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-16"
+        className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 pt-[var(--header-clearance)] pb-16"
       >
         {/* Header */}
         <div className="mb-8 text-center">
@@ -944,14 +944,14 @@ function LeaderboardContent() {
 
               {/* Loading / Error */}
               {activeLoading && (
-                <div className="terminal-window p-8 text-center" role="status" aria-live="polite">
+                <div className="panel p-8 text-center" role="status" aria-live="polite">
                   <p className="text-ink-lo font-mono text-xs tracking-widest animate-pulse">
                     LOADING {branch === "house" ? "REPRESENTATIVE" : "SENATOR"} DATA...
                   </p>
                 </div>
               )}
               {activeError && (
-                <div className="terminal-window p-8 text-center border-signal-red/40" role="alert">
+                <div className="panel p-8 text-center border-signal-red/40" role="alert">
                   <p className="text-signal-red">
                     {">"} ERROR: {activeError}
                   </p>
@@ -960,7 +960,7 @@ function LeaderboardContent() {
 
               {/* Table */}
               {!activeLoading && !activeError && (
-                <div className="terminal-window overflow-hidden">
+                <div className="panel overflow-hidden">
                   <TerminalTitlebar
                     title={
                       branch === "house"
@@ -1041,7 +1041,7 @@ function LeaderboardContent() {
                               </td>
                               <td className="px-3 py-3 text-center">
                                 <span
-                                  className={`text-xs px-2 py-0.5 border  ${(PARTY_BADGE[entry.party] ?? PARTY_BADGE.I).className}`}
+                                  className={`text-xs px-2 py-0.5 border ${(PARTY_BADGE[entry.party] ?? PARTY_BADGE.I).className}`}
                                 >
                                   {branch === "house" && entry.district != null
                                     ? `${entry.state}-${entry.district}`

@@ -85,7 +85,7 @@ export function JusticeCard({ justice }: { justice: Justice }) {
   const agreementEntries = Object.entries(justice.agreementMatrix).sort(([, a], [, b]) => b - a);
 
   return (
-    <div className="terminal-window">
+    <div className="panel">
       <TerminalTitlebar title={`Justice ${justice.lastName}`} />
 
       <div className="p-6 space-y-6">
@@ -97,14 +97,14 @@ export function JusticeCard({ justice }: { justice: Justice }) {
               <img
                 src={justice.thumbnailUrl}
                 alt={justice.name}
-                className={`w-14 h-14  object-cover border-2 ${pb.border} shrink-0`}
+                className={`w-14 h-14 object-cover border-2 ${pb.border} shrink-0`}
               />
             ) : null}
             <div>
               <h2 className="text-2xl font-mono text-ink-hi">{justice.name}</h2>
               <div className="flex items-center gap-3 mt-1 flex-wrap">
                 <span className="text-xs text-ink-lo">{justice.roleTitle}</span>
-                <span className={`text-xs px-2 py-0.5 border  ${pb.bg} ${pb.border} ${pb.color}`}>
+                <span className={`text-xs px-2 py-0.5 border ${pb.bg} ${pb.border} ${pb.color}`}>
                   {pb.label}
                 </span>
                 {justice.appointingPresident && (
@@ -303,7 +303,7 @@ export default function JusticeClient() {
 
   if (loading) {
     return (
-      <div className="terminal-window max-w-md mx-auto p-6 text-center">
+      <div className="panel max-w-md mx-auto p-6 text-center">
         <div className="text-signal-cyan animate-pulse text-lg">{">"} LOADING SCOTUS DATA...</div>
       </div>
     );
@@ -311,7 +311,7 @@ export default function JusticeClient() {
 
   if (error) {
     return (
-      <div className="terminal-window max-w-md mx-auto p-6 text-center">
+      <div className="panel max-w-md mx-auto p-6 text-center">
         <div className="text-signal-red text-lg">{">"} ERROR</div>
         <div className="text-ink-min text-sm mt-2">{error}</div>
       </div>
@@ -320,7 +320,7 @@ export default function JusticeClient() {
 
   if (entries.length === 0) {
     return (
-      <div className="terminal-window max-w-md mx-auto p-6 text-center">
+      <div className="panel max-w-md mx-auto p-6 text-center">
         <div className="text-ink-min text-sm">
           {">"} No justice data available yet. Run the justice pipeline to populate.
         </div>
@@ -333,7 +333,7 @@ export default function JusticeClient() {
       <JusticeSelector entries={entries} selectedId={selectedId} onSelect={setSelectedId} />
 
       {detailLoading && (
-        <div className="terminal-window max-w-md mx-auto p-6 text-center">
+        <div className="panel max-w-md mx-auto p-6 text-center">
           <div className="text-signal-cyan animate-pulse">{">"} LOADING PROFILE...</div>
         </div>
       )}

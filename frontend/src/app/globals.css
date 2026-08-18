@@ -2,8 +2,39 @@
 @config "../../tailwind.config.ts";
 
 :root {
-  --background: #0d0208;
-  --foreground: #00ff41;
+  /* Mirrors the palette in tailwind.config.ts for the handful of places that
+     cannot reach a utility class — pseudo-elements, ::selection, the
+     scrollbar. Keep the two in step; the config is the source of truth and
+     carries the measured contrast ratios. */
+  --surface-base: #0d0208;
+  --surface: #140a0f;
+  --ink-hi: #eaf3ec;
+  --ink: #b4c2b7;
+  --ink-min: #7c8b7f;
+  --phos: #00ff41;
+  --signal-cyan: #4de3e8;
+  --signal-magenta: #ff6bd6;
+  --hairline: rgba(255, 255, 255, 0.09);
+
+  --background: var(--surface-base);
+
+  /* Body default. Was --phos, which meant any element that never named a
+     colour rendered in full-strength phosphor — fine when green WAS the text
+     colour, wrong now that green is reserved for data and wayfinding. An
+     unstyled paragraph should read as prose. */
+  --foreground: var(--ink);
+
+  /* Clearance for the fixed header (RecordsBand + Navbar), which every page
+     reserves at the top of its <main>.
+
+     This was the literal `pt-24` repeated across 19 pages, coupled to the
+     header's height by nothing but coincidence — and that is precisely how a
+     114px header shipped against a 96px reservation, clipping content between
+     640 and 740px. Measured worst case is now 82px across 320-1280px and
+     every run-state label; the remainder is deliberate breathing room.
+
+     Change the header's height, change this, and every page follows. */
+  --header-clearance: 6rem;
 }
 
 /* ===== BASE STYLES ===== */
@@ -19,21 +50,19 @@ body {
    still. WCAG 2.2 SC 1.4.12 requires content to survive a reader forcing 1.5;
    Baymard's reading research finds comprehension degrading below about 1.4.
 
-   Scoped to prose elements rather than set on `body` deliberately. Tailwind's
-   named size utilities carry their own line-height, so a body-level rule lands
-   almost entirely on the ~496 arbitrary `text-[Npx]` badges instead of on the
-   text it was meant for — measured, that made every small badge 33% taller
-   for no reading benefit. `p`/`li` is where continuous reading actually
-   happens. Elements that set their own leading (`leading-relaxed` and
-   friends, ~64 call sites) still win on specificity. */
+   Scoped to prose elements rather than set on `body` deliberately: Tailwind's
+   named size utilities carry their own line-height, so a body-level rule would
+   fight every label and badge on the site for no reading benefit. `p`/`li` is
+   where continuous reading actually happens, and anything setting its own
+   `leading-*` still wins on specificity. */
 p,
 li {
   line-height: 1.6;
 }
 
 ::selection {
-  background: #00ff41;
-  color: #000;
+  background: var(--phos);
+  color: var(--surface-base);
 }
 
 /* ===== CUSTOM SCROLLBAR ===== */
@@ -42,16 +71,16 @@ li {
 }
 
 ::-webkit-scrollbar-track {
-  background: #0d0208;
+  background: var(--surface-base);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #00ff41;
+  background: var(--phos);
   border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #00ffff;
+  background: var(--signal-cyan);
 }
 
 /* ===== CRT SCANLINES ===== */
@@ -87,13 +116,13 @@ li {
 }
 
 .glitch::before {
-  color: #ff00ff;
+  color: var(--signal-magenta);
   z-index: -1;
   animation: glitch-clip-1 2s infinite linear alternate-reverse;
 }
 
 .glitch::after {
-  color: #00ffff;
+  color: var(--signal-cyan);
   z-index: -2;
   animation: glitch-clip-2 2s infinite linear alternate-reverse;
 }
@@ -200,85 +229,13 @@ li {
    Depth is carried by a single hairline and the surface step, not by shadow —
    a drop shadow on a flat dark ground reads as a widget, and the register is
    built out of ruled paper. Corners stay square, as they already were. */
-.terminal-window {
-  background: #140a0f;
-  border: 1px solid rgba(255, 255, 255, 0.09);
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
   border-radius: 0;
   overflow: hidden;
   word-wrap: break-word;
   overflow-wrap: break-word;
-}
-
-/* ===== BUTTONS ===== */
-.btn-retro {
-  background: transparent;
-  color: #00ff41;
-  border: 1px solid rgba(0, 255, 65, 0.5);
-  padding: 10px 28px;
-  font-family: var(--font-share-tech), monospace;
-  font-size: 0.8rem;
-  cursor: pointer;
-  text-transform: uppercase;
-  letter-spacing: 0.15em;
-  transition: all 0.2s ease;
-  text-decoration: none;
-  display: inline-block;
-}
-
-.btn-retro:hover {
-  background: rgba(0, 255, 65, 0.08);
-  border-color: #00ff41;
-  color: #00ff41;
-  box-shadow: 0 0 16px rgba(0, 255, 65, 0.2);
-}
-
-.btn-retro:active {
-  transform: translateY(1px);
-}
-
-.btn-retro-pink {
-  border-color: rgba(255, 0, 255, 0.5);
-  color: #ff00ff;
-}
-
-.btn-retro-pink:hover {
-  background: rgba(255, 0, 255, 0.08);
-  border-color: #ff00ff;
-  box-shadow: 0 0 16px rgba(255, 0, 255, 0.2);
-}
-
-/* ===== NEON GLOW EFFECTS ===== */
-.neon-green {
-  text-shadow:
-    0 0 8px rgba(0, 255, 65, 0.6),
-    0 0 20px rgba(0, 255, 65, 0.2);
-}
-
-.neon-cyan {
-  text-shadow:
-    0 0 8px rgba(0, 255, 255, 0.6),
-    0 0 20px rgba(0, 255, 255, 0.2);
-}
-
-.neon-pink {
-  text-shadow:
-    0 0 8px rgba(255, 0, 255, 0.6),
-    0 0 20px rgba(255, 0, 255, 0.2);
-}
-
-.neon-yellow {
-  text-shadow: 0 0 8px rgba(255, 255, 0, 0.5);
-}
-
-/* ===== ASCII DIVIDER ===== */
-.ascii-divider {
-  text-align: center;
-  color: #555;
-  font-family: var(--font-vt323), monospace;
-  font-size: 0.75rem;
-  overflow: hidden;
-  white-space: nowrap;
-  letter-spacing: 2px;
 }
 
 /* ===== REDUCED MOTION ===== */
@@ -337,7 +294,7 @@ p + p {
 
 /* ===== FOCUS VISIBLE ===== */
 *:focus-visible {
-  outline: 2px solid #00ffff;
+  outline: 2px solid var(--signal-cyan);
   outline-offset: 2px;
 }
 
@@ -345,9 +302,9 @@ button:focus-visible,
 a:focus-visible,
 select:focus-visible,
 input:focus-visible {
-  outline: 2px solid #00ffff;
+  outline: 2px solid var(--signal-cyan);
   outline-offset: 2px;
-  box-shadow: 0 0 8px rgba(0, 255, 255, 0.4);
+  box-shadow: 0 0 8px rgba(77, 227, 232, 0.4);
 }
 
 /* ===== EXTERNAL LINK A11Y =====
@@ -414,12 +371,12 @@ a[target="_blank"] {
 }
 
 .overprint::before {
-  color: #ff6bd6;
+  color: var(--signal-magenta);
   transform: translate(-3px, 1px);
 }
 
 .overprint::after {
-  color: #4de3e8;
+  color: var(--signal-cyan);
   transform: translate(3px, -1px);
 }
 
@@ -440,11 +397,11 @@ a[target="_blank"] {
    ~3deg starts to read as a sticker. */
 .stamp {
   display: inline-block;
-  border: 2px solid #ff6bd6;
+  border: 2px solid var(--signal-magenta);
   box-shadow:
-    0 0 0 1px #0d0208,
+    0 0 0 1px var(--surface-base),
     0 0 0 3px rgba(255, 107, 214, 0.35);
-  color: #ff6bd6;
+  color: var(--signal-magenta);
   font-family: var(--font-share-tech), ui-monospace, monospace;
   text-transform: uppercase;
   letter-spacing: 0.14em;

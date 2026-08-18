@@ -88,7 +88,7 @@ export function PresidentCard({ president }: { president: President }) {
   const termEnd = president.termEnd ? president.termEnd.slice(0, 4) : "Present";
 
   return (
-    <div className="terminal-window">
+    <div className="panel">
       <TerminalTitlebar title={`President no. ${president.number}`} />
 
       <div className="p-6 space-y-6">
@@ -100,7 +100,7 @@ export function PresidentCard({ president }: { president: President }) {
               <span className="ml-2 text-ink-min text-sm">#{president.number}</span>
             </h2>
             <div className="flex items-center gap-3 mt-1">
-              <span className={`text-xs px-2 py-0.5 border  ${pm.bg} ${pm.border} ${pm.color}`}>
+              <span className={`text-xs px-2 py-0.5 border ${pm.bg} ${pm.border} ${pm.color}`}>
                 {pm.label}
               </span>
               <span className="text-ink-min text-xs">
@@ -378,7 +378,7 @@ export default function PresidentClient() {
 
   if (loading) {
     return (
-      <div className="terminal-window max-w-md mx-auto p-6 text-center">
+      <div className="panel max-w-md mx-auto p-6 text-center">
         <div className="text-signal-cyan animate-pulse text-lg">
           {">"} LOADING PRESIDENTIAL DATA...
         </div>
@@ -388,7 +388,7 @@ export default function PresidentClient() {
 
   if (error) {
     return (
-      <div className="terminal-window max-w-md mx-auto p-6 text-center">
+      <div className="panel max-w-md mx-auto p-6 text-center">
         <div className="text-signal-red text-lg">{">"} ERROR</div>
         <div className="text-ink-min text-sm mt-2">{error}</div>
       </div>
@@ -400,7 +400,7 @@ export default function PresidentClient() {
       <PresidentSelector entries={chronological} selectedId={selectedId} onSelect={setSelectedId} />
 
       {detailLoading && (
-        <div className="terminal-window max-w-md mx-auto p-6 text-center">
+        <div className="panel max-w-md mx-auto p-6 text-center">
           <div className="text-signal-cyan animate-pulse">{">"} LOADING PROFILE...</div>
         </div>
       )}

@@ -71,7 +71,7 @@ function TimelinessBadge({ late, daysToDisclose }: { late: boolean; daysToDisclo
 
 function TradeRow({ trade }: { trade: StockTrade }) {
   return (
-    <div className="terminal-window p-3">
+    <div className="panel p-3">
       <div className="flex items-center gap-2 flex-wrap mb-1">
         <TransactionBadge type={trade.transactionType} />
         <span className="text-ink text-sm">
@@ -199,7 +199,7 @@ export default function StockTrades({ politicianId, filer = "senate" }: StockTra
 
   if (loading && !data) {
     return (
-      <div className="terminal-window p-4 text-center" role="status" aria-live="polite">
+      <div className="panel p-4 text-center" role="status" aria-live="polite">
         <span className="text-ink-lo text-sm animate-pulse">Loading stock trades...</span>
       </div>
     );
@@ -207,7 +207,7 @@ export default function StockTrades({ politicianId, filer = "senate" }: StockTra
 
   if (error) {
     return (
-      <div className="terminal-window p-4 text-center" role="alert">
+      <div className="panel p-4 text-center" role="alert">
         <span className="text-signal-red text-sm">{error}</span>
       </div>
     );

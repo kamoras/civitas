@@ -8,11 +8,11 @@ import { useRouter } from "next/navigation";
  * The homepage masthead: overprint wordmark, the statement of what this is,
  * the governance stamp, and the record request slip.
  *
- * Replaces HeroSection, which was a full-viewport centred hero over a canvas
- * animation. That is marketing-page anatomy — hero, then proof, then a call
- * to action — and it read as a product launch rather than a public-interest
- * project. This is a document header: what the record is, who keeps it, and
- * how to pull something out of it.
+ * Replaces a full-viewport centred hero over a canvas animation. That is
+ * marketing-page anatomy — hero, then proof, then a call to action — and it
+ * read as a product launch rather than a public-interest project. This is a
+ * document header: what the record is, who keeps it, and how to pull
+ * something out of it.
  */
 export default function Masthead() {
   const router = useRouter();
