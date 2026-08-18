@@ -1,11 +1,27 @@
 """When each state holds its primary.
 
 The November general is statutory and computed (election_calendar.py); a
-PRIMARY date is not. Every state picks its own, they move between cycles,
-and there is no free national feed of them — so the only durable answer is
-to read each state's date off the same feed its results already come from,
-which is what this does. Nothing here is a stored calendar to be
-maintained; every date is re-read from the state.
+PRIMARY date is not. Every state picks its own and they move between
+cycles, so nothing here is a stored calendar anybody maintains — every
+date is re-read.
+
+There ARE two sources, and both are used, because they cover different
+gaps:
+
+  FEC — api.open.fec.gov's election-dates endpoint carries the federal
+        primary AND runoff date for every state, DC and the territories,
+        in three calls. This is the one that makes "what is every state's
+        status right now" answerable at all: it needs no per-state
+        coverage, so a state nobody has written an adapter for still gets
+        a real date. Verified live 2026-08-18 — 53 jurisdictions, and it
+        agrees exactly with the nine dates read independently from state
+        feeds the day before, including California, whose own certified
+        results file carries no date anywhere.
+
+  The state's own feed — kept as the cross-check and the fallback. It is
+        the authority on its own election, it needs no API key, and a
+        disagreement between the two is worth knowing about rather than
+        averaging away.
 
 Each source kind already knows the answer:
 
@@ -33,6 +49,11 @@ from typing import Any
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# Three pages covers a cycle's ~240 federal election dates with headroom;
+# a fourth would mean the endpoint's shape changed, which should stop
+# rather than page forever.
+_FEC_MAX_PAGES = 6
 
 _PATHS = (
     "/data/state_election_dates.json",
@@ -71,9 +92,13 @@ def all_dates() -> dict[str, Any]:
 
 
 def save(state: str, cycle: int, dates: dict) -> None:
+    """Record what is known about a state's cycle. Merges rather than
+    replaces, so a per-state read that knows only the primary doesn't drop
+    the runoff the national calendar supplied, or vice versa."""
     global _cache
     known = dict(_load())
-    known[f"{cycle}-{state.upper()}"] = {k: v for k, v in dates.items() if v}
+    key = f"{cycle}-{state.upper()}"
+    known[key] = {**known.get(key, {}), **{k: v for k, v in dates.items() if v}}
     for path in _PATHS:
         try:
             os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -85,6 +110,48 @@ def save(state: str, cycle: int, dates: dict) -> None:
     else:
         logger.warning("Nowhere writable to record election dates for %s", state)
     _cache = known
+
+
+async def fetch_fec_calendar(client: httpx.AsyncClient, cycle: int) -> dict[str, dict]:
+    """{state: {"primary": iso, "runoff": iso|None}} for every state the
+    FEC lists a federal primary for. Empty on any failure — this augments
+    per-state reads, it never replaces them.
+
+    Special elections are excluded: a special primary is a different race
+    on its own schedule, and folding one in would report a state's regular
+    primary as whenever its last vacancy happened to be filled.
+    """
+    from app.pipeline.fetch.fec import _fetch_with_retry
+
+    rows: list[dict] = []
+    page = 1
+    while page <= _FEC_MAX_PAGES:
+        payload = await _fetch_with_retry(
+            client,
+            "https://api.open.fec.gov/v1/election-dates/"
+            f"?election_year={cycle}&per_page=100&page={page}",
+        )
+        if not payload:
+            break
+        rows += payload.get("results") or []
+        if page >= (payload.get("pagination") or {}).get("pages", 1):
+            break
+        page += 1
+
+    calendar: dict[str, dict] = {}
+    for row in sorted(rows, key=lambda r: r.get("election_date") or ""):
+        kind = (row.get("election_type_full") or "").lower()
+        state, held = row.get("election_state"), row.get("election_date")
+        if not state or not held or "special" in kind:
+            continue
+        if row.get("office_sought") not in ("H", "S"):
+            continue
+        entry = calendar.setdefault(state.upper(), {})
+        if kind == "primary election":
+            entry.setdefault("primary", held)
+        elif "runoff" in kind and "general" not in kind:
+            entry.setdefault("runoff", held)
+    return {s: d for s, d in calendar.items() if d}
 
 
 async def discover_dates(

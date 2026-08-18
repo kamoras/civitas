@@ -17,6 +17,31 @@
       "runoff_threshold_pct": 35.0,
       "description": "Second state on the Clarity adapter, added 2026-08-16 on a re-probe of all 50 states' Clarity feeds — Iowa had published nothing for 2026 when the same probe ran on 2026-08-12, and its 2026-06-02 primary (EID 126082) is there now, so this file's coverage grows without code as states publish. All 10 federal contests parse (4 districts x 2 parties, plus both Senate primaries). Ground-truthed on the real result: Miller-Meeks holding IA-01 against Pautsch with Bohannan again taking the Democratic side, and Ashley Hinson winning the Senate primary — which is why IA-02 is an open-seat race. runoff_threshold_pct is 35, and it is NOT a runoff rule: Iowa Code 43.52 sends a nomination to a party CONVENTION when nobody clears 35%, so a sub-threshold leader isn't merely unconfirmed, they may well not be the nominee at all. IA-04's Democratic primary is the live case — Dawson took it on 39.0% of a three-way field, close enough to that line to matter."
     },
+    "IL": {
+      "source_name": "Illinois State Board of Elections (official vote totals by office)",
+      "strategy": "tabular",
+      "runoff_threshold_pct": null,
+      "discovery": {
+        "mode": "landing_page",
+        "page_url": "https://www.elections.il.gov/ElectionOperations/ElectionVoteTotals.aspx",
+        "link_regex": "[\\\\/]Downloads[\\\\/]ElectionOperations[\\\\/]ElectionResults[\\\\/]ByOffice[\\\\/]\\d+[\\\\/][^\\\"]*(?:CONGRESS|SENATOR)[^\\\"]*-{year}GP\\.csv"
+      },
+      "format": {
+        "delimiter": ",",
+        "contest_column": [
+          "ContestName",
+          "PartyName"
+        ],
+        "choice_column": "CandidateName",
+        "party_column": "PartyName",
+        "votes_column": "VoteCount",
+        "exclude_choices": [
+          "Under Votes",
+          "Over Votes"
+        ]
+      },
+      "description": "Illinois posts one precinct-level CSV PER OFFICE rather than a single statewide export, so its 17 congressional files plus the Senate file are read as 18 stages off the board's own vote-totals page — which is also why the link pattern, not any one file's URL, is what's written down. '{year}GP' pins the cycle's General Primary and excludes the general election's own files. The contest label is bare ('1ST CONGRESS'), which parse_office reads as a federal seat because no state legislature is called a Congress; party lives only in its own column, so the contest key carries it, without which both parties' primaries for a district would tally as one race. Verified live 2026-08-17 against the real 2026-03-17 primary."
+    },
     "CA": {
       "source_name": "California Secretary of State (certified Statement of Vote)",
       "strategy": "tabular",

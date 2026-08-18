@@ -168,6 +168,17 @@ async def crawl_for_new_sources(
     lost by waiting — a source adopted the week after certification is
     still months before the general.
     """
+    # Every state's primary and runoff date in three calls, needing no
+    # per-state coverage at all — so a state nobody has an adapter for
+    # still gets a real date instead of a blank. Per-state reads below
+    # still run and still win: a state is the authority on its own
+    # election, and this is the floor, not the ceiling.
+    try:
+        for state, dates in (await election_dates.fetch_fec_calendar(client, cycle)).items():
+            election_dates.save(state, cycle, dates)
+    except Exception:
+        logger.exception("FEC election-date calendar read failed")
+
     hand_verified = (_sources_file().get("states") or {})
     outcomes: dict[str, str] = {}
     for state in sorted(ELECTION_DOMAINS):

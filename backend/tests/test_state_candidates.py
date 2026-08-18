@@ -49,6 +49,10 @@ class TestCrawlAdoption:
         async def no_filings(client, state, cycle):
             return None
 
+        async def no_calendar(client, cycle):
+            return {}
+
+        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
         monkeypatch.setattr(sc, "discover_source", fake_discover)
         monkeypatch.setattr(sc, "discover_filings", no_filings)
         monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"ZZ": ["example.gov"]})
@@ -137,6 +141,14 @@ class TestCrawlAdoption:
         async def no_filings(client, state, cycle):
             return None
 
+        async def no_calendar(client, cycle):
+            return {}
+
+        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
+        async def no_calendar(client, cycle):
+            return {}
+
+        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
         monkeypatch.setattr(sc, "discover_source", fake_discover)
         monkeypatch.setattr(sc, "discover_filings", no_filings)
         monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"GA": ["sos.ga.gov"]})
@@ -167,6 +179,10 @@ class TestForgetsBrokenDiscoveries:
         async def no_filings(client, state, cycle):
             return None
 
+        async def no_calendar(client, cycle):
+            return {}
+
+        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
         monkeypatch.setattr(sc, "discover_source", nothing_found)
         monkeypatch.setattr(sc, "discover_filings", no_filings)
         monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"ZZ": ["example.gov"]})
@@ -195,6 +211,10 @@ class TestForgetsBrokenDiscoveries:
         async def no_filings(client, state, cycle):
             return None
 
+        async def no_calendar(client, cycle):
+            return {}
+
+        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", no_calendar)
         monkeypatch.setattr(sc, "discover_source", nothing_found)
         monkeypatch.setattr(sc, "discover_filings", no_filings)
         monkeypatch.setattr(sc, "ELECTION_DOMAINS", {"ZZ": ["example.gov"]})

@@ -42,7 +42,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 from collections import defaultdict
 from datetime import UTC, date, datetime
-from urllib.parse import quote
+from urllib.parse import quote, urljoin
 
 import httpx
 
@@ -338,8 +338,13 @@ async def _discover_urls(
             return []
         # Literal token, not str.format: a link regex is full of {n}
         # quantifiers that format() would try to fill in.
+        #
+        # Matches are resolved against the page they were found on, and
+        # Windows-style separators are normalised — real state pages link
+        # results with relative hrefs and, in Illinois' case, backslashes.
         links = sorted({
-            m.group(0) for m in re.finditer(pattern.replace("{year}", str(year)), resp.text)
+            urljoin(discovery["page_url"], m.group(0).replace("\\", "/"))
+            for m in re.finditer(pattern.replace("{year}", str(year)), resp.text)
         })
         # Same rule s3_listing applies, for a page that shows one election
         # at a time: a file dated on this cycle's federal election day IS
