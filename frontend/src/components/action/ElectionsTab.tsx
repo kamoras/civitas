@@ -173,7 +173,10 @@ export default function ElectionsTab() {
     );
   }
 
-  if (!data) {
+  // The countdown is the whole point of the header, so a payload without one
+  // is "unavailable", not a header reading "NaN DAYS". This tab is the first
+  // thing to go quiet when the elections pipeline has not run yet.
+  if (!data?.nextElection) {
     return (
       <div className="panel max-w-md mx-auto p-6 text-center">
         <div className="text-ink-lo">Election data unavailable.</div>

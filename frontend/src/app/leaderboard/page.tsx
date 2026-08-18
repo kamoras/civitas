@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useCallback, useMemo, useState, type KeyboardEvent } from "react";
+import { useAsyncData } from "@/hooks/useAsyncData";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
@@ -649,25 +650,7 @@ function LeaderboardContent() {
     window.history.replaceState({}, "", url.toString());
   }, []);
 
-  const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
-  const [presEntries, setPresEntries] = useState<PresidentLeaderboardEntry[]>([]);
-  const [currentPresident, setCurrentPresident] = useState<President | null>(null);
-  const [currentPresidentLoading, setCurrentPresidentLoading] = useState(false);
-  const [justiceEntries, setJusticeEntries] = useState<JusticeLeaderboardEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [presLoading, setPresLoading] = useState(false);
-  const [justiceLoading, setJusticeLoading] = useState(false);
-  const [houseEntries, setHouseEntries] = useState<LeaderboardEntry[]>([]);
-  const [houseLoading, setHouseLoading] = useState(false);
   const [housePage, setHousePage] = useState(1);
-  const [houseTotalPages, setHouseTotalPages] = useState(1);
-  const [houseTotal, setHouseTotal] = useState(0);
-  // Per-branch error state — a failed fetch on one tab must not surface as an
-  // error on the other three (each fetches independently).
-  const [senateError, setSenateError] = useState<string | null>(null);
-  const [houseError, setHouseError] = useState<string | null>(null);
-  const [presError, setPresError] = useState<string | null>(null);
-  const [justiceError, setJusticeError] = useState<string | null>(null);
   const [partyFilter, setPartyFilter] = useState<PartyFilter>("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("score");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -689,62 +672,62 @@ function LeaderboardContent() {
     [sortKey]
   );
 
-  useEffect(() => {
-    fetchLeaderboard()
-      .then(setEntries)
-      .catch((e) => setSenateError(e.message))
-      .finally(() => setLoading(false));
-  }, []);
+  /*
+    Each tab fetches independently, so a failure on one must not surface as an
+    error on the other three. useAsyncData keeps that per-branch isolation and
+    removes the `setLoading(true)` that used to run synchronously inside every
+    one of these effects — loading is now derived from whether the settled data
+    belongs to the key being asked for.
 
-  useEffect(() => {
-    if (branch !== "house") return;
-    setHouseLoading(true);
-    setHouseError(null);
-    const partyParam = partyFilter !== "ALL" ? partyFilter : undefined;
-    fetchRepLeaderboard(housePage, 50, partyParam)
-      .then((data) => {
-        setHouseEntries(data.entries);
-        setHouseTotalPages(data.totalPages);
-        setHouseTotal(data.total);
-      })
-      .catch((e) => setHouseError(e.message))
-      .finally(() => setHouseLoading(false));
-  }, [branch, housePage, partyFilter]);
+    Passing null for the fetcher is the old `if (branch !== "house") return;`
+    guard, and the hook's key-caching is the old
+    `if (presEntries.length > 0) return;` guard: coming back to a tab shows
+    what it already loaded rather than refetching.
+  */
+  const senate = useAsyncData("senate", () => fetchLeaderboard());
+  const entries = senate.data ?? EMPTY_SENATE;
+  const senateError = senate.error;
+  const loading = senate.loading;
 
-  useEffect(() => {
-    if (branch !== "president") return;
-    if (presEntries.length > 0) return;
-    setPresLoading(true);
-    fetchPresidentLeaderboard()
-      .then(setPresEntries)
-      .catch((e) => setPresError(e.message))
-      .finally(() => setPresLoading(false));
-  }, [branch, presEntries.length]);
+  const house = useAsyncData(
+    `house:${housePage}:${partyFilter}`,
+    branch === "house"
+      ? () => fetchRepLeaderboard(housePage, 50, partyFilter !== "ALL" ? partyFilter : undefined)
+      : null
+  );
+  const houseEntries = house.data?.entries ?? EMPTY_SENATE;
+  const houseTotalPages = house.data?.totalPages ?? 1;
+  const houseTotal = house.data?.total ?? 0;
+  const houseError = house.error;
+  const houseLoading = house.loading;
 
-  // Separate fetch, not derived from presEntries: the leaderboard
-  // endpoint excludes the currently-serving president entirely (an
-  // incomplete-term record isn't fairly ranked against completed ones —
-  // see the backend's get_president_leaderboard docstring), so their
-  // profile has to come from its own endpoint.
-  useEffect(() => {
-    if (branch !== "president") return;
-    if (currentPresident) return;
-    setCurrentPresidentLoading(true);
-    fetchCurrentPresident()
-      .then(setCurrentPresident)
-      .catch(() => {}) // non-fatal — the ranked table still works without this
-      .finally(() => setCurrentPresidentLoading(false));
-  }, [branch, currentPresident]);
+  const presidents = useAsyncData(
+    "presidents",
+    branch === "president" ? () => fetchPresidentLeaderboard() : null
+  );
+  const presEntries = presidents.data ?? EMPTY_PRESIDENTS;
+  const presError = presidents.error;
+  const presLoading = presidents.loading;
 
-  useEffect(() => {
-    if (branch !== "scotus") return;
-    if (justiceEntries.length > 0) return;
-    setJusticeLoading(true);
-    fetchJusticeLeaderboard()
-      .then(setJusticeEntries)
-      .catch((e) => setJusticeError(e.message))
-      .finally(() => setJusticeLoading(false));
-  }, [branch, justiceEntries.length]);
+  // Separate fetch, not derived from presEntries: the leaderboard endpoint
+  // excludes the currently-serving president entirely (an incomplete-term
+  // record isn't fairly ranked against completed ones — see the backend's
+  // get_president_leaderboard docstring), so their profile has to come from
+  // its own endpoint. Its failure is non-fatal; the ranked table still works.
+  const sitting = useAsyncData(
+    "current-president",
+    branch === "president" ? () => fetchCurrentPresident() : null
+  );
+  const currentPresident = sitting.data;
+  const currentPresidentLoading = sitting.loading;
+
+  const justices = useAsyncData(
+    "justices",
+    branch === "scotus" ? () => fetchJusticeLeaderboard() : null
+  );
+  const justiceEntries = justices.data ?? EMPTY_JUSTICES;
+  const justiceError = justices.error;
+  const justiceLoading = justices.loading;
 
   const activeEntries = branch === "house" ? houseEntries : entries;
   // The senate/house table view is shared; show whichever branch's
@@ -1223,6 +1206,10 @@ function LeaderboardContent() {
 }
 
 import { Suspense } from "react";
+
+const EMPTY_SENATE: LeaderboardEntry[] = [];
+const EMPTY_PRESIDENTS: PresidentLeaderboardEntry[] = [];
+const EMPTY_JUSTICES: JusticeLeaderboardEntry[] = [];
 
 export default function LeaderboardPage() {
   return (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Navbar from "@/components/layout/Navbar";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import Footer from "@/components/layout/Footer";
@@ -25,16 +25,19 @@ export default function FeedbackPage() {
   const [category, setCategory] = useState<FeedbackSubmission["category"]>("bug");
   const [message, setMessage] = useState("");
   const [email, setEmail] = useState("");
-  const [pageUrl, setPageUrl] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [issueUrl, setIssueUrl] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (document.referrer && document.referrer.includes(window.location.hostname)) {
-      setPageUrl(document.referrer);
-    }
-  }, []);
+  /** The page the reporter came from, read at submit time rather than stored.
+   *  It was captured into state by a mount effect purely so it could be read
+   *  once, in the handler below — an extra render on every visit to hold a
+   *  value nothing renders. Same-origin check unchanged: an off-site referrer
+   *  is not ours to forward. */
+  function referringPage(): string | undefined {
+    const ref = document.referrer;
+    return ref && ref.includes(window.location.hostname) ? ref : undefined;
+  }
 
   const trimmed = message.trim();
   const canSubmit =
@@ -50,7 +53,7 @@ export default function FeedbackPage() {
         category,
         message: trimmed,
         email: email.trim() || undefined,
-        pageUrl: pageUrl || undefined,
+        pageUrl: referringPage(),
       });
       setIssueUrl(res.issueUrl);
       setStatus("success");

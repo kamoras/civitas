@@ -11,12 +11,14 @@ import BillStageFlow, { ALL_STAGE_CODES } from "@/components/bills/BillStageFlow
 import BillStageGroup from "@/components/bills/BillStageGroup";
 import BillRow from "@/components/bills/BillRow";
 import { fetchBillsInFlight } from "@/lib/api";
+import { useAsyncData } from "@/hooks/useAsyncData";
 import type { BillInFlight } from "@/types/bill";
 
 type ChamberFilter = "all" | "senate" | "house";
 type PartyFilter = "ALL" | "D" | "R" | "I";
 type ViewMode = "hot" | "all";
 
+const EMPTY_BILLS: BillInFlight[] = [];
 const PER_PAGE = 50;
 
 function BillsPageContent() {
@@ -228,24 +230,13 @@ function AllBillsGroups({
   // already reflects the chamber/party/q filters server-side, so the
   // groups no longer each probe for their own count (which used to fan
   // out ~8 parallel requests per filter change).
-  const [stageTotals, setStageTotals] = useState<Record<string, number> | "loading" | "error">(
-    "loading"
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    setStageTotals("loading");
+  // Fail open: on error the groups fall back to probing their own counts.
+  const totalsRequest = useAsyncData(`stage-totals:${chamber}:${party}:${q}`, () =>
     fetchBillsInFlight({ chamber, party, q, sort: "recent", page: 1, perPage: 1 })
-      .then((res) => {
-        if (!cancelled) setStageTotals(res.stageCounts);
-      })
-      .catch(() => {
-        if (!cancelled) setStageTotals("error");
-      }); // fail open — groups fall back to probing their own counts
-    return () => {
-      cancelled = true;
-    };
-  }, [chamber, party, q]);
+  );
+  const stageTotals: Record<string, number> | "loading" | "error" = totalsRequest.loading
+    ? "loading"
+    : (totalsRequest.data?.stageCounts ?? "error");
 
   if (stageTotals === "loading") {
     return (
@@ -291,23 +282,45 @@ function HotBillsList({
   q?: string;
   onViewAll: () => void;
 }) {
-  const [results, setResults] = useState<BillInFlight[]>([]);
-  const [total, setTotal] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  /* One object rather than five pieces of state, because they are only ever
+     meaningful together: a bill list belongs to a filter signature and a page
+     depth, and splitting them is what made "is this loading?" need its own
+     stored flag. Only ever written from a settled promise, so no setState runs
+     synchronously inside the effect below. */
+  const [loaded, setLoaded] = useState<{
+    sig: string;
+    page: number;
+    bills: BillInFlight[];
+    total: number;
+    totalPages: number;
+    error: string | null;
+  } | null>(null);
+  /* Page is stored against the filter signature it belongs to, so changing a
+     filter resets to page 1 by derivation rather than by an effect that fires
+     setPage(1) and forces a second render (during which the old page's request
+     is already in flight). */
+  const filterSig = `${stage ?? ""}:${chamber}:${party}:${q}`;
+  const [pageState, setPageState] = useState({ sig: filterSig, page: 1 });
+  const page = pageState.sig === filterSig ? pageState.page : 1;
+  const setPage = (next: number | ((p: number) => number)) =>
+    setPageState((prev) => ({
+      sig: filterSig,
+      page: typeof next === "function" ? next(prev.sig === filterSig ? prev.page : 1) : next,
+    }));
+  const current = loaded?.sig === filterSig ? loaded : null;
+  const results = current?.bills ?? EMPTY_BILLS;
+  const total = current?.total ?? 0;
+  const totalPages = current?.totalPages ?? 0;
+  const error = current?.error ?? null;
+  // Derived, not stored: nothing for these filters yet means the first page is
+  // in flight; having fewer pages than asked for means "load more" is.
+  const loading = current === null;
+  const loadingMore = current !== null && current.page < page;
 
   useEffect(() => {
-    setPage(1);
-  }, [stage, chamber, party, q]);
-
-  useEffect(() => {
+    if (loaded?.sig === filterSig && loaded.page >= page) return;
     let cancelled = false;
     const isFirstPage = page === 1;
-    if (isFirstPage) setLoading(true);
-    else setLoadingMore(true);
 
     fetchBillsInFlight({
       stage: stage ?? undefined,
@@ -320,25 +333,31 @@ function HotBillsList({
     })
       .then((res) => {
         if (cancelled) return;
-        setResults((prev) => (isFirstPage ? res.bills : [...prev, ...res.bills]));
-        setTotal(res.total);
-        setTotalPages(res.totalPages);
-        setError(null);
+        setLoaded((prev) => ({
+          sig: filterSig,
+          page,
+          bills: isFirstPage || prev?.sig !== filterSig ? res.bills : [...prev.bills, ...res.bills],
+          total: res.total,
+          totalPages: res.totalPages,
+          error: null,
+        }));
       })
       .catch((err) => {
-        if (!cancelled) setError(err.message || "Failed to load bills");
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-          setLoadingMore(false);
-        }
+        if (cancelled) return;
+        setLoaded((prev) => ({
+          sig: filterSig,
+          page,
+          bills: prev?.sig === filterSig ? prev.bills : [],
+          total: prev?.sig === filterSig ? prev.total : 0,
+          totalPages: prev?.sig === filterSig ? prev.totalPages : 0,
+          error: err instanceof Error ? err.message : "Failed to load bills",
+        }));
       });
 
     return () => {
       cancelled = true;
     };
-  }, [stage, chamber, party, q, page]);
+  }, [stage, chamber, party, q, page, filterSig, loaded]);
 
   if (loading) {
     return (

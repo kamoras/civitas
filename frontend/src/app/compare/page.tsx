@@ -370,7 +370,14 @@ function ComparePageInner() {
   const [rightSenator, setRightSenator] = useState<Senator | null>(null);
   const [leftChamber, setLeftChamber] = useState<Chamber>("senate");
   const [rightChamber, setRightChamber] = useState<Chamber>("senate");
-  const [hydrating, setHydrating] = useState(false);
+  // Seeded from the URL rather than switched on inside the effect: whether
+  // this render will hydrate is already knowable from the query string, and
+  // setting it in the effect cost an extra render pass before the first
+  // request even went out. searchParams is stable for the initial render,
+  // which is the only one this initialiser is read on.
+  const [hydrating, setHydrating] = useState(() =>
+    Boolean(searchParams.get("leftId") || searchParams.get("rightId"))
+  );
   const [savedState] = useUserState();
   const [savedStateName, setSavedStateName] = useState<string | null>(null);
   const [quickLoading, setQuickLoading] = useState(false);
@@ -394,8 +401,6 @@ function ComparePageInner() {
     const rightCh = (searchParams.get("rightChamber") ?? "senate") as Chamber;
 
     if (!leftId && !rightId) return;
-
-    setHydrating(true);
 
     const promises: Promise<void>[] = [];
 

@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useNow } from "@/hooks/useNow";
+import { useSessionToken } from "@/hooks/useSessionToken";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import {
   adminAuth,
@@ -223,6 +225,8 @@ function formatEtaSeconds(etaSeconds: number): string {
   return `~${m}m ${s}s`;
 }
 
+const NO_ESTIMATE = { eta: null, rate: null } as const;
+
 function useAnalyzeEta(
   isAnalyze: boolean,
   processed: number,
@@ -231,14 +235,20 @@ function useAnalyzeEta(
   unitLabel: string = "senator"
 ) {
   const liveAnchorRef = useRef<{ time: number; count: number } | null>(null);
-  const [eta, setEta] = useState<string | null>(null);
-  const [rate, setRate] = useState<string | null>(null);
+  const [estimate, setEstimate] = useState<{ eta: string | null; rate: string | null }>({
+    eta: null,
+    rate: null,
+  });
+
+  // Whether an estimate means anything right now is a function of the props,
+  // not something to remember. Deriving it means a finished or switched-away
+  // pipeline cannot show the previous phase's ETA for even one frame, which
+  // clearing the stored values from the effect allowed.
+  const active = isAnalyze && total > 0 && total - processed > 0;
 
   useEffect(() => {
     if (!isAnalyze || total <= 0) {
       liveAnchorRef.current = null;
-      setEta(null);
-      setRate(null);
       return;
     }
 
@@ -251,8 +261,7 @@ function useAnalyzeEta(
       const remaining = total - processed;
 
       if (remaining <= 0) {
-        setEta(null);
-        setRate(null);
+        setEstimate({ eta: null, rate: null });
         return;
       }
 
@@ -261,15 +270,18 @@ function useAnalyzeEta(
 
       if (liveDelta > 0 && liveElapsed > 3) {
         const secPer = liveElapsed / liveDelta;
-        setRate(`${secPer.toFixed(0)}s/${unitLabel}`);
-        setEta(formatEtaSeconds(Math.round(remaining * secPer)));
+        setEstimate({
+          rate: `${secPer.toFixed(0)}s/${unitLabel}`,
+          eta: formatEtaSeconds(Math.round(remaining * secPer)),
+        });
       } else if (processed > 0 && elapsedSeconds && elapsedSeconds > 0) {
         const secPer = elapsedSeconds / processed;
-        setRate(`~${secPer.toFixed(0)}s/${unitLabel}`);
-        setEta(formatEtaSeconds(Math.round(remaining * secPer)));
+        setEstimate({
+          rate: `~${secPer.toFixed(0)}s/${unitLabel}`,
+          eta: formatEtaSeconds(Math.round(remaining * secPer)),
+        });
       } else {
-        setEta(null);
-        setRate(null);
+        setEstimate({ eta: null, rate: null });
       }
     };
 
@@ -278,7 +290,7 @@ function useAnalyzeEta(
     return () => clearInterval(id);
   }, [isAnalyze, processed, total, elapsedSeconds, unitLabel]);
 
-  return { eta, rate };
+  return active ? estimate : NO_ESTIMATE;
 }
 
 function StepProgressMini({ step }: { step: PipelineStepInfo }) {
@@ -564,12 +576,7 @@ function UptimeTracker({
   uptime?: UptimeInfo;
   hostUptime?: number | null;
 }) {
-  const [now, setNow] = useState(Date.now());
-
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
+  const now = useNow();
 
   const processStart = uptime?.processStartedAt
     ? parseUTC(uptime.processStartedAt).getTime()
@@ -1697,22 +1704,13 @@ const ACTION_STAGE_LABELS: Record<string, string> = {
   cleanup: "CLEANUP",
 };
 
+// Seconds since a run started, ticking. Nothing is stored: the elapsed time is
+// a function of the shared clock and the start stamp, so it cannot go stale,
+// and stopping a run reports 0 immediately rather than one tick later.
 function useElapsedSeconds(startIso: string | null, running: boolean): number {
-  const [elapsed, setElapsed] = useState(0);
-  useEffect(() => {
-    if (!running || !startIso) {
-      setElapsed(0);
-      return;
-    }
-    const update = () => {
-      const diff = (Date.now() - new Date(startIso + "Z").getTime()) / 1000;
-      setElapsed(Math.max(0, Math.round(diff)));
-    };
-    update();
-    const id = setInterval(update, 1000);
-    return () => clearInterval(id);
-  }, [startIso, running]);
-  return elapsed;
+  const now = useNow();
+  if (!running || !startIso) return 0;
+  return Math.max(0, Math.round((now - parseUTC(startIso).getTime()) / 1000));
 }
 
 function ActionCenterStatus({ ac }: { ac: ActionRefreshState | null }) {
@@ -1831,23 +1829,27 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
   const wasRunningRef = useRef(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const loadDashboard = useCallback(async () => {
-    try {
-      const [d, h, s] = await Promise.all([
-        fetchAdminDashboard(token),
-        fetchAdminPipelineHistory(token),
-        fetchAdminPipelineStatus(token),
-      ]);
-      setDashboard(d);
-      setHistory(h);
-      setPipelineStatus(s);
-    } catch (e) {
-      if (e instanceof Error && e.message === "Unauthorized") {
-        onLogout();
-      }
-    } finally {
-      setLoading(false);
-    }
+  // Deliberately not `async`: every state write lands in a `.then`/`.finally`
+  // callback, so nothing here can run synchronously inside the effect that
+  // kicks off the first load. The three requests are one unit — a dashboard
+  // showing fresh counts next to stale history is worse than showing neither.
+  const loadDashboard = useCallback(() => {
+    Promise.all([
+      fetchAdminDashboard(token),
+      fetchAdminPipelineHistory(token),
+      fetchAdminPipelineStatus(token),
+    ])
+      .then(([d, h, s]) => {
+        setDashboard(d);
+        setHistory(h);
+        setPipelineStatus(s);
+      })
+      .catch((e: unknown) => {
+        if (e instanceof Error && e.message === "Unauthorized") {
+          onLogout();
+        }
+      })
+      .finally(() => setLoading(false));
   }, [token, onLogout]);
 
   const pollStatus = useCallback(async () => {
@@ -2819,28 +2821,9 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
 
 // --- Root Admin Page ---
 export default function AdminPage() {
-  const [token, setToken] = useState<string | null>(null);
-  const [checked, setChecked] = useState(false);
+  const { token, ready, signIn: handleLogin, signOut: handleLogout } = useSessionToken(TOKEN_KEY);
 
-  useEffect(() => {
-    const stored = sessionStorage.getItem(TOKEN_KEY);
-    if (stored) {
-      setToken(stored);
-    }
-    setChecked(true);
-  }, []);
-
-  const handleLogin = (t: string) => {
-    sessionStorage.setItem(TOKEN_KEY, t);
-    setToken(t);
-  };
-
-  const handleLogout = () => {
-    sessionStorage.removeItem(TOKEN_KEY);
-    setToken(null);
-  };
-
-  if (!checked) return null;
+  if (!ready) return null;
 
   if (!token) {
     return <LoginScreen onLogin={handleLogin} />;

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
@@ -8,6 +8,7 @@ import TerminalTitlebar from "@/components/TerminalTitlebar";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import { fetchPoliticianDirectory } from "@/lib/api";
+import { useAsyncData } from "@/hooks/useAsyncData";
 import { getScoreBgColor } from "@/lib/representation";
 import { formerOfficeBadge } from "@/lib/officeStatus";
 import type { PoliticianCard } from "@/types/politicians";
@@ -159,6 +160,8 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
   );
 }
 
+const EMPTY_DIRECTORY: PoliticianCard[] = [];
+
 export default function PoliticiansPage() {
   return (
     <Suspense fallback={null}>
@@ -175,29 +178,16 @@ function PoliticiansPageContent() {
   const [party, setParty] = useState<PartyFilter>("ALL");
   const [state, setState] = useState<string>(initialState);
   const [search, setSearch] = useState<string>("");
-  const [all, setAll] = useState<PoliticianCard[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const load = useCallback(async (b: BranchFilter) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await fetchPoliticianDirectory({
-        branch: b === "all" ? undefined : b,
-      });
-      setAll(data);
-    } catch {
-      setError("Failed to load politicians.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load(branch);
-  }, [branch, load]);
+  // Party, state and name are applied client-side over one branch fetch (see
+  // `filtered` below), so the branch is the whole request identity.
+  const directory = useAsyncData(`politicians:${branch}`, () =>
+    fetchPoliticianDirectory({ branch: branch === "all" ? undefined : branch })
+  );
+  const all = directory.data ?? EMPTY_DIRECTORY;
+  const loading = directory.loading;
+  const error = directory.error ? "Failed to load politicians." : null;
 
   const filtered = useMemo(() => {
     let list = all;

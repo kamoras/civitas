@@ -1,17 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useAsyncData } from "@/hooks/useAsyncData";
 import Link from "next/link";
 import { fetchTimeline } from "@/lib/api";
 import { formatWeekRange, safeHref } from "@/lib/formatting";
 import { ACTION_CENTER_MONITORS_HREF } from "@/lib/routes";
-import type {
-  TimelineResponse,
-  TimelineEntry,
-  TimelineWeek,
-  TimelineMonth,
-  UpcomingEvent,
-} from "@/lib/api";
+import type { TimelineEntry, TimelineWeek, TimelineMonth, UpcomingEvent } from "@/lib/api";
 
 const MONTH_NAMES = [
   "",
@@ -331,16 +326,10 @@ function MonthCard({
 }
 
 export default function TimelineTab() {
-  const [data, setData] = useState<TimelineResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [fetchError, setFetchError] = useState(false);
-
-  useEffect(() => {
-    fetchTimeline()
-      .then(setData)
-      .catch(() => setFetchError(true))
-      .finally(() => setLoading(false));
-  }, []);
+  const request = useAsyncData("action-timeline", fetchTimeline);
+  const data = request.data;
+  const loading = request.loading;
+  const fetchError = request.error !== null;
 
   const eventsByMonth = useMemo(() => {
     if (!data?.upcomingEvents) return {} as Record<number, UpcomingEvent[]>;
@@ -371,10 +360,16 @@ export default function TimelineTab() {
     );
   }
 
-  if (
-    !data ||
-    (data.totalDays === 0 && (!data.upcomingEvents || data.upcomingEvents.length === 0))
-  ) {
+  // Every list is normalized once, here, rather than defended at each of its
+  // dozen use sites. A payload missing `months` used to reach `.some()` and
+  // white-screen the whole tab; a partial answer should render the part that
+  // did arrive, and an empty one should say so.
+  const months = data?.months ?? [];
+  const monitors = data?.monitors ?? [];
+  const topThemes = data?.topThemes ?? [];
+  const upcomingEvents = data?.upcomingEvents ?? [];
+
+  if (!data || (!data.totalDays && months.length === 0 && upcomingEvents.length === 0)) {
     return (
       <div className="panel max-w-lg mx-auto p-8 text-center space-y-4">
         <div className="font-mono text-sm text-ind-purple">NO TIMELINE DATA YET</div>
@@ -386,13 +381,12 @@ export default function TimelineTab() {
     );
   }
 
-  const isYearComplete = !data.months.some((m) => m.isCurrent);
-  const upcomingEvents = data.upcomingEvents ?? [];
-  const currentMonthData = data.months.find((m) => m.isCurrent);
-  const pastMonths = data.months.filter((m) => !m.isCurrent);
+  const isYearComplete = !months.some((m) => m.isCurrent);
+  const currentMonthData = months.find((m) => m.isCurrent);
+  const pastMonths = months.filter((m) => !m.isCurrent);
 
   // Future months with only events (no entries yet)
-  const monthsWithEntries = new Set(data.months.map((m) => m.month));
+  const monthsWithEntries = new Set(months.map((m) => m.month));
   const futureMonthsFromEvents = Object.keys(eventsByMonth)
     .map(Number)
     .filter((m) => !monthsWithEntries.has(m))
@@ -407,15 +401,15 @@ export default function TimelineTab() {
         </h2>
         <p className="text-ink-lo text-base mb-4">
           {data.totalDays} day{data.totalDays !== 1 ? "s" : ""} tracked
-          {data.monitors.length > 0 &&
-            ` · ${data.monitors.length} ongoing monitor${data.monitors.length !== 1 ? "s" : ""}`}
+          {monitors.length > 0 &&
+            ` · ${monitors.length} ongoing monitor${monitors.length !== 1 ? "s" : ""}`}
           {upcomingEvents.length > 0 &&
             ` · ${upcomingEvents.length} upcoming event${upcomingEvents.length !== 1 ? "s" : ""}`}
         </p>
-        {data.topThemes.length > 0 && (
+        {topThemes.length > 0 && (
           <div className="flex items-center justify-center gap-2 flex-wrap">
             <span className="font-mono text-xs tracking-widest text-ink-min">TOP THEMES</span>
-            {data.topThemes.slice(0, 6).map((t) => (
+            {topThemes.slice(0, 6).map((t) => (
               <span
                 key={t.area}
                 className="text-xs font-mono px-2 py-0.5 border border-purple-400/30 text-ind-purple bg-purple-400/5"
@@ -434,9 +428,9 @@ export default function TimelineTab() {
             YEAR IN REVIEW — {data.year}
           </div>
           <p className="text-base text-ink leading-relaxed italic">{data.yearSummary.summary}</p>
-          {data.yearSummary.topAreas.length > 0 && (
+          {(data.yearSummary.topAreas?.length ?? 0) > 0 && (
             <div className="flex gap-2 flex-wrap mt-3">
-              {data.yearSummary.topAreas.map((a) => (
+              {data.yearSummary.topAreas!.map((a) => (
                 <span
                   key={a}
                   className="text-xs font-mono px-1.5 py-0.5 border border-purple-400/20 text-ind-purple"
@@ -534,13 +528,13 @@ export default function TimelineTab() {
       )}
 
       {/* Monitors */}
-      {data.monitors.length > 0 && (
+      {monitors.length > 0 && (
         <div className="panel p-4 sm:p-5">
           <h3 className="font-mono text-sm text-signal-amber mb-3">
             {">"} ONGOING MONITORS ({data.year})
           </h3>
           <div className="space-y-2">
-            {data.monitors.map((m) => (
+            {monitors.map((m) => (
               <Link
                 key={m.slug}
                 href={ACTION_CENTER_MONITORS_HREF}

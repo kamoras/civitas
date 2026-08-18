@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import { fetchPresident, fetchPresidentLeaderboard } from "@/lib/api";
+import { useAsyncData } from "@/hooks/useAsyncData";
 import { getScoreColor, getPresidentLabel } from "@/lib/representation";
 import { MetricBar, StatBox } from "@/components/shared/ScoreMetric";
 import ScoreTrendSection from "@/components/checker/ScoreTrendSection";
@@ -345,9 +346,7 @@ export default function PresidentClient() {
 
   const [entries, setEntries] = useState<PresidentLeaderboardEntry[]>([]);
   const [selectedId, setSelectedId] = useState(initialId);
-  const [president, setPresident] = useState<President | null>(null);
   const [loading, setLoading] = useState(true);
-  const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -365,14 +364,16 @@ export default function PresidentClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    if (!selectedId) return;
-    setDetailLoading(true);
-    fetchPresident(selectedId)
-      .then(setPresident)
-      .catch((e) => setError(e.message))
-      .finally(() => setDetailLoading(false));
-  }, [selectedId]);
+  // Detail for the selected row. `detailLoading` is derived from whether the
+  // settled response belongs to the id currently selected, so selecting a new
+  // row cannot briefly show the previous one's detail — which storing the flag
+  // separately allowed.
+  const detail = useAsyncData(
+    `president:${selectedId ?? ""}`,
+    selectedId ? () => fetchPresident(selectedId) : null
+  );
+  const president = detail.data;
+  const detailLoading = detail.loading;
 
   const chronological = useMemo(() => [...entries].sort((a, b) => a.number - b.number), [entries]);
 

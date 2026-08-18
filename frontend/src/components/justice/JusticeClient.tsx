@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import { fetchJustice, fetchJusticeLeaderboard } from "@/lib/api";
+import { useAsyncData } from "@/hooks/useAsyncData";
 import { getJusticeLabel, getScoreColor, getScoreBgColor } from "@/lib/representation";
 import { MetricBar, StatBox } from "@/components/shared/ScoreMetric";
 import type { Justice, JusticeLeaderboardEntry, JusticeScore } from "@/types/justice";
@@ -273,9 +274,7 @@ function JusticeSelector({
 export default function JusticeClient() {
   const [entries, setEntries] = useState<JusticeLeaderboardEntry[]>([]);
   const [selectedId, setSelectedId] = useState("");
-  const [justice, setJustice] = useState<Justice | null>(null);
   const [loading, setLoading] = useState(true);
-  const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -292,14 +291,16 @@ export default function JusticeClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    if (!selectedId) return;
-    setDetailLoading(true);
-    fetchJustice(selectedId)
-      .then(setJustice)
-      .catch((e) => setError(e.message))
-      .finally(() => setDetailLoading(false));
-  }, [selectedId]);
+  // Detail for the selected row. `detailLoading` is derived from whether the
+  // settled response belongs to the id currently selected, so selecting a new
+  // row cannot briefly show the previous one's detail — which storing the flag
+  // separately allowed.
+  const detail = useAsyncData(
+    `justice:${selectedId ?? ""}`,
+    selectedId ? () => fetchJustice(selectedId) : null
+  );
+  const justice = detail.data;
+  const detailLoading = detail.loading;
 
   if (loading) {
     return (

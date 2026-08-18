@@ -1,14 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { SCORE_TERMS } from "@/lib/scoreTerms";
 import { fetchMyReps, fetchActionIssues } from "@/lib/api";
+import { useAsyncData } from "@/hooks/useAsyncData";
 import { STATES } from "@/data/states";
 import { PARTY_COLORS, PARTY_BORDER, PARTY_BG } from "@/lib/partyStyles";
 import { getScoreBgColor } from "@/lib/representation";
 import { useCopyFeedback } from "@/hooks/useCopyFeedback";
-import type { ActionIssue, MyRepSenator, MyRepsResponse } from "@/types/action";
+import type { ActionIssue, MyRepSenator } from "@/types/action";
 
 function ContactScript({
   name,
@@ -217,24 +218,17 @@ export default function MyRepsTab({
   /** Optional pre-fetched issues from the parent; avoids a redundant fetchActionIssues() call. */
   issues?: ActionIssue[];
 }) {
-  const [data, setData] = useState<MyRepsResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [fetchError, setFetchError] = useState(false);
   const [fallbackIssues, setFallbackIssues] = useState<ActionIssue[]>([]);
   const activeIssues = issues ?? fallbackIssues;
 
-  const loadReps = useCallback((st: string) => {
-    setLoading(true);
-    setFetchError(false);
-    fetchMyReps(st)
-      .then((d) => setData(d))
-      .catch(() => setFetchError(true))
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => {
-    if (userState) loadReps(userState);
-  }, [userState, loadReps]);
+  const reps = useAsyncData(
+    `my-reps:${userState ?? ""}`,
+    userState ? () => fetchMyReps(userState) : null
+  );
+  const data = reps.data;
+  const loading = reps.loading;
+  const fetchError = reps.error !== null;
+  const retryReps = reps.retry;
 
   useEffect(() => {
     if (issues) return;
@@ -299,7 +293,7 @@ export default function MyRepsTab({
         <div className="font-mono text-sm text-signal-red">CONNECTION ERROR</div>
         <p className="text-ink-lo text-base">Could not load representative data.</p>
         <button
-          onClick={() => loadReps(userState)}
+          onClick={retryReps}
           className="text-signal-cyan font-mono text-sm border border-white/15 px-4 py-2 hover:bg-signal-cyan/10 transition-colors"
         >
           [RETRY]

@@ -55,6 +55,51 @@ async function requestJson<T>(
   return (opts?.camelize ? camelizeKeys(data) : data) as T;
 }
 
+// ---------------------------------------------------------------------------
+// Shape guarantees
+//
+// The backend can legitimately answer `{}` or `null` where the contract says
+// "a list": an endpoint whose table the pipeline has not populated yet, a
+// feature deployed ahead of its first run, a partial payload from a run that
+// died halfway. Passed straight through, the crash surfaced at the caller's
+// `.map` and took down the whole route — every one of these views already has
+// a perfectly good "no data yet" state that never got the chance to render.
+//
+// These make the declared return types true, so the empty case reaches the UI
+// as emptiness rather than as an exception.
+// ---------------------------------------------------------------------------
+
+/** A payload that must be a list, as a list. */
+function asList<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
+/** A payload that must be an object, as an object. */
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+/**
+ * An object payload whose named fields are guaranteed to be there and to have
+ * the shape callers index into: `lists` come back as arrays, `records` as
+ * objects. Fields the backend did send are left exactly as they arrived.
+ */
+function withShape<T extends object>(
+  value: unknown,
+  shape: { lists?: readonly (keyof T & string)[]; records?: readonly (keyof T & string)[] }
+): T {
+  const out = { ...asRecord(value) };
+  for (const key of shape.lists ?? []) {
+    if (!Array.isArray(out[key])) out[key] = [];
+  }
+  for (const key of shape.records ?? []) {
+    if (!out[key] || typeof out[key] !== "object" || Array.isArray(out[key])) out[key] = {};
+  }
+  return out as T;
+}
+
 const _fetchCache = new Map<string, { data: unknown; expiry: number }>();
 // In-flight requests keyed by URL. Concurrent callers of the same URL (e.g.
 // the home preview, the Action Center parent, and IssuesTab all requesting
@@ -64,6 +109,12 @@ const _fetchCache = new Map<string, { data: unknown; expiry: number }>();
 // as the request settles so a later call re-fetches once the TTL lapses, and a
 // rejected request isn't cached (retries work).
 const _inflight = new Map<string, Promise<unknown>>();
+
+/** Test seam: drops both caches so one suite's stubbed fetch can't answer another's. */
+export function __resetApiCache(): void {
+  _fetchCache.clear();
+  _inflight.clear();
+}
 
 async function cachedFetch<T>(url: string, ttlMs: number): Promise<T> {
   const now = Date.now();
@@ -96,7 +147,9 @@ async function cachedFetch<T>(url: string, ttlMs: number): Promise<T> {
 }
 
 export async function fetchSenatorsByState(state: string): Promise<Senator[]> {
-  return requestJson(`${API_BASE}/senators?state=${state}`, "Failed to load senators");
+  return asList(
+    await requestJson(`${API_BASE}/senators?state=${state}`, "Failed to load senators")
+  );
 }
 
 export async function fetchSenator(senatorId: string): Promise<Senator> {
@@ -110,11 +163,11 @@ export interface StateInfo {
 }
 
 export async function fetchStates(): Promise<StateInfo[]> {
-  return cachedFetch(`${API_BASE}/senators/states`, TTL.SHORT);
+  return asList(await cachedFetch(`${API_BASE}/senators/states`, TTL.SHORT));
 }
 
 export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
-  return cachedFetch(`${API_BASE}/senators/leaderboard`, TTL.SHORT);
+  return asList(await cachedFetch(`${API_BASE}/senators/leaderboard`, TTL.SHORT));
 }
 
 // --- House Representatives ---
@@ -126,7 +179,7 @@ export interface RepStateInfo {
 }
 
 export async function fetchRepStates(): Promise<RepStateInfo[]> {
-  return cachedFetch(`${API_BASE}/representatives/states`, TTL.SHORT);
+  return asList(await cachedFetch(`${API_BASE}/representatives/states`, TTL.SHORT));
 }
 
 export interface PaginatedReps {
@@ -142,9 +195,12 @@ export async function fetchRepresentativesByState(
   page: number = 1,
   perPage: number = 10
 ): Promise<PaginatedReps> {
-  return requestJson(
-    `${API_BASE}/representatives?state=${state}&page=${page}&per_page=${perPage}`,
-    "Failed to load representatives"
+  return withShape<PaginatedReps>(
+    await requestJson(
+      `${API_BASE}/representatives?state=${state}&page=${page}&per_page=${perPage}`,
+      "Failed to load representatives"
+    ),
+    { lists: ["entries"] }
   );
 }
 
@@ -192,9 +248,12 @@ export async function fetchRepLeaderboard(
 ): Promise<PaginatedLeaderboard> {
   const params = new URLSearchParams({ page: String(page), per_page: String(perPage) });
   if (party) params.set("party", party);
-  return requestJson(
-    `${API_BASE}/representatives/leaderboard?${params}`,
-    "Failed to load house leaderboard"
+  return withShape<PaginatedLeaderboard>(
+    await requestJson(
+      `${API_BASE}/representatives/leaderboard?${params}`,
+      "Failed to load house leaderboard"
+    ),
+    { lists: ["entries"] }
   );
 }
 
@@ -295,7 +354,12 @@ export async function fetchBillsInFlight(options?: {
   // and list views can request the same URL concurrently (and again on
   // mode/filter toggles) — share one network request and reuse it for the
   // same 2 minutes the backend's Cache-Control already promises.
-  return cachedFetch(`${API_BASE}/bills?${params}`, TTL.SHORT);
+  return withShape<PaginatedBills>(await cachedFetch(`${API_BASE}/bills?${params}`, TTL.SHORT), {
+    lists: ["bills"],
+    // The stage funnel reduces over these on every render; an absent map has
+    // to arrive as {} rather than undefined.
+    records: ["stageCounts"],
+  });
 }
 
 export async function fetchBillDetail(billId: string): Promise<BillDetail | null> {
@@ -520,7 +584,9 @@ export async function fetchPresidentLeaderboard(): Promise<PresidentLeaderboardE
   // by_alias=True). Recursively re-camelizing is a no-op on scalar fields but
   // would corrupt any data-keyed map field the moment one is added (see the
   // justice agreementMatrix bug this pattern caused).
-  return requestJson(`${API_BASE}/presidents/leaderboard`, "Failed to load president leaderboard");
+  return asList(
+    await requestJson(`${API_BASE}/presidents/leaderboard`, "Failed to load president leaderboard")
+  );
 }
 
 export async function fetchPresident(id: string): Promise<President> {
@@ -542,9 +608,11 @@ export async function fetchCurrentPresident(): Promise<President | null> {
 }
 
 export async function fetchJusticeLeaderboard(): Promise<JusticeLeaderboardEntry[]> {
-  return requestJson(`${API_BASE}/justices/leaderboard`, "Failed to load justice leaderboard", {
-    camelize: true,
-  });
+  return asList(
+    await requestJson(`${API_BASE}/justices/leaderboard`, "Failed to load justice leaderboard", {
+      camelize: true,
+    })
+  );
 }
 
 export async function fetchJustice(id: string): Promise<Justice> {
@@ -1025,9 +1093,11 @@ export async function clearStuckStockTradesPipeline(
 }
 
 export async function fetchAdminPipelineHistory(token: string): Promise<PipelineHistoryRun[]> {
-  return requestJson(`${API_BASE}/admin/pipeline/history?limit=20`, "History failed", {
-    init: { headers: adminHeaders(token) },
-  });
+  return asList(
+    await requestJson(`${API_BASE}/admin/pipeline/history?limit=20`, "History failed", {
+      init: { headers: adminHeaders(token) },
+    })
+  );
 }
 
 export async function fetchAdminSystemStats(token: string): Promise<HostStats> {
@@ -1074,9 +1144,11 @@ export interface TopPageEntry {
 }
 
 export async function fetchAdminTopPages(token: string, days: number = 7): Promise<TopPageEntry[]> {
-  return requestJson(`${API_BASE}/admin/top-pages?days=${days}`, "Top pages failed", {
-    init: { headers: adminHeaders(token) },
-  });
+  return asList(
+    await requestJson(`${API_BASE}/admin/top-pages?days=${days}`, "Top pages failed", {
+      init: { headers: adminHeaders(token) },
+    })
+  );
 }
 
 export interface PhaseTimingPhase {
@@ -1182,7 +1254,10 @@ export async function fetchActionIssues(date?: string): Promise<ActionIssuesResp
   // already serves this with `Cache-Control: public, max-age=300`, so a
   // 5-minute client cache matches its own freshness policy while collapsing
   // the several consumers that request the same day's issues on load.
-  return cachedFetch(`${API_BASE}/action/issues${params}`, 300_000);
+  return withShape<ActionIssuesResponse>(
+    await cachedFetch(`${API_BASE}/action/issues${params}`, 300_000),
+    { lists: ["issues", "availableDates"] }
+  );
 }
 
 export async function submitPulseVote(
@@ -1199,7 +1274,10 @@ export async function submitPulseVote(
 }
 
 export async function fetchMyReps(state: string): Promise<MyRepsResponse> {
-  return cachedFetch(`${API_BASE}/action/my-reps?state=${encodeURIComponent(state)}`, TTL.MEDIUM);
+  return withShape<MyRepsResponse>(
+    await cachedFetch(`${API_BASE}/action/my-reps?state=${encodeURIComponent(state)}`, TTL.MEDIUM),
+    { lists: ["senators", "representatives"] }
+  );
 }
 
 export interface ScoreSnapshot {
@@ -1220,15 +1298,24 @@ export interface ScoreHistory {
 }
 
 export async function fetchSenatorHistory(senatorId: string): Promise<ScoreHistory> {
-  return cachedFetch(`${API_BASE}/senators/${senatorId}/history`, TTL.LONG);
+  return withShape<ScoreHistory>(
+    await cachedFetch(`${API_BASE}/senators/${senatorId}/history`, TTL.LONG),
+    { lists: ["snapshots"] }
+  );
 }
 
 export async function fetchRepresentativeHistory(repId: string): Promise<ScoreHistory> {
-  return cachedFetch(`${API_BASE}/representatives/${repId}/history`, TTL.LONG);
+  return withShape<ScoreHistory>(
+    await cachedFetch(`${API_BASE}/representatives/${repId}/history`, TTL.LONG),
+    { lists: ["snapshots"] }
+  );
 }
 
 export async function fetchPresidentHistory(presidentId: string): Promise<ScoreHistory> {
-  return cachedFetch(`${API_BASE}/presidents/${presidentId}/history`, TTL.LONG);
+  return withShape<ScoreHistory>(
+    await cachedFetch(`${API_BASE}/presidents/${presidentId}/history`, TTL.LONG),
+    { lists: ["snapshots"] }
+  );
 }
 
 export interface OpenCommentItem {
@@ -1244,7 +1331,7 @@ export interface OpenCommentItem {
 }
 
 export async function fetchOpenComments(): Promise<OpenCommentItem[]> {
-  return cachedFetch(`${API_BASE}/action/open-comments`, TTL.LONG);
+  return asList(await cachedFetch(`${API_BASE}/action/open-comments`, TTL.LONG));
 }
 
 export interface CountryArticle {
@@ -1267,7 +1354,10 @@ export interface CountryNewsResponse {
 }
 
 export async function fetchCountryNews(): Promise<CountryNewsResponse> {
-  return requestJson(`${API_BASE}/action/country-news`, "Failed to load country news");
+  return withShape<CountryNewsResponse>(
+    await requestJson(`${API_BASE}/action/country-news`, "Failed to load country news"),
+    { lists: ["countries"] }
+  );
 }
 
 export interface ElectionSenator {
@@ -1304,7 +1394,9 @@ export interface ElectionInfo {
 }
 
 export async function fetchElectionInfo(): Promise<ElectionInfo> {
-  return cachedFetch(`${API_BASE}/action/elections`, TTL.LONG);
+  return withShape<ElectionInfo>(await cachedFetch(`${API_BASE}/action/elections`, TTL.LONG), {
+    lists: ["states"],
+  });
 }
 
 // ── Midterm-elections feature (candidate rosters, race detail, PVI) ──
@@ -1314,11 +1406,18 @@ export async function fetchElectionInfo(): Promise<ElectionInfo> {
 // server-side by app/elections/[raceId]/page.tsx, not through this client.
 
 export async function fetchRaces(): Promise<RaceSummary[]> {
-  return cachedFetch(`${API_BASE}/elections/races`, TTL.SHORT);
+  return asList(await cachedFetch(`${API_BASE}/elections/races`, TTL.SHORT));
 }
 
 export async function fetchPviMap(): Promise<PviMap> {
-  return cachedFetch(`${API_BASE}/elections/pvi`, TTL.LONG);
+  // `states` and `districts` are maps, not lists, and callers index into them
+  // directly — an absent one has to arrive as {} rather than undefined.
+  const raw = asRecord(await cachedFetch(`${API_BASE}/elections/pvi`, TTL.LONG));
+  return {
+    ...raw,
+    states: asRecord(raw.states),
+    districts: asRecord(raw.districts),
+  } as unknown as PviMap;
 }
 
 /** Not cached — every address is a distinct, user-entered, one-off
@@ -1358,7 +1457,10 @@ export interface NationalMonitorDetail extends NationalMonitor {
 }
 
 export async function fetchMonitors(): Promise<{ monitors: NationalMonitor[] }> {
-  return cachedFetch(`${API_BASE}/action/monitors`, TTL.MEDIUM);
+  return withShape<{ monitors: NationalMonitor[] }>(
+    await cachedFetch(`${API_BASE}/action/monitors`, TTL.MEDIUM),
+    { lists: ["monitors"] }
+  );
 }
 
 export async function fetchMonitorDetail(slug: string): Promise<NationalMonitorDetail> {
@@ -1420,7 +1522,10 @@ export interface TimelineResponse {
 
 export async function fetchTimeline(year?: number): Promise<TimelineResponse> {
   const params = year ? `?year=${year}` : "";
-  return cachedFetch(`${API_BASE}/action/timeline${params}`, TTL.MEDIUM);
+  return withShape<TimelineResponse>(
+    await cachedFetch(`${API_BASE}/action/timeline${params}`, TTL.MEDIUM),
+    { lists: ["months", "monitors", "topThemes", "upcomingEvents"] }
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1439,7 +1544,7 @@ export async function fetchPoliticianDirectory(params?: {
   if (params?.party) qs.set("party", params.party);
   if (params?.q) qs.set("q", params.q);
   const query = qs.toString() ? `?${qs.toString()}` : "";
-  return cachedFetch(`${API_BASE}/politicians${query}`, TTL.SHORT);
+  return asList(await cachedFetch(`${API_BASE}/politicians${query}`, TTL.SHORT));
 }
 
 export interface FeedbackSubmission {

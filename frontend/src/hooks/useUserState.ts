@@ -27,7 +27,7 @@ export function useUserState(): [string | null, (s: string | null) => void] {
   const state = useSyncExternalStore(
     subscribe,
     () => localStorage.getItem(KEY),
-    () => null,
+    () => null
   );
 
   const setUserState = useCallback((s: string | null) => {

@@ -1,7 +1,22 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   EXPLORE_HIGHLIGHT_END,
   EXPLORE_HIGHLIGHT_START,
+  __resetApiCache,
+  fetchActionIssues,
+  fetchBillsInFlight,
+  fetchJusticeLeaderboard,
+  fetchLeaderboard,
+  fetchMonitors,
+  fetchOpenComments,
+  fetchPoliticianDirectory,
+  fetchPresidentLeaderboard,
+  fetchPviMap,
+  fetchRaces,
+  fetchRepStates,
+  fetchSenatorsByState,
+  fetchStates,
+  fetchTimeline,
   parseExploreSummaryText,
   splitHighlights,
 } from "./api";
@@ -93,9 +108,7 @@ describe("splitHighlights", () => {
   });
 
   it("returns a single plain segment when nothing matched", () => {
-    expect(splitHighlights("no markers here")).toEqual([
-      { text: "no markers here", match: false },
-    ]);
+    expect(splitHighlights("no markers here")).toEqual([{ text: "no markers here", match: false }]);
   });
 
   it("returns nothing for an empty snippet", () => {
@@ -124,5 +137,114 @@ describe("splitHighlights — unpaired markers", () => {
       { text: "funding for ", match: false },
       { text: "wildfire", match: false },
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Shape guarantees
+//
+// The Pi serves this site from a database the pipeline fills in overnight, so
+// "the endpoint exists but has nothing in it" is a normal state, not an edge
+// case. Each of these fetchers declares a list in its return type; before the
+// normalizers, a `{}` from the backend satisfied TypeScript and then crashed
+// the caller's `.map` at runtime, replacing the page with the browser's own
+// error screen. These tests hold that line.
+// ---------------------------------------------------------------------------
+
+const EMPTY_SHAPES: [string, unknown][] = [
+  ["an empty object", {}],
+  ["a bare array where an object belongs", []],
+  ["null", null],
+  ["a payload whose list field is null", { issues: null, entries: null, months: null }],
+];
+
+function mockJson(body: unknown) {
+  return vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    json: async () => body,
+  })) as unknown as typeof fetch;
+}
+
+describe("API shape guarantees", () => {
+  beforeEach(() => {
+    __resetApiCache();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const listFetchers: [string, () => Promise<unknown[]>][] = [
+    ["fetchLeaderboard", () => fetchLeaderboard()],
+    ["fetchStates", () => fetchStates()],
+    ["fetchRepStates", () => fetchRepStates()],
+    ["fetchJusticeLeaderboard", () => fetchJusticeLeaderboard()],
+    ["fetchPresidentLeaderboard", () => fetchPresidentLeaderboard()],
+    ["fetchOpenComments", () => fetchOpenComments()],
+    ["fetchRaces", () => fetchRaces()],
+    ["fetchPoliticianDirectory", () => fetchPoliticianDirectory()],
+    ["fetchSenatorsByState", () => fetchSenatorsByState("CA")],
+  ];
+
+  for (const [name, call] of listFetchers) {
+    for (const [label, body] of EMPTY_SHAPES) {
+      it(`${name} returns a list when the backend sends ${label}`, async () => {
+        vi.stubGlobal("fetch", mockJson(body));
+        __resetApiCache();
+        const result = await call();
+        expect(Array.isArray(result)).toBe(true);
+        expect(result).toHaveLength(0);
+      });
+    }
+  }
+
+  it("fetchActionIssues always exposes issues and availableDates as lists", async () => {
+    vi.stubGlobal("fetch", mockJson({ date: "2026-08-18" }));
+    const result = await fetchActionIssues();
+    expect(result.issues).toEqual([]);
+    expect(result.availableDates).toEqual([]);
+    // Fields the backend did send are preserved, not clobbered by the defaults.
+    expect(result.date).toBe("2026-08-18");
+  });
+
+  it("fetchTimeline always exposes its four lists", async () => {
+    vi.stubGlobal("fetch", mockJson({ year: 2026, totalDays: 4 }));
+    const result = await fetchTimeline();
+    expect(result.months).toEqual([]);
+    expect(result.monitors).toEqual([]);
+    expect(result.topThemes).toEqual([]);
+    expect(result.upcomingEvents).toEqual([]);
+    expect(result.totalDays).toBe(4);
+  });
+
+  it("fetchMonitors returns { monitors: [] } for an empty payload", async () => {
+    vi.stubGlobal("fetch", mockJson({}));
+    expect(await fetchMonitors()).toEqual({ monitors: [] });
+  });
+
+  it("fetchBillsInFlight returns an empty bills list rather than undefined", async () => {
+    vi.stubGlobal("fetch", mockJson({ total: 0 }));
+    expect((await fetchBillsInFlight()).bills).toEqual([]);
+  });
+
+  it("fetchBillsInFlight returns a reducible stageCounts map", async () => {
+    vi.stubGlobal("fetch", mockJson({ total: 0 }));
+    // The bills page reduces over this during render to headline a bill count.
+    expect((await fetchBillsInFlight()).stageCounts).toEqual({});
+  });
+
+  it("fetchPviMap returns indexable maps even with nothing in them", async () => {
+    vi.stubGlobal("fetch", mockJson({}));
+    const pvi = await fetchPviMap();
+    // The elections map indexes these by state/district code on every render.
+    expect(pvi.states).toEqual({});
+    expect(pvi.districts).toEqual({});
+  });
+
+  it("keeps real data intact — normalizing is not filtering", async () => {
+    const entry = { id: "S001", name: "Example", overallScore: 71 };
+    vi.stubGlobal("fetch", mockJson([entry]));
+    expect(await fetchLeaderboard()).toEqual([entry]);
   });
 });

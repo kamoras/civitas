@@ -16,6 +16,7 @@ import {
 import { localDateStr, formatUtcDate } from "@/lib/formatting";
 import { chamberColor, chamberBg, chamberLabel } from "@/lib/chamber";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
+import { useAsyncData } from "@/hooks/useAsyncData";
 
 type ChamberFilter = "all" | "Senate" | "House" | "Executive" | "Judicial" | "Regulatory";
 
@@ -179,22 +180,45 @@ export default function ExplorePage() {
   );
 }
 
+/** A search as submitted — the four inputs that define one set of results. */
+type SubmittedSearch = {
+  query: string;
+  chamber: ChamberFilter;
+  commentableOnly: boolean;
+  sort: "relevance" | "date";
+};
+
+const searchKey = (s: SubmittedSearch) =>
+  `explore:${s.query}|${s.chamber}|${s.commentableOnly ? 1 : 0}|${s.sort}`;
+
+const INDEX_BUILDING_MESSAGE =
+  "The search index is still being built. This happens right after a data refresh — please check back in a few minutes.";
+
+// Stable identity: a fresh [] on every render would restart every memo and
+// effect downstream of `results` for no reason.
+const EMPTY_RESULTS: ExploreResult[] = [];
+
 function ExplorePageInner() {
   const searchParams = useSearchParams();
-  const [query, setQuery] = useState("");
+  // Seeded from ?q= at first render rather than assigned back in a mount
+  // effect, so the input is right on the first paint instead of one frame late.
+  const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
   const [chamber, setChamber] = useState<ChamberFilter>("all");
   const [commentableOnly, setCommentableOnly] = useState(false);
   const [sortOrder, setSortOrder] = useState<"relevance" | "date">("relevance");
-  const [results, setResults] = useState<ExploreResult[]>([]);
   const [stats, setStats] = useState<ExploreStats | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [searched, setSearched] = useState(false);
-  const [error, setError] = useState("");
-  // Results came from the keyword channel alone because the vector index is
-  // rebuilding. A partial answer presented as a whole one is the thing to
-  // avoid here — the reader has no other way to tell.
-  const [semanticDown, setSemanticDown] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // The search that is currently on screen, as a value. A deep-linked ?q= is
+  // just this state's initial value, which is why there is no mount effect
+  // firing a search — and no window in which the URL says one thing and the
+  // results pane shows another.
+  const [submitted, setSubmitted] = useState<SubmittedSearch | null>(() => {
+    const initialQ = searchParams.get("q")?.trim();
+    return initialQ
+      ? { query: initialQ, chamber: "all", commentableOnly: false, sort: "relevance" }
+      : null;
+  });
 
   useEffect(() => {
     fetchExploreStats()
@@ -202,70 +226,60 @@ function ExplorePageInner() {
       .catch(() => {});
   }, []);
 
-  const doSearch = useCallback(
-    async (q: string, ch: ChamberFilter, commentOnly: boolean, sort: "relevance" | "date") => {
-      if (!q.trim()) return;
-      setLoading(true);
-      setError("");
-      setSearched(true);
-      try {
-        const politicianId = searchParams.get("politician_id") || undefined;
-        const resp = await searchExplore(q, {
-          chamber: ch === "all" ? undefined : ch,
-          limit: 30,
-          commentableOnly: commentOnly || undefined,
-          sort,
-          politicianId,
-        });
-        if (resp.indexEmpty) {
-          setError(
-            "The search index is still being built. This happens right after a data refresh — please check back in a few minutes."
-          );
-          setResults([]);
-          setSemanticDown(false);
-        } else {
-          setResults(resp.results);
-          setSemanticDown(Boolean(resp.semanticUnavailable));
-        }
-      } catch (e) {
-        setError(
-          e instanceof Error
-            ? e.message
-            : "Search failed. The explore pipeline may still be ingesting data."
-        );
-        setResults([]);
-        setSemanticDown(false);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [searchParams]
+  const politicianId = searchParams.get("politician_id") || undefined;
+  const request = useAsyncData(
+    submitted ? `${searchKey(submitted)}|${politicianId ?? ""}` : "",
+    submitted
+      ? () =>
+          searchExplore(submitted.query, {
+            chamber: submitted.chamber === "all" ? undefined : submitted.chamber,
+            limit: 30,
+            commentableOnly: submitted.commentableOnly || undefined,
+            sort: submitted.sort,
+            politicianId,
+          })
+      : null
   );
 
-  useEffect(() => {
-    const initialQ = searchParams.get("q");
-    if (initialQ) {
-      setQuery(initialQ);
-      doSearch(initialQ, chamber, commentableOnly, sortOrder);
-    }
-    // Only run on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const searched = submitted !== null;
+  const loading = request.loading;
+  const resp = request.data;
+  // An empty index is a backend state, not a transport failure, but it reaches
+  // the reader the same way: as an explanation of why there is nothing here.
+  const indexEmpty = Boolean(resp?.indexEmpty);
+  const error = request.error ?? (indexEmpty ? INDEX_BUILDING_MESSAGE : "");
+  const results = indexEmpty ? EMPTY_RESULTS : (resp?.results ?? EMPTY_RESULTS);
+  // Results came from the keyword channel alone because the vector index is
+  // rebuilding. A partial answer presented as a whole one is the thing to
+  // avoid here — the reader has no other way to tell.
+  const semanticDown = !indexEmpty && Boolean(resp?.semanticUnavailable);
+  // What the results are *of*, which is not what is in the box: typing a new
+  // term must not silently relabel the results still showing from the old one.
+  const resultsFor = submitted?.query ?? "";
+
+  const runSearch = useCallback(
+    (q: string, ch: ChamberFilter, commentOnly: boolean, sort: "relevance" | "date") => {
+      const trimmed = q.trim();
+      if (!trimmed) return;
+      setSubmitted({ query: trimmed, chamber: ch, commentableOnly: commentOnly, sort });
+    },
+    []
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    doSearch(query, chamber, commentableOnly, sortOrder);
+    runSearch(query, chamber, commentableOnly, sortOrder);
   };
 
   const handleSuggestion = (q: string) => {
     setQuery(q);
-    doSearch(q, chamber, commentableOnly, sortOrder);
+    runSearch(q, chamber, commentableOnly, sortOrder);
   };
 
   const handleChamberChange = (ch: ChamberFilter) => {
     setChamber(ch);
     if (searched && query.trim()) {
-      doSearch(query, ch, commentableOnly, sortOrder);
+      runSearch(query, ch, commentableOnly, sortOrder);
     }
   };
 
@@ -273,14 +287,14 @@ function ExplorePageInner() {
     const next = !commentableOnly;
     setCommentableOnly(next);
     if (searched && query.trim()) {
-      doSearch(query, chamber, next, sortOrder);
+      runSearch(query, chamber, next, sortOrder);
     }
   };
 
   const handleSortChange = (s: "relevance" | "date") => {
     setSortOrder(s);
     if (searched && query.trim()) {
-      doSearch(query, chamber, commentableOnly, s);
+      runSearch(query, chamber, commentableOnly, s);
     }
   };
 
@@ -484,7 +498,8 @@ function ExplorePageInner() {
           {!loading && searched && results.length > 0 && (
             <div aria-live="polite">
               <p className="text-ink-lo text-xs mb-4">
-                {results.length} result{results.length !== 1 ? "s" : ""} for &ldquo;{query}&rdquo;
+                {results.length} result{results.length !== 1 ? "s" : ""} for &ldquo;{resultsFor}
+                &rdquo;
                 {commentableOnly && (
                   <span className="text-emerald-400/70 ml-2">— open for comment only</span>
                 )}
@@ -494,7 +509,7 @@ function ExplorePageInner() {
               </p>
               <div className="space-y-3">
                 {results.map((r) => (
-                  <ResultCard key={r.id} result={r} query={query} />
+                  <ResultCard key={r.id} result={r} query={resultsFor} />
                 ))}
               </div>
             </div>
@@ -504,7 +519,7 @@ function ExplorePageInner() {
           {!loading && searched && !error && results.length === 0 && (
             <div className="text-center py-12">
               <p className="text-ink-lo text-base mb-2">
-                No results found for &ldquo;{query}&rdquo;
+                No results found for &ldquo;{resultsFor}&rdquo;
               </p>
               <p className="text-ink-lo text-xs">
                 Try a broader search term or adjust your filters.

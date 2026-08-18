@@ -8,6 +8,7 @@ import Footer from "@/components/layout/Footer";
 import { safeHref, localDateStr, formatUtcDate } from "@/lib/formatting";
 import { chamberColor, chamberBorder, chamberLabel } from "@/lib/chamber";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
+import { useAsyncData } from "@/hooks/useAsyncData";
 import {
   fetchExploreDocument,
   streamExploreDocumentSummary,
@@ -512,7 +513,6 @@ export default function ExploreDetailPage() {
   const docId = Number(params.id);
   const query = searchParams.get("q") || "";
 
-  const [doc, setDoc] = useState<ExploreDocumentDetail | null>(null);
   // liveText accumulates as the stream arrives; summary is set once the
   // stream's terminal event resolves (also the ONLY thing that fires on a
   // cache hit — no deltas at all — so it can't be dropped in favor of just
@@ -520,22 +520,23 @@ export default function ExploreDetailPage() {
   // parseExploreSummaryText(liveText) instead for progressive display.
   const [liveText, setLiveText] = useState("");
   const [summary, setSummary] = useState<ExploreDocumentSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [summaryStreaming, setSummaryStreaming] = useState(false);
-  const [error, setError] = useState("");
+
+  const docRequest = useAsyncData(
+    `explore-doc:${docId || ""}`,
+    docId ? () => fetchExploreDocument(docId) : null
+  );
+  const doc = docRequest.data;
+  const loading = docRequest.loading;
+  const docError = docRequest.error;
+
+  // The summary is streamed token-by-token, so it is a real side effect
+  // rather than a keyed fetch. A ref is the re-entry guard so nothing has to
+  // be set synchronously in the effect body.
+  const streamStarted = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!docId) return;
-    setLoading(true);
-    fetchExploreDocument(docId)
-      .then(setDoc)
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load document"))
-      .finally(() => setLoading(false));
-  }, [docId]);
-
-  useEffect(() => {
-    if (!docId || summaryStreaming || summary) return;
-    setSummaryStreaming(true);
+    if (!docId || streamStarted.current === docId || summary) return;
+    streamStarted.current = docId;
     streamExploreDocumentSummary(docId, setLiveText)
       .then(setSummary)
       .catch(() => {
@@ -544,9 +545,13 @@ export default function ExploreDetailPage() {
           keyPoints: [],
           impact: "",
         });
-      })
-      .finally(() => setSummaryStreaming(false));
-  }, [docId, summaryStreaming, summary]);
+      });
+  }, [docId, summary]);
+
+  // Both the success and the failure path of the stream set `summary`, so
+  // "still streaming" is exactly "asked for one and none has landed" — no
+  // separate flag to keep in sync.
+  const summaryStreaming = Boolean(docId) && summary === null;
 
   const displayedSummary = summary ?? (liveText ? parseExploreSummaryText(liveText) : null);
 
@@ -564,13 +569,13 @@ export default function ExploreDetailPage() {
     );
   }
 
-  if (error || !doc) {
+  if (docError || !doc) {
     return (
       <>
         <Navbar />
         <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
           <div className="max-w-3xl mx-auto text-center py-20">
-            <p className="text-signal-magenta text-base mb-4">{error || "Document not found"}</p>
+            <p className="text-signal-magenta text-base mb-4">{docError || "Document not found"}</p>
             <Link
               href="/explore"
               className="text-xs font-mono text-signal-cyan hover:text-phos transition-colors"

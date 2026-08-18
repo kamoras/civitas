@@ -8,8 +8,9 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
 import { fetchActionIssues, fetchOpenComments, OpenCommentItem } from "@/lib/api";
+import { useAsyncData } from "@/hooks/useAsyncData";
 import { useUserState } from "@/hooks/useUserState";
-import { formatUtcDate } from "@/lib/formatting";
+import { describeDaysLeft, formatUtcDate } from "@/lib/formatting";
 import { PARTY_COLORS, PARTY_BORDER } from "@/lib/partyStyles";
 import StancePulse from "@/components/action/StancePulse";
 import { LogActionButton } from "@/components/action/CivicTracker";
@@ -30,7 +31,7 @@ import {
 } from "@/components/action/IssueEnrichment";
 
 const CivicActionWidget = dynamic(() => import("@/components/action/CivicTracker"), { ssr: false });
-import type { ActionIssue, ActionIssuesResponse } from "@/types/action";
+import type { ActionIssue } from "@/types/action";
 import { STATES } from "@/data/states";
 
 const GlobeTab = dynamic(() => import("@/components/action/GlobeTab"), {
@@ -498,23 +499,16 @@ function IssuesTab({
   initialIssueId?: number | null;
   onIssueChange?: (id: number | null) => void;
 }) {
-  const [data, setData] = useState<ActionIssuesResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [fetchError, setFetchError] = useState(false);
+  // The selected day IS the request. Keying the fetch on it means the pager
+  // can't get out of step with what is on screen: there is no separate
+  // "which day did we last ask for" to drift from `selectedDate`.
   const [selectedDate, setSelectedDate] = useState<string | null>(initialDate || null);
-
-  const loadIssues = useCallback((date?: string) => {
-    setLoading(true);
-    setFetchError(false);
-    fetchActionIssues(date)
-      .then((d) => setData(d))
-      .catch(() => setFetchError(true))
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => {
-    loadIssues(initialDate || undefined);
-  }, [loadIssues, initialDate]);
+  const request = useAsyncData(`action-issues:${selectedDate ?? "latest"}`, () =>
+    fetchActionIssues(selectedDate || undefined)
+  );
+  const data = request.data;
+  const loading = request.loading;
+  const fetchError = request.error !== null;
 
   const availableDates = useMemo(() => data?.availableDates || [], [data?.availableDates]);
   const currentDate = selectedDate || data?.date || null;
@@ -524,23 +518,20 @@ function IssuesTab({
     if (currentIdx < availableDates.length - 1) {
       const d = availableDates[currentIdx + 1];
       setSelectedDate(d);
-      loadIssues(d);
       onDateChange?.(d);
     }
-  }, [currentIdx, availableDates, loadIssues, onDateChange]);
+  }, [currentIdx, availableDates, onDateChange]);
 
   const goToNext = useCallback(() => {
     if (currentIdx > 0) {
       const d = availableDates[currentIdx - 1];
       setSelectedDate(d);
-      loadIssues(d);
       onDateChange?.(d);
     } else if (currentIdx === 0 && selectedDate) {
       setSelectedDate(null);
-      loadIssues();
       onDateChange?.(null);
     }
-  }, [currentIdx, availableDates, selectedDate, loadIssues, onDateChange]);
+  }, [currentIdx, availableDates, selectedDate, onDateChange]);
 
   const generatedAt = data?.generatedAt;
 
@@ -576,7 +567,7 @@ function IssuesTab({
         </div>
         <p className="text-ink-lo text-base mb-4">Could not load today&apos;s issues.</p>
         <button
-          onClick={() => loadIssues(selectedDate || undefined)}
+          onClick={request.retry}
           className="text-signal-cyan font-mono text-xs tracking-widest border border-white/15 px-4 py-2 hover:bg-signal-cyan/10 transition-colors"
         >
           RETRY
@@ -629,7 +620,6 @@ function IssuesTab({
             <button
               onClick={() => {
                 setSelectedDate(null);
-                loadIssues();
                 onDateChange?.(null);
               }}
               className="text-ink-lo hover:text-phos transition-colors ml-1"
@@ -710,20 +700,21 @@ function isValidTab(s: string | null): s is Tab {
 }
 
 function OpenCommentsBanner() {
-  const [items, setItems] = useState<OpenCommentItem[]>([]);
+  // The clock is read once, when the comment periods land, and carried
+  // alongside them. Reading it again on every render would make the countdown
+  // depend on when React happened to re-render — a value that changes without
+  // any input changing is exactly what a render is not allowed to produce.
+  const [loaded, setLoaded] = useState<{ items: OpenCommentItem[]; asOf: number } | null>(null);
 
   useEffect(() => {
     fetchOpenComments()
-      .then(setItems)
+      .then((items) => setLoaded({ items, asOf: Date.now() }))
       .catch(() => {});
   }, []);
 
-  if (items.length === 0) return null;
-
-  function daysLeft(closeDate: string): string {
-    const diff = Math.ceil((new Date(closeDate).getTime() - Date.now()) / 86400000);
-    return diff <= 0 ? "closes today" : diff === 1 ? "1 day left" : `${diff} days left`;
-  }
+  if (!loaded || loaded.items.length === 0) return null;
+  const items = loaded.items;
+  const daysLeft = (closeDate: string) => describeDaysLeft(closeDate, loaded.asOf);
 
   return (
     <section aria-label="Open public comment periods" className="mb-6">
@@ -793,8 +784,13 @@ function ActionPageInner() {
     window.history.replaceState(null, "", url);
   }, []);
 
+  // The address bar is the single source of truth for which tab is showing.
+  // Tab clicks write ?tab= through the History API (see replaceUrl) and Next
+  // feeds that back through useSearchParams, so the rendered tab follows the
+  // URL with no second copy of the answer to keep in sync. (replaceState, so
+  // tab switches deliberately do not stack up history entries.)
   const paramTab = searchParams.get("tab");
-  const [activeTab, setActiveTabRaw] = useState<Tab>(isValidTab(paramTab) ? paramTab : "issues");
+  const activeTab: Tab = isValidTab(paramTab) ? paramTab : "issues";
   const [userState, setUserState] = useUserState();
   const [sharedIssues, setSharedIssues] = useState<ActionIssue[]>([]);
 
@@ -821,20 +817,8 @@ function ActionPageInner() {
     };
   });
 
-  useEffect(() => {
-    const t = searchParams.get("tab");
-    if (isValidTab(t) && t !== activeTab) {
-      setActiveTabRaw(t);
-    } else if (!t && activeTab !== "issues") {
-      setActiveTabRaw("issues");
-    }
-    // activeTab intentionally omitted: including it would re-trigger the effect
-    // on every user-initiated tab switch, creating a loop with setActiveTab.
-  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const setActiveTab = useCallback(
     (tab: Tab) => {
-      setActiveTabRaw(tab);
       const url = tab === "issues" ? "/action" : `/action?tab=${tab}`;
       replaceUrl(url);
       // Focus the newly selected *tab*, not its panel. The tabs use a roving

@@ -100,3 +100,19 @@ export function parseUtc(iso: string): Date | null {
   const d = new Date(hasTime && !hasOffset ? `${iso}Z` : iso);
   return Number.isNaN(d.getTime()) ? null : d;
 }
+
+/**
+ * Days remaining until a comment period closes, phrased for a reader.
+ *
+ * `asOf` is passed in rather than read from the clock: a countdown computed
+ * during render would change without any input changing, which is both impure
+ * and untestable. Callers read the clock once, when the deadline arrives.
+ */
+export function describeDaysLeft(closeDate: string, asOf: number): string {
+  const close = parseUtc(closeDate);
+  if (!close) return "";
+  const diff = Math.ceil((close.getTime() - asOf) / 86400000);
+  if (diff <= 0) return "closes today";
+  if (diff === 1) return "1 day left";
+  return `${diff} days left`;
+}
