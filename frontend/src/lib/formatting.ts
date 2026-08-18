@@ -37,7 +37,7 @@ export function localDateStr(d: Date = new Date()): string {
 export function formatUtcDate(
   dateStr: string,
   opts: Intl.DateTimeFormatOptions = { year: "numeric", month: "long", day: "numeric" },
-  locale?: string,
+  locale?: string
 ): string {
   if (!dateStr) return "";
   try {
@@ -64,7 +64,7 @@ export function formatWeekRange(startDate: string, endDate: string): string {
   const startFmt = start.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   const endFmt = end.toLocaleDateString(
     "en-US",
-    start.getMonth() === end.getMonth() ? { day: "numeric" } : { month: "short", day: "numeric" },
+    start.getMonth() === end.getMonth() ? { day: "numeric" } : { month: "short", day: "numeric" }
   );
   return `${startFmt}–${endFmt}, ${end.getFullYear()}`;
 }
@@ -82,4 +82,21 @@ export function safeHref(url: string | null | undefined): string | undefined {
     /* malformed URL */
   }
   return undefined;
+}
+
+/** Parses an ISO-8601 timestamp, treating an offset-less string as UTC —
+ * `new Date("2026-07-04T12:00:00")` would otherwise parse as viewer-local
+ * time (repo precedent: admin/page.tsx's `new Date(startIso + "Z")`).
+ *
+ * This is not a hypothetical: the backend's `utcnow()` deliberately returns a
+ * NAIVE UTC datetime (see backend/app/time_utils.py), so Pydantic serialises
+ * every timestamp without a `Z` or an offset. Passing one of those straight
+ * to `new Date` silently shifts it by the viewer's UTC offset.
+ * Returns null for unparseable input.
+ */
+export function parseUtc(iso: string): Date | null {
+  const hasTime = /[T ]\d{2}:\d{2}/.test(iso);
+  const hasOffset = /(?:Z|[+-]\d{2}:?\d{2})$/.test(iso);
+  const d = new Date(hasTime && !hasOffset ? `${iso}Z` : iso);
+  return Number.isNaN(d.getTime()) ? null : d;
 }

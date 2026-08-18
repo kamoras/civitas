@@ -65,23 +65,16 @@ export function raceBadgeLabel(race: { office: string; district: number | null }
  * carry real information); "(part)" is left as-is since it means that
  * county is split across districts. Null in, null out — a district
  * missing from the crosswalk stays unlabeled, never a guessed list. */
+/* parseUtc moved to lib/formatting.ts — it is a generic ISO-8601 concern,
+   and the records band and homepage index need it too. Re-exported here so
+   existing election call sites keep their import path. */
+export { parseUtc } from "./formatting";
+
 export function districtCountiesLabel(counties: string[] | null, max = 3): string | null {
   if (!counties || counties.length === 0) return null;
   const short = counties.map((c) => c.replace(/ County\b/, ""));
   if (short.length <= max) return short.join(", ");
   return `${short.slice(0, max).join(", ")} & ${short.length - max} more`;
-}
-
-/** Parses an ISO-8601 timestamp, treating an offset-less string as UTC —
- * `new Date("2026-07-04T12:00:00")` would otherwise parse as viewer-local
- * time (repo precedent: admin/page.tsx's `new Date(startIso + "Z")`).
- * Returns null for unparseable input.
- */
-export function parseUtc(iso: string): Date | null {
-  const hasTime = /[T ]\d{2}:\d{2}/.test(iso);
-  const hasOffset = /(?:Z|[+-]\d{2}:?\d{2})$/.test(iso);
-  const d = new Date(hasTime && !hasOffset ? `${iso}Z` : iso);
-  return Number.isNaN(d.getTime()) ? null : d;
 }
 
 /** "Active" candidates get full card treatment; the rest (paper filers,

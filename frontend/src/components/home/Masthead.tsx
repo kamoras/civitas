@@ -30,15 +30,14 @@ export default function Masthead() {
     <section className="mx-auto max-w-7xl px-4 pt-8 sm:px-6">
       <div className="grid grid-cols-1 gap-8 md:grid-cols-12 md:gap-9">
         <div className="md:col-span-8">
-          <h1 className="overprint font-pixel text-2xl leading-none text-ink-hi sm:text-3xl">
-            {/* Duplicate plates are decorative; the accessible name is the
-                base copy alone. */}
-            <span className="overprint-plate magenta" aria-hidden="true">
-              CIVITAS
-            </span>
-            <span className="overprint-plate cyan" aria-hidden="true">
-              CIVITAS
-            </span>
+          {/* The two offset plates are drawn from `data-text` as pseudo-
+              elements (see .overprint in globals.css), so the heading's text
+              content stays exactly "CIVITAS" — copyable, findable and
+              scrapeable once rather than three times. */}
+          <h1
+            className="overprint font-pixel text-2xl leading-none text-ink-hi sm:text-3xl"
+            data-text="CIVITAS"
+          >
             <span className="relative">CIVITAS</span>
           </h1>
 

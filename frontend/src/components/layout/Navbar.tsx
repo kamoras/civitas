@@ -111,8 +111,23 @@ export default function Navbar() {
           CIVITAS
         </Link>
 
+        {/*
+          `lg` (1024px), not `sm` (640px).
+
+          Nine wide-tracked uppercase links do not fit on one row until about
+          900px, so from 640px up they wrapped to two or three rows. On main
+          that merely made a 41px header 57px, which nothing depended on. With
+          the records band above it, the same wrap produced a 114px header
+          between 640 and 740px — past the 96px (`pt-24`) all 19 pages reserve
+          for the fixed header, clipping the top of their content. Measured
+          across 320-1280px; a four-width spot check missed it entirely.
+
+          Holding the menu button until the links genuinely fit is also the
+          better call on its own: nine cramped links at 640px were never
+          readable.
+        */}
         {/* Desktop nav */}
-        <div className="hidden sm:flex items-center gap-7">
+        <div className="hidden lg:flex items-center gap-7">
           {NAV_LINKS.map(({ href, label, accent }) => {
             const active = isActive(href);
             return (
@@ -147,7 +162,7 @@ export default function Navbar() {
         {/* Mobile hamburger */}
         <button
           ref={toggleRef}
-          className="sm:hidden text-ink-lo hover:text-ink-hi font-mono text-sm tracking-widest transition-colors"
+          className="lg:hidden text-ink-lo hover:text-ink-hi font-mono text-sm tracking-widest transition-colors"
           onClick={() => menuOpen ? closeMenu() : setMenuOpen(true)}
           aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
           aria-expanded={menuOpen}
@@ -162,7 +177,7 @@ export default function Navbar() {
         <div
           ref={menuRef}
           id="mobile-menu"
-          className="sm:hidden bg-surface-base/[0.98] border-t border-white/[0.07] px-6 py-8 flex flex-col items-start gap-5"
+          className="lg:hidden bg-surface-base/[0.98] border-t border-white/[0.07] px-6 py-8 flex flex-col items-start gap-5"
         >
           {NAV_LINKS.map(({ href, label, accent }) => {
             const active = isActive(href);

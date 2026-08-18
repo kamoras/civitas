@@ -7,6 +7,7 @@ import type { NationalMonitor } from "@/lib/api";
 import type { ActionIssue } from "@/types/action";
 import type { BillInFlight } from "@/types/bill";
 import { ACTION_CENTER_MONITORS_HREF } from "@/lib/routes";
+import { parseUtc } from "@/lib/formatting";
 
 /**
  * The dense, dated index of what has recently entered the record.
@@ -36,10 +37,18 @@ export interface RecordEntry {
 
 const MAX_ENTRIES = 6;
 
-/** "2026-08-18" -> "18 AUG". Returns "" for anything unparseable. */
+/**
+ * "2026-08-18" -> "18 AUG". Returns "" for anything unparseable.
+ *
+ * `parseUtc`, not `new Date`: issue dates are date-only (which ECMA-262 does
+ * parse as UTC) but monitor and bill timestamps are full date-times that the
+ * backend serialises without a `Z`, and those parse as viewer-local. Mixing
+ * the two would not only mislabel a day, it would make the sort in
+ * buildRecordEntries inconsistent between sources near midnight.
+ */
 export function formatEntryDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
+  const d = parseUtc(iso);
+  if (!d) return "";
   const month = d.toLocaleString("en-US", { month: "short", timeZone: "UTC" }).toUpperCase();
   return `${String(d.getUTCDate()).padStart(2, "0")} ${month}`;
 }
@@ -73,8 +82,13 @@ export function buildRecordEntries(
       href: `/issue/${i.id}`,
       tone: "text-phos-mid",
     })),
-    // Only monitors the backend still considers live: a closed monitor is
-    // history, and this list is "what changed lately".
+    // ACTIVE only. The endpoint already filters to ACTIVE + WATCHING, so
+    // this drops WATCHING — a monitor gone dormant past the article cutoff
+    // (see MonitorStatus in backend/app/models.py). That is deliberate and
+    // not merely incidental: a dormant monitor often has a null
+    // lastArticleDate, so it would fall back to `updatedAt`, which the
+    // pipeline touches when it flips the status — surfacing a stale monitor
+    // at the top of a list whose whole claim is "what changed lately".
     ...monitors
       .filter((m) => m.status === "active")
       .map((m) => ({
@@ -96,9 +110,11 @@ export function buildRecordEntries(
   ];
 
   return entries
-    .filter((e) => e.title && !Number.isNaN(new Date(e.date).getTime()))
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .slice(0, MAX_ENTRIES);
+    .map((e) => ({ entry: e, at: e.date ? parseUtc(e.date) : null }))
+    .filter((x): x is { entry: RecordEntry; at: Date } => Boolean(x.entry.title && x.at))
+    .sort((a, b) => b.at.getTime() - a.at.getTime())
+    .slice(0, MAX_ENTRIES)
+    .map((x) => x.entry);
 }
 
 export default function RecordIndex() {

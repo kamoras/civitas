@@ -669,29 +669,36 @@ a[target="_blank"] {
    identical offset reads as cheap two-plate printing — an independent press
    rather than a conspiracy. Same DNA, opposite connotation, no new assets.
 
-   The plates are aria-hidden duplicates of the wordmark, so assistive tech
-   reads "CIVITAS" once. They are absolutely positioned against the base
-   copy, which stays in flow and sets the box. */
+   The plates are PSEUDO-ELEMENTS fed by `data-text`, matching how .glitch
+   above already does this. Real duplicated spans were the obvious approach
+   and are wrong: aria-hidden keeps them out of the accessibility tree, but
+   they still land in the element's textContent, so selecting and copying the
+   wordmark yields "CIVITASCIVITASCIVITAS", find-in-page matches three times,
+   and any DOM-text scraper sees it tripled. Pseudo-element content is in none
+   of those. */
 .overprint {
   position: relative;
   display: inline-block;
   white-space: nowrap;
 }
 
-.overprint > .overprint-plate {
+.overprint::before,
+.overprint::after {
+  content: attr(data-text);
   position: absolute;
   top: 0;
   left: 0;
   white-space: nowrap;
   pointer-events: none;
+  user-select: none;
 }
 
-.overprint > .overprint-plate.magenta {
+.overprint::before {
   color: #ff6bd6;
   transform: translate(-3px, 1px);
 }
 
-.overprint > .overprint-plate.cyan {
+.overprint::after {
   color: #4de3e8;
   transform: translate(3px, -1px);
 }
@@ -699,7 +706,8 @@ a[target="_blank"] {
 /* Forced-colors mode replaces our palette wholesale, so the two plates
    collapse onto the base copy as one smeared word. Drop them there. */
 @media (forced-colors: active) {
-  .overprint > .overprint-plate {
+  .overprint::before,
+  .overprint::after {
     display: none;
   }
 }

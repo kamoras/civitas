@@ -77,6 +77,15 @@ describe("formatEntryDate", () => {
   it("returns an empty string rather than 'NaN' for a bad date", () => {
     expect(formatEntryDate("")).toBe("");
   });
+
+  it("treats an offset-less datetime as UTC — the shape monitors and bills send", () => {
+    // The suite runs pinned to America/Los_Angeles (see vitest.config.ts)
+    // precisely so this case can fail. 20:00 UTC on the 17th is 03:00 UTC on
+    // the 18th if the string is mis-parsed as local, so a plain `new Date`
+    // here reports the wrong DAY, not merely the wrong hour. Issue dates are
+    // date-only and would parse as UTC either way, which is why the bug hid.
+    expect(formatEntryDate("2026-08-17T20:00:00")).toBe("17 AUG");
+  });
 });
 
 describe("buildRecordEntries", () => {
@@ -100,13 +109,30 @@ describe("buildRecordEntries", () => {
     expect(entries.map((e) => e.ref)).toEqual(["MON-2", "S100-119", "ISSUE-1"]);
   });
 
+  it("orders a date-only issue against an offset-less monitor timestamp correctly", () => {
+    // The two feeds use different ISO shapes, and ECMA-262 parses them under
+    // different rules — date-only as UTC, offset-less date-time as local. Sorting
+    // them with a bare `new Date` silently interleaves the sources wrongly.
+    const entries = buildRecordEntries(
+      [issue({ id: 1, date: "2026-08-18" })],
+      [monitor({ id: 2, lastArticleDate: "2026-08-17T20:00:00" })],
+      []
+    );
+    expect(entries.map((e) => e.ref)).toEqual(["ISSUE-1", "MON-2"]);
+  });
+
   it("caps the list so the index stays a front page, not a feed", () => {
     const many = Array.from({ length: 20 }, (_, n) => issue({ id: n, date: "2026-08-18" }));
     expect(buildRecordEntries(many, [], [])).toHaveLength(6);
   });
 
-  it("drops monitors the backend no longer considers active", () => {
-    const entries = buildRecordEntries([], [monitor({ id: 9, status: "closed" })], []);
+  it("drops dormant (watching) monitors", () => {
+    // Not "closed": /action/monitors already filters to ACTIVE + WATCHING, so
+    // a closed monitor can never reach this code and asserting on one proves
+    // nothing. WATCHING is what the filter actually excludes — a monitor gone
+    // dormant past the article cutoff, whose updatedAt the pipeline touches
+    // when it flips the status.
+    const entries = buildRecordEntries([], [monitor({ id: 9, status: "watching" })], []);
     expect(entries).toHaveLength(0);
   });
 
