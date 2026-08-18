@@ -9,7 +9,7 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        /* ── Direction C tokens ──────────────────────────────────────────
+        /* ── Public-records palette ──────────────────────────────────────
            Every value below is a SOLID hex, deliberately: the `/NN` opacity
            steps these replace are the root cause of the 260-line contrast
            clamp block in globals.css. Alpha composited over the page

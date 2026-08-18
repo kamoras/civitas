@@ -4,7 +4,6 @@ import { Suspense, useEffect, useMemo, useState, useCallback, useRef } from "rea
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import MatrixRain from "@/components/effects/MatrixRain";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { fetchActionIssues, fetchOpenComments, OpenCommentItem } from "@/lib/api";
@@ -29,10 +28,7 @@ import {
   trackableActions,
 } from "@/components/action/IssueEnrichment";
 
-const CivicActionWidget = dynamic(
-  () => import("@/components/action/CivicTracker"),
-  { ssr: false },
-);
+const CivicActionWidget = dynamic(() => import("@/components/action/CivicTracker"), { ssr: false });
 import type { ActionIssue, ActionIssuesResponse } from "@/types/action";
 import { STATES } from "@/data/states";
 
@@ -40,7 +36,9 @@ const GlobeTab = dynamic(() => import("@/components/action/GlobeTab"), {
   ssr: false,
   loading: () => (
     <div className="flex items-center justify-center py-24">
-      <div className="text-neon-cyan/50 font-mono text-xs tracking-widest animate-pulse">LOADING GLOBE...</div>
+      <div className="text-neon-cyan/50 font-mono text-xs tracking-widest animate-pulse">
+        LOADING GLOBE...
+      </div>
     </div>
   ),
 });
@@ -49,7 +47,9 @@ const ElectionsTab = dynamic(() => import("@/components/action/ElectionsTab"), {
   ssr: false,
   loading: () => (
     <div className="flex items-center justify-center py-24">
-      <div className="text-neon-yellow/50 font-mono text-xs tracking-widest animate-pulse">LOADING ELECTIONS...</div>
+      <div className="text-neon-yellow/50 font-mono text-xs tracking-widest animate-pulse">
+        LOADING ELECTIONS...
+      </div>
     </div>
   ),
 });
@@ -57,7 +57,9 @@ const ElectionsTab = dynamic(() => import("@/components/action/ElectionsTab"), {
 const MonitorsTab = dynamic(() => import("./MonitorsTab"), {
   loading: () => (
     <div className="flex items-center justify-center py-24">
-      <div className="text-amber-400/50 font-mono text-xs tracking-widest animate-pulse">SCANNING NATIONAL CONCERNS...</div>
+      <div className="text-amber-400/50 font-mono text-xs tracking-widest animate-pulse">
+        SCANNING NATIONAL CONCERNS...
+      </div>
     </div>
   ),
 });
@@ -65,7 +67,9 @@ const MonitorsTab = dynamic(() => import("./MonitorsTab"), {
 const TimelineTab = dynamic(() => import("./TimelineTab"), {
   loading: () => (
     <div className="flex items-center justify-center py-24">
-      <div className="text-purple-400/50 font-mono text-xs tracking-widest animate-pulse">LOADING TIMELINE...</div>
+      <div className="text-purple-400/50 font-mono text-xs tracking-widest animate-pulse">
+        LOADING TIMELINE...
+      </div>
     </div>
   ),
 });
@@ -73,7 +77,9 @@ const TimelineTab = dynamic(() => import("./TimelineTab"), {
 const MyRepsTab = dynamic(() => import("@/components/action/MyRepsTab"), {
   loading: () => (
     <div className="flex items-center justify-center py-24">
-      <div className="text-neon-pink/50 font-mono text-xs tracking-widest animate-pulse">LOADING REPRESENTATIVES...</div>
+      <div className="text-neon-pink/50 font-mono text-xs tracking-widest animate-pulse">
+        LOADING REPRESENTATIVES...
+      </div>
     </div>
   ),
 });
@@ -104,7 +110,12 @@ function StatePicker({
 
   return (
     <div className="flex items-center gap-2">
-      <label htmlFor="state-picker" className="text-[10px] font-mono tracking-widest text-matrix-green/40">YOUR STATE</label>
+      <label
+        htmlFor="state-picker"
+        className="text-[10px] font-mono tracking-widest text-matrix-green/40"
+      >
+        YOUR STATE
+      </label>
       <select
         id="state-picker"
         value={userState || ""}
@@ -123,13 +134,18 @@ function StatePicker({
   );
 }
 
-const TABS: { id: Tab; label: string; color: string }[] = [
-  { id: "issues", label: "ISSUES", color: "text-neon-cyan border-neon-cyan" },
-  { id: "my-reps", label: "MY REPS", color: "text-neon-pink border-neon-pink" },
-  { id: "monitors", label: "MONITORS", color: "text-amber-400 border-amber-400" },
-  { id: "timeline", label: "TIMELINE", color: "text-purple-400 border-purple-400" },
-  { id: "elections", label: "ELECTIONS", color: "text-neon-yellow border-neon-yellow" },
-  { id: "world", label: "GLOBE", color: "text-green-400 border-green-400" },
+/* One treatment for all six, not a different neon each.
+   Six tabs in six accent colours made the tab bar the loudest element on the
+   page and left the selected tab nowhere to go — every tab was already
+   shouting. Selection is now carried by weight plus a solid phosphor rule,
+   the same way the navbar marks the current page. */
+const TABS: { id: Tab; label: string }[] = [
+  { id: "issues", label: "ISSUES" },
+  { id: "my-reps", label: "MY REPS" },
+  { id: "monitors", label: "MONITORS" },
+  { id: "timeline", label: "TIMELINE" },
+  { id: "elections", label: "ELECTIONS" },
+  { id: "world", label: "GLOBE" },
 ];
 
 function HeroIssue({
@@ -154,19 +170,23 @@ function HeroIssue({
   }, [isDeepLinked]);
 
   return (
-    <div ref={heroRef} className="terminal-window border-t-2 border-t-neon-cyan/50 p-6 sm:p-8">
-      <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <span className="font-mono text-[10px] tracking-widest px-2 py-1 border text-neon-cyan/60 bg-neon-cyan/10 border-neon-cyan/30">
+    <article ref={heroRef} className="border border-phos/20 bg-surface p-6 sm:p-8">
+      <div className="mb-4 flex flex-wrap items-center gap-3 font-mono text-xs">
+        <span className="border border-phos/40 px-2 py-0.5 tracking-[0.14em] text-phos-mid">
           TOP ISSUE
         </span>
-        <span className="text-[11px] font-mono text-matrix-green/35">{issue.date}</span>
+        <span className="text-ink-lo">{issue.date}</span>
+        <span className="text-ink-min" aria-hidden="true">
+          ·
+        </span>
+        <span className="text-ink-min">ISSUE-{issue.id}</span>
       </div>
 
-      <h2 className="font-pixel text-lg sm:text-2xl mb-4 leading-relaxed text-matrix-green">
+      <h2 className="mb-4 font-display text-2xl font-bold leading-tight text-ink-hi sm:text-[28px]">
         {issue.title}
       </h2>
 
-      <p className="text-matrix-green/80 text-sm sm:text-base leading-relaxed mb-6">
+      <p className="mb-6 max-w-3xl font-display text-base leading-relaxed text-ink sm:text-[17px]">
         {issue.summary}
       </p>
 
@@ -184,17 +204,19 @@ function HeroIssue({
 
       {issue.facts.length > 0 && (
         <div className="mb-6">
-          <h3 className="font-mono text-[10px] tracking-widest text-neon-yellow/60 mb-3 uppercase">
-            Key Facts
+          <h3 className="mb-3 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
+            Key facts
           </h3>
-          <div className="space-y-2">
+          <ol className="space-y-2">
             {issue.facts.map((fact, i) => (
-              <div key={i} className="flex gap-3 text-sm">
-                <span className="text-neon-yellow/40 shrink-0 font-mono text-[10px] mt-0.5">{i + 1}.</span>
-                <span className="text-matrix-green/80">{fact}</span>
-              </div>
+              <li key={i} className="flex gap-3">
+                <span className="mt-0.5 shrink-0 font-mono text-xs text-phos-mid">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <span className="font-display text-[15px] leading-relaxed text-ink">{fact}</span>
+              </li>
             ))}
-          </div>
+          </ol>
         </div>
       )}
 
@@ -215,15 +237,15 @@ function HeroIssue({
       <div className="mt-3 flex items-center justify-between gap-3">
         <a
           href={`/issue/${issue.id}`}
-          className="text-xs text-matrix-green border border-matrix-green/40 hover:border-matrix-green hover:bg-matrix-green/10 px-3 py-1.5 transition-colors"
+          className="border border-phos/40 px-3 py-1.5 font-mono text-xs uppercase tracking-[0.12em] text-phos-mid transition-colors hover:border-phos hover:text-phos"
         >
-          READ FULL STORY →
+          Read full story →
         </a>
         <LogActionButton issueTitle={issue.title} />
       </div>
 
       <ShareButtons issue={issue} />
-    </div>
+    </article>
   );
 }
 
@@ -263,52 +285,65 @@ function SecondaryIssue({
   }
 
   return (
-    <div ref={cardRef} className="terminal-window">
+    <article ref={cardRef} className="border border-white/[0.09] bg-surface">
       <button
         onClick={handleToggle}
-        className="w-full text-left p-4 sm:p-5 flex items-start justify-between gap-4"
+        className="flex w-full items-start justify-between gap-4 p-4 text-left sm:p-5"
         aria-expanded={expanded}
         aria-controls={`issue-detail-${issue.id}`}
       >
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap mb-2">
+        <div className="min-w-0 flex-1">
+          <div className="mb-2 flex flex-wrap items-center gap-2 font-mono text-xs">
+            <span className="text-ink-min">
+              {issue.date} · ISSUE-{issue.id}
+            </span>
             {issue.policyAreas.map((area) => (
               <PolicyBadge key={area} area={area} />
             ))}
           </div>
-          <h3 className="font-pixel text-sm sm:text-base text-matrix-green leading-relaxed">
+          <h3 className="font-display text-lg font-semibold leading-snug text-ink-hi">
             {issue.title}
           </h3>
           {!expanded && (
-            <p className="text-matrix-green/50 text-sm mt-1 line-clamp-2">
+            <p className="mt-1 line-clamp-2 font-display text-[15px] leading-relaxed text-ink-lo">
               {issue.summary}
             </p>
           )}
         </div>
-        <span className="text-matrix-green/40 shrink-0 font-mono text-base mt-0.5 leading-none" aria-hidden="true">
+        <span
+          className="mt-0.5 shrink-0 font-mono text-lg leading-none text-ink-min"
+          aria-hidden="true"
+        >
           {expanded ? "−" : "+"}
         </span>
       </button>
 
       {expanded && (
-        <div id={`issue-detail-${issue.id}`} className="px-4 sm:px-5 pb-4 sm:pb-5 border-t border-matrix-green/10 pt-4 space-y-4">
-          <p className="text-matrix-green/80 text-sm leading-relaxed">
-            {issue.summary}
-          </p>
+        <div
+          id={`issue-detail-${issue.id}`}
+          className="space-y-4 border-t border-white/[0.07] px-4 pb-4 pt-4 sm:px-5 sm:pb-5"
+        >
+          <p className="font-display text-[15px] leading-relaxed text-ink">{issue.summary}</p>
 
           <MonitorChips slugs={issue.relatedMonitorSlugs} onSelect={onMonitorSelect} />
 
           {issue.facts.length > 0 && (
             <div>
-              <h4 className="font-mono text-[10px] tracking-widest text-neon-yellow/50 mb-2 uppercase">Key Facts</h4>
-              <div className="space-y-1.5">
+              <h4 className="mb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
+                Key facts
+              </h4>
+              <ol className="space-y-1.5">
                 {issue.facts.map((fact, i) => (
-                  <div key={i} className="flex gap-2 text-sm">
-                    <span className="text-neon-yellow/40 shrink-0 font-mono text-[10px] mt-0.5">{i + 1}.</span>
-                    <span className="text-matrix-green/70">{fact}</span>
-                  </div>
+                  <li key={i} className="flex gap-2">
+                    <span className="mt-0.5 shrink-0 font-mono text-xs text-phos-mid">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <span className="font-display text-[15px] leading-relaxed text-ink">
+                      {fact}
+                    </span>
+                  </li>
                 ))}
-              </div>
+              </ol>
             </div>
           )}
 
@@ -316,44 +351,63 @@ function SecondaryIssue({
 
           {trackableActions(issue).length > 0 && (
             <div>
-              <h4 className="font-mono text-[10px] tracking-widest text-neon-cyan/50 mb-2 uppercase">Track Legislation</h4>
+              <h4 className="mb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
+                Track legislation
+              </h4>
               <div className="space-y-1.5">
-                {trackableActions(issue)
-                  .map((action, i) => {
-                    const { href, internal } = trackActionLink(issue, action);
-                    const linkClass = "flex items-center gap-2 p-2 border border-neon-cyan/15 bg-neon-cyan/5 hover:border-neon-cyan/30 transition-colors text-sm";
-                    const inner = (
-                      <>
-                        <span className="text-matrix-green/70 flex-1 truncate">{trackActionText(action, internal)}</span>
-                        <span className="text-[10px] text-neon-cyan/40 shrink-0 ml-auto">{internal ? "→" : "↗"}</span>
-                      </>
-                    );
-                    return internal ? (
-                      <Link key={i} href={href} className={linkClass}>
-                        {inner}
-                      </Link>
-                    ) : (
-                      <a key={i} href={href} target="_blank" rel="noopener noreferrer" className={linkClass}>
-                        {inner}
-                      </a>
-                    );
-                  })}
+                {trackableActions(issue).map((action, i) => {
+                  const { href, internal } = trackActionLink(issue, action);
+                  const linkClass =
+                    "flex items-center gap-2 p-2 border border-neon-cyan/15 bg-neon-cyan/5 hover:border-neon-cyan/30 transition-colors text-sm";
+                  const inner = (
+                    <>
+                      <span className="text-matrix-green/70 flex-1 truncate">
+                        {trackActionText(action, internal)}
+                      </span>
+                      <span className="text-[10px] text-neon-cyan/40 shrink-0 ml-auto">
+                        {internal ? "→" : "↗"}
+                      </span>
+                    </>
+                  );
+                  return internal ? (
+                    <Link key={i} href={href} className={linkClass}>
+                      {inner}
+                    </Link>
+                  ) : (
+                    <a
+                      key={i}
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={linkClass}
+                    >
+                      {inner}
+                    </a>
+                  );
+                })}
               </div>
             </div>
           )}
 
           {issue.relatedBills && issue.relatedBills.length > 0 && (
             <div>
-              <h4 className="font-mono text-[10px] tracking-widest text-neon-yellow/50 mb-2 uppercase">Official Legislation</h4>
+              <h4 className="font-mono text-[10px] tracking-widest text-neon-yellow/50 mb-2 uppercase">
+                Official Legislation
+              </h4>
               <div className="space-y-1.5">
                 {issue.relatedBills.map((bill) => {
                   const { href, internal } = billLink(bill);
-                  const linkClass = "flex items-center gap-2 p-2 border border-neon-yellow/15 bg-neon-yellow/5 hover:border-neon-yellow/30 transition-colors text-sm";
+                  const linkClass =
+                    "flex items-center gap-2 p-2 border border-neon-yellow/15 bg-neon-yellow/5 hover:border-neon-yellow/30 transition-colors text-sm";
                   const inner = (
                     <>
-                      <span className="text-[10px] font-mono tracking-wide text-neon-yellow/60 shrink-0">{bill.id}</span>
+                      <span className="text-[10px] font-mono tracking-wide text-neon-yellow/60 shrink-0">
+                        {bill.id}
+                      </span>
                       <span className="text-matrix-green/70 truncate">{bill.name}</span>
-                      <span className="text-[10px] text-neon-cyan/40 shrink-0 ml-auto">{internal ? "→" : "↗"}</span>
+                      <span className="text-[10px] text-neon-cyan/40 shrink-0 ml-auto">
+                        {internal ? "→" : "↗"}
+                      </span>
                     </>
                   );
                   return internal ? (
@@ -361,7 +415,13 @@ function SecondaryIssue({
                       {inner}
                     </Link>
                   ) : (
-                    <a key={bill.id} href={href} target="_blank" rel="noopener noreferrer" className={linkClass}>
+                    <a
+                      key={bill.id}
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={linkClass}
+                    >
                       {inner}
                     </a>
                   );
@@ -372,7 +432,9 @@ function SecondaryIssue({
 
           {issue.relatedSenators && issue.relatedSenators.length > 0 && (
             <div>
-              <h4 className="font-mono text-[10px] tracking-widest text-neon-pink/50 mb-2 uppercase">Officials in Coverage</h4>
+              <h4 className="font-mono text-[10px] tracking-widest text-neon-pink/50 mb-2 uppercase">
+                Officials in Coverage
+              </h4>
               <div className="flex flex-wrap gap-2">
                 {issue.relatedSenators.map((s) => (
                   <Link
@@ -380,7 +442,11 @@ function SecondaryIssue({
                     href={`/politicians/${s.id}`}
                     className={`flex items-start gap-1.5 px-2 py-1.5 border ${PARTY_BORDER[s.party]} bg-matrix-dark-green/20 hover:border-neon-cyan/40 transition-colors`}
                   >
-                    <span className={`font-mono text-[10px] mt-0.5 shrink-0 ${PARTY_COLORS[s.party]}`}>{s.party}</span>
+                    <span
+                      className={`font-mono text-[10px] mt-0.5 shrink-0 ${PARTY_COLORS[s.party]}`}
+                    >
+                      {s.party}
+                    </span>
                     <div className="flex flex-col min-w-0">
                       <span className="text-sm text-matrix-green/70 leading-snug">{s.name}</span>
                       {s.matchReason && (
@@ -389,14 +455,19 @@ function SecondaryIssue({
                         </span>
                       )}
                     </div>
-                    <span className="text-[10px] font-mono tracking-wide text-neon-cyan/50 mt-0.5 shrink-0">{Math.round(s.overallScore)}</span>
+                    <span className="text-[10px] font-mono tracking-wide text-neon-cyan/50 mt-0.5 shrink-0">
+                      {Math.round(s.overallScore)}
+                    </span>
                   </Link>
                 ))}
               </div>
             </div>
           )}
 
-          <SourceList issue={issue} className="flex items-center gap-2 flex-wrap pt-3 border-t border-matrix-green/10" />
+          <SourceList
+            issue={issue}
+            className="flex items-center gap-2 flex-wrap pt-3 border-t border-matrix-green/10"
+          />
 
           <StancePulse
             issueId={issue.id}
@@ -410,7 +481,7 @@ function SecondaryIssue({
           <ShareButtons issue={issue} />
         </div>
       )}
-    </div>
+    </article>
   );
 }
 
@@ -481,8 +552,10 @@ function IssuesTab({
     try {
       const d = new Date(iso);
       return d.toLocaleString(undefined, {
-        month: "short", day: "numeric",
-        hour: "numeric", minute: "2-digit",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
       });
     } catch {
       return "";
@@ -491,8 +564,14 @@ function IssuesTab({
 
   if (loading) {
     return (
-      <div className="terminal-window max-w-md mx-auto p-6 text-center" role="status" aria-live="polite">
-        <div className="text-neon-cyan/50 font-mono text-xs tracking-widest animate-pulse">SCANNING NEWS FEEDS...</div>
+      <div
+        className="terminal-window max-w-md mx-auto p-6 text-center"
+        role="status"
+        aria-live="polite"
+      >
+        <div className="text-neon-cyan/50 font-mono text-xs tracking-widest animate-pulse">
+          SCANNING NEWS FEEDS...
+        </div>
       </div>
     );
   }
@@ -517,7 +596,11 @@ function IssuesTab({
 
   if (!heroIssue) {
     return (
-      <div className="terminal-window max-w-lg mx-auto p-6 text-center" role="status" aria-live="polite">
+      <div
+        className="terminal-window max-w-lg mx-auto p-6 text-center"
+        role="status"
+        aria-live="polite"
+      >
         <div className="text-neon-yellow font-mono text-sm tracking-widest mb-2">NO ISSUES YET</div>
         <p className="text-matrix-green/50 text-sm">Check back soon.</p>
       </div>
@@ -538,7 +621,9 @@ function IssuesTab({
             ← PREV
           </button>
           <span className="text-matrix-green/70 px-3 py-1 border border-matrix-green/15 bg-matrix-green/5 min-w-[110px] text-center">
-            {currentDate ? formatUtcDate(currentDate, { month: "short", day: "numeric", year: "numeric" }) : "—"}
+            {currentDate
+              ? formatUtcDate(currentDate, { month: "short", day: "numeric", year: "numeric" })
+              : "—"}
           </span>
           <button
             onClick={goToNext}
@@ -550,7 +635,11 @@ function IssuesTab({
           </button>
           {selectedDate && (
             <button
-              onClick={() => { setSelectedDate(null); loadIssues(); onDateChange?.(null); }}
+              onClick={() => {
+                setSelectedDate(null);
+                loadIssues();
+                onDateChange?.(null);
+              }}
               className="text-neon-cyan/50 hover:text-neon-cyan transition-colors ml-1"
               aria-label="Jump to present"
             >
@@ -572,7 +661,9 @@ function IssuesTab({
       {/* State selector bar */}
       <div className="flex items-center justify-between terminal-window p-3">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-mono tracking-widest text-matrix-green/35">PERSONALIZE</span>
+          <span className="text-[10px] font-mono tracking-widest text-matrix-green/35">
+            PERSONALIZE
+          </span>
           {userState && (
             <span className="text-[10px] font-mono text-neon-cyan/70 border border-neon-cyan/20 px-1.5 py-0.5 bg-neon-cyan/5">
               {STATES.find((s) => s.code === userState)?.name || userState} — links personalized
@@ -616,7 +707,14 @@ function IssuesTab({
   );
 }
 
-const VALID_TABS = new Set<string>(["issues", "my-reps", "monitors", "timeline", "elections", "world"]);
+const VALID_TABS = new Set<string>([
+  "issues",
+  "my-reps",
+  "monitors",
+  "timeline",
+  "elections",
+  "world",
+]);
 function isValidTab(s: string | null): s is Tab {
   return s !== null && VALID_TABS.has(s);
 }
@@ -633,9 +731,7 @@ function OpenCommentsBanner() {
   if (items.length === 0) return null;
 
   function daysLeft(closeDate: string): string {
-    const diff = Math.ceil(
-      (new Date(closeDate).getTime() - Date.now()) / 86400000
-    );
+    const diff = Math.ceil((new Date(closeDate).getTime() - Date.now()) / 86400000);
     return diff <= 0 ? "closes today" : diff === 1 ? "1 day left" : `${diff} days left`;
   }
 
@@ -643,7 +739,9 @@ function OpenCommentsBanner() {
     <section aria-label="Open public comment periods" className="mb-6">
       <div className="flex items-center gap-3 mb-2">
         <span className="w-1.5 h-1.5 rounded-full bg-amber-400/80 shrink-0" aria-hidden="true" />
-        <span className="font-mono text-[10px] tracking-widest text-amber-400/70">OPEN FOR PUBLIC COMMENT</span>
+        <span className="font-mono text-[10px] tracking-widest text-amber-400/70">
+          OPEN FOR PUBLIC COMMENT
+        </span>
         <div className="flex-1 h-px bg-amber-400/15" aria-hidden="true" />
       </div>
       <div className="flex gap-3 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 snap-x">
@@ -708,16 +806,16 @@ function ActionPageInner() {
   }, []);
 
   const paramTab = searchParams.get("tab");
-  const [activeTab, setActiveTabRaw] = useState<Tab>(
-    isValidTab(paramTab) ? paramTab : "issues",
-  );
+  const [activeTab, setActiveTabRaw] = useState<Tab>(isValidTab(paramTab) ? paramTab : "issues");
   const [userState, setUserState] = useUserState();
   const [sharedIssues, setSharedIssues] = useState<ActionIssue[]>([]);
 
   useEffect(() => {
     fetchActionIssues()
       .then((d) => setSharedIssues(d.issues))
-      .catch(() => {/* silently ignore — IssuesTab has its own error handling */});
+      .catch(() => {
+        /* silently ignore — IssuesTab has its own error handling */
+      });
   }, []);
 
   // ?date= and ?issue=<id> are read once, from the URL the page was opened
@@ -742,8 +840,8 @@ function ActionPageInner() {
     } else if (!t && activeTab !== "issues") {
       setActiveTabRaw("issues");
     }
-  // activeTab intentionally omitted: including it would re-trigger the effect
-  // on every user-initiated tab switch, creating a loop with setActiveTab.
+    // activeTab intentionally omitted: including it would re-trigger the effect
+    // on every user-initiated tab switch, creating a loop with setActiveTab.
   }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setActiveTab = useCallback(
@@ -762,7 +860,7 @@ function ActionPageInner() {
         document.getElementById(`tab-${tab}`)?.focus();
       });
     },
-    [replaceUrl],
+    [replaceUrl]
   );
 
   // Update URL when a secondary issue is expanded/collapsed
@@ -771,21 +869,26 @@ function ActionPageInner() {
       const url = id ? `/action?issue=${id}` : "/action";
       replaceUrl(url);
     },
-    [replaceUrl],
+    [replaceUrl]
   );
 
   return (
     <>
-      <MatrixRain />
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
         <div className="max-w-4xl mx-auto relative z-10">
-          <div className="text-center mb-6">
-            <h1 className="font-pixel text-xl sm:text-3xl md:text-4xl text-matrix-green neon-green">ACTION CENTER</h1>
-            <p className="text-matrix-green/40 text-xs font-mono tracking-wider mt-3 max-w-xl mx-auto">
-              Stay informed. Take action. Track your government.
+          <header className="mb-6 border-b-3 border-phos pb-5">
+            <p className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
+              Action Center · what is moving right now
             </p>
-          </div>
+            <h1 className="mt-3 font-display text-3xl font-extrabold uppercase leading-none tracking-[-0.02em] text-ink-hi sm:text-4xl">
+              Today on the record
+            </h1>
+            <p className="mt-3 max-w-2xl font-display text-base leading-relaxed text-ink-lo">
+              Issues surfaced from news and social coverage, the monitors tracking them, and the
+              members of Congress who can act. Every item links back to its source.
+            </p>
+          </header>
 
           {/* Open comment periods banner */}
           <OpenCommentsBanner />
@@ -794,7 +897,7 @@ function ActionPageInner() {
           <div
             role="tablist"
             aria-label="Action Center sections"
-            className="flex gap-1 mb-8 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 sticky top-10 z-30 bg-crt-black/95 backdrop-blur-sm"
+            className="sticky top-[82px] z-30 -mx-4 mb-8 flex gap-0 overflow-x-auto border-b border-white/15 bg-surface-base/95 px-4 backdrop-blur-sm sm:mx-0 sm:px-0"
             onKeyDown={(e) => {
               const tabs = TABS.map((t) => t.id);
               const idx = tabs.indexOf(activeTab);
@@ -822,10 +925,10 @@ function ActionPageInner() {
                 aria-controls={`tabpanel-${tab.id}`}
                 tabIndex={activeTab === tab.id ? 0 : -1}
                 onClick={() => setActiveTab(tab.id)}
-                className={`font-mono text-[11px] tracking-widest px-3 sm:px-5 py-3 border-b-2 transition-all whitespace-nowrap ${
+                className={`-mb-px whitespace-nowrap border-b-3 px-3 py-3 font-mono text-xs uppercase tracking-[0.14em] transition-colors sm:px-5 ${
                   activeTab === tab.id
-                    ? `${tab.color} bg-matrix-dark-green/20 border-current`
-                    : "text-matrix-green/35 border-transparent hover:text-matrix-green/60 hover:border-matrix-green/15"
+                    ? "border-phos text-ink-hi"
+                    : "border-transparent text-ink-min hover:text-ink-lo"
                 }`}
               >
                 {tab.label}
@@ -840,19 +943,23 @@ function ActionPageInner() {
             aria-labelledby={`tab-${activeTab}`}
             tabIndex={0}
           >
-            {activeTab === "issues" && <IssuesTab
-              userState={userState}
-              setUserState={setUserState}
-              onNavigate={setActiveTab}
-              initialDate={deepLink.date}
-              onDateChange={(d) => {
-                const url = d ? `/action?date=${d}` : "/action";
-                replaceUrl(url);
-              }}
-              initialIssueId={deepLink.issue}
-              onIssueChange={handleIssueChange}
-            />}
-            {activeTab === "my-reps" && <MyRepsTab userState={userState} setUserState={setUserState} issues={sharedIssues} />}
+            {activeTab === "issues" && (
+              <IssuesTab
+                userState={userState}
+                setUserState={setUserState}
+                onNavigate={setActiveTab}
+                initialDate={deepLink.date}
+                onDateChange={(d) => {
+                  const url = d ? `/action?date=${d}` : "/action";
+                  replaceUrl(url);
+                }}
+                initialIssueId={deepLink.issue}
+                onIssueChange={handleIssueChange}
+              />
+            )}
+            {activeTab === "my-reps" && (
+              <MyRepsTab userState={userState} setUserState={setUserState} issues={sharedIssues} />
+            )}
             {activeTab === "monitors" && <MonitorsTab />}
             {activeTab === "timeline" && <TimelineTab />}
             {activeTab === "elections" && <ElectionsTab />}

@@ -327,7 +327,7 @@ li {
 }
 
 /* ===== A11Y: MINIMUM TEXT CONTRAST (always on) =====
-   NOTE (Direction C): this whole block is what the `ink`/`phos` tokens in
+   NOTE: this whole block is what the `ink`/`phos` tokens in
    tailwind.config.ts exist to delete. It stays for now because it protects
    ~500 call sites that still write `matrix-green/40` and friends, and
    removing it before those migrate would regress contrast site-wide rather
@@ -656,7 +656,7 @@ a[target="_blank"] {
 }
 
 
-/* ===== DIRECTION C: PUBLIC-RECORDS REGISTER =====
+/* ===== PUBLIC-RECORDS REGISTER =====
    Two devices that Tailwind cannot express cleanly. Everything else in the
    direction — rule weights, density, docket refs, the request slip — is
    plain utilities over the tokens in tailwind.config.ts. */

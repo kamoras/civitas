@@ -36,70 +36,87 @@ function formatItemTime(item: RaceCoverageItem): { timeLabel: string; isRecent: 
 }
 
 export default function CoverageFeed({ items }: { items: RaceCoverageItem[] }) {
-  // Viewer-local time formatting and the "recent" pulse both depend on the
+  // Viewer-local time formatting and the "recent" marker both depend on the
   // viewer's clock/locale, so they must not run during the (cached, 120s)
   // server render — that guaranteed a hydration mismatch. Server render:
   // no time label, non-pulsing dot; real values fill in after mount.
   const mounted = useMounted();
 
   if (items.length === 0) {
-    return <p className="text-sm text-matrix-green/40">No coverage ingested for this race yet.</p>;
+    return (
+      <p className="font-mono text-sm text-ink-min">No coverage ingested for this race yet.</p>
+    );
   }
 
   return (
-    <div className="relative pl-4 border-l border-neon-cyan/20 space-y-4" role="list">
+    <ol className="relative space-y-0 border-l border-white/15 pl-5" role="list">
       {items.map((item) => {
         const { timeLabel, isRecent } = mounted
           ? formatItemTime(item)
           : { timeLabel: "", isRecent: false };
         const href = safeHref(item.url);
+        const isBluesky = item.sourceType === "bluesky";
         return (
-          <div key={item.id} className="relative" role="listitem">
-            <div
-              className={`absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full border ${
-                isRecent
-                  ? "bg-neon-cyan border-neon-cyan animate-pulse"
-                  : "bg-neon-cyan/30 border-neon-cyan/50"
+          <li key={item.id} className="relative border-b border-white/[0.07] py-4 last:border-b-0">
+            {/* A square tick on the rail, not a rounded dot: the register uses
+                hard corners throughout, and a filled tick reads as an entry
+                marker on a timeline rather than a status light. */}
+            <span
+              className={`absolute -left-[23px] top-[22px] h-1.5 w-3 ${
+                isRecent ? "bg-phos" : "bg-ink-min"
               }`}
               aria-hidden="true"
             />
-            <div className="flex items-center gap-2 mb-1 flex-wrap">
+
+            {/* Docket line: when, what kind, from whom — the same shape the
+                homepage index uses, so an entry looks the same wherever it
+                appears. */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs">
               {timeLabel && (
                 <time
                   dateTime={item.publishedAt || undefined}
-                  className="text-[10px] text-matrix-green/40 font-pixel"
+                  className={isRecent ? "text-phos-mid" : "text-ink-lo"}
                 >
                   {timeLabel}
                 </time>
               )}
-              <span className="text-[9px] font-pixel px-1.5 py-0.5 border border-matrix-green/20 text-matrix-green/50">
-                {item.sourceType === "bluesky" ? "BLUESKY" : "NEWS"}
+              <span
+                className={
+                  isBluesky
+                    ? "border border-signal-magenta/40 px-1.5 py-0.5 tracking-[0.1em] text-signal-magenta"
+                    : "border border-signal-cyan/40 px-1.5 py-0.5 tracking-[0.1em] text-signal-cyan"
+                }
+              >
+                {isBluesky ? "BLUESKY" : "NEWS"}
               </span>
-              <span className="text-[10px] text-matrix-green/30 font-pixel">
-                via {item.sourceName}
-              </span>
+              <span className="text-ink-min">via {item.sourceName}</span>
               {item.race && (
-                <span className="text-[9px] font-pixel px-1.5 py-0.5 border border-neon-cyan/20 text-neon-cyan/60">
+                <span className="border border-white/15 px-1.5 py-0.5 tracking-[0.1em] text-ink-lo">
                   {raceBadgeLabel(item.race)}
                 </span>
               )}
+              {isRecent && <span className="tracking-[0.1em] text-phos-mid">LAST 24H</span>}
             </div>
-            <p className="text-sm text-matrix-green/80 leading-relaxed mb-1">{item.summary}</p>
+
+            <p className="mt-2 font-display text-base leading-relaxed text-ink">{item.summary}</p>
+
             {href ? (
               <a
                 href={href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[10px] text-neon-cyan/60 hover:text-neon-cyan transition-colors"
+                className="mt-1.5 inline-block border-b border-phos-mid/40 font-mono text-xs text-phos-mid transition-colors hover:text-phos"
               >
                 {item.title || "Source"} <span aria-hidden="true">↗</span>
               </a>
             ) : (
-              <span className="text-[10px] text-neon-cyan/60">{item.title || "Source"}</span>
+              <span className="mt-1.5 inline-block font-mono text-xs text-ink-min">
+                {item.title || "Source"}
+              </span>
             )}
-          </div>
+          </li>
         );
       })}
-    </div>
+    </ol>
   );
 }
