@@ -19,12 +19,25 @@ export function getJusticeLabel(score: number): string {
 // politician rather than what the score actually measures (see the north
 // star note in score_calculator.py: scores measure representation, not
 // intrinsic goodness).
+//
+// The bottom band was "DEEPLY CAPTURED" until it got the same treatment for
+// the same reason. That label had two problems the rest of the ladder does
+// not. It asserts a MECHANISM — capture, by donors or by an industry — where
+// the score only measures an outcome, and nothing in the three scored
+// dimensions can distinguish a captured member from one who is simply
+// ineffective, thinly documented, or out of step with their state. And it is
+// the one rung that editorialises: every other label states a degree of
+// representation and lets the reader draw the conclusion.
+//
+// "NOT REPRESENTATIVE" completes the same ladder in the same vocabulary and
+// makes no claim the evidence cannot carry. The number is unchanged and the
+// colour tier is unchanged; only the accusation is gone.
 export function getScoreLabel(score: number): string {
   if (score >= 81) return "STRONGLY REPRESENTATIVE";
   if (score >= 61) return "REPRESENTATIVE";
   if (score >= 41) return "MIXED REPRESENTATION";
   if (score >= 21) return "WEAKLY REPRESENTATIVE";
-  return "DEEPLY CAPTURED";
+  return "NOT REPRESENTATIVE";
 }
 
 // Presidential scores measure performance in office, not constituent
