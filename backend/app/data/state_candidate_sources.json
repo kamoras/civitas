@@ -241,6 +241,12 @@
       },
       "general_ballot_complete": true
     },
+    "PA": {
+      "source_name": "Pennsylvania Department of State (electionreturns.pa.gov API)",
+      "strategy": "pa_returns",
+      "runoff_threshold_pct": null,
+      "description": "Pennsylvania looked unreachable for months because electionreturns.pa.gov's front page sits behind Imperva and answers a bot challenge — but its API does not, and serves a plain server-side request fine. The endpoints were read off the page's own network activity in a browser on 2026-08-18 and then confirmed with no browser involved. Election and office are matched by CODE, never wording: ElectionType 'P' is the general primary, OfficeCode 'USC'/'USS' the federal offices, so the ids (117 for 2026) never need writing down. Verified live against the real 2026-05-19 primary: Bob Harvie taking PA-01's Democratic primary with 65.14%. Pennsylvania has no Senate seat on the 2026 ballot and nominates on a plurality, so there is no runoff threshold."
+    },
     "TX": {
       "source_name": "Texas Secretary of State (Civix Candidate Bio Portal)",
       "strategy": "tx_civix",

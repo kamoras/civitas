@@ -63,6 +63,7 @@ from app.pipeline.fetch.state_source_crawler import (
 )
 from app.pipeline.fetch.state_candidates_clarity import fetch_confirmed_candidates as _fetch_clarity
 from app.pipeline.fetch.state_candidates_tabular import fetch_confirmed_candidates as _fetch_tabular
+from app.pipeline.fetch.state_candidates_pa import fetch_confirmed_candidates as _fetch_pa
 from app.pipeline.fetch.state_candidates_tx import fetch_confirmed_candidates as _fetch_tx
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,7 @@ logger = logging.getLogger(__name__)
 # different vendor earns a new module.
 STRATEGIES = {
     "tx_civix": _fetch_tx,
+    "pa_returns": _fetch_pa,
     "clarity": _fetch_clarity,
     "tabular": _fetch_tabular,
 }
