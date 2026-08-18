@@ -4,6 +4,7 @@ import { Suspense, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
+import PageMasthead from "@/components/layout/PageMasthead";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
@@ -224,14 +225,13 @@ function PoliticiansPageContent() {
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-7xl mx-auto">
-          <div className="mb-8 border-b-3 border-phos pb-5">
-            <h1 className="font-display font-semibold text-xl sm:text-3xl text-ink-hi mb-2">
-              POLITICIANS
-            </h1>
-            <p className="font-mono text-xs text-ink-min">
-              CURRENTLY SERVING OFFICIALS · PUBLIC RECORD
-            </p>
-          </div>
+          <PageMasthead
+            className="mb-8"
+            eyebrow="Directory · currently serving officials"
+            title="Politicians"
+          >
+            <p>Everyone currently holding federal office, as recorded in the public register.</p>
+          </PageMasthead>
 
           <TerminalTitlebar title="Directory" />
           <div className="border border-t-0 border-white/[0.07] bg-surface-base p-4 mb-6">

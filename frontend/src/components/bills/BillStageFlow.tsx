@@ -1,6 +1,7 @@
 "use client";
 
 import { useConfig } from "@/hooks/useConfig";
+import { billStageStyle } from "@/lib/billStages";
 
 export const MAIN_FLOW_STAGES = [
   "INTRODUCED",
@@ -64,8 +65,9 @@ export default function BillStageFlow({
                   longest stage label ("IN OTHER CHAMBER") measures ~113px and
                   overflowed the 112px w-28 box. */}
               <span
-                className="w-32 shrink-0 truncate text-xs font-mono uppercase tracking-wider"
-                style={{ color: isActive ? color : undefined }}
+                className={`w-32 shrink-0 truncate text-xs font-mono uppercase tracking-wider ${
+                  isActive ? billStageStyle(code).text : ""
+                }`}
               >
                 {info?.name ?? code}
               </span>

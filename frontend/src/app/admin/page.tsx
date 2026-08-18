@@ -118,7 +118,11 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
   };
 
   return (
-    <div className="min-h-screen bg-surface-base flex items-center justify-center px-4">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="min-h-screen bg-surface-base flex items-center justify-center px-4"
+    >
       <div className="w-full max-w-md">
         <div className="panel">
           <TerminalTitlebar title="Sign in" />
@@ -160,7 +164,7 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
           </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -1910,7 +1914,11 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
   const d = dashboard;
 
   return (
-    <main className="min-h-screen bg-surface-base text-ink-hi px-4 py-8">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="min-h-screen bg-surface-base text-ink-hi px-4 py-8"
+    >
       <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">

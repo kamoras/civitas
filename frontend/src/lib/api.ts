@@ -69,12 +69,41 @@ async function requestJson<T>(
 // as emptiness rather than as an exception.
 // ---------------------------------------------------------------------------
 
-/** A payload that must be a list, as a list. */
-function asList<T>(value: unknown): T[] {
-  return Array.isArray(value) ? value : [];
+/**
+ * A shape correction, reported once per endpoint field per session.
+ *
+ * Coercing silently is right for the reader — the page renders its own
+ * "no data yet" state instead of a crash — but wrong for whoever has to fix
+ * the backend, who would otherwise see an idle-looking site and no signal at
+ * all. Reported once per (endpoint, field) because several of these endpoints
+ * are polled: a broken one would write a line every three seconds.
+ */
+const _reportedShapes = new Set<string>();
+
+function reportShape(endpoint: string, field: string, expected: string, received: unknown): void {
+  const key = `${endpoint} ${field}`;
+  if (_reportedShapes.has(key)) return;
+  _reportedShapes.add(key);
+  const got = received === null ? "null" : Array.isArray(received) ? "array" : typeof received;
+  console.warn(
+    `[civitas] ${endpoint}: expected ${field} to be ${expected === "list" ? "an array" : "an object"}, got ${got}. ` +
+      `Coerced to an empty ${expected} — the view will render its no-data state.`
+  );
 }
 
-/** A payload that must be an object, as an object. */
+/** Test seam: forgets which corrections have already been reported. */
+export function __resetShapeReports(): void {
+  _reportedShapes.clear();
+}
+
+/** A payload that must be a list, as a list. */
+function asList<T>(value: unknown, endpoint: string): T[] {
+  if (Array.isArray(value)) return value;
+  reportShape(endpoint, "the response", "list", value);
+  return [];
+}
+
+/** A payload that must be an object, as an object. Reports only when asked to. */
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -88,14 +117,24 @@ function asRecord(value: unknown): Record<string, unknown> {
  */
 function withShape<T extends object>(
   value: unknown,
-  shape: { lists?: readonly (keyof T & string)[]; records?: readonly (keyof T & string)[] }
+  shape: { lists?: readonly (keyof T & string)[]; records?: readonly (keyof T & string)[] },
+  endpoint: string
 ): T {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    reportShape(endpoint, "the response", "object", value);
+  }
   const out = { ...asRecord(value) };
   for (const key of shape.lists ?? []) {
-    if (!Array.isArray(out[key])) out[key] = [];
+    if (!Array.isArray(out[key])) {
+      reportShape(endpoint, `"${key}"`, "list", out[key]);
+      out[key] = [];
+    }
   }
   for (const key of shape.records ?? []) {
-    if (!out[key] || typeof out[key] !== "object" || Array.isArray(out[key])) out[key] = {};
+    if (!out[key] || typeof out[key] !== "object" || Array.isArray(out[key])) {
+      reportShape(endpoint, `"${key}"`, "object", out[key]);
+      out[key] = {};
+    }
   }
   return out as T;
 }
@@ -147,9 +186,8 @@ async function cachedFetch<T>(url: string, ttlMs: number): Promise<T> {
 }
 
 export async function fetchSenatorsByState(state: string): Promise<Senator[]> {
-  return asList(
-    await requestJson(`${API_BASE}/senators?state=${state}`, "Failed to load senators")
-  );
+  const url = `${API_BASE}/senators?state=${state}`;
+  return asList(await requestJson(url, "Failed to load senators"), url);
 }
 
 export async function fetchSenator(senatorId: string): Promise<Senator> {
@@ -163,11 +201,13 @@ export interface StateInfo {
 }
 
 export async function fetchStates(): Promise<StateInfo[]> {
-  return asList(await cachedFetch(`${API_BASE}/senators/states`, TTL.SHORT));
+  const url = `${API_BASE}/senators/states`;
+  return asList(await cachedFetch(url, TTL.SHORT), url);
 }
 
 export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
-  return asList(await cachedFetch(`${API_BASE}/senators/leaderboard`, TTL.SHORT));
+  const url = `${API_BASE}/senators/leaderboard`;
+  return asList(await cachedFetch(url, TTL.SHORT), url);
 }
 
 // --- House Representatives ---
@@ -179,7 +219,8 @@ export interface RepStateInfo {
 }
 
 export async function fetchRepStates(): Promise<RepStateInfo[]> {
-  return asList(await cachedFetch(`${API_BASE}/representatives/states`, TTL.SHORT));
+  const url = `${API_BASE}/representatives/states`;
+  return asList(await cachedFetch(url, TTL.SHORT), url);
 }
 
 export interface PaginatedReps {
@@ -195,12 +236,11 @@ export async function fetchRepresentativesByState(
   page: number = 1,
   perPage: number = 10
 ): Promise<PaginatedReps> {
+  const url = `${API_BASE}/representatives?state=${state}&page=${page}&per_page=${perPage}`;
   return withShape<PaginatedReps>(
-    await requestJson(
-      `${API_BASE}/representatives?state=${state}&page=${page}&per_page=${perPage}`,
-      "Failed to load representatives"
-    ),
-    { lists: ["entries"] }
+    await requestJson(url, "Failed to load representatives"),
+    { lists: ["entries"] },
+    url
   );
 }
 
@@ -248,12 +288,11 @@ export async function fetchRepLeaderboard(
 ): Promise<PaginatedLeaderboard> {
   const params = new URLSearchParams({ page: String(page), per_page: String(perPage) });
   if (party) params.set("party", party);
+  const url = `${API_BASE}/representatives/leaderboard?${params}`;
   return withShape<PaginatedLeaderboard>(
-    await requestJson(
-      `${API_BASE}/representatives/leaderboard?${params}`,
-      "Failed to load house leaderboard"
-    ),
-    { lists: ["entries"] }
+    await requestJson(url, "Failed to load house leaderboard"),
+    { lists: ["entries"] },
+    url
   );
 }
 
@@ -354,12 +393,17 @@ export async function fetchBillsInFlight(options?: {
   // and list views can request the same URL concurrently (and again on
   // mode/filter toggles) — share one network request and reuse it for the
   // same 2 minutes the backend's Cache-Control already promises.
-  return withShape<PaginatedBills>(await cachedFetch(`${API_BASE}/bills?${params}`, TTL.SHORT), {
-    lists: ["bills"],
-    // The stage funnel reduces over these on every render; an absent map has
-    // to arrive as {} rather than undefined.
-    records: ["stageCounts"],
-  });
+  const url = `${API_BASE}/bills?${params}`;
+  return withShape<PaginatedBills>(
+    await cachedFetch(url, TTL.SHORT),
+    {
+      lists: ["bills"],
+      // The stage funnel reduces over these on every render; an absent map has
+      // to arrive as {} rather than undefined.
+      records: ["stageCounts"],
+    },
+    url
+  );
 }
 
 export async function fetchBillDetail(billId: string): Promise<BillDetail | null> {
@@ -584,9 +628,8 @@ export async function fetchPresidentLeaderboard(): Promise<PresidentLeaderboardE
   // by_alias=True). Recursively re-camelizing is a no-op on scalar fields but
   // would corrupt any data-keyed map field the moment one is added (see the
   // justice agreementMatrix bug this pattern caused).
-  return asList(
-    await requestJson(`${API_BASE}/presidents/leaderboard`, "Failed to load president leaderboard")
-  );
+  const url = `${API_BASE}/presidents/leaderboard`;
+  return asList(await requestJson(url, "Failed to load president leaderboard"), url);
 }
 
 export async function fetchPresident(id: string): Promise<President> {
@@ -608,10 +651,12 @@ export async function fetchCurrentPresident(): Promise<President | null> {
 }
 
 export async function fetchJusticeLeaderboard(): Promise<JusticeLeaderboardEntry[]> {
+  const url = `${API_BASE}/justices/leaderboard`;
   return asList(
-    await requestJson(`${API_BASE}/justices/leaderboard`, "Failed to load justice leaderboard", {
+    await requestJson(url, "Failed to load justice leaderboard", {
       camelize: true,
-    })
+    }),
+    url
   );
 }
 
@@ -1093,10 +1138,12 @@ export async function clearStuckStockTradesPipeline(
 }
 
 export async function fetchAdminPipelineHistory(token: string): Promise<PipelineHistoryRun[]> {
+  const url = `${API_BASE}/admin/pipeline/history?limit=20`;
   return asList(
-    await requestJson(`${API_BASE}/admin/pipeline/history?limit=20`, "History failed", {
+    await requestJson(url, "History failed", {
       init: { headers: adminHeaders(token) },
-    })
+    }),
+    url
   );
 }
 
@@ -1144,10 +1191,12 @@ export interface TopPageEntry {
 }
 
 export async function fetchAdminTopPages(token: string, days: number = 7): Promise<TopPageEntry[]> {
+  const url = `${API_BASE}/admin/top-pages?days=${days}`;
   return asList(
-    await requestJson(`${API_BASE}/admin/top-pages?days=${days}`, "Top pages failed", {
+    await requestJson(url, "Top pages failed", {
       init: { headers: adminHeaders(token) },
-    })
+    }),
+    url
   );
 }
 
@@ -1254,9 +1303,11 @@ export async function fetchActionIssues(date?: string): Promise<ActionIssuesResp
   // already serves this with `Cache-Control: public, max-age=300`, so a
   // 5-minute client cache matches its own freshness policy while collapsing
   // the several consumers that request the same day's issues on load.
+  const url = `${API_BASE}/action/issues${params}`;
   return withShape<ActionIssuesResponse>(
-    await cachedFetch(`${API_BASE}/action/issues${params}`, 300_000),
-    { lists: ["issues", "availableDates"] }
+    await cachedFetch(url, 300_000),
+    { lists: ["issues", "availableDates"] },
+    url
   );
 }
 
@@ -1274,9 +1325,11 @@ export async function submitPulseVote(
 }
 
 export async function fetchMyReps(state: string): Promise<MyRepsResponse> {
+  const url = `${API_BASE}/action/my-reps?state=${encodeURIComponent(state)}`;
   return withShape<MyRepsResponse>(
-    await cachedFetch(`${API_BASE}/action/my-reps?state=${encodeURIComponent(state)}`, TTL.MEDIUM),
-    { lists: ["senators", "representatives"] }
+    await cachedFetch(url, TTL.MEDIUM),
+    { lists: ["senators", "representatives"] },
+    url
   );
 }
 
@@ -1298,24 +1351,18 @@ export interface ScoreHistory {
 }
 
 export async function fetchSenatorHistory(senatorId: string): Promise<ScoreHistory> {
-  return withShape<ScoreHistory>(
-    await cachedFetch(`${API_BASE}/senators/${senatorId}/history`, TTL.LONG),
-    { lists: ["snapshots"] }
-  );
+  const url = `${API_BASE}/senators/${senatorId}/history`;
+  return withShape<ScoreHistory>(await cachedFetch(url, TTL.LONG), { lists: ["snapshots"] }, url);
 }
 
 export async function fetchRepresentativeHistory(repId: string): Promise<ScoreHistory> {
-  return withShape<ScoreHistory>(
-    await cachedFetch(`${API_BASE}/representatives/${repId}/history`, TTL.LONG),
-    { lists: ["snapshots"] }
-  );
+  const url = `${API_BASE}/representatives/${repId}/history`;
+  return withShape<ScoreHistory>(await cachedFetch(url, TTL.LONG), { lists: ["snapshots"] }, url);
 }
 
 export async function fetchPresidentHistory(presidentId: string): Promise<ScoreHistory> {
-  return withShape<ScoreHistory>(
-    await cachedFetch(`${API_BASE}/presidents/${presidentId}/history`, TTL.LONG),
-    { lists: ["snapshots"] }
-  );
+  const url = `${API_BASE}/presidents/${presidentId}/history`;
+  return withShape<ScoreHistory>(await cachedFetch(url, TTL.LONG), { lists: ["snapshots"] }, url);
 }
 
 export interface OpenCommentItem {
@@ -1331,7 +1378,8 @@ export interface OpenCommentItem {
 }
 
 export async function fetchOpenComments(): Promise<OpenCommentItem[]> {
-  return asList(await cachedFetch(`${API_BASE}/action/open-comments`, TTL.LONG));
+  const url = `${API_BASE}/action/open-comments`;
+  return asList(await cachedFetch(url, TTL.LONG), url);
 }
 
 export interface CountryArticle {
@@ -1354,9 +1402,11 @@ export interface CountryNewsResponse {
 }
 
 export async function fetchCountryNews(): Promise<CountryNewsResponse> {
+  const url = `${API_BASE}/action/country-news`;
   return withShape<CountryNewsResponse>(
-    await requestJson(`${API_BASE}/action/country-news`, "Failed to load country news"),
-    { lists: ["countries"] }
+    await requestJson(url, "Failed to load country news"),
+    { lists: ["countries"] },
+    url
   );
 }
 
@@ -1394,9 +1444,14 @@ export interface ElectionInfo {
 }
 
 export async function fetchElectionInfo(): Promise<ElectionInfo> {
-  return withShape<ElectionInfo>(await cachedFetch(`${API_BASE}/action/elections`, TTL.LONG), {
-    lists: ["states"],
-  });
+  const url = `${API_BASE}/action/elections`;
+  return withShape<ElectionInfo>(
+    await cachedFetch(url, TTL.LONG),
+    {
+      lists: ["states"],
+    },
+    url
+  );
 }
 
 // ── Midterm-elections feature (candidate rosters, race detail, PVI) ──
@@ -1406,7 +1461,8 @@ export async function fetchElectionInfo(): Promise<ElectionInfo> {
 // server-side by app/elections/[raceId]/page.tsx, not through this client.
 
 export async function fetchRaces(): Promise<RaceSummary[]> {
-  return asList(await cachedFetch(`${API_BASE}/elections/races`, TTL.SHORT));
+  const url = `${API_BASE}/elections/races`;
+  return asList(await cachedFetch(url, TTL.SHORT), url);
 }
 
 export async function fetchPviMap(): Promise<PviMap> {
@@ -1457,9 +1513,11 @@ export interface NationalMonitorDetail extends NationalMonitor {
 }
 
 export async function fetchMonitors(): Promise<{ monitors: NationalMonitor[] }> {
+  const url = `${API_BASE}/action/monitors`;
   return withShape<{ monitors: NationalMonitor[] }>(
-    await cachedFetch(`${API_BASE}/action/monitors`, TTL.MEDIUM),
-    { lists: ["monitors"] }
+    await cachedFetch(url, TTL.MEDIUM),
+    { lists: ["monitors"] },
+    url
   );
 }
 
@@ -1522,9 +1580,11 @@ export interface TimelineResponse {
 
 export async function fetchTimeline(year?: number): Promise<TimelineResponse> {
   const params = year ? `?year=${year}` : "";
+  const url = `${API_BASE}/action/timeline${params}`;
   return withShape<TimelineResponse>(
-    await cachedFetch(`${API_BASE}/action/timeline${params}`, TTL.MEDIUM),
-    { lists: ["months", "monitors", "topThemes", "upcomingEvents"] }
+    await cachedFetch(url, TTL.MEDIUM),
+    { lists: ["months", "monitors", "topThemes", "upcomingEvents"] },
+    url
   );
 }
 
@@ -1544,7 +1604,8 @@ export async function fetchPoliticianDirectory(params?: {
   if (params?.party) qs.set("party", params.party);
   if (params?.q) qs.set("q", params.q);
   const query = qs.toString() ? `?${qs.toString()}` : "";
-  return asList(await cachedFetch(`${API_BASE}/politicians${query}`, TTL.SHORT));
+  const url = `${API_BASE}/politicians${query}`;
+  return asList(await cachedFetch(url, TTL.SHORT), url);
 }
 
 export interface FeedbackSubmission {

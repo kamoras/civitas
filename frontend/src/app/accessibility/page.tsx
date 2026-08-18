@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
+import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 
@@ -54,14 +55,13 @@ export default function AccessibilityPage() {
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-3xl mx-auto">
-          <div className="mb-10 border-b-3 border-phos pb-5">
-            <h1 className="font-display font-semibold text-xl sm:text-3xl text-ink-hi tracking-widest mb-2">
-              ACCESSIBILITY
-            </h1>
-            <p className="text-ink-min text-base max-w-xl mx-auto">
-              Our commitment to making civic data accessible to everyone.
-            </p>
-          </div>
+          <PageMasthead
+            className="mb-10"
+            eyebrow="Accessibility · how this site is built to be used"
+            title="Accessibility"
+          >
+            <p>Our commitment to making civic data accessible to everyone.</p>
+          </PageMasthead>
 
           <Section title="CONFORMANCE STATUS">
             <P>

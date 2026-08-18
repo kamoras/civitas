@@ -4,6 +4,7 @@ import Link from "next/link";
 import { BillInFlight } from "@/types/bill";
 import { useConfig } from "@/hooks/useConfig";
 import { PARTY_BADGE } from "@/lib/partyStyles";
+import { billStageStyle } from "@/lib/billStages";
 
 function timeAgo(dateStr: string): string {
   if (!dateStr) return "";
@@ -23,6 +24,7 @@ export default function BillRow({ bill }: { bill: BillInFlight }) {
   const stageInfo = config?.billStages?.[bill.stage];
   const party = PARTY_BADGE[bill.sponsorParty] ?? PARTY_BADGE.I;
   const stageColor = stageInfo?.color ?? "#00ff41";
+  const stageStyle = billStageStyle(bill.stage);
 
   return (
     <div
@@ -34,12 +36,7 @@ export default function BillRow({ bill }: { bill: BillInFlight }) {
           "TO PRESIDENT") measure ~85px, which with the 12px of horizontal
           padding overflowed the old 92px box and truncated. */}
       <span
-        className="shrink-0 mt-0.5 text-xs font-mono uppercase tracking-wider px-1.5 py-0.5 border w-[100px] text-center truncate"
-        style={{
-          color: stageColor,
-          borderColor: `${stageColor}4d`,
-          backgroundColor: `${stageColor}1a`,
-        }}
+        className={`shrink-0 mt-0.5 text-xs font-mono uppercase tracking-wider px-1.5 py-0.5 border w-[100px] text-center truncate ${stageStyle.text} ${stageStyle.border} ${stageStyle.bg}`}
         title={stageInfo?.name ?? bill.stage}
       >
         {stageInfo?.name ?? bill.stage}
@@ -49,7 +46,10 @@ export default function BillRow({ bill }: { bill: BillInFlight }) {
         <div className="flex items-start gap-2">
           <Link
             href={`/bills/${encodeURIComponent(bill.billId)}`}
-            className="min-w-0 flex-1 text-sm text-ink-hi hover:text-phos hover:underline leading-snug truncate"
+            // min-h-6 (24px): WCAG 2.2 target size. The row is deliberately
+            // dense, so the height comes from the tap target rather than from
+            // padding that would space the list out.
+            className="min-w-0 flex-1 min-h-6 flex items-center text-sm text-ink-hi hover:text-phos hover:underline leading-snug truncate"
           >
             {bill.title || bill.billId}
           </Link>
@@ -65,7 +65,7 @@ export default function BillRow({ bill }: { bill: BillInFlight }) {
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5 text-xs text-ink-lo">
           <Link
             href={`/politicians/${bill.sponsorId}`}
-            className="flex items-center gap-1 hover:text-phos shrink-0"
+            className="flex min-h-6 shrink-0 items-center gap-1 hover:text-phos"
           >
             {bill.sponsorThumbnailUrl && (
               // eslint-disable-next-line @next/next/no-img-element

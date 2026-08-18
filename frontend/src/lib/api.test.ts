@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import {
   EXPLORE_HIGHLIGHT_END,
   EXPLORE_HIGHLIGHT_START,
   __resetApiCache,
+  __resetShapeReports,
   fetchActionIssues,
   fetchBillsInFlight,
   fetchJusticeLeaderboard,
@@ -169,10 +170,13 @@ function mockJson(body: unknown) {
 describe("API shape guarantees", () => {
   beforeEach(() => {
     __resetApiCache();
+    __resetShapeReports();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   const listFetchers: [string, () => Promise<unknown[]>][] = [
@@ -246,5 +250,64 @@ describe("API shape guarantees", () => {
     const entry = { id: "S001", name: "Example", overallScore: 71 };
     vi.stubGlobal("fetch", mockJson([entry]));
     expect(await fetchLeaderboard()).toEqual([entry]);
+  });
+});
+
+describe("shape corrections are reported, not swallowed", () => {
+  // Coercing silently is right for the reader and wrong for whoever maintains
+  // the backend: an endpoint returning garbage would look exactly like an
+  // endpoint with nothing in it yet. These hold the developer-facing signal.
+  let warn: MockInstance<(...args: unknown[]) => void>;
+
+  beforeEach(() => {
+    __resetApiCache();
+    __resetShapeReports();
+    warn = vi.spyOn(console, "warn").mockImplementation(() => {}) as unknown as MockInstance<
+      (...args: unknown[]) => void
+    >;
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("names the endpoint and what arrived instead", async () => {
+    vi.stubGlobal("fetch", mockJson({ not: "a list" }));
+    await fetchLeaderboard();
+    expect(warn).toHaveBeenCalledTimes(1);
+    const message = String(warn.mock.calls[0][0]);
+    expect(message).toContain("/senators/leaderboard");
+    expect(message).toContain("got object");
+  });
+
+  it("names the offending field on an object payload", async () => {
+    vi.stubGlobal("fetch", mockJson({ date: "2026-08-18", issues: "nope" }));
+    await fetchActionIssues();
+    const messages = warn.mock.calls.map((c: unknown[]) => String(c[0]));
+    expect(messages.some((m) => m.includes('"issues"') && m.includes("got string"))).toBe(true);
+  });
+
+  it("reports each field once, not once per poll", async () => {
+    vi.stubGlobal("fetch", mockJson({}));
+    // The dashboard pollers hit some of these every three seconds; a warning
+    // per response would bury the console rather than inform it.
+    for (let i = 0; i < 5; i++) {
+      __resetApiCache();
+      await fetchLeaderboard();
+    }
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("says nothing when the payload is the right shape", async () => {
+    vi.stubGlobal("fetch", mockJson([{ id: "S001" }]));
+    await fetchLeaderboard();
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("says nothing for a legitimately empty list", async () => {
+    vi.stubGlobal("fetch", mockJson([]));
+    await fetchLeaderboard();
+    expect(warn).not.toHaveBeenCalled();
   });
 });

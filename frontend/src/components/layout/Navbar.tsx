@@ -110,22 +110,31 @@ export default function Navbar() {
           </Link>
 
           {/*
-          `lg` (1024px), not `sm` (640px).
+          Two link rows, not one, because one row cannot serve 640px and
+          1440px at the same size.
 
-          Nine wide-tracked uppercase links do not fit on one row until about
-          900px, so from 640px up they wrapped to two or three rows. On main
-          that merely made a 41px header 57px, which nothing depended on. With
-          the records band above it, the same wrap produced a 114px header
-          between 640 and 740px — past the clearance every page reserves
-          for the fixed header, clipping the top of their content. Measured
-          across 320-1280px; a four-width spot check missed it entirely.
+          Nine wide-tracked uppercase links measure 793px at the full
+          treatment, so they need ~975px of viewport before they fit beside
+          the wordmark — which is why the full row starts at `lg`. Below that
+          they used to wrap, and with the records band above them a wrapped
+          row made a 114px header between 640 and 740px, past the clearance
+          every page reserves. Content got clipped site-wide.
 
-          Holding the menu button until the links genuinely fit is also the
-          better call on its own: nine cramped links at 640px were never
-          readable.
+          The earlier fix held the menu button all the way to `lg`, which
+          handed a hamburger to every tablet. Instead `md` (768px) now gets a
+          compact row: tighter gap, normal tracking, and no [BSKY] (which the
+          footer carries anyway). That measures 548px against a 588px budget
+          at 768px — the narrowest width it renders at.
+
+          `flex-nowrap` is the guard, not the layout: if a fallback face ever
+          measures wider than Share Tech Mono, the row overflows — which the
+          route audit catches as horizontal scroll — rather than silently
+          wrapping and clipping the top of every page again.
+
+          Measured across 320-1536px in all five records-band states.
         */}
-          {/* Desktop nav */}
-          <div className="hidden lg:flex items-center gap-7">
+          {/* Compact row: md up to lg */}
+          <div className="hidden md:flex lg:hidden items-center gap-3 flex-nowrap">
             {NAV_LINKS.map(({ href, label, accent }) => {
               const active = isActive(href);
               return (
@@ -135,10 +144,33 @@ export default function Navbar() {
                   aria-current={active ? "page" : undefined}
                   className={
                     active
-                      ? "bg-phos text-surface-base font-mono text-xs tracking-widest uppercase px-2 py-0.5"
+                      ? "bg-phos text-surface-base font-mono text-xs tracking-[0.025em] uppercase px-1.5 py-0.5 whitespace-nowrap"
                       : accent
-                        ? "text-ink-hi hover:text-phos font-mono text-xs tracking-widest uppercase transition-colors"
-                        : "text-ink-lo hover:text-ink-hi font-mono text-xs tracking-widest uppercase transition-colors"
+                        ? "text-ink-hi hover:text-phos font-mono text-xs tracking-[0.025em] uppercase transition-colors whitespace-nowrap"
+                        : "text-ink-lo hover:text-ink-hi font-mono text-xs tracking-[0.025em] uppercase transition-colors whitespace-nowrap"
+                  }
+                >
+                  {label}
+                </Link>
+              );
+            })}
+          </div>
+
+          {/* Full row: lg and up */}
+          <div className="hidden lg:flex items-center gap-7 flex-nowrap">
+            {NAV_LINKS.map(({ href, label, accent }) => {
+              const active = isActive(href);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  aria-current={active ? "page" : undefined}
+                  className={
+                    active
+                      ? "bg-phos text-surface-base font-mono text-xs tracking-widest uppercase px-2 py-0.5 whitespace-nowrap"
+                      : accent
+                        ? "text-ink-hi hover:text-phos font-mono text-xs tracking-widest uppercase transition-colors whitespace-nowrap"
+                        : "text-ink-lo hover:text-ink-hi font-mono text-xs tracking-widest uppercase transition-colors whitespace-nowrap"
                   }
                 >
                   {label}
@@ -160,7 +192,7 @@ export default function Navbar() {
           {/* Mobile hamburger */}
           <button
             ref={toggleRef}
-            className="lg:hidden text-ink-lo hover:text-ink-hi font-mono text-sm tracking-widest transition-colors"
+            className="md:hidden text-ink-lo hover:text-ink-hi font-mono text-sm tracking-widest transition-colors"
             onClick={() => (menuOpen ? closeMenu() : setMenuOpen(true))}
             aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
             aria-expanded={menuOpen}
@@ -175,7 +207,7 @@ export default function Navbar() {
           <div
             ref={menuRef}
             id="mobile-menu"
-            className="lg:hidden bg-surface-base/[0.98] border-t border-white/[0.07] px-6 py-8 flex flex-col items-start gap-5"
+            className="md:hidden bg-surface-base/[0.98] border-t border-white/[0.07] px-6 py-8 flex flex-col items-start gap-5"
           >
             {NAV_LINKS.map(({ href, label, accent }) => {
               const active = isActive(href);

@@ -1,4 +1,5 @@
 import Navbar from "@/components/layout/Navbar";
+import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 
@@ -114,15 +115,16 @@ export default function AboutPage() {
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-3xl mx-auto">
-          <div className="mb-10 border-b-3 border-phos pb-5">
-            <h1 className="font-display font-semibold text-xl sm:text-3xl text-ink-hi tracking-widest mb-2">
-              METHODOLOGY
-            </h1>
-            <p className="text-ink-min text-base max-w-xl mx-auto">
+          <PageMasthead
+            className="mb-10"
+            eyebrow="Methodology · how every score is calculated"
+            title="Methodology"
+          >
+            <p>
               Full transparency on how scores are calculated, where data comes from, and why each
               analytical technique was chosen. No black boxes.
             </p>
-          </div>
+          </PageMasthead>
 
           {/* ── Philosophy ── */}
           <Section title="OUR APPROACH" defaultOpen>

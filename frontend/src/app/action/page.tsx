@@ -784,11 +784,19 @@ function ActionPageInner() {
     window.history.replaceState(null, "", url);
   }, []);
 
+  // Switching tabs is a destination, so it gets a history entry and Back
+  // returns to the tab you came from. Expanding a card or paging a day stays
+  // on replaceState above: those refine what you are already looking at, and
+  // pushing them would make Back walk through every card someone opened
+  // before it left the page.
+  const pushUrl = useCallback((url: string) => {
+    window.history.pushState(null, "", url);
+  }, []);
+
   // The address bar is the single source of truth for which tab is showing.
-  // Tab clicks write ?tab= through the History API (see replaceUrl) and Next
-  // feeds that back through useSearchParams, so the rendered tab follows the
-  // URL with no second copy of the answer to keep in sync. (replaceState, so
-  // tab switches deliberately do not stack up history entries.)
+  // Tab clicks write ?tab= through the History API and Next feeds that back
+  // through useSearchParams, so the rendered tab follows the URL — Back and
+  // Forward included — with no second copy of the answer to keep in sync.
   const paramTab = searchParams.get("tab");
   const activeTab: Tab = isValidTab(paramTab) ? paramTab : "issues";
   const [userState, setUserState] = useUserState();
@@ -820,7 +828,7 @@ function ActionPageInner() {
   const setActiveTab = useCallback(
     (tab: Tab) => {
       const url = tab === "issues" ? "/action" : `/action?tab=${tab}`;
-      replaceUrl(url);
+      pushUrl(url);
       // Focus the newly selected *tab*, not its panel. The tabs use a roving
       // tabindex, so the incoming tab has to be focused explicitly or the
       // keyboard user is stranded on an element that just became tabindex=-1.
@@ -832,7 +840,7 @@ function ActionPageInner() {
         document.getElementById(`tab-${tab}`)?.focus();
       });
     },
-    [replaceUrl]
+    [pushUrl]
   );
 
   // Update URL when a secondary issue is expanded/collapsed

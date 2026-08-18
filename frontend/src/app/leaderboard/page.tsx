@@ -5,6 +5,7 @@ import { useAsyncData } from "@/hooks/useAsyncData";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
+import PageMasthead from "@/components/layout/PageMasthead";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import BranchSelector, { type Branch } from "@/components/BranchSelector";
 import Footer from "@/components/layout/Footer";
@@ -791,12 +792,12 @@ function LeaderboardContent() {
         tabIndex={-1}
         className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 pt-[var(--header-clearance)] pb-16"
       >
-        {/* Header */}
-        <div className="mb-8 text-center">
-          <h1 className="font-display text-3xl font-extrabold uppercase leading-none tracking-[-0.02em] text-ink-hi sm:text-4xl">
-            LEADERBOARD
-          </h1>
-          <p className="text-ink-lo text-lg">
+        <PageMasthead
+          className="mb-8"
+          eyebrow="Leaderboard · ranked by representation score"
+          title="Leaderboard"
+        >
+          <p>
             {branch === "house"
               ? "House members"
               : branch === "president"
@@ -804,7 +805,7 @@ function LeaderboardContent() {
                 : branch === "scotus"
                   ? "Justices"
                   : "Senators"}{" "}
-            ranked by constituent representation score
+            ranked by constituent representation score.
           </p>
           {/* Verified live (2026-08 review): the top of this ranking
               skews heavily Democratic — a real, honestly-disclosed
@@ -813,7 +814,7 @@ function LeaderboardContent() {
               lived only in About's much longer methodology essay with
               no link from here. */}
           {(branch === "senate" || branch === "house") && (
-            <p className="text-ink-min text-xs mt-2">
+            <p className="mt-2 text-xs text-ink-min">
               Why does one party tend to rank higher?{" "}
               <Link
                 href="/about#known-limitations"
@@ -824,7 +825,7 @@ function LeaderboardContent() {
               .
             </p>
           )}
-        </div>
+        </PageMasthead>
 
         <div className="mb-8">
           <BranchSelector selected={branch} onChange={setBranch} />
@@ -876,7 +877,7 @@ function LeaderboardContent() {
                               ? "bg-signal-red/10 border-signal-red/40 text-signal-red"
                               : p === "I"
                                 ? "bg-ind-purple/30 border-ind-purple text-ind-purple"
-                                : "bg-phos border-phos/40 text-ink-hi"
+                                : "bg-phos border-phos text-surface-base"
                           : "border-white/[0.07] text-ink-lo hover:border-white/30 hover:text-ink"
                       }`}
                     >
@@ -1162,7 +1163,7 @@ function LeaderboardContent() {
                         aria-current={housePage === p ? "page" : undefined}
                         className={`w-8 h-8 text-sm font-mono border transition-colors ${
                           housePage === p
-                            ? "bg-phos border-phos/40 text-ink-hi"
+                            ? "bg-phos border-phos text-surface-base"
                             : "border-white/[0.07] text-ink-lo hover:border-white/30 hover:text-ink"
                         }`}
                       >

@@ -11,7 +11,11 @@ import GlitchText from "@/components/effects/GlitchText";
  */
 export default function NotFound() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center px-4 text-center">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="flex min-h-screen flex-col items-center justify-center px-4 text-center"
+    >
       <GlitchText
         text="404"
         as="h1"

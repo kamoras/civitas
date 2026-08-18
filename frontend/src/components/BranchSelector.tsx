@@ -59,7 +59,7 @@ export default function BranchSelector({ selected, onChange }: BranchSelectorPro
           onClick={() => onChange(key)}
           className={`px-3 sm:px-5 py-2 text-xs sm:text-sm font-mono border transition-all tracking-wider ${
             selected === key
-              ? "bg-phos border-phos/40 text-ink-hi"
+              ? "bg-phos border-phos text-surface-base"
               : "border-white/[0.07] text-ink-lo hover:border-white/30 hover:text-ink"
           }`}
         >

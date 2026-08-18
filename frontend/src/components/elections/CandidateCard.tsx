@@ -46,7 +46,7 @@ export default function CandidateCard({ candidate }: { candidate: CandidateSumma
 
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h4 className="font-display text-lg font-semibold leading-tight text-ink-hi">
+          <h3 className="font-display text-lg font-semibold leading-tight text-ink-hi">
             <a
               href={`https://www.fec.gov/data/candidate/${encodeURIComponent(candidate.id)}/`}
               target="_blank"
@@ -58,7 +58,7 @@ export default function CandidateCard({ candidate }: { candidate: CandidateSumma
                 ↗
               </span>
             </a>
-          </h4>
+          </h3>
           <p className={`mt-0.5 font-mono text-xs tracking-[0.1em] ${pm.color}`}>{pm.label}</p>
         </div>
 

@@ -22,9 +22,9 @@ export default function RaceFinancials({ candidates }: { candidates: CandidateSu
 
   return (
     <div>
-      <h4 className="mb-3 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+      <h3 className="mb-3 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
         Cash on hand
-      </h4>
+      </h3>
       <ol className="space-y-3">
         {withFunds
           .slice()

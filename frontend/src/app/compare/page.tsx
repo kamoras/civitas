@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
+import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
 import {
   fetchSenatorsByState,
@@ -508,15 +509,16 @@ function ComparePageInner() {
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-5xl mx-auto">
-          <div className="mb-8 border-b-3 border-phos pb-5">
-            <h1 className="font-display font-semibold text-xl sm:text-3xl text-ink-hi tracking-widest mb-2">
-              COMPARE LEGISLATORS
-            </h1>
-            <p className="text-ink-min text-base max-w-xl mx-auto">
+          <PageMasthead
+            className="mb-8"
+            eyebrow="Compare · two legislators, side by side"
+            title="Compare legislators"
+          >
+            <p>
               Select two legislators to compare their representation scores, funding sources, and
               voting independence side by side.
             </p>
-          </div>
+          </PageMasthead>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <SenatorSelector

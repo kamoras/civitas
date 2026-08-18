@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Navbar from "@/components/layout/Navbar";
+import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 
@@ -78,15 +79,16 @@ export default function EnvironmentalPage() {
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-3xl mx-auto">
           {/* Header */}
-          <div className="mb-10 border-b-3 border-phos pb-5">
-            <h1 className="font-display font-semibold text-lg sm:text-2xl text-ink-hi tracking-widest mb-3">
-              ENVIRONMENTAL IMPACT
-            </h1>
-            <p className="text-ink-min text-base max-w-xl mx-auto leading-relaxed">
+          <PageMasthead
+            className="mb-10"
+            eyebrow="Environmental · what this service costs to run"
+            title="Environmental impact"
+          >
+            <p>
               As an AI-powered application, we believe you have a right to know what our
               infrastructure costs the planet. This page is our attempt at an honest answer.
             </p>
-          </div>
+          </PageMasthead>
 
           {/* Headline stats */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">

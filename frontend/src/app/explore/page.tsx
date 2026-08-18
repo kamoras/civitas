@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
+import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import {
@@ -304,28 +305,31 @@ function ExplorePageInner() {
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-4xl mx-auto">
           {/* Header */}
-          <div className="mb-8 border-b-3 border-phos pb-5">
-            <h1 className="font-display font-semibold text-xl sm:text-3xl text-ink-hi tracking-widest mb-2">
-              EXPLORE
-            </h1>
-            <p className="text-ink-min text-base max-w-xl mx-auto">
+          <PageMasthead
+            className="mb-8"
+            eyebrow="Explore · search across every branch"
+            title="Explore the record"
+            aside={
+              stats && stats.totalDocuments > 0 ? (
+                <div className="text-right font-mono text-xs">
+                  <p className="text-ink-lo tabular-nums">
+                    {stats.totalDocuments.toLocaleString()} documents indexed
+                  </p>
+                  {stats.openForComment > 0 && (
+                    <p className="text-signal-cyan tabular-nums">
+                      {stats.openForComment} open for comment
+                    </p>
+                  )}
+                </div>
+              ) : null
+            }
+          >
+            <p>
               Search any issue to see what all branches of government and federal agencies have done
               about it — by topic, or by exact name, number, or &ldquo;quoted phrase&rdquo;. Many
               regulatory documents are open for public comment — make your voice heard.
             </p>
-            {stats && stats.totalDocuments > 0 && (
-              <div className="flex items-center justify-center gap-4 mt-2">
-                <p className="text-ink-lo text-xs">
-                  {stats.totalDocuments.toLocaleString()} documents indexed
-                </p>
-                {stats.openForComment > 0 && (
-                  <p className="text-emerald-400/70 text-xs">
-                    {stats.openForComment} open for comment
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
+          </PageMasthead>
 
           {/* Search form */}
           <form onSubmit={handleSubmit} className="mb-6">
@@ -497,7 +501,11 @@ function ExplorePageInner() {
           {/* Results */}
           {!loading && searched && results.length > 0 && (
             <div aria-live="polite">
-              <p className="text-ink-lo text-xs mb-4">
+              {/* The results count is the section's heading, not a caption:
+                  it is what the list below it is, and it keeps the document
+                  outline going h1 -> h2 -> h3 instead of jumping to the
+                  result titles. */}
+              <h2 className="text-ink-lo text-xs mb-4 font-normal">
                 {results.length} result{results.length !== 1 ? "s" : ""} for &ldquo;{resultsFor}
                 &rdquo;
                 {commentableOnly && (
@@ -506,7 +514,7 @@ function ExplorePageInner() {
                 <span className="text-ink-min ml-2">
                   — sorted by {sortOrder === "date" ? "newest first" : "relevance"}
                 </span>
-              </p>
+              </h2>
               <div className="space-y-3">
                 {results.map((r) => (
                   <ResultCard key={r.id} result={r} query={resultsFor} />

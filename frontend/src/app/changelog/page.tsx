@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Navbar from "@/components/layout/Navbar";
+import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import { SCORE_VERSIONS } from "@/lib/scoreVersions";
@@ -32,11 +33,12 @@ export default function ChangelogPage() {
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-3xl mx-auto">
-          <div className="mb-10 border-b-3 border-phos pb-5">
-            <h1 className="font-display font-semibold text-xl sm:text-3xl text-ink-hi tracking-widest mb-2">
-              SCORING CHANGELOG
-            </h1>
-            <p className="text-ink-min text-base max-w-xl mx-auto">
+          <PageMasthead
+            className="mb-10"
+            eyebrow="Changelog · versioned scoring methodology"
+            title="Scoring changelog"
+          >
+            <p>
               The scoring algorithms are versioned. When a formula or its data inputs change, every
               affected score can shift on the next nightly run — the trend charts mark these dates
               so a methodology update is never mistaken for a change in a politician&apos;s
@@ -49,7 +51,7 @@ export default function ChangelogPage() {
               </a>{" "}
               for how scores are calculated.
             </p>
-          </div>
+          </PageMasthead>
 
           <Section title="VERSION HISTORY">
             <div className="space-y-6">
