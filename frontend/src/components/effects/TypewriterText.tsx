@@ -57,7 +57,7 @@ export default function TypewriterText({
       <span aria-hidden="true">
         {displayed}
         {!reducedMotion && started && displayed.length < text.length && (
-          <span className="animate-blink text-matrix-green">_</span>
+          <span className="animate-blink text-ink-hi">_</span>
         )}
       </span>
     </span>

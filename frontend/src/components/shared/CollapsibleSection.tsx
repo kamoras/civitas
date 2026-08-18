@@ -18,7 +18,7 @@ interface CollapsibleSectionProps {
 
 export default function CollapsibleSection({
   title,
-  titleColor = "text-neon-cyan neon-cyan",
+  titleColor = "text-signal-cyan",
   summary,
   alwaysVisible,
   defaultOpen = false,
@@ -37,22 +37,21 @@ export default function CollapsibleSection({
         aria-controls={contentId}
       >
         <h3 className={`text-lg ${titleColor} flex items-center gap-2`}>
-          <span className="text-matrix-green/40 text-base font-mono group-hover:text-matrix-green transition-colors" aria-hidden="true">
+          <span
+            className="text-ink-min text-base font-mono group-hover:text-phos transition-colors"
+            aria-hidden="true"
+          >
             {open ? "−" : "+"}
           </span>
           {title}
         </h3>
         <span className="flex items-center gap-3">
           {!open && summary && (
-            <span className="text-xs text-matrix-green/50 max-w-xs truncate hidden sm:inline">
+            <span className="text-xs text-ink-lo max-w-xs truncate hidden sm:inline">
               {summary}
             </span>
           )}
-          {source && (
-            <span className="text-[10px] text-matrix-green/50 hidden sm:inline">
-              {source}
-            </span>
-          )}
+          {source && <span className="text-xs text-ink-lo hidden sm:inline">{source}</span>}
         </span>
       </button>
       {alwaysVisible}

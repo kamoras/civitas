@@ -14,7 +14,7 @@ const archivo = Archivo({
 });
 
 // DEPRECATED — kept loaded only so the ~150 call sites still naming
-// `font-terminal` keep rendering while they migrate off it. See the
+// `font-mono` keep rendering while they migrate off it. See the
 // fontFamily note in tailwind.config.ts.
 const vt323 = VT323({
   weight: "400",
@@ -48,7 +48,8 @@ export const metadata: Metadata = {
   ],
   openGraph: {
     title: "CIVITAS // PUBLIC RECORD",
-    description: "Congressional scorecards, campaign finance data, and civic actions — all sourced from public federal records.",
+    description:
+      "Congressional scorecards, campaign finance data, and civic actions — all sourced from public federal records.",
     type: "website",
   },
 };
@@ -61,7 +62,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       {/*
-        `font-mono` (Share Tech Mono), not `font-terminal` (VT323).
+        `font-mono` (Share Tech Mono), not `font-mono` (VT323).
         This governs every element that does not name a font itself, which is
         most of the site's prose. Measured from the shipped woff2 files:
 
@@ -86,7 +87,7 @@ export default function RootLayout({
         <ConfigProvider>
           <a
             href="#main-content"
-            className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:top-2 focus-visible:left-2 focus-visible:z-[10000] focus-visible:bg-crt-black focus-visible:text-matrix-green focus-visible:border-2 focus-visible:border-matrix-green focus-visible:px-4 focus-visible:py-2 focus-visible:text-lg focus-visible:font-terminal"
+            className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:top-2 focus-visible:left-2 focus-visible:z-[10000] focus-visible:bg-surface-base focus-visible:text-ink-hi focus-visible:border-2 focus-visible:border-phos/40 focus-visible:px-4 focus-visible:py-2 focus-visible:text-lg focus-visible:font-mono"
           >
             Skip to main content
           </a>

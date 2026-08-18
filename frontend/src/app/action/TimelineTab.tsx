@@ -5,16 +5,58 @@ import Link from "next/link";
 import { fetchTimeline } from "@/lib/api";
 import { formatWeekRange, safeHref } from "@/lib/formatting";
 import { ACTION_CENTER_MONITORS_HREF } from "@/lib/routes";
-import type { TimelineResponse, TimelineEntry, TimelineWeek, TimelineMonth, UpcomingEvent } from "@/lib/api";
+import type {
+  TimelineResponse,
+  TimelineEntry,
+  TimelineWeek,
+  TimelineMonth,
+  UpcomingEvent,
+} from "@/lib/api";
 
-const MONTH_NAMES = ["", "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
-  "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
+const MONTH_NAMES = [
+  "",
+  "JANUARY",
+  "FEBRUARY",
+  "MARCH",
+  "APRIL",
+  "MAY",
+  "JUNE",
+  "JULY",
+  "AUGUST",
+  "SEPTEMBER",
+  "OCTOBER",
+  "NOVEMBER",
+  "DECEMBER",
+];
 
-const EVENT_STYLES: Record<string, { border: string; dot: string; badge: string; badgeText: string }> = {
-  election:  { border: "border-red-400/30",     dot: "bg-red-400",     badge: "border-red-400/40 text-red-400/90 bg-red-400/10",     badgeText: "ELECTION" },
-  scotus:    { border: "border-blue-400/30",    dot: "bg-blue-400",    badge: "border-blue-400/40 text-blue-400/90 bg-blue-400/10",   badgeText: "SCOTUS" },
-  congress:  { border: "border-emerald-400/30", dot: "bg-emerald-400", badge: "border-emerald-400/40 text-emerald-400/90 bg-emerald-400/10", badgeText: "CONGRESS" },
-  executive: { border: "border-amber-400/30",   dot: "bg-amber-400",   badge: "border-amber-400/40 text-amber-400/90 bg-amber-400/10", badgeText: "EXECUTIVE" },
+const EVENT_STYLES: Record<
+  string,
+  { border: string; dot: string; badge: string; badgeText: string }
+> = {
+  election: {
+    border: "border-red-400/30",
+    dot: "bg-red-400",
+    badge: "border-red-400/40 text-signal-red bg-red-400/10",
+    badgeText: "ELECTION",
+  },
+  scotus: {
+    border: "border-blue-400/30",
+    dot: "bg-blue-400",
+    badge: "border-blue-400/40 text-blue-400/90 bg-blue-400/10",
+    badgeText: "SCOTUS",
+  },
+  congress: {
+    border: "border-emerald-400/30",
+    dot: "bg-emerald-400",
+    badge: "border-emerald-400/40 text-emerald-400/90 bg-emerald-400/10",
+    badgeText: "CONGRESS",
+  },
+  executive: {
+    border: "border-signal-amber/40",
+    dot: "bg-amber-400",
+    badge: "border-signal-amber/40 text-signal-amber bg-signal-amber/10",
+    badgeText: "EXECUTIVE",
+  },
 };
 
 function daysUntil(dateStr: string): number {
@@ -32,18 +74,23 @@ function EventCard({ event }: { event: UpcomingEvent }) {
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2 mb-2 flex-wrap">
-            <span className={`text-[10px] font-pixel px-2 py-0.5 border ${style.badge}`}>{style.badgeText}</span>
-            <span className="text-[10px] text-matrix-green/40 font-pixel">{event.date}</span>
+            <span className={`text-xs font-mono px-2 py-0.5 border ${style.badge}`}>
+              {style.badgeText}
+            </span>
+            <span className="text-xs text-ink-min font-mono">{event.date}</span>
           </div>
-          <h4 className="font-pixel text-sm text-matrix-green leading-relaxed mb-1">{event.title}</h4>
-          <p className="text-xs text-matrix-green/60 leading-relaxed mb-3">{event.description}</p>
-          <Link href={event.link} className="text-[10px] font-mono tracking-widest text-neon-cyan/60 hover:text-neon-cyan transition-colors">
+          <h4 className="font-mono text-sm text-ink-hi leading-relaxed mb-1">{event.title}</h4>
+          <p className="text-xs text-ink-lo leading-relaxed mb-3">{event.description}</p>
+          <Link
+            href={event.link}
+            className="text-xs font-mono tracking-widest text-ink-lo hover:text-phos transition-colors"
+          >
             {event.linkLabel.toUpperCase()} →
           </Link>
         </div>
         <div className="text-right shrink-0">
-          <div className="font-pixel text-2xl sm:text-3xl text-matrix-green/90">{days}</div>
-          <div className="text-[10px] font-pixel text-matrix-green/40">DAY{days !== 1 ? "S" : ""} AWAY</div>
+          <div className="font-display font-semibold text-2xl sm:text-3xl text-ink-hi">{days}</div>
+          <div className="text-xs font-mono text-ink-min">DAY{days !== 1 ? "S" : ""} AWAY</div>
         </div>
       </div>
     </div>
@@ -53,30 +100,49 @@ function EventCard({ event }: { event: UpcomingEvent }) {
 function DayEntry({ entry }: { entry: TimelineEntry }) {
   return (
     <div className="relative group">
-      <div className="absolute -left-[21px] top-1.5 w-2.5 h-2.5 rounded-full bg-purple-400/40 border border-purple-400/60" aria-hidden="true" />
-      <Link href={`/action?date=${entry.date}`} className="block hover:bg-white/[0.02] transition-colors rounded px-1 -mx-1 py-0.5">
+      <div
+        className="absolute -left-[21px] top-1.5 w-2.5 h-2.5 bg-purple-400/40 border border-purple-400/60"
+        aria-hidden="true"
+      />
+      <Link
+        href={`/action?date=${entry.date}`}
+        className="block hover:bg-white/[0.02] transition-colors px-1 -mx-1 py-0.5"
+      >
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-[10px] text-matrix-green/40 font-pixel">{entry.date}</span>
+          <span className="text-xs text-ink-min font-mono">{entry.date}</span>
           {entry.policyAreas.slice(0, 2).map((area) => (
-            <span key={area} className="text-[10px] font-pixel px-1.5 py-0.5 border border-neon-yellow/20 text-neon-yellow/50">
+            <span
+              key={area}
+              className="text-xs font-mono px-1.5 py-0.5 border border-signal-amber/40 text-ink-lo"
+            >
               {area}
             </span>
           ))}
         </div>
-        <p className="text-sm text-matrix-green/90 group-hover:text-matrix-green font-medium leading-relaxed">{entry.title}</p>
-        <p className="text-xs text-matrix-green/50 leading-relaxed mt-1">
-          {entry.summary.slice(0, 200)}{entry.summary.length > 200 ? "…" : ""}
+        <p className="text-base text-ink-hi group-hover:text-phos font-medium leading-relaxed">
+          {entry.title}
+        </p>
+        <p className="text-xs text-ink-lo leading-relaxed mt-1">
+          {entry.summary.slice(0, 200)}
+          {entry.summary.length > 200 ? "…" : ""}
         </p>
       </Link>
       <div className="flex items-center gap-3 mt-1 px-1">
         {entry.sourceUrl && (
-          <a href={safeHref(entry.sourceUrl) || "#"} target="_blank" rel="noopener noreferrer"
-             className="text-[10px] text-neon-cyan/50 hover:text-neon-cyan transition-colors">
+          <a
+            href={safeHref(entry.sourceUrl) || "#"}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-ink-lo hover:text-phos transition-colors"
+          >
             {entry.sourceName || "Source"} <span aria-hidden="true">↗</span>
           </a>
         )}
         {entry.monitorSlug && (
-          <Link href={ACTION_CENTER_MONITORS_HREF} className="text-[10px] font-pixel text-amber-400/50 hover:text-amber-400 transition-colors">
+          <Link
+            href={ACTION_CENTER_MONITORS_HREF}
+            className="text-xs font-mono text-signal-amber hover:text-signal-amber transition-colors"
+          >
             ● MONITORED
           </Link>
         )}
@@ -91,11 +157,13 @@ function DayList({ entries }: { entries: TimelineEntry[] }) {
   const remaining = entries.length - 7;
   return (
     <div className="relative pl-4 border-l border-purple-400/20 space-y-3">
-      {visible.map((e) => <DayEntry key={e.date} entry={e} />)}
+      {visible.map((e) => (
+        <DayEntry key={e.date} entry={e} />
+      ))}
       {remaining > 0 && (
         <button
           onClick={() => setShowAll((v) => !v)}
-          className="w-full text-center text-[10px] font-pixel py-2 border border-purple-400/20 text-purple-400/60 hover:text-purple-400 hover:border-purple-400/40 transition-colors"
+          className="w-full text-center text-xs font-mono py-2 border border-purple-400/20 text-ind-purple hover:text-ind-purple hover:border-purple-400/40 transition-colors"
         >
           {showAll ? "▲ SHOW LESS" : `▼ SHOW ${remaining} MORE DAY${remaining !== 1 ? "S" : ""}`}
         </button>
@@ -109,32 +177,43 @@ function WeekCard({ week }: { week: TimelineWeek }) {
   const label = week.isCurrent ? "CURRENT WEEK" : formatWeekRange(week.startDate, week.endDate);
 
   return (
-    <div className="border border-matrix-green/10 rounded">
+    <div className="border border-white/[0.07] ">
       <button
         onClick={() => setExpanded((v) => !v)}
         className="w-full text-left px-3 py-2.5 flex items-center justify-between hover:bg-white/[0.01] transition-colors"
         aria-expanded={expanded}
       >
         <div className="flex items-center gap-2.5 flex-wrap">
-          <span className={`font-pixel text-xs ${week.isCurrent ? "text-neon-cyan/80" : "text-matrix-green/60"}`}>
+          <span
+            className={`font-mono text-xs ${week.isCurrent ? "text-signal-cyan" : "text-ink-lo"}`}
+          >
             {label}
           </span>
-          <span className="text-[10px] text-matrix-green/30">{week.entryCount} day{week.entryCount !== 1 ? "s" : ""}</span>
+          <span className="text-xs text-ink-min">
+            {week.entryCount} day{week.entryCount !== 1 ? "s" : ""}
+          </span>
           {week.topAreas.slice(0, 3).map((a) => (
-            <span key={a} className="hidden sm:inline text-[10px] font-pixel px-1.5 py-0.5 border border-matrix-green/15 text-matrix-green/35">
+            <span
+              key={a}
+              className="hidden sm:inline text-xs font-mono px-1.5 py-0.5 border border-white/[0.07] text-ink-min"
+            >
               {a}
             </span>
           ))}
         </div>
-        <span className="text-matrix-green/30 font-mono text-base leading-none shrink-0">{expanded ? "−" : "+"}</span>
+        <span className="text-ink-min font-mono text-base leading-none shrink-0">
+          {expanded ? "−" : "+"}
+        </span>
       </button>
 
       {expanded && (
-        <div className="px-3 pb-3 border-t border-matrix-green/10 pt-3 space-y-3">
+        <div className="px-3 pb-3 border-t border-white/[0.07] pt-3 space-y-3">
           {week.summary && !week.isCurrent && (
             <div className="border-l-2 border-purple-400/30 pl-3 py-1">
-              <div className="text-[10px] font-mono tracking-widest text-purple-400/40 mb-1">WEEK IN REVIEW</div>
-              <p className="text-xs text-matrix-green/60 leading-relaxed italic">{week.summary}</p>
+              <div className="text-xs font-mono tracking-widest text-ind-purple mb-1">
+                WEEK IN REVIEW
+              </div>
+              <p className="text-xs text-ink-lo leading-relaxed italic">{week.summary}</p>
             </div>
           )}
           <DayList entries={week.entries} />
@@ -164,41 +243,54 @@ function MonthCard({
         aria-expanded={expanded}
       >
         <div className="flex items-center gap-3 flex-wrap">
-          <span className={`font-pixel text-sm ${month.isCurrent ? "text-purple-400" : "text-purple-400/70"}`}>
+          <span
+            className={`font-mono text-sm ${month.isCurrent ? "text-ind-purple" : "text-ind-purple"}`}
+          >
             {month.name.toUpperCase()}
           </span>
-          <span className="text-[10px] text-matrix-green/40">
+          <span className="text-xs text-ink-min">
             {month.entries.length} day{month.entries.length !== 1 ? "s" : ""}
           </span>
           {monthEvents.length > 0 && (
-            <span className="text-[10px] font-pixel text-neon-cyan/60">
+            <span className="text-xs font-mono text-ink-lo">
               +{monthEvents.length} event{monthEvents.length !== 1 ? "s" : ""}
             </span>
           )}
-          {!month.isCurrent && month.topAreas.slice(0, 3).map((a) => (
-            <span key={a} className="hidden sm:inline text-[10px] font-pixel px-1.5 py-0.5 border border-matrix-green/15 text-matrix-green/40">
-              {a}
-            </span>
-          ))}
+          {!month.isCurrent &&
+            month.topAreas.slice(0, 3).map((a) => (
+              <span
+                key={a}
+                className="hidden sm:inline text-xs font-mono px-1.5 py-0.5 border border-white/[0.07] text-ink-min"
+              >
+                {a}
+              </span>
+            ))}
         </div>
-        <span className="text-matrix-green/40 font-mono text-base leading-none" aria-hidden="true">{expanded ? "−" : "+"}</span>
+        <span className="text-ink-min font-mono text-base leading-none" aria-hidden="true">
+          {expanded ? "−" : "+"}
+        </span>
       </button>
 
       {expanded && (
-        <div className="px-4 sm:px-5 pb-4 sm:pb-5 border-t border-matrix-green/10 pt-4 space-y-4">
+        <div className="px-4 sm:px-5 pb-4 sm:pb-5 border-t border-white/[0.07] pt-4 space-y-4">
           {monthEvents.length > 0 && (
             <div className="space-y-2">
               {monthEvents.map((ev) => {
                 const style = EVENT_STYLES[ev.category] ?? EVENT_STYLES.congress;
                 return (
-                  <Link key={ev.date + ev.category} href={ev.link}
-                    className={`block border-l-2 ${style.border} pl-3 py-2 hover:bg-white/[0.02] transition-colors`}>
+                  <Link
+                    key={ev.date + ev.category}
+                    href={ev.link}
+                    className={`block border-l-2 ${style.border} pl-3 py-2 hover:bg-white/[0.02] transition-colors`}
+                  >
                     <div className="flex items-center gap-2 mb-0.5">
-                      <span className={`w-2 h-2 rounded-full ${style.dot}`} aria-hidden="true" />
-                      <span className="text-[10px] text-matrix-green/40 font-pixel">{ev.date}</span>
-                      <span className={`text-[10px] font-pixel px-1.5 py-0.5 border ${style.badge}`}>{style.badgeText}</span>
+                      <span className={`w-2 h-2  ${style.dot}`} aria-hidden="true" />
+                      <span className="text-xs text-ink-min font-mono">{ev.date}</span>
+                      <span className={`text-xs font-mono px-1.5 py-0.5 border ${style.badge}`}>
+                        {style.badgeText}
+                      </span>
                     </div>
-                    <span className="text-sm text-matrix-green/90 font-medium">{ev.title}</span>
+                    <span className="text-sm text-ink-hi font-medium">{ev.title}</span>
                   </Link>
                 );
               })}
@@ -208,23 +300,28 @@ function MonthCard({
           {/* Past month: show LLM summary + week breakdown */}
           {!month.isCurrent && month.summary && (
             <div className="border-l-2 border-purple-400/30 pl-3 py-1">
-              <div className="text-[10px] font-mono tracking-widest text-purple-400/40 mb-1">MONTH IN REVIEW</div>
-              <p className="text-xs text-matrix-green/60 leading-relaxed italic">{month.summary}</p>
+              <div className="text-xs font-mono tracking-widest text-ind-purple mb-1">
+                MONTH IN REVIEW
+              </div>
+              <p className="text-xs text-ink-lo leading-relaxed italic">{month.summary}</p>
             </div>
           )}
 
           {/* Current month: show week cards */}
           {month.isCurrent ? (
             <div className="space-y-2">
-              {month.weeks.map((week) => <WeekCard key={week.weekNum} week={week} />)}
+              {month.weeks.map((week) => (
+                <WeekCard key={week.weekNum} week={week} />
+              ))}
             </div>
           ) : (
             /* Past month: week breakdown + days */
             <div className="space-y-2">
-              {month.weeks.length > 1
-                ? month.weeks.map((week) => <WeekCard key={week.weekNum} week={week} />)
-                : <DayList entries={month.entries} />
-              }
+              {month.weeks.length > 1 ? (
+                month.weeks.map((week) => <WeekCard key={week.weekNum} week={week} />)
+              ) : (
+                <DayList entries={month.entries} />
+              )}
             </div>
           )}
         </div>
@@ -258,7 +355,9 @@ export default function TimelineTab() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <div className="text-purple-400/50 font-mono text-xs tracking-widest animate-pulse">LOADING TIMELINE...</div>
+        <div className="text-ind-purple font-mono text-xs tracking-widest animate-pulse">
+          LOADING TIMELINE...
+        </div>
       </div>
     );
   }
@@ -266,17 +365,23 @@ export default function TimelineTab() {
   if (fetchError) {
     return (
       <div className="terminal-window max-w-lg mx-auto p-8 text-center space-y-4" role="alert">
-        <div className="font-pixel text-sm text-red-400">CONNECTION ERROR</div>
-        <p className="text-matrix-green/50 text-sm">Could not load timeline data.</p>
+        <div className="font-mono text-sm text-signal-red">CONNECTION ERROR</div>
+        <p className="text-ink-lo text-base">Could not load timeline data.</p>
       </div>
     );
   }
 
-  if (!data || (data.totalDays === 0 && (!data.upcomingEvents || data.upcomingEvents.length === 0))) {
+  if (
+    !data ||
+    (data.totalDays === 0 && (!data.upcomingEvents || data.upcomingEvents.length === 0))
+  ) {
     return (
       <div className="terminal-window max-w-lg mx-auto p-8 text-center space-y-4">
-        <div className="font-pixel text-sm text-purple-400/80">NO TIMELINE DATA YET</div>
-        <p className="text-matrix-green/50 text-sm">The timeline builds automatically as issues are tracked each day. Check back as the year progresses.</p>
+        <div className="font-mono text-sm text-ind-purple">NO TIMELINE DATA YET</div>
+        <p className="text-ink-lo text-base">
+          The timeline builds automatically as issues are tracked each day. Check back as the year
+          progresses.
+        </p>
       </div>
     );
   }
@@ -297,19 +402,24 @@ export default function TimelineTab() {
     <div className="space-y-6">
       {/* Year header */}
       <div className="terminal-window border-t-2 border-t-purple-400/50 p-5 sm:p-6 text-center">
-        <h2 className="font-pixel text-xl sm:text-2xl text-purple-400 mb-2">
+        <h2 className="font-display font-semibold text-xl sm:text-2xl text-ind-purple mb-2">
           {isYearComplete ? `${data.year} YEAR IN REVIEW` : `${data.year} — IN PROGRESS`}
         </h2>
-        <p className="text-matrix-green/50 text-sm mb-4">
+        <p className="text-ink-lo text-base mb-4">
           {data.totalDays} day{data.totalDays !== 1 ? "s" : ""} tracked
-          {data.monitors.length > 0 && ` · ${data.monitors.length} ongoing monitor${data.monitors.length !== 1 ? "s" : ""}`}
-          {upcomingEvents.length > 0 && ` · ${upcomingEvents.length} upcoming event${upcomingEvents.length !== 1 ? "s" : ""}`}
+          {data.monitors.length > 0 &&
+            ` · ${data.monitors.length} ongoing monitor${data.monitors.length !== 1 ? "s" : ""}`}
+          {upcomingEvents.length > 0 &&
+            ` · ${upcomingEvents.length} upcoming event${upcomingEvents.length !== 1 ? "s" : ""}`}
         </p>
         {data.topThemes.length > 0 && (
           <div className="flex items-center justify-center gap-2 flex-wrap">
-            <span className="font-mono text-[10px] tracking-widest text-matrix-green/35">TOP THEMES</span>
+            <span className="font-mono text-xs tracking-widest text-ink-min">TOP THEMES</span>
             {data.topThemes.slice(0, 6).map((t) => (
-              <span key={t.area} className="text-[10px] font-pixel px-2 py-0.5 border border-purple-400/30 text-purple-400/70 bg-purple-400/5">
+              <span
+                key={t.area}
+                className="text-xs font-mono px-2 py-0.5 border border-purple-400/30 text-ind-purple bg-purple-400/5"
+              >
                 {t.area} ({t.count})
               </span>
             ))}
@@ -320,12 +430,19 @@ export default function TimelineTab() {
       {/* Year summary (if complete year) */}
       {data.yearSummary && (
         <div className="terminal-window border-l-4 border-l-purple-400/50 p-5">
-          <div className="text-[10px] font-mono tracking-widest text-purple-400/50 mb-2">YEAR IN REVIEW — {data.year}</div>
-          <p className="text-sm text-matrix-green/70 leading-relaxed italic">{data.yearSummary.summary}</p>
+          <div className="text-xs font-mono tracking-widest text-ind-purple mb-2">
+            YEAR IN REVIEW — {data.year}
+          </div>
+          <p className="text-base text-ink leading-relaxed italic">{data.yearSummary.summary}</p>
           {data.yearSummary.topAreas.length > 0 && (
             <div className="flex gap-2 flex-wrap mt-3">
               {data.yearSummary.topAreas.map((a) => (
-                <span key={a} className="text-[10px] font-pixel px-1.5 py-0.5 border border-purple-400/20 text-purple-400/50">{a}</span>
+                <span
+                  key={a}
+                  className="text-xs font-mono px-1.5 py-0.5 border border-purple-400/20 text-ind-purple"
+                >
+                  {a}
+                </span>
               ))}
             </div>
           )}
@@ -335,8 +452,12 @@ export default function TimelineTab() {
       {/* Upcoming events */}
       {upcomingEvents.length > 0 && (
         <div className="space-y-3">
-          <h3 className="font-mono text-[10px] tracking-widest text-neon-cyan/50 text-center">UPCOMING EVENTS</h3>
-          {upcomingEvents.map((event) => <EventCard key={event.date + event.category} event={event} />)}
+          <h3 className="font-mono text-xs tracking-widest text-ink-lo text-center">
+            UPCOMING EVENTS
+          </h3>
+          {upcomingEvents.map((event) => (
+            <EventCard key={event.date + event.category} event={event} />
+          ))}
         </div>
       )}
 
@@ -348,9 +469,16 @@ export default function TimelineTab() {
       {/* Past months (collapsed by default) */}
       {pastMonths.length > 0 && (
         <div className="space-y-3">
-          <h3 className="font-mono text-[10px] tracking-widest text-matrix-green/25 text-center">EARLIER THIS YEAR</h3>
+          <h3 className="font-mono text-xs tracking-widest text-ink-min text-center">
+            EARLIER THIS YEAR
+          </h3>
           {pastMonths.map((month) => (
-            <MonthCard key={month.month} month={month} defaultExpanded={false} eventsByMonth={eventsByMonth} />
+            <MonthCard
+              key={month.month}
+              month={month}
+              defaultExpanded={false}
+              eventsByMonth={eventsByMonth}
+            />
           ))}
         </div>
       )}
@@ -365,24 +493,35 @@ export default function TimelineTab() {
                 <details>
                   <summary className="w-full text-left p-4 sm:p-5 flex items-center justify-between cursor-pointer list-none">
                     <div className="flex items-center gap-3">
-                      <span className="font-pixel text-sm text-purple-400/50">{MONTH_NAMES[monthNum]}</span>
-                      <span className="text-[10px] font-pixel text-neon-cyan/60">{monthEvents.length} event{monthEvents.length !== 1 ? "s" : ""}</span>
+                      <span className="font-mono text-sm text-ind-purple">
+                        {MONTH_NAMES[monthNum]}
+                      </span>
+                      <span className="text-xs font-mono text-ink-lo">
+                        {monthEvents.length} event{monthEvents.length !== 1 ? "s" : ""}
+                      </span>
                     </div>
-                    <span className="text-matrix-green/40 font-mono text-base leading-none">+</span>
+                    <span className="text-ink-min font-mono text-base leading-none">+</span>
                   </summary>
-                  <div className="px-4 sm:px-5 pb-4 sm:pb-5 border-t border-matrix-green/10 pt-4 space-y-2">
+                  <div className="px-4 sm:px-5 pb-4 sm:pb-5 border-t border-white/[0.07] pt-4 space-y-2">
                     {monthEvents.map((ev) => {
                       const style = EVENT_STYLES[ev.category] ?? EVENT_STYLES.congress;
                       return (
-                        <Link key={ev.date + ev.category} href={ev.link}
-                          className={`block border-l-2 ${style.border} pl-3 py-2 hover:bg-white/[0.02] transition-colors`}>
+                        <Link
+                          key={ev.date + ev.category}
+                          href={ev.link}
+                          className={`block border-l-2 ${style.border} pl-3 py-2 hover:bg-white/[0.02] transition-colors`}
+                        >
                           <div className="flex items-center gap-2 mb-0.5">
-                            <span className={`w-2 h-2 rounded-full ${style.dot}`} aria-hidden="true" />
-                            <span className="text-[10px] text-matrix-green/40 font-pixel">{ev.date}</span>
-                            <span className={`text-[10px] font-pixel px-1.5 py-0.5 border ${style.badge}`}>{style.badgeText}</span>
+                            <span className={`w-2 h-2  ${style.dot}`} aria-hidden="true" />
+                            <span className="text-xs text-ink-min font-mono">{ev.date}</span>
+                            <span
+                              className={`text-xs font-mono px-1.5 py-0.5 border ${style.badge}`}
+                            >
+                              {style.badgeText}
+                            </span>
                           </div>
-                          <span className="text-sm text-matrix-green/90 font-medium">{ev.title}</span>
-                          <p className="text-xs text-matrix-green/50 mt-1">{ev.description}</p>
+                          <span className="text-sm text-ink-hi font-medium">{ev.title}</span>
+                          <p className="text-xs text-ink-lo mt-1">{ev.description}</p>
                         </Link>
                       );
                     })}
@@ -397,15 +536,25 @@ export default function TimelineTab() {
       {/* Monitors */}
       {data.monitors.length > 0 && (
         <div className="terminal-window p-4 sm:p-5">
-          <h3 className="font-pixel text-sm text-amber-400/80 mb-3">{">"} ONGOING MONITORS ({data.year})</h3>
+          <h3 className="font-mono text-sm text-signal-amber mb-3">
+            {">"} ONGOING MONITORS ({data.year})
+          </h3>
           <div className="space-y-2">
             {data.monitors.map((m) => (
-              <Link key={m.slug} href={ACTION_CENTER_MONITORS_HREF}
-                className="flex items-center justify-between text-sm hover:bg-white/[0.02] transition-colors px-2 py-1.5 -mx-2 rounded">
-                <span className="text-matrix-green/70">{m.title}</span>
+              <Link
+                key={m.slug}
+                href={ACTION_CENTER_MONITORS_HREF}
+                className="flex items-center justify-between text-sm hover:bg-white/[0.02] transition-colors px-2 py-1.5 -mx-2 "
+              >
+                <span className="text-ink">{m.title}</span>
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-[10px] text-matrix-green/40">{m.updateCount} update{m.updateCount !== 1 ? "s" : ""}</span>
-                  <span className={`w-2 h-2 rounded-full ${m.status === "active" ? "bg-green-400" : "bg-amber-400/50"}`} aria-hidden="true" />
+                  <span className="text-xs text-ink-min">
+                    {m.updateCount} update{m.updateCount !== 1 ? "s" : ""}
+                  </span>
+                  <span
+                    className={`w-2 h-2  ${m.status === "active" ? "bg-green-400" : "bg-signal-amber/10"}`}
+                    aria-hidden="true"
+                  />
                 </div>
               </Link>
             ))}

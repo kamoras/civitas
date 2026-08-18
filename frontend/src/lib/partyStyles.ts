@@ -19,19 +19,19 @@ export type Party = "D" | "R" | "I";
 
 export const PARTY_COLORS: Record<string, string> = {
   D: "text-dem-blue",
-  R: "text-rep-red",
+  R: "text-signal-red",
   I: "text-ind-purple",
 };
 
 export const PARTY_BORDER: Record<string, string> = {
-  D: "border-dem-blue/30",
-  R: "border-rep-red/30",
-  I: "border-ind-purple/30",
+  D: "border-dem-blue/40",
+  R: "border-signal-red/40",
+  I: "border-ind-purple/40",
 };
 
 export const PARTY_BG: Record<string, string> = {
   D: "bg-dem-blue/5",
-  R: "bg-rep-red/5",
+  R: "bg-signal-red/5",
   I: "bg-ind-purple/5",
 };
 
@@ -51,7 +51,7 @@ export const PARTY_LABELS: Record<string, string> = {
 // extraction.
 export const PARTY_BADGE: Record<string, { label: string; className: string }> = {
   D: { label: "D", className: `${PARTY_COLORS.D} ${PARTY_BORDER.D} bg-dem-blue/10` },
-  R: { label: "R", className: `${PARTY_COLORS.R} ${PARTY_BORDER.R} bg-rep-red/10` },
+  R: { label: "R", className: `${PARTY_COLORS.R} ${PARTY_BORDER.R} bg-signal-red/10` },
   I: { label: "I", className: `${PARTY_COLORS.I} ${PARTY_BORDER.I} bg-ind-purple/10` },
   bipartisan: { label: "BP", className: `${PARTY_COLORS.I} ${PARTY_BORDER.I} bg-ind-purple/10` },
 };

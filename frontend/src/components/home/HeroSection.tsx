@@ -22,15 +22,15 @@ export default function HeroSection() {
         <GlitchText
           text="CIVITAS"
           as="h1"
-          className="font-pixel text-3xl sm:text-5xl md:text-7xl text-matrix-green neon-green"
+          className="font-display font-semibold text-3xl sm:text-5xl md:text-7xl text-ink-hi"
         />
       </div>
 
-      <div className="mb-2 text-matrix-green/30 font-mono text-xs tracking-[0.4em] uppercase">
+      <div className="mb-2 text-ink-min font-mono text-xs tracking-[0.4em] uppercase">
         public record terminal
       </div>
 
-      <div className="mb-12 text-base sm:text-lg md:text-xl text-matrix-green/70 max-w-2xl font-mono">
+      <div className="mb-12 text-base sm:text-lg md:text-xl text-ink max-w-2xl font-mono">
         <TypewriterText
           text="CONGRESSIONAL DATA. SCORED. SOURCED. SEARCHABLE."
           speed={35}
@@ -47,7 +47,7 @@ export default function HeroSection() {
         </Link>
       </div>
 
-      <p className="mb-12 text-[11px] font-mono text-matrix-green/30 tracking-widest uppercase">
+      <p className="mb-12 text-xs font-mono text-ink-min tracking-widest uppercase">
         No login · no paywall · just the data
       </p>
 

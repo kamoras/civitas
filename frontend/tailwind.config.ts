@@ -69,9 +69,9 @@ const config: Config = {
         "terminal-bg": "#0a0a0a",
         "terminal-border": "#333333",
         "crt-black": "#0d0208",
-        "dem-blue": "#0066ff",
-        "rep-red": "#ff3333",
-        "ind-purple": "#9933ff",
+        "dem-blue": "#6699ff", //  7.35:1 — was #0066ff (4.22:1), which failed even at full opacity
+        "rep-red": "#ff5c5c", //  6.74:1 — matches signal.red; kept as an alias for party call sites
+        "ind-purple": "#ac56ff", //  5.37:1 — was #9933ff (4.15:1), which failed even at full opacity
       },
       fontFamily: {
         /* Three faces, one job each. `display` and `sans` are both Archivo:

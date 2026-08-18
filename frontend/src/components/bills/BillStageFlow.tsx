@@ -25,7 +25,11 @@ interface BillStageFlowProps {
   onSelectStage: (stage: string | null) => void;
 }
 
-export default function BillStageFlow({ stageCounts, activeStage, onSelectStage }: BillStageFlowProps) {
+export default function BillStageFlow({
+  stageCounts,
+  activeStage,
+  onSelectStage,
+}: BillStageFlowProps) {
   const config = useConfig();
   const stages = config?.billStages ?? {};
   const vetoedCount = stageCounts["VETOED"] || 0;
@@ -51,7 +55,7 @@ export default function BillStageFlow({ stageCounts, activeStage, onSelectStage 
               onClick={() => onSelectStage(isActive ? null : code)}
               aria-pressed={isActive}
               title={`${info?.name ?? code}: ${count.toLocaleString()} bill${count === 1 ? "" : "s"} (${share}% of all bills tracked)`}
-              className={`group flex items-center gap-3 py-1.5 px-2 -mx-2 rounded transition-colors text-left ${
+              className={`group flex items-center gap-3 py-1.5 px-2 -mx-2  transition-colors text-left ${
                 isActive ? "bg-white/5" : "hover:bg-white/[0.03]"
               }`}
               style={isActive ? { boxShadow: `inset 2px 0 0 0 ${color}` } : undefined}
@@ -60,22 +64,22 @@ export default function BillStageFlow({ stageCounts, activeStage, onSelectStage 
                   longest stage label ("IN OTHER CHAMBER") measures ~113px and
                   overflowed the 112px w-28 box. */}
               <span
-                className="w-32 shrink-0 truncate text-[10px] font-mono uppercase tracking-wider"
+                className="w-32 shrink-0 truncate text-xs font-mono uppercase tracking-wider"
                 style={{ color: isActive ? color : undefined }}
               >
                 {info?.name ?? code}
               </span>
 
-              <span className="relative flex-1 h-3.5 rounded-sm bg-matrix-green/[0.06] overflow-hidden">
+              <span className="relative flex-1 h-3.5 bg-phos/[0.06] overflow-hidden">
                 <span
                   className="absolute inset-y-0 left-0 rounded-r-[4px] transition-[width] duration-300"
                   style={{ width: `${pct}%`, backgroundColor: color, opacity: isActive ? 1 : 0.75 }}
                 />
               </span>
 
-              <span className="w-20 sm:w-24 shrink-0 text-right font-mono text-[11px] tabular-nums text-matrix-green/70">
+              <span className="w-20 sm:w-24 shrink-0 text-right font-mono text-xs tabular-nums text-ink">
                 {count.toLocaleString()}
-                <span className="hidden sm:inline text-matrix-green/30"> · {share}%</span>
+                <span className="hidden sm:inline text-ink-min"> · {share}%</span>
               </span>
             </button>
           );
@@ -86,10 +90,10 @@ export default function BillStageFlow({ stageCounts, activeStage, onSelectStage 
         <button
           type="button"
           onClick={() => onSelectStage(activeStage === "VETOED" ? null : "VETOED")}
-          className={`text-[10px] font-mono uppercase tracking-wider px-2 py-1 rounded border transition-colors ${
+          className={`text-xs font-mono uppercase tracking-wider px-2 py-1  border transition-colors ${
             activeStage === "VETOED"
-              ? "border-rep-red text-rep-red bg-rep-red/10"
-              : "border-rep-red/20 text-rep-red/50 hover:text-rep-red/80"
+              ? "border-signal-red/40 text-signal-red bg-signal-red/10"
+              : "border-signal-red/40 text-signal-red hover:text-signal-red"
           }`}
         >
           {vetoedCount} vetoed

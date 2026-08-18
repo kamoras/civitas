@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
-import MatrixRain from "@/components/effects/MatrixRain";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
@@ -19,7 +18,7 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   "Senate Floor Speech": "FLOOR SPEECH",
   "House Floor Speech": "FLOOR SPEECH",
   "Executive Order": "EXEC ORDER",
-  "Proclamation": "PROCLAMATION",
+  Proclamation: "PROCLAMATION",
   "Supreme Court Opinion": "COURT OPINION",
   "Presidential Memorandum": "MEMO",
 };
@@ -37,23 +36,23 @@ function branchLabel(branch: string) {
 function DocRow({ doc }: { doc: GovernmentDoc }) {
   const typeLabel = DOC_TYPE_LABELS[doc.docType] ?? doc.docType.toUpperCase();
   return (
-    <div className="flex items-start gap-3 py-2 border-b border-matrix-green/10 last:border-0">
-      <span className="font-mono text-[9px] text-matrix-green/30 tracking-widest shrink-0 mt-0.5 w-24">
+    <div className="flex items-start gap-3 py-2 border-b border-white/[0.07] last:border-0">
+      <span className="font-mono text-xs text-ink-min tracking-widest shrink-0 mt-0.5 w-24">
         {doc.date ?? "—"}
       </span>
       <div className="flex-1 min-w-0">
-        <span className="font-mono text-[9px] text-neon-cyan/50 tracking-widest mr-2">[{typeLabel}]</span>
+        <span className="font-mono text-xs text-ink-lo tracking-widest mr-2">[{typeLabel}]</span>
         {doc.url ? (
           <a
             href={doc.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="font-mono text-xs text-matrix-green/80 hover:text-matrix-green transition-colors"
+            className="font-mono text-xs text-ink hover:text-phos transition-colors"
           >
             {doc.title}
           </a>
         ) : (
-          <span className="font-mono text-xs text-matrix-green/60">{doc.title}</span>
+          <span className="font-mono text-xs text-ink-lo">{doc.title}</span>
         )}
       </div>
     </div>
@@ -64,9 +63,7 @@ function SectionBlock({ title, children }: { title: string; children: React.Reac
   return (
     <div className="mb-6">
       <TerminalTitlebar title={title} />
-      <div className="border border-t-0 border-matrix-green/20 bg-crt-black/40 p-4">
-        {children}
-      </div>
+      <div className="border border-t-0 border-white/[0.07] bg-surface-base p-4">{children}</div>
     </div>
   );
 }
@@ -75,64 +72,60 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
   const { identity, branch, hasScorecard, activeIssues, governmentRecord, scorecard } = profile;
 
   // Justices carry `isActive`; every other branch carries `isCurrent`.
-  const hasLeftOffice = branch === "scotus"
-    ? identity.isActive === false
-    : identity.isCurrent === false;
-  const formerOffice = hasLeftOffice
-    ? formerOfficeNotice({ branch, ...identity })
-    : null;
+  const hasLeftOffice =
+    branch === "scotus" ? identity.isActive === false : identity.isCurrent === false;
+  const formerOffice = hasLeftOffice ? formerOfficeNotice({ branch, ...identity }) : null;
 
   return (
-    <div className="min-h-screen bg-crt-black text-matrix-green">
-      <MatrixRain />
+    <div className="min-h-screen bg-surface-base text-ink-hi">
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
         <div className="max-w-4xl mx-auto">
-
           {/* Breadcrumb */}
-          <div className="mb-6 font-mono text-[10px] text-matrix-green/30">
-            <Link href="/politicians" className="hover:text-matrix-green/60 transition-colors">
+          <div className="mb-6 font-mono text-xs text-ink-min">
+            <Link href="/politicians" className="hover:text-phos transition-colors">
               ← POLITICIANS
             </Link>
             <span className="mx-2">/</span>
-            <span className="text-matrix-green/50">{branchLabel(branch)}</span>
+            <span className="text-ink-lo">{branchLabel(branch)}</span>
           </div>
 
           {/* Left-office banner — wording is branch-specific, see officeStatus.ts */}
           {formerOffice && (
-            <div className="mb-6 border border-neon-pink/40 bg-neon-pink/5 px-4 py-3">
-              <p className="font-mono text-xs text-neon-pink tracking-widest uppercase mb-1">
+            <div className="mb-6 border border-signal-magenta/40 bg-signal-magenta/10 px-4 py-3">
+              <p className="font-mono text-xs text-signal-magenta tracking-widest uppercase mb-1">
                 {formerOffice.label}
               </p>
-              <p className="font-mono text-[11px] text-matrix-green/60">
-                {formerOffice.detail}
-              </p>
+              <p className="font-mono text-xs text-ink-lo">{formerOffice.detail}</p>
             </div>
           )}
 
           {/* Active Issues */}
           {activeIssues.length > 0 && (
-            <SectionBlock title="in-the-action-center.dat">
-              <p className="font-mono text-[9px] text-matrix-green/30 tracking-widest mb-3">
-                CURRENTLY ACTIVE IN {activeIssues.length} ISSUE{activeIssues.length !== 1 ? "S" : ""}
+            <SectionBlock title="In the Action Center">
+              <p className="font-mono text-xs text-ink-min tracking-widest mb-3">
+                CURRENTLY ACTIVE IN {activeIssues.length} ISSUE
+                {activeIssues.length !== 1 ? "S" : ""}
               </p>
               <div className="space-y-3">
-                {activeIssues.map(issue => (
-                  <div key={issue.id} className="border border-matrix-green/15 bg-crt-black/40 p-3">
+                {activeIssues.map((issue) => (
+                  <div key={issue.id} className="border border-white/[0.07] bg-surface-base p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="font-mono text-[9px] text-matrix-green/30">RANK #{issue.rank}</span>
-                          <span className="font-mono text-[9px] text-matrix-green/30">{issue.date}</span>
+                          <span className="font-mono text-xs text-ink-min">RANK #{issue.rank}</span>
+                          <span className="font-mono text-xs text-ink-min">{issue.date}</span>
                         </div>
-                        <p className="font-mono text-sm text-matrix-green/90 mb-1">{issue.title}</p>
+                        <p className="font-mono text-base text-ink-hi mb-1">{issue.title}</p>
                         {issue.summary && (
-                          <p className="font-mono text-[10px] text-matrix-green/50 line-clamp-2">{issue.summary}</p>
+                          <p className="font-mono text-xs text-ink-lo line-clamp-2">
+                            {issue.summary}
+                          </p>
                         )}
                       </div>
                       <Link
                         href={`/issue/${issue.id}`}
-                        className="shrink-0 font-mono text-[9px] text-neon-cyan/60 hover:text-neon-cyan transition-colors tracking-widest whitespace-nowrap"
+                        className="shrink-0 font-mono text-xs text-ink-lo hover:text-phos transition-colors tracking-widest whitespace-nowrap"
                       >
                         VIEW →
                       </Link>
@@ -145,17 +138,18 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
 
           {/* Government Record */}
           {governmentRecord.totalDocs > 0 && (
-            <SectionBlock title="government-record.dat">
-              <p className="font-mono text-[9px] text-matrix-green/30 tracking-widest mb-3">
-                {governmentRecord.totalDocs} DOCUMENT{governmentRecord.totalDocs !== 1 ? "S" : ""} ON PUBLIC RECORD · VERBATIM SOURCE LINKS
+            <SectionBlock title="Government record">
+              <p className="font-mono text-xs text-ink-min tracking-widest mb-3">
+                {governmentRecord.totalDocs} DOCUMENT{governmentRecord.totalDocs !== 1 ? "S" : ""}{" "}
+                ON PUBLIC RECORD · VERBATIM SOURCE LINKS
               </p>
-              {governmentRecord.recentDocs.map(doc => (
+              {governmentRecord.recentDocs.map((doc) => (
                 <DocRow key={doc.id} doc={doc} />
               ))}
               {governmentRecord.totalDocs > 5 && (
                 <Link
                   href={`/explore?politician_id=${profile.id}`}
-                  className="block mt-3 font-mono text-[10px] text-matrix-green/40 hover:text-matrix-green/70 transition-colors tracking-widest"
+                  className="block mt-3 font-mono text-xs text-ink-min hover:text-phos transition-colors tracking-widest"
                 >
                   VIEW ALL {governmentRecord.totalDocs} DOCUMENTS →
                 </Link>
@@ -164,22 +158,27 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
           )}
 
           {/* Committee Memberships */}
-          {(branch === "senate" || branch === "house") && identity.committees && identity.committees.length > 0 && (
-            <SectionBlock title="committee-assignments.dat">
-              <div className="space-y-1.5">
-                {identity.committees.map((c, i) => (
-                  <div key={i} className="flex items-center justify-between gap-3 py-1 border-b border-matrix-green/10 last:border-0">
-                    <span className="font-mono text-xs text-matrix-green/70">{c.committeeName}</span>
-                    {c.title && (
-                      <span className="font-mono text-[9px] tracking-widest border border-neon-cyan/30 text-neon-cyan/60 px-1.5 py-0.5 shrink-0">
-                        {c.title.toUpperCase()}
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </SectionBlock>
-          )}
+          {(branch === "senate" || branch === "house") &&
+            identity.committees &&
+            identity.committees.length > 0 && (
+              <SectionBlock title="Committee assignments">
+                <div className="space-y-1.5">
+                  {identity.committees.map((c, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between gap-3 py-1 border-b border-white/[0.07] last:border-0"
+                    >
+                      <span className="font-mono text-xs text-ink">{c.committeeName}</span>
+                      {c.title && (
+                        <span className="font-mono text-xs tracking-widest border border-white/15 text-ink-lo px-1.5 py-0.5 shrink-0">
+                          {c.title.toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </SectionBlock>
+            )}
 
           {/* Scorecard */}
           {hasScorecard && scorecard && (
@@ -198,17 +197,16 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
               {branch === "president" && (
                 <PresidentCard president={scorecard as unknown as President} />
               )}
-              {branch === "scotus" && (
-                <JusticeCard justice={scorecard as unknown as Justice} />
-              )}
+              {branch === "scotus" && <JusticeCard justice={scorecard as unknown as Justice} />}
 
               {(branch === "senate" || branch === "house") && identity.state && (
                 <div className="mt-3 text-center">
                   <Link
                     href={`/politicians?branch=${branch}&state=${identity.state}`}
-                    className="font-mono text-[10px] text-matrix-green/35 hover:text-matrix-green/60 transition-colors tracking-widest"
+                    className="font-mono text-xs text-ink-min hover:text-phos transition-colors tracking-widest"
                   >
-                    COMPARE ALL {identity.stateName ?? identity.state} {branch === "senate" ? "SENATORS" : "REPRESENTATIVES"} →
+                    COMPARE ALL {identity.stateName ?? identity.state}{" "}
+                    {branch === "senate" ? "SENATORS" : "REPRESENTATIVES"} →
                   </Link>
                 </div>
               )}
@@ -216,7 +214,7 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
           )}
 
           {!hasScorecard && (
-            <SectionBlock title="scorecard.dat">
+            <SectionBlock title="Scorecard">
               {/* No card header will render below to carry identity, so
                   show a minimal one here — otherwise a not-yet-scored
                   official's page has no name/photo/party anywhere on it. */}
@@ -226,23 +224,24 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
                   <img
                     src={identity.thumbnailUrl}
                     alt={identity.name}
-                    className="w-12 h-12 rounded object-cover border border-matrix-green/20 shrink-0"
+                    className="w-12 h-12 object-cover border border-white/[0.07] shrink-0"
                   />
                 ) : null}
                 <div>
-                  <p className="font-pixel text-base text-matrix-green">{identity.name}</p>
-                  <p className="font-mono text-[10px] text-matrix-green/40 tracking-widest">
+                  <p className="font-display font-semibold text-base text-ink-hi">
+                    {identity.name}
+                  </p>
+                  <p className="font-mono text-xs text-ink-min tracking-widest">
                     {identity.role}
                     {identity.state ? ` · ${identity.stateName ?? identity.state}` : ""}
                   </p>
                 </div>
               </div>
-              <p className="font-mono text-xs text-matrix-green/30 tracking-widest text-center py-4">
+              <p className="font-mono text-xs text-ink-min tracking-widest text-center py-4">
                 SCORECARD NOT YET GENERATED — CHECK BACK AFTER NEXT PIPELINE RUN
               </p>
             </SectionBlock>
           )}
-
         </div>
       </main>
       <BackToTop />

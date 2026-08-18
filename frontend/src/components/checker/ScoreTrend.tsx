@@ -15,10 +15,14 @@ function ordinal(n: number): string {
   const mod100 = n % 100;
   if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
   switch (n % 10) {
-    case 1: return `${n}st`;
-    case 2: return `${n}nd`;
-    case 3: return `${n}rd`;
-    default: return `${n}th`;
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
   }
 }
 
@@ -81,8 +85,8 @@ export default function ScoreTrend({ snapshots }: ScoreTrendProps) {
       aria-label={`Score trend from ${snapshots[0].date} to ${snapshots[snapshots.length - 1].date}: ${first} to ${last}`}
     >
       <div className="flex items-center justify-between mb-1">
-        <span className="font-pixel text-[9px] text-neon-cyan/50 tracking-widest">SCORE HISTORY</span>
-        <span className="font-pixel text-[9px]" style={{ color: changeColor }}>
+        <span className="font-mono text-xs text-ink-lo tracking-widest">SCORE HISTORY</span>
+        <span className="font-mono text-xs" style={{ color: changeColor }}>
           {changeLabel} since first snapshot
         </span>
       </div>
@@ -94,7 +98,15 @@ export default function ScoreTrend({ snapshots }: ScoreTrendProps) {
         aria-hidden="true"
       >
         {/* Reference line at 50 */}
-        <line x1={PAD} y1={midY} x2={W - PAD} y2={midY} stroke="#333" strokeWidth="0.5" strokeDasharray="3,3" />
+        <line
+          x1={PAD}
+          y1={midY}
+          x2={W - PAD}
+          y2={midY}
+          stroke="#333"
+          strokeWidth="0.5"
+          strokeDasharray="3,3"
+        />
         {/* Methodology-change markers */}
         {versionChanges.map(({ i, version }) => (
           <line
@@ -153,21 +165,20 @@ export default function ScoreTrend({ snapshots }: ScoreTrendProps) {
           {last}
         </text>
       </svg>
-      <div className="flex justify-between text-[8px] text-matrix-green/30 font-mono mt-0.5">
+      <div className="flex justify-between text-xs text-ink-min font-mono mt-0.5">
         <span>{snapshots[0].date}</span>
         <span>{snapshots[snapshots.length - 1].date}</span>
       </div>
       {versionChanges.length > 0 && (
-        <div className="text-[8px] text-neon-cyan/40 font-mono mt-0.5">
-          ┊ methodology updated ({versionChanges.map((v) => v.version).join(", ")}) — see
-          {" "}
-          <a href="/changelog" className="underline underline-offset-2 hover:text-neon-cyan/70">
+        <div className="text-xs text-ink-lo font-mono mt-0.5">
+          ┊ methodology updated ({versionChanges.map((v) => v.version).join(", ")}) — see{" "}
+          <a href="/changelog" className="underline underline-offset-2 hover:text-phos">
             scoring changelog
           </a>
         </div>
       )}
       {congressChanges.length > 0 && (
-        <div className="text-[8px] text-[#ffaa00]/50 font-mono mt-0.5">
+        <div className="text-xs text-[#ffaa00]/50 font-mono mt-0.5">
           ┊ {congressChanges.map((c) => `${ordinal(c.congress)} Congress`).join(", ")} began —
           scores reset to reflect the new term
         </div>

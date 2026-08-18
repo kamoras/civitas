@@ -11,23 +11,75 @@ import StockTrades from "@/components/checker/StockTrades";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 
 const PARTY_META: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  D:  { label: "DEMOCRAT",          color: "text-dem-blue",    bg: "bg-dem-blue/20",    border: "border-dem-blue/40" },
-  R:  { label: "REPUBLICAN",       color: "text-rep-red",     bg: "bg-rep-red/20",     border: "border-rep-red/40" },
-  DR: { label: "DEM-REPUBLICAN",   color: "text-teal-400",    bg: "bg-teal-400/20",    border: "border-teal-400/40" },
-  F:  { label: "FEDERALIST",       color: "text-purple-400",  bg: "bg-purple-400/20",  border: "border-purple-400/40" },
-  W:  { label: "WHIG",             color: "text-amber-400",   bg: "bg-amber-400/20",   border: "border-amber-400/40" },
-  I:  { label: "INDEPENDENT",      color: "text-white/70",    bg: "bg-white/10",       border: "border-white/30" },
+  D: {
+    label: "DEMOCRAT",
+    color: "text-dem-blue",
+    bg: "bg-dem-blue/20",
+    border: "border-dem-blue/40",
+  },
+  R: {
+    label: "REPUBLICAN",
+    color: "text-signal-red",
+    bg: "bg-signal-red/10",
+    border: "border-signal-red/40",
+  },
+  DR: {
+    label: "DEM-REPUBLICAN",
+    color: "text-teal-400",
+    bg: "bg-teal-400/20",
+    border: "border-teal-400/40",
+  },
+  F: {
+    label: "FEDERALIST",
+    color: "text-ind-purple",
+    bg: "bg-purple-400/20",
+    border: "border-purple-400/40",
+  },
+  W: {
+    label: "WHIG",
+    color: "text-signal-amber",
+    bg: "bg-signal-amber/10",
+    border: "border-signal-amber/40",
+  },
+  I: { label: "INDEPENDENT", color: "text-ink", bg: "bg-white/10", border: "border-white/30" },
 };
 
 function getPartyMeta(party: string) {
-  return PARTY_META[party] ?? { label: party, color: "text-white/50", bg: "bg-white/10", border: "border-white/20" };
+  return (
+    PARTY_META[party] ?? {
+      label: party,
+      color: "text-ink-lo",
+      bg: "bg-white/10",
+      border: "border-white/20",
+    }
+  );
 }
 
-const METRIC_LABELS: { key: "publicMandate" | "effectiveness" | "agencyAlignment" | "historicalLegacy"; label: string; desc: string }[] = [
-  { key: "publicMandate", label: "PUBLIC MANDATE", desc: "Approval polling (Truman onward) or, for earlier presidents, election-margin history. N/A for presidents who never won a presidential election." },
-  { key: "effectiveness", label: "EFFECTIVENESS", desc: "GDP growth, job creation, and tangible outcomes for voters" },
-  { key: "agencyAlignment", label: "AGENCY ALIGNMENT", desc: "How effectively federal agencies execute the president's agenda through rulemaking. N/A before Federal Register data begins in 1936." },
-  { key: "historicalLegacy", label: "HISTORICAL LEGACY", desc: "C-SPAN's Presidential Historians Survey — crisis leadership, moral authority, and vision, as assessed by ~142 professional historians. N/A for any currently-serving or just-departed president; the survey only rates a completed term." },
+const METRIC_LABELS: {
+  key: "publicMandate" | "effectiveness" | "agencyAlignment" | "historicalLegacy";
+  label: string;
+  desc: string;
+}[] = [
+  {
+    key: "publicMandate",
+    label: "PUBLIC MANDATE",
+    desc: "Approval polling (Truman onward) or, for earlier presidents, election-margin history. N/A for presidents who never won a presidential election.",
+  },
+  {
+    key: "effectiveness",
+    label: "EFFECTIVENESS",
+    desc: "GDP growth, job creation, and tangible outcomes for voters",
+  },
+  {
+    key: "agencyAlignment",
+    label: "AGENCY ALIGNMENT",
+    desc: "How effectively federal agencies execute the president's agenda through rulemaking. N/A before Federal Register data begins in 1936.",
+  },
+  {
+    key: "historicalLegacy",
+    label: "HISTORICAL LEGACY",
+    desc: "C-SPAN's Presidential Historians Survey — crisis leadership, moral authority, and vision, as assessed by ~142 professional historians. N/A for any currently-serving or just-departed president; the survey only rates a completed term.",
+  },
 ];
 
 export function PresidentCard({ president }: { president: President }) {
@@ -37,25 +89,25 @@ export function PresidentCard({ president }: { president: President }) {
 
   return (
     <div className="terminal-window">
-      <TerminalTitlebar title={`president_${president.number}.profile`} />
+      <TerminalTitlebar title={`President no. ${president.number}`} />
 
       <div className="p-6 space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-terminal text-white">
+            <h2 className="text-2xl font-mono text-ink-hi">
               {president.name}
-              <span className="ml-2 text-matrix-green/30 text-sm">#{president.number}</span>
+              <span className="ml-2 text-ink-min text-sm">#{president.number}</span>
             </h2>
             <div className="flex items-center gap-3 mt-1">
-              <span className={`text-xs px-2 py-0.5 border rounded-sm ${pm.bg} ${pm.border} ${pm.color}`}>
+              <span className={`text-xs px-2 py-0.5 border  ${pm.bg} ${pm.border} ${pm.color}`}>
                 {pm.label}
               </span>
-              <span className="text-matrix-green/40 text-xs">
+              <span className="text-ink-min text-xs">
                 {president.termStart.slice(0, 4)}–{termEnd}
               </span>
               {president.isCurrent && (
-                <span className="text-neon-yellow text-xs animate-pulse border border-neon-yellow/30 px-2 py-0.5">
+                <span className="text-signal-amber text-xs animate-pulse border border-signal-amber/40 px-2 py-0.5">
                   CURRENT
                 </span>
               )}
@@ -70,17 +122,19 @@ export function PresidentCard({ president }: { president: President }) {
               // reads as an actual (and the worst possible) score, not
               // "no data yet." Most common for a just-inaugurated
               // president before the first pipeline run.
-              <div className="text-2xl font-bold text-matrix-green/40">NOT YET CALCULATED</div>
+              <div className="text-2xl font-bold text-ink-min">NOT YET CALCULATED</div>
             ) : (
               <>
-                <div className={`text-4xl font-bold tabular-nums ${getScoreColor(overall)}`}>{overall}</div>
+                <div className={`text-4xl font-bold tabular-nums ${getScoreColor(overall)}`}>
+                  {overall}
+                </div>
                 <div className={`text-xs tracking-widest ${getScoreColor(overall)}`}>
                   {getPresidentLabel(overall)}
                 </div>
               </>
             )}
             <div
-              className="text-[10px] text-matrix-green/40 mt-1"
+              className="text-xs text-ink-min mt-1"
               title="How many of the 4 possible score dimensions have data for this president — a score built from fewer is based on less information, not a worse president."
             >
               based on {president.score.dimensionsAvailable}/4 dimensions
@@ -94,7 +148,7 @@ export function PresidentCard({ president }: { president: President }) {
             href="https://www.presidency.ucsb.edu/statistics/data/executive-orders"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
+            className="text-xs text-ink-min hover:text-phos transition-colors"
           >
             [UCSB EXECUTIVE ORDERS]
           </a>
@@ -102,7 +156,7 @@ export function PresidentCard({ president }: { president: President }) {
             href="https://www.presidency.ucsb.edu/statistics/data/presidential-job-approval"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
+            className="text-xs text-ink-min hover:text-phos transition-colors"
           >
             [UCSB APPROVAL RATINGS]
           </a>
@@ -110,7 +164,7 @@ export function PresidentCard({ president }: { president: President }) {
             href="https://www.presidency.ucsb.edu/statistics/data/presidential-election-mandates"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
+            className="text-xs text-ink-min hover:text-phos transition-colors"
           >
             [UCSB ELECTION MARGINS]
           </a>
@@ -118,7 +172,7 @@ export function PresidentCard({ president }: { president: President }) {
             href="https://www.measuringworth.com/datasets/usgdp/"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
+            className="text-xs text-ink-min hover:text-phos transition-colors"
           >
             [MEASURINGWORTH GDP]
           </a>
@@ -126,7 +180,7 @@ export function PresidentCard({ president }: { president: President }) {
             href="https://data.bls.gov/timeseries/CES0000000001"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
+            className="text-xs text-ink-min hover:text-phos transition-colors"
           >
             [BLS EMPLOYMENT DATA]
           </a>
@@ -134,7 +188,7 @@ export function PresidentCard({ president }: { president: President }) {
             href="https://www.federalregister.gov/presidential-documents"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
+            className="text-xs text-ink-min hover:text-phos transition-colors"
           >
             [FEDERAL REGISTER]
           </a>
@@ -142,7 +196,7 @@ export function PresidentCard({ president }: { president: President }) {
             href="https://extapps2.oge.gov/201/Presiden.nsf"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
+            className="text-xs text-ink-min hover:text-phos transition-colors"
           >
             [OGE FINANCIAL DISCLOSURES]
           </a>
@@ -150,7 +204,7 @@ export function PresidentCard({ president }: { president: President }) {
             href="https://www.c-span.org/presidentsurvey2021/?page=overall"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
+            className="text-xs text-ink-min hover:text-phos transition-colors"
           >
             [C-SPAN HISTORIANS SURVEY]
           </a>
@@ -158,7 +212,7 @@ export function PresidentCard({ president }: { president: President }) {
 
         {/* Score Breakdown */}
         <div>
-          <h3 className="text-xs text-matrix-green/50 tracking-widest mb-4">SCORE BREAKDOWN</h3>
+          <h3 className="text-xs text-ink-lo tracking-widest mb-4">SCORE BREAKDOWN</h3>
           <div className="space-y-3">
             {METRIC_LABELS.map(({ key, label, desc }) => (
               <MetricBar
@@ -190,8 +244,8 @@ export function PresidentCard({ president }: { president: President }) {
         {/* Key Stats */}
         <div>
           <div className="flex items-baseline justify-between mb-3">
-            <h3 className="text-xs text-matrix-green/50 tracking-widest">KEY METRICS</h3>
-            <span className="text-[10px] text-matrix-green/50">
+            <h3 className="text-xs text-ink-lo tracking-widest">KEY METRICS</h3>
+            <span className="text-xs text-ink-lo">
               Sources: UCSB, MeasuringWorth, BLS, Federal Register, C-SPAN
             </span>
           </div>
@@ -203,12 +257,18 @@ export function PresidentCard({ president }: { president: President }) {
             />
             <StatBox
               label="RECENT APPROVAL (90D)"
-              value={president.recentAvgApproval != null ? `${president.recentAvgApproval.toFixed(0)}` : null}
+              value={
+                president.recentAvgApproval != null
+                  ? `${president.recentAvgApproval.toFixed(0)}`
+                  : null
+              }
               unit="%"
             />
             <StatBox
               label="ELECTION MARGIN"
-              value={president.electionMargin != null ? `${president.electionMargin.toFixed(1)}` : null}
+              value={
+                president.electionMargin != null ? `${president.electionMargin.toFixed(1)}` : null
+              }
               unit="pt"
             />
             <StatBox
@@ -231,7 +291,11 @@ export function PresidentCard({ president }: { president: President }) {
             />
             <StatBox
               label="C-SPAN SURVEY"
-              value={president.historicalLegacyScore != null ? `${president.historicalLegacyScore}` : null}
+              value={
+                president.historicalLegacyScore != null
+                  ? `${president.historicalLegacyScore}`
+                  : null
+              }
               unit="pts"
             />
           </div>
@@ -262,12 +326,12 @@ function PresidentSelector({
           <button
             key={e.id}
             onClick={() => onSelect(e.id)}
-            className={`px-2 py-1.5 border text-xs font-terminal transition-all truncate ${partyBorder} ${
-              active ? "text-white" : "text-white/40 hover:text-white/70"
+            className={`px-2 py-1.5 border text-xs font-mono transition-all truncate ${partyBorder} ${
+              active ? "text-ink-hi" : "text-ink-lo hover:text-ink"
             }`}
           >
             {e.name.split(" ").pop()}
-            <span className="text-matrix-green/30 ml-1">#{e.number}</span>
+            <span className="text-ink-min ml-1">#{e.number}</span>
           </button>
         );
       })}
@@ -297,8 +361,8 @@ export default function PresidentClient() {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  // Mount-only: selectedId excluded to avoid refetching the leaderboard on selection change.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Mount-only: selectedId excluded to avoid refetching the leaderboard on selection change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -310,15 +374,14 @@ export default function PresidentClient() {
       .finally(() => setDetailLoading(false));
   }, [selectedId]);
 
-  const chronological = useMemo(
-    () => [...entries].sort((a, b) => a.number - b.number),
-    [entries],
-  );
+  const chronological = useMemo(() => [...entries].sort((a, b) => a.number - b.number), [entries]);
 
   if (loading) {
     return (
       <div className="terminal-window max-w-md mx-auto p-6 text-center">
-        <div className="text-neon-cyan animate-pulse text-lg">{">"} LOADING PRESIDENTIAL DATA...</div>
+        <div className="text-signal-cyan animate-pulse text-lg">
+          {">"} LOADING PRESIDENTIAL DATA...
+        </div>
       </div>
     );
   }
@@ -326,8 +389,8 @@ export default function PresidentClient() {
   if (error) {
     return (
       <div className="terminal-window max-w-md mx-auto p-6 text-center">
-        <div className="text-red-500 text-lg">{">"} ERROR</div>
-        <div className="text-matrix-green/40 text-sm mt-2">{error}</div>
+        <div className="text-signal-red text-lg">{">"} ERROR</div>
+        <div className="text-ink-min text-sm mt-2">{error}</div>
       </div>
     );
   }
@@ -338,7 +401,7 @@ export default function PresidentClient() {
 
       {detailLoading && (
         <div className="terminal-window max-w-md mx-auto p-6 text-center">
-          <div className="text-neon-cyan animate-pulse">{">"} LOADING PROFILE...</div>
+          <div className="text-signal-cyan animate-pulse">{">"} LOADING PROFILE...</div>
         </div>
       )}
 

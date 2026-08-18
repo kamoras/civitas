@@ -23,9 +23,9 @@ export function formatPvi(pvi: number | null): string {
 }
 
 export function pviColor(pvi: number | null): string {
-  if (pvi == null) return "text-matrix-green/40";
-  if (pvi === 0) return "text-white/60";
-  return pvi > 0 ? "text-rep-red" : "text-dem-blue";
+  if (pvi == null) return "text-ink-min";
+  if (pvi === 0) return "text-ink";
+  return pvi > 0 ? "text-signal-red" : "text-dem-blue";
 }
 
 /** District number for labels: 0 (FEC "00", at-large) renders as "AL".

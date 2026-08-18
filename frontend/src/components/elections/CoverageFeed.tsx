@@ -44,7 +44,7 @@ export default function CoverageFeed({ items }: { items: RaceCoverageItem[] }) {
 
   if (items.length === 0) {
     return (
-      <p className="font-mono text-sm text-ink-min">No coverage ingested for this race yet.</p>
+      <p className="font-mono text-base text-ink-min">No coverage ingested for this race yet.</p>
     );
   }
 
@@ -58,7 +58,7 @@ export default function CoverageFeed({ items }: { items: RaceCoverageItem[] }) {
         const isBluesky = item.sourceType === "bluesky";
         return (
           <li key={item.id} className="relative border-b border-white/[0.07] py-4 last:border-b-0">
-            {/* A square tick on the rail, not a rounded dot: the register uses
+            {/* A square tick on the rail, not a  dot: the register uses
                 hard corners throughout, and a filled tick reads as an entry
                 marker on a timeline rather than a status light. */}
             <span

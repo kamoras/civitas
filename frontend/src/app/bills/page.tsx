@@ -4,10 +4,8 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
-import MatrixRain from "@/components/effects/MatrixRain";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
-import GlitchText from "@/components/effects/GlitchText";
 import BillStageFlow, { ALL_STAGE_CODES } from "@/components/bills/BillStageFlow";
 import BillStageGroup from "@/components/bills/BillStageGroup";
 import BillRow from "@/components/bills/BillRow";
@@ -41,7 +39,9 @@ function BillsPageContent() {
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => setDebouncedSearch(search), 300);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
   }, [search]);
 
   // The stage-flow funnel is a global overview of the whole pipeline,
@@ -50,9 +50,13 @@ function BillsPageContent() {
   useEffect(() => {
     let cancelled = false;
     fetchBillsInFlight({ sort: "recent", page: 1, perPage: 1 })
-      .then((res) => { if (!cancelled) setStageCounts(res.stageCounts); })
+      .then((res) => {
+        if (!cancelled) setStageCounts(res.stageCounts);
+      })
       .catch(() => {});
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const chamberParam = chamber === "all" ? undefined : chamber;
@@ -68,39 +72,38 @@ function BillsPageContent() {
     .reduce((sum, [, count]) => sum + count, 0);
 
   return (
-    <div className="min-h-screen bg-crt-black text-matrix-green">
-      <MatrixRain />
+    <div className="min-h-screen bg-surface-base text-ink-hi">
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
         <div className="max-w-6xl mx-auto">
-
-          <div className="text-center mb-8">
-            <GlitchText
-              as="h1"
-              text="BILLS IN MOTION"
-              className="font-pixel text-xl sm:text-3xl text-matrix-green neon-green mb-2 block"
-            />
-            <p className="font-mono text-xs text-matrix-green/40">
-              WHERE {totalMoving.toLocaleString()} BILLS SIT IN THE LEGISLATIVE PIPELINE RIGHT NOW
+          <header className="mb-8 border-b-3 border-phos pb-5">
+            <p className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
+              Bills · legislative pipeline
+            </p>
+            <h1 className="mt-3 font-display text-3xl font-extrabold uppercase leading-none tracking-[-0.02em] text-ink-hi sm:text-4xl">
+              Bills in motion
+            </h1>
+            <p className="mt-3 max-w-2xl font-display text-base leading-relaxed text-ink-lo">
+              Where {totalMoving.toLocaleString()} bills sit in the legislative pipeline right now.
             </p>
             {/* Verified live (2026-08 review): this total is genuinely
                 correct — it's the pipeline breakdown below MINUS
                 Introduced and Referred — but without this line it reads
                 as a bug next to a "Referred to Committee" count in the
                 tens of thousands sitting directly below it. */}
-            <p className="font-mono text-xs text-matrix-green/25 mt-1">
+            <p className="font-mono text-xs text-ink-min mt-1">
               Excludes bills only introduced or automatically referred to committee — nearly every
               bill clears that step within days; this counts what&apos;s moved further.
             </p>
-          </div>
+          </header>
 
           <div className="flex justify-center gap-2 mb-4">
             <button
               onClick={() => setMode("hot")}
               className={`font-mono text-xs px-4 py-1.5 border transition-colors uppercase tracking-widest ${
                 mode === "hot"
-                  ? "border-neon-cyan text-neon-cyan bg-neon-cyan/10"
-                  : "border-matrix-green/15 text-matrix-green/40 hover:text-matrix-green/70"
+                  ? "border-signal-cyan/40 text-signal-cyan bg-signal-cyan/10"
+                  : "border-white/[0.07] text-ink-min hover:text-phos"
               }`}
             >
               Active Now
@@ -109,29 +112,25 @@ function BillsPageContent() {
               onClick={() => setMode("all")}
               className={`font-mono text-xs px-4 py-1.5 border transition-colors uppercase tracking-widest ${
                 mode === "all"
-                  ? "border-neon-cyan text-neon-cyan bg-neon-cyan/10"
-                  : "border-matrix-green/15 text-matrix-green/40 hover:text-matrix-green/70"
+                  ? "border-signal-cyan/40 text-signal-cyan bg-signal-cyan/10"
+                  : "border-white/[0.07] text-ink-min hover:text-phos"
               }`}
             >
               All Bills
             </button>
           </div>
 
-          <TerminalTitlebar title="bill_pipeline.dat" />
-          <div className="border border-t-0 border-matrix-green/20 bg-crt-black/40 p-4 mb-6">
-            <BillStageFlow
-              stageCounts={stageCounts}
-              activeStage={stage}
-              onSelectStage={setStage}
-            />
+          <TerminalTitlebar title="Pipeline" />
+          <div className="border border-t-0 border-white/[0.07] bg-surface-base p-4 mb-6">
+            <BillStageFlow stageCounts={stageCounts} activeStage={stage} onSelectStage={setStage} />
 
-            <div className="flex flex-wrap gap-3 items-center mt-5 pt-4 border-t border-matrix-green/10">
+            <div className="flex flex-wrap gap-3 items-center mt-5 pt-4 border-t border-white/[0.07]">
               <input
                 type="text"
                 placeholder="SEARCH TITLE..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="font-mono text-xs bg-crt-black border border-matrix-green/20 focus:border-matrix-green/60 text-matrix-green placeholder-matrix-green/25 px-3 py-1.5 outline-none w-48"
+                className="font-mono text-xs bg-surface-base border border-white/[0.07] focus:border-phos/40 text-ink-hi placeholder-white/15 px-3 py-1.5 outline-none w-48"
               />
 
               <div className="flex gap-1">
@@ -139,10 +138,10 @@ function BillsPageContent() {
                   <button
                     key={c}
                     onClick={() => setChamber(c)}
-                    className={`font-mono text-[10px] px-2 py-1 border transition-colors uppercase ${
+                    className={`font-mono text-xs px-2 py-1 border transition-colors uppercase ${
                       chamber === c
-                        ? "border-neon-cyan text-neon-cyan bg-neon-cyan/10"
-                        : "border-matrix-green/15 text-matrix-green/35 hover:text-matrix-green/60"
+                        ? "border-signal-cyan/40 text-signal-cyan bg-signal-cyan/10"
+                        : "border-white/[0.07] text-ink-min hover:text-phos"
                     }`}
                   >
                     {c}
@@ -155,10 +154,10 @@ function BillsPageContent() {
                   <button
                     key={p}
                     onClick={() => setParty(p)}
-                    className={`font-mono text-[10px] px-2 py-1 border transition-colors ${
+                    className={`font-mono text-xs px-2 py-1 border transition-colors ${
                       party === p
-                        ? "border-matrix-green/60 text-matrix-green bg-matrix-green/10"
-                        : "border-matrix-green/15 text-matrix-green/35 hover:text-matrix-green/60"
+                        ? "border-phos/40 text-ink-hi bg-white/[0.03]"
+                        : "border-white/[0.07] text-ink-min hover:text-phos"
                     }`}
                   >
                     {p}
@@ -168,8 +167,13 @@ function BillsPageContent() {
 
               {(stage || chamber !== "all" || party !== "ALL" || search) && (
                 <button
-                  onClick={() => { setStage(null); setChamber("all"); setParty("ALL"); setSearch(""); }}
-                  className="font-mono text-[9px] text-matrix-green/30 hover:text-matrix-green/60 transition-colors tracking-widest"
+                  onClick={() => {
+                    setStage(null);
+                    setChamber("all");
+                    setParty("ALL");
+                    setSearch("");
+                  }}
+                  className="font-mono text-xs text-ink-min hover:text-phos transition-colors tracking-widest"
                 >
                   CLEAR
                 </button>
@@ -186,11 +190,16 @@ function BillsPageContent() {
               onViewAll={() => setMode("all")}
             />
           ) : stage ? (
-            <BillStageGroup stageCode={stage} chamber={chamberParam} party={partyParam} q={qParam} forceExpanded />
+            <BillStageGroup
+              stageCode={stage}
+              chamber={chamberParam}
+              party={partyParam}
+              q={qParam}
+              forceExpanded
+            />
           ) : (
             <AllBillsGroups chamber={chamberParam} party={partyParam} q={qParam} />
           )}
-
         </div>
       </main>
       <BackToTop />
@@ -208,7 +217,9 @@ export default function BillsPage() {
 }
 
 function AllBillsGroups({
-  chamber, party, q,
+  chamber,
+  party,
+  q,
 }: {
   chamber?: "senate" | "house";
   party?: "D" | "R" | "I";
@@ -218,27 +229,35 @@ function AllBillsGroups({
   // already reflects the chamber/party/q filters server-side, so the
   // groups no longer each probe for their own count (which used to fan
   // out ~8 parallel requests per filter change).
-  const [stageTotals, setStageTotals] = useState<Record<string, number> | "loading" | "error">("loading");
+  const [stageTotals, setStageTotals] = useState<Record<string, number> | "loading" | "error">(
+    "loading"
+  );
 
   useEffect(() => {
     let cancelled = false;
     setStageTotals("loading");
     fetchBillsInFlight({ chamber, party, q, sort: "recent", page: 1, perPage: 1 })
-      .then((res) => { if (!cancelled) setStageTotals(res.stageCounts); })
-      .catch(() => { if (!cancelled) setStageTotals("error"); }); // fail open — groups fall back to probing their own counts
-    return () => { cancelled = true; };
+      .then((res) => {
+        if (!cancelled) setStageTotals(res.stageCounts);
+      })
+      .catch(() => {
+        if (!cancelled) setStageTotals("error");
+      }); // fail open — groups fall back to probing their own counts
+    return () => {
+      cancelled = true;
+    };
   }, [chamber, party, q]);
 
   if (stageTotals === "loading") {
     return (
-      <div className="text-center py-16 font-mono text-xs text-matrix-green/30 tracking-widest animate-pulse">
+      <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest animate-pulse">
         LOADING...
       </div>
     );
   }
   if (stageTotals !== "error" && ALL_STAGE_CODES.every((code) => !(stageTotals[code] > 0))) {
     return (
-      <div className="text-center py-16 font-mono text-xs text-matrix-green/30 tracking-widest">
+      <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest">
         NO RESULTS
       </div>
     );
@@ -261,7 +280,11 @@ function AllBillsGroups({
 }
 
 function HotBillsList({
-  stage, chamber, party, q, onViewAll,
+  stage,
+  chamber,
+  party,
+  q,
+  onViewAll,
 }: {
   stage: string | null;
   chamber?: "senate" | "house";
@@ -277,14 +300,25 @@ function HotBillsList({
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => { setPage(1); }, [stage, chamber, party, q]);
+  useEffect(() => {
+    setPage(1);
+  }, [stage, chamber, party, q]);
 
   useEffect(() => {
     let cancelled = false;
     const isFirstPage = page === 1;
-    if (isFirstPage) setLoading(true); else setLoadingMore(true);
+    if (isFirstPage) setLoading(true);
+    else setLoadingMore(true);
 
-    fetchBillsInFlight({ stage: stage ?? undefined, chamber, party, q, sort: "hot", page, perPage: PER_PAGE })
+    fetchBillsInFlight({
+      stage: stage ?? undefined,
+      chamber,
+      party,
+      q,
+      sort: "hot",
+      page,
+      perPage: PER_PAGE,
+    })
       .then((res) => {
         if (cancelled) return;
         setResults((prev) => (isFirstPage ? res.bills : [...prev, ...res.bills]));
@@ -292,27 +326,39 @@ function HotBillsList({
         setTotalPages(res.totalPages);
         setError(null);
       })
-      .catch((err) => { if (!cancelled) setError(err.message || "Failed to load bills"); })
-      .finally(() => { if (!cancelled) { setLoading(false); setLoadingMore(false); } });
+      .catch((err) => {
+        if (!cancelled) setError(err.message || "Failed to load bills");
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
+      });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [stage, chamber, party, q, page]);
 
   if (loading) {
     return (
-      <div className="text-center py-16 font-mono text-xs text-matrix-green/30 tracking-widest animate-pulse">
+      <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest animate-pulse">
         LOADING...
       </div>
     );
   }
   if (error) {
-    return <div className="text-center py-16 font-mono text-xs text-red-400/60">{error}</div>;
+    return <div className="text-center py-16 font-mono text-xs text-signal-red">{error}</div>;
   }
   if (results.length === 0) {
     return (
-      <div className="text-center py-16 font-mono text-xs text-matrix-green/30 tracking-widest space-y-3">
+      <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest space-y-3">
         <p>NOTHING CURRENTLY TRENDING IN ACTION CENTER FOR THIS FILTER</p>
-        <button onClick={onViewAll} className="font-mono text-[10px] text-neon-cyan hover:underline tracking-widest">
+        <button
+          onClick={onViewAll}
+          className="font-mono text-xs text-signal-cyan hover:underline tracking-widest"
+        >
           VIEW ALL BILLS INSTEAD
         </button>
       </div>
@@ -321,10 +367,11 @@ function HotBillsList({
 
   return (
     <>
-      <p className="font-mono text-[10px] text-matrix-green/30 mb-3 tracking-widest">
-        SHOWING {results.length.toLocaleString()} OF {total.toLocaleString()} BILL{total !== 1 ? "S" : ""}
+      <p className="font-mono text-xs text-ink-min mb-3 tracking-widest">
+        SHOWING {results.length.toLocaleString()} OF {total.toLocaleString()} BILL
+        {total !== 1 ? "S" : ""}
       </p>
-      <div className="border border-matrix-green/10 divide-y divide-matrix-green/10">
+      <div className="border border-white/[0.07] divide-y divide-white/[0.07]">
         {results.map((bill) => (
           <BillRow key={`${bill.chamber}-${bill.billId}-${bill.sponsorId}`} bill={bill} />
         ))}
@@ -335,9 +382,11 @@ function HotBillsList({
           <button
             onClick={() => setPage((p) => p + 1)}
             disabled={loadingMore}
-            className="font-mono text-[10px] tracking-widest px-4 py-2 border border-matrix-green/20 text-matrix-green/60 hover:text-matrix-green hover:border-matrix-green/40 disabled:opacity-40 disabled:cursor-wait transition-colors"
+            className="font-mono text-xs tracking-widest px-4 py-2 border border-white/[0.07] text-ink-lo hover:text-phos hover:border-white/15 disabled:opacity-40 disabled:cursor-wait transition-colors"
           >
-            {loadingMore ? "LOADING..." : `LOAD MORE (${(total - results.length).toLocaleString()} REMAINING)`}
+            {loadingMore
+              ? "LOADING..."
+              : `LOAD MORE (${(total - results.length).toLocaleString()} REMAINING)`}
           </button>
         </div>
       )}

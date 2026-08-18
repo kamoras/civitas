@@ -99,7 +99,7 @@ export default function RaceDetailClient({ race }: { race: RaceDetail }) {
             <SectionHeading aside={`${activeCandidates.length} active`}>Candidates</SectionHeading>
 
             {race.candidates.length === 0 && (
-              <p className="font-mono text-sm text-ink-min">
+              <p className="font-mono text-base text-ink-min">
                 No candidates on record for this race yet.
               </p>
             )}

@@ -36,7 +36,7 @@ const GlobeTab = dynamic(() => import("@/components/action/GlobeTab"), {
   ssr: false,
   loading: () => (
     <div className="flex items-center justify-center py-24">
-      <div className="text-neon-cyan/50 font-mono text-xs tracking-widest animate-pulse">
+      <div className="text-ink-lo font-mono text-xs tracking-widest animate-pulse">
         LOADING GLOBE...
       </div>
     </div>
@@ -47,7 +47,7 @@ const ElectionsTab = dynamic(() => import("@/components/action/ElectionsTab"), {
   ssr: false,
   loading: () => (
     <div className="flex items-center justify-center py-24">
-      <div className="text-neon-yellow/50 font-mono text-xs tracking-widest animate-pulse">
+      <div className="text-ink-lo font-mono text-xs tracking-widest animate-pulse">
         LOADING ELECTIONS...
       </div>
     </div>
@@ -57,7 +57,7 @@ const ElectionsTab = dynamic(() => import("@/components/action/ElectionsTab"), {
 const MonitorsTab = dynamic(() => import("./MonitorsTab"), {
   loading: () => (
     <div className="flex items-center justify-center py-24">
-      <div className="text-amber-400/50 font-mono text-xs tracking-widest animate-pulse">
+      <div className="text-signal-amber font-mono text-xs tracking-widest animate-pulse">
         SCANNING NATIONAL CONCERNS...
       </div>
     </div>
@@ -67,7 +67,7 @@ const MonitorsTab = dynamic(() => import("./MonitorsTab"), {
 const TimelineTab = dynamic(() => import("./TimelineTab"), {
   loading: () => (
     <div className="flex items-center justify-center py-24">
-      <div className="text-purple-400/50 font-mono text-xs tracking-widest animate-pulse">
+      <div className="text-ind-purple font-mono text-xs tracking-widest animate-pulse">
         LOADING TIMELINE...
       </div>
     </div>
@@ -77,7 +77,7 @@ const TimelineTab = dynamic(() => import("./TimelineTab"), {
 const MyRepsTab = dynamic(() => import("@/components/action/MyRepsTab"), {
   loading: () => (
     <div className="flex items-center justify-center py-24">
-      <div className="text-neon-pink/50 font-mono text-xs tracking-widest animate-pulse">
+      <div className="text-ink-lo font-mono text-xs tracking-widest animate-pulse">
         LOADING REPRESENTATIVES...
       </div>
     </div>
@@ -99,7 +99,7 @@ function StatePicker({
     return (
       <button
         onClick={() => onSelect(null)}
-        className="text-[10px] font-mono tracking-widest text-neon-cyan/60 hover:text-neon-cyan transition-colors"
+        className="text-xs font-mono tracking-widest text-ink-lo hover:text-phos transition-colors"
         title="Change your state"
         aria-label="Change your state"
       >
@@ -110,10 +110,7 @@ function StatePicker({
 
   return (
     <div className="flex items-center gap-2">
-      <label
-        htmlFor="state-picker"
-        className="text-[10px] font-mono tracking-widest text-matrix-green/40"
-      >
+      <label htmlFor="state-picker" className="text-xs font-mono tracking-widest text-ink-min">
         YOUR STATE
       </label>
       <select
@@ -121,7 +118,7 @@ function StatePicker({
         value={userState || ""}
         onChange={(e) => onSelect(e.target.value || null)}
         autoComplete="address-level1"
-        className="appearance-none bg-crt-black border border-matrix-green/25 text-matrix-green font-mono text-[11px] px-2 py-1 pr-6 cursor-pointer focus:outline-none focus:border-neon-cyan transition-all"
+        className="appearance-none bg-surface-base border border-white/15 text-ink-hi font-mono text-xs px-2 py-1 pr-6 cursor-pointer focus:outline-none focus:border-signal-cyan/40 transition-all"
       >
         <option value="">SELECT</option>
         {STATES.map((s) => (
@@ -358,13 +355,13 @@ function SecondaryIssue({
                 {trackableActions(issue).map((action, i) => {
                   const { href, internal } = trackActionLink(issue, action);
                   const linkClass =
-                    "flex items-center gap-2 p-2 border border-neon-cyan/15 bg-neon-cyan/5 hover:border-neon-cyan/30 transition-colors text-sm";
+                    "flex items-center gap-2 p-2 border border-white/15 bg-signal-cyan/10 hover:border-white/15 transition-colors text-sm";
                   const inner = (
                     <>
-                      <span className="text-matrix-green/70 flex-1 truncate">
+                      <span className="text-ink flex-1 truncate">
                         {trackActionText(action, internal)}
                       </span>
-                      <span className="text-[10px] text-neon-cyan/40 shrink-0 ml-auto">
+                      <span className="text-xs text-ink-lo shrink-0 ml-auto">
                         {internal ? "→" : "↗"}
                       </span>
                     </>
@@ -391,21 +388,21 @@ function SecondaryIssue({
 
           {issue.relatedBills && issue.relatedBills.length > 0 && (
             <div>
-              <h4 className="font-mono text-[10px] tracking-widest text-neon-yellow/50 mb-2 uppercase">
+              <h4 className="font-mono text-xs tracking-widest text-ink-lo mb-2 uppercase">
                 Official Legislation
               </h4>
               <div className="space-y-1.5">
                 {issue.relatedBills.map((bill) => {
                   const { href, internal } = billLink(bill);
                   const linkClass =
-                    "flex items-center gap-2 p-2 border border-neon-yellow/15 bg-neon-yellow/5 hover:border-neon-yellow/30 transition-colors text-sm";
+                    "flex items-center gap-2 p-2 border border-signal-amber/40 bg-signal-amber/10 hover:border-signal-amber/40 transition-colors text-sm";
                   const inner = (
                     <>
-                      <span className="text-[10px] font-mono tracking-wide text-neon-yellow/60 shrink-0">
+                      <span className="text-xs font-mono tracking-wide text-ink-lo shrink-0">
                         {bill.id}
                       </span>
-                      <span className="text-matrix-green/70 truncate">{bill.name}</span>
-                      <span className="text-[10px] text-neon-cyan/40 shrink-0 ml-auto">
+                      <span className="text-ink truncate">{bill.name}</span>
+                      <span className="text-xs text-ink-lo shrink-0 ml-auto">
                         {internal ? "→" : "↗"}
                       </span>
                     </>
@@ -432,7 +429,7 @@ function SecondaryIssue({
 
           {issue.relatedSenators && issue.relatedSenators.length > 0 && (
             <div>
-              <h4 className="font-mono text-[10px] tracking-widest text-neon-pink/50 mb-2 uppercase">
+              <h4 className="font-mono text-xs tracking-widest text-ink-lo mb-2 uppercase">
                 Officials in Coverage
               </h4>
               <div className="flex flex-wrap gap-2">
@@ -440,22 +437,20 @@ function SecondaryIssue({
                   <Link
                     key={s.id}
                     href={`/politicians/${s.id}`}
-                    className={`flex items-start gap-1.5 px-2 py-1.5 border ${PARTY_BORDER[s.party]} bg-matrix-dark-green/20 hover:border-neon-cyan/40 transition-colors`}
+                    className={`flex items-start gap-1.5 px-2 py-1.5 border ${PARTY_BORDER[s.party]} bg-white/[0.03] hover:border-signal-cyan/40 transition-colors`}
                   >
-                    <span
-                      className={`font-mono text-[10px] mt-0.5 shrink-0 ${PARTY_COLORS[s.party]}`}
-                    >
+                    <span className={`font-mono text-xs mt-0.5 shrink-0 ${PARTY_COLORS[s.party]}`}>
                       {s.party}
                     </span>
                     <div className="flex flex-col min-w-0">
-                      <span className="text-sm text-matrix-green/70 leading-snug">{s.name}</span>
+                      <span className="text-sm text-ink leading-snug">{s.name}</span>
                       {s.matchReason && (
-                        <span className="text-[10px] font-mono text-matrix-green/35 uppercase tracking-wide">
+                        <span className="text-xs font-mono text-ink-min uppercase tracking-wide">
                           {s.matchReason}
                         </span>
                       )}
                     </div>
-                    <span className="text-[10px] font-mono tracking-wide text-neon-cyan/50 mt-0.5 shrink-0">
+                    <span className="text-xs font-mono tracking-wide text-ink-lo mt-0.5 shrink-0">
                       {Math.round(s.overallScore)}
                     </span>
                   </Link>
@@ -466,7 +461,7 @@ function SecondaryIssue({
 
           <SourceList
             issue={issue}
-            className="flex items-center gap-2 flex-wrap pt-3 border-t border-matrix-green/10"
+            className="flex items-center gap-2 flex-wrap pt-3 border-t border-white/[0.07]"
           />
 
           <StancePulse
@@ -569,7 +564,7 @@ function IssuesTab({
         role="status"
         aria-live="polite"
       >
-        <div className="text-neon-cyan/50 font-mono text-xs tracking-widest animate-pulse">
+        <div className="text-ink-lo font-mono text-xs tracking-widest animate-pulse">
           SCANNING NEWS FEEDS...
         </div>
       </div>
@@ -579,11 +574,13 @@ function IssuesTab({
   if (fetchError) {
     return (
       <div className="terminal-window max-w-lg mx-auto p-6 text-center" role="alert">
-        <div className="text-red-400 font-mono text-sm tracking-widest mb-2">CONNECTION ERROR</div>
-        <p className="text-matrix-green/50 text-sm mb-4">Could not load today&apos;s issues.</p>
+        <div className="text-signal-red font-mono text-sm tracking-widest mb-2">
+          CONNECTION ERROR
+        </div>
+        <p className="text-ink-lo text-base mb-4">Could not load today&apos;s issues.</p>
         <button
           onClick={() => loadIssues(selectedDate || undefined)}
-          className="text-neon-cyan font-mono text-xs tracking-widest border border-neon-cyan/30 px-4 py-2 hover:bg-neon-cyan/10 transition-colors"
+          className="text-signal-cyan font-mono text-xs tracking-widest border border-white/15 px-4 py-2 hover:bg-signal-cyan/10 transition-colors"
         >
           RETRY
         </button>
@@ -601,8 +598,10 @@ function IssuesTab({
         role="status"
         aria-live="polite"
       >
-        <div className="text-neon-yellow font-mono text-sm tracking-widest mb-2">NO ISSUES YET</div>
-        <p className="text-matrix-green/50 text-sm">Check back soon.</p>
+        <div className="text-signal-amber font-mono text-sm tracking-widest mb-2">
+          NO ISSUES YET
+        </div>
+        <p className="text-ink-lo text-base">Check back soon.</p>
       </div>
     );
   }
@@ -611,16 +610,16 @@ function IssuesTab({
     <div className="space-y-6">
       {/* Date navigation */}
       {availableDates.length > 1 && (
-        <div className="flex items-center justify-center gap-4 font-mono text-[11px] tracking-widest">
+        <div className="flex items-center justify-center gap-4 font-mono text-xs tracking-widest">
           <button
             onClick={goToPrev}
             disabled={currentIdx >= availableDates.length - 1}
-            className="text-matrix-green/50 hover:text-matrix-green disabled:text-matrix-green/20 disabled:cursor-not-allowed transition-colors"
+            className="text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed transition-colors"
             aria-label="Previous day"
           >
             ← PREV
           </button>
-          <span className="text-matrix-green/70 px-3 py-1 border border-matrix-green/15 bg-matrix-green/5 min-w-[110px] text-center">
+          <span className="text-ink px-3 py-1 border border-white/[0.07] bg-white/[0.03] min-w-[110px] text-center">
             {currentDate
               ? formatUtcDate(currentDate, { month: "short", day: "numeric", year: "numeric" })
               : "—"}
@@ -628,7 +627,7 @@ function IssuesTab({
           <button
             onClick={goToNext}
             disabled={currentIdx <= 0 && !selectedDate}
-            className="text-matrix-green/50 hover:text-matrix-green disabled:text-matrix-green/20 disabled:cursor-not-allowed transition-colors"
+            className="text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed transition-colors"
             aria-label="Next day"
           >
             NEXT →
@@ -640,7 +639,7 @@ function IssuesTab({
                 loadIssues();
                 onDateChange?.(null);
               }}
-              className="text-neon-cyan/50 hover:text-neon-cyan transition-colors ml-1"
+              className="text-ink-lo hover:text-phos transition-colors ml-1"
               aria-label="Jump to present"
             >
               LATEST
@@ -652,7 +651,7 @@ function IssuesTab({
       {/* Data freshness timestamp */}
       {generatedAt && (
         <div className="text-center">
-          <span className="text-matrix-green/30 text-[10px] font-mono">
+          <span className="text-ink-min text-xs font-mono">
             Updated: {formatGeneratedAt(generatedAt)}
           </span>
         </div>
@@ -661,11 +660,9 @@ function IssuesTab({
       {/* State selector bar */}
       <div className="flex items-center justify-between terminal-window p-3">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-mono tracking-widest text-matrix-green/35">
-            PERSONALIZE
-          </span>
+          <span className="text-xs font-mono tracking-widest text-ink-min">PERSONALIZE</span>
           {userState && (
-            <span className="text-[10px] font-mono text-neon-cyan/70 border border-neon-cyan/20 px-1.5 py-0.5 bg-neon-cyan/5">
+            <span className="text-xs font-mono text-signal-cyan border border-white/15 px-1.5 py-0.5 bg-signal-cyan/10">
               {STATES.find((s) => s.code === userState)?.name || userState} — links personalized
             </span>
           )}
@@ -686,7 +683,7 @@ function IssuesTab({
 
       {secondaryIssues.length > 0 && (
         <div>
-          <h2 className="font-mono text-[10px] tracking-[0.3em] text-matrix-green/40 mb-3 px-1 uppercase">
+          <h2 className="font-mono text-xs tracking-[0.3em] text-ink-min mb-3 px-1 uppercase">
             More Issues to Watch
           </h2>
           <div className="space-y-3">
@@ -738,35 +735,33 @@ function OpenCommentsBanner() {
   return (
     <section aria-label="Open public comment periods" className="mb-6">
       <div className="flex items-center gap-3 mb-2">
-        <span className="w-1.5 h-1.5 rounded-full bg-amber-400/80 shrink-0" aria-hidden="true" />
-        <span className="font-mono text-[10px] tracking-widest text-amber-400/70">
+        <span className="w-1.5 h-1.5 bg-signal-amber/10 shrink-0" aria-hidden="true" />
+        <span className="font-mono text-xs tracking-widest text-signal-amber">
           OPEN FOR PUBLIC COMMENT
         </span>
-        <div className="flex-1 h-px bg-amber-400/15" aria-hidden="true" />
+        <div className="flex-1 h-px bg-signal-amber/10" aria-hidden="true" />
       </div>
       <div className="flex gap-3 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 snap-x">
         {items.map((item) => (
           <div
             key={item.id}
-            className="terminal-window border border-amber-400/30 bg-amber-400/5 p-3 min-w-[220px] max-w-[260px] flex-shrink-0 snap-start flex flex-col gap-1.5"
+            className="terminal-window border border-signal-amber/40 bg-signal-amber/10 p-3 min-w-[220px] max-w-[260px] flex-shrink-0 snap-start flex flex-col gap-1.5"
           >
-            <p className="text-[11px] text-matrix-green/80 leading-snug line-clamp-3 flex-1">
-              {item.title}
-            </p>
+            <p className="text-xs text-ink leading-snug line-clamp-3 flex-1">{item.title}</p>
             {item.agencyName && (
-              <div className="text-[9px] text-amber-400/40 font-mono tracking-wider truncate">
+              <div className="text-xs text-signal-amber font-mono tracking-wider truncate">
                 {item.agencyName}
               </div>
             )}
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[9px] text-amber-400/60 font-mono">
+              <span className="text-xs text-signal-amber font-mono">
                 {daysLeft(item.commentsCloseOn)}
               </span>
               <a
                 href={item.commentUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-mono text-[9px] tracking-widest text-amber-400/70 border border-amber-400/25 px-2 py-0.5 hover:bg-amber-400/10 transition-colors shrink-0"
+                className="font-mono text-xs tracking-widest text-signal-amber border border-signal-amber/40 px-2 py-0.5 hover:bg-signal-amber/10 transition-colors shrink-0"
               >
                 COMMENT ↗
               </a>

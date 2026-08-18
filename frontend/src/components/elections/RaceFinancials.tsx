@@ -12,7 +12,7 @@ export default function RaceFinancials({ candidates }: { candidates: CandidateSu
   const withFunds = candidates.filter((c) => c.cashOnHand != null);
   if (withFunds.length === 0) {
     return (
-      <p className="font-mono text-sm text-ink-min">
+      <p className="font-mono text-base text-ink-min">
         No fundraising data synced for this race yet.
       </p>
     );
@@ -37,7 +37,7 @@ export default function RaceFinancials({ candidates }: { candidates: CandidateSu
                   {formatCurrency(c.cashOnHand as number)}
                 </span>
               </div>
-              {/* Square bar on a square track: the register has no rounded
+              {/* Square bar on a square track: the register has no 
                   corners, and this is the same bar language the scorecard and
                   leaderboard use. */}
               <div className="h-2 w-full bg-white/10">

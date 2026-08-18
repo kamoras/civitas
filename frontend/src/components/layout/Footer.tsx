@@ -93,7 +93,7 @@ export default function Footer() {
           </div>
 
           <div className="md:col-span-8">
-            <p className="font-display text-sm leading-relaxed text-ink-lo">
+            <p className="font-display text-base leading-relaxed text-ink-lo">
               All data sourced from public records: FEC campaign finance filings (fec.gov),
               OpenSecrets.org donor &amp; industry data, GovTrack.us &amp; MapLight voting records,
               and Senate Lobbying Disclosure Act filings (lda.senate.gov). The Representation

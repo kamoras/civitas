@@ -24,7 +24,7 @@ describe("getScoreLabel", () => {
 
   it("keeps the top band reachable — a scale that cannot say 'good' is a hit piece", () => {
     expect(getScoreLabel(100)).toBe("STRONGLY REPRESENTATIVE");
-    expect(getScoreColor(100)).toBe("text-matrix-green");
+    expect(getScoreColor(100)).toBe("text-phos");
   });
 
   it("did not move any band boundary while renaming the bottom one", () => {

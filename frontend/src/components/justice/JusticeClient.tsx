@@ -8,13 +8,31 @@ import { MetricBar, StatBox } from "@/components/shared/ScoreMetric";
 import type { Justice, JusticeLeaderboardEntry, JusticeScore } from "@/types/justice";
 
 const PARTY_BADGE: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  R: { label: "R-APPOINTED", color: "text-rep-red", bg: "bg-rep-red/20", border: "border-rep-red/40" },
-  D: { label: "D-APPOINTED", color: "text-dem-blue", bg: "bg-dem-blue/20", border: "border-dem-blue/40" },
+  R: {
+    label: "R-APPOINTED",
+    color: "text-signal-red",
+    bg: "bg-signal-red/10",
+    border: "border-signal-red/40",
+  },
+  D: {
+    label: "D-APPOINTED",
+    color: "text-dem-blue",
+    bg: "bg-dem-blue/20",
+    border: "border-dem-blue/40",
+  },
 };
 
 function getPartyBadge(party: string | null) {
-  if (!party) return { label: "UNKNOWN", color: "text-white/50", bg: "bg-white/10", border: "border-white/20" };
-  return PARTY_BADGE[party] ?? { label: party, color: "text-white/50", bg: "bg-white/10", border: "border-white/20" };
+  if (!party)
+    return { label: "UNKNOWN", color: "text-ink-lo", bg: "bg-white/10", border: "border-white/20" };
+  return (
+    PARTY_BADGE[party] ?? {
+      label: party,
+      color: "text-ink-lo",
+      bg: "bg-white/10",
+      border: "border-white/20",
+    }
+  );
 }
 
 const METRIC_LABELS: { key: keyof JusticeScore; label: string; desc: string }[] = [
@@ -51,9 +69,9 @@ function AgreementRow({ name, pct }: { name: string; pct: number }) {
 
   return (
     <div className="flex items-center gap-3">
-      <span className="text-xs text-white/60 w-36 truncate">{label}</span>
-      <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+      <span className="text-xs text-ink w-36 truncate">{label}</span>
+      <div className="flex-1 h-1.5 bg-white/10 overflow-hidden">
+        <div className={`h-full ${barColor}`} style={{ width: `${pct}%` }} />
       </div>
       <span className={`text-xs font-bold tabular-nums ${color} w-10 text-right`}>{pct}%</span>
     </div>
@@ -64,12 +82,11 @@ export function JusticeCard({ justice }: { justice: Justice }) {
   const overall = justice.score.overall;
   const pb = getPartyBadge(justice.appointingParty);
 
-  const agreementEntries = Object.entries(justice.agreementMatrix)
-    .sort(([, a], [, b]) => b - a);
+  const agreementEntries = Object.entries(justice.agreementMatrix).sort(([, a], [, b]) => b - a);
 
   return (
     <div className="terminal-window">
-      <TerminalTitlebar title={`justice_${justice.lastName.toLowerCase()}.profile`} />
+      <TerminalTitlebar title={`Justice ${justice.lastName}`} />
 
       <div className="p-6 space-y-6">
         {/* Header */}
@@ -80,23 +97,21 @@ export function JusticeCard({ justice }: { justice: Justice }) {
               <img
                 src={justice.thumbnailUrl}
                 alt={justice.name}
-                className={`w-14 h-14 rounded object-cover border-2 ${pb.border} shrink-0`}
+                className={`w-14 h-14  object-cover border-2 ${pb.border} shrink-0`}
               />
             ) : null}
             <div>
-              <h2 className="text-2xl font-terminal text-white">{justice.name}</h2>
+              <h2 className="text-2xl font-mono text-ink-hi">{justice.name}</h2>
               <div className="flex items-center gap-3 mt-1 flex-wrap">
-                <span className="text-xs text-matrix-green/60">{justice.roleTitle}</span>
-                <span className={`text-xs px-2 py-0.5 border rounded-sm ${pb.bg} ${pb.border} ${pb.color}`}>
+                <span className="text-xs text-ink-lo">{justice.roleTitle}</span>
+                <span className={`text-xs px-2 py-0.5 border  ${pb.bg} ${pb.border} ${pb.color}`}>
                   {pb.label}
                 </span>
                 {justice.appointingPresident && (
-                  <span className="text-xs text-white/30">
-                    by {justice.appointingPresident}
-                  </span>
+                  <span className="text-xs text-ink-lo">by {justice.appointingPresident}</span>
                 )}
                 {!justice.isActive && (
-                  <span className="text-xs text-neon-pink/70 border border-neon-pink/30 px-2 py-0.5">
+                  <span className="text-xs text-ink-lo border border-signal-magenta/40 px-2 py-0.5">
                     NO LONGER SERVING
                   </span>
                 )}
@@ -104,7 +119,9 @@ export function JusticeCard({ justice }: { justice: Justice }) {
             </div>
           </div>
           <div className="text-right">
-            <div className={`text-4xl font-bold tabular-nums ${getScoreColor(overall)}`}>{overall}</div>
+            <div className={`text-4xl font-bold tabular-nums ${getScoreColor(overall)}`}>
+              {overall}
+            </div>
             <div className={`text-xs tracking-widest ${getScoreColor(overall)}`}>
               {getJusticeLabel(overall)}
             </div>
@@ -113,18 +130,18 @@ export function JusticeCard({ justice }: { justice: Justice }) {
 
         {/* Summary */}
         {justice.summary && (
-          <div className="border border-matrix-green/10 bg-matrix-green/5 p-4">
-            <p className="text-sm text-matrix-green/70 leading-relaxed">{justice.summary}</p>
+          <div className="border border-white/[0.07] bg-white/[0.03] p-4">
+            <p className="text-base text-ink leading-relaxed">{justice.summary}</p>
           </div>
         )}
 
         {/* Methodology note */}
-        <div className="border border-white/5 bg-white/[0.02] p-3">
-          <p className="text-[10px] text-white/30 leading-relaxed">
-            Scores derived from Martin-Quinn-style voting pattern analysis (Martin &amp; Quinn, 2002).
-            Consistency measures how unpredictable a justice&apos;s votes are relative to ideological bloc —
-            higher is better (follows law, not party). Based on {justice.casesDecided} cases from recent
-            SCOTUS terms via Oyez.
+        <div className="border border-white/[0.07] bg-white/[0.02] p-3">
+          <p className="text-xs text-ink-lo leading-relaxed">
+            Scores derived from Martin-Quinn-style voting pattern analysis (Martin &amp; Quinn,
+            2002). Consistency measures how unpredictable a justice&apos;s votes are relative to
+            ideological bloc — higher is better (follows law, not party). Based on{" "}
+            {justice.casesDecided} cases from recent SCOTUS terms via Oyez.
           </p>
         </div>
 
@@ -134,7 +151,7 @@ export function JusticeCard({ justice }: { justice: Justice }) {
             href="https://www.oyez.org"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
+            className="text-xs text-ink-min hover:text-phos transition-colors"
           >
             [OYEZ PROJECT]
           </a>
@@ -142,7 +159,7 @@ export function JusticeCard({ justice }: { justice: Justice }) {
             href="https://www.supremecourt.gov"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
+            className="text-xs text-ink-min hover:text-phos transition-colors"
           >
             [SUPREME COURT]
           </a>
@@ -150,7 +167,7 @@ export function JusticeCard({ justice }: { justice: Justice }) {
             href="https://mqscores.lsa.umich.edu"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[10px] text-matrix-green/30 hover:text-neon-cyan transition-colors"
+            className="text-xs text-ink-min hover:text-phos transition-colors"
           >
             [MARTIN-QUINN SCORES]
           </a>
@@ -158,30 +175,42 @@ export function JusticeCard({ justice }: { justice: Justice }) {
 
         {/* Score Breakdown */}
         <div>
-          <h3 className="text-xs text-matrix-green/50 tracking-widest mb-4">JURISPRUDENTIAL CONSISTENCY</h3>
+          <h3 className="text-xs text-ink-lo tracking-widest mb-4">JURISPRUDENTIAL CONSISTENCY</h3>
           <div className="space-y-3">
             {METRIC_LABELS.map(({ key, label, desc }) => (
-              <MetricBar key={key} label={label} value={justice.score[key]} desc={desc} entityType="justice" entityId={justice.id} dimensionKey={key} />
+              <MetricBar
+                key={key}
+                label={label}
+                value={justice.score[key]}
+                desc={desc}
+                entityType="justice"
+                entityId={justice.id}
+                dimensionKey={key}
+              />
             ))}
           </div>
         </div>
 
         {/* Key Stats */}
         <div>
-          <h3 className="text-xs text-matrix-green/50 tracking-widest mb-3">VOTING PROFILE</h3>
+          <h3 className="text-xs text-ink-lo tracking-widest mb-3">VOTING PROFILE</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             <StatBox label="CASES" value={`${justice.casesDecided}`} />
             <StatBox label="MAJORITY" value={`${justice.majorityPct.toFixed(0)}`} unit="%" />
             <StatBox label="DISSENT" value={`${justice.dissentPct.toFixed(0)}`} unit="%" />
             <StatBox label="UNANIMOUS" value={`${justice.unanimousPct.toFixed(0)}`} unit="%" />
             <StatBox label="CROSS-BLOC" value={`${justice.crossBlocPct.toFixed(0)}`} unit="%" />
-            <StatBox label="CLOSE CASE MAJ" value={`${justice.closeCaseMajorityPct.toFixed(0)}`} unit="%" />
+            <StatBox
+              label="CLOSE CASE MAJ"
+              value={`${justice.closeCaseMajorityPct.toFixed(0)}`}
+              unit="%"
+            />
           </div>
         </div>
 
         {/* Opinions authored */}
         <div>
-          <h3 className="text-xs text-matrix-green/50 tracking-widest mb-3">OPINIONS AUTHORED</h3>
+          <h3 className="text-xs text-ink-lo tracking-widest mb-3">OPINIONS AUTHORED</h3>
           <div className="grid grid-cols-3 gap-2">
             <StatBox label="MAJORITY" value={`${justice.authoredMajority}`} />
             <StatBox label="DISSENT" value={`${justice.authoredDissent}`} />
@@ -192,7 +221,7 @@ export function JusticeCard({ justice }: { justice: Justice }) {
         {/* Agreement Matrix */}
         {agreementEntries.length > 0 && (
           <div>
-            <h3 className="text-xs text-matrix-green/50 tracking-widest mb-3">
+            <h3 className="text-xs text-ink-lo tracking-widest mb-3">
               AGREEMENT WITH OTHER JUSTICES
             </h3>
             <div className="space-y-2">
@@ -226,14 +255,14 @@ function JusticeSelector({
           <button
             key={e.id}
             onClick={() => onSelect(e.id)}
-            className={`px-2 py-2.5 border text-xs font-terminal transition-all ${
+            className={`px-2 py-2.5 border text-xs font-mono transition-all ${
               active
-                ? `${pb.border} ${pb.bg} text-white`
-                : `${pb.border.replace("/40", "/20")} text-white/40 hover:text-white/70 hover:${pb.border}`
+                ? `${pb.border} ${pb.bg} text-ink-hi`
+                : `${pb.border.replace("/40", "/20")} text-ink-lo hover:text-ink hover:${pb.border}`
             }`}
           >
             <div className="truncate">{e.lastName}</div>
-            <div className={`text-[10px] tabular-nums ${getScoreColor(overall)}`}>{overall}</div>
+            <div className={`text-xs tabular-nums ${getScoreColor(overall)}`}>{overall}</div>
           </button>
         );
       })}
@@ -259,8 +288,8 @@ export default function JusticeClient() {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  // Mount-only: selectedId excluded to avoid refetching the leaderboard on selection change.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Mount-only: selectedId excluded to avoid refetching the leaderboard on selection change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -275,7 +304,7 @@ export default function JusticeClient() {
   if (loading) {
     return (
       <div className="terminal-window max-w-md mx-auto p-6 text-center">
-        <div className="text-neon-cyan animate-pulse text-lg">{">"} LOADING SCOTUS DATA...</div>
+        <div className="text-signal-cyan animate-pulse text-lg">{">"} LOADING SCOTUS DATA...</div>
       </div>
     );
   }
@@ -283,8 +312,8 @@ export default function JusticeClient() {
   if (error) {
     return (
       <div className="terminal-window max-w-md mx-auto p-6 text-center">
-        <div className="text-red-500 text-lg">{">"} ERROR</div>
-        <div className="text-matrix-green/40 text-sm mt-2">{error}</div>
+        <div className="text-signal-red text-lg">{">"} ERROR</div>
+        <div className="text-ink-min text-sm mt-2">{error}</div>
       </div>
     );
   }
@@ -292,7 +321,7 @@ export default function JusticeClient() {
   if (entries.length === 0) {
     return (
       <div className="terminal-window max-w-md mx-auto p-6 text-center">
-        <div className="text-matrix-green/40 text-sm">
+        <div className="text-ink-min text-sm">
           {">"} No justice data available yet. Run the justice pipeline to populate.
         </div>
       </div>
@@ -305,7 +334,7 @@ export default function JusticeClient() {
 
       {detailLoading && (
         <div className="terminal-window max-w-md mx-auto p-6 text-center">
-          <div className="text-neon-cyan animate-pulse">{">"} LOADING PROFILE...</div>
+          <div className="text-signal-cyan animate-pulse">{">"} LOADING PROFILE...</div>
         </div>
       )}
 

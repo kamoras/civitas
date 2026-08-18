@@ -6,7 +6,6 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { ACTION_CENTER_HREF } from "@/lib/routes";
 import RecordsBand from "./RecordsBand";
 
-
 const BSKY_PROFILE_URL = "https://bsky.app/profile/civitas-research.org";
 
 const NAV_LINKS: readonly { href: string; label: string; accent?: boolean }[] = [
@@ -40,7 +39,7 @@ export default function Navbar() {
 
   useEffect(() => {
     if (!menuOpen || !menuRef.current) return;
-    const firstLink = menuRef.current.querySelector<HTMLElement>('a[href]');
+    const firstLink = menuRef.current.querySelector<HTMLElement>("a[href]");
     firstLink?.focus();
   }, [menuOpen]);
 
@@ -53,7 +52,7 @@ export default function Navbar() {
       }
       if (e.key !== "Tab" || !menuRef.current) return;
       const focusable = menuRef.current.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled])'
+        "a[href], button:not([disabled])"
       );
       if (focusable.length === 0) return;
       const first = focusable[0];
@@ -95,23 +94,22 @@ export default function Navbar() {
       <RecordsBand />
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999]
-                   focus:bg-surface-base focus:text-phos focus:border focus:border-phos/60
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:bg-surface-base focus:text-phos focus:border focus:border-phos/60
                    focus:px-4 focus:py-2 focus:font-mono focus:text-xs focus:tracking-widest
                    focus:outline-none"
       >
         SKIP TO MAIN CONTENT
       </a>
-    <nav aria-label="Main navigation" className="border-b-3 border-white/15">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
-        <Link
-          href="/"
-          className="font-pixel text-[10px] sm:text-xs text-ink-hi hover:text-phos transition-colors tracking-widest"
-        >
-          CIVITAS
-        </Link>
+      <nav aria-label="Main navigation" className="border-b-3 border-white/15">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+          <Link
+            href="/"
+            className="font-pixel text-xs sm:text-sm text-ink-hi hover:text-phos transition-colors tracking-widest"
+          >
+            CIVITAS
+          </Link>
 
-        {/*
+          {/*
           `lg` (1024px), not `sm` (640px).
 
           Nine wide-tracked uppercase links do not fit on one row until about
@@ -126,92 +124,92 @@ export default function Navbar() {
           better call on its own: nine cramped links at 640px were never
           readable.
         */}
-        {/* Desktop nav */}
-        <div className="hidden lg:flex items-center gap-7">
-          {NAV_LINKS.map(({ href, label, accent }) => {
-            const active = isActive(href);
-            return (
-              <Link
-                key={href}
-                href={href}
-                aria-current={active ? "page" : undefined}
-                className={
-                  active
-                    ? "bg-phos text-surface-base font-mono text-xs tracking-widest uppercase px-2 py-0.5"
-                    : accent
-                      ? "text-ink-hi hover:text-phos font-mono text-xs tracking-widest uppercase transition-colors"
-                      : "text-ink-lo hover:text-ink-hi font-mono text-xs tracking-widest uppercase transition-colors"
-                }
-              >
-                {label}
-              </Link>
-            );
-          })}
-          <a
-            href={BSKY_PROFILE_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Civitas on Bluesky (opens in new tab)"
-            title="Follow Civitas on Bluesky"
-            className="text-ink-lo hover:text-phos font-mono text-xs tracking-widest transition-colors"
+          {/* Desktop nav */}
+          <div className="hidden lg:flex items-center gap-7">
+            {NAV_LINKS.map(({ href, label, accent }) => {
+              const active = isActive(href);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  aria-current={active ? "page" : undefined}
+                  className={
+                    active
+                      ? "bg-phos text-surface-base font-mono text-xs tracking-widest uppercase px-2 py-0.5"
+                      : accent
+                        ? "text-ink-hi hover:text-phos font-mono text-xs tracking-widest uppercase transition-colors"
+                        : "text-ink-lo hover:text-ink-hi font-mono text-xs tracking-widest uppercase transition-colors"
+                  }
+                >
+                  {label}
+                </Link>
+              );
+            })}
+            <a
+              href={BSKY_PROFILE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Civitas on Bluesky (opens in new tab)"
+              title="Follow Civitas on Bluesky"
+              className="text-ink-lo hover:text-phos font-mono text-xs tracking-widest transition-colors"
+            >
+              [BSKY]
+            </a>
+          </div>
+
+          {/* Mobile hamburger */}
+          <button
+            ref={toggleRef}
+            className="lg:hidden text-ink-lo hover:text-ink-hi font-mono text-sm tracking-widest transition-colors"
+            onClick={() => (menuOpen ? closeMenu() : setMenuOpen(true))}
+            aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
+            aria-expanded={menuOpen}
+            aria-controls="mobile-menu"
           >
-            [BSKY]
-          </a>
+            {menuOpen ? "CLOSE" : "MENU"}
+          </button>
         </div>
 
-        {/* Mobile hamburger */}
-        <button
-          ref={toggleRef}
-          className="lg:hidden text-ink-lo hover:text-ink-hi font-mono text-sm tracking-widest transition-colors"
-          onClick={() => menuOpen ? closeMenu() : setMenuOpen(true)}
-          aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
-          aria-expanded={menuOpen}
-          aria-controls="mobile-menu"
-        >
-          {menuOpen ? "CLOSE" : "MENU"}
-        </button>
-      </div>
-
-      {/* Mobile menu */}
-      {menuOpen && (
-        <div
-          ref={menuRef}
-          id="mobile-menu"
-          className="lg:hidden bg-surface-base/[0.98] border-t border-white/[0.07] px-6 py-8 flex flex-col items-start gap-5"
-        >
-          {NAV_LINKS.map(({ href, label, accent }) => {
-            const active = isActive(href);
-            return (
-              <Link
-                key={href}
-                href={href}
-                aria-current={active ? "page" : undefined}
-                onClick={closeMenu}
-                className={
-                  active
-                    ? "self-start bg-phos text-surface-base font-mono text-sm tracking-widest uppercase px-2 py-0.5"
-                    : accent
-                      ? "text-ink-hi hover:text-phos font-mono text-sm tracking-widest uppercase transition-colors"
-                      : "text-ink-lo hover:text-ink-hi font-mono text-sm tracking-widest uppercase transition-colors"
-                }
-              >
-                {label}
-              </Link>
-            );
-          })}
-          <a
-            href={BSKY_PROFILE_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Civitas on Bluesky (opens in new tab)"
-            onClick={closeMenu}
-            className="text-ink-lo hover:text-phos font-mono text-sm tracking-widest transition-colors"
+        {/* Mobile menu */}
+        {menuOpen && (
+          <div
+            ref={menuRef}
+            id="mobile-menu"
+            className="lg:hidden bg-surface-base/[0.98] border-t border-white/[0.07] px-6 py-8 flex flex-col items-start gap-5"
           >
-            [BSKY]
-          </a>
-        </div>
-      )}
-    </nav>
+            {NAV_LINKS.map(({ href, label, accent }) => {
+              const active = isActive(href);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  aria-current={active ? "page" : undefined}
+                  onClick={closeMenu}
+                  className={
+                    active
+                      ? "self-start bg-phos text-surface-base font-mono text-sm tracking-widest uppercase px-2 py-0.5"
+                      : accent
+                        ? "text-ink-hi hover:text-phos font-mono text-sm tracking-widest uppercase transition-colors"
+                        : "text-ink-lo hover:text-ink-hi font-mono text-sm tracking-widest uppercase transition-colors"
+                  }
+                >
+                  {label}
+                </Link>
+              );
+            })}
+            <a
+              href={BSKY_PROFILE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Civitas on Bluesky (opens in new tab)"
+              onClick={closeMenu}
+              className="text-ink-lo hover:text-phos font-mono text-sm tracking-widest transition-colors"
+            >
+              [BSKY]
+            </a>
+          </div>
+        )}
+      </nav>
     </header>
   );
 }

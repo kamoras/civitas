@@ -39,7 +39,7 @@ function useHasVoted(issueId: number): boolean {
   return useSyncExternalStore(
     subscribeVoted,
     () => getVotedIssues().has(issueId),
-    () => false,
+    () => false
   );
 }
 
@@ -65,14 +65,14 @@ export default function StancePulse({
         const result = await submitPulseVote(issueId, stance);
         setConcerned(result.concernedCount);
         setNotPriority(result.notPriorityCount);
-        markVoted(issueId);  // dispatches PULSE_EVENT → useHasVoted re-reads true
+        markVoted(issueId); // dispatches PULSE_EVENT → useHasVoted re-reads true
       } catch {
         /* fail silently — non-critical feature */
       } finally {
         setSubmitting(false);
       }
     },
-    [issueId, hasVoted, submitting],
+    [issueId, hasVoted, submitting]
   );
 
   const total = concerned + notPriority;
@@ -80,19 +80,22 @@ export default function StancePulse({
   const pctNotPriority = total > 0 ? 100 - pctConcerned : 0;
 
   return (
-    <div className="mt-4 pt-4 border-t border-matrix-green/10">
+    <div className="mt-4 pt-4 border-t border-white/[0.07]">
       <fieldset>
-        <legend className="font-mono text-[10px] tracking-widest text-matrix-green/40 mb-2">
+        <legend className="font-mono text-xs tracking-widest text-ink-min mb-2">
           COMMUNITY PULSE
         </legend>
 
         {!hasVoted ? (
-          <div className="flex gap-2" role="radiogroup" aria-label="How important is this issue to you?">
+          <div
+            className="flex gap-2"
+            role="radiogroup"
+            aria-label="How important is this issue to you?"
+          >
             <button
               onClick={() => vote("concerned")}
               disabled={submitting}
-              className="flex-1 py-2.5 px-3 border border-neon-cyan/30 text-neon-cyan/80 font-mono text-xs tracking-widest
-                         hover:bg-neon-cyan/10 hover:border-neon-cyan/50 transition-colors
+              className="flex-1 py-2.5 px-3 border border-white/15 text-signal-cyan font-mono text-xs tracking-widest hover:bg-signal-cyan/10 hover:border-signal-cyan/40 transition-colors
                          disabled:opacity-40 disabled:cursor-not-allowed"
               role="radio"
               aria-checked="false"
@@ -102,8 +105,7 @@ export default function StancePulse({
             <button
               onClick={() => vote("not_priority")}
               disabled={submitting}
-              className="flex-1 py-2.5 px-3 border border-matrix-green/20 text-matrix-green/50 font-mono text-xs tracking-widest
-                         hover:bg-matrix-green/5 hover:border-matrix-green/30 transition-colors
+              className="flex-1 py-2.5 px-3 border border-white/[0.07] text-ink-lo font-mono text-xs tracking-widest hover:bg-white/[0.03] hover:border-white/15 transition-colors
                          disabled:opacity-40 disabled:cursor-not-allowed"
               role="radio"
               aria-checked="false"
@@ -114,7 +116,7 @@ export default function StancePulse({
         ) : (
           <div>
             <div
-              className="flex h-3 overflow-hidden border border-matrix-green/20"
+              className="flex h-3 overflow-hidden border border-white/[0.07]"
               role="meter"
               aria-valuenow={pctConcerned}
               aria-valuemin={0}
@@ -122,24 +124,20 @@ export default function StancePulse({
               aria-label={`${pctConcerned}% of respondents say this concerns them`}
             >
               <div
-                className="bg-neon-cyan/40 transition-all duration-500"
+                className="bg-signal-cyan transition-all duration-500"
                 style={{ width: `${pctConcerned}%` }}
               />
               <div
-                className="bg-matrix-green/10 transition-all duration-500"
+                className="bg-white/[0.03] transition-all duration-500"
                 style={{ width: `${pctNotPriority}%` }}
               />
             </div>
-            <div className="flex justify-between mt-1.5 font-mono text-[10px] tracking-wide">
-              <span className="text-neon-cyan/70">
-                CONCERNED {pctConcerned}%
-              </span>
-              <span className="text-matrix-green/40">
+            <div className="flex justify-between mt-1.5 font-mono text-xs tracking-wide">
+              <span className="text-signal-cyan">CONCERNED {pctConcerned}%</span>
+              <span className="text-ink-min">
                 {total} response{total !== 1 ? "s" : ""}
               </span>
-              <span className="text-matrix-green/40">
-                NOT PRIORITY {pctNotPriority}%
-              </span>
+              <span className="text-ink-min">NOT PRIORITY {pctNotPriority}%</span>
             </div>
           </div>
         )}

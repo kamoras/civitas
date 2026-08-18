@@ -34,8 +34,12 @@ export default function BillRow({ bill }: { bill: BillInFlight }) {
           "TO PRESIDENT") measure ~85px, which with the 12px of horizontal
           padding overflowed the old 92px box and truncated. */}
       <span
-        className="shrink-0 mt-0.5 text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded border w-[100px] text-center truncate"
-        style={{ color: stageColor, borderColor: `${stageColor}4d`, backgroundColor: `${stageColor}1a` }}
+        className="shrink-0 mt-0.5 text-xs font-mono uppercase tracking-wider px-1.5 py-0.5 border w-[100px] text-center truncate"
+        style={{
+          color: stageColor,
+          borderColor: `${stageColor}4d`,
+          backgroundColor: `${stageColor}1a`,
+        }}
         title={stageInfo?.name ?? bill.stage}
       >
         {stageInfo?.name ?? bill.stage}
@@ -45,39 +49,39 @@ export default function BillRow({ bill }: { bill: BillInFlight }) {
         <div className="flex items-start gap-2">
           <Link
             href={`/bills/${encodeURIComponent(bill.billId)}`}
-            className="min-w-0 flex-1 text-sm text-matrix-green hover:text-neon-cyan hover:underline leading-snug truncate"
+            className="min-w-0 flex-1 text-sm text-ink-hi hover:text-phos hover:underline leading-snug truncate"
           >
             {bill.title || bill.billId}
           </Link>
           {bill.mentionCount > 0 && (
             <span
-              className="shrink-0 text-[9px] font-mono text-neon-cyan border border-neon-cyan/30 bg-neon-cyan/10 px-1.5 py-0.5 rounded"
+              className="shrink-0 text-xs font-mono text-signal-cyan border border-white/15 bg-signal-cyan/10 px-1.5 py-0.5 "
               title={`Referenced in ${bill.mentionCount} current Action Center issue${bill.mentionCount === 1 ? "" : "s"}`}
             >
               ACTIVE ×{bill.mentionCount}
             </span>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5 text-[11px] text-matrix-green/50">
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5 text-xs text-ink-lo">
           <Link
             href={`/politicians/${bill.sponsorId}`}
-            className="flex items-center gap-1 hover:text-neon-cyan shrink-0"
+            className="flex items-center gap-1 hover:text-phos shrink-0"
           >
             {bill.sponsorThumbnailUrl && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={bill.sponsorThumbnailUrl}
                 alt=""
-                className="w-4 h-4 rounded-full object-cover border border-matrix-green/20"
+                className="w-4 h-4 rounded-full object-cover border border-white/[0.07]"
               />
             )}
-            <span className={`px-1 rounded border text-[9px] ${party.className}`}>{party.label}</span>
-            <span className="text-matrix-green/70">{bill.sponsorName}</span>
+            <span className={`px-1  border text-xs ${party.className}`}>{party.label}</span>
+            <span className="text-ink">{bill.sponsorName}</span>
           </Link>
-          <span className="text-matrix-green/30">· {bill.sponsorState}</span>
-          <span className="text-matrix-green/30">· {bill.chamber === "senate" ? "Senate" : "House"}</span>
+          <span className="text-ink-min">· {bill.sponsorState}</span>
+          <span className="text-ink-min">· {bill.chamber === "senate" ? "Senate" : "House"}</span>
           {bill.latestAction && (
-            <span className="text-matrix-green/40 truncate">
+            <span className="text-ink-min truncate">
               · {bill.latestAction}
               {bill.latestActionDate && ` (${timeAgo(bill.latestActionDate)})`}
             </span>

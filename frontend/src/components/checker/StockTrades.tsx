@@ -43,10 +43,10 @@ function formatAmountRange(trade: StockTrade): string {
 function TransactionBadge({ type }: { type: StockTrade["transactionType"] }) {
   const styles =
     type === "purchase"
-      ? "text-matrix-green bg-matrix-green/10 border-matrix-green/30"
+      ? "text-ink-hi bg-white/[0.03] border-white/15"
       : type === "exchange"
-        ? "text-yellow-500 bg-yellow-500/10 border-yellow-500/30"
-        : "text-red-500 bg-red-500/10 border-red-500/30";
+        ? "text-signal-amber bg-signal-amber border-yellow-500/30"
+        : "text-signal-red bg-signal-red border-signal-red/40";
   return (
     <span className={`font-mono text-xs tracking-widest px-2 py-1 border ${styles}`}>
       {TXN_TYPE_LABEL[type]}
@@ -57,10 +57,10 @@ function TransactionBadge({ type }: { type: StockTrade["transactionType"] }) {
 function TimelinessBadge({ late, daysToDisclose }: { late: boolean; daysToDisclose: number }) {
   return (
     <span
-      className={`text-[10px] px-1.5 py-0.5 border font-mono ${
+      className={`text-xs px-1.5 py-0.5 border font-mono ${
         late
-          ? "text-neon-pink border-neon-pink/40 bg-neon-pink/10 font-bold"
-          : "text-matrix-green/50 border-matrix-green/20 bg-matrix-green/5"
+          ? "text-signal-magenta border-signal-magenta/40 bg-signal-magenta/10 font-bold"
+          : "text-ink-lo border-white/[0.07] bg-white/[0.03]"
       }`}
       title={`Disclosed ${daysToDisclose} day${daysToDisclose !== 1 ? "s" : ""} after the transaction — the STOCK Act requires disclosure within 45 days.`}
     >
@@ -74,19 +74,19 @@ function TradeRow({ trade }: { trade: StockTrade }) {
     <div className="terminal-window p-3">
       <div className="flex items-center gap-2 flex-wrap mb-1">
         <TransactionBadge type={trade.transactionType} />
-        <span className="text-matrix-green/80 text-sm">
+        <span className="text-ink text-sm">
           {trade.ticker ? `${trade.ticker} — ${trade.assetName}` : trade.assetName}
         </span>
         {trade.parseConfidence === "ocr" && (
           <span
-            className="text-[10px] px-1 py-0.5 border text-yellow-500/70 border-yellow-500/30"
+            className="text-xs px-1 py-0.5 border text-signal-amber border-yellow-500/30"
             title="Extracted via OCR from a scanned filing — verify against the source before relying on exact figures."
           >
             LOW CONFIDENCE
           </span>
         )}
       </div>
-      <div className="flex items-center gap-2 flex-wrap text-[10px] text-matrix-green/40">
+      <div className="flex items-center gap-2 flex-wrap text-xs text-ink-min">
         <span>{OWNER_LABEL[trade.owner]}</span>
         <span
           title={
@@ -104,7 +104,7 @@ function TradeRow({ trade }: { trade: StockTrade }) {
           href={trade.sourceUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-neon-cyan/40 hover:text-neon-cyan transition-colors"
+          className="text-ink-lo hover:text-phos transition-colors"
         >
           SOURCE ↗
         </a>
@@ -129,18 +129,18 @@ function Pagination({
         onClick={() => onPageChange(page - 1)}
         disabled={page === 1}
         aria-label="Previous page"
-        className="text-xs px-2 py-1 font-terminal text-matrix-green/60 hover:text-matrix-green disabled:text-matrix-green/20 disabled:cursor-not-allowed"
+        className="text-xs px-2 py-1 font-mono text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed"
       >
         &lt; PREV
       </button>
-      <span className="text-xs text-matrix-green/40">
+      <span className="text-xs text-ink-min">
         page {page}/{totalPages}
       </span>
       <button
         onClick={() => onPageChange(page + 1)}
         disabled={page === totalPages}
         aria-label="Next page"
-        className="text-xs px-2 py-1 font-terminal text-matrix-green/60 hover:text-matrix-green disabled:text-matrix-green/20 disabled:cursor-not-allowed"
+        className="text-xs px-2 py-1 font-mono text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed"
       >
         NEXT &gt;
       </button>
@@ -172,18 +172,21 @@ export default function StockTrades({ politicianId, filer = "senate" }: StockTra
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchPage = useCallback(async (p: number) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await FETCHER[filer](politicianId, { page: p, perPage: TRADES_PER_PAGE });
-      setData(result);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load stock trades");
-    } finally {
-      setLoading(false);
-    }
-  }, [politicianId, filer]);
+  const fetchPage = useCallback(
+    async (p: number) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await FETCHER[filer](politicianId, { page: p, perPage: TRADES_PER_PAGE });
+        setData(result);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to load stock trades");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [politicianId, filer]
+  );
 
   useEffect(() => {
     fetchPage(1);
@@ -197,7 +200,7 @@ export default function StockTrades({ politicianId, filer = "senate" }: StockTra
   if (loading && !data) {
     return (
       <div className="terminal-window p-4 text-center" role="status" aria-live="polite">
-        <span className="text-matrix-green/50 text-sm animate-pulse">Loading stock trades...</span>
+        <span className="text-ink-lo text-sm animate-pulse">Loading stock trades...</span>
       </div>
     );
   }
@@ -205,7 +208,7 @@ export default function StockTrades({ politicianId, filer = "senate" }: StockTra
   if (error) {
     return (
       <div className="terminal-window p-4 text-center" role="alert">
-        <span className="text-red-400 text-sm">{error}</span>
+        <span className="text-signal-red text-sm">{error}</span>
       </div>
     );
   }
@@ -215,12 +218,12 @@ export default function StockTrades({ politicianId, filer = "senate" }: StockTra
   return (
     <CollapsibleSection
       title={filer === "president" ? "STOCK & CRYPTO TRADES" : "STOCK TRADES"}
-      titleColor="text-neon-yellow neon-yellow"
+      titleColor="text-signal-amber"
       summary={`${data.total} trade${data.total !== 1 ? "s" : ""}${data.lateCount > 0 ? ` · ${data.lateCount} late` : ""}`}
       source={SOURCE_LABEL[filer]}
     >
       <div className="space-y-3 mt-4">
-        <p className="text-[10px] text-matrix-green/40">
+        <p className="text-xs text-ink-min">
           <MetricTooltip text={filer === "president" ? ABOUT_DATA.president : ABOUT_DATA.congress}>
             ABOUT THIS DATA
           </MetricTooltip>

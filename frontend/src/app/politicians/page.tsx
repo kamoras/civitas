@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
-import MatrixRain from "@/components/effects/MatrixRain";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import { fetchPoliticianDirectory } from "@/lib/api";
@@ -17,28 +16,72 @@ type BranchFilter = "all" | "senate" | "house" | "president" | "scotus";
 type PartyFilter = "ALL" | "D" | "R" | "I";
 
 const US_STATES = [
-  "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA",
-  "KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ",
-  "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT",
-  "VA","WA","WV","WI","WY","DC",
+  "AL",
+  "AK",
+  "AZ",
+  "AR",
+  "CA",
+  "CO",
+  "CT",
+  "DE",
+  "FL",
+  "GA",
+  "HI",
+  "ID",
+  "IL",
+  "IN",
+  "IA",
+  "KS",
+  "KY",
+  "LA",
+  "ME",
+  "MD",
+  "MA",
+  "MI",
+  "MN",
+  "MS",
+  "MO",
+  "MT",
+  "NE",
+  "NV",
+  "NH",
+  "NJ",
+  "NM",
+  "NY",
+  "NC",
+  "ND",
+  "OH",
+  "OK",
+  "OR",
+  "PA",
+  "RI",
+  "SC",
+  "SD",
+  "TN",
+  "TX",
+  "UT",
+  "VT",
+  "VA",
+  "WA",
+  "WV",
+  "WI",
+  "WY",
+  "DC",
 ];
 
 function partyDot(party: string) {
-  const cls =
-    party === "D" ? "bg-dem-blue" : party === "R" ? "bg-rep-red" : "bg-ind-purple";
-  return <span className={`inline-block w-2 h-2 rounded-full ${cls} mr-1.5`} />;
+  const cls = party === "D" ? "bg-dem-blue" : party === "R" ? "bg-signal-red" : "bg-ind-purple";
+  return <span className={`inline-block w-2 h-2  ${cls} mr-1.5`} />;
 }
 
 function ScoreBar({ score }: { score: number }) {
   const color = getScoreBgColor(score);
   return (
     <div className="flex items-center gap-2 min-w-0">
-      <div className="flex-1 h-1 bg-matrix-green/10 rounded-full overflow-hidden">
-        <div className={`h-full ${color} rounded-full`} style={{ width: `${score}%` }} />
+      <div className="flex-1 h-1 bg-white/[0.03] overflow-hidden">
+        <div className={`h-full ${color}`} style={{ width: `${score}%` }} />
       </div>
-      <span className="font-mono text-[10px] text-matrix-green/70 w-8 text-right shrink-0">
-        {score.toFixed(0)}
-      </span>
+      <span className="font-mono text-xs text-ink w-8 text-right shrink-0">{score.toFixed(0)}</span>
     </div>
   );
 }
@@ -48,21 +91,31 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
     p.role,
     p.stateName ?? null,
     p.district != null ? `District ${p.district}` : null,
-  ].filter(Boolean).join(" · ");
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <Link
       href={`/politicians/${p.id}`}
-      className="block border border-matrix-green/15 hover:border-matrix-green/40 bg-crt-black/60 hover:bg-crt-black/80 rounded p-4 transition-all group"
+      className="block border border-white/[0.07] hover:border-white/15 bg-surface-base hover:bg-surface-base p-4 transition-all group"
     >
       <div className="flex items-start gap-3">
         {p.thumbnailUrl ? (
           // eslint-disable-next-line @next/next/no-img-element -- external, varied politician-photo hosts; not worth per-host next/image remotePatterns
-          <img src={p.thumbnailUrl} alt={p.name} className="w-10 h-10 rounded object-cover shrink-0 opacity-80 group-hover:opacity-100 transition-opacity" />
+          <img
+            src={p.thumbnailUrl}
+            alt={p.name}
+            className="w-10 h-10 object-cover shrink-0 opacity-80 group-hover:opacity-100 transition-opacity"
+          />
         ) : (
-          <div className="w-10 h-10 rounded border border-matrix-green/20 flex items-center justify-center shrink-0">
-            <span className="font-mono text-xs text-matrix-green/40">
-              {p.name.split(" ").map(w => w[0]).slice(0, 2).join("")}
+          <div className="w-10 h-10 border border-white/[0.07] flex items-center justify-center shrink-0">
+            <span className="font-mono text-xs text-ink-min">
+              {p.name
+                .split(" ")
+                .map((w) => w[0])
+                .slice(0, 2)
+                .join("")}
             </span>
           </div>
         )}
@@ -70,26 +123,26 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
             {partyDot(p.party)}
-            <span className="font-mono text-sm text-matrix-green group-hover:text-neon-cyan transition-colors truncate">
+            <span className="font-mono text-sm text-ink-hi group-hover:text-phos transition-colors truncate">
               {p.name}
             </span>
           </div>
-          <p className="font-mono text-[10px] text-matrix-green/40 mb-2 truncate">{subtitle}</p>
+          <p className="font-mono text-xs text-ink-min mb-2 truncate">{subtitle}</p>
 
           {p.leadershipTitle && (
-            <span className="inline-block font-mono text-[9px] text-amber-400/80 tracking-widest border border-amber-400/30 px-1.5 py-0.5 mb-2">
+            <span className="inline-block font-mono text-xs text-signal-amber tracking-widest border border-signal-amber/40 px-1.5 py-0.5 mb-2">
               {p.leadershipTitle.toUpperCase()}
             </span>
           )}
 
           {p.isCurrent === false ? (
-            <span className="font-mono text-[9px] text-neon-pink/70 tracking-widest border border-neon-pink/30 px-1.5 py-0.5">
+            <span className="font-mono text-xs text-ink-lo tracking-widest border border-signal-magenta/40 px-1.5 py-0.5">
               {formerOfficeBadge(p)}
             </span>
           ) : p.hasScorecard && p.overallScore != null ? (
             <ScoreBar score={p.overallScore} />
           ) : (
-            <span className="font-mono text-[9px] text-matrix-green/25 tracking-widest">
+            <span className="font-mono text-xs text-ink-min tracking-widest">
               SCORECARD PENDING
             </span>
           )}
@@ -97,10 +150,8 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
 
         {p.activeIssueCount > 0 && (
           <div className="shrink-0 flex items-center gap-1 mt-0.5">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-neon-cyan animate-pulse" />
-            <span className="font-mono text-[9px] text-neon-cyan">
-              {p.activeIssueCount} ACTIVE
-            </span>
+            <span className="inline-block w-1.5 h-1.5 bg-signal-cyan animate-pulse" />
+            <span className="font-mono text-xs text-signal-cyan">{p.activeIssueCount} ACTIVE</span>
           </div>
         )}
       </div>
@@ -144,15 +195,17 @@ function PoliticiansPageContent() {
     }
   }, []);
 
-  useEffect(() => { load(branch); }, [branch, load]);
+  useEffect(() => {
+    load(branch);
+  }, [branch, load]);
 
   const filtered = useMemo(() => {
     let list = all;
-    if (party !== "ALL") list = list.filter(p => p.party === party);
-    if (state) list = list.filter(p => p.state === state);
+    if (party !== "ALL") list = list.filter((p) => p.party === party);
+    if (state) list = list.filter((p) => p.state === state);
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      list = list.filter(p => p.name.toLowerCase().includes(q));
+      list = list.filter((p) => p.name.toLowerCase().includes(q));
     }
     return list;
   }, [all, party, state, search]);
@@ -174,44 +227,45 @@ function PoliticiansPageContent() {
     { key: "I", label: "IND" },
   ];
 
-  const activeCount = filtered.filter(p => p.activeIssueCount > 0).length;
+  const activeCount = filtered.filter((p) => p.activeIssueCount > 0).length;
 
   return (
-    <div className="min-h-screen bg-crt-black text-matrix-green">
-      <MatrixRain />
+    <div className="min-h-screen bg-surface-base text-ink-hi">
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
         <div className="max-w-7xl mx-auto">
-
-          <div className="text-center mb-8">
-            <h1 className="font-pixel text-xl sm:text-3xl text-matrix-green neon-green mb-2">
+          <div className="mb-8 border-b-3 border-phos pb-5">
+            <h1 className="font-display font-semibold text-xl sm:text-3xl text-ink-hi mb-2">
               POLITICIANS
             </h1>
-            <p className="font-mono text-xs text-matrix-green/40">
+            <p className="font-mono text-xs text-ink-min">
               CURRENTLY SERVING OFFICIALS · PUBLIC RECORD
             </p>
           </div>
 
-          <TerminalTitlebar title="directory.dat" />
-          <div className="border border-t-0 border-matrix-green/20 bg-crt-black/40 p-4 mb-6">
-
+          <TerminalTitlebar title="Directory" />
+          <div className="border border-t-0 border-white/[0.07] bg-surface-base p-4 mb-6">
             {/* Branch tabs */}
             <div className="flex flex-wrap gap-2 mb-4">
               {branchTabs.map(({ key, label }) => (
                 <button
                   key={key}
-                  onClick={() => { setBranch(key); setState(""); setParty("ALL"); }}
-                  className={`font-mono text-[10px] tracking-widest px-3 py-1 border transition-colors ${
+                  onClick={() => {
+                    setBranch(key);
+                    setState("");
+                    setParty("ALL");
+                  }}
+                  className={`font-mono text-xs tracking-widest px-3 py-1 border transition-colors ${
                     branch === key
-                      ? "border-neon-cyan text-neon-cyan bg-neon-cyan/10"
-                      : "border-matrix-green/20 text-matrix-green/40 hover:text-matrix-green hover:border-matrix-green/40"
+                      ? "border-signal-cyan/40 text-signal-cyan bg-signal-cyan/10"
+                      : "border-white/[0.07] text-ink-min hover:text-phos hover:border-white/15"
                   }`}
                 >
                   {label}
                 </button>
               ))}
               {activeCount > 0 && (
-                <span className="font-mono text-[9px] text-neon-cyan/60 self-center ml-2">
+                <span className="font-mono text-xs text-ink-lo self-center ml-2">
                   {activeCount} IN ACTIVE ISSUES
                 </span>
               )}
@@ -225,8 +279,8 @@ function PoliticiansPageContent() {
                 type="text"
                 placeholder="SEARCH NAME..."
                 value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="font-mono text-xs bg-crt-black border border-matrix-green/20 focus:border-matrix-green/60 text-matrix-green placeholder-matrix-green/25 px-3 py-1.5 outline-none w-48"
+                onChange={(e) => setSearch(e.target.value)}
+                className="font-mono text-xs bg-surface-base border border-white/[0.07] focus:border-phos/40 text-ink-hi placeholder-white/15 px-3 py-1.5 outline-none w-48"
               />
 
               {/* Party filter */}
@@ -235,10 +289,10 @@ function PoliticiansPageContent() {
                   <button
                     key={key}
                     onClick={() => setParty(key)}
-                    className={`font-mono text-[10px] px-2 py-1 border transition-colors ${
+                    className={`font-mono text-xs px-2 py-1 border transition-colors ${
                       party === key
-                        ? "border-matrix-green/60 text-matrix-green bg-matrix-green/10"
-                        : "border-matrix-green/15 text-matrix-green/35 hover:text-matrix-green/60"
+                        ? "border-phos/40 text-ink-hi bg-white/[0.03]"
+                        : "border-white/[0.07] text-ink-min hover:text-phos"
                     }`}
                   >
                     {label}
@@ -250,21 +304,27 @@ function PoliticiansPageContent() {
               {showStateFilter && (
                 <select
                   value={state}
-                  onChange={e => setState(e.target.value)}
+                  onChange={(e) => setState(e.target.value)}
                   aria-label="Filter by state"
-                  className="font-mono text-[10px] bg-crt-black border border-matrix-green/20 text-matrix-green/60 px-2 py-1 outline-none"
+                  className="font-mono text-xs bg-surface-base border border-white/[0.07] text-ink-lo px-2 py-1 outline-none"
                 >
                   <option value="">ALL STATES</option>
-                  {US_STATES.map(s => (
-                    <option key={s} value={s}>{s}</option>
+                  {US_STATES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
                   ))}
                 </select>
               )}
 
               {(search || party !== "ALL" || state) && (
                 <button
-                  onClick={() => { setSearch(""); setParty("ALL"); setState(""); }}
-                  className="font-mono text-[9px] text-matrix-green/30 hover:text-matrix-green/60 transition-colors tracking-widest"
+                  onClick={() => {
+                    setSearch("");
+                    setParty("ALL");
+                    setState("");
+                  }}
+                  className="font-mono text-xs text-ink-min hover:text-phos transition-colors tracking-widest"
                 >
                   CLEAR
                 </button>
@@ -274,28 +334,27 @@ function PoliticiansPageContent() {
 
           {/* Results */}
           {loading ? (
-            <div className="text-center py-16 font-mono text-xs text-matrix-green/30 tracking-widest animate-pulse">
+            <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest animate-pulse">
               LOADING...
             </div>
           ) : error ? (
-            <div className="text-center py-16 font-mono text-xs text-red-400/60">{error}</div>
+            <div className="text-center py-16 font-mono text-xs text-signal-red">{error}</div>
           ) : filtered.length === 0 ? (
-            <div className="text-center py-16 font-mono text-xs text-matrix-green/30 tracking-widest">
+            <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest">
               NO RESULTS
             </div>
           ) : (
             <>
-              <p className="font-mono text-[10px] text-matrix-green/30 mb-3 tracking-widest">
+              <p className="font-mono text-xs text-ink-min mb-3 tracking-widest">
                 {filtered.length} POLITICIAN{filtered.length !== 1 ? "S" : ""}
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {filtered.map(p => (
+                {filtered.map((p) => (
                   <PoliticianCardUI key={p.id} p={p} />
                 ))}
               </div>
             </>
           )}
-
         </div>
       </main>
       <BackToTop />

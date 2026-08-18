@@ -192,48 +192,21 @@ li {
   }
 }
 
-/* ===== TERMINAL WINDOW ===== */
+/* ===== PANEL =====
+   Was `.terminal-window`: a 0.97-alpha near-black fill, a green hairline, and
+   two stacked box-shadows imitating a floating window. Redefined here rather
+   than replaced at ~115 call sites, so every panel on the site moves at once.
+
+   Depth is carried by a single hairline and the surface step, not by shadow —
+   a drop shadow on a flat dark ground reads as a widget, and the register is
+   built out of ruled paper. Corners stay square, as they already were. */
 .terminal-window {
-  background: rgba(13, 2, 8, 0.97);
-  border: 1px solid rgba(0, 255, 65, 0.12);
+  background: #140a0f;
+  border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 0;
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.8),
-    0 4px 24px rgba(0, 0, 0, 0.6);
   overflow: hidden;
   word-wrap: break-word;
   overflow-wrap: break-word;
-}
-
-.terminal-titlebar {
-  background: rgba(255, 255, 255, 0.03);
-  border-bottom: 1px solid rgba(0, 255, 65, 0.08);
-  padding: 5px 12px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-/* Terminal titlebars + dots are purely decorative, not semantic content */
-.terminal-titlebar[aria-hidden] .terminal-dot {
-  pointer-events: none;
-}
-
-.terminal-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  opacity: 0.7;
-}
-
-.terminal-dot.red {
-  background: #ff5f56;
-}
-.terminal-dot.yellow {
-  background: #ffbd2e;
-}
-.terminal-dot.green {
-  background: #27c93f;
 }
 
 /* ===== BUTTONS ===== */
@@ -294,8 +267,7 @@ li {
 }
 
 .neon-yellow {
-  text-shadow:
-    0 0 8px rgba(255, 255, 0, 0.5);
+  text-shadow: 0 0 8px rgba(255, 255, 0, 0.5);
 }
 
 /* ===== ASCII DIVIDER ===== */
@@ -326,276 +298,23 @@ li {
   }
 }
 
-/* ===== A11Y: MINIMUM TEXT CONTRAST (always on) =====
-   NOTE: this whole block is what the `ink`/`phos` tokens in
-   tailwind.config.ts exist to delete. It stays for now because it protects
-   ~500 call sites that still write `matrix-green/40` and friends, and
-   removing it before those migrate would regress contrast site-wide rather
-   than fix it. The new tokens are solid hex and carry no `/NN` step, so
-   none of the attribute selectors below can match them — the two systems
-   do not interact. Each page that migrates shrinks this block; it comes
-   out entirely when the last legacy step is gone.
-   WCAG AA requires 4.5:1 for normal text on the #0d0208 background.
-   Measured (alpha-composited over #0d0208, then WCAG relative-luminance
-   contrast against #0d0208 — 2026-07 audit, not the "40% passes" claim
-   this block previously made, which was never actually checked and was
-   wrong by a wide margin: matrix-green/40 measures 2.89:1):
-     matrix-green needs >=54% opacity (54% -> 4.57:1)
-     white        needs >=46% opacity (46% -> 4.62:1)
-     neon-cyan    needs >=52% opacity (52% -> 4.62:1)
-     neon-yellow  needs >=48% opacity (48% -> 4.66:1)
-     neon-pink    needs >=82% opacity (82% -> 4.59:1) — by far the least
-       forgiving color at low alpha; below that it fails even in the
-       60-70% range other colors are safe at.
-   Editing every below-floor className at ~500 call sites risks missing
-   some and risks silently flattening the terminal-dim aesthetic in a
-   giant diff. Instead, clamp exactly the opacity steps actually used in
-   the codebase that fall under each color's floor, rounded up to the
-   nearest value already in use elsewhere (so no new visual weight is
-   introduced) — everything at or above the floor is untouched.
+/* ===== PARAGRAPH SPACING =====
+   The one survivor of the old remediation block, kept because it is a
+   typographic default rather than a patch: consecutive prose paragraphs
+   should never run together, and several pages relied on `mb-*` being
+   remembered.
 
-   IMPORTANT — this previously used `opacity: N !important` instead of
-   `color`. Tailwind v4 bakes the /NN opacity modifier directly into the
-   `color` value itself (e.g. `color: lab(... / 0.4)`), so an element-level
-   `opacity` on top doesn't replace that alpha, it MULTIPLIES with it:
-   matrix-green/40 (0.4 alpha) with `opacity: 0.6` rendered at an effective
-   0.4 * 0.6 = 0.24 alpha — well below even the original unfixed 0.4, i.e.
-   the "fix" made contrast measurably worse than doing nothing (live-audit
-   confirmed via axe-core: 1.68:1, not the intended ~5.5:1). Overriding
-   `color` directly replaces Tailwind's alpha instead of compounding with
-   it. `:not(:hover)` keeps each color's hover-variant class (a different,
-   unaffected className) working as a distinct brightening cue. */
-[class*="text-matrix-green/20"]:not(:hover),
-[class*="text-matrix-green/25"]:not(:hover),
-[class*="text-matrix-green/30"]:not(:hover),
-[class*="text-matrix-green/35"]:not(:hover),
-[class*="text-matrix-green/40"]:not(:hover),
-[class*="text-matrix-green/50"]:not(:hover) {
-  color: rgb(0 255 65 / 0.6) !important; /* matrix-green/60 -> 5.49:1 */
-}
-[class*="text-white/20"]:not(:hover),
-[class*="text-white/30"]:not(:hover),
-[class*="text-white/40"]:not(:hover) {
-  color: rgb(255 255 255 / 0.5) !important; /* white/50 -> ~6:1 */
-}
-[class*="text-neon-cyan/40"]:not(:hover),
-[class*="text-neon-cyan/50"]:not(:hover) {
-  color: rgb(0 255 255 / 0.6) !important; /* neon-cyan/60 -> ~5.4:1 */
-}
-[class*="text-neon-yellow/40"]:not(:hover) {
-  color: rgb(255 255 0 / 0.5) !important; /* neon-yellow/50 -> ~4.9:1 */
-}
-[class*="text-neon-pink/40"]:not(:hover),
-[class*="text-neon-pink/50"]:not(:hover),
-[class*="text-neon-pink/60"]:not(:hover),
-[class*="text-neon-pink/70"]:not(:hover),
-[class*="text-neon-pink/80"]:not(:hover) {
-  color: rgb(255 0 255 / 0.9) !important; /* neon-pink/90 -> ~4.9:1 — needs to be nearly opaque */
-}
-/* red-400 (#f87171) is the error/empty-state color (fetch failures on
-   /politicians, /bills, president "KEY FAILURES"). Full opacity clears
-   ~7.5:1, but the /50 and /60 steps in use composite toward #0d0208 and
-   fall under 4.5:1 (Lighthouse a11y flagged the rendered error state).
-   Clamp those steps to full opacity — same approach as the colors above. */
-[class*="text-red-400/50"]:not(:hover),
-[class*="text-red-400/60"]:not(:hover) {
-  color: rgb(248 113 113 / 1) !important; /* red-400 -> ~7.5:1 */
-}
+   `margin-top` on the second paragraph, not `margin-bottom` on the first,
+   because adjacent-sibling margins COLLAPSE in normal flow — the gap becomes
+   max(prev bottom, this top), never the sum. So a pair already spaced stays
+   as it is and only a zero gap moves.
 
-/* dem-blue (#0066ff, 4.22:1) and ind-purple (#9933ff, 4.15:1) both fail
-   4.5:1 even at full opacity — not an opacity problem, the base color
-   itself is too dark against #0d0208. Always substitute a lighter shade
-   rather than gating the fix behind prefers-contrast (dem-blue's lighter
-   variant was already used there, at 7.35:1; ind-purple gets the same
-   treatment here, at 5.37:1 against #0d0208). rep-red passes fine at
-   full opacity (5.61:1) and needs no equivalent swap.
-   ind-purple's swap needed a second pass (a852ff -> ac56ff): party
-   badges render it on a tinted bg-ind-purple/20 chip background
-   (~#290c3a, lighter than the page's #0d0208), which — being a lighter
-   background — reduces contrast against this light foreground color to
-   4.40:1. #ac56ff clears 4.5:1 against both the plain page background
-   and that chip background. */
-[class*="text-dem-blue"] {
-  color: #6699ff !important;
-}
-[class*="text-ind-purple"] {
-  color: #ac56ff !important;
-}
-
-@media (prefers-contrast: more) {
-  [class*="text-matrix-green/"],
-  [class*="text-white/"] {
-    opacity: 1 !important;
-    color: #00ff41 !important;
-  }
-
-  /* Same compounding pitfall as above: `opacity: 1` alone doesn't strip
-     the alpha already baked into Tailwind's `color` value, so these
-     stayed at their original low alpha under forced-contrast mode. Force
-     each family's solid hue directly. */
-  [class*="text-neon-cyan/"] {
-    opacity: 1 !important;
-    color: #00ffff !important;
-  }
-  [class*="text-neon-pink/"] {
-    opacity: 1 !important;
-    color: #ff00ff !important;
-  }
-  [class*="text-neon-yellow/"] {
-    opacity: 1 !important;
-    color: #ffff00 !important;
-  }
-
-  /* Lighter partisan colors for better contrast on dark backgrounds */
-  [class*="text-rep-red"] {
-    color: #ff6666 !important;
-  }
-
-  .terminal-window {
-    border-color: #00ff41 !important;
-    border-width: 2px !important;
-  }
-
-  /* Stronger focus ring in high-contrast mode */
-  *:focus-visible {
-    outline-width: 3px !important;
-    outline-offset: 3px !important;
-  }
-}
-
-/* ===== A11Y: MINIMUM FONT SIZE (always on) =====
-   8-11px pixel-font badges/labels (bill-type tags, committee names, dates)
-   are common across the site (~470 Tailwind arbitrary-value call sites —
-   too many to hand-edit, same reasoning as the contrast floor above).
-   Floored to 12px globally rather than per component; Tailwind v4 keeps
-   arbitrary-value class names literal in the DOM (`text-[9px]`, not
-   hashed), so this attribute selector reliably matches every call site.
-   `text-[11px]` is in scope here too: it was exactly at the old 11px floor,
-   so raising the floor without extending this list would leave ~20 real
-   call sites (HeroSection, Marquee, BillStageFlow's leg-date column,
-   MetricTooltip, admin, …) sitting 1px under the new one. Checked each for
-   truncation risk — all either wrap, already declare `truncate` with a
-   `title` fallback, or sit in a comfortably wide fixed column — so bumping
-   them the same 1px the 8-10px group gets is safe by the same reasoning
-   BillRow/BillStageFlow already establish for badge fit.
-   Verified live against production (Playwright, Action Center's dense
-   badge grid and a senator scorecard's sponsored-bill tag list) — 12px
-   doesn't overflow or wrap any of the bordered/padded badges it touches. */
-[class*="text-[8px]"],
-[class*="text-[9px]"],
-[class*="text-[10px]"],
-[class*="text-[11px]"] {
-  font-size: 12px !important;
-}
-
-/* ===== LEGIBILITY: PROSE PARAGRAPH SIZE =====
-   Reader feedback, twice: the site is hard to read. The floor rule above
-   fixes badges and labels; it does nothing for running prose, which is the
-   part people actually sit and read. Measured live on /about — 98 of the
-   101 real paragraphs render at 14px, against a 16px browser/web default.
-   Monospace compounds it: Share Tech Mono's 0.500em x-height reads smaller
-   than a proportional face at the same nominal size, so nominal 14px here
-   is doing the work of roughly 13px elsewhere.
-
-   Scoped to `p` on purpose. Prose is what needs the bump; the same tokens
-   on a span or div are badges, table cells, and stat readouts, where a
-   size change is a layout change. Line-height comes along for free —
-   `leading-relaxed`/`leading-snug` are unitless, so they scale with the
-   new size instead of tightening against it (measured: 1.60 ratio holds).
-
-   Same start-or-space anchoring the pixel-font block below explains, so a
-   variant-prefixed `sm:text-sm` on some other element's base size never
-   matches. The breakpoint hazard documented there does not apply: the only
-   two `<p>` carrying both tokens (`action/page.tsx`, `BillDetailClient`)
-   pair `text-sm` with `sm:text-base`, which is 16px — the same value this
-   rule sets, so desktop is unchanged and only mobile moves 14px -> 16px,
-   which is the improvement being asked for. */
-p[class^="text-sm"],
-p[class*=" text-sm"] {
-  font-size: 16px !important;
-}
-
-/* ===== LEGIBILITY: PARAGRAPH SPACING =====
-   Second half of the same feedback: the text reads as dense. Measured on
-   /about, paragraph spacing is not merely tight, it is inconsistent — of
-   the consecutive prose pairs there, 28 sit 16px apart and 21 sit at
-   literally 0px, running one paragraph straight into the next with only
-   line-height between them. Identical-looking prose (same classes, same
-   container) spaced two different ways is a missing `mb-*`, not a design.
-
-   `margin-top` on the second paragraph rather than `margin-bottom` on the
-   first, because adjacent-sibling margins COLLAPSE in normal flow: the gap
-   becomes max(prev's bottom, this top), never the sum. So the pairs already
-   at 16px stay exactly 16px and only the 0px pairs move — a floor, not an
-   increase. Verified every affected parent is `display: block` (collapsing
-   does not happen in flex/grid, where this would instead be additive).
-
-   1em, so it tracks the font size set above rather than pinning a px value
-   that drifts if the size changes again. Measured across /about, /action,
-   /bills, /leaderboard, /elections and a politician page: 21 zero-gap pairs
-   on /about go to 0, every other page is untouched, no overflow anywhere. */
+   The hazard, which has bitten once already (see Footer.tsx): margins do NOT
+   collapse in flex or grid, where this rule is additive instead. Put each
+   paragraph in its own grid cell rather than making two <p> adjacent
+   siblings inside a grid. */
 p + p {
   margin-top: 1em;
-}
-
-/* ===== LEGIBILITY: PIXEL FONT OFF ITS DESIGN GRID =====
-   Press Start 2P (`font-pixel`) is a bitmap face. Across the latin set every
-   outline coordinate is a multiple of 125/1000 em — an 8-cell-per-em grid,
-   verified with fontTools against the shipped woff2. (Scoped to latin
-   deliberately: `gravecomb`/`acutecomb` are off-grid, so a naive GCD over the
-   whole font returns 5, not 125.) One design cell lands on a whole device
-   pixel only when `font-size x devicePixelRatio` is a multiple of 8:
-
-     dpr 1.00 (typical 1080p)      crisp at 8, 16, 24px
-     dpr 1.25 (Windows at 125%)    crisp at no size between 8 and 24px
-     dpr 1.50 (Windows at 150%)    crisp at 16px only
-     dpr 2.00 (HiDPI / Retina)     crisp at 8, 12, 16, 20, 24px
-
-   Its stems are one cell wide, so off-grid there is nothing to anti-alias
-   against and the rasteriser softens them. Measured in Chromium by counting
-   distinct grey levels in the rasterised output: 3 on-grid, 20-32 off-grid.
-   Outline faces sit at 29-31 at every size, so a high count is not itself a
-   defect — it is a defect for a face whose whole design intent is hard edges.
-
-   This is not a fractional-scaling edge case. Of the 144 `font-pixel` call
-   sites carrying an explicit size, only `text-base`, `text-2xl` and `text-5xl`
-   are multiples of 8 — about 14% on-grid at dpr 1.0, i.e. at 100% zoom on an
-   ordinary 1x display.
-
-   Fix: keep Press Start 2P for display type, where it is on-grid more often
-   and its blocky cap height carries the aesthetic, and hand small labels to
-   Share Tech Mono, an outline face with no grid constraint.
-
-   Two constraints on the selectors, both learned the hard way:
-
-   1. Size tokens are anchored to the start of the class attribute or to a
-      space, so a variant-prefixed class does not match. Plain
-      `[class*="text-xs"]` also matches `sm:text-xs` and `focus:text-xs`,
-      which sit on elements whose base size is something else.
-   2. `text-sm` is deliberately NOT in this list. A CSS attribute selector
-      cannot be breakpoint-aware, so a rule keyed on `text-sm` also fires for
-      `text-sm sm:text-lg` at the 18px breakpoint — measured on the senator
-      scorecard number row, that stripped the pixel font at desktop size and
-      shrank "100%" by 43%. 14px is off-grid too, but not by enough to justify
-      changing display-size rendering to reach it.
-
-   `font-pixel` itself needs no anchor: it never appears variant-prefixed. */
-[class*="font-pixel"][class^="text-[8px]"],
-[class*="font-pixel"][class*=" text-[8px]"],
-[class*="font-pixel"][class^="text-[9px]"],
-[class*="font-pixel"][class*=" text-[9px]"],
-[class*="font-pixel"][class^="text-[10px]"],
-[class*="font-pixel"][class*=" text-[10px]"],
-[class*="font-pixel"][class^="text-[11px]"],
-[class*="font-pixel"][class*=" text-[11px]"],
-[class*="font-pixel"][class^="text-xs"],
-[class*="font-pixel"][class*=" text-xs"] {
-  font-family: var(--font-share-tech), ui-monospace, monospace !important;
-  /* Share Tech Mono's 0.500em x-height reads lighter than Press Start 2P's
-     0.625em at the same nominal size; a touch of tracking keeps the blocky,
-     spaced-out label texture without needing the bitmap face to supply it.
-     Not !important, so an explicit `tracking-*` utility still wins. */
-  letter-spacing: 0.06em;
 }
 
 /* Tailwind's built-in animate-pulse dips to 50% opacity at its keyframe
@@ -608,7 +327,9 @@ p + p {
    of animate-pulse on persistent (non-loading-spinner) text so the dim
    phase never drops below the color's own safe floor. */
 @keyframes pulse-subtle {
-  50% { opacity: 0.92; }
+  50% {
+    opacity: 0.92;
+  }
 }
 .pulse-subtle {
   animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
@@ -654,7 +375,6 @@ a[target="_blank"] {
     text-wrap: balance;
   }
 }
-
 
 /* ===== PUBLIC-RECORDS REGISTER =====
    Two devices that Tailwind cannot express cleanly. Everything else in the

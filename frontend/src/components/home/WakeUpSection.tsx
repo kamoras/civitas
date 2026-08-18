@@ -32,14 +32,16 @@ function StatCard({ value, label, prefix = "", source }: StatCardProps) {
         visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
       }`}
     >
-      <TerminalTitlebar title="public_record.dat" />
+      <TerminalTitlebar title="Public record" />
       <div className="p-4 sm:p-6 text-center">
-        <div className="text-3xl sm:text-5xl md:text-6xl font-terminal text-neon-cyan neon-cyan mb-3 tracking-wide">
+        <div className="text-3xl sm:text-5xl md:text-6xl font-mono text-signal-cyan mb-3 tracking-wide">
           {prefix}
           {value}
         </div>
-        <div className="text-xs font-mono text-matrix-green/55 px-2 leading-relaxed tracking-wide">{label}</div>
-        {source && <div className="text-[10px] font-mono text-matrix-green/25 mt-2">{source}</div>}
+        <div className="text-xs font-mono text-ink-lo px-2 leading-relaxed tracking-wide">
+          {label}
+        </div>
+        {source && <div className="text-xs font-mono text-ink-min mt-2">{source}</div>}
       </div>
     </div>
   );
@@ -49,14 +51,14 @@ export default function WakeUpSection() {
   return (
     <section
       id="the-numbers"
-      className="py-24 px-4 bg-gradient-to-b from-crt-black to-crt-black/80"
+      className="py-24 px-4 bg-gradient-to-b from-surface-base to-surface-base/80"
     >
       <div className="max-w-5xl mx-auto">
-        <div className="text-center mb-16">
-          <h2 className="font-mono text-xs tracking-[0.35em] uppercase text-neon-pink/70 mb-2">
+        <div className="mb-16 border-b-3 border-phos pb-5">
+          <h2 className="font-mono text-xs tracking-[0.35em] uppercase text-ink-lo mb-2">
             WHAT WE TRACK
           </h2>
-          <p className="text-matrix-green/35 text-xs font-mono tracking-wider mt-2">
+          <p className="text-ink-min text-xs font-mono tracking-wider mt-2">
             Senate. House of Representatives. Presidents. Supreme Court. Public data only.
           </p>
         </div>
@@ -84,7 +86,9 @@ export default function WakeUpSection() {
           />
         </div>
 
-        <div className="ascii-divider mt-16" aria-hidden="true" role="presentation">{"=".repeat(60)}</div>
+        <div className="ascii-divider mt-16" aria-hidden="true" role="presentation">
+          {"=".repeat(60)}
+        </div>
       </div>
     </section>
   );

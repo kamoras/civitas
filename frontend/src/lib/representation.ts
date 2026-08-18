@@ -7,11 +7,14 @@
 // after a backend scoring-dimension merge and silently mis-weighted scores
 // until /api/config loaded).
 
+// Same reasoning as getScoreLabel's bottom band: the measure is how
+// consistently a justice votes with an ideological bloc, which is a degree,
+// not a motive. "DEEPLY PARTISAN" named the motive.
 export function getJusticeLabel(score: number): string {
   if (score >= 75) return "HIGHLY CONSISTENT";
   if (score >= 55) return "MODERATELY CONSISTENT";
   if (score >= 35) return "IDEOLOGICALLY PREDICTABLE";
-  return "DEEPLY PARTISAN";
+  return "HIGHLY PREDICTABLE";
 }
 
 // Labels describe how well a member represents their constituents, not
@@ -54,11 +57,11 @@ export function getPresidentLabel(score: number): string {
 }
 
 export function getScoreColor(score: number): string {
-  if (score >= 81) return "text-matrix-green";
-  if (score >= 61) return "text-neon-cyan";
-  if (score >= 41) return "text-yellow-500";
-  if (score >= 21) return "text-orange-500";
-  return "text-red-500";
+  if (score >= 81) return "text-phos";
+  if (score >= 61) return "text-signal-cyan";
+  if (score >= 41) return "text-signal-amber";
+  if (score >= 21) return "text-signal-orange";
+  return "text-signal-red";
 }
 
 // bg-* counterpart of getScoreColor, for progress-bar fills — same
@@ -70,11 +73,11 @@ export function getScoreColor(score: number): string {
 // same score could render a different tier depending on which page you
 // were on.
 export function getScoreBgColor(score: number): string {
-  if (score >= 81) return "bg-matrix-green";
-  if (score >= 61) return "bg-neon-cyan";
-  if (score >= 41) return "bg-yellow-500";
-  if (score >= 21) return "bg-orange-500";
-  return "bg-red-500";
+  if (score >= 81) return "bg-phos";
+  if (score >= 61) return "bg-signal-cyan";
+  if (score >= 41) return "bg-signal-amber";
+  if (score >= 21) return "bg-signal-orange";
+  return "bg-signal-red";
 }
 
 // ASCII progress bar for a 0-100 score in the terminal aesthetic: 20 cells,

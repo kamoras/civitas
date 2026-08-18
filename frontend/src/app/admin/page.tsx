@@ -89,18 +89,14 @@ function formatTime(iso: string | null | undefined): string {
 function StatusDot({ ok }: { ok: boolean }) {
   return (
     <span
-      className={`inline-block w-2 h-2 rounded-full ${ok ? "bg-matrix-green" : "bg-neon-pink"}`}
+      className={`inline-block w-2 h-2  ${ok ? "bg-phos" : "bg-signal-magenta"}`}
       aria-label={ok ? "Healthy" : "Unhealthy"}
     />
   );
 }
 
 // --- Login Screen ---
-function LoginScreen({
-  onLogin,
-}: {
-  onLogin: (token: string) => void;
-}) {
+function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
   const [input, setInput] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -120,19 +116,16 @@ function LoginScreen({
   };
 
   return (
-    <div className="min-h-screen bg-crt-black flex items-center justify-center px-4">
+    <div className="min-h-screen bg-surface-base flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="terminal-window">
-          <TerminalTitlebar title="admin_auth.sh" />
+          <TerminalTitlebar title="Sign in" />
           <div className="p-6">
-            <h1 className="font-pixel text-sm text-matrix-green tracking-widest mb-6 text-center">
+            <h1 className="font-mono text-sm text-ink-hi tracking-widest mb-6 text-center">
               CIVITAS ADMIN
             </h1>
             <form onSubmit={handleSubmit}>
-              <label
-                htmlFor="admin-token"
-                className="block text-matrix-green/60 text-xs font-terminal mb-2"
-              >
+              <label htmlFor="admin-token" className="block text-ink-lo text-xs font-mono mb-2">
                 ADMIN TOKEN:
               </label>
               <input
@@ -141,22 +134,23 @@ function LoginScreen({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Enter admin token..."
-                className="w-full bg-transparent border border-matrix-green/30 rounded px-3 py-2
-                           text-matrix-green text-sm font-terminal placeholder:text-matrix-green/30
-                           outline-none focus:border-matrix-green/60"
+                className="w-full bg-transparent border border-white/15 px-3 py-2
+                           text-ink-hi text-sm font-mono placeholder:text-ink-min
+                           outline-none focus:border-phos/40"
                 autoFocus
                 aria-invalid={!!error}
                 aria-describedby={error ? "admin-token-error" : undefined}
               />
               {error && (
-                <p id="admin-token-error" className="text-neon-pink text-xs mt-2" role="alert">{error}</p>
+                <p id="admin-token-error" className="text-signal-magenta text-xs mt-2" role="alert">
+                  {error}
+                </p>
               )}
               <button
                 type="submit"
                 disabled={loading || !input.trim()}
-                className="mt-4 w-full text-xs font-pixel text-crt-black bg-matrix-green
-                           hover:bg-neon-cyan disabled:bg-matrix-green/30 disabled:text-matrix-green/50
-                           transition-colors py-2 rounded"
+                className="mt-4 w-full text-xs font-mono text-surface-base bg-phos hover:bg-signal-cyan disabled:bg-phos disabled:text-ink-lo
+                           transition-colors py-2 "
               >
                 {loading ? "AUTHENTICATING..." : "AUTHENTICATE"}
               </button>
@@ -183,7 +177,7 @@ function ElapsedTimer({ startedAt }: { startedAt: string | null | undefined }) {
       setElapsed(
         h > 0
           ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`
-          : `${m}:${String(sec).padStart(2, "0")}`,
+          : `${m}:${String(sec).padStart(2, "0")}`
       );
     };
     tick();
@@ -194,28 +188,18 @@ function ElapsedTimer({ startedAt }: { startedAt: string | null | undefined }) {
 }
 
 function PhaseSteps({ currentPhase }: { currentPhase: string | null | undefined }) {
-  const activeIdx = PHASE_ORDER.indexOf(
-    (currentPhase ?? "fetch") as (typeof PHASE_ORDER)[number],
-  );
+  const activeIdx = PHASE_ORDER.indexOf((currentPhase ?? "fetch") as (typeof PHASE_ORDER)[number]);
   return (
-    <div className="flex items-center gap-1 text-[10px] font-pixel tracking-wider">
+    <div className="flex items-center gap-1 text-xs font-mono tracking-wider">
       {PHASE_ORDER.map((p, i) => {
         const done = i < activeIdx;
         const active = i === activeIdx;
         return (
           <div key={p} className="flex items-center gap-1">
-            {i > 0 && (
-              <span
-                className={`w-4 h-px ${done ? "bg-matrix-green" : "bg-matrix-green/20"}`}
-              />
-            )}
+            {i > 0 && <span className={`w-4 h-px ${done ? "bg-phos" : "bg-phos"}`} />}
             <span
               className={
-                active
-                  ? "text-neon-cyan animate-pulse"
-                  : done
-                    ? "text-matrix-green"
-                    : "text-matrix-green/25"
+                active ? "text-signal-cyan animate-pulse" : done ? "text-ink-hi" : "text-ink-min"
               }
             >
               {done ? "✓ " : active ? "▶ " : ""}
@@ -244,7 +228,7 @@ function useAnalyzeEta(
   processed: number,
   total: number,
   elapsedSeconds: number | null | undefined,
-  unitLabel: string = "senator",
+  unitLabel: string = "senator"
 ) {
   const liveAnchorRef = useRef<{ time: number; count: number } | null>(null);
   const [eta, setEta] = useState<string | null>(null);
@@ -304,7 +288,7 @@ function StepProgressMini({ step }: { step: PipelineStepInfo }) {
   return (
     <div className="mt-1">
       <div
-        className="w-full h-1 bg-matrix-green/10 rounded-full overflow-hidden"
+        className="w-full h-1 bg-white/[0.03] overflow-hidden"
         role="progressbar"
         aria-valuenow={pct}
         aria-valuemin={0}
@@ -312,13 +296,13 @@ function StepProgressMini({ step }: { step: PipelineStepInfo }) {
         aria-label={`${step.label} progress`}
       >
         <div
-          className={`h-full rounded-full transition-all duration-500 ${
-            step.status === "active" ? "bg-neon-cyan/70" : "bg-matrix-green/50"
+          className={`h-full transition-all duration-500 ${
+            step.status === "active" ? "bg-signal-cyan" : "bg-phos"
           }`}
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-[9px] font-terminal text-matrix-green/40 tabular-nums">
+      <span className="text-xs font-mono text-ink-min tabular-nums">
         {done}/{step.total}
       </span>
     </div>
@@ -368,7 +352,13 @@ function PipelineProgressBar({
   const processed = etaConfig?.processed ?? 0;
   const elapsed = run?.elapsedSeconds ?? null;
   const isAnalyze = isRunning && phase === "analyze" && total > 0 && !!etaConfig;
-  const { eta, rate } = useAnalyzeEta(isAnalyze, processed, total, elapsed, etaConfig?.unitLabel ?? "item");
+  const { eta, rate } = useAnalyzeEta(
+    isAnalyze,
+    processed,
+    total,
+    elapsed,
+    etaConfig?.unitLabel ?? "item"
+  );
 
   if (!isRunning || !run) return null;
 
@@ -393,13 +383,13 @@ function PipelineProgressBar({
   }
 
   return (
-    <div className="border border-neon-cyan/40 rounded p-4 bg-neon-cyan/5">
+    <div className="border border-signal-cyan/40 p-4 bg-signal-cyan/10">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-neon-cyan text-sm font-terminal font-bold flex items-center gap-2">
-          <span className="inline-block w-2 h-2 rounded-full bg-neon-cyan animate-pulse" />
+        <span className="text-signal-cyan text-sm font-mono font-bold flex items-center gap-2">
+          <span className="inline-block w-2 h-2 bg-signal-cyan animate-pulse" />
           {title}
         </span>
-        <span className="text-matrix-green/70 text-xs font-terminal">
+        <span className="text-ink text-xs font-mono">
           <ElapsedTimer startedAt={run.startedAt} />
         </span>
       </div>
@@ -409,17 +399,15 @@ function PipelineProgressBar({
       {/* Overall progress bar */}
       <div className="mt-3">
         <div className="flex items-center justify-between mb-1">
-          <span className="text-matrix-green/60 text-[10px] font-terminal">
-            {activeStep
-              ? activeStep.label.toUpperCase()
-              : "INITIALIZING"}
+          <span className="text-ink-lo text-xs font-mono">
+            {activeStep ? activeStep.label.toUpperCase() : "INITIALIZING"}
           </span>
-          <span className="text-matrix-green text-xs font-terminal tabular-nums">
+          <span className="text-ink-hi text-xs font-mono tabular-nums">
             {doneSteps}/{totalSteps} steps ({overallPct}%)
           </span>
         </div>
         <div
-          className="w-full h-2 bg-matrix-green/10 border border-matrix-green/20 rounded-sm overflow-hidden"
+          className="w-full h-2 bg-white/[0.03] border border-white/[0.07] overflow-hidden"
           role="progressbar"
           aria-valuenow={overallPct}
           aria-valuemin={0}
@@ -427,18 +415,14 @@ function PipelineProgressBar({
           aria-label="Pipeline overall progress"
         >
           <div
-            className="h-full bg-neon-cyan transition-all duration-700"
+            className="h-full bg-signal-cyan transition-all duration-700"
             style={{ width: `${overallPct}%` }}
           />
         </div>
         {isAnalyze && eta && (
           <div className="flex items-center justify-between mt-1">
-            <span className="text-matrix-green/40 text-[10px] font-terminal tabular-nums">
-              {rate}
-            </span>
-            <span className="text-neon-yellow/80 text-[10px] font-terminal tabular-nums">
-              ETA: {eta}
-            </span>
+            <span className="text-ink-min text-xs font-mono tabular-nums">{rate}</span>
+            <span className="text-signal-amber text-xs font-mono tabular-nums">ETA: {eta}</span>
           </div>
         )}
       </div>
@@ -448,35 +432,31 @@ function PipelineProgressBar({
         <div className="mt-4 space-y-3">
           {phaseGroups.map((group) => {
             const groupDone = group.steps.every(
-              (s) => s.status === "done" || s.status === "skipped",
+              (s) => s.status === "done" || s.status === "skipped"
             );
             const groupActive = group.steps.some((s) => s.status === "active");
             return (
               <div key={group.phase}>
                 <div
-                  className={`text-[10px] font-pixel tracking-wider mb-1.5 ${
-                    groupActive
-                      ? "text-neon-cyan"
-                      : groupDone
-                        ? "text-matrix-green/70"
-                        : "text-matrix-green/30"
+                  className={`text-xs font-mono tracking-wider mb-1.5 ${
+                    groupActive ? "text-signal-cyan" : groupDone ? "text-ink" : "text-ink-min"
                   }`}
                 >
                   {groupDone ? "✓ " : groupActive ? "▶ " : ""}
                   {group.label}
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 pl-3 border-l border-matrix-green/15">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 pl-3 border-l border-white/[0.07]">
                   {group.steps.map((step) => (
                     <div key={step.key} className="flex items-start gap-2 min-h-[20px]">
                       <span
-                        className={`mt-0.5 flex-shrink-0 w-3 text-center text-[10px] ${
+                        className={`mt-0.5 flex-shrink-0 w-3 text-center text-xs ${
                           step.status === "done"
-                            ? "text-matrix-green"
+                            ? "text-ink-hi"
                             : step.status === "active"
-                              ? "text-neon-cyan animate-pulse"
+                              ? "text-signal-cyan animate-pulse"
                               : step.status === "skipped"
-                                ? "text-matrix-green/25"
-                                : "text-matrix-green/20"
+                                ? "text-ink-min"
+                                : "text-ink-min"
                         }`}
                       >
                         {step.status === "done"
@@ -490,20 +470,20 @@ function PipelineProgressBar({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span
-                            className={`text-[11px] font-terminal truncate ${
+                            className={`text-xs font-mono truncate ${
                               step.status === "active"
-                                ? "text-neon-cyan"
+                                ? "text-signal-cyan"
                                 : step.status === "done"
-                                  ? "text-matrix-green/80"
+                                  ? "text-ink"
                                   : step.status === "skipped"
-                                    ? "text-matrix-green/30 line-through"
-                                    : "text-matrix-green/35"
+                                    ? "text-ink-min line-through"
+                                    : "text-ink-min"
                             }`}
                           >
                             {step.label}
                           </span>
                           {step.detail && (step.status === "done" || step.status === "active") && (
-                            <span className="text-[9px] font-terminal text-matrix-green/40 truncate">
+                            <span className="text-xs font-mono text-ink-min truncate">
                               {step.detail}
                             </span>
                           )}
@@ -520,7 +500,7 @@ function PipelineProgressBar({
       )}
 
       {statsRow && (
-        <div className="flex gap-4 mt-3 pt-2 border-t border-matrix-green/10 text-[10px] text-matrix-green/50 font-terminal">
+        <div className="flex gap-4 mt-3 pt-2 border-t border-white/[0.07] text-xs text-ink-lo font-mono">
           {statsRow}
         </div>
       )}
@@ -547,16 +527,11 @@ function UsageBar({
   critAt?: number;
   ariaLabel: string;
 }) {
-  const color =
-    pct >= critAt
-      ? "bg-neon-pink"
-      : pct >= warnAt
-        ? "bg-neon-yellow"
-        : "bg-matrix-green";
+  const color = pct >= critAt ? "bg-signal-magenta" : pct >= warnAt ? "bg-signal-amber" : "bg-phos";
   const value = Math.min(Math.round(pct), 100);
   return (
     <div
-      className="w-full h-1.5 bg-matrix-green/10 rounded-sm overflow-hidden"
+      className="w-full h-1.5 bg-white/[0.03] overflow-hidden"
       role="progressbar"
       aria-valuenow={value}
       aria-valuemin={0}
@@ -601,12 +576,8 @@ function UptimeTracker({
     : null;
   const appUptimeSec = processStart ? Math.max(0, Math.floor((now - processStart) / 1000)) : null;
 
-  const firstRun = uptime?.firstPipelineRun
-    ? parseUTC(uptime.firstPipelineRun).getTime()
-    : null;
-  const totalServiceDays = firstRun
-    ? Math.max(1, Math.floor((now - firstRun) / 86400000))
-    : null;
+  const firstRun = uptime?.firstPipelineRun ? parseUTC(uptime.firstPipelineRun).getTime() : null;
+  const totalServiceDays = firstRun ? Math.max(1, Math.floor((now - firstRun) / 86400000)) : null;
 
   function tickingUptime(seconds: number): string {
     const d = Math.floor(seconds / 86400);
@@ -620,23 +591,23 @@ function UptimeTracker({
 
   return (
     <div className="terminal-window mb-6">
-      <TerminalTitlebar title="uptime_tracker">
-        <span className="ml-auto text-white/20 text-[10px] font-terminal mr-2">
+      <TerminalTitlebar title="Uptime">
+        <span className="ml-auto text-ink-lo text-xs font-mono mr-2">
           live
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-matrix-green ml-1 animate-pulse" />
+          <span className="inline-block w-1.5 h-1.5 bg-phos ml-1 animate-pulse" />
         </span>
       </TerminalTitlebar>
       <div className="p-4">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {/* App Uptime — large ticking counter */}
           <div className="sm:col-span-2">
-            <div className="text-[10px] font-pixel text-matrix-green/50 tracking-wider mb-2">
+            <div className="text-xs font-mono text-ink-lo tracking-wider mb-2">
               APPLICATION UPTIME
             </div>
-            <div className="font-terminal text-2xl sm:text-3xl text-neon-cyan tabular-nums tracking-wider">
+            <div className="font-mono text-2xl sm:text-3xl text-signal-cyan tabular-nums tracking-wider">
               {appUptimeSec != null ? tickingUptime(appUptimeSec) : "—"}
             </div>
-            <div className="text-[10px] font-terminal text-matrix-green/40 mt-1.5">
+            <div className="text-xs font-mono text-ink-min mt-1.5">
               {uptime?.processStartedAt
                 ? `started ${formatTime(uptime.processStartedAt)}`
                 : "unknown start time"}
@@ -646,26 +617,20 @@ function UptimeTracker({
           {/* Sidebar stats */}
           <div className="space-y-3">
             <div>
-              <div className="text-[10px] font-pixel text-matrix-green/50 tracking-wider mb-0.5">
-                HOST UPTIME
-              </div>
-              <div className="font-terminal text-sm text-matrix-green tabular-nums">
+              <div className="text-xs font-mono text-ink-lo tracking-wider mb-0.5">HOST UPTIME</div>
+              <div className="font-mono text-sm text-ink-hi tabular-nums">
                 {hostUptime != null ? tickingUptime(hostUptime) : "—"}
               </div>
             </div>
             <div>
-              <div className="text-[10px] font-pixel text-matrix-green/50 tracking-wider mb-0.5">
-                SERVICE AGE
-              </div>
-              <div className="font-terminal text-sm text-matrix-green">
+              <div className="text-xs font-mono text-ink-lo tracking-wider mb-0.5">SERVICE AGE</div>
+              <div className="font-mono text-sm text-ink-hi">
                 {totalServiceDays != null
                   ? `${totalServiceDays} day${totalServiceDays !== 1 ? "s" : ""}`
                   : "—"}
               </div>
-              <div className="text-[10px] font-terminal text-matrix-green/30 mt-0.5">
-                {uptime?.firstPipelineRun
-                  ? `since ${formatTime(uptime.firstPipelineRun)}`
-                  : ""}
+              <div className="text-xs font-mono text-ink-min mt-0.5">
+                {uptime?.firstPipelineRun ? `since ${formatTime(uptime.firstPipelineRun)}` : ""}
               </div>
             </div>
           </div>
@@ -673,10 +638,10 @@ function UptimeTracker({
 
         {/* Uptime bar visualization */}
         {appUptimeSec != null && (
-          <div className="mt-4 pt-3 border-t border-matrix-green/10">
+          <div className="mt-4 pt-3 border-t border-white/[0.07]">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] font-pixel text-matrix-green/40">SESSION HEALTH</span>
-              <span className="text-[10px] font-terminal text-matrix-green/60 tabular-nums">
+              <span className="text-xs font-mono text-ink-min">SESSION HEALTH</span>
+              <span className="text-xs font-mono text-ink-lo tabular-nums">
                 {appUptimeSec >= 86400
                   ? `${Math.floor(appUptimeSec / 86400)}d`
                   : appUptimeSec >= 3600
@@ -686,7 +651,7 @@ function UptimeTracker({
               </span>
             </div>
             <div
-              className="w-full h-2 bg-matrix-green/10 rounded-sm overflow-hidden"
+              className="w-full h-2 bg-white/[0.03] overflow-hidden"
               role="progressbar"
               aria-valuenow={Math.min(100, Math.round((appUptimeSec / 86400) * 100))}
               aria-valuemin={0}
@@ -694,13 +659,13 @@ function UptimeTracker({
               aria-label="Session health since last deploy"
             >
               <div
-                className="h-full bg-neon-cyan/60 rounded-sm transition-all duration-1000"
+                className="h-full bg-signal-cyan transition-all duration-1000"
                 style={{
                   width: `${Math.min(100, (appUptimeSec / 86400) * 100)}%`,
                 }}
               />
             </div>
-            <div className="flex justify-between text-[9px] font-terminal text-matrix-green/25 mt-0.5">
+            <div className="flex justify-between text-xs font-mono text-ink-min mt-0.5">
               <span>0h</span>
               <span>6h</span>
               <span>12h</span>
@@ -715,13 +680,7 @@ function UptimeTracker({
 }
 
 // --- System Monitor ---
-function SystemMonitor({
-  token,
-  initialStats,
-}: {
-  token: string;
-  initialStats?: HostStats;
-}) {
+function SystemMonitor({ token, initialStats }: { token: string; initialStats?: HostStats }) {
   const [stats, setStats] = useState<HostStats | null>(initialStats ?? null);
   const [netRate, setNetRate] = useState<{ rx: number; tx: number } | null>(null);
   const prevNetRef = useRef<{ rx: number; tx: number; time: number } | null>(null);
@@ -758,21 +717,19 @@ function SystemMonitor({
     stats.cpuTempC == null
       ? ""
       : stats.cpuTempC >= 80
-        ? "text-neon-pink"
+        ? "text-signal-magenta"
         : stats.cpuTempC >= 65
-          ? "text-neon-yellow"
-          : "text-matrix-green";
+          ? "text-signal-amber"
+          : "text-ink-hi";
 
-  const loadPct = stats.loadAvg
-    ? Math.round((stats.loadAvg[0] / stats.cpuCount) * 100)
-    : 0;
+  const loadPct = stats.loadAvg ? Math.round((stats.loadAvg[0] / stats.cpuCount) * 100) : 0;
 
   return (
     <div className="terminal-window mb-6">
-      <TerminalTitlebar title="system_monitor">
-        <span className="ml-auto text-white/20 text-[10px] font-terminal mr-2">
+      <TerminalTitlebar title="System monitor">
+        <span className="ml-auto text-ink-lo text-xs font-mono mr-2">
           live
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-matrix-green ml-1 animate-pulse" />
+          <span className="inline-block w-1.5 h-1.5 bg-phos ml-1 animate-pulse" />
         </span>
       </TerminalTitlebar>
       <div className="p-4">
@@ -780,17 +737,13 @@ function SystemMonitor({
           {/* CPU Load */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-matrix-green/50 text-[10px] font-pixel tracking-wider">
-                CPU LOAD
-              </span>
-              <span className="text-matrix-green text-xs font-terminal tabular-nums">
-                {stats.loadAvg
-                  ? `${stats.loadAvg[0].toFixed(2)} / ${stats.cpuCount}`
-                  : "—"}
+              <span className="text-ink-lo text-xs font-mono tracking-wider">CPU LOAD</span>
+              <span className="text-ink-hi text-xs font-mono tabular-nums">
+                {stats.loadAvg ? `${stats.loadAvg[0].toFixed(2)} / ${stats.cpuCount}` : "—"}
               </span>
             </div>
             <UsageBar pct={loadPct} ariaLabel="CPU load percentage" />
-            <div className="text-[10px] text-matrix-green/40 font-terminal mt-1 tabular-nums">
+            <div className="text-xs text-ink-min font-mono mt-1 tabular-nums">
               {stats.loadAvg
                 ? `${stats.loadAvg[0].toFixed(1)} · ${stats.loadAvg[1].toFixed(1)} · ${stats.loadAvg[2].toFixed(1)}`
                 : ""}
@@ -800,15 +753,13 @@ function SystemMonitor({
           {/* Memory */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-matrix-green/50 text-[10px] font-pixel tracking-wider">
-                MEMORY
-              </span>
-              <span className="text-matrix-green text-xs font-terminal tabular-nums">
+              <span className="text-ink-lo text-xs font-mono tracking-wider">MEMORY</span>
+              <span className="text-ink-hi text-xs font-mono tabular-nums">
                 {stats.memUsedPct}%
               </span>
             </div>
             <UsageBar pct={stats.memUsedPct} ariaLabel="Memory usage percentage" />
-            <div className="text-[10px] text-matrix-green/40 font-terminal mt-1 tabular-nums">
+            <div className="text-xs text-ink-min font-mono mt-1 tabular-nums">
               {formatBytes(stats.memUsedBytes)} / {formatBytes(stats.memTotalBytes)}
             </div>
           </div>
@@ -816,15 +767,18 @@ function SystemMonitor({
           {/* Disk */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-matrix-green/50 text-[10px] font-pixel tracking-wider">
-                DISK
-              </span>
-              <span className="text-matrix-green text-xs font-terminal tabular-nums">
+              <span className="text-ink-lo text-xs font-mono tracking-wider">DISK</span>
+              <span className="text-ink-hi text-xs font-mono tabular-nums">
                 {stats.diskUsedPct}%
               </span>
             </div>
-            <UsageBar pct={stats.diskUsedPct} warnAt={80} critAt={95} ariaLabel="Disk usage percentage" />
-            <div className="text-[10px] text-matrix-green/40 font-terminal mt-1 tabular-nums">
+            <UsageBar
+              pct={stats.diskUsedPct}
+              warnAt={80}
+              critAt={95}
+              ariaLabel="Disk usage percentage"
+            />
+            <div className="text-xs text-ink-min font-mono mt-1 tabular-nums">
               {formatBytes(stats.diskFreeBytes)} free
             </div>
           </div>
@@ -832,17 +786,20 @@ function SystemMonitor({
           {/* Temperature + Uptime */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-matrix-green/50 text-[10px] font-pixel tracking-wider">
-                CPU TEMP
-              </span>
-              <span className={`text-xs font-terminal tabular-nums ${tempColor}`}>
+              <span className="text-ink-lo text-xs font-mono tracking-wider">CPU TEMP</span>
+              <span className={`text-xs font-mono tabular-nums ${tempColor}`}>
                 {stats.cpuTempC != null ? `${stats.cpuTempC}°C` : "—"}
               </span>
             </div>
             {stats.cpuTempC != null && (
-              <UsageBar pct={(stats.cpuTempC / 85) * 100} warnAt={76} critAt={94} ariaLabel="CPU temperature" />
+              <UsageBar
+                pct={(stats.cpuTempC / 85) * 100}
+                warnAt={76}
+                critAt={94}
+                ariaLabel="CPU temperature"
+              />
             )}
-            <div className="text-[10px] text-matrix-green/40 font-terminal mt-1">
+            <div className="text-xs text-ink-min font-mono mt-1">
               uptime {formatUptime(stats.uptimeSeconds)}
             </div>
           </div>
@@ -850,24 +807,22 @@ function SystemMonitor({
           {/* Network */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-matrix-green/50 text-[10px] font-pixel tracking-wider">
-                NETWORK
-              </span>
-              <span className="text-matrix-green text-xs font-terminal tabular-nums">
+              <span className="text-ink-lo text-xs font-mono tracking-wider">NETWORK</span>
+              <span className="text-ink-hi text-xs font-mono tabular-nums">
                 {netRate ? formatRate(netRate.rx + netRate.tx) : "—"}
               </span>
             </div>
             <div className="space-y-1.5">
               <div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-matrix-green/40 font-terminal">▼ RX</span>
-                  <span className="text-[10px] text-matrix-green/60 font-terminal tabular-nums">
+                  <span className="text-xs text-ink-min font-mono">▼ RX</span>
+                  <span className="text-xs text-ink-lo font-mono tabular-nums">
                     {netRate ? formatRate(netRate.rx) : "—"}
                   </span>
                 </div>
                 {netRate && (
                   <div
-                    className="w-full h-1 rounded-full bg-matrix-green/10 mt-0.5"
+                    className="w-full h-1 bg-white/[0.03] mt-0.5"
                     role="progressbar"
                     aria-valuenow={Math.min(100, Math.round((netRate.rx / (1024 * 1024)) * 10))}
                     aria-valuemin={0}
@@ -875,7 +830,7 @@ function SystemMonitor({
                     aria-label="Network receive rate"
                   >
                     <div
-                      className="h-full rounded-full bg-matrix-green/50 transition-all duration-500"
+                      className="h-full bg-phos transition-all duration-500"
                       style={{ width: `${Math.min(100, (netRate.rx / (1024 * 1024)) * 10)}%` }}
                     />
                   </div>
@@ -883,14 +838,14 @@ function SystemMonitor({
               </div>
               <div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-matrix-green/40 font-terminal">▲ TX</span>
-                  <span className="text-[10px] text-matrix-green/60 font-terminal tabular-nums">
+                  <span className="text-xs text-ink-min font-mono">▲ TX</span>
+                  <span className="text-xs text-ink-lo font-mono tabular-nums">
                     {netRate ? formatRate(netRate.tx) : "—"}
                   </span>
                 </div>
                 {netRate && (
                   <div
-                    className="w-full h-1 rounded-full bg-matrix-green/10 mt-0.5"
+                    className="w-full h-1 bg-white/[0.03] mt-0.5"
                     role="progressbar"
                     aria-valuenow={Math.min(100, Math.round((netRate.tx / (1024 * 1024)) * 10))}
                     aria-valuemin={0}
@@ -898,15 +853,17 @@ function SystemMonitor({
                     aria-label="Network transmit rate"
                   >
                     <div
-                      className="h-full rounded-full bg-neon-blue/50 transition-all duration-500"
+                      className="h-full bg-signal-cyan/50 transition-all duration-500"
                       style={{ width: `${Math.min(100, (netRate.tx / (1024 * 1024)) * 10)}%` }}
                     />
                   </div>
                 )}
               </div>
             </div>
-            <div className="text-[10px] text-matrix-green/40 font-terminal mt-1 tabular-nums">
-              {stats.netRxBytes != null ? `↓${formatBytes(stats.netRxBytes)} ↑${formatBytes(stats.netTxBytes ?? 0)}` : ""}
+            <div className="text-xs text-ink-min font-mono mt-1 tabular-nums">
+              {stats.netRxBytes != null
+                ? `↓${formatBytes(stats.netRxBytes)} ↑${formatBytes(stats.netTxBytes ?? 0)}`
+                : ""}
             </div>
           </div>
         </div>
@@ -938,12 +895,12 @@ function VacancyControl({ token }: { token: string }) {
         politicianId.trim(),
         action === "restore",
         action === "vacate" ? reason : undefined,
-        action === "vacate" && leftOfficeDate ? leftOfficeDate : undefined,
+        action === "vacate" && leftOfficeDate ? leftOfficeDate : undefined
       );
       setResult(
         action === "vacate"
           ? `${res.name}'s seat marked vacant (${res.vacancyReason}).`
-          : `${res.name}'s seat restored to current.`,
+          : `${res.name}'s seat restored to current.`
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed");
@@ -954,32 +911,28 @@ function VacancyControl({ token }: { token: string }) {
 
   return (
     <div className="terminal-window mb-6">
-      <TerminalTitlebar title="seat_vacancy" />
+      <TerminalTitlebar title="Seat vacancies" />
       <div className="p-4 space-y-3">
-        <p className="text-matrix-green/40 text-[10px] font-terminal">
-          Marks a senator/representative&apos;s seat vacant (or restores it) without
-          deleting their historical data. No automated detection — this is manual only.
+        <p className="text-ink-min text-xs font-mono">
+          Marks a senator/representative&apos;s seat vacant (or restores it) without deleting their
+          historical data. No automated detection — this is manual only.
         </p>
         <div className="flex flex-wrap items-end gap-2">
           <div className="flex flex-col gap-1">
-            <label className="text-matrix-green/50 text-[9px] font-pixel tracking-wider">
-              POLITICIAN ID
-            </label>
+            <label className="text-ink-lo text-xs font-mono tracking-wider">POLITICIAN ID</label>
             <input
               value={politicianId}
               onChange={(e) => setPoliticianId(e.target.value)}
               placeholder="e.g. lindsey-graham"
-              className="bg-terminal-bg/50 border border-matrix-green/20 text-matrix-green text-xs font-terminal px-2 py-1.5 w-48 focus:outline-none focus:border-matrix-green/50"
+              className="bg-surface border border-white/[0.07] text-ink-hi text-xs font-mono px-2 py-1.5 w-48 focus:outline-none focus:border-phos/40"
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-matrix-green/50 text-[9px] font-pixel tracking-wider">
-              ACTION
-            </label>
+            <label className="text-ink-lo text-xs font-mono tracking-wider">ACTION</label>
             <select
               value={action}
               onChange={(e) => setAction(e.target.value as "vacate" | "restore")}
-              className="bg-terminal-bg/50 border border-matrix-green/20 text-matrix-green text-xs font-terminal px-2 py-1.5 focus:outline-none focus:border-matrix-green/50"
+              className="bg-surface border border-white/[0.07] text-ink-hi text-xs font-mono px-2 py-1.5 focus:outline-none focus:border-phos/40"
             >
               <option value="vacate">Mark vacant</option>
               <option value="restore">Restore to current</option>
@@ -988,28 +941,26 @@ function VacancyControl({ token }: { token: string }) {
           {action === "vacate" && (
             <>
               <div className="flex flex-col gap-1">
-                <label className="text-matrix-green/50 text-[9px] font-pixel tracking-wider">
-                  REASON
-                </label>
+                <label className="text-ink-lo text-xs font-mono tracking-wider">REASON</label>
                 <select
                   value={reason}
                   onChange={(e) => setReason(e.target.value as (typeof VACANCY_REASONS)[number])}
-                  className="bg-terminal-bg/50 border border-matrix-green/20 text-matrix-green text-xs font-terminal px-2 py-1.5 focus:outline-none focus:border-matrix-green/50"
+                  className="bg-surface border border-white/[0.07] text-ink-hi text-xs font-mono px-2 py-1.5 focus:outline-none focus:border-phos/40"
                 >
                   {VACANCY_REASONS.map((r) => (
-                    <option key={r} value={r}>{r}</option>
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
                   ))}
                 </select>
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-matrix-green/50 text-[9px] font-pixel tracking-wider">
-                  LEFT OFFICE
-                </label>
+                <label className="text-ink-lo text-xs font-mono tracking-wider">LEFT OFFICE</label>
                 <input
                   type="date"
                   value={leftOfficeDate}
                   onChange={(e) => setLeftOfficeDate(e.target.value)}
-                  className="bg-terminal-bg/50 border border-matrix-green/20 text-matrix-green text-xs font-terminal px-2 py-1.5 focus:outline-none focus:border-matrix-green/50"
+                  className="bg-surface border border-white/[0.07] text-ink-hi text-xs font-mono px-2 py-1.5 focus:outline-none focus:border-phos/40"
                 />
               </div>
             </>
@@ -1017,33 +968,35 @@ function VacancyControl({ token }: { token: string }) {
           <button
             onClick={submit}
             disabled={submitting || !politicianId.trim()}
-            className="font-pixel text-[10px] text-neon-cyan border border-neon-cyan/30 px-3 py-1.5 hover:bg-neon-cyan/10 transition-colors disabled:opacity-40"
+            className="font-mono text-xs text-signal-cyan border border-white/15 px-3 py-1.5 hover:bg-signal-cyan/10 transition-colors disabled:opacity-40"
           >
             {submitting ? "SUBMITTING..." : "SUBMIT"}
           </button>
         </div>
-        {result && <p className="text-matrix-green text-xs font-terminal">{result}</p>}
-        {error && <p className="text-neon-pink text-xs font-terminal">{error}</p>}
+        {result && <p className="text-ink-hi text-xs font-mono">{result}</p>}
+        {error && <p className="text-signal-magenta text-xs font-mono">{error}</p>}
       </div>
     </div>
   );
 }
 
 // --- Visitor Stats ---
-function BreakdownGroup({ title, entries }: { title: string; entries: { name: string; count: number }[] }) {
+function BreakdownGroup({
+  title,
+  entries,
+}: {
+  title: string;
+  entries: { name: string; count: number }[];
+}) {
   if (entries.length === 0) return null;
   const max = Math.max(1, ...entries.map((e) => e.count));
   return (
     <div>
-      <div className="text-matrix-green/40 text-[9px] font-pixel tracking-wider mb-1.5">
-        {title}
-      </div>
+      <div className="text-ink-min text-xs font-mono tracking-wider mb-1.5">{title}</div>
       <div className="space-y-1">
         {entries.map((e) => (
           <div key={e.name} className="flex items-center gap-2">
-            <span className="text-matrix-green/50 text-[10px] font-terminal w-14 shrink-0 truncate">
-              {e.name}
-            </span>
+            <span className="text-ink-lo text-xs font-mono w-14 shrink-0 truncate">{e.name}</span>
             <div className="flex-1">
               <UsageBar
                 pct={(e.count / max) * 100}
@@ -1052,7 +1005,7 @@ function BreakdownGroup({ title, entries }: { title: string; entries: { name: st
                 ariaLabel={`${e.count} visitors used ${e.name}`}
               />
             </div>
-            <span className="text-matrix-green/60 text-[10px] font-terminal tabular-nums w-6 text-right shrink-0">
+            <span className="text-ink-lo text-xs font-mono tabular-nums w-6 text-right shrink-0">
               {e.count}
             </span>
           </div>
@@ -1109,7 +1062,7 @@ function PipelinePhaseTimings({ token }: { token: string }) {
 
   return (
     <div className="terminal-window mb-6">
-      <TerminalTitlebar title="pipeline_phase_timings" />
+      <TerminalTitlebar title="Phase timings" />
       <div className="p-4">
         <div className="flex flex-wrap gap-1.5 mb-4">
           {TIMING_KINDS.map((k) => (
@@ -1118,10 +1071,10 @@ function PipelinePhaseTimings({ token }: { token: string }) {
               type="button"
               onClick={() => setKind(k.kind)}
               aria-pressed={kind === k.kind}
-              className={`px-2 py-1 text-[10px] font-pixel tracking-wider border transition-colors ${
+              className={`px-2 py-1 text-xs font-mono tracking-wider border transition-colors ${
                 kind === k.kind
-                  ? "border-matrix-green text-matrix-green"
-                  : "border-matrix-green/20 text-matrix-green/40 hover:text-matrix-green/70"
+                  ? "border-phos/40 text-ink-hi"
+                  : "border-white/[0.07] text-ink-min hover:text-phos"
               }`}
             >
               {k.label}
@@ -1130,9 +1083,9 @@ function PipelinePhaseTimings({ token }: { token: string }) {
         </div>
 
         {loading ? (
-          <div className="text-matrix-green/40 text-xs font-terminal">Loading…</div>
+          <div className="text-ink-min text-xs font-mono">Loading…</div>
         ) : runs.length === 0 ? (
-          <div className="text-matrix-green/40 text-xs font-terminal">
+          <div className="text-ink-min text-xs font-mono">
             No phase timings recorded yet — they are written as each run completes its steps.
           </div>
         ) : (
@@ -1146,11 +1099,11 @@ function PipelinePhaseTimings({ token }: { token: string }) {
                   className="w-full text-left"
                 >
                   <div className="flex items-baseline justify-between gap-3 mb-1">
-                    <span className="text-matrix-green/40 text-[10px] font-terminal tabular-nums shrink-0">
+                    <span className="text-ink-min text-xs font-mono tabular-nums shrink-0">
                       #{run.runId}
                       {run.startedAt ? ` · ${run.startedAt.slice(5, 16).replace("T", " ")}` : ""}
                     </span>
-                    <span className="text-matrix-green/70 text-[10px] font-terminal tabular-nums shrink-0">
+                    <span className="text-ink text-xs font-mono tabular-nums shrink-0">
                       {formatDuration(run.totalSeconds)}
                       {run.blockedPct > 0 && (
                         // Share of the run spent inside a rate limiter. A run
@@ -1159,9 +1112,7 @@ function PipelinePhaseTimings({ token }: { token: string }) {
                         // local hardware.
                         <span
                           className={
-                            run.blockedPct >= 50
-                              ? "text-neon-pink ml-2"
-                              : "text-matrix-green/40 ml-2"
+                            run.blockedPct >= 50 ? "text-signal-magenta ml-2" : "text-ink-min ml-2"
                           }
                         >
                           {run.blockedPct}% blocked
@@ -1173,18 +1124,16 @@ function PipelinePhaseTimings({ token }: { token: string }) {
                       relative to the slowest run in the window so runs are
                       comparable to each other, not just internally. */}
                   <div
-                    className="flex w-full h-2 bg-matrix-green/5 rounded-sm overflow-hidden"
+                    className="flex w-full h-2 bg-white/[0.03] overflow-hidden"
                     role="img"
-                    aria-label={run.phases
-                      .map((p) => `${p.phase} ${p.pct}%`)
-                      .join(", ")}
+                    aria-label={run.phases.map((p) => `${p.phase} ${p.pct}%`).join(", ")}
                     style={{ width: `${(run.totalSeconds / maxTotal) * 100}%` }}
                   >
                     {run.phases.map((p, i) => (
                       <div
                         key={p.phase}
                         className={
-                          ["bg-matrix-green", "bg-neon-yellow", "bg-neon-pink", "bg-matrix-green/40"][i % 4]
+                          ["bg-phos", "bg-signal-amber", "bg-signal-magenta", "bg-phos"][i % 4]
                         }
                         style={{ width: `${p.pct}%` }}
                         title={`${p.phase}: ${formatDuration(p.seconds)} (${p.pct}%)`}
@@ -1194,45 +1143,45 @@ function PipelinePhaseTimings({ token }: { token: string }) {
                 </button>
 
                 {expanded === run.runId && (
-                  <div className="mt-2 pl-2 border-l border-matrix-green/10 space-y-1">
+                  <div className="mt-2 pl-2 border-l border-white/[0.07] space-y-1">
                     {run.phases.map((p) => (
                       <div key={p.phase} className="flex justify-between gap-3">
-                        <span className="text-matrix-green/60 text-[10px] font-terminal">
+                        <span className="text-ink-lo text-xs font-mono">
                           {PHASE_LABELS[p.phase] ?? p.phase.toUpperCase()} ({p.steps})
                         </span>
-                        <span className="text-matrix-green/60 text-[10px] font-terminal tabular-nums">
+                        <span className="text-ink-lo text-xs font-mono tabular-nums">
                           {formatDuration(p.seconds)} · {p.pct}%
                         </span>
                       </div>
                     ))}
                     {run.rateLimitSources.length > 0 && (
-                      <div className="pt-1 mt-1 border-t border-matrix-green/10 space-y-0.5">
-                        <div className="text-matrix-green/30 text-[10px] font-pixel tracking-wider">
+                      <div className="pt-1 mt-1 border-t border-white/[0.07] space-y-0.5">
+                        <div className="text-ink-min text-xs font-mono tracking-wider">
                           BLOCKED ON RATE LIMITS
                         </div>
                         {run.rateLimitSources.map((s) => (
                           <div key={s.source} className="flex justify-between gap-3">
-                            <span className="text-matrix-green/40 text-[10px] font-terminal truncate">
+                            <span className="text-ink-min text-xs font-mono truncate">
                               {s.source} · {s.requests.toLocaleString()} req
                             </span>
-                            <span className="text-matrix-green/40 text-[10px] font-terminal tabular-nums shrink-0">
+                            <span className="text-ink-min text-xs font-mono tabular-nums shrink-0">
                               {formatDuration(s.blockedSeconds)}
                             </span>
                           </div>
                         ))}
                       </div>
                     )}
-                    <div className="pt-1 mt-1 border-t border-matrix-green/10 space-y-0.5">
+                    <div className="pt-1 mt-1 border-t border-white/[0.07] space-y-0.5">
                       {run.steps.slice(0, 8).map((s) => (
                         <div key={s.stepKey} className="flex justify-between gap-3">
-                          <span className="text-matrix-green/40 text-[10px] font-terminal truncate">
+                          <span className="text-ink-min text-xs font-mono truncate">
                             {s.label || s.stepKey}
                             {s.status !== "done" ? ` [${s.status}]` : ""}
                           </span>
-                          <span className="text-matrix-green/40 text-[10px] font-terminal tabular-nums shrink-0">
+                          <span className="text-ink-min text-xs font-mono tabular-nums shrink-0">
                             {formatDuration(s.seconds)}
                             {s.blockedSeconds > 0 && (
-                              <span className="text-matrix-green/25">
+                              <span className="text-ink-min">
                                 {" "}
                                 ({formatDuration(s.blockedSeconds)} blocked)
                               </span>
@@ -1242,7 +1191,7 @@ function PipelinePhaseTimings({ token }: { token: string }) {
                       ))}
                     </div>
                     {run.untimedSteps > 0 && (
-                      <div className="text-matrix-green/30 text-[10px] font-terminal pt-1">
+                      <div className="text-ink-min text-xs font-mono pt-1">
                         {run.untimedSteps} step(s) without a duration — excluded from totals.
                       </div>
                     )}
@@ -1286,25 +1235,21 @@ function VisitorStats({ token }: { token: string }) {
 
   return (
     <div className="terminal-window mb-6">
-      <TerminalTitlebar title="visitor_stats" />
+      <TerminalTitlebar title="Visits" />
       <div className="p-4">
         <div className="flex items-baseline justify-between mb-4">
-          <span className="text-matrix-green/50 text-[10px] font-pixel tracking-wider">
+          <span className="text-ink-lo text-xs font-mono tracking-wider">
             UNIQUE VISITORS TODAY
           </span>
-          <span className="text-matrix-green text-2xl font-terminal tabular-nums">
-            {todayCount}
-          </span>
+          <span className="text-ink-hi text-2xl font-mono tabular-nums">{todayCount}</span>
         </div>
         {days.length === 0 ? (
-          <div className="text-matrix-green/40 text-xs font-terminal">
-            No visitor data yet.
-          </div>
+          <div className="text-ink-min text-xs font-mono">No visitor data yet.</div>
         ) : (
           <div className="space-y-1.5">
             {days.map((d) => (
               <div key={d.date} className="flex items-center gap-3">
-                <span className="text-matrix-green/40 text-[10px] font-terminal tabular-nums w-16 shrink-0">
+                <span className="text-ink-min text-xs font-mono tabular-nums w-16 shrink-0">
                   {d.date.slice(5)}
                 </span>
                 <div className="flex-1">
@@ -1315,23 +1260,26 @@ function VisitorStats({ token }: { token: string }) {
                     ariaLabel={`${d.uniqueVisitors} unique visitors on ${d.date}`}
                   />
                 </div>
-                <span className="text-matrix-green/60 text-[10px] font-terminal tabular-nums w-8 text-right shrink-0">
+                <span className="text-ink-lo text-xs font-mono tabular-nums w-8 text-right shrink-0">
                   {d.uniqueVisitors}
                 </span>
               </div>
             ))}
           </div>
         )}
-        {breakdown && (breakdown.browsers.length > 0 || breakdown.os.length > 0 || breakdown.devices.length > 0) && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4 pt-4 border-t border-matrix-green/10">
-            <BreakdownGroup title="BROWSER — TODAY" entries={breakdown.browsers} />
-            <BreakdownGroup title="OS — TODAY" entries={breakdown.os} />
-            <BreakdownGroup title="DEVICE — TODAY" entries={breakdown.devices} />
-          </div>
-        )}
+        {breakdown &&
+          (breakdown.browsers.length > 0 ||
+            breakdown.os.length > 0 ||
+            breakdown.devices.length > 0) && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4 pt-4 border-t border-white/[0.07]">
+              <BreakdownGroup title="BROWSER — TODAY" entries={breakdown.browsers} />
+              <BreakdownGroup title="OS — TODAY" entries={breakdown.os} />
+              <BreakdownGroup title="DEVICE — TODAY" entries={breakdown.devices} />
+            </div>
+          )}
         {topPages.length > 0 && (
-          <div className="mt-4 pt-4 border-t border-matrix-green/10">
-            <div className="text-matrix-green/40 text-[9px] font-pixel tracking-wider mb-1.5">
+          <div className="mt-4 pt-4 border-t border-white/[0.07]">
+            <div className="text-ink-min text-xs font-mono tracking-wider mb-1.5">
               MOST VISITED PAGES — LAST 7 DAYS
             </div>
             <div className="space-y-1">
@@ -1339,7 +1287,7 @@ function VisitorStats({ token }: { token: string }) {
                 const max = Math.max(1, ...topPages.map((e) => e.views));
                 return (
                   <div key={p.path} className="flex items-center gap-2">
-                    <span className="text-matrix-green/50 text-[10px] font-terminal w-40 shrink-0 truncate">
+                    <span className="text-ink-lo text-xs font-mono w-40 shrink-0 truncate">
                       {p.path}
                     </span>
                     <div className="flex-1">
@@ -1350,7 +1298,7 @@ function VisitorStats({ token }: { token: string }) {
                         ariaLabel={`${p.views} views on ${p.path}`}
                       />
                     </div>
-                    <span className="text-matrix-green/60 text-[10px] font-terminal tabular-nums w-10 text-right shrink-0">
+                    <span className="text-ink-lo text-xs font-mono tabular-nums w-10 text-right shrink-0">
                       {p.views}
                     </span>
                   </div>
@@ -1359,12 +1307,11 @@ function VisitorStats({ token }: { token: string }) {
             </div>
           </div>
         )}
-        <p className="text-matrix-green/25 text-[9px] font-terminal mt-3">
-          Counted by a salted, daily-rotating hash — no IP addresses are stored.
-          Browser/OS/device are coarse categories only, never the raw
-          User-Agent string. Page views are raw counts (not deduped by
-          visitor) grouped by route, e.g. all politician profiles count under
-          one row.
+        <p className="text-ink-min text-xs font-mono mt-3">
+          Counted by a salted, daily-rotating hash — no IP addresses are stored. Browser/OS/device
+          are coarse categories only, never the raw User-Agent string. Page views are raw counts
+          (not deduped by visitor) grouped by route, e.g. all politician profiles count under one
+          row.
         </p>
       </div>
     </div>
@@ -1373,19 +1320,33 @@ function VisitorStats({ token }: { token: string }) {
 
 // --- Run History Table ---
 function RunHistory({ runs }: { runs: PipelineHistoryRun[] }) {
-  if (runs.length === 0) return <p className="text-matrix-green/40 text-xs">No pipeline runs recorded.</p>;
+  if (runs.length === 0) return <p className="text-ink-min text-xs">No pipeline runs recorded.</p>;
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-xs font-terminal">
+      <table className="w-full text-xs font-mono">
         <thead>
-          <tr className="text-matrix-green/60 border-b border-matrix-green/20">
-            <th scope="col" className="text-left py-1 pr-3">TYPE</th>
-            <th scope="col" className="text-left py-1 pr-3">STARTED</th>
-            <th scope="col" className="text-left py-1 pr-3">STATUS</th>
-            <th scope="col" className="text-left py-1 pr-3">DURATION</th>
-            <th scope="col" className="text-right py-1 pr-3">PROCESSED</th>
-            <th scope="col" className="text-right py-1 pr-3">LLM</th>
-            <th scope="col" className="text-right py-1">CACHE</th>
+          <tr className="text-ink-lo border-b border-white/[0.07]">
+            <th scope="col" className="text-left py-1 pr-3">
+              TYPE
+            </th>
+            <th scope="col" className="text-left py-1 pr-3">
+              STARTED
+            </th>
+            <th scope="col" className="text-left py-1 pr-3">
+              STATUS
+            </th>
+            <th scope="col" className="text-left py-1 pr-3">
+              DURATION
+            </th>
+            <th scope="col" className="text-right py-1 pr-3">
+              PROCESSED
+            </th>
+            <th scope="col" className="text-right py-1 pr-3">
+              LLM
+            </th>
+            <th scope="col" className="text-right py-1">
+              CACHE
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -1395,45 +1356,46 @@ function RunHistory({ runs }: { runs: PipelineHistoryRun[] }) {
             // chain is what silently rendered Election runs as SENATE.
             const display = describeRun(r);
             const hitRate = display.hasLlmStats ? cacheHitRate(r) : null;
-            const statusColor = r.status === "completed"
-              ? "text-matrix-green"
-              : r.status === "partial"
-                ? "text-yellow-400"
-                : r.status === "failed"
-                  ? "text-neon-pink"
-                  : r.status === "running"
-                    ? "text-neon-cyan animate-pulse"
-                    : "text-matrix-green/50";
+            const statusColor =
+              r.status === "completed"
+                ? "text-ink-hi"
+                : r.status === "partial"
+                  ? "text-signal-amber"
+                  : r.status === "failed"
+                    ? "text-signal-magenta"
+                    : r.status === "running"
+                      ? "text-signal-cyan animate-pulse"
+                      : "text-ink-lo";
             return (
               <tr
                 key={`${r.pipelineType ?? "senate"}-${r.id}`}
-                className="border-b border-matrix-green/10 hover:bg-matrix-green/5"
+                className="border-b border-white/[0.07] hover:bg-white/[0.03]"
               >
                 <td className="py-1.5 pr-3">
-                  <span className={display.hasLlmStats ? "text-matrix-green/50" : "text-neon-cyan/70"}>
+                  <span className={display.hasLlmStats ? "text-ink-lo" : "text-signal-cyan"}>
                     {display.label}
                   </span>
                 </td>
-                <td className="py-1.5 pr-3 text-matrix-green/70">{formatTime(r.startedAt)}</td>
+                <td className="py-1.5 pr-3 text-ink">{formatTime(r.startedAt)}</td>
                 <td className="py-1.5 pr-3">
-                  <span className={statusColor}>
-                    {r.status.toUpperCase()}
-                  </span>
+                  <span className={statusColor}>{r.status.toUpperCase()}</span>
                   {r.errorMessage && (
-                    <span className="ml-2 text-neon-pink/70 text-[10px]" title={r.errorMessage}>⚠</span>
+                    <span className="ml-2 text-ink-lo text-xs" title={r.errorMessage}>
+                      ⚠
+                    </span>
                   )}
                 </td>
-                <td className="py-1.5 pr-3 text-matrix-green/60">{formatDuration(r.elapsedSeconds)}</td>
-                <td className="py-1.5 pr-3 text-right text-matrix-green/60">
+                <td className="py-1.5 pr-3 text-ink-lo">{formatDuration(r.elapsedSeconds)}</td>
+                <td className="py-1.5 pr-3 text-right text-ink-lo">
                   {display.processed}
                   {display.failed > 0 && (
-                    <span className="text-neon-pink ml-1">({display.failed}F)</span>
+                    <span className="text-signal-magenta ml-1">({display.failed}F)</span>
                   )}
                 </td>
-                <td className="py-1.5 pr-3 text-right text-matrix-green/60">
-                  {display.hasLlmStats ? r.llmCalls ?? 0 : "—"}
+                <td className="py-1.5 pr-3 text-right text-ink-lo">
+                  {display.hasLlmStats ? (r.llmCalls ?? 0) : "—"}
                 </td>
-                <td className="py-1.5 text-right text-matrix-green/60">
+                <td className="py-1.5 text-right text-ink-lo">
                   {hitRate === null ? "—" : `${hitRate}%`}
                 </td>
               </tr>
@@ -1473,14 +1435,20 @@ function PipelineStatusRow({
   return (
     <>
       <div className="flex justify-between items-center">
-        <span className="text-matrix-green/60">{label}</span>
-        <span className={isRunning ? "text-neon-cyan animate-pulse" : "text-matrix-green/60"}>
-          {isRunning ? "RUNNING" : run ? (
+        <span className="text-ink-lo">{label}</span>
+        <span className={isRunning ? "text-signal-cyan animate-pulse" : "text-ink-lo"}>
+          {isRunning ? (
+            "RUNNING"
+          ) : run ? (
             <span>
-              <span className={statusClassName}>{isStuck ? "STUCK" : run.status.toUpperCase()}</span>
+              <span className={statusClassName}>
+                {isStuck ? "STUCK" : run.status.toUpperCase()}
+              </span>
               {detail}
             </span>
-          ) : "IDLE"}
+          ) : (
+            "IDLE"
+          )}
         </span>
       </div>
       {isStuck && onClear && (
@@ -1488,9 +1456,8 @@ function PipelineStatusRow({
           <button
             disabled={clearing}
             onClick={onClear}
-            className="text-[9px] font-pixel text-yellow-400/70 hover:text-yellow-400
-                       border border-yellow-400/30 hover:border-yellow-400/60
-                       px-2 py-0.5 rounded transition-colors disabled:opacity-40"
+            className="text-xs font-mono text-signal-amber hover:text-signal-amber border border-yellow-400/30 hover:border-yellow-400/60
+                       px-2 py-0.5  transition-colors disabled:opacity-40"
           >
             {clearing ? "CLEARING..." : "[CLEAR STUCK RUN]"}
           </button>
@@ -1534,36 +1501,34 @@ function PipelineRunDetailCard({
     <div className="terminal-window mb-6">
       <TerminalTitlebar title={title} />
       <div className="p-4">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm font-terminal">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm font-mono">
           <div>
-            <span className="text-matrix-green/50 text-xs block">STATUS</span>
+            <span className="text-ink-lo text-xs block">STATUS</span>
             <span
               className={
                 run.status === "completed"
-                  ? "text-matrix-green"
+                  ? "text-ink-hi"
                   : run.status === "failed"
-                    ? "text-neon-pink"
-                    : "text-neon-cyan"
+                    ? "text-signal-magenta"
+                    : "text-signal-cyan"
               }
             >
               {run.status.toUpperCase()}
             </span>
           </div>
           <div>
-            <span className="text-matrix-green/50 text-xs block">STARTED</span>
+            <span className="text-ink-lo text-xs block">STARTED</span>
             <span>{formatTime(run.startedAt)}</span>
           </div>
           <div>
-            <span className="text-matrix-green/50 text-xs block">DURATION</span>
+            <span className="text-ink-lo text-xs block">DURATION</span>
             <span>{formatDuration(run.elapsedSeconds)}</span>
           </div>
           {extraStats}
         </div>
         {run.errorMessage && (
-          <div className="mt-3 p-2 border border-neon-pink/30 rounded bg-neon-pink/5">
-            <span className="text-neon-pink text-xs font-terminal">
-              ERROR: {run.errorMessage}
-            </span>
+          <div className="mt-3 p-2 border border-signal-magenta/40 bg-signal-magenta/10">
+            <span className="text-signal-magenta text-xs font-mono">ERROR: {run.errorMessage}</span>
           </div>
         )}
         <LastRunSteps steps={run.progressSteps} />
@@ -1577,47 +1542,40 @@ function LastRunSteps({ steps }: { steps?: PipelineStepInfo[] | null }) {
   if (!steps || steps.length === 0) return null;
 
   return (
-    <div className="mt-4 border-t border-matrix-green/15 pt-3">
+    <div className="mt-4 border-t border-white/[0.07] pt-3">
       <button
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
         aria-label={`Step breakdown, ${steps.length} steps`}
-        className="text-[10px] font-pixel text-matrix-green/50 hover:text-matrix-green/80 transition-colors"
+        className="text-xs font-mono text-ink-lo hover:text-phos transition-colors"
       >
         {expanded ? "▼" : "▶"} STEP BREAKDOWN ({steps.length} steps)
       </button>
       {expanded && (
         <div className="mt-2 space-y-0.5">
           {steps.map((step) => (
-            <div
-              key={step.key}
-              className="flex items-center gap-2 text-[11px] font-terminal py-0.5"
-            >
+            <div key={step.key} className="flex items-center gap-2 text-xs font-mono py-0.5">
               <span
                 className={`w-3 text-center flex-shrink-0 ${
                   step.status === "done"
-                    ? "text-matrix-green"
+                    ? "text-ink-hi"
                     : step.status === "skipped"
-                      ? "text-matrix-green/25"
-                      : "text-matrix-green/40"
+                      ? "text-ink-min"
+                      : "text-ink-min"
                 }`}
               >
                 {step.status === "done" ? "✓" : step.status === "skipped" ? "—" : "○"}
               </span>
               <span
                 className={`w-40 truncate ${
-                  step.status === "skipped"
-                    ? "text-matrix-green/30 line-through"
-                    : "text-matrix-green/70"
+                  step.status === "skipped" ? "text-ink-min line-through" : "text-ink"
                 }`}
               >
                 {step.label}
               </span>
-              {step.detail && (
-                <span className="text-matrix-green/40 truncate">{step.detail}</span>
-              )}
+              {step.detail && <span className="text-ink-min truncate">{step.detail}</span>}
               {step.total != null && step.total > 0 && (
-                <span className="text-matrix-green/30 tabular-nums ml-auto">
+                <span className="text-ink-min tabular-nums ml-auto">
                   {step.done ?? step.total}/{step.total}
                 </span>
               )}
@@ -1691,42 +1649,30 @@ function DataInventory({ data }: { data: Record<string, number> }) {
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between mb-1">
-        <span className="font-pixel text-[10px] text-matrix-green/40 tracking-widest">
-          TOTAL RECORDS
-        </span>
-        <span className="font-terminal text-sm text-matrix-green">
-          {total.toLocaleString()}
-        </span>
+        <span className="font-mono text-xs text-ink-min tracking-widest">TOTAL RECORDS</span>
+        <span className="font-mono text-sm text-ink-hi">{total.toLocaleString()}</span>
       </div>
       {INVENTORY_SECTIONS.map((section) => {
-        const sectionTotal = section.keys.reduce(
-          (s, { key }) => s + (data[key] ?? 0),
-          0,
-        );
+        const sectionTotal = section.keys.reduce((s, { key }) => s + (data[key] ?? 0), 0);
         if (sectionTotal === 0 && section.label !== "SYSTEM") return null;
         return (
           <div key={section.label}>
             <div className="flex items-center gap-2 mb-2">
-              <span className="font-pixel text-[10px] text-purple-400/70 tracking-widest">
+              <span className="font-mono text-xs text-ind-purple tracking-widest">
                 {section.label}
               </span>
-              <span className="text-[10px] font-terminal text-matrix-green/30">
+              <span className="text-xs font-mono text-ink-min">
                 {sectionTotal.toLocaleString()}
               </span>
-              <div className="flex-1 border-t border-matrix-green/10" />
+              <div className="flex-1 border-t border-white/[0.07]" />
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
               {section.keys.map(({ key, label }) => (
-                <div
-                  key={key}
-                  className="border border-matrix-green/15 rounded p-2.5 text-center"
-                >
-                  <div className="text-base font-terminal text-matrix-green">
+                <div key={key} className="border border-white/[0.07] p-2.5 text-center">
+                  <div className="text-base font-mono text-ink-hi">
                     {(data[key] ?? 0).toLocaleString()}
                   </div>
-                  <div className="text-[9px] font-pixel text-matrix-green/50 tracking-wider mt-0.5">
-                    {label}
-                  </div>
+                  <div className="text-xs font-mono text-ink-lo tracking-wider mt-0.5">{label}</div>
                 </div>
               ))}
             </div>
@@ -1739,22 +1685,25 @@ function DataInventory({ data }: { data: Record<string, number> }) {
 
 // --- Action Center Status Panel ---
 const ACTION_STAGE_LABELS: Record<string, string> = {
-  fetch:    "FETCHING ARTICLES",
-  filter:   "FILTERING RELEVANCE",
-  cluster:  "CLUSTERING TOPICS",
-  rank:     "RANKING CLUSTERS",
-  issues:   "GENERATING ISSUES",
+  fetch: "FETCHING ARTICLES",
+  filter: "FILTERING RELEVANCE",
+  cluster: "CLUSTERING TOPICS",
+  rank: "RANKING CLUSTERS",
+  issues: "GENERATING ISSUES",
   monitors: "UPDATING MONITORS",
-  theme:    "GENERATING THEME",
-  stories:  "WRITING STORIES",
-  bluesky:  "POSTING TO BLUESKY",
-  cleanup:  "CLEANUP",
+  theme: "GENERATING THEME",
+  stories: "WRITING STORIES",
+  bluesky: "POSTING TO BLUESKY",
+  cleanup: "CLEANUP",
 };
 
 function useElapsedSeconds(startIso: string | null, running: boolean): number {
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
-    if (!running || !startIso) { setElapsed(0); return; }
+    if (!running || !startIso) {
+      setElapsed(0);
+      return;
+    }
     const update = () => {
       const diff = (Date.now() - new Date(startIso + "Z").getTime()) / 1000;
       setElapsed(Math.max(0, Math.round(diff)));
@@ -1773,7 +1722,7 @@ function ActionCenterStatus({ ac }: { ac: ActionRefreshState | null }) {
 
   if (!ac || (!ac.isRunning && !ac.lastCompletedAt)) {
     return (
-      <div className="p-4 text-xs font-terminal text-matrix-green/40">
+      <div className="p-4 text-xs font-mono text-ink-min">
         No data yet — status available after first refresh.
       </div>
     );
@@ -1785,39 +1734,39 @@ function ActionCenterStatus({ ac }: { ac: ActionRefreshState | null }) {
   const progressMatch = ac.stageDetail ? /^(\d+)\/(\d+)/.exec(ac.stageDetail) : null;
   const progressDone = progressMatch ? parseInt(progressMatch[1]) : null;
   const progressTotal = progressMatch ? parseInt(progressMatch[2]) : null;
-  const progressPct = progressDone !== null && progressTotal && progressTotal > 0
-    ? Math.round((progressDone / progressTotal) * 100) : null;
+  const progressPct =
+    progressDone !== null && progressTotal && progressTotal > 0
+      ? Math.round((progressDone / progressTotal) * 100)
+      : null;
 
   // Sub-step detail (text after N/M)
   const subStep = ac.stageDetail && !progressMatch ? ac.stageDetail : null;
 
   return (
-    <div className="p-4 space-y-3 text-xs font-terminal">
+    <div className="p-4 space-y-3 text-xs font-mono">
       {/* Status + elapsed */}
       <div className="flex items-center justify-between">
-        <span className="text-matrix-green/60">STATUS</span>
-        <span className={ac.isRunning ? "text-neon-cyan animate-pulse font-bold" : "text-matrix-green/60"}>
-          {ac.isRunning
-            ? `RUNNING · ${formatDuration(totalElapsed)}`
-            : "IDLE"}
+        <span className="text-ink-lo">STATUS</span>
+        <span className={ac.isRunning ? "text-signal-cyan animate-pulse font-bold" : "text-ink-lo"}>
+          {ac.isRunning ? `RUNNING · ${formatDuration(totalElapsed)}` : "IDLE"}
         </span>
       </div>
 
       {/* Live stage — shown when running */}
       {ac.isRunning && stageLabel && (
-        <div className="border border-neon-cyan/20 rounded px-3 py-2 bg-neon-cyan/5">
+        <div className="border border-white/15 px-3 py-2 bg-signal-cyan/10">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-neon-cyan font-bold tracking-wider">{stageLabel}</span>
-            <span className="text-neon-cyan/70 shrink-0">
+            <span className="text-signal-cyan font-bold tracking-wider">{stageLabel}</span>
+            <span className="text-signal-cyan shrink-0">
               {progressDone !== null && progressTotal !== null
                 ? `${progressDone}/${progressTotal}`
-                : subStep ?? ""}
+                : (subStep ?? "")}
             </span>
           </div>
           {progressPct !== null && (
-            <div className="mt-2 h-1 bg-matrix-green/10 rounded overflow-hidden">
+            <div className="mt-2 h-1 bg-white/[0.03] overflow-hidden">
               <div
-                className="h-full bg-neon-cyan/60 rounded transition-all duration-500"
+                className="h-full bg-signal-cyan transition-all duration-500"
                 style={{ width: `${progressPct}%` }}
               />
             </div>
@@ -1826,38 +1775,38 @@ function ActionCenterStatus({ ac }: { ac: ActionRefreshState | null }) {
       )}
 
       {/* Last run results */}
-      <div className="border-t border-matrix-green/10 pt-2 space-y-1.5">
+      <div className="border-t border-white/[0.07] pt-2 space-y-1.5">
         <div className="flex justify-between">
-          <span className="text-matrix-green/60">LAST RUN</span>
-          <span className="text-matrix-green/80">{formatTime(ac.lastCompletedAt)}</span>
+          <span className="text-ink-lo">LAST RUN</span>
+          <span className="text-ink">{formatTime(ac.lastCompletedAt)}</span>
         </div>
         {ac.lastElapsed > 0 && (
           <div className="flex justify-between">
-            <span className="text-matrix-green/60">DURATION</span>
-            <span className="text-matrix-green/80">{formatDuration(ac.lastElapsed)}</span>
+            <span className="text-ink-lo">DURATION</span>
+            <span className="text-ink">{formatDuration(ac.lastElapsed)}</span>
           </div>
         )}
         {(ac.lastIssuesCreated > 0 || ac.lastIssuesRetired > 0) && (
           <div className="flex justify-between">
-            <span className="text-matrix-green/60">ISSUES</span>
+            <span className="text-ink-lo">ISSUES</span>
             <span>
-              <span className="text-matrix-green">+{ac.lastIssuesCreated} created</span>
+              <span className="text-ink-hi">+{ac.lastIssuesCreated} created</span>
               {ac.lastIssuesRetired > 0 && (
-                <span className="text-matrix-green/50"> · -{ac.lastIssuesRetired} retired</span>
+                <span className="text-ink-lo"> · -{ac.lastIssuesRetired} retired</span>
               )}
             </span>
           </div>
         )}
         {ac.lastStoriesGenerated > 0 && (
           <div className="flex justify-between">
-            <span className="text-matrix-green/60">STORIES</span>
-            <span className="text-matrix-green">{ac.lastStoriesGenerated} written</span>
+            <span className="text-ink-lo">STORIES</span>
+            <span className="text-ink-hi">{ac.lastStoriesGenerated} written</span>
           </div>
         )}
         {ac.lastBskyPosted > 0 && (
           <div className="flex justify-between">
-            <span className="text-matrix-green/60">BLUESKY</span>
-            <span className="text-neon-cyan">{ac.lastBskyPosted} posted</span>
+            <span className="text-ink-lo">BLUESKY</span>
+            <span className="text-signal-cyan">{ac.lastBskyPosted} posted</span>
           </div>
         )}
       </div>
@@ -1865,15 +1814,8 @@ function ActionCenterStatus({ ac }: { ac: ActionRefreshState | null }) {
   );
 }
 
-
 // --- Main Admin Dashboard ---
-function AdminDashboardView({
-  token,
-  onLogout,
-}: {
-  token: string;
-  onLogout: () => void;
-}) {
+function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () => void }) {
   const [dashboard, setDashboard] = useState<AdminDashboard | null>(null);
   const [pipelineStatus, setPipelineStatus] = useState<AdminPipelineStatus | null>(null);
   const [history, setHistory] = useState<PipelineHistoryRun[]>([]);
@@ -1933,7 +1875,8 @@ function AdminDashboardView({
   }, [loadDashboard]);
 
   useEffect(() => {
-    const anyRunning = (pipelineStatus?.isRunning ?? false) || (pipelineStatus?.actionRefresh?.isRunning ?? false);
+    const anyRunning =
+      (pipelineStatus?.isRunning ?? false) || (pipelineStatus?.actionRefresh?.isRunning ?? false);
     const interval = anyRunning ? 3000 : 10000;
 
     if (pollRef.current) clearInterval(pollRef.current);
@@ -1956,10 +1899,8 @@ function AdminDashboardView({
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-crt-black flex items-center justify-center">
-        <span className="text-matrix-green font-terminal animate-pulse">
-          Loading dashboard...
-        </span>
+      <div className="min-h-screen bg-surface-base flex items-center justify-center">
+        <span className="text-ink-hi font-mono animate-pulse">Loading dashboard...</span>
       </div>
     );
   }
@@ -1967,19 +1908,16 @@ function AdminDashboardView({
   const d = dashboard;
 
   return (
-    <main className="min-h-screen bg-crt-black text-matrix-green px-4 py-8">
+    <main className="min-h-screen bg-surface-base text-ink-hi px-4 py-8">
       <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
-          <h1 className="font-pixel text-sm sm:text-lg tracking-widest">
-            CIVITAS // ADMIN
-          </h1>
+          <h1 className="font-mono text-sm sm:text-lg tracking-widest">CIVITAS // ADMIN</h1>
           <button
             onClick={onLogout}
             aria-label="Log out of admin"
-            className="text-[10px] font-pixel text-neon-pink/60 hover:text-neon-pink
-                       border border-neon-pink/30 hover:border-neon-pink/60
-                       px-3 py-1 rounded transition-colors"
+            className="text-xs font-mono text-ink-lo hover:text-signal-magenta border border-signal-magenta/40 hover:border-signal-magenta/40
+                       px-3 py-1  transition-colors"
           >
             [LOGOUT]
           </button>
@@ -1990,29 +1928,25 @@ function AdminDashboardView({
           <div
             role="status"
             aria-live="polite"
-            className={`mb-6 border rounded p-4 flex items-center justify-between ${
+            className={`mb-6 border  p-4 flex items-center justify-between ${
               completionBanner.status === "completed"
-                ? "border-matrix-green/60 bg-matrix-green/10"
-                : "border-neon-pink/60 bg-neon-pink/10"
+                ? "border-phos/40 bg-white/[0.03]"
+                : "border-signal-magenta/40 bg-signal-magenta/10"
             }`}
           >
             <span
-              className={`text-sm font-terminal font-bold ${
-                completionBanner.status === "completed"
-                  ? "text-matrix-green"
-                  : "text-neon-pink"
+              className={`text-sm font-mono font-bold ${
+                completionBanner.status === "completed" ? "text-ink-hi" : "text-signal-magenta"
               }`}
             >
               {completionBanner.status === "completed"
                 ? "PIPELINE COMPLETED SUCCESSFULLY"
                 : "PIPELINE FAILED"}
             </span>
-            <span className="text-matrix-green/60 text-xs font-terminal">
-              {completionBanner.duration}
-            </span>
+            <span className="text-ink-lo text-xs font-mono">{completionBanner.duration}</span>
             <button
               onClick={() => setCompletionBanner(null)}
-              className="text-matrix-green/40 hover:text-matrix-green text-xs ml-4"
+              className="text-ink-min hover:text-phos text-xs ml-4"
               aria-label="Dismiss"
             >
               [x]
@@ -2039,13 +1973,17 @@ function AdminDashboardView({
                 <>
                   <span>LLM: {pipelineStatus.lastRun.llmCalls}</span>
                   <span>
-                    Cache: {pipelineStatus.lastRun.cacheHits}H / {pipelineStatus.lastRun.cacheMisses}M
+                    Cache: {pipelineStatus.lastRun.cacheHits}H /{" "}
+                    {pipelineStatus.lastRun.cacheMisses}M
                   </span>
                   <span>Bills: {pipelineStatus.lastRun.billsClassified}</span>
                   <span>
-                    Senators: {pipelineStatus.lastRun.senatorsProcessed}/{pipelineStatus.lastRun.senatorsTotal}
+                    Senators: {pipelineStatus.lastRun.senatorsProcessed}/
+                    {pipelineStatus.lastRun.senatorsTotal}
                     {pipelineStatus.lastRun.senatorsFailed > 0 && (
-                      <span className="text-neon-pink ml-1">({pipelineStatus.lastRun.senatorsFailed}F)</span>
+                      <span className="text-signal-magenta ml-1">
+                        ({pipelineStatus.lastRun.senatorsFailed}F)
+                      </span>
                     )}
                   </span>
                 </>
@@ -2067,9 +2005,12 @@ function AdminDashboardView({
               }}
               statsRow={
                 <span>
-                  Reps: {pipelineStatus.houseLastRun.repsProcessed}/{pipelineStatus.houseLastRun.repsTotal}
+                  Reps: {pipelineStatus.houseLastRun.repsProcessed}/
+                  {pipelineStatus.houseLastRun.repsTotal}
                   {pipelineStatus.houseLastRun.repsFailed > 0 && (
-                    <span className="text-neon-pink ml-1">({pipelineStatus.houseLastRun.repsFailed}F)</span>
+                    <span className="text-signal-magenta ml-1">
+                      ({pipelineStatus.houseLastRun.repsFailed}F)
+                    </span>
                   )}
                 </span>
               }
@@ -2137,32 +2078,32 @@ function AdminDashboardView({
         <div className="grid grid-cols-1 mb-6">
           {/* System Health */}
           <div className="terminal-window">
-            <TerminalTitlebar title="system_health" />
-            <div className="p-4 space-y-2 text-sm font-terminal">
+            <TerminalTitlebar title="System health" />
+            <div className="p-4 space-y-2 text-sm font-mono">
               <div className="flex justify-between">
-                <span className="text-matrix-green/60">DATABASE</span>
+                <span className="text-ink-lo">DATABASE</span>
                 <span className="flex items-center gap-2">
                   <StatusDot ok={d?.system.database === "ok"} />
                   {d?.system.database?.toUpperCase()}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-matrix-green/60">OLLAMA</span>
+                <span className="text-ink-lo">OLLAMA</span>
                 <span className="flex items-center gap-2">
                   <StatusDot ok={d?.system.ollama === "ok"} />
                   {d?.system.ollama?.toUpperCase()}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-matrix-green/60">MODEL</span>
-                <span className="text-neon-cyan">{d?.system.ollamaModel}</span>
+                <span className="text-ink-lo">MODEL</span>
+                <span className="text-signal-cyan">{d?.system.ollamaModel}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-matrix-green/60">DB SIZE</span>
+                <span className="text-ink-lo">DB SIZE</span>
                 <span>{formatBytes(d?.system.dbSizeBytes ?? 0)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-matrix-green/60">VECTOR DB</span>
+                <span className="text-ink-lo">VECTOR DB</span>
                 <span className="flex items-center gap-2">
                   <StatusDot ok={d?.system.vectorDb?.status === "ok"} />
                   {d?.system.vectorDb?.status === "ok"
@@ -2170,26 +2111,42 @@ function AdminDashboardView({
                     : "UNAVAILABLE"}
                 </span>
               </div>
-              <div className="border-t border-matrix-green/15 pt-2 mt-2 space-y-1.5">
+              <div className="border-t border-white/[0.07] pt-2 mt-2 space-y-1.5">
                 {/* Senate pipeline */}
                 <div className="flex justify-between">
-                  <span className="text-matrix-green/60">SENATE</span>
-                  <span className={pipelineStatus?.isRunning ? "text-neon-cyan animate-pulse" : "text-matrix-green/60"}>
-                    {pipelineStatus?.isRunning ? "RUNNING" : (() => {
-                      const run = pipelineStatus?.lastRun;
-                      if (!run) return "IDLE";
-                      const senators = `${run.senatorsProcessed}/${run.senatorsTotal}`;
-                      const failed = run.senatorsFailed > 0 ? ` · ${run.senatorsFailed}F` : "";
-                      return (
-                        <span>
-                          <span className={run.status === "completed" ? "text-matrix-green" : run.status === "failed" ? "text-neon-pink" : "text-matrix-green/60"}>
-                            {run.status.toUpperCase()}
-                          </span>
-                          <span className="text-matrix-green/60"> · {senators}</span>
-                          {run.senatorsFailed > 0 && <span className="text-neon-pink">{failed}</span>}
-                        </span>
-                      );
-                    })()}
+                  <span className="text-ink-lo">SENATE</span>
+                  <span
+                    className={
+                      pipelineStatus?.isRunning ? "text-signal-cyan animate-pulse" : "text-ink-lo"
+                    }
+                  >
+                    {pipelineStatus?.isRunning
+                      ? "RUNNING"
+                      : (() => {
+                          const run = pipelineStatus?.lastRun;
+                          if (!run) return "IDLE";
+                          const senators = `${run.senatorsProcessed}/${run.senatorsTotal}`;
+                          const failed = run.senatorsFailed > 0 ? ` · ${run.senatorsFailed}F` : "";
+                          return (
+                            <span>
+                              <span
+                                className={
+                                  run.status === "completed"
+                                    ? "text-ink-hi"
+                                    : run.status === "failed"
+                                      ? "text-signal-magenta"
+                                      : "text-ink-lo"
+                                }
+                              >
+                                {run.status.toUpperCase()}
+                              </span>
+                              <span className="text-ink-lo"> · {senators}</span>
+                              {run.senatorsFailed > 0 && (
+                                <span className="text-signal-magenta">{failed}</span>
+                              )}
+                            </span>
+                          );
+                        })()}
                   </span>
                 </div>
                 <LastRunSteps steps={pipelineStatus?.lastRun?.progressSteps} />
@@ -2199,10 +2156,15 @@ function AdminDashboardView({
                   const run = pipelineStatus?.houseLastRun;
                   const isStuck = run?.status === "running" && !pipelineStatus?.houseIsRunning;
                   const statusClassName =
-                    run?.status === "completed" ? "text-matrix-green" :
-                    run?.status === "partial" ? "text-yellow-400" :
-                    run?.status === "failed" ? "text-neon-pink" :
-                    isStuck ? "text-yellow-400" : "text-matrix-green/50";
+                    run?.status === "completed"
+                      ? "text-ink-hi"
+                      : run?.status === "partial"
+                        ? "text-signal-amber"
+                        : run?.status === "failed"
+                          ? "text-signal-magenta"
+                          : isStuck
+                            ? "text-signal-amber"
+                            : "text-ink-lo";
                   return (
                     <>
                       <PipelineStatusRow
@@ -2211,12 +2173,21 @@ function AdminDashboardView({
                         run={run}
                         isStuck={isStuck}
                         statusClassName={statusClassName}
-                        detail={run && (
-                          <>
-                            {run.repsTotal > 0 && <span className="text-matrix-green/60"> · {run.repsProcessed}/{run.repsTotal}</span>}
-                            {(run.repsFailed ?? 0) > 0 && <span className="text-neon-pink"> · {run.repsFailed}F</span>}
-                          </>
-                        )}
+                        detail={
+                          run && (
+                            <>
+                              {run.repsTotal > 0 && (
+                                <span className="text-ink-lo">
+                                  {" "}
+                                  · {run.repsProcessed}/{run.repsTotal}
+                                </span>
+                              )}
+                              {(run.repsFailed ?? 0) > 0 && (
+                                <span className="text-signal-magenta"> · {run.repsFailed}F</span>
+                              )}
+                            </>
+                          )
+                        }
                         clearing={clearingHouse}
                         onClear={async () => {
                           setClearingHouse(true);
@@ -2235,11 +2206,16 @@ function AdminDashboardView({
                 {/* Stock trades pipeline */}
                 {(() => {
                   const run = pipelineStatus?.stockTradesLastRun;
-                  const isStuck = run?.status === "running" && !pipelineStatus?.stockTradesIsRunning;
+                  const isStuck =
+                    run?.status === "running" && !pipelineStatus?.stockTradesIsRunning;
                   const statusClassName =
-                    run?.status === "completed" ? "text-matrix-green" :
-                    run?.status === "failed" ? "text-neon-pink" :
-                    isStuck ? "text-yellow-400" : "text-matrix-green/50";
+                    run?.status === "completed"
+                      ? "text-ink-hi"
+                      : run?.status === "failed"
+                        ? "text-signal-magenta"
+                        : isStuck
+                          ? "text-signal-amber"
+                          : "text-ink-lo";
                   return (
                     <>
                       <PipelineStatusRow
@@ -2248,7 +2224,15 @@ function AdminDashboardView({
                         run={run}
                         isStuck={isStuck}
                         statusClassName={statusClassName}
-                        detail={run && <span className="text-matrix-green/60"> · {run.houseTradesIngested}H/{run.senateTradesIngested}S/{run.presidentTradesIngested}P</span>}
+                        detail={
+                          run && (
+                            <span className="text-ink-lo">
+                              {" "}
+                              · {run.houseTradesIngested}H/{run.senateTradesIngested}S/
+                              {run.presidentTradesIngested}P
+                            </span>
+                          )
+                        }
                         clearing={clearingStockTrades}
                         onClear={async () => {
                           setClearingStockTrades(true);
@@ -2270,11 +2254,16 @@ function AdminDashboardView({
                     despite having no data dependency on it. */}
                 {(() => {
                   const run = pipelineStatus?.supplementaryLastRun;
-                  const isStuck = run?.status === "running" && !pipelineStatus?.supplementaryIsRunning;
+                  const isStuck =
+                    run?.status === "running" && !pipelineStatus?.supplementaryIsRunning;
                   const statusClassName =
-                    run?.status === "completed" ? "text-matrix-green" :
-                    run?.status === "failed" ? "text-neon-pink" :
-                    isStuck ? "text-yellow-400" : "text-matrix-green/50";
+                    run?.status === "completed"
+                      ? "text-ink-hi"
+                      : run?.status === "failed"
+                        ? "text-signal-magenta"
+                        : isStuck
+                          ? "text-signal-amber"
+                          : "text-ink-lo";
                   return (
                     <>
                       <PipelineStatusRow
@@ -2283,11 +2272,18 @@ function AdminDashboardView({
                         run={run}
                         isStuck={isStuck}
                         statusClassName={statusClassName}
-                        detail={run && (
-                          <span className="text-matrix-green/60">
-                            {" "}· {run.exploreDocsIngested} docs · {run.justicesSkipped ? "SCOTUS skipped" : `${run.justicesScored} justices`} · {run.presidentsUpdated} pres
-                          </span>
-                        )}
+                        detail={
+                          run && (
+                            <span className="text-ink-lo">
+                              {" "}
+                              · {run.exploreDocsIngested} docs ·{" "}
+                              {run.justicesSkipped
+                                ? "SCOTUS skipped"
+                                : `${run.justicesScored} justices`}{" "}
+                              · {run.presidentsUpdated} pres
+                            </span>
+                          )
+                        }
                         clearing={clearingSupplementary}
                         onClear={async () => {
                           setClearingSupplementary(true);
@@ -2304,68 +2300,69 @@ function AdminDashboardView({
                 })()}
 
                 <div className="flex justify-between">
-                  <span className="text-matrix-green/60">SCHEDULE</span>
-                  <span className="text-matrix-green/70">{d?.pipeline.cronSchedule}</span>
+                  <span className="text-ink-lo">SCHEDULE</span>
+                  <span className="text-ink">{d?.pipeline.cronSchedule}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-matrix-green/60">NEXT RUN</span>
-                  <span className="text-matrix-green/70">
-                    {formatTime(d?.pipeline.nextScheduled)}
-                  </span>
+                  <span className="text-ink-lo">NEXT RUN</span>
+                  <span className="text-ink">{formatTime(d?.pipeline.nextScheduled)}</span>
                 </div>
               </div>
             </div>
           </div>
-
         </div>
 
         {/* Action Center */}
         <div className="terminal-window mb-6">
-          <TerminalTitlebar title="action_center" />
+          <TerminalTitlebar title="Action center" />
           <ActionCenterStatus ac={pipelineStatus?.actionRefresh ?? null} />
         </div>
 
         {/* Data Stats */}
         <div className="terminal-window mb-6">
-          <TerminalTitlebar title="data_inventory" />
+          <TerminalTitlebar title="Data inventory" />
           {d && <DataInventory data={d.data} />}
         </div>
 
         {/* Vector DB & ML Metrics */}
         {d?.system.vectorDb && (
           <div className="terminal-window mb-6">
-            <TerminalTitlebar title="vector_db_metrics" />
+            <TerminalTitlebar title="Vector index" />
             <div className="p-4 space-y-4">
               {d.system.vectorDb.status !== "ok" ? (
-                <p className="text-neon-pink text-xs font-terminal">
+                <p className="text-signal-magenta text-xs font-mono">
                   VECTOR DB UNAVAILABLE: {d.system.vectorDb.error}
                 </p>
               ) : (
                 <>
                   {/* Embedding Model */}
                   <div>
-                    <h3 className="text-[10px] font-pixel text-matrix-green/50 tracking-wider mb-2">
+                    <h3 className="text-xs font-mono text-ink-lo tracking-wider mb-2">
                       EMBEDDING MODELS
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div className="border border-matrix-green/15 rounded p-3">
-                        <div className="text-[10px] font-pixel text-matrix-green/40 mb-1">CLASSIFICATION MODEL</div>
-                        <div className="text-xs font-terminal text-neon-cyan break-all">
+                      <div className="border border-white/[0.07] p-3">
+                        <div className="text-xs font-mono text-ink-min mb-1">
+                          CLASSIFICATION MODEL
+                        </div>
+                        <div className="text-xs font-mono text-signal-cyan break-all">
                           {d.system.vectorDb.embeddingModel}
                         </div>
-                        <div className="text-[10px] font-terminal text-matrix-green/50 mt-1">
+                        <div className="text-xs font-mono text-ink-lo mt-1">
                           v: {d.system.vectorDb.embeddingModelVersion}
                         </div>
                       </div>
-                      <div className="border border-matrix-green/15 rounded p-3">
-                        <div className="text-[10px] font-pixel text-matrix-green/40 mb-1">SEARCH INDEX MODEL</div>
-                        <div className="text-sm font-terminal text-matrix-green">
+                      <div className="border border-white/[0.07] p-3">
+                        <div className="text-xs font-mono text-ink-min mb-1">
+                          SEARCH INDEX MODEL
+                        </div>
+                        <div className="text-sm font-mono text-ink-hi">
                           {d.system.vectorDb.indexModelVersion || "rebuilding…"}
                         </div>
                       </div>
-                      <div className="border border-matrix-green/15 rounded p-3">
-                        <div className="text-[10px] font-pixel text-matrix-green/40 mb-1">DIMENSIONS</div>
-                        <div className="text-sm font-terminal text-matrix-green">
+                      <div className="border border-white/[0.07] p-3">
+                        <div className="text-xs font-mono text-ink-min mb-1">DIMENSIONS</div>
+                        <div className="text-sm font-mono text-ink-hi">
                           {d.system.vectorDb.embeddingDimensions}
                         </div>
                       </div>
@@ -2374,7 +2371,7 @@ function AdminDashboardView({
 
                   {/* Collections */}
                   <div>
-                    <h3 className="text-[10px] font-pixel text-matrix-green/50 tracking-wider mb-2">
+                    <h3 className="text-xs font-mono text-ink-lo tracking-wider mb-2">
                       COLLECTIONS ({d.system.vectorDb.collections?.length ?? 0})
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2383,20 +2380,15 @@ function AdminDashboardView({
                           ? Math.round((col.count / d.system.vectorDb!.totalVectors!) * 100)
                           : 0;
                         return (
-                          <div
-                            key={col.name}
-                            className="border border-matrix-green/15 rounded p-3"
-                          >
+                          <div key={col.name} className="border border-white/[0.07] p-3">
                             <div className="flex justify-between items-center mb-2">
-                              <span className="text-xs font-terminal text-matrix-green">
-                                {col.name}
-                              </span>
-                              <span className="text-xs font-terminal text-neon-cyan">
+                              <span className="text-xs font-mono text-ink-hi">{col.name}</span>
+                              <span className="text-xs font-mono text-signal-cyan">
                                 {col.count.toLocaleString()}
                               </span>
                             </div>
                             <div
-                              className="w-full h-1.5 bg-matrix-green/10 rounded-full overflow-hidden mb-2"
+                              className="w-full h-1.5 bg-white/[0.03] overflow-hidden mb-2"
                               role="progressbar"
                               aria-valuenow={pct}
                               aria-valuemin={0}
@@ -2404,15 +2396,15 @@ function AdminDashboardView({
                               aria-label={`${col.name} vector count`}
                             >
                               <div
-                                className="h-full bg-matrix-green/60 rounded-full transition-all"
+                                className="h-full bg-phos transition-all"
                                 style={{ width: `${Math.max(pct, 2)}%` }}
                               />
                             </div>
-                            <div className="text-[10px] font-terminal text-matrix-green/40">
+                            <div className="text-xs font-mono text-ink-min">
                               {pct}% of total vectors
                             </div>
                             {col.sampleMetadataKeys && col.sampleMetadataKeys.length > 0 && (
-                              <div className="mt-1 text-[10px] font-terminal text-matrix-green/30">
+                              <div className="mt-1 text-xs font-mono text-ink-min">
                                 fields: {col.sampleMetadataKeys.join(", ")}
                               </div>
                             )}
@@ -2424,35 +2416,33 @@ function AdminDashboardView({
 
                   {/* Storage Summary */}
                   <div>
-                    <h3 className="text-[10px] font-pixel text-matrix-green/50 tracking-wider mb-2">
-                      STORAGE
-                    </h3>
+                    <h3 className="text-xs font-mono text-ink-lo tracking-wider mb-2">STORAGE</h3>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      <div className="border border-matrix-green/15 rounded p-3 text-center">
-                        <div className="text-lg font-terminal text-matrix-green">
+                      <div className="border border-white/[0.07] p-3 text-center">
+                        <div className="text-lg font-mono text-ink-hi">
                           {(d.system.vectorDb.totalVectors ?? 0).toLocaleString()}
                         </div>
-                        <div className="text-[10px] font-pixel text-matrix-green/50">TOTAL VECTORS</div>
+                        <div className="text-xs font-mono text-ink-lo">TOTAL VECTORS</div>
                       </div>
-                      <div className="border border-matrix-green/15 rounded p-3 text-center">
-                        <div className="text-lg font-terminal text-matrix-green">
+                      <div className="border border-white/[0.07] p-3 text-center">
+                        <div className="text-lg font-mono text-ink-hi">
                           {formatBytes(d.system.vectorDb.sizeBytes ?? 0)}
                         </div>
-                        <div className="text-[10px] font-pixel text-matrix-green/50">DISK SIZE</div>
+                        <div className="text-xs font-mono text-ink-lo">DISK SIZE</div>
                       </div>
-                      <div className="border border-matrix-green/15 rounded p-3 text-center">
-                        <div className="text-lg font-terminal text-matrix-green">
+                      <div className="border border-white/[0.07] p-3 text-center">
+                        <div className="text-lg font-mono text-ink-hi">
                           {d.system.vectorDb.collections?.length ?? 0}
                         </div>
-                        <div className="text-[10px] font-pixel text-matrix-green/50">COLLECTIONS</div>
+                        <div className="text-xs font-mono text-ink-lo">COLLECTIONS</div>
                       </div>
-                      <div className="border border-matrix-green/15 rounded p-3 text-center">
-                        <div className="text-lg font-terminal text-matrix-green">
+                      <div className="border border-white/[0.07] p-3 text-center">
+                        <div className="text-lg font-mono text-ink-hi">
                           {d.system.vectorDb.totalVectors && d.system.vectorDb.sizeBytes
                             ? `${Math.round(d.system.vectorDb.sizeBytes / d.system.vectorDb.totalVectors)} B`
                             : "—"}
                         </div>
-                        <div className="text-[10px] font-pixel text-matrix-green/50">AVG PER VECTOR</div>
+                        <div className="text-xs font-mono text-ink-lo">AVG PER VECTOR</div>
                       </div>
                     </div>
                   </div>
@@ -2460,58 +2450,60 @@ function AdminDashboardView({
                   {/* Learning Store */}
                   {d.system.vectorDb.learningStore && !d.system.vectorDb.learningStore.error && (
                     <div>
-                      <h3 className="text-[10px] font-pixel text-matrix-green/50 tracking-wider mb-2">
+                      <h3 className="text-xs font-mono text-ink-lo tracking-wider mb-2">
                         LEARNING STORE
                       </h3>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-                        <div className="border border-matrix-green/15 rounded p-3 text-center">
-                          <div className="text-lg font-terminal text-matrix-green">
+                        <div className="border border-white/[0.07] p-3 text-center">
+                          <div className="text-lg font-mono text-ink-hi">
                             {d.system.vectorDb.learningStore.totalEntries.toLocaleString()}
                           </div>
-                          <div className="text-[10px] font-pixel text-matrix-green/50">CLASSIFICATIONS</div>
+                          <div className="text-xs font-mono text-ink-lo">CLASSIFICATIONS</div>
                         </div>
-                        <div className="border border-matrix-green/15 rounded p-3 text-center">
-                          <div className="text-lg font-terminal text-matrix-green">
+                        <div className="border border-white/[0.07] p-3 text-center">
+                          <div className="text-lg font-mono text-ink-hi">
                             {d.system.vectorDb.learningStore.avgConfidence != null
                               ? `${(d.system.vectorDb.learningStore.avgConfidence * 100).toFixed(1)}%`
                               : "—"}
                           </div>
-                          <div className="text-[10px] font-pixel text-matrix-green/50">AVG CONFIDENCE</div>
+                          <div className="text-xs font-mono text-ink-lo">AVG CONFIDENCE</div>
                         </div>
-                        <div className="border border-matrix-green/15 rounded p-3 text-center">
-                          <div className="text-lg font-terminal text-matrix-green">
+                        <div className="border border-white/[0.07] p-3 text-center">
+                          <div className="text-lg font-mono text-ink-hi">
                             {Object.keys(d.system.vectorDb.learningStore.bySource).length}
                           </div>
-                          <div className="text-[10px] font-pixel text-matrix-green/50">SOURCES</div>
+                          <div className="text-xs font-mono text-ink-lo">SOURCES</div>
                         </div>
-                        <div className="border border-matrix-green/15 rounded p-3 text-center">
-                          <div className="text-lg font-terminal text-matrix-green">
+                        <div className="border border-white/[0.07] p-3 text-center">
+                          <div className="text-lg font-mono text-ink-hi">
                             {Object.keys(d.system.vectorDb.learningStore.byType).length}
                           </div>
-                          <div className="text-[10px] font-pixel text-matrix-green/50">ENTITY TYPES</div>
+                          <div className="text-xs font-mono text-ink-lo">ENTITY TYPES</div>
                         </div>
                       </div>
 
                       {/* By Source breakdown */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="border border-matrix-green/15 rounded p-3">
-                          <div className="text-[10px] font-pixel text-matrix-green/40 mb-2">BY SOURCE</div>
+                        <div className="border border-white/[0.07] p-3">
+                          <div className="text-xs font-mono text-ink-min mb-2">BY SOURCE</div>
                           <div className="space-y-1.5">
                             {Object.entries(d.system.vectorDb.learningStore.bySource)
                               .sort(([, a], [, b]) => (b as number) - (a as number))
                               .map(([source, count]) => {
                                 const total = d.system.vectorDb!.learningStore!.totalEntries;
-                                const pct = total ? Math.round(((count as number) / total) * 100) : 0;
+                                const pct = total
+                                  ? Math.round(((count as number) / total) * 100)
+                                  : 0;
                                 return (
                                   <div key={source}>
-                                    <div className="flex justify-between text-xs font-terminal mb-0.5">
-                                      <span className="text-matrix-green/70">{source}</span>
-                                      <span className="text-matrix-green/50">
+                                    <div className="flex justify-between text-xs font-mono mb-0.5">
+                                      <span className="text-ink">{source}</span>
+                                      <span className="text-ink-lo">
                                         {(count as number).toLocaleString()} ({pct}%)
                                       </span>
                                     </div>
                                     <div
-                                      className="w-full h-1 bg-matrix-green/10 rounded-full overflow-hidden"
+                                      className="w-full h-1 bg-white/[0.03] overflow-hidden"
                                       role="progressbar"
                                       aria-valuenow={pct}
                                       aria-valuemin={0}
@@ -2519,7 +2511,7 @@ function AdminDashboardView({
                                       aria-label={`${source} classifications`}
                                     >
                                       <div
-                                        className="h-full bg-neon-cyan/50 rounded-full"
+                                        className="h-full bg-signal-cyan"
                                         style={{ width: `${Math.max(pct, 1)}%` }}
                                       />
                                     </div>
@@ -2528,24 +2520,26 @@ function AdminDashboardView({
                               })}
                           </div>
                         </div>
-                        <div className="border border-matrix-green/15 rounded p-3">
-                          <div className="text-[10px] font-pixel text-matrix-green/40 mb-2">BY ENTITY TYPE</div>
+                        <div className="border border-white/[0.07] p-3">
+                          <div className="text-xs font-mono text-ink-min mb-2">BY ENTITY TYPE</div>
                           <div className="space-y-1.5">
                             {Object.entries(d.system.vectorDb.learningStore.byType)
                               .sort(([, a], [, b]) => (b as number) - (a as number))
                               .map(([type, count]) => {
                                 const total = d.system.vectorDb!.learningStore!.totalEntries;
-                                const pct = total ? Math.round(((count as number) / total) * 100) : 0;
+                                const pct = total
+                                  ? Math.round(((count as number) / total) * 100)
+                                  : 0;
                                 return (
                                   <div key={type}>
-                                    <div className="flex justify-between text-xs font-terminal mb-0.5">
-                                      <span className="text-matrix-green/70">{type}</span>
-                                      <span className="text-matrix-green/50">
+                                    <div className="flex justify-between text-xs font-mono mb-0.5">
+                                      <span className="text-ink">{type}</span>
+                                      <span className="text-ink-lo">
                                         {(count as number).toLocaleString()} ({pct}%)
                                       </span>
                                     </div>
                                     <div
-                                      className="w-full h-1 bg-matrix-green/10 rounded-full overflow-hidden"
+                                      className="w-full h-1 bg-white/[0.03] overflow-hidden"
                                       role="progressbar"
                                       aria-valuenow={pct}
                                       aria-valuemin={0}
@@ -2553,7 +2547,7 @@ function AdminDashboardView({
                                       aria-label={`${type} classifications`}
                                     >
                                       <div
-                                        className="h-full bg-matrix-green/40 rounded-full"
+                                        className="h-full bg-phos"
                                         style={{ width: `${Math.max(pct, 1)}%` }}
                                       />
                                     </div>
@@ -2565,37 +2559,42 @@ function AdminDashboardView({
                       </div>
 
                       {/* Confidence Distribution */}
-                      {Object.keys(d.system.vectorDb.learningStore.confidenceDistribution).length > 0 && (
-                        <div className="border border-matrix-green/15 rounded p-3 mt-3">
-                          <div className="text-[10px] font-pixel text-matrix-green/40 mb-2">
+                      {Object.keys(d.system.vectorDb.learningStore.confidenceDistribution).length >
+                        0 && (
+                        <div className="border border-white/[0.07] p-3 mt-3">
+                          <div className="text-xs font-mono text-ink-min mb-2">
                             CONFIDENCE DISTRIBUTION
                           </div>
                           <div className="flex items-end gap-1 h-16">
                             {(() => {
                               const dist = d.system.vectorDb!.learningStore!.confidenceDistribution;
-                              const buckets = Array.from({ length: 11 }, (_, i) => (i / 10).toFixed(1));
+                              const buckets = Array.from({ length: 11 }, (_, i) =>
+                                (i / 10).toFixed(1)
+                              );
                               const maxCount = Math.max(
                                 ...buckets.map((b) => (dist[b] ?? 0) as number),
-                                1,
+                                1
                               );
                               return buckets.map((bucket) => {
                                 const count = (dist[bucket] ?? 0) as number;
-                                const height = count > 0 ? Math.max((count / maxCount) * 100, 5) : 0;
+                                const height =
+                                  count > 0 ? Math.max((count / maxCount) * 100, 5) : 0;
                                 return (
                                   <div
                                     key={bucket}
                                     className="flex-1 flex flex-col items-center gap-0.5"
                                     title={`${bucket}: ${count} entries`}
                                   >
-                                    <div className="w-full flex items-end justify-center" style={{ height: "48px" }}>
+                                    <div
+                                      className="w-full flex items-end justify-center"
+                                      style={{ height: "48px" }}
+                                    >
                                       <div
-                                        className="w-full rounded-t bg-neon-cyan/40 transition-all min-w-[4px]"
+                                        className="w-full rounded-t bg-signal-cyan transition-all min-w-[4px]"
                                         style={{ height: `${height}%` }}
                                       />
                                     </div>
-                                    <span className="text-[8px] font-terminal text-matrix-green/30">
-                                      {bucket}
-                                    </span>
+                                    <span className="text-xs font-mono text-ink-min">{bucket}</span>
                                   </div>
                                 );
                               });
@@ -2605,7 +2604,7 @@ function AdminDashboardView({
                       )}
 
                       {/* Timestamps */}
-                      <div className="flex gap-4 mt-2 text-[10px] font-terminal text-matrix-green/40">
+                      <div className="flex gap-4 mt-2 text-xs font-mono text-ink-min">
                         {d.system.vectorDb.learningStore.oldestEntry && (
                           <span>
                             oldest: {formatTime(d.system.vectorDb.learningStore.oldestEntry)}
@@ -2628,78 +2627,79 @@ function AdminDashboardView({
         {/* Last Run Details */}
         {d?.pipeline.lastRun && (
           <div className="terminal-window mb-6">
-            <TerminalTitlebar title="last_run_detail" />
+            <TerminalTitlebar title="Last run" />
             <div className="p-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm font-terminal">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm font-mono">
                 <div>
-                  <span className="text-matrix-green/50 text-xs block">STATUS</span>
+                  <span className="text-ink-lo text-xs block">STATUS</span>
                   <span
                     className={
                       d.pipeline.lastRun.status === "completed"
-                        ? "text-matrix-green"
+                        ? "text-ink-hi"
                         : d.pipeline.lastRun.status === "failed"
-                          ? "text-neon-pink"
-                          : "text-neon-cyan"
+                          ? "text-signal-magenta"
+                          : "text-signal-cyan"
                     }
                   >
                     {d.pipeline.lastRun.status.toUpperCase()}
                   </span>
                 </div>
                 <div>
-                  <span className="text-matrix-green/50 text-xs block">STARTED</span>
+                  <span className="text-ink-lo text-xs block">STARTED</span>
                   <span>{formatTime(d.pipeline.lastRun.startedAt)}</span>
                 </div>
                 <div>
-                  <span className="text-matrix-green/50 text-xs block">DURATION</span>
+                  <span className="text-ink-lo text-xs block">DURATION</span>
                   <span>{formatDuration(d.pipeline.lastRun.elapsedSeconds)}</span>
                 </div>
                 <div>
-                  <span className="text-matrix-green/50 text-xs block">SENATORS</span>
+                  <span className="text-ink-lo text-xs block">SENATORS</span>
                   <span>
                     {d.pipeline.lastRun.senatorsProcessed}/{d.pipeline.lastRun.senatorsTotal}
                     {d.pipeline.lastRun.senatorsFailed > 0 && (
-                      <span className="text-neon-pink ml-1">
+                      <span className="text-signal-magenta ml-1">
                         ({d.pipeline.lastRun.senatorsFailed} failed)
                       </span>
                     )}
                   </span>
                 </div>
                 <div>
-                  <span className="text-matrix-green/50 text-xs block">LLM CALLS</span>
+                  <span className="text-ink-lo text-xs block">LLM CALLS</span>
                   <span>{d.pipeline.lastRun.llmCalls}</span>
                 </div>
                 <div>
-                  <span className="text-matrix-green/50 text-xs block">BILLS CLASSIFIED</span>
+                  <span className="text-ink-lo text-xs block">BILLS CLASSIFIED</span>
                   <span>{d.pipeline.lastRun.billsClassified}</span>
                 </div>
                 <div>
-                  <span className="text-matrix-green/50 text-xs block">CACHE HIT RATE</span>
+                  <span className="text-ink-lo text-xs block">CACHE HIT RATE</span>
                   <span>
                     {d.pipeline.lastRun.cacheHits + d.pipeline.lastRun.cacheMisses > 0
                       ? `${Math.round(
                           (d.pipeline.lastRun.cacheHits /
                             (d.pipeline.lastRun.cacheHits + d.pipeline.lastRun.cacheMisses)) *
-                            100,
+                            100
                         )}%`
                       : "—"}{" "}
-                    <span className="text-matrix-green/40">
+                    <span className="text-ink-min">
                       ({d.pipeline.lastRun.cacheHits}H / {d.pipeline.lastRun.cacheMisses}M)
                     </span>
                   </span>
                 </div>
                 <div>
-                  <span className="text-matrix-green/50 text-xs block">PIPELINE RUNS</span>
+                  <span className="text-ink-lo text-xs block">PIPELINE RUNS</span>
                   <span>
                     {d.pipeline.totalRuns} total
-                    <span className="text-matrix-green/40">
-                      {" "}({d.pipeline.successfulRuns}✓ {d.pipeline.failedRuns}✗)
+                    <span className="text-ink-min">
+                      {" "}
+                      ({d.pipeline.successfulRuns}✓ {d.pipeline.failedRuns}✗)
                     </span>
                   </span>
                 </div>
               </div>
               {d.pipeline.lastRun.errorMessage && (
-                <div className="mt-3 p-2 border border-neon-pink/30 rounded bg-neon-pink/5">
-                  <span className="text-neon-pink text-xs font-terminal">
+                <div className="mt-3 p-2 border border-signal-magenta/40 bg-signal-magenta/10">
+                  <span className="text-signal-magenta text-xs font-mono">
                     ERROR: {d.pipeline.lastRun.errorMessage}
                   </span>
                 </div>
@@ -2715,11 +2715,12 @@ function AdminDashboardView({
           extraStats={
             pipelineStatus?.houseLastRun && (
               <div>
-                <span className="text-matrix-green/50 text-xs block">REPS</span>
+                <span className="text-ink-lo text-xs block">REPS</span>
                 <span>
-                  {pipelineStatus.houseLastRun.repsProcessed}/{pipelineStatus.houseLastRun.repsTotal}
+                  {pipelineStatus.houseLastRun.repsProcessed}/
+                  {pipelineStatus.houseLastRun.repsTotal}
                   {pipelineStatus.houseLastRun.repsFailed > 0 && (
-                    <span className="text-neon-pink ml-1">
+                    <span className="text-signal-magenta ml-1">
                       ({pipelineStatus.houseLastRun.repsFailed} failed)
                     </span>
                   )}
@@ -2735,7 +2736,7 @@ function AdminDashboardView({
           extraStats={
             pipelineStatus?.stockTradesLastRun && (
               <div>
-                <span className="text-matrix-green/50 text-xs block">TRADES INGESTED</span>
+                <span className="text-ink-lo text-xs block">TRADES INGESTED</span>
                 <span>
                   {pipelineStatus.stockTradesLastRun.houseTradesIngested}H /{" "}
                   {pipelineStatus.stockTradesLastRun.senateTradesIngested}S /{" "}
@@ -2753,11 +2754,11 @@ function AdminDashboardView({
             pipelineStatus?.supplementaryLastRun && (
               <>
                 <div>
-                  <span className="text-matrix-green/50 text-xs block">EXPLORE DOCS</span>
+                  <span className="text-ink-lo text-xs block">EXPLORE DOCS</span>
                   <span>{pipelineStatus.supplementaryLastRun.exploreDocsIngested}</span>
                 </div>
                 <div>
-                  <span className="text-matrix-green/50 text-xs block">SCOTUS</span>
+                  <span className="text-ink-lo text-xs block">SCOTUS</span>
                   <span>
                     {pipelineStatus.supplementaryLastRun.justicesSkipped
                       ? "skipped"
@@ -2765,7 +2766,7 @@ function AdminDashboardView({
                   </span>
                 </div>
                 <div>
-                  <span className="text-matrix-green/50 text-xs block">PRESIDENTS</span>
+                  <span className="text-ink-lo text-xs block">PRESIDENTS</span>
                   <span>{pipelineStatus.supplementaryLastRun.presidentsUpdated}</span>
                 </div>
               </>
@@ -2776,14 +2777,14 @@ function AdminDashboardView({
         {/* LLM Stats */}
         {d?.llm && Object.keys(d.llm).length > 0 && (
           <div className="terminal-window mb-6">
-            <TerminalTitlebar title="llm_stats" />
+            <TerminalTitlebar title="Model stats" />
             <div className="p-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm font-terminal">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm font-mono">
                 {Object.entries(d.llm)
                   .filter(([, val]) => val === null || typeof val !== "object")
                   .map(([key, val]) => (
                     <div key={key}>
-                      <span className="text-matrix-green/50 text-xs block">
+                      <span className="text-ink-lo text-xs block">
                         {key.replace(/_/g, " ").toUpperCase()}
                       </span>
                       <span>{val === null ? "—" : String(val)}</span>
@@ -2796,17 +2797,17 @@ function AdminDashboardView({
 
         {/* Pipeline History */}
         <div className="terminal-window mb-6">
-          <TerminalTitlebar title="pipeline_history" />
+          <TerminalTitlebar title="Run history" />
           <div className="p-4">
             <RunHistory runs={history} />
           </div>
         </div>
 
         {/* Footer */}
-        <div className="text-center text-matrix-green/30 text-xs font-terminal mt-8">
+        <div className="text-center text-ink-min text-xs font-mono mt-8">
           <button
             onClick={loadDashboard}
-            className="text-matrix-green/40 hover:text-matrix-green transition-colors"
+            className="text-ink-min hover:text-phos transition-colors"
           >
             [REFRESH DASHBOARD]
           </button>

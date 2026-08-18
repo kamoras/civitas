@@ -1,6 +1,5 @@
 import { Metadata } from "next";
 import Link from "next/link";
-import MatrixRain from "@/components/effects/MatrixRain";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
@@ -70,7 +69,6 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
   if (!issue) {
     return (
       <>
-        <MatrixRain />
         <Navbar />
         <main
           id="main-content"
@@ -78,10 +76,10 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
           className="pt-24 pb-16 px-4 min-h-screen flex items-center justify-center"
         >
           <div className="text-center space-y-4 relative z-10">
-            <div className="text-2xl font-mono text-matrix-green">ISSUE NOT FOUND</div>
+            <div className="text-2xl font-mono text-ink-hi">ISSUE NOT FOUND</div>
             <Link
               href={ACTION_CENTER_HREF}
-              className="text-sm text-matrix-green/60 hover:text-matrix-green underline"
+              className="text-sm text-ink-lo hover:text-phos underline"
             >
               ← Back to Action Center
             </Link>
@@ -102,26 +100,25 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
 
   return (
     <>
-      <MatrixRain />
       <Navbar />
       <main
         id="main-content"
         tabIndex={-1}
-        className="min-h-screen text-matrix-green font-mono pt-24 pb-16 px-4"
+        className="min-h-screen text-ink-hi font-mono pt-24 pb-16 px-4"
       >
         <div className="max-w-3xl mx-auto relative z-10">
           {/* Nav */}
           <div className="mb-8">
             <Link
               href={ACTION_CENTER_HREF}
-              className="text-xs text-matrix-green/50 hover:text-matrix-green transition-colors"
+              className="text-xs text-ink-lo hover:text-phos transition-colors"
             >
               ← ACTION CENTER
             </Link>
           </div>
 
           {/* Header */}
-          <header className="mb-8 space-y-3 border-b border-matrix-green/20 pb-8">
+          <header className="mb-8 space-y-3 border-b border-white/[0.07] pb-8">
             {issue.policyAreas?.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {issue.policyAreas.map((area) => (
@@ -129,9 +126,9 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
                 ))}
               </div>
             )}
-            <h1 className="text-xl leading-tight text-matrix-green">{issue.title}</h1>
-            <p className="text-sm text-matrix-green/70 leading-relaxed">{issue.summary}</p>
-            <div className="text-[10px] text-matrix-green/30">
+            <h1 className="text-xl leading-tight text-ink-hi">{issue.title}</h1>
+            <p className="text-base text-ink leading-relaxed">{issue.summary}</p>
+            <div className="text-xs text-ink-min">
               {new Date(issue.date + "T12:00:00").toLocaleDateString("en-US", {
                 year: "numeric",
                 month: "long",
@@ -143,14 +140,14 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
 
           {/* Full story */}
           {paragraphs ? (
-            <article className="space-y-5 text-sm text-matrix-green/80 leading-relaxed mb-12">
+            <article className="space-y-5 text-sm text-ink leading-relaxed mb-12">
               {paragraphs.map((para, i) => {
                 // Detect markdown-style headers (# or ## Heading)
                 if (para.startsWith("# ") || para.startsWith("## ")) {
                   return (
                     <h2
                       key={i}
-                      className="text-base text-matrix-green font-bold mt-8 first:mt-0 border-l-2 border-matrix-green/40 pl-3"
+                      className="text-base text-ink-hi font-bold mt-8 first:mt-0 border-l-2 border-white/15 pl-3"
                     >
                       {para.replace(/^#+\s+/, "")}
                     </h2>
@@ -160,7 +157,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
                 if (para.startsWith("**") && para.endsWith("**") && para.length > 4) {
                   const stripped = para.slice(2, -2);
                   return (
-                    <p key={i} className="text-matrix-green font-medium">
+                    <p key={i} className="text-ink-hi font-medium">
                       {stripped}
                     </p>
                   );
@@ -169,7 +166,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
               })}
             </article>
           ) : (
-            <div className="mb-12 py-10 border border-matrix-green/20 text-center text-matrix-green/40 text-sm">
+            <div className="mb-12 py-10 border border-white/[0.07] text-center text-ink-min text-sm">
               Full story not yet available. Check back soon.
             </div>
           )}
@@ -177,11 +174,11 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
           {/* Key facts */}
           {issue.facts?.length > 0 && (
             <section className="mb-10">
-              <h2 className="text-xs text-matrix-green/40 mb-4 tracking-widest">KEY FACTS</h2>
+              <h2 className="text-xs text-ink-min mb-4 tracking-widest">KEY FACTS</h2>
               <ul className="space-y-3">
                 {issue.facts.map((fact, i) => (
-                  <li key={i} className="flex gap-3 text-sm text-matrix-green/70">
-                    <span className="text-matrix-green/30 shrink-0 mt-0.5">▸</span>
+                  <li key={i} className="flex gap-3 text-sm text-ink">
+                    <span className="text-ink-min shrink-0 mt-0.5">▸</span>
                     <span>{fact}</span>
                   </li>
                 ))}
@@ -192,10 +189,10 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
           <IssueActions issue={issue} today={today} shareUrl={`${SITE}/issue/${id}`} />
 
           {/* Back */}
-          <div className="pt-8 border-t border-matrix-green/10">
+          <div className="pt-8 border-t border-white/[0.07]">
             <Link
               href={ACTION_CENTER_HREF}
-              className="text-xs text-matrix-green/50 hover:text-matrix-green transition-colors"
+              className="text-xs text-ink-lo hover:text-phos transition-colors"
             >
               ← Back to Action Center
             </Link>

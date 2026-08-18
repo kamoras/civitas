@@ -23,7 +23,14 @@ interface BillStageGroupProps {
   forceExpanded?: boolean;
 }
 
-export default function BillStageGroup({ stageCode, count, chamber, party, q, forceExpanded }: BillStageGroupProps) {
+export default function BillStageGroup({
+  stageCode,
+  count,
+  chamber,
+  party,
+  q,
+  forceExpanded,
+}: BillStageGroupProps) {
   const config = useConfig();
   const stageInfo = config?.billStages?.[stageCode];
   const color = stageInfo?.color ?? "#00ff41";
@@ -58,9 +65,15 @@ export default function BillStageGroup({ stageCode, count, chamber, party, q, fo
     let cancelled = false;
     setProbedTotal(null);
     fetchBillsInFlight({ stage: stageCode, chamber, party, q, sort: "recent", page: 1, perPage: 1 })
-      .then((res) => { if (!cancelled) setProbedTotal(res.total); })
-      .catch(() => { if (!cancelled) setProbedTotal(0); });
-    return () => { cancelled = true; };
+      .then((res) => {
+        if (!cancelled) setProbedTotal(res.total);
+      })
+      .catch(() => {
+        if (!cancelled) setProbedTotal(0);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [count, forceExpanded, stageCode, chamber, party, q]);
 
   // Sort choice changed — throw away whatever's loaded and refetch page 1.
@@ -75,7 +88,15 @@ export default function BillStageGroup({ stageCode, count, chamber, party, q, fo
     if (!expanded || page !== 0) return;
     let cancelled = false;
     setLoading(true);
-    fetchBillsInFlight({ stage: stageCode, chamber, party, q, sort, page: 1, perPage: GROUP_PER_PAGE })
+    fetchBillsInFlight({
+      stage: stageCode,
+      chamber,
+      party,
+      q,
+      sort,
+      page: 1,
+      perPage: GROUP_PER_PAGE,
+    })
       .then((res) => {
         if (cancelled) return;
         setBills(res.bills);
@@ -83,14 +104,26 @@ export default function BillStageGroup({ stageCode, count, chamber, party, q, fo
         setTotalPages(res.totalPages);
         setRowsTotal(res.total);
       })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [expanded, page, stageCode, chamber, party, q, sort]);
 
   const loadMore = () => {
     const nextPage = page + 1;
     setLoading(true);
-    fetchBillsInFlight({ stage: stageCode, chamber, party, q, sort, page: nextPage, perPage: GROUP_PER_PAGE })
+    fetchBillsInFlight({
+      stage: stageCode,
+      chamber,
+      party,
+      q,
+      sort,
+      page: nextPage,
+      perPage: GROUP_PER_PAGE,
+    })
       .then((res) => {
         setBills((prev) => [...prev, ...res.bills]);
         setPage(nextPage);
@@ -102,40 +135,42 @@ export default function BillStageGroup({ stageCode, count, chamber, party, q, fo
   if (total === 0) return null;
 
   return (
-    <div className="border border-matrix-green/10">
+    <div className="border border-white/[0.07]">
       <button
         type="button"
         onClick={() => setExpanded((e) => !e)}
         className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/[0.02] transition-colors text-left"
         aria-expanded={expanded}
       >
-        <span className="font-mono text-[10px] w-3 text-matrix-green/40">{expanded ? "▼" : "▶"}</span>
-        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
-        <span className="font-mono text-xs uppercase tracking-wider text-matrix-green/80 flex-1">
+        <span className="font-mono text-xs w-3 text-ink-min">{expanded ? "▼" : "▶"}</span>
+        <span className="w-2 h-2 shrink-0" style={{ backgroundColor: color }} />
+        <span className="font-mono text-xs uppercase tracking-wider text-ink flex-1">
           {stageInfo?.name ?? stageCode}
         </span>
-        <span className="font-mono text-[11px] tabular-nums text-matrix-green/40">
+        <span className="font-mono text-xs tabular-nums text-ink-min">
           {total === null ? "…" : total.toLocaleString()}
         </span>
       </button>
 
       {expanded && (
-        <div className="border-t border-matrix-green/10">
-          <div className="flex items-center justify-end gap-1 px-3 py-1.5 border-b border-matrix-green/10">
-            <span className="font-mono text-[9px] text-matrix-green/25 uppercase tracking-widest mr-1">Sort</span>
-            {([
+        <div className="border-t border-white/[0.07]">
+          <div className="flex items-center justify-end gap-1 px-3 py-1.5 border-b border-white/[0.07]">
+            <span className="font-mono text-xs text-ink-min uppercase tracking-widest mr-1">
+              Sort
+            </span>
+            {[
               { value: "recent" as const, label: "Newest" },
               { value: "stale" as const, label: "Stuck longest" },
-            ]).map((opt) => (
+            ].map((opt) => (
               <button
                 key={opt.value}
                 type="button"
                 onClick={() => setSort(opt.value)}
                 aria-pressed={sort === opt.value}
-                className={`font-mono text-[9px] px-2 py-0.5 border transition-colors uppercase tracking-wider ${
+                className={`font-mono text-xs px-2 py-0.5 border transition-colors uppercase tracking-wider ${
                   sort === opt.value
-                    ? "border-neon-cyan/50 text-neon-cyan bg-neon-cyan/10"
-                    : "border-matrix-green/15 text-matrix-green/35 hover:text-matrix-green/60"
+                    ? "border-signal-cyan/40 text-signal-cyan bg-signal-cyan/10"
+                    : "border-white/[0.07] text-ink-min hover:text-phos"
                 }`}
               >
                 {opt.label}
@@ -143,12 +178,12 @@ export default function BillStageGroup({ stageCode, count, chamber, party, q, fo
             ))}
           </div>
 
-          <div className="divide-y divide-matrix-green/10">
+          <div className="divide-y divide-white/[0.07]">
             {bills.map((bill) => (
               <BillRow key={`${bill.chamber}-${bill.billId}-${bill.sponsorId}`} bill={bill} />
             ))}
             {loading && (
-              <div className="text-center py-4 font-mono text-[10px] text-matrix-green/30 tracking-widest animate-pulse">
+              <div className="text-center py-4 font-mono text-xs text-ink-min tracking-widest animate-pulse">
                 LOADING...
               </div>
             )}
@@ -156,7 +191,7 @@ export default function BillStageGroup({ stageCode, count, chamber, party, q, fo
               <div className="flex justify-center py-3">
                 <button
                   onClick={loadMore}
-                  className="font-mono text-[10px] tracking-widest px-3 py-1.5 border border-matrix-green/20 text-matrix-green/60 hover:text-matrix-green hover:border-matrix-green/40 transition-colors"
+                  className="font-mono text-xs tracking-widest px-3 py-1.5 border border-white/[0.07] text-ink-lo hover:text-phos hover:border-white/15 transition-colors"
                 >
                   LOAD MORE ({((total ?? 0) - bills.length).toLocaleString()} REMAINING)
                 </button>
