@@ -411,6 +411,81 @@ class TestColumnJoining:
         assert all(r["district"] == 25 for r in records)
 
 
+class TestHtmlTableReader:
+    """Maryland publishes results as HTML tables under headings and offers
+    no downloadable file at all. A table alone never says which contest it
+    is — the heading above it does — so rows carry the heading stack."""
+
+    _PAGE = b"""
+    <html><body>
+      <h1>Official 2026 Primary Election Results for Representative in Congress</h1>
+      <h2>Representative in Congress</h2>
+      <h3>District 1</h3>
+      <h4>Democratic Candidates - Vote for 1</h4>
+      <table>
+        <tr><th>Name</th><th>Party</th><th>Total</th></tr>
+        <tr><td>Dan Schwartz</td><td>Democratic</td><td>18,317</td></tr>
+        <tr><td>Totals</td><td></td><td>18,317</td></tr>
+      </table>
+      <h4>Republican Candidates - Vote for 1</h4>
+      <table>
+        <tr><th>Name</th><th>Party</th><th>Total</th></tr>
+        <tr><td>Andy Harris</td><td>Republican</td><td>44,000</td></tr>
+      </table>
+      <h3>District 2</h3>
+      <h4>Democratic Candidates - Vote for 1</h4>
+      <table>
+        <tr><th>Name</th><th>Party</th><th>Total</th></tr>
+        <tr><td>Johnny Olszewski</td><td>Democratic</td><td>30,000</td></tr>
+      </table>
+    </body></html>
+    """
+    _FMT = {
+        "format": "html_table",
+        "contest_column": ["heading_2", "heading_3", "heading_4"],
+        "choice_column": "Name", "party_column": "Party", "votes_column": "Total",
+        "exclude_choices": ["Totals"],
+    }
+
+    def test_rows_carry_the_heading_they_appeared_under(self):
+        rows = tb._rows(self._PAGE, self._FMT)
+        first = rows[0]
+        assert first["Name"] == "Dan Schwartz"
+        assert first["heading_2"] == "Representative in Congress"
+        assert first["heading_3"] == "District 1"
+
+    def test_a_new_heading_clears_the_deeper_ones(self):
+        """District 2's rows must not inherit District 1's party heading
+        or anything else nested under it."""
+        rows = tb._rows(self._PAGE, self._FMT)
+        olszewski = next(r for r in rows if r["Name"].startswith("Johnny"))
+        assert olszewski["heading_3"] == "District 2"
+
+    @pytest.mark.asyncio
+    async def test_both_parties_survive_the_same_district(self, monkeypatch):
+        """The party heading is part of the contest key: without it, both
+        parties' candidates for a district tally as ONE race and the
+        weaker party's nominee is dropped."""
+        async def fake_discover(client, state, year, discovery):
+            return [tb._stage("https://example.gov/md.html")]
+
+        async def fake_get(client, url, label):
+            return _Resp(content=self._PAGE)
+
+        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
+        monkeypatch.setattr(tb, "_get", fake_get)
+        records = await tb.fetch_confirmed_candidates(
+            None, 2026, "MD", {"format": self._FMT},
+        )
+        assert sorted((r["district"], r["party"], r["last_name"]) for r in records) == [
+            (1, "D", "Schwartz"), (1, "R", "Harris"), (2, "D", "Olszewski"),
+        ]
+
+    def test_a_page_that_is_not_a_results_table_yields_nothing(self):
+        assert tb._rows(b"<html><body><p>no tables here</p></body></html>",
+                        {"format": "html_table"}) is None
+
+
 class TestLandingPageDiscovery:
     """Florida publishes one dated file per election and no way to list
     them, so the link comes off the page the state keeps current."""
@@ -424,6 +499,23 @@ class TestLandingPageDiscovery:
     def _page(self, *names):
         links = "".join(f'<a href="https://files.example.gov/{n}">x</a>' for n in names)
         return f"<html>{links}</html>"
+
+    @pytest.mark.asyncio
+    async def test_the_page_url_is_templated_by_cycle_too(self, monkeypatch):
+        """A state that files results under a per-cycle path needs the
+        PAGE templated, not just the link pattern, or nothing is ever
+        found there again."""
+        asked = []
+
+        async def fake_get(client, url, label):
+            asked.append(url)
+            return _Resp(text=self._page("20260818_Results.txt"))
+
+        monkeypatch.setattr(tb, "_get", fake_get)
+        await tb._discover_urls(None, "MD", 2026, dict(
+            self._DISCOVERY, page_url="https://example.gov/{year}/results/index.html",
+        ))
+        assert asked == ["https://example.gov/2026/results/index.html"]
 
     @pytest.mark.asyncio
     async def test_reads_this_cycles_file_off_the_page(self, monkeypatch):

@@ -42,6 +42,32 @@
       },
       "description": "Illinois posts one precinct-level CSV PER OFFICE rather than a single statewide export, so its 17 congressional files plus the Senate file are read as 18 stages off the board's own vote-totals page — which is also why the link pattern, not any one file's URL, is what's written down. '{year}GP' pins the cycle's General Primary and excludes the general election's own files. The contest label is bare ('1ST CONGRESS'), which parse_office reads as a federal seat because no state legislature is called a Congress; party lives only in its own column, so the contest key carries it, without which both parties' primaries for a district would tally as one race. Verified live 2026-08-17 against the real 2026-03-17 primary."
     },
+    "MD": {
+      "source_name": "Maryland State Board of Elections (official primary results)",
+      "strategy": "tabular",
+      "runoff_threshold_pct": null,
+      "discovery": {
+        "mode": "landing_page",
+        "page_url": "https://elections.maryland.gov/elections/{year}/primary_results/index.html",
+        "link_regex": "gen_results_{year}_\\d+\\.html"
+      },
+      "format": {
+        "format": "html_table",
+        "contest_column": [
+          "heading_2",
+          "heading_3",
+          "heading_4"
+        ],
+        "choice_column": "Name",
+        "party_column": "Party",
+        "votes_column": "Total",
+        "exclude_choices": [
+          "Totals",
+          "Other Write-Ins"
+        ]
+      },
+      "description": "Maryland publishes results as HTML tables under headings rather than as any downloadable file, which is why the html_table reader exists — the table alone never says which contest it is, so every row carries the heading stack it appeared under and the contest is built from it ('Representative in Congress' + 'District 1'). The link pattern deliberately matches EVERY office summary page rather than pinning the congressional one's internal office number: parse_office already refuses Governor, Comptroller and the state legislature, so matching broadly costs a few extra pages and survives Maryland renumbering its offices. The party heading joins the contest key ('Democratic Candidates - Vote for 1'): without it both parties' candidates for a district tally as ONE race and, in a district that leans hard either way, the other party's nominee is dropped entirely — 8 records instead of 16. Verified live 2026-08-18 against the real 2026-06-23 primary: 92 candidate rows across all 8 districts."
+    },
     "CA": {
       "source_name": "California Secretary of State (certified Statement of Vote)",
       "strategy": "tabular",

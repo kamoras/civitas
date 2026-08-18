@@ -42,6 +42,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 from collections import defaultdict
 from datetime import UTC, date, datetime
+from html.parser import HTMLParser
 from urllib.parse import quote, urljoin
 
 import httpx
@@ -333,7 +334,12 @@ async def _discover_urls(
         # keeps current (Florida's floridaelectionwatch.gov/Downloads), so
         # the cycle's date is never written down here.
         pattern = discovery.get("link_regex")
-        resp = await _get(client, discovery.get("page_url") or "", f"{state} downloads page")
+        # {year} is substituted in the PAGE url as well as the link
+        # pattern: a state that files its results under a per-cycle path
+        # (Maryland's /elections/{year}/primary_results/) needs the page
+        # itself templated, or nothing is ever found there again.
+        page_url = (discovery.get("page_url") or "").replace("{year}", str(year))
+        resp = await _get(client, page_url, f"{state} downloads page")
         if resp is None or not pattern:
             return []
         # Literal token, not str.format: a link regex is full of {n}
@@ -343,7 +349,7 @@ async def _discover_urls(
         # Windows-style separators are normalised — real state pages link
         # results with relative hrefs and, in Illinois' case, backslashes.
         links = sorted({
-            urljoin(discovery["page_url"], m.group(0).replace("\\", "/"))
+            urljoin(page_url, m.group(0).replace("\\", "/"))
             for m in re.finditer(pattern.replace("{year}", str(year)), resp.text)
         })
         # Same rule s3_listing applies, for a page that shows one election
@@ -420,6 +426,78 @@ def _xlsx_rows(payload: bytes) -> list[dict] | None:
     return [dict(zip(header, r)) for r in rows[1:]]
 
 
+class _TableReader(HTMLParser):
+    """Reads results published as HTML TABLES UNDER HEADINGS, which is how
+    a good number of states publish and how Maryland publishes all eight
+    of its congressional districts on one page.
+
+    A table alone doesn't say which contest it is — the contest is the
+    heading above it ("Representative in Congress", then "District 1") —
+    so every row carries the heading stack in force where it appeared, as
+    heading_1..heading_6. Config then names which of those make up the
+    contest, exactly as it would name any other column.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.rows: list[dict] = []
+        self._headings: dict[int, str] = {}
+        self._heading_level: int | None = None
+        self._in_table = False
+        self._cells: list[str] | None = None
+        self._cell: list[str] | None = None
+        self._header: list[str] | None = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
+            self._heading_level = int(tag[1])
+            self._headings[self._heading_level] = ""
+        elif tag == "table":
+            self._in_table, self._header = True, None
+        elif tag == "tr" and self._in_table:
+            self._cells = []
+        elif tag in ("td", "th") and self._cells is not None:
+            self._cell = []
+
+    def handle_data(self, data):
+        if self._cell is not None:
+            self._cell.append(data)
+        elif self._heading_level is not None:
+            self._headings[self._heading_level] += data
+
+    def handle_endtag(self, tag):
+        if tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
+            level = int(tag[1])
+            self._headings[level] = " ".join(self._headings.get(level, "").split())
+            # A new heading replaces everything nested under it.
+            for deeper in [k for k in self._headings if k > level]:
+                del self._headings[deeper]
+            self._heading_level = None
+        elif tag in ("td", "th") and self._cell is not None:
+            self._cells.append(" ".join("".join(self._cell).split()))
+            self._cell = None
+        elif tag == "tr" and self._cells is not None:
+            if self._header is None:
+                self._header = self._cells
+            elif any(self._cells):
+                row = dict(zip(self._header, self._cells))
+                row.update({f"heading_{lvl}": text for lvl, text in self._headings.items()})
+                self.rows.append(row)
+            self._cells = None
+        elif tag == "table":
+            self._in_table, self._cells, self._header = False, None, None
+
+
+def _html_rows(payload: bytes, fmt: dict) -> list[dict] | None:
+    reader = _TableReader()
+    try:
+        reader.feed(payload.decode(fmt.get("encoding") or "utf-8", errors="replace"))
+    except Exception:  # noqa: BLE001 - a malformed page is a skip, not a crash
+        logger.warning("Results page was not parsable HTML")
+        return None
+    return reader.rows or None
+
+
 def _rows(payload: bytes, fmt: dict) -> list[dict] | None:
     """Delimited rows from the download, transparently unzipping a
     single-file archive or reading an xlsx workbook. None when the payload
@@ -429,6 +507,9 @@ def _rows(payload: bytes, fmt: dict) -> list[dict] | None:
 
     if fmt.get("format") == "xlsx":
         return _xlsx_rows(payload)
+
+    if fmt.get("format") == "html_table":
+        return _html_rows(payload, fmt)
 
     if payload[:2] == b"PK":
         try:
