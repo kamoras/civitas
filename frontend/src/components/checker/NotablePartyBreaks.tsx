@@ -79,7 +79,7 @@ export default function NotablePartyBreaks({
                       className={`font-mono text-xs px-1 py-0.5 border ${
                         vote.vote === "Yea"
                           ? "text-ink-hi border-white/15 bg-white/[0.03]"
-                          : "text-signal-red border-red-400/40 bg-red-400/10"
+                          : "text-signal-red border-signal-red/40 bg-signal-red/10"
                       }`}
                     >
                       {vote.vote.toUpperCase()}

@@ -20,6 +20,7 @@ import {
 import { getScoreColor, getScoreBgColor } from "@/lib/representation";
 import MetricTooltip from "@/components/checker/MetricTooltip";
 import { PARTY_BADGE } from "@/lib/partyStyles";
+import { BOXED_CONTROL, boxedControl } from "@/lib/controlStyles";
 import { formatCurrency } from "@/lib/formatting";
 import { PresidentCard } from "@/components/president/PresidentClient";
 import type { LeaderboardEntry, ScoreTrend } from "@/types/senator";
@@ -151,6 +152,12 @@ function TrendIndicator({ trend }: { trend?: ScoreTrend }) {
   if (!trend || trend.direction === "new") return null;
 
   const abs = Math.abs(trend.change);
+  // Two decimals below 1 so a real-but-small move still reads as a number.
+  // The value used to be computed here and then suppressed in the markup by
+  // an `abs >= 1 &&` guard, which left a bare arrow in the cell — a direction
+  // with no magnitude, indistinguishable from a decorative glyph, while the
+  // tooltip it sat under said "Up 0.70 pts". The backend has already decided
+  // this is a move rather than "stable"; the cell should say how big.
   const formatted = abs >= 1 ? abs.toFixed(1) : abs.toFixed(2);
 
   if (trend.direction === "up") {
@@ -164,7 +171,7 @@ function TrendIndicator({ trend }: { trend?: ScoreTrend }) {
         <svg className="w-3 h-3" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
           <path d="M6 2L10 7H2L6 2Z" />
         </svg>
-        {abs >= 1 && <span className="tabular-nums">{formatted}</span>}
+        <span className="tabular-nums">{formatted}</span>
       </span>
     );
   }
@@ -180,7 +187,7 @@ function TrendIndicator({ trend }: { trend?: ScoreTrend }) {
         <svg className="w-3 h-3" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
           <path d="M6 10L2 5H10L6 10Z" />
         </svg>
-        {abs >= 1 && <span className="tabular-nums">{formatted}</span>}
+        <span className="tabular-nums">{formatted}</span>
       </span>
     );
   }
@@ -202,8 +209,8 @@ function TrendIndicator({ trend }: { trend?: ScoreTrend }) {
 const PRES_PARTY: Record<string, { label: string; color: string; bg: string }> = {
   D: { label: "DEM", color: "text-dem-blue", bg: "bg-dem-blue/20 border-dem-blue/40" },
   R: { label: "REP", color: "text-signal-red", bg: "bg-signal-red/10 border-signal-red/40" },
-  DR: { label: "D-R", color: "text-teal-400", bg: "bg-teal-400/20 border-teal-400/40" },
-  F: { label: "FED", color: "text-ind-purple", bg: "bg-purple-400/20 border-purple-400/40" },
+  DR: { label: "D-R", color: "text-signal-cyan", bg: "bg-signal-cyan/20 border-signal-cyan/40" },
+  F: { label: "FED", color: "text-ind-purple", bg: "bg-ind-purple/20 border-ind-purple/40" },
   W: { label: "WHG", color: "text-signal-amber", bg: "bg-signal-amber/10 border-signal-amber/40" },
   I: { label: "IND", color: "text-ink", bg: "bg-white/10 border-white/30" },
 };
@@ -869,16 +876,16 @@ function LeaderboardContent() {
                         setPartyFilter(p);
                         if (branch === "house") setHousePage(1);
                       }}
-                      className={`px-3 py-1 text-sm border transition-all font-mono ${
+                      className={`border px-3 py-1 font-mono text-sm transition-colors ${
                         partyFilter === p
                           ? p === "D"
-                            ? "bg-dem-blue/30 border-dem-blue text-dem-blue"
+                            ? "border-dem-blue bg-dem-blue/10 text-dem-blue"
                             : p === "R"
-                              ? "bg-signal-red/10 border-signal-red/40 text-signal-red"
+                              ? "border-signal-red bg-signal-red/10 text-signal-red"
                               : p === "I"
-                                ? "bg-ind-purple/30 border-ind-purple text-ind-purple"
-                                : "bg-phos border-phos text-surface-base"
-                          : "border-white/[0.07] text-ink-lo hover:border-white/30 hover:text-ink"
+                                ? "border-ind-purple bg-ind-purple/10 text-ind-purple"
+                                : BOXED_CONTROL.selected
+                          : BOXED_CONTROL.unselected
                       }`}
                     >
                       {p === "ALL"
@@ -1007,7 +1014,7 @@ function LeaderboardContent() {
                             <tr
                               key={entry.id}
                               className={`border-b border-white/[0.07] hover:bg-white/[0.03] transition-colors cursor-pointer group ${
-                                isTopTen ? "border-l-2 border-l-red-500/30" : ""
+                                isTopTen ? "border-l-2 border-l-signal-red/30" : ""
                               }`}
                               tabIndex={0}
                               aria-label={`View profile for ${entry.name}, ${entry.state}, rank ${rank}, score ${score}`}
@@ -1161,11 +1168,9 @@ function LeaderboardContent() {
                         key={p}
                         onClick={() => setHousePage(p)}
                         aria-current={housePage === p ? "page" : undefined}
-                        className={`w-8 h-8 text-sm font-mono border transition-colors ${
+                        className={`h-8 w-8 border font-mono text-sm transition-colors ${boxedControl(
                           housePage === p
-                            ? "bg-phos border-phos text-surface-base"
-                            : "border-white/[0.07] text-ink-lo hover:border-white/30 hover:text-ink"
-                        }`}
+                        )}`}
                       >
                         {p}
                       </button>

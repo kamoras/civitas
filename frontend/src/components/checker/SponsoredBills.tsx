@@ -5,7 +5,7 @@ import Link from "next/link";
 import { SponsoredBill } from "@/types/senator";
 import CollapsibleSection from "../shared/CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
-import { PARTY_BADGE } from "@/lib/partyStyles";
+import { PARTY_BADGE, policyAreaBadgeClass } from "@/lib/partyStyles";
 
 interface SponsoredBillsProps {
   bills: SponsoredBill[];
@@ -219,13 +219,7 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
                         .map((a) => (
                           <span
                             key={a.area}
-                            className={`text-xs px-1.5 py-0.5 border ${
-                              a.party === "R"
-                                ? "text-signal-red border-red-400/30 bg-red-400/5"
-                                : a.party === "D"
-                                  ? "text-blue-400/70 border-blue-400/30 bg-blue-400/5"
-                                  : "text-signal-amber border-signal-amber/40 bg-signal-amber/10"
-                            }`}
+                            className={`text-xs px-1.5 py-0.5 border ${policyAreaBadgeClass(a.party)}`}
                           >
                             {a.area}
                           </span>

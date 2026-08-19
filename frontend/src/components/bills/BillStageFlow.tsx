@@ -46,7 +46,7 @@ export default function BillStageFlow({
           const count = stageCounts[code] || 0;
           const pct = count > 0 ? Math.max((count / maxCount) * 100, MIN_BAR_PCT) : 0;
           const share = totalAll > 0 ? Math.round((count / totalAll) * 100) : 0;
-          const color = info?.color ?? "#00ff41";
+          const style = billStageStyle(code);
           const isActive = activeStage === code;
 
           return (
@@ -56,17 +56,20 @@ export default function BillStageFlow({
               onClick={() => onSelectStage(isActive ? null : code)}
               aria-pressed={isActive}
               title={`${info?.name ?? code}: ${count.toLocaleString()} bill${count === 1 ? "" : "s"} (${share}% of all bills tracked)`}
-              className={`group flex items-center gap-3 py-1.5 px-2 -mx-2  transition-colors text-left ${
-                isActive ? "bg-white/5" : "hover:bg-white/[0.03]"
+              className={`group -mx-2 flex items-center gap-3 border-l-2 px-2 py-1.5 text-left transition-colors ${
+                isActive ? `bg-white/5 ${style.rule}` : "border-l-transparent hover:bg-white/[0.03]"
               }`}
-              style={isActive ? { boxShadow: `inset 2px 0 0 0 ${color}` } : undefined}
             >
-              {/* w-32 at base, not w-28: at the 12px minimum-size floor the
-                  longest stage label ("IN OTHER CHAMBER") measures ~113px and
-                  overflowed the 112px w-28 box. */}
+              {/* w-40 (160px). The previous w-32 was sized against "IN OTHER
+                  CHAMBER" at ~114px, but that is not the longest label —
+                  "Referred to Committee" measures 149px at 12px Share Tech
+                  Mono with this tracking, so the one stage the funnel exists
+                  to distinguish from IN_COMMITTEE rendered as "REFERRED TO
+                  COMMI…". `truncate` stays as a guard for a longer stage name
+                  arriving from /config, not as the normal case. */}
               <span
-                className={`w-32 shrink-0 truncate text-xs font-mono uppercase tracking-wider ${
-                  isActive ? billStageStyle(code).text : ""
+                className={`w-40 shrink-0 truncate text-xs font-mono uppercase tracking-wider ${
+                  isActive ? style.text : "text-ink-lo"
                 }`}
               >
                 {info?.name ?? code}
@@ -74,12 +77,18 @@ export default function BillStageFlow({
 
               <span className="relative flex-1 h-3.5 bg-phos/[0.06] overflow-hidden">
                 <span
-                  className="absolute inset-y-0 left-0 rounded-r-[4px] transition-[width] duration-300"
-                  style={{ width: `${pct}%`, backgroundColor: color, opacity: isActive ? 1 : 0.75 }}
+                  className={`absolute inset-y-0 left-0 transition-[width] duration-300 ${style.bar} ${
+                    isActive ? "opacity-100" : "opacity-75"
+                  }`}
+                  style={{ width: `${pct}%` }}
                 />
               </span>
 
-              <span className="w-20 sm:w-24 shrink-0 text-right font-mono text-xs tabular-nums text-ink">
+              {/* w-12 on mobile, not w-20: the share ("· 16%") is
+                  `hidden sm:inline`, so below `sm` this column reserved 80px
+                  to render at most four digits. Giving the 32px back to the
+                  bar matters at 390px, where the bar was down to 55px. */}
+              <span className="w-12 shrink-0 text-right font-mono text-xs tabular-nums text-ink sm:w-24">
                 {count.toLocaleString()}
                 <span className="hidden sm:inline text-ink-min"> · {share}%</span>
               </span>
@@ -92,10 +101,10 @@ export default function BillStageFlow({
         <button
           type="button"
           onClick={() => onSelectStage(activeStage === "VETOED" ? null : "VETOED")}
-          className={`text-xs font-mono uppercase tracking-wider px-2 py-1  border transition-colors ${
+          className={`border px-2 py-1 font-mono text-xs uppercase tracking-wider transition-colors ${
             activeStage === "VETOED"
-              ? "border-signal-red/40 text-signal-red bg-signal-red/10"
-              : "border-signal-red/40 text-signal-red hover:text-signal-red"
+              ? "border-signal-red bg-signal-red/10 text-signal-red"
+              : "border-signal-red/40 text-signal-red hover:border-signal-red"
           }`}
         >
           {vetoedCount} vetoed

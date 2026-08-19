@@ -3,6 +3,7 @@
 import { useState, type KeyboardEvent } from "react";
 import type { ActionIssue } from "@/types/action";
 import { useCopyFeedback } from "@/hooks/useCopyFeedback";
+import { BOXED_CONTROL } from "@/lib/controlStyles";
 
 interface ShareButtonsProps {
   issue: ActionIssue;
@@ -128,8 +129,8 @@ export default function ShareButtons({
           onClick={handleCopy}
           className={`text-xs font-mono px-2 py-1 border transition-colors ${
             copied
-              ? "border-signal-cyan/40 text-signal-cyan bg-signal-cyan/10"
-              : "border-white/[0.07] text-ink-lo hover:text-phos hover:border-signal-cyan/40"
+              ? BOXED_CONTROL.selected
+              : BOXED_CONTROL.unselected
           }`}
           aria-label="Copy link to clipboard"
         >

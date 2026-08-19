@@ -6,6 +6,7 @@ import { fetchElectionInfo } from "@/lib/api";
 import type { ElectionInfo, ElectionState, ElectionSenator } from "@/lib/api";
 import { PARTY_COLORS, PARTY_BORDER } from "@/lib/partyStyles";
 import RaceMap, { FIPS_TO_STATE } from "@/components/elections/RaceMap";
+import { BOXED_CONTROL } from "@/lib/controlStyles";
 
 function formatCountdown(days: number): { value: string; unit: string }[] {
   if (days <= 0) return [{ value: "TODAY", unit: "" }];
@@ -62,7 +63,7 @@ function StatePanel({ stateData, onClose }: { stateData: ElectionState; onClose:
       aria-label={`${stateData.state} election details`}
     >
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-display font-semibold text-lg text-ink-hi">{stateData.state}</h3>
+        <h2 className="font-display font-semibold text-lg text-ink-hi">{stateData.state}</h2>
         <button
           onClick={onClose}
           className="font-mono text-sm text-ink-min hover:text-phos"
@@ -241,7 +242,7 @@ export default function ElectionsTab() {
       {/* Interactive US map */}
       <div className="panel p-4">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <h3 className="font-mono text-xs text-ink-lo">{">"} SELECT A STATE</h3>
+          <h2 className="font-mono text-xs text-ink-lo">{">"} SELECT A STATE</h2>
           <div className="flex items-center gap-3 flex-wrap">
             <span className="flex items-center gap-1.5 text-xs text-ink-min">
               <span className="w-3 h-2 bg-signal-amber/10 inline-block" /> SENATE + HOUSE
@@ -285,8 +286,8 @@ export default function ElectionsTab() {
               onClick={() => setSelectedState(selectedState === abbr ? null : abbr)}
               className={`font-mono text-xs py-1.5 px-2 border  transition-colors ${
                 selectedState === abbr
-                  ? "border-signal-cyan/40 bg-signal-cyan/10 text-signal-cyan"
-                  : "border-white/[0.07] text-ink hover:border-white/15"
+                  ? BOXED_CONTROL.selected
+                  : BOXED_CONTROL.unselected
               }`}
             >
               {abbr}

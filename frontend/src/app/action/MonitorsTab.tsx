@@ -137,13 +137,13 @@ export default function MonitorsTab() {
             <div className="flex items-center gap-2 mb-2">
               <span
                 className={`w-2 h-2  ${
-                  m.status === "active" ? "bg-green-400" : "bg-signal-amber/10"
+                  m.status === "active" ? "bg-phos" : "bg-signal-amber/10"
                 }`}
                 aria-label={m.status === "active" ? "Active" : "Watching"}
               />
               <span className="font-mono text-xs text-signal-amber uppercase">{m.category}</span>
             </div>
-            <h3 className="font-mono text-sm text-ink-hi mb-1 leading-relaxed">{m.title}</h3>
+            <h2 className="font-mono text-sm text-ink-hi mb-1 leading-relaxed">{m.title}</h2>
             {selected?.slug !== m.slug && m.description && (
               <p className="text-xs text-ink-min mb-2 line-clamp-1 leading-snug">{m.description}</p>
             )}
@@ -169,20 +169,20 @@ export default function MonitorsTab() {
       {selected && !detailLoading && (
         <div
           ref={detailRef}
-          className="panel border-t-2 border-t-amber-400/50 p-5 sm:p-6 scroll-mt-4"
+          className="panel border-t-2 border-t-signal-amber/50 p-5 sm:p-6 scroll-mt-4"
           role="region"
           aria-label={`Monitor: ${selected.title}`}
         >
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="font-display font-semibold text-base sm:text-lg text-signal-amber">
+              <h2 className="font-display font-semibold text-base sm:text-lg text-signal-amber">
                 {selected.title}
-              </h3>
+              </h2>
               <div className="flex items-center gap-2 mt-1">
                 <span
                   className={`text-xs font-mono px-2 py-0.5 border ${
                     selected.status === "active"
-                      ? "border-green-400/30 text-phos-mid"
+                      ? "border-phos/30 text-phos-mid"
                       : "border-signal-amber/40 text-signal-amber"
                   }`}
                 >
@@ -221,7 +221,7 @@ export default function MonitorsTab() {
                   <div
                     className={`absolute -left-[21px] top-1 w-2.5 h-2.5  border ${
                       isRecent
-                        ? "bg-red-400 border-red-400 animate-pulse"
+                        ? "bg-signal-red border-signal-red animate-pulse"
                         : "bg-signal-amber/10 border-signal-amber/40"
                     }`}
                     aria-hidden="true"
@@ -234,7 +234,7 @@ export default function MonitorsTab() {
                       {timeLabel}
                     </time>
                     {isRecent && (
-                      <span className="text-xs font-mono px-1.5 py-0.5 bg-signal-red border border-red-400/40 text-signal-red animate-pulse">
+                      <span className="text-xs font-mono px-1.5 py-0.5 bg-signal-red/10 border border-signal-red/40 text-signal-red animate-pulse">
                         BREAKING
                       </span>
                     )}

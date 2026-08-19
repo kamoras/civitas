@@ -13,6 +13,7 @@ import BillRow from "@/components/bills/BillRow";
 import { fetchBillsInFlight } from "@/lib/api";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import type { BillInFlight } from "@/types/bill";
+import { BOXED_CONTROL } from "@/lib/controlStyles";
 
 type ChamberFilter = "all" | "senate" | "house";
 type PartyFilter = "ALL" | "D" | "R" | "I";
@@ -103,8 +104,8 @@ function BillsPageContent() {
               onClick={() => setMode("hot")}
               className={`font-mono text-xs px-4 py-1.5 border transition-colors uppercase tracking-widest ${
                 mode === "hot"
-                  ? "border-signal-cyan/40 text-signal-cyan bg-signal-cyan/10"
-                  : "border-white/[0.07] text-ink-min hover:text-phos"
+                  ? BOXED_CONTROL.selected
+                  : BOXED_CONTROL.unselected
               }`}
             >
               Active Now
@@ -113,8 +114,8 @@ function BillsPageContent() {
               onClick={() => setMode("all")}
               className={`font-mono text-xs px-4 py-1.5 border transition-colors uppercase tracking-widest ${
                 mode === "all"
-                  ? "border-signal-cyan/40 text-signal-cyan bg-signal-cyan/10"
-                  : "border-white/[0.07] text-ink-min hover:text-phos"
+                  ? BOXED_CONTROL.selected
+                  : BOXED_CONTROL.unselected
               }`}
             >
               All Bills
@@ -141,8 +142,8 @@ function BillsPageContent() {
                     onClick={() => setChamber(c)}
                     className={`font-mono text-xs px-2 py-1 border transition-colors uppercase ${
                       chamber === c
-                        ? "border-signal-cyan/40 text-signal-cyan bg-signal-cyan/10"
-                        : "border-white/[0.07] text-ink-min hover:text-phos"
+                        ? BOXED_CONTROL.selected
+                        : BOXED_CONTROL.unselected
                     }`}
                   >
                     {c}
@@ -157,8 +158,8 @@ function BillsPageContent() {
                     onClick={() => setParty(p)}
                     className={`font-mono text-xs px-2 py-1 border transition-colors ${
                       party === p
-                        ? "border-phos/40 text-ink-hi bg-white/[0.03]"
-                        : "border-white/[0.07] text-ink-min hover:text-phos"
+                        ? BOXED_CONTROL.selected
+                        : BOXED_CONTROL.unselected
                     }`}
                   >
                     {p}

@@ -85,7 +85,7 @@ export default function BillDetailClient({ bill }: { bill: BillDetail }) {
                   <img
                     src={bill.sponsorThumbnailUrl}
                     alt=""
-                    className="w-8 h-8 rounded-full object-cover border border-white/[0.07]"
+                    className="h-8 w-8 border border-white/[0.07] object-cover"
                   />
                 )}
                 <span className={`px-1.5 py-0.5 border text-xs font-mono ${party.className}`}>

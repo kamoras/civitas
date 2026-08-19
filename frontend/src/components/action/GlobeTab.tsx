@@ -122,7 +122,7 @@ export default function GlobeTab() {
       {selected && (
         <div
           ref={detailRef}
-          className="panel border-t-2 border-t-green-400/50 p-5 sm:p-6 scroll-mt-4"
+          className="panel border-t-2 border-t-phos/50 p-5 sm:p-6 scroll-mt-4"
           role="region"
           aria-label={`U.S. and ${selected.country} news`}
         >
@@ -149,7 +149,7 @@ export default function GlobeTab() {
           </div>
           <div className="space-y-3">
             {selected.articles.map((article, i) => (
-              <div key={i} className="border-l-2 border-l-green-400/30 pl-3">
+              <div key={i} className="border-l-2 border-l-phos/30 pl-3">
                 <a
                   href={safeHref(article.url) || "#"}
                   target="_blank"
@@ -184,7 +184,7 @@ export default function GlobeTab() {
                   globeRef.current.pointOfView({ lat: c.lat, lng: c.lng, altitude: 1.8 }, 800);
                 }
               }}
-              className="panel p-2.5 text-left hover:border-green-400/30 transition-colors"
+              className="panel p-2.5 text-left hover:border-phos/30 transition-colors"
               aria-label={`View news about ${c.country}`}
             >
               <div className="font-mono text-xs text-phos-mid truncate">{c.country}</div>

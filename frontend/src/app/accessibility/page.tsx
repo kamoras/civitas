@@ -52,7 +52,25 @@ export default function AccessibilityPage() {
     <>
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
-        <div className="max-w-3xl mx-auto">
+        {/* `font-sans` because this is the reading, not the data.
+
+            The body element is `font-mono`, so anything that does not name a
+            face inherits Share Tech Mono — which on these four documents meant
+            103 of 105 paragraphs on /about alone. That contradicts the rule
+            the palette states outright: "mono is data, IDs, timestamps, labels
+            and status — the terminal voice, now meaning something because it
+            is no longer also the body face" (tailwind.config.ts). It was still
+            the body face here.
+
+            Set on the container rather than on the `P` helper so raw `<p>`,
+            `<li>` and inline prose are covered too. Everything that should
+            stay mono on these pages — section headings, `Label`, `Row`'s key
+            column, the +/- markers — already declares `font-mono` and still
+            wins. The global default is left alone deliberately: the dense data
+            surfaces were measured against Share Tech Mono's advance width (see
+            the note in layout.tsx), and flipping it wholesale is a different
+            change from fixing the prose. */}
+        <div className="max-w-3xl mx-auto font-sans">
           <PageMasthead
             className="mb-10"
             eyebrow="Accessibility · how this site is built to be used"

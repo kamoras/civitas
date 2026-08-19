@@ -55,3 +55,22 @@ export const PARTY_BADGE: Record<string, { label: string; className: string }> =
   I: { label: "I", className: `${PARTY_COLORS.I} ${PARTY_BORDER.I} bg-ind-purple/10` },
   bipartisan: { label: "BP", className: `${PARTY_COLORS.I} ${PARTY_BORDER.I} bg-ind-purple/10` },
 };
+
+// Policy-area chips on a vote or a sponsored bill, keyed by the area's own
+// party alignment (`a.party`) rather than by a member's registration. Same
+// visual language as PARTY_BADGE for R and D; the third case is not
+// "Independent" but "neither side owns this area", which is why it is amber
+// rather than PARTY_BADGE.I's purple.
+//
+// Extracted for the same reason PARTY_BADGE was, from the same two files —
+// VotingRecord and SponsoredBills carried identical copies of this ternary,
+// and both had been left half-migrated: the R arm was rewritten to
+// `text-signal-red` while the D arm kept `text-blue-400/70` (4.18:1, under
+// the floor) with stock-Tailwind `border-blue-400/30 bg-blue-400/5` around
+// it. Splitting a two-armed ternary across two palettes is how that survives
+// review.
+export function policyAreaBadgeClass(party: string | null | undefined): string {
+  if (party === "R") return PARTY_BADGE.R.className;
+  if (party === "D") return PARTY_BADGE.D.className;
+  return "text-signal-amber border-signal-amber/40 bg-signal-amber/10";
+}

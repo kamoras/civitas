@@ -26,15 +26,15 @@ const PARTY_META: Record<string, { label: string; color: string; bg: string; bor
   },
   DR: {
     label: "DEM-REPUBLICAN",
-    color: "text-teal-400",
-    bg: "bg-teal-400/20",
-    border: "border-teal-400/40",
+    color: "text-signal-cyan",
+    bg: "bg-signal-cyan/10",
+    border: "border-signal-cyan/40",
   },
   F: {
     label: "FEDERALIST",
     color: "text-ind-purple",
-    bg: "bg-purple-400/20",
-    border: "border-purple-400/40",
+    bg: "bg-ind-purple/10",
+    border: "border-ind-purple/40",
   },
   W: {
     label: "WHIG",
@@ -83,7 +83,15 @@ const METRIC_LABELS: {
   },
 ];
 
-export function PresidentCard({ president }: { president: President }) {
+export function PresidentCard({
+  president,
+  titleAs: Title = "h2",
+}: {
+  president: President;
+  /** See SenatorCard's `titleAs` — h1 only where this card is the page. */
+  titleAs?: "h1" | "h2";
+}) {
+  const SectionHeading = Title === "h1" ? "h2" : "h3";
   const overall = president.score.overall;
   const pm = getPartyMeta(president.party);
   const termEnd = president.termEnd ? president.termEnd.slice(0, 4) : "Present";
@@ -96,10 +104,10 @@ export function PresidentCard({ president }: { president: President }) {
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-mono text-ink-hi">
+            <Title className="text-2xl font-mono text-ink-hi">
               {president.name}
               <span className="ml-2 text-ink-min text-sm">#{president.number}</span>
-            </h2>
+            </Title>
             <div className="flex items-center gap-3 mt-1">
               <span className={`text-xs px-2 py-0.5 border ${pm.bg} ${pm.border} ${pm.color}`}>
                 {pm.label}
@@ -213,7 +221,9 @@ export function PresidentCard({ president }: { president: President }) {
 
         {/* Score Breakdown */}
         <div>
-          <h3 className="text-xs text-ink-lo tracking-widest mb-4">SCORE BREAKDOWN</h3>
+          <SectionHeading className="text-xs text-ink-lo tracking-widest mb-4">
+            SCORE BREAKDOWN
+          </SectionHeading>
           <div className="space-y-3">
             {METRIC_LABELS.map(({ key, label, desc }) => (
               <MetricBar
@@ -245,7 +255,9 @@ export function PresidentCard({ president }: { president: President }) {
         {/* Key Stats */}
         <div>
           <div className="flex items-baseline justify-between mb-3">
-            <h3 className="text-xs text-ink-lo tracking-widest">KEY METRICS</h3>
+            <SectionHeading className="text-xs text-ink-lo tracking-widest">
+              KEY METRICS
+            </SectionHeading>
             <span className="text-xs text-ink-lo">
               Sources: UCSB, MeasuringWorth, BLS, Federal Register, C-SPAN
             </span>

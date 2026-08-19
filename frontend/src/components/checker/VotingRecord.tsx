@@ -11,7 +11,7 @@ import { voteSourceUrl } from "@/lib/sources";
 import { fetchSenatorVotes, fetchRepVotes } from "@/lib/api";
 import CollapsibleSection from "../shared/CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
-import { PARTY_BADGE } from "@/lib/partyStyles";
+import { PARTY_BADGE, policyAreaBadgeClass } from "@/lib/partyStyles";
 
 const VOTES_PER_PAGE = 15;
 
@@ -48,8 +48,8 @@ function VoteBadge({ vote }: { vote: string }) {
     vote === "Yea"
       ? "text-ink-hi bg-white/[0.03] border-white/15"
       : vote === "Nay"
-        ? "text-signal-red bg-signal-red border-signal-red/40"
-        : "text-signal-amber bg-signal-amber border-yellow-500/30";
+        ? "text-signal-red bg-signal-red/10 border-signal-red/40"
+        : "text-signal-amber bg-signal-amber/10 border-signal-amber/40";
   return (
     <span className={`font-mono text-xs tracking-widest px-2 py-1 border ${styles}`}>
       {vote.toUpperCase()}
@@ -62,8 +62,8 @@ function VoteCard({ vote, expandable = false }: { vote: KeyVote; expandable?: bo
 
   const getVoteBorder = (v: string) => {
     if (v === "Yea") return "border-l-4 border-l-white/15";
-    if (v === "Nay") return "border-l-4 border-l-red-500/40";
-    return "border-l-4 border-l-yellow-500/30";
+    if (v === "Nay") return "border-l-4 border-l-signal-red/40";
+    return "border-l-4 border-l-signal-amber/30";
   };
 
   const voteColor =
@@ -90,13 +90,7 @@ function VoteCard({ vote, expandable = false }: { vote: KeyVote; expandable?: bo
                   .map((a) => (
                     <span
                       key={a.area}
-                      className={`text-xs px-1.5 py-0.5 border ${
-                        a.party === "R"
-                          ? "text-signal-red border-red-400/30 bg-red-400/5"
-                          : a.party === "D"
-                            ? "text-blue-400/70 border-blue-400/30 bg-blue-400/5"
-                            : "text-signal-amber border-signal-amber/40 bg-signal-amber/10"
-                      }`}
+                      className={`text-xs px-1.5 py-0.5 border ${policyAreaBadgeClass(a.party)}`}
                       title={`${a.area} — ${a.party} aligned (${Math.round(a.confidence * 100)}%)`}
                     >
                       {a.area}
@@ -208,13 +202,7 @@ function VoteCard({ vote, expandable = false }: { vote: KeyVote; expandable?: bo
                 ).map((a) => (
                   <span
                     key={a.area}
-                    className={`text-xs px-1.5 py-0.5 border ${
-                      a.party === "R"
-                        ? "text-signal-red border-red-400/30 bg-red-400/5"
-                        : a.party === "D"
-                          ? "text-blue-400/70 border-blue-400/30 bg-blue-400/5"
-                          : "text-signal-amber border-signal-amber/40 bg-signal-amber/10"
-                    }`}
+                    className={`text-xs px-1.5 py-0.5 border ${policyAreaBadgeClass(a.party)}`}
                     title={`Confidence: ${Math.round(a.confidence * 100)}% — ${a.party} aligned`}
                   >
                     {a.area}

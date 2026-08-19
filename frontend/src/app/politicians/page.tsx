@@ -13,6 +13,7 @@ import { useAsyncData } from "@/hooks/useAsyncData";
 import { getScoreBgColor } from "@/lib/representation";
 import { formerOfficeBadge } from "@/lib/officeStatus";
 import type { PoliticianCard } from "@/types/politicians";
+import { BOXED_CONTROL } from "@/lib/controlStyles";
 
 type BranchFilter = "all" | "senate" | "house" | "president" | "scotus";
 type PartyFilter = "ALL" | "D" | "R" | "I";
@@ -247,8 +248,8 @@ function PoliticiansPageContent() {
                   }}
                   className={`font-mono text-xs tracking-widest px-3 py-1 border transition-colors ${
                     branch === key
-                      ? "border-signal-cyan/40 text-signal-cyan bg-signal-cyan/10"
-                      : "border-white/[0.07] text-ink-min hover:text-phos hover:border-white/15"
+                      ? BOXED_CONTROL.selected
+                      : BOXED_CONTROL.unselected
                   }`}
                 >
                   {label}
@@ -281,8 +282,8 @@ function PoliticiansPageContent() {
                     onClick={() => setParty(key)}
                     className={`font-mono text-xs px-2 py-1 border transition-colors ${
                       party === key
-                        ? "border-phos/40 text-ink-hi bg-white/[0.03]"
-                        : "border-white/[0.07] text-ink-min hover:text-phos"
+                        ? BOXED_CONTROL.selected
+                        : BOXED_CONTROL.unselected
                     }`}
                   >
                     {label}

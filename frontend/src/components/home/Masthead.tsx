@@ -31,23 +31,32 @@ export default function Masthead() {
       <div className="grid grid-cols-1 gap-8 md:grid-cols-12 md:gap-9">
         <div className="md:col-span-8">
           {/* The two offset plates are drawn from `data-text` as pseudo-
-              elements (see .overprint in globals.css), so the heading's text
+              elements (see .overprint in globals.css), so the mark's text
               content stays exactly "CIVITAS" — copyable, findable and
-              scrapeable once rather than three times. */}
-          <h1
+              scrapeable once rather than three times.
+
+              A nameplate, not the heading. It was the page's h1, which meant
+              the homepage's one h1 was a brand mark carrying no information
+              about the page, while the sentence that actually says what this
+              is sat in a <p>. It is also the third "CIVITAS" in the accessible
+              tree after the nav's home link and the document title, and the
+              second on screen — the nav wordmark sits 86px directly above it.
+              `aria-hidden` leaves it as the printed nameplate it looks like. */}
+          <div
+            aria-hidden="true"
             className="overprint font-pixel text-2xl leading-none text-ink-hi sm:text-3xl"
             data-text="CIVITAS"
           >
             <span className="relative">CIVITAS</span>
-          </h1>
+          </div>
 
-          <p className="mt-6 font-display text-3xl font-extrabold uppercase leading-[1.03] tracking-[-0.025em] text-ink-hi sm:mt-7 sm:text-[43px]">
+          <h1 className="mt-6 font-display text-3xl font-extrabold uppercase leading-[1.03] tracking-[-0.025em] text-ink-hi sm:mt-7 sm:text-[43px]">
             Who funds them.
             <br />
             How they vote.
             <br />
             What they pass.
-          </p>
+          </h1>
 
           <p className="mt-4 max-w-xl font-display text-base leading-relaxed text-ink-lo sm:text-[17px]">
             Every member of Congress, scored nightly from federal filings. Every number traces back
@@ -56,22 +65,9 @@ export default function Masthead() {
         </div>
 
         <div className="md:col-span-4">
-          {/* Governance disclosure, asserted rather than murmured in a
-              footer. Deliberately not a charity claim — Civitas is a
-              non-profit public-interest project, not a registered 501(c)(3). */}
-          <p className="stamp text-xs leading-[1.75]">
-            Non-profit · free to use
-            <br />
-            No party, candidate
-            <br />
-            or PAC money
-            <br />
-            <span className="text-signal-magenta/75">AGPL-3.0 · SELF-HOSTED</span>
-          </p>
-
           <form
             onSubmit={submit}
-            className="mt-7 border border-phos/35"
+            className="border border-phos/35"
             aria-labelledby="request-a-record"
           >
             <h2
@@ -119,6 +115,26 @@ export default function Masthead() {
               </div>
             </div>
           </form>
+
+          {/* Governance disclosure, asserted rather than murmured in a
+              footer. Deliberately not a charity claim — Civitas is a
+              non-profit public-interest project, not a registered 501(c)(3).
+
+              Below the request slip, not above it. The stamp is the most
+              saturated thing on the page by some margin — full-strength
+              magenta, rotated, against a column of ink and phosphor — so
+              placing it first made boilerplate the first thing the eye landed
+              on, ahead of both the record index and the only control on the
+              page. Reading order now runs control, then disclosure. */}
+          <p className="stamp mt-7 text-xs leading-[1.75]">
+            Non-profit · free to use
+            <br />
+            No party, candidate
+            <br />
+            or PAC money
+            <br />
+            <span className="text-signal-magenta">AGPL-3.0 · SELF-HOSTED</span>
+          </p>
         </div>
       </div>
     </section>

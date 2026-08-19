@@ -66,6 +66,12 @@ def _bill_mention_counts(db: Session) -> dict[str, int]:
         .all()
     )
     counts: dict[str, int] = {}
+    # `isinstance(entry, dict)` below, matching api/politicians.py's guard on
+    # the same column: related_bill_ids is a JSON TEXT column with nothing
+    # enforcing its element shape, and a bare string in it raised
+    # AttributeError here — which is not a degraded mention count, it is a 500
+    # on /api/bills, so the whole Bills page and the homepage record index go
+    # with it. Three of the four readers of these columns were unguarded.
     for (related_bill_ids,) in issues:
         if not related_bill_ids:
             continue
@@ -74,7 +80,7 @@ def _bill_mention_counts(db: Session) -> dict[str, int]:
         except Exception:
             continue
         for entry in entries:
-            bill_id = entry.get("id")
+            bill_id = entry.get("id") if isinstance(entry, dict) else None
             if bill_id:
                 counts[bill_id] = counts.get(bill_id, 0) + 1
     return counts
@@ -255,7 +261,7 @@ def _issues_mentioning(db: Session, bill_id: str) -> list[RelatedIssueSchema]:
             entries = json.loads(related_bill_ids)
         except (json.JSONDecodeError, TypeError):
             continue
-        if any(e.get("id") == bill_id for e in entries):
+        if any(isinstance(e, dict) and e.get("id") == bill_id for e in entries):
             result.append(RelatedIssueSchema(id=issue_id, date=date, title=title))
     return result
 

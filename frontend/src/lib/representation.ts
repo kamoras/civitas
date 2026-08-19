@@ -69,7 +69,7 @@ export function getScoreColor(score: number): string {
 // text or a bar, on any page. Several per-metric bars (senator/president/
 // justice detail pages, the leaderboard) previously reimplemented this
 // with drifting cutoffs (70/40, 70/50/35, 75/55/35/15...) and drifting
-// colors (bg-cyan-400 instead of the site's actual neon-cyan), so the
+// colors (stock-Tailwind `bg-cyan-400` instead of a palette token), so the
 // same score could render a different tier depending on which page you
 // were on.
 export function getScoreBgColor(score: number): string {

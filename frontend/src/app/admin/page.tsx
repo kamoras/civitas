@@ -1467,7 +1467,7 @@ function PipelineStatusRow({
           <button
             disabled={clearing}
             onClick={onClear}
-            className="text-xs font-mono text-signal-amber hover:text-signal-amber border border-yellow-400/30 hover:border-yellow-400/60
+            className="text-xs font-mono text-signal-amber hover:text-signal-amber border border-signal-amber/30 hover:border-signal-amber/60
                        px-2 py-0.5  transition-colors disabled:opacity-40"
           >
             {clearing ? "CLEARING..." : "[CLEAR STUCK RUN]"}
@@ -2600,7 +2600,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
                                       style={{ height: "48px" }}
                                     >
                                       <div
-                                        className="w-full rounded-t bg-signal-cyan transition-all min-w-[4px]"
+                                        className="w-full min-w-[4px] bg-signal-cyan transition-all"
                                         style={{ height: `${height}%` }}
                                       />
                                     </div>

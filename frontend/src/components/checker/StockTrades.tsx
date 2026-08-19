@@ -45,8 +45,8 @@ function TransactionBadge({ type }: { type: StockTrade["transactionType"] }) {
     type === "purchase"
       ? "text-ink-hi bg-white/[0.03] border-white/15"
       : type === "exchange"
-        ? "text-signal-amber bg-signal-amber border-yellow-500/30"
-        : "text-signal-red bg-signal-red border-signal-red/40";
+        ? "text-signal-amber bg-signal-amber/10 border-signal-amber/40"
+        : "text-signal-red bg-signal-red/10 border-signal-red/40";
   return (
     <span className={`font-mono text-xs tracking-widest px-2 py-1 border ${styles}`}>
       {TXN_TYPE_LABEL[type]}
@@ -79,7 +79,7 @@ function TradeRow({ trade }: { trade: StockTrade }) {
         </span>
         {trade.parseConfidence === "ocr" && (
           <span
-            className="text-xs px-1 py-0.5 border text-signal-amber border-yellow-500/30"
+            className="text-xs px-1 py-0.5 border text-signal-amber border-signal-amber/40"
             title="Extracted via OCR from a scanned filing — verify against the source before relying on exact figures."
           >
             LOW CONFIDENCE

@@ -5,6 +5,7 @@ import BillRow from "./BillRow";
 import { fetchBillsInFlight } from "@/lib/api";
 import { useConfig } from "@/hooks/useConfig";
 import type { BillInFlight } from "@/types/bill";
+import { BOXED_CONTROL } from "@/lib/controlStyles";
 
 const EMPTY_BILLS: BillInFlight[] = [];
 const GROUP_PER_PAGE = 25;
@@ -192,8 +193,8 @@ export default function BillStageGroup({
                 aria-pressed={sort === opt.value}
                 className={`font-mono text-xs px-2 py-0.5 border transition-colors uppercase tracking-wider ${
                   sort === opt.value
-                    ? "border-signal-cyan/40 text-signal-cyan bg-signal-cyan/10"
-                    : "border-white/[0.07] text-ink-min hover:text-phos"
+                    ? BOXED_CONTROL.selected
+                    : BOXED_CONTROL.unselected
                 }`}
               >
                 {opt.label}

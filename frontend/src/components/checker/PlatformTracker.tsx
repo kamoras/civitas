@@ -50,14 +50,18 @@ function PartisanDepthPanel({
       {/* Spectrum bar */}
       <div className="mb-3">
         <div className="flex justify-between text-xs mb-1">
-          <span className="text-blue-400 font-display font-semibold">← DEM</span>
+          <span className="text-dem-blue font-display font-semibold">← DEM</span>
           <span className="text-ink-min font-display font-semibold">CENTER</span>
           <span className="text-signal-red font-display font-semibold">REP →</span>
         </div>
+        {/* Both party bars paint at full token strength. The D side used to be
+            `bg-blue-500/40` against a solid `bg-signal-red`, so identical
+            magnitudes rendered as a heavier bar on the Republican side of a
+            chart whose only job is to compare the two. */}
         <div className="relative h-3 bg-white/[0.03] border border-white/[0.07]">
           <div className="absolute top-0 bottom-0 left-1/2 w-px bg-phos" />
           <div
-            className={`absolute top-0 bottom-0 ${leanDirection === "R" ? "bg-signal-red" : "bg-blue-500/40"}`}
+            className={`absolute top-0 bottom-0 ${leanDirection === "R" ? "bg-signal-red" : "bg-dem-blue"}`}
             style={{
               left: leanDirection === "R" ? "50%" : `${50 - leanPct / 2}%`,
               width: `${leanPct / 2}%`,
@@ -77,7 +81,7 @@ function PartisanDepthPanel({
       <div className="grid grid-cols-3 gap-2 mb-3 text-center">
         <div className="panel p-2 min-w-0">
           <div
-            className={`text-sm font-mono ${depth.overallParty === "R" ? "text-signal-red" : depth.overallParty === "D" ? "text-blue-400" : "text-ink-hi"}`}
+            className={`text-sm font-mono ${depth.overallParty === "R" ? "text-signal-red" : depth.overallParty === "D" ? "text-dem-blue" : "text-ink-hi"}`}
           >
             {depth.overallParty === "centrist" ? "CTR" : depth.overallParty}
           </div>
@@ -133,7 +137,7 @@ function PartisanDepthPanel({
           ) : (
             <span>
               Despite being {senatorParty === "R" ? "Republican" : "Democrat"}, voting record leans{" "}
-              <span className={depth.overallParty === "R" ? "text-signal-red" : "text-blue-400"}>
+              <span className={depth.overallParty === "R" ? "text-signal-red" : "text-dem-blue"}>
                 {depth.overallParty === "R" ? "Republican" : "Democratic"}
               </span>{" "}
               overall.
@@ -157,12 +161,12 @@ function PartisanDepthPanel({
                 </span>
                 <div className="flex-1 h-2 bg-white/[0.03] border border-white/[0.07] relative">
                   <div
-                    className={`absolute top-0 bottom-0 ${isR ? "bg-signal-red right-0" : isD ? "bg-blue-500/40 left-0" : "bg-purple-500/30 left-1/2 -translate-x-1/2"}`}
+                    className={`absolute top-0 bottom-0 ${isR ? "bg-signal-red right-0" : isD ? "bg-dem-blue left-0" : "bg-ind-purple left-1/2 -translate-x-1/2"}`}
                     style={{ width: `${Math.max(barWidth, 4)}%` }}
                   />
                 </div>
                 <span
-                  className={`w-5 text-xs font-mono ${isR ? "text-signal-red" : isD ? "text-blue-400" : "text-ind-purple"}`}
+                  className={`w-5 text-xs font-mono ${isR ? "text-signal-red" : isD ? "text-dem-blue" : "text-ind-purple"}`}
                 >
                   {p.alignment === "bipartisan" ? "BP" : p.alignment}
                 </span>

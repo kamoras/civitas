@@ -2,6 +2,8 @@
 
 import { useCallback } from "react";
 
+import { boxedControl } from "@/lib/controlStyles";
+
 export type Branch = "senate" | "house" | "president" | "scotus";
 
 const BRANCHES: { key: Branch; label: string }[] = [
@@ -57,11 +59,9 @@ export default function BranchSelector({ selected, onChange }: BranchSelectorPro
           aria-controls={`branch-panel-${key}`}
           tabIndex={selected === key ? 0 : -1}
           onClick={() => onChange(key)}
-          className={`px-3 sm:px-5 py-2 text-xs sm:text-sm font-mono border transition-all tracking-wider ${
+          className={`border px-3 py-2 font-mono text-xs tracking-wider transition-colors sm:px-5 sm:text-sm ${boxedControl(
             selected === key
-              ? "bg-phos border-phos text-surface-base"
-              : "border-white/[0.07] text-ink-lo hover:border-white/30 hover:text-ink"
-          }`}
+          )}`}
         >
           {label}
         </button>

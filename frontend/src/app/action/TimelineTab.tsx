@@ -29,26 +29,26 @@ const EVENT_STYLES: Record<
   { border: string; dot: string; badge: string; badgeText: string }
 > = {
   election: {
-    border: "border-red-400/30",
-    dot: "bg-red-400",
-    badge: "border-red-400/40 text-signal-red bg-red-400/10",
+    border: "border-signal-red/30",
+    dot: "bg-signal-red",
+    badge: "border-signal-red/40 text-signal-red bg-signal-red/10",
     badgeText: "ELECTION",
   },
   scotus: {
-    border: "border-blue-400/30",
-    dot: "bg-blue-400",
-    badge: "border-blue-400/40 text-blue-400/90 bg-blue-400/10",
+    border: "border-dem-blue/30",
+    dot: "bg-dem-blue",
+    badge: "border-dem-blue/40 text-dem-blue/90 bg-dem-blue/10",
     badgeText: "SCOTUS",
   },
   congress: {
-    border: "border-emerald-400/30",
-    dot: "bg-emerald-400",
-    badge: "border-emerald-400/40 text-emerald-400/90 bg-emerald-400/10",
+    border: "border-phos/30",
+    dot: "bg-phos",
+    badge: "border-phos/40 text-phos/90 bg-phos/10",
     badgeText: "CONGRESS",
   },
   executive: {
     border: "border-signal-amber/40",
-    dot: "bg-amber-400",
+    dot: "bg-signal-amber",
     badge: "border-signal-amber/40 text-signal-amber bg-signal-amber/10",
     badgeText: "EXECUTIVE",
   },
@@ -96,7 +96,7 @@ function DayEntry({ entry }: { entry: TimelineEntry }) {
   return (
     <div className="relative group">
       <div
-        className="absolute -left-[21px] top-1.5 w-2.5 h-2.5 bg-purple-400/40 border border-purple-400/60"
+        className="absolute -left-[21px] top-1.5 w-2.5 h-2.5 bg-ind-purple/40 border border-ind-purple/60"
         aria-hidden="true"
       />
       <Link
@@ -151,14 +151,14 @@ function DayList({ entries }: { entries: TimelineEntry[] }) {
   const visible = showAll ? entries : entries.slice(0, 7);
   const remaining = entries.length - 7;
   return (
-    <div className="relative pl-4 border-l border-purple-400/20 space-y-3">
+    <div className="relative pl-4 border-l border-ind-purple/20 space-y-3">
       {visible.map((e) => (
         <DayEntry key={e.date} entry={e} />
       ))}
       {remaining > 0 && (
         <button
           onClick={() => setShowAll((v) => !v)}
-          className="w-full text-center text-xs font-mono py-2 border border-purple-400/20 text-ind-purple hover:text-ind-purple hover:border-purple-400/40 transition-colors"
+          className="w-full text-center text-xs font-mono py-2 border border-ind-purple/20 text-ind-purple hover:text-ind-purple hover:border-ind-purple/40 transition-colors"
         >
           {showAll ? "▲ SHOW LESS" : `▼ SHOW ${remaining} MORE DAY${remaining !== 1 ? "S" : ""}`}
         </button>
@@ -204,7 +204,7 @@ function WeekCard({ week }: { week: TimelineWeek }) {
       {expanded && (
         <div className="px-3 pb-3 border-t border-white/[0.07] pt-3 space-y-3">
           {week.summary && !week.isCurrent && (
-            <div className="border-l-2 border-purple-400/30 pl-3 py-1">
+            <div className="border-l-2 border-ind-purple/30 pl-3 py-1">
               <div className="text-xs font-mono tracking-widest text-ind-purple mb-1">
                 WEEK IN REVIEW
               </div>
@@ -294,7 +294,7 @@ function MonthCard({
 
           {/* Past month: show LLM summary + week breakdown */}
           {!month.isCurrent && month.summary && (
-            <div className="border-l-2 border-purple-400/30 pl-3 py-1">
+            <div className="border-l-2 border-ind-purple/30 pl-3 py-1">
               <div className="text-xs font-mono tracking-widest text-ind-purple mb-1">
                 MONTH IN REVIEW
               </div>
@@ -395,7 +395,7 @@ export default function TimelineTab() {
   return (
     <div className="space-y-6">
       {/* Year header */}
-      <div className="panel border-t-2 border-t-purple-400/50 p-5 sm:p-6 text-center">
+      <div className="panel border-t-2 border-t-ind-purple/50 p-5 sm:p-6 text-center">
         <h2 className="font-display font-semibold text-xl sm:text-2xl text-ind-purple mb-2">
           {isYearComplete ? `${data.year} YEAR IN REVIEW` : `${data.year} — IN PROGRESS`}
         </h2>
@@ -412,7 +412,7 @@ export default function TimelineTab() {
             {topThemes.slice(0, 6).map((t) => (
               <span
                 key={t.area}
-                className="text-xs font-mono px-2 py-0.5 border border-purple-400/30 text-ind-purple bg-purple-400/5"
+                className="text-xs font-mono px-2 py-0.5 border border-ind-purple/30 text-ind-purple bg-ind-purple/5"
               >
                 {t.area} ({t.count})
               </span>
@@ -423,7 +423,7 @@ export default function TimelineTab() {
 
       {/* Year summary (if complete year) */}
       {data.yearSummary && (
-        <div className="panel border-l-4 border-l-purple-400/50 p-5">
+        <div className="panel border-l-4 border-l-ind-purple/50 p-5">
           <div className="text-xs font-mono tracking-widest text-ind-purple mb-2">
             YEAR IN REVIEW — {data.year}
           </div>
@@ -433,7 +433,7 @@ export default function TimelineTab() {
               {data.yearSummary.topAreas!.map((a) => (
                 <span
                   key={a}
-                  className="text-xs font-mono px-1.5 py-0.5 border border-purple-400/20 text-ind-purple"
+                  className="text-xs font-mono px-1.5 py-0.5 border border-ind-purple/20 text-ind-purple"
                 >
                   {a}
                 </span>
@@ -546,7 +546,7 @@ export default function TimelineTab() {
                     {m.updateCount} update{m.updateCount !== 1 ? "s" : ""}
                   </span>
                   <span
-                    className={`w-2 h-2 ${m.status === "active" ? "bg-green-400" : "bg-signal-amber/10"}`}
+                    className={`w-2 h-2 ${m.status === "active" ? "bg-phos" : "bg-signal-amber/10"}`}
                     aria-hidden="true"
                   />
                 </div>

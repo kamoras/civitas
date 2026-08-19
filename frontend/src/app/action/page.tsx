@@ -33,6 +33,7 @@ import {
 const CivicActionWidget = dynamic(() => import("@/components/action/CivicTracker"), { ssr: false });
 import type { ActionIssue } from "@/types/action";
 import { STATES } from "@/data/states";
+import { tabControl } from "@/lib/controlStyles";
 
 const GlobeTab = dynamic(() => import("@/components/action/GlobeTab"), {
   ssr: false,
@@ -908,11 +909,9 @@ function ActionPageInner() {
                 aria-controls={`tabpanel-${tab.id}`}
                 tabIndex={activeTab === tab.id ? 0 : -1}
                 onClick={() => setActiveTab(tab.id)}
-                className={`-mb-px whitespace-nowrap border-b-3 px-3 py-3 font-mono text-xs uppercase tracking-[0.14em] transition-colors sm:px-5 ${
+                className={`-mb-px whitespace-nowrap border-b-3 px-3 py-3 font-mono text-xs uppercase tracking-[0.14em] transition-colors sm:px-5 ${tabControl(
                   activeTab === tab.id
-                    ? "border-phos text-ink-hi"
-                    : "border-transparent text-ink-min hover:text-ink-lo"
-                }`}
+                )}`}
               >
                 {tab.label}
               </button>

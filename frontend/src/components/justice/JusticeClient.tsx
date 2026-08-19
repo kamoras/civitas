@@ -79,7 +79,15 @@ function AgreementRow({ name, pct }: { name: string; pct: number }) {
   );
 }
 
-export function JusticeCard({ justice }: { justice: Justice }) {
+export function JusticeCard({
+  justice,
+  titleAs: Title = "h2",
+}: {
+  justice: Justice;
+  /** See SenatorCard's `titleAs` — h1 only where this card is the page. */
+  titleAs?: "h1" | "h2";
+}) {
+  const SectionHeading = Title === "h1" ? "h2" : "h3";
   const overall = justice.score.overall;
   const pb = getPartyBadge(justice.appointingParty);
 
@@ -102,7 +110,7 @@ export function JusticeCard({ justice }: { justice: Justice }) {
               />
             ) : null}
             <div>
-              <h2 className="text-2xl font-mono text-ink-hi">{justice.name}</h2>
+              <Title className="text-2xl font-mono text-ink-hi">{justice.name}</Title>
               <div className="flex items-center gap-3 mt-1 flex-wrap">
                 <span className="text-xs text-ink-lo">{justice.roleTitle}</span>
                 <span className={`text-xs px-2 py-0.5 border ${pb.bg} ${pb.border} ${pb.color}`}>
@@ -176,7 +184,9 @@ export function JusticeCard({ justice }: { justice: Justice }) {
 
         {/* Score Breakdown */}
         <div>
-          <h3 className="text-xs text-ink-lo tracking-widest mb-4">JURISPRUDENTIAL CONSISTENCY</h3>
+          <SectionHeading className="text-xs text-ink-lo tracking-widest mb-4">
+            JURISPRUDENTIAL CONSISTENCY
+          </SectionHeading>
           <div className="space-y-3">
             {METRIC_LABELS.map(({ key, label, desc }) => (
               <MetricBar
@@ -194,7 +204,9 @@ export function JusticeCard({ justice }: { justice: Justice }) {
 
         {/* Key Stats */}
         <div>
-          <h3 className="text-xs text-ink-lo tracking-widest mb-3">VOTING PROFILE</h3>
+          <SectionHeading className="text-xs text-ink-lo tracking-widest mb-3">
+            VOTING PROFILE
+          </SectionHeading>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             <StatBox label="CASES" value={`${justice.casesDecided}`} />
             <StatBox label="MAJORITY" value={`${justice.majorityPct.toFixed(0)}`} unit="%" />
@@ -211,7 +223,9 @@ export function JusticeCard({ justice }: { justice: Justice }) {
 
         {/* Opinions authored */}
         <div>
-          <h3 className="text-xs text-ink-lo tracking-widest mb-3">OPINIONS AUTHORED</h3>
+          <SectionHeading className="text-xs text-ink-lo tracking-widest mb-3">
+            OPINIONS AUTHORED
+          </SectionHeading>
           <div className="grid grid-cols-3 gap-2">
             <StatBox label="MAJORITY" value={`${justice.authoredMajority}`} />
             <StatBox label="DISSENT" value={`${justice.authoredDissent}`} />
@@ -222,9 +236,9 @@ export function JusticeCard({ justice }: { justice: Justice }) {
         {/* Agreement Matrix */}
         {agreementEntries.length > 0 && (
           <div>
-            <h3 className="text-xs text-ink-lo tracking-widest mb-3">
+            <SectionHeading className="text-xs text-ink-lo tracking-widest mb-3">
               AGREEMENT WITH OTHER JUSTICES
-            </h3>
+            </SectionHeading>
             <div className="space-y-2">
               {agreementEntries.map(([id, pct]) => (
                 <AgreementRow key={id} name={id} pct={pct} />

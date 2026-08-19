@@ -16,13 +16,13 @@ const STYLES: Record<string, { color: string; border: string; bg: string }> = {
   },
   Judicial: {
     color: "text-ind-purple",
-    border: "border-purple-400/30",
-    bg: "border-purple-400/30 bg-purple-400/5",
+    border: "border-ind-purple/40",
+    bg: "border-ind-purple/40 bg-ind-purple/10",
   },
   Regulatory: {
     color: "text-signal-orange",
-    border: "border-orange-400/30",
-    bg: "border-orange-400/30 bg-orange-400/5",
+    border: "border-signal-orange/40",
+    bg: "border-signal-orange/40 bg-signal-orange/10",
   },
 };
 

@@ -425,3 +425,62 @@ class TestGetBillDetail:
 
         assert detail.mention_count == 0
         assert detail.related_issues == []
+
+
+class TestMalformedRelatedBillIds:
+    """`ActionIssue.related_bill_ids` is a JSON TEXT column with nothing
+    enforcing the shape of its elements — no `response_model`, no schema, no
+    constraint. Three of the four places that read these columns indexed the
+    elements as dicts unguarded, so a bare string in one row raised
+    AttributeError inside the query and returned a 500 for the whole route.
+
+    That is not a degraded mention count: /api/bills is what both the Bills
+    page and the homepage record index read, so both go blank together.
+    api/politicians.py already guarded its copy with `isinstance(entry, dict)`;
+    these tests hold the other three to the same bar.
+    """
+
+    def _issue_with_raw(self, db, raw, date="2026-07-01"):
+        issue = ActionIssue(date=date, rank=1, title="Trending", related_bill_ids=raw, is_current=True)
+        db.add(issue)
+        db.flush()
+        return issue
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            '["S.4967"]',                       # bare strings, not objects
+            '[null]',
+            '[123]',
+            '[{"id": "S.4967"}, "S.4967"]',     # one good element, one bad
+        ],
+        ids=["bare-strings", "nulls", "numbers", "mixed"],
+    )
+    def test_a_malformed_element_does_not_break_the_feed(self, db_session, raw):
+        senator = _make_senator(db_session)
+        _make_sponsored_bill(db_session, senator.id, "S.4967", "IN_COMMITTEE")
+        self._issue_with_raw(db_session, raw)
+
+        result = get_bills_in_flight(db_session)
+
+        assert [b.bill_id for b in result.bills] == ["S.4967"]
+
+    def test_a_malformed_element_does_not_break_bill_detail(self, db_session):
+        senator = _make_senator(db_session)
+        _make_sponsored_bill(db_session, senator.id, "S.4967", "IN_COMMITTEE")
+        self._issue_with_raw(db_session, '["S.4967"]')
+
+        detail = get_bill_detail(db_session, "S.4967")
+
+        assert detail.bill_id == "S.4967"
+        assert detail.related_issues == []
+
+    def test_well_formed_entries_beside_a_malformed_one_still_count(self, db_session):
+        senator = _make_senator(db_session)
+        _make_sponsored_bill(db_session, senator.id, "S.4967", "IN_COMMITTEE")
+        self._issue_with_raw(db_session, '["junk", {"id": "S.4967"}]')
+
+        result = get_bills_in_flight(db_session, sort="hot")
+
+        assert [b.bill_id for b in result.bills] == ["S.4967"]
+        assert get_bill_detail(db_session, "S.4967").mention_count == 1

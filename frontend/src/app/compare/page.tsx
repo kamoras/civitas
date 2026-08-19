@@ -19,6 +19,7 @@ import { getScoreColor, asciiScoreBar } from "@/lib/representation";
 import { formatCurrency } from "@/lib/formatting";
 import { useUserState } from "@/hooks/useUserState";
 import { PARTY_COLORS } from "@/lib/partyStyles";
+import { BOXED_CONTROL } from "@/lib/controlStyles";
 
 type Chamber = "senate" | "house";
 
@@ -114,8 +115,8 @@ function SenatorSelector({
           onClick={() => handleChamberToggle("senate")}
           className={`font-mono text-xs px-2 py-1 border transition-colors ${
             chamber === "senate"
-              ? "border-signal-cyan/40 bg-signal-cyan/10 text-signal-cyan"
-              : "border-white/[0.07] text-ink-lo hover:border-white/15 hover:text-phos"
+              ? BOXED_CONTROL.selected
+              : BOXED_CONTROL.unselected
           }`}
         >
           SEN
@@ -124,8 +125,8 @@ function SenatorSelector({
           onClick={() => handleChamberToggle("house")}
           className={`font-mono text-xs px-2 py-1 border transition-colors ${
             chamber === "house"
-              ? "border-signal-cyan/40 bg-signal-cyan/10 text-signal-cyan"
-              : "border-white/[0.07] text-ink-lo hover:border-white/15 hover:text-phos"
+              ? BOXED_CONTROL.selected
+              : BOXED_CONTROL.unselected
           }`}
         >
           HOUSE
@@ -170,8 +171,8 @@ function SenatorSelector({
               onClick={() => onSelect(s, chamber)}
               className={`w-full text-left px-3 py-2 border transition-colors font-mono text-xs ${
                 s.id === selectedId
-                  ? "border-signal-cyan/40 bg-signal-cyan/10 text-signal-cyan"
-                  : "border-white/[0.07] hover:border-white/15 text-ink"
+                  ? BOXED_CONTROL.selected
+                  : BOXED_CONTROL.unselected
               }`}
             >
               <span className={`mr-2 ${PARTY_COLORS[s.party]}`}>[{s.party}]</span>

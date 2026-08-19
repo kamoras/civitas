@@ -19,6 +19,32 @@ const NAV_LINKS: readonly { href: string; label: string; accent?: boolean }[] = 
   { href: "/about", label: "ABOUT" },
 ];
 
+/**
+ * One definition of what a nav link looks like, for all three rows.
+ *
+ * The current page was a solid `bg-phos` pill with dark text. That is the one
+ * thing the palette says phosphor must never be — "Data and wayfinding only —
+ * status, rules, figures, link underlines. Never a fill behind a call to
+ * action" (tailwind.config.ts) — and it made the loudest element on a page
+ * about public records the fact that you were already on it. It is a rule
+ * now, which is both the documented use and the same treatment the Action
+ * Center's tab bar already gives its selected tab.
+ *
+ * The rule, not the colour, is what carries the state: colour alone would be
+ * the only distinguisher for a reader who cannot see it, and `aria-current`
+ * only reaches assistive tech.
+ *
+ * Three rows, one function, because they previously carried three copies of
+ * this string that had already drifted apart on padding — `px-1.5 py-0.5`
+ * against `px-2 py-0.5` against `self-start px-2 py-0.5` — for no reason
+ * anyone recorded.
+ */
+function navLinkClass(active: boolean, accent: boolean | undefined, size: "sm" | "xs"): string {
+  const base = `font-mono ${size === "xs" ? "text-xs" : "text-sm"} uppercase whitespace-nowrap border-b-2 pb-0.5 transition-colors`;
+  if (active) return `${base} border-phos text-phos`;
+  return `${base} border-transparent ${accent ? "text-ink-hi hover:text-phos" : "text-ink-lo hover:text-ink-hi"}`;
+}
+
 export default function Navbar() {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
@@ -142,13 +168,7 @@ export default function Navbar() {
                   key={href}
                   href={href}
                   aria-current={active ? "page" : undefined}
-                  className={
-                    active
-                      ? "bg-phos text-surface-base font-mono text-xs tracking-[0.025em] uppercase px-1.5 py-0.5 whitespace-nowrap"
-                      : accent
-                        ? "text-ink-hi hover:text-phos font-mono text-xs tracking-[0.025em] uppercase transition-colors whitespace-nowrap"
-                        : "text-ink-lo hover:text-ink-hi font-mono text-xs tracking-[0.025em] uppercase transition-colors whitespace-nowrap"
-                  }
+                  className={`tracking-[0.025em] ${navLinkClass(active, accent, "xs")}`}
                 >
                   {label}
                 </Link>
@@ -165,13 +185,7 @@ export default function Navbar() {
                   key={href}
                   href={href}
                   aria-current={active ? "page" : undefined}
-                  className={
-                    active
-                      ? "bg-phos text-surface-base font-mono text-xs tracking-widest uppercase px-2 py-0.5 whitespace-nowrap"
-                      : accent
-                        ? "text-ink-hi hover:text-phos font-mono text-xs tracking-widest uppercase transition-colors whitespace-nowrap"
-                        : "text-ink-lo hover:text-ink-hi font-mono text-xs tracking-widest uppercase transition-colors whitespace-nowrap"
-                  }
+                  className={`tracking-widest ${navLinkClass(active, accent, "xs")}`}
                 >
                   {label}
                 </Link>
@@ -217,13 +231,7 @@ export default function Navbar() {
                   href={href}
                   aria-current={active ? "page" : undefined}
                   onClick={closeMenu}
-                  className={
-                    active
-                      ? "self-start bg-phos text-surface-base font-mono text-sm tracking-widest uppercase px-2 py-0.5"
-                      : accent
-                        ? "text-ink-hi hover:text-phos font-mono text-sm tracking-widest uppercase transition-colors"
-                        : "text-ink-lo hover:text-ink-hi font-mono text-sm tracking-widest uppercase transition-colors"
-                  }
+                  className={`self-start tracking-widest ${navLinkClass(active, accent, "sm")}`}
                 >
                   {label}
                 </Link>

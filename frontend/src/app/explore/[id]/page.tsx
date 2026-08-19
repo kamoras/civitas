@@ -101,18 +101,18 @@ function HelpMeCommentPanel({ doc, remaining }: { doc: ExploreDocumentDetail; re
       <button
         onClick={handleOpen}
         aria-expanded={open}
-        className="text-xs font-mono px-4 py-2 border border-emerald-500/40
-                   text-emerald-400/80 hover:text-emerald-400 hover:bg-emerald-500/10
+        className="text-xs font-mono px-4 py-2 border border-phos/40
+                   text-phos-mid hover:text-phos hover:bg-phos/10
                    transition-colors"
       >
         {open ? "CLOSE" : "HELP ME WRITE A COMMENT"}
       </button>
 
       {open && (
-        <div className="mt-4 p-4 border border-emerald-500/20 bg-emerald-500/5 space-y-4">
+        <div className="mt-4 p-4 border border-phos/20 bg-phos/5 space-y-4">
           {plainSummary && (
             <div>
-              <p className="text-xs font-mono text-emerald-400/50 mb-1 tracking-wider">
+              <p className="text-xs font-mono text-ink-lo mb-1 tracking-wider">
                 WHAT THIS DOCUMENT DOES
               </p>
               <p className="text-base text-ink leading-relaxed">{plainSummary}</p>
@@ -134,7 +134,7 @@ function HelpMeCommentPanel({ doc, remaining }: { doc: ExploreDocumentDetail; re
               rows={9}
               className="w-full bg-surface-base border border-white/[0.07] px-3 py-2
                          text-sm text-ink-hi leading-relaxed
-                         focus:outline-none focus:border-emerald-500/50 transition-colors
+                         focus:outline-none focus:border-phos/50 transition-colors
                          resize-y min-h-[180px]"
             />
             <p className="text-xs text-ink-min mt-1">
@@ -143,7 +143,7 @@ function HelpMeCommentPanel({ doc, remaining }: { doc: ExploreDocumentDetail; re
           </div>
 
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <p className="text-xs text-emerald-400/50">
+            <p className="text-xs text-ink-lo">
               {remaining === 0
                 ? "Closes today"
                 : `${remaining} day${remaining !== 1 ? "s" : ""} left`}{" "}
@@ -153,8 +153,8 @@ function HelpMeCommentPanel({ doc, remaining }: { doc: ExploreDocumentDetail; re
               href={safeHref(doc.commentUrl) || "#"}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs font-mono px-5 py-2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/50
-                         hover:bg-emerald-500/30 hover:border-emerald-500/70
+              className="text-xs font-mono px-5 py-2 bg-phos/20 text-phos border border-phos/50
+                         hover:bg-phos/30 hover:border-phos/70
                          transition-colors"
             >
               OPEN COMMENT FORM →
@@ -263,8 +263,8 @@ function CommentsSection({
                     setShowForm(!showForm);
                     setSubmitResult(null);
                   }}
-                  className="text-xs font-mono px-3 py-1.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40
-                             hover:bg-emerald-500/30 transition-colors"
+                  className="text-xs font-mono px-3 py-1.5 bg-phos/20 text-phos border border-phos/40
+                             hover:bg-phos/30 transition-colors"
                 >
                   {showForm ? "CANCEL" : "WRITE COMMENT"}
                 </button>
@@ -289,8 +289,8 @@ function CommentsSection({
               role="alert"
               className={`mb-4 p-3  border text-sm ${
                 submitResult.success
-                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                  : "bg-signal-red border-signal-red/40 text-signal-red"
+                  ? "bg-phos/10 border-phos/30 text-phos"
+                  : "bg-signal-red/10 border-signal-red/40 text-signal-red"
               }`}
             >
               {submitResult.message}
@@ -299,7 +299,7 @@ function CommentsSection({
 
           {/* Comment Form */}
           {showForm && commentOpen && (
-            <div className="mb-6 p-4 border border-emerald-500/20 bg-emerald-500/5">
+            <div className="mb-6 p-4 border border-phos/20 bg-phos/5">
               <p className="text-xs text-ink-lo mb-3 leading-relaxed">
                 Your comment will be submitted to regulations.gov and become part of the official
                 public record. Agency officials review these comments when making final decisions.
@@ -322,7 +322,7 @@ function CommentsSection({
                     maxLength={100}
                     className="w-full bg-surface-base border border-white/[0.07] px-3 py-2
                                text-sm text-ink-hi placeholder:text-ink-min
-                               focus:outline-none focus:border-emerald-500/50 transition-colors"
+                               focus:outline-none focus:border-phos/50 transition-colors"
                   />
                 </div>
                 <div>
@@ -341,7 +341,7 @@ function CommentsSection({
                     maxLength={200}
                     className="w-full bg-surface-base border border-white/[0.07] px-3 py-2
                                text-sm text-ink-hi placeholder:text-ink-min
-                               focus:outline-none focus:border-emerald-500/50 transition-colors"
+                               focus:outline-none focus:border-phos/50 transition-colors"
                   />
                 </div>
               </div>
@@ -359,7 +359,7 @@ function CommentsSection({
                   rows={6}
                   className="w-full bg-surface-base border border-white/[0.07] px-3 py-2
                              text-sm text-ink-hi placeholder:text-ink-min
-                             focus:outline-none focus:border-emerald-500/50 transition-colors
+                             focus:outline-none focus:border-phos/50 transition-colors
                              resize-y min-h-[120px]"
                 />
                 <div className="flex justify-between mt-1">
@@ -381,8 +381,8 @@ function CommentsSection({
                 <button
                   onClick={handleSubmit}
                   disabled={submitting || commentText.trim().length < 10}
-                  className="text-xs font-mono px-6 py-2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/50
-                             hover:bg-emerald-500/30 hover:border-emerald-500/70
+                  className="text-xs font-mono px-6 py-2 bg-phos/20 text-phos border border-phos/50
+                             hover:bg-phos/30 hover:border-phos/70
                              transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {submitting ? "SUBMITTING..." : "SUBMIT TO OFFICIAL RECORD"}
@@ -431,7 +431,7 @@ function CommentsSection({
               {commentOpen && !showForm && (
                 <button
                   onClick={() => setShowForm(true)}
-                  className="mt-3 text-xs font-mono text-emerald-400/70 hover:text-emerald-400 transition-colors"
+                  className="mt-3 text-xs font-mono text-phos-mid hover:text-phos transition-colors"
                 >
                   BE THE FIRST TO COMMENT →
                 </button>
@@ -619,14 +619,14 @@ export default function ExploreDetailPage() {
 
           {/* Public Comment CTA — prominent, above everything */}
           {commentOpen && (
-            <div className="border border-emerald-500/40 p-5 mb-6 bg-emerald-500/5">
+            <div className="border border-phos/40 p-5 mb-6 bg-phos/5">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs font-mono px-2 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                    <span className="text-xs font-mono px-2 py-0.5 bg-phos/20 text-phos border border-phos/30">
                       OPEN FOR PUBLIC COMMENT
                     </span>
-                    <span className="text-emerald-400/60 text-xs">
+                    <span className="text-ink-lo text-xs">
                       {remaining === 0
                         ? "Closes today!"
                         : `${remaining} day${remaining !== 1 ? "s" : ""} remaining`}
@@ -644,8 +644,8 @@ export default function ExploreDetailPage() {
                   href={safeHref(doc.commentUrl) || "#"}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-sm font-mono px-6 py-3 bg-emerald-500/20 text-emerald-400 border border-emerald-500/50
-                             hover:bg-emerald-500/30 hover:border-emerald-500/70
+                  className="text-sm font-mono px-6 py-3 bg-phos/20 text-phos border border-phos/50
+                             hover:bg-phos/30 hover:border-phos/70
                              transition-colors shrink-0"
                 >
                   SUBMIT YOUR COMMENT →

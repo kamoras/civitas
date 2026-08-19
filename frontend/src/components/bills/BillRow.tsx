@@ -23,13 +23,11 @@ export default function BillRow({ bill }: { bill: BillInFlight }) {
   const config = useConfig();
   const stageInfo = config?.billStages?.[bill.stage];
   const party = PARTY_BADGE[bill.sponsorParty] ?? PARTY_BADGE.I;
-  const stageColor = stageInfo?.color ?? "#00ff41";
   const stageStyle = billStageStyle(bill.stage);
 
   return (
     <div
-      className="flex items-start gap-3 py-2 px-2 hover:bg-white/[0.02] transition-colors"
-      style={{ boxShadow: `inset 2px 0 0 0 ${stageColor}55` }}
+      className={`flex items-start gap-3 border-l-2 px-2 py-2 transition-colors hover:bg-white/[0.02] ${stageStyle.rule}`}
     >
       {/* w-[100px], not w-[92px]: the global minimum-size floor moved this from
           11px to 12px, and at 12px the longest stage names ("IN COMMITTEE",
@@ -72,7 +70,7 @@ export default function BillRow({ bill }: { bill: BillInFlight }) {
               <img
                 src={bill.sponsorThumbnailUrl}
                 alt=""
-                className="w-4 h-4 rounded-full object-cover border border-white/[0.07]"
+                className="h-4 w-4 border border-white/[0.07] object-cover"
               />
             )}
             <span className={`px-1 border text-xs ${party.className}`}>{party.label}</span>

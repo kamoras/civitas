@@ -18,6 +18,7 @@ import { localDateStr, formatUtcDate } from "@/lib/formatting";
 import { chamberColor, chamberBg, chamberLabel } from "@/lib/chamber";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import { useAsyncData } from "@/hooks/useAsyncData";
+import { BOXED_CONTROL } from "@/lib/controlStyles";
 
 type ChamberFilter = "all" | "Senate" | "House" | "Executive" | "Judicial" | "Regulatory";
 
@@ -82,7 +83,7 @@ function Snippet({ text }: { text: string }) {
     <p className="text-xs text-ink-lo leading-relaxed mb-3 line-clamp-3">
       {segments.map((segment, i) =>
         segment.match ? (
-          <mark key={i} className="bg-signal-cyan text-signal-cyan px-0.5">
+          <mark key={i} className="bg-signal-cyan/20 text-signal-cyan px-0.5">
             {segment.text}
           </mark>
         ) : (
@@ -111,7 +112,7 @@ function ResultCard({ result, query }: { result: ExploreResult; query: string })
             <span className="text-ink-min text-xs">|</span>
             <span className="text-ink-lo text-xs">{docTypeLabel(result.docType)}</span>
             {commentOpen && (
-              <span className="text-xs font-mono tracking-wide px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 animate-pulse">
+              <span className="text-xs font-mono tracking-wide px-1.5 py-0.5 bg-phos/20 text-phos border border-phos/30 animate-pulse">
                 OPEN FOR COMMENT
               </span>
             )}
@@ -384,8 +385,8 @@ function ExplorePageInner() {
                   aria-pressed={chamber === f.value}
                   className={`text-xs px-3 py-1  border transition-colors ${
                     chamber === f.value
-                      ? "border-phos/40 text-ink-hi bg-white/[0.03]"
-                      : "border-white/[0.07] text-ink-lo hover:text-phos hover:border-white/15"
+                      ? BOXED_CONTROL.selected
+                      : BOXED_CONTROL.unselected
                   }`}
                 >
                   {f.label}
@@ -430,14 +431,17 @@ function ExplorePageInner() {
                 aria-label="Show only documents open for public comment"
                 className={`text-xs px-4 py-1.5  border transition-colors flex items-center gap-2 ${
                   commentableOnly
-                    ? "border-emerald-500/60 text-emerald-400 bg-emerald-500/10"
-                    : "border-white/[0.07] text-ink-lo hover:text-emerald-400/70 hover:border-emerald-500/30"
+                    ? "border-phos/60 text-phos bg-phos/10"
+                    : "border-white/[0.07] text-ink-lo hover:text-phos-mid hover:border-phos/30"
                 }`}
               >
+                {/* An indicator lamp: lit when the filter is on, dark when it
+                    is off. Both arms briefly rendered the same green — the
+                    palette migration turned an emerald/dim-green pair into
+                    phos and a full-strength phos — so the dot stopped saying
+                    anything. */}
                 <span
-                  className={`inline-block w-1.5 h-1.5  ${
-                    commentableOnly ? "bg-emerald-400" : "bg-phos"
-                  }`}
+                  className={`inline-block h-1.5 w-1.5 ${commentableOnly ? "bg-phos" : "bg-ink-min"}`}
                   aria-hidden="true"
                 />
                 Open for Public Comment
@@ -489,7 +493,7 @@ function ExplorePageInner() {
 
           {/* Partial-results notice */}
           {!loading && searched && semanticDown && results.length > 0 && (
-            <div role="status" className="mb-4 px-3 py-2 border border-amber-500/30 bg-amber-500/5">
+            <div role="status" className="mb-4 px-3 py-2 border border-signal-amber/30 bg-signal-amber/5">
               <p className="text-signal-amber text-xs">
                 Showing keyword matches only — the meaning-based index is rebuilding after a data
                 refresh. Searches by topic will return more once it finishes, usually within a few
@@ -509,7 +513,7 @@ function ExplorePageInner() {
                 {results.length} result{results.length !== 1 ? "s" : ""} for &ldquo;{resultsFor}
                 &rdquo;
                 {commentableOnly && (
-                  <span className="text-emerald-400/70 ml-2">— open for comment only</span>
+                  <span className="text-phos-mid ml-2">— open for comment only</span>
                 )}
                 <span className="text-ink-min ml-2">
                   — sorted by {sortOrder === "date" ? "newest first" : "relevance"}

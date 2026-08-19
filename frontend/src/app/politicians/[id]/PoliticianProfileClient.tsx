@@ -69,7 +69,7 @@ function SectionBlock({ title, children }: { title: string; children: React.Reac
 }
 
 export default function PoliticianProfileClient({ profile }: { profile: PoliticianProfile }) {
-  const { identity, branch, hasScorecard, activeIssues, governmentRecord, scorecard } = profile;
+  const { identity, branch, activeIssues, governmentRecord, scorecard } = profile;
 
   // Justices carry `isActive`; every other branch carries `isCurrent`.
   const hasLeftOffice =
@@ -97,6 +97,61 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
                 {formerOffice.label}
               </p>
               <p className="font-mono text-xs text-ink-lo">{formerOffice.detail}</p>
+            </div>
+          )}
+
+          {/* Identity and scorecard first.
+
+              This block used to sit third, below the Action Center issues and
+              the government-record list, so a profile opened on a stack of
+              news cards and the reader had to scroll past them to find out
+              whose page they were on. Who this is, and how they score, is the
+              page; what is trending that mentions them is context for it. */}
+          {/* Scorecard */}
+          {/* Gated on `scorecard`, not on `hasScorecard`.
+
+              The two come from different places on the API side: hasScorecard
+              is `overall is not None` off the member row, while scorecard is
+              built by a helper whose body is wrapped in a bare
+              `except Exception: return None`. So any failure building the
+              detail — a schema mismatch, a half-written pipeline row — yields
+              hasScorecard:true with scorecard:null, and this page used to fall
+              through BOTH branches and render a breadcrumb over an empty
+              screen: no name, no scores, no explanation. Reproduced on a
+              president. Rendering off the object that is actually needed means
+              the fallback below always catches it. */}
+          {scorecard && (
+            <div className="mb-6">
+              {(branch === "senate" || branch === "house") && (
+                <SenatorCard
+                  senator={scorecard as unknown as Senator}
+                  chamber={branch}
+                  thumbnailUrl={identity.thumbnailUrl}
+                  district={identity.district}
+                  stateName={identity.stateName}
+                  isCurrent={identity.isCurrent}
+                  leadershipTitle={identity.leadershipTitle}
+                  titleAs="h1"
+                />
+              )}
+              {branch === "president" && (
+                <PresidentCard president={scorecard as unknown as President} titleAs="h1" />
+              )}
+              {branch === "scotus" && (
+                <JusticeCard justice={scorecard as unknown as Justice} titleAs="h1" />
+              )}
+
+              {(branch === "senate" || branch === "house") && identity.state && (
+                <div className="mt-3 text-center">
+                  <Link
+                    href={`/politicians?branch=${branch}&state=${identity.state}`}
+                    className="font-mono text-xs text-ink-min hover:text-phos transition-colors tracking-widest"
+                  >
+                    COMPARE ALL {identity.stateName ?? identity.state}{" "}
+                    {branch === "senate" ? "SENATORS" : "REPRESENTATIVES"} →
+                  </Link>
+                </div>
+              )}
             </div>
           )}
 
@@ -180,40 +235,7 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
               </SectionBlock>
             )}
 
-          {/* Scorecard */}
-          {hasScorecard && scorecard && (
-            <div className="mb-6">
-              {(branch === "senate" || branch === "house") && (
-                <SenatorCard
-                  senator={scorecard as unknown as Senator}
-                  chamber={branch}
-                  thumbnailUrl={identity.thumbnailUrl}
-                  district={identity.district}
-                  stateName={identity.stateName}
-                  isCurrent={identity.isCurrent}
-                  leadershipTitle={identity.leadershipTitle}
-                />
-              )}
-              {branch === "president" && (
-                <PresidentCard president={scorecard as unknown as President} />
-              )}
-              {branch === "scotus" && <JusticeCard justice={scorecard as unknown as Justice} />}
-
-              {(branch === "senate" || branch === "house") && identity.state && (
-                <div className="mt-3 text-center">
-                  <Link
-                    href={`/politicians?branch=${branch}&state=${identity.state}`}
-                    className="font-mono text-xs text-ink-min hover:text-phos transition-colors tracking-widest"
-                  >
-                    COMPARE ALL {identity.stateName ?? identity.state}{" "}
-                    {branch === "senate" ? "SENATORS" : "REPRESENTATIVES"} →
-                  </Link>
-                </div>
-              )}
-            </div>
-          )}
-
-          {!hasScorecard && (
+          {!scorecard && (
             <SectionBlock title="Scorecard">
               {/* No card header will render below to carry identity, so
                   show a minimal one here — otherwise a not-yet-scored
@@ -228,9 +250,12 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
                   />
                 ) : null}
                 <div>
-                  <p className="font-display font-semibold text-base text-ink-hi">
+                  {/* h1, not a <p>: on a not-yet-scored official this block is
+                      the only identity on the page, so it is the page title.
+                      The scored path gets its h1 from the card's `titleAs`. */}
+                  <h1 className="font-display font-semibold text-base text-ink-hi">
                     {identity.name}
-                  </p>
+                  </h1>
                   <p className="font-mono text-xs text-ink-min tracking-widest">
                     {identity.role}
                     {identity.state ? ` · ${identity.stateName ?? identity.state}` : ""}
