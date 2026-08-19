@@ -15,7 +15,7 @@ const PARTY_META: Record<string, { label: string; color: string; bg: string; bor
   D: {
     label: "DEMOCRAT",
     color: "text-dem-blue",
-    bg: "bg-dem-blue/20",
+    bg: "bg-dem-blue/10",
     border: "border-dem-blue/40",
   },
   R: {

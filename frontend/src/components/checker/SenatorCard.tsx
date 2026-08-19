@@ -115,6 +115,18 @@ function ContactInfo({ senator }: { senator: Senator }) {
   );
 }
 
+/**
+ * The three "go read the original" links under a member's identity.
+ *
+ * `min-h-6` for WCAG 2.2 SC 2.5.8 (24x24): they were 16px tall in a
+ * `gap-3` row, and axe flagged the middle one — the outer two clear the
+ * rule's spacing exception, the one hemmed in on both sides does not. Same
+ * trade BillRow documents: the height comes from the tap target, and the row
+ * grows once rather than the links being spaced apart.
+ */
+const SOURCE_LINK =
+  "inline-flex min-h-6 items-center font-mono text-xs tracking-wide text-ink-lo transition-colors hover:text-phos";
+
 export default function SenatorCard({
   senator,
   chamber = "senate",
@@ -220,7 +232,7 @@ export default function SenatorCard({
                   href={`https://www.fec.gov/data/candidates/?search=${encodeURIComponent(senator.name)}&office=S`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs font-mono tracking-wide text-ink-lo hover:text-phos transition-colors"
+                  className={SOURCE_LINK}
                 >
                   FEC FILINGS ↗
                 </a>
@@ -228,7 +240,7 @@ export default function SenatorCard({
                   href={`https://www.congress.gov/member/${senator.name.toLowerCase().replace(/\s+/g, "-")}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs font-mono tracking-wide text-ink-lo hover:text-phos transition-colors"
+                  className={SOURCE_LINK}
                 >
                   CONGRESS.GOV ↗
                 </a>
@@ -237,7 +249,7 @@ export default function SenatorCard({
                     href={safeHref(senator.websiteUrl) || "#"}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs font-mono tracking-wide text-ink-lo hover:text-phos transition-colors"
+                    className={SOURCE_LINK}
                   >
                     OFFICIAL SITE ↗
                   </a>

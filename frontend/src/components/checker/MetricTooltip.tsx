@@ -108,7 +108,17 @@ export default function MetricTooltip({ text, children }: MetricTooltipProps) {
           if (e.key === "Escape") setOpen(false);
         }}
         title={text}
-        className="ml-0.5 text-ink-min hover:text-phos transition-colors cursor-help text-xs leading-none align-super"
+        // A real 24x24 box (WCAG 2.2 SC 2.5.8), with the extra height taken
+        // straight back out again by `-my-1.5`. The glyph was 19-21px x 12px.
+        //
+        // Negative margin rather than a `::before` overlay: the overlay does
+        // enlarge the clickable area, but axe measures the element's own
+        // border box and cannot see it, so the violation stands and the next
+        // person auditing this has to relitigate whether the tool is wrong.
+        // This way the box axe measures and the box a thumb hits are the same
+        // 24x24, while the line it sits on keeps its original height — which
+        // matters at 53 call sites across the scorecards.
+        className="ml-0.5 -my-1.5 inline-flex h-6 w-6 items-center justify-center align-middle text-xs leading-none text-ink-min transition-colors cursor-help hover:text-phos"
         aria-label={`More info: ${text.slice(0, 60)}${text.length > 60 ? "…" : ""}`}
         aria-describedby={tooltipId}
       >

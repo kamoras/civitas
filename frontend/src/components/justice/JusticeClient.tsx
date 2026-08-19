@@ -18,7 +18,7 @@ const PARTY_BADGE: Record<string, { label: string; color: string; bg: string; bo
   D: {
     label: "D-APPOINTED",
     color: "text-dem-blue",
-    bg: "bg-dem-blue/20",
+    bg: "bg-dem-blue/10",
     border: "border-dem-blue/40",
   },
 };

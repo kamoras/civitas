@@ -206,11 +206,16 @@ function TrendIndicator({ trend }: { trend?: ScoreTrend }) {
   );
 }
 
+// Every fill is /10, like PARTY_BADGE. Three of these were /20 and three were
+// /10 for no recorded reason, and the darker tokens could not carry it: FED
+// measured 4.39:1 against its own 20% wash, under the floor, on a real
+// president. `partyStyles`'s docstring already named this "an undocumented,
+// more-saturated variant of the same badge" — it was, and it cost 0.11.
 const PRES_PARTY: Record<string, { label: string; color: string; bg: string }> = {
-  D: { label: "DEM", color: "text-dem-blue", bg: "bg-dem-blue/20 border-dem-blue/40" },
+  D: { label: "DEM", color: "text-dem-blue", bg: "bg-dem-blue/10 border-dem-blue/40" },
   R: { label: "REP", color: "text-signal-red", bg: "bg-signal-red/10 border-signal-red/40" },
-  DR: { label: "D-R", color: "text-signal-cyan", bg: "bg-signal-cyan/20 border-signal-cyan/40" },
-  F: { label: "FED", color: "text-ind-purple", bg: "bg-ind-purple/20 border-ind-purple/40" },
+  DR: { label: "D-R", color: "text-signal-cyan", bg: "bg-signal-cyan/10 border-signal-cyan/40" },
+  F: { label: "FED", color: "text-ind-purple", bg: "bg-ind-purple/10 border-ind-purple/40" },
   W: { label: "WHG", color: "text-signal-amber", bg: "bg-signal-amber/10 border-signal-amber/40" },
   I: { label: "IND", color: "text-ink", bg: "bg-white/10 border-white/30" },
 };
@@ -449,7 +454,7 @@ function PresidentLeaderboard({
 }
 
 const APPT_PARTY: Record<string, { label: string; color: string; bg: string }> = {
-  D: { label: "D", color: "text-dem-blue", bg: "bg-dem-blue/20 border-dem-blue/40" },
+  D: { label: "D", color: "text-dem-blue", bg: "bg-dem-blue/10 border-dem-blue/40" },
   R: { label: "R", color: "text-signal-red", bg: "bg-signal-red/10 border-signal-red/40" },
 };
 

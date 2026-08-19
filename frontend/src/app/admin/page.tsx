@@ -155,8 +155,13 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
               <button
                 type="submit"
                 disabled={loading || !input.trim()}
-                className="mt-4 w-full text-xs font-mono text-surface-base bg-phos hover:bg-signal-cyan disabled:bg-phos disabled:text-ink-lo
-                           transition-colors py-2 "
+                // Disabled dims the FILL, not just the label. It used to keep
+                // `bg-phos` and only drop the text to `text-ink-lo`, which put
+                // a mid grey-green on full phosphor at 1.96:1 — the first thing
+                // an operator sees, with an unreadable word on it. WCAG exempts
+                // inactive controls from contrast, so nothing flagged it; it
+                // still looked like a rendering fault.
+                className="mt-4 w-full border border-transparent bg-phos py-2 font-mono text-xs text-surface-base transition-colors hover:bg-signal-cyan disabled:border-white/15 disabled:bg-transparent disabled:text-ink-min"
               >
                 {loading ? "AUTHENTICATING..." : "AUTHENTICATE"}
               </button>
