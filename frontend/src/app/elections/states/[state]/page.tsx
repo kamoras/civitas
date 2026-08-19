@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { StateBallot } from "@/types/election";
+import { usableRecord } from "@/lib/ssrPayload";
 import StateBallotClient from "./StateBallotClient";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
@@ -12,7 +13,7 @@ async function fetchStateBallot(state: string): Promise<StateBallot | null> {
       next: { revalidate: 120 },
     });
     if (!res.ok) return null;
-    return await res.json();
+    return usableRecord<StateBallot>(await res.json(), "state", "senateRaces");
   } catch {
     return null;
   }

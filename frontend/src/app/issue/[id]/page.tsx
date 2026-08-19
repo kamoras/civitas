@@ -4,6 +4,7 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import { ActionIssue } from "@/types/action";
+import { usableRecord } from "@/lib/ssrPayload";
 import { ACTION_CENTER_HREF } from "@/lib/routes";
 import { PolicyBadge, MonitorChips } from "@/components/action/IssueEnrichment";
 import IssueActions from "./IssueActions";
@@ -17,7 +18,7 @@ async function fetchIssue(id: string): Promise<ActionIssue | null> {
       next: { revalidate: 300 },
     });
     if (!res.ok) return null;
-    return await res.json();
+    return usableRecord<ActionIssue>(await res.json(), "id", "title");
   } catch {
     return null;
   }

@@ -2,6 +2,7 @@ import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { raceTitleLabel } from "@/lib/elections";
 import type { RaceDetail } from "@/types/election";
+import { usableRecord } from "@/lib/ssrPayload";
 import RaceDetailClient from "./RaceDetailClient";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
@@ -13,7 +14,7 @@ async function fetchRace(raceId: string): Promise<RaceDetail | null> {
       next: { revalidate: 120 },
     });
     if (!res.ok) return null;
-    return await res.json();
+    return usableRecord<RaceDetail>(await res.json(), "id", "state");
   } catch {
     return null;
   }
