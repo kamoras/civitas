@@ -136,9 +136,7 @@ export default function MonitorsTab() {
           >
             <div className="flex items-center gap-2 mb-2">
               <span
-                className={`w-2 h-2  ${
-                  m.status === "active" ? "bg-phos" : "bg-signal-amber/10"
-                }`}
+                className={`w-2 h-2  ${m.status === "active" ? "bg-phos" : "bg-signal-amber/10"}`}
                 aria-label={m.status === "active" ? "Active" : "Watching"}
               />
               <span className="font-mono text-xs text-signal-amber uppercase">{m.category}</span>

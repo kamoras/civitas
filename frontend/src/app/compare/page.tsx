@@ -114,9 +114,7 @@ function SenatorSelector({
         <button
           onClick={() => handleChamberToggle("senate")}
           className={`font-mono text-xs px-2 py-1 border transition-colors ${
-            chamber === "senate"
-              ? BOXED_CONTROL.selected
-              : BOXED_CONTROL.unselected
+            chamber === "senate" ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
           }`}
         >
           SEN
@@ -124,9 +122,7 @@ function SenatorSelector({
         <button
           onClick={() => handleChamberToggle("house")}
           className={`font-mono text-xs px-2 py-1 border transition-colors ${
-            chamber === "house"
-              ? BOXED_CONTROL.selected
-              : BOXED_CONTROL.unselected
+            chamber === "house" ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
           }`}
         >
           HOUSE
@@ -170,9 +166,7 @@ function SenatorSelector({
               key={s.id}
               onClick={() => onSelect(s, chamber)}
               className={`w-full text-left px-3 py-2 border transition-colors font-mono text-xs ${
-                s.id === selectedId
-                  ? BOXED_CONTROL.selected
-                  : BOXED_CONTROL.unselected
+                s.id === selectedId ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
               }`}
             >
               <span className={`mr-2 ${PARTY_COLORS[s.party]}`}>[{s.party}]</span>

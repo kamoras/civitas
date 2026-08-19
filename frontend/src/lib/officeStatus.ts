@@ -31,7 +31,7 @@ export interface OfficeStatusInput {
 
 function ordinal(n: number): string {
   if (n % 100 >= 11 && n % 100 <= 13) return `${n}th`;
-  return `${n}${({ 1: "st", 2: "nd", 3: "rd" }[n % 10] ?? "th")}`;
+  return `${n}${{ 1: "st", 2: "nd", 3: "rd" }[n % 10] ?? "th"}`;
 }
 
 /** "2009-01-20" → "2009"; passes anything else through unchanged. */
@@ -46,9 +46,7 @@ export function formerOfficeNotice(input: OfficeStatusInput): OfficeStatusNotice
   const { branch, name } = input;
 
   if (branch === "president") {
-    const office = input.number != null
-      ? `the ${ordinal(input.number)} President`
-      : "President";
+    const office = input.number != null ? `the ${ordinal(input.number)} President` : "President";
     const start = yearOf(input.termStart);
     const end = yearOf(input.termEnd);
     const span = start ? ` from ${start} to ${end || "the end of their term"}` : "";
@@ -76,8 +74,11 @@ export function formerOfficeNotice(input: OfficeStatusInput): OfficeStatusNotice
 /** Compact badge for the directory grid, e.g. "SEAT VACANT — RESIGNED". */
 export function formerOfficeBadge(input: OfficeStatusInput): string {
   const { label } = formerOfficeNotice(input);
-  const suffix = input.branch === "senate" || input.branch === "house"
-    ? (input.vacancyReason ? ` — ${input.vacancyReason.toUpperCase()}` : "")
-    : "";
+  const suffix =
+    input.branch === "senate" || input.branch === "house"
+      ? input.vacancyReason
+        ? ` — ${input.vacancyReason.toUpperCase()}`
+        : ""
+      : "";
   return `${label.toUpperCase()}${suffix}`;
 }

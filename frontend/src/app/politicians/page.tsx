@@ -247,9 +247,7 @@ function PoliticiansPageContent() {
                     setParty("ALL");
                   }}
                   className={`font-mono text-xs tracking-widest px-3 py-1 border transition-colors ${
-                    branch === key
-                      ? BOXED_CONTROL.selected
-                      : BOXED_CONTROL.unselected
+                    branch === key ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                   }`}
                 >
                   {label}
@@ -281,9 +279,7 @@ function PoliticiansPageContent() {
                     key={key}
                     onClick={() => setParty(key)}
                     className={`font-mono text-xs px-2 py-1 border transition-colors ${
-                      party === key
-                        ? BOXED_CONTROL.selected
-                        : BOXED_CONTROL.unselected
+                      party === key ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                     }`}
                   >
                     {label}

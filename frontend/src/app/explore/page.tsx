@@ -384,9 +384,7 @@ function ExplorePageInner() {
                   onClick={() => handleChamberChange(f.value)}
                   aria-pressed={chamber === f.value}
                   className={`text-xs px-3 py-1  border transition-colors ${
-                    chamber === f.value
-                      ? BOXED_CONTROL.selected
-                      : BOXED_CONTROL.unselected
+                    chamber === f.value ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                   }`}
                 >
                   {f.label}
@@ -493,7 +491,10 @@ function ExplorePageInner() {
 
           {/* Partial-results notice */}
           {!loading && searched && semanticDown && results.length > 0 && (
-            <div role="status" className="mb-4 px-3 py-2 border border-signal-amber/30 bg-signal-amber/5">
+            <div
+              role="status"
+              className="mb-4 px-3 py-2 border border-signal-amber/30 bg-signal-amber/5"
+            >
               <p className="text-signal-amber text-xs">
                 Showing keyword matches only — the meaning-based index is rebuilding after a data
                 refresh. Searches by topic will return more once it finishes, usually within a few

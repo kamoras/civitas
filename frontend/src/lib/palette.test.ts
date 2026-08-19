@@ -137,7 +137,9 @@ describe("palette discipline", () => {
     const offenders: string[] = [];
     for (const { path, text } of FILES) {
       for (const literal of text.match(/"[^"\n]*"|`[^`]*`/g) ?? []) {
-        for (const m of literal.matchAll(new RegExp(String.raw`\btext-` + TOKENS + String.raw`\b`, "g"))) {
+        for (const m of literal.matchAll(
+          new RegExp(String.raw`\btext-` + TOKENS + String.raw`\b`, "g")
+        )) {
           // The same token as a background at full opacity, i.e. with no /NN.
           if (new RegExp(String.raw`\bbg-` + m[1] + String.raw`\b(?!/)`).test(literal)) {
             offenders.push(`${path}: text-${m[1]} on bg-${m[1]}`);
@@ -158,7 +160,9 @@ describe("palette discipline", () => {
       // className values only — `scoreVersions.ts` uses the English word
       // "rounded" describing a scoring change, which is not a corner.
       [...text.matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\})/g)]
-        .flatMap((attr) => [...(attr[1] ?? attr[2] ?? "").matchAll(/\brounded(?:-[a-z]+)?(?:-\[[^\]]+\])?\b/g)])
+        .flatMap((attr) => [
+          ...(attr[1] ?? attr[2] ?? "").matchAll(/\brounded(?:-[a-z]+)?(?:-\[[^\]]+\])?\b/g),
+        ])
         .map((m) => `${path}: ${m[0]}`)
     );
     expect(offenders).toEqual([]);

@@ -31,7 +31,7 @@ export function middleware(request: NextRequest, event: NextFetchEvent) {
     fetch(`${BACKEND_URL}/api/track-visit?path=${path}`, {
       method: "POST",
       headers: { "X-Real-IP": realIp, "User-Agent": userAgent },
-    }).catch(() => {}),
+    }).catch(() => {})
   );
 
   return NextResponse.next();

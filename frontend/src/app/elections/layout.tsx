@@ -20,7 +20,9 @@ async function fetchCycleYear(): Promise<number | null> {
 
 export async function generateMetadata(): Promise<Metadata> {
   const cycleYear = await fetchCycleYear();
-  const title = cycleYear ? `${cycleYear} Midterm Elections — Civitas` : "Midterm Elections — Civitas";
+  const title = cycleYear
+    ? `${cycleYear} Midterm Elections — Civitas`
+    : "Midterm Elections — Civitas";
   const listDescription = cycleYear
     ? `Every ${cycleYear} Senate and House race`
     : "Every Senate and House race";

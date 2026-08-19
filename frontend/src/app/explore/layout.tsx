@@ -6,13 +6,15 @@ export const metadata: Metadata = {
     "Search congressional bills, votes, and policy documents by topic. Find which members of Congress are shaping the issues that matter to you.",
   openGraph: {
     title: "Explore Congressional Bills & Votes — Civitas",
-    description: "Search bills, votes, and policy documents by topic. Discover how Congress is acting on issues that affect you.",
+    description:
+      "Search bills, votes, and policy documents by topic. Discover how Congress is acting on issues that affect you.",
     url: "https://civitas-research.org/explore",
   },
   twitter: {
     card: "summary_large_image",
     title: "Explore Congressional Bills & Votes — Civitas",
-    description: "Search bills, votes, and policy documents by topic — all from public federal records.",
+    description:
+      "Search bills, votes, and policy documents by topic — all from public federal records.",
   },
 };
 

@@ -165,8 +165,7 @@ export default function ScoreTrend({ snapshots }: ScoreTrendProps) {
           {snapshots[0].date} · <span className="text-phos-mid">{first}</span>
         </span>
         <span>
-          <span className="text-phos-mid">{last}</span> ·{" "}
-          {snapshots[snapshots.length - 1].date}
+          <span className="text-phos-mid">{last}</span> · {snapshots[snapshots.length - 1].date}
         </span>
       </div>
       {versionChanges.length > 0 && (

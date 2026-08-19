@@ -15,13 +15,7 @@ function run(overrides: Partial<PipelineHistoryRun> = {}): PipelineHistoryRun {
   };
 }
 
-const ALL_TYPES: PipelineType[] = [
-  "senate",
-  "house",
-  "stock_trades",
-  "supplementary",
-  "election",
-];
+const ALL_TYPES: PipelineType[] = ["senate", "house", "stock_trades", "supplementary", "election"];
 
 describe("describeRun — labels", () => {
   it.each([
@@ -67,7 +61,7 @@ describe("describeRun — processed counts", () => {
         senatorsProcessed: 98,
         senatorsTotal: 100,
         senatorsFailed: 2,
-      }),
+      })
     );
     expect(d.processed).toBe("98/100");
     expect(d.failed).toBe(2);
@@ -75,7 +69,7 @@ describe("describeRun — processed counts", () => {
 
   it("renders house counts and failures", () => {
     const d = describeRun(
-      run({ pipelineType: "house", repsProcessed: 430, repsTotal: 435, repsFailed: 5 }),
+      run({ pipelineType: "house", repsProcessed: 430, repsTotal: 435, repsFailed: 5 })
     );
     expect(d.processed).toBe("430/435");
     expect(d.failed).toBe(5);
@@ -88,7 +82,7 @@ describe("describeRun — processed counts", () => {
         houseTradesIngested: 12,
         senateTradesIngested: 3,
         presidentTradesIngested: 1,
-      }),
+      })
     );
     expect(d.processed).toBe("12H/3S/1P");
     expect(d.failed).toBe(0);
@@ -97,7 +91,7 @@ describe("describeRun — processed counts", () => {
   it("renders supplementary counts, distinguishing a skipped justice phase from zero", () => {
     expect(
       describeRun(run({ pipelineType: "supplementary", presidentsUpdated: 4, justicesScored: 9 }))
-        .processed,
+        .processed
     ).toBe("4P/9J");
     expect(
       describeRun(
@@ -106,8 +100,8 @@ describe("describeRun — processed counts", () => {
           presidentsUpdated: 4,
           justicesScored: 0,
           justicesSkipped: true,
-        }),
-      ).processed,
+        })
+      ).processed
     ).toBe("4P/—J");
   });
 
@@ -118,7 +112,7 @@ describe("describeRun — processed counts", () => {
         candidatesSynced: 120,
         financialsRefreshed: 87,
         coverageItemsIngested: 40,
-      }),
+      })
     );
     expect(d.processed).toBe("120C/87F/40N");
     expect(d.failed).toBe(0);

@@ -6,13 +6,15 @@ export const metadata: Metadata = {
     "Compare any two members of Congress side-by-side — funding sources, voting records, representation scores, and donor-vote connections.",
   openGraph: {
     title: "Compare Congress Members — Civitas",
-    description: "Side-by-side comparison of campaign finance, voting records, and representation scores for any two members of Congress.",
+    description:
+      "Side-by-side comparison of campaign finance, voting records, and representation scores for any two members of Congress.",
     url: "https://civitas-research.org/compare",
   },
   twitter: {
     card: "summary_large_image",
     title: "Compare Congress Members — Civitas",
-    description: "Compare funding, voting records, and representation scores for any two members of Congress.",
+    description:
+      "Compare funding, voting records, and representation scores for any two members of Congress.",
   },
 };
 

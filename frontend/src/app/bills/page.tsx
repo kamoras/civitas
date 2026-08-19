@@ -103,9 +103,7 @@ function BillsPageContent() {
             <button
               onClick={() => setMode("hot")}
               className={`font-mono text-xs px-4 py-1.5 border transition-colors uppercase tracking-widest ${
-                mode === "hot"
-                  ? BOXED_CONTROL.selected
-                  : BOXED_CONTROL.unselected
+                mode === "hot" ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
               }`}
             >
               Active Now
@@ -113,9 +111,7 @@ function BillsPageContent() {
             <button
               onClick={() => setMode("all")}
               className={`font-mono text-xs px-4 py-1.5 border transition-colors uppercase tracking-widest ${
-                mode === "all"
-                  ? BOXED_CONTROL.selected
-                  : BOXED_CONTROL.unselected
+                mode === "all" ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
               }`}
             >
               All Bills
@@ -141,9 +137,7 @@ function BillsPageContent() {
                     key={c}
                     onClick={() => setChamber(c)}
                     className={`font-mono text-xs px-2 py-1 border transition-colors uppercase ${
-                      chamber === c
-                        ? BOXED_CONTROL.selected
-                        : BOXED_CONTROL.unselected
+                      chamber === c ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                     }`}
                   >
                     {c}
@@ -157,9 +151,7 @@ function BillsPageContent() {
                     key={p}
                     onClick={() => setParty(p)}
                     className={`font-mono text-xs px-2 py-1 border transition-colors ${
-                      party === p
-                        ? BOXED_CONTROL.selected
-                        : BOXED_CONTROL.unselected
+                      party === p ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                     }`}
                   >
                     {p}

@@ -128,9 +128,7 @@ export default function ShareButtons({
         <button
           onClick={handleCopy}
           className={`text-xs font-mono px-2 py-1 border transition-colors ${
-            copied
-              ? BOXED_CONTROL.selected
-              : BOXED_CONTROL.unselected
+            copied ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
           }`}
           aria-label="Copy link to clipboard"
         >

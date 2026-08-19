@@ -285,9 +285,7 @@ export default function ElectionsTab() {
               key={abbr}
               onClick={() => setSelectedState(selectedState === abbr ? null : abbr)}
               className={`font-mono text-xs py-1.5 px-2 border  transition-colors ${
-                selectedState === abbr
-                  ? BOXED_CONTROL.selected
-                  : BOXED_CONTROL.unselected
+                selectedState === abbr ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
               }`}
             >
               {abbr}

@@ -43,11 +43,7 @@ export async function generateMetadata({
   };
 }
 
-export default async function BillDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function BillDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const bill = await fetchBill(id);
 
