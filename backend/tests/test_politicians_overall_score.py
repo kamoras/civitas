@@ -5,6 +5,8 @@ and the senator/representative leaderboards were the other three, deduped
 in #82/#83). This locks in its two remaining local behaviors: the
 all-zero "not yet scored" guard and rounding to 1 decimal place."""
 
+import pytest
+
 from app.api.politicians import _president_overall, _senator_overall
 from app.models import President, Representative, Senator
 from app.pipeline.analyze.score_calculator import compute_overall_score
@@ -83,3 +85,53 @@ class TestPresidentOverall:
             score_historical_legacy=0.0,
         )
         assert _president_overall(p) == 0.0
+
+
+class TestMalformedRelatedOfficials:
+    """`ActionIssue.related_senators` / `related_officials` are JSON TEXT
+    columns with nothing enforcing the shape of their elements, and
+    `_get_active_issues` indexes those elements as dicts.
+
+    Unguarded, a bare string in one row raised AttributeError inside the
+    profile query — a 500 on `/api/politicians/{id}`, which is the whole
+    profile page for that member, not a missing "active issues" section.
+    The sibling readers in bill_service.py had the same shape; this file
+    covers the third one (see TestMalformedRelatedBillIds there).
+    """
+
+    def _issue(self, db, *, senators=None, officials=None):
+        from app.models import ActionIssue
+        issue = ActionIssue(
+            date="2026-07-01", rank=1, title="Trending", is_current=True,
+            related_senators=senators, related_officials=officials,
+        )
+        db.add(issue)
+        db.flush()
+        return issue
+
+    @pytest.mark.parametrize(
+        "raw",
+        # A mixed list holding one WELL-formed matching entry is the next
+        # test, not this one — there the issue should still be found.
+        ['["sen-warren-ma"]', "[null]", "[123]"],
+        ids=["bare-strings", "nulls", "numbers"],
+    )
+    def test_a_malformed_element_does_not_break_the_lookup(self, db_session, raw):
+        from app.api.politicians import _get_active_issues
+        self._issue(db_session, senators=raw)
+
+        assert _get_active_issues("sen-warren-ma", db_session) == []
+
+    def test_a_well_formed_entry_beside_a_malformed_one_still_matches(self, db_session):
+        from app.api.politicians import _get_active_issues
+        self._issue(db_session, senators='["junk", {"id": "sen-warren-ma"}]')
+
+        result = _get_active_issues("sen-warren-ma", db_session)
+
+        assert [r["title"] for r in result] == ["Trending"]
+
+    def test_malformed_related_officials_is_guarded_too(self, db_session):
+        from app.api.politicians import _get_active_issues
+        self._issue(db_session, senators="[]", officials='["potus"]')
+
+        assert _get_active_issues("potus", db_session) == []
