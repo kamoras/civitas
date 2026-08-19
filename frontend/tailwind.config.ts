@@ -22,9 +22,12 @@ const config: Config = {
            added here must clear 4.5:1 on that background AND on `surface`
            (#140A0F), which is the lightest thing text sits on.
 
-           These are additive. The legacy matrix-green/neon-* tokens and the
-           clamp block that protects them stay until each surface migrates;
-           see the note above that block. */
+           This is the whole palette. The legacy matrix-green, neon-cyan,
+           neon-pink, neon-yellow, terminal-bg, terminal-border and crt-black
+           tokens that used to sit below it are gone: the migration finished
+           with zero call sites left on any of them, the clamp block that
+           protected them was deleted with it, and a dead token left in the
+           config is just an invitation to reach for #00ffff again. */
 
         // Prose and UI text. Neutral, faintly green-cast to sit on the
         // phosphor background without vibrating against it.
@@ -61,14 +64,6 @@ const config: Config = {
           raised: "#190F14",
         },
 
-        "matrix-green": "#00ff41",
-        "matrix-dark-green": "#003b00",
-        "neon-cyan": "#00ffff",
-        "neon-pink": "#ff00ff",
-        "neon-yellow": "#ffff00",
-        "terminal-bg": "#0a0a0a",
-        "terminal-border": "#333333",
-        "crt-black": "#0d0208",
         "dem-blue": "#6699ff", //  7.35:1 — was #0066ff (4.22:1), which failed even at full opacity
         "rep-red": "#ff5c5c", //  6.74:1 — matches signal.red; kept as an alias for party call sites
         "ind-purple": "#ac56ff", //  5.37:1 — was #9933ff (4.15:1), which failed even at full opacity
@@ -87,13 +82,12 @@ const config: Config = {
            multiples of 8px; at label sizes it was off-grid at ~86% of its
            call sites, which is why globals.css substitutes it out below 12px.
 
-           `terminal` (VT323) is DEPRECATED and kept only so the ~150 call
-           sites still naming it keep rendering while they migrate. Its
-           0.400em x-height renders ~5.6px lowercase at text-sm; do not add
-           new uses. */
+           There is no fourth family. `terminal` (VT323) was removed along with
+           its font import: it had no call sites left, and a 0.400em x-height
+           that rendered ~5.6px lowercase at text-sm is not a face to leave
+           within reach. */
         display: ["var(--font-archivo)", "ui-sans-serif", "system-ui", "sans-serif"],
         sans: ["var(--font-archivo)", "ui-sans-serif", "system-ui", "sans-serif"],
-        terminal: ["var(--font-vt323)", "monospace"],
         pixel: ["var(--font-press-start)", "monospace"],
         mono: ["var(--font-share-tech)", "monospace"],
       },

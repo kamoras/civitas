@@ -869,11 +869,18 @@ function ActionPageInner() {
           {/* Open comment periods banner */}
           <OpenCommentsBanner />
 
-          {/* Tab bar */}
+          {/* Tab bar.
+
+              `overflow-y-hidden` is load-bearing, not tidying: `overflow-x-auto`
+              also makes overflow-y `auto`, and the tabs measure 42.67px against
+              a 42px content box, so that fractional pixel is enough to raise a
+              vertical scrollbar. globals.css paints every scrollbar thumb in
+              full-strength phosphor, so it rendered as a bright green 4px bar
+              parked beside the tab row, reading as a deliberate accent. */}
           <div
             role="tablist"
             aria-label="Action Center sections"
-            className="sticky top-[82px] z-30 -mx-4 mb-8 flex gap-0 overflow-x-auto border-b border-white/15 bg-surface-base/95 px-4 backdrop-blur-sm sm:mx-0 sm:px-0"
+            className="sticky top-[82px] z-30 -mx-4 mb-8 flex gap-0 overflow-x-auto overflow-y-hidden border-b border-white/15 bg-surface-base/95 px-4 backdrop-blur-sm sm:mx-0 sm:px-0"
             onKeyDown={(e) => {
               const tabs = TABS.map((t) => t.id);
               const idx = tabs.indexOf(activeTab);

@@ -1,7 +1,6 @@
 import Navbar from "@/components/layout/Navbar";
 import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
-import TerminalTitlebar from "@/components/TerminalTitlebar";
 
 // Collapsed by default (2026-08). Reader feedback that the site reads dense
 // was partly about volume, not just spacing: this page measured 10,766 words
@@ -38,7 +37,6 @@ function Section({
 }) {
   return (
     <section className="panel mb-6" id={id}>
-      <TerminalTitlebar title={title.toLowerCase().replace(/ /g, "_")} />
       <details className="group" open={defaultOpen || Boolean(id)}>
         <summary className="p-6 flex items-center gap-3 cursor-pointer list-none [&::-webkit-details-marker]:hidden hover:bg-white/[0.03] transition-colors">
           <span

@@ -3,7 +3,6 @@ import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
-import TerminalTitlebar from "@/components/TerminalTitlebar";
 
 export const metadata: Metadata = {
   title: "Accessibility Statement — Civitas",
@@ -14,7 +13,6 @@ export const metadata: Metadata = {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="panel mb-6">
-      <TerminalTitlebar title={title.toLowerCase().replace(/ /g, "_")} />
       <div className="p-6 space-y-4">
         <h2 className="text-signal-cyan font-mono text-sm tracking-widest">{title}</h2>
         {children}

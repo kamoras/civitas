@@ -102,11 +102,19 @@ export default function Masthead() {
                 >
                   [ PULL THE FILE ]
                 </button>
+                {/* No count here on purpose. This read "535 on file", a
+                    literal, three lines under "Nothing here is an estimate" —
+                    and wrong twice over: it excludes the presidents and
+                    justices the directory also holds, and the House is only
+                    momentarily at 435 between vacancies. The real number needs
+                    /api/politicians, which has no pagination and returns the
+                    entire roster, which is not a fetch a label is worth. The
+                    directory prints its own count on arrival. */}
                 <Link
                   href="/politicians"
                   className="font-mono text-xs tracking-[0.06em] text-ink-min hover:text-ink-lo"
                 >
-                  535 on file →
+                  Everyone on file →
                 </Link>
               </div>
             </div>

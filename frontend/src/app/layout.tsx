@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Archivo, VT323, Press_Start_2P, Share_Tech_Mono } from "next/font/google";
+import { Archivo, Press_Start_2P, Share_Tech_Mono } from "next/font/google";
 import ConfigProvider from "@/components/providers/ConfigProvider";
 import "./globals.css";
 
@@ -11,15 +11,6 @@ const archivo = Archivo({
   subsets: ["latin"],
   variable: "--font-archivo",
   display: "swap",
-});
-
-// DEPRECATED — kept loaded only so the ~150 call sites still naming
-// `font-mono` keep rendering while they migrate off it. See the
-// fontFamily note in tailwind.config.ts.
-const vt323 = VT323({
-  weight: "400",
-  subsets: ["latin"],
-  variable: "--font-vt323",
 });
 
 const pressStart = Press_Start_2P({
@@ -62,9 +53,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       {/*
-        `font-mono` (Share Tech Mono), not `font-mono` (VT323).
-        This governs every element that does not name a font itself, which is
-        most of the site's prose. Measured from the shipped woff2 files:
+        `font-mono` is Share Tech Mono. It governs every element that does not
+        name a font itself, which is most of the site's prose.
+
+        It used to be VT323, and that face is now gone from the bundle rather
+        than merely unused — it had zero call sites left but was still being
+        fetched from Google Fonts on every page load. Why it went, measured
+        from the shipped woff2 files:
 
                           x-height/em   advance/em
           VT323               0.400        0.400
@@ -82,7 +77,7 @@ export default function RootLayout({
         width bumps in BillRow and BillStageFlow that this required.
       */}
       <body
-        className={`${archivo.variable} ${vt323.variable} ${pressStart.variable} ${shareTech.variable} font-mono antialiased`}
+        className={`${archivo.variable} ${pressStart.variable} ${shareTech.variable} font-mono antialiased`}
       >
         <ConfigProvider>
           <a
