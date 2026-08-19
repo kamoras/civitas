@@ -115,7 +115,7 @@ function HelpMeCommentPanel({ doc, remaining }: { doc: ExploreDocumentDetail; re
               <p className="text-xs font-mono text-ink-lo mb-1 tracking-wider">
                 WHAT THIS DOCUMENT DOES
               </p>
-              <p className="text-base text-ink leading-relaxed">{plainSummary}</p>
+              <p className="font-sans text-base leading-relaxed text-ink">{plainSummary}</p>
             </div>
           )}
 
@@ -632,7 +632,7 @@ export default function ExploreDetailPage() {
                         : `${remaining} day${remaining !== 1 ? "s" : ""} remaining`}
                     </span>
                   </div>
-                  <p className="text-base text-ink leading-relaxed">
+                  <p className="font-sans text-base leading-relaxed text-ink">
                     The public can submit comments on this document. Your input is part of the
                     official record and may influence the final outcome.
                   </p>
@@ -718,9 +718,9 @@ export default function ExploreDetailPage() {
                 <div className="space-y-4" aria-live="polite">
                   {displayedSummary.summary && (
                     <div>
-                      <h3 className="text-xs font-mono text-ink-lo tracking-wider mb-2">
+                      <h2 className="text-xs font-mono text-ink-lo tracking-wider mb-2">
                         AI SUMMARY
-                      </h3>
+                      </h2>
                       <p className="text-base text-ink-hi leading-relaxed">
                         {displayedSummary.summary}
                         {summaryStreaming && !summary && (
@@ -732,9 +732,9 @@ export default function ExploreDetailPage() {
 
                   {displayedSummary.keyPoints.length > 0 && (
                     <div>
-                      <h3 className="text-xs font-mono text-ink-lo tracking-wider mb-2">
+                      <h2 className="text-xs font-mono text-ink-lo tracking-wider mb-2">
                         KEY POINTS
-                      </h3>
+                      </h2>
                       <ul className="space-y-1.5">
                         {displayedSummary.keyPoints.map((point, i) => (
                           <li key={i} className="flex gap-2 text-sm text-ink">
@@ -748,8 +748,8 @@ export default function ExploreDetailPage() {
 
                   {displayedSummary.impact && (
                     <div className="border-t border-white/[0.07] pt-3">
-                      <h3 className="text-xs font-mono text-ink-lo tracking-wider mb-2">IMPACT</h3>
-                      <p className="text-base text-ink leading-relaxed">
+                      <h2 className="text-xs font-mono text-ink-lo tracking-wider mb-2">IMPACT</h2>
+                      <p className="font-sans text-base leading-relaxed text-ink">
                         {displayedSummary.impact}
                       </p>
                     </div>
@@ -765,15 +765,30 @@ export default function ExploreDetailPage() {
             <div className="p-5">
               {doc.summary && doc.summary !== doc.body?.slice(0, 300) && (
                 <div className="mb-4 pb-4 border-b border-white/[0.07]">
-                  <h3 className="text-xs font-mono text-ink-lo tracking-wider mb-2">SUMMARY</h3>
-                  <p className="text-base text-ink leading-relaxed">{doc.summary}</p>
+                  <h2 className="text-xs font-mono text-ink-lo tracking-wider mb-2">SUMMARY</h2>
+                  <p className="font-sans text-base leading-relaxed text-ink">{doc.summary}</p>
                 </div>
               )}
 
               {doc.body && (
                 <div>
-                  <h3 className="text-xs font-mono text-ink-lo tracking-wider mb-2">FULL TEXT</h3>
-                  <div className="text-sm text-ink leading-relaxed whitespace-pre-wrap max-h-[600px] overflow-y-auto pr-2">
+                  <h2
+                    id="full-text-heading"
+                    className="mb-2 font-mono text-xs tracking-wider text-ink-lo"
+                  >
+                    FULL TEXT
+                  </h2>
+                  {/* tabIndex/role/aria-label: the box scrolls, so a keyboard
+                      user has to be able to put focus in it. Without them the
+                      full text of the document — the reason this page exists —
+                      was reachable by mouse wheel only, which axe-core reports
+                      as `scrollable-region-focusable` (WCAG 2.1.1). */}
+                  <div
+                    tabIndex={0}
+                    role="region"
+                    aria-labelledby="full-text-heading"
+                    className="max-h-[600px] overflow-y-auto whitespace-pre-wrap pr-2 text-sm leading-relaxed text-ink focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-signal-cyan"
+                  >
                     {doc.body}
                   </div>
                 </div>

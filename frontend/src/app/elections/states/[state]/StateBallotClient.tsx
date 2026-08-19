@@ -151,7 +151,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
               <h2 className="font-mono text-xs text-signal-cyan mb-2">
                 THIS IS NOT YOUR FULL BALLOT
               </h2>
-              <p className="text-xs text-ink">
+              <p className="font-sans text-xs text-ink">
                 This page shows federal races only — U.S. Senate and House. Ballots are printed per
                 precinct, so state and local races, ballot questions, and judicial retention votes
                 are not shown here. Check with your local election office for everything else on

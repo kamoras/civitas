@@ -15,7 +15,7 @@ export default function PviMethodologyNote({ meta }: { meta?: PviMeta | null }) 
     // Press Start 2P at 9px was unreadable, and this is the caveat that stops
     // a lean figure being read as a forecast — the last thing that should be
     // the smallest text on the page. Mono at 12px, above the contrast floor.
-    <p className="font-mono text-xs leading-relaxed text-ink-lo">
+    <p className="font-sans text-xs leading-relaxed text-ink-lo">
       {note}
       {source ? ` SOURCE: ${source}.` : ""}
       {window ? ` WINDOW: ${window}.` : ""}

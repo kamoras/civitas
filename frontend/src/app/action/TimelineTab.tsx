@@ -75,7 +75,7 @@ function EventCard({ event }: { event: UpcomingEvent }) {
             <span className="text-xs text-ink-min font-mono">{event.date}</span>
           </div>
           <h4 className="font-mono text-sm text-ink-hi leading-relaxed mb-1">{event.title}</h4>
-          <p className="text-xs text-ink-lo leading-relaxed mb-3">{event.description}</p>
+          <p className="mb-3 font-sans text-xs leading-relaxed text-ink-lo">{event.description}</p>
           <Link
             href={event.link}
             className="text-xs font-mono tracking-widest text-ink-lo hover:text-phos transition-colors"

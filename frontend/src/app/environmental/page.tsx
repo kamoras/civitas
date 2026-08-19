@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Navbar from "@/components/layout/Navbar";
 import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
-import TerminalTitlebar from "@/components/TerminalTitlebar";
 
 export const metadata: Metadata = {
   title: "Environmental Impact — Civitas",
@@ -18,7 +17,11 @@ export const metadata: Metadata = {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="panel mb-6" aria-label={title}>
-      <TerminalTitlebar title={title} />
+      {/* No titlebar. It printed the same string as the <h2> directly beneath
+          it, so every panel on this page announced itself twice — the same
+          duplication removed from /about, /accessibility and /changelog,
+          which only looked different here because this one was not
+          snake_cased on the way out. */}
       <div className="p-6 space-y-4">
         <h2 className="text-signal-cyan font-mono text-sm tracking-widest">{title}</h2>
         {children}

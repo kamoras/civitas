@@ -143,7 +143,9 @@ export default function MonitorsTab() {
             </div>
             <h2 className="font-mono text-sm text-ink-hi mb-1 leading-relaxed">{m.title}</h2>
             {selected?.slug !== m.slug && m.description && (
-              <p className="text-xs text-ink-min mb-2 line-clamp-1 leading-snug">{m.description}</p>
+              <p className="mb-2 line-clamp-1 font-sans text-xs leading-snug text-ink-min">
+                {m.description}
+              </p>
             )}
             <div className="flex items-center gap-3 text-xs text-ink-min">
               <span>

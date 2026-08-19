@@ -171,9 +171,9 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
                           <span className="font-mono text-xs text-ink-min">RANK #{issue.rank}</span>
                           <span className="font-mono text-xs text-ink-min">{issue.date}</span>
                         </div>
-                        <p className="font-mono text-base text-ink-hi mb-1">{issue.title}</p>
+                        <p className="mb-1 font-sans text-base text-ink-hi">{issue.title}</p>
                         {issue.summary && (
-                          <p className="font-mono text-xs text-ink-lo line-clamp-2">
+                          <p className="line-clamp-2 font-sans text-xs text-ink-lo">
                             {issue.summary}
                           </p>
                         )}

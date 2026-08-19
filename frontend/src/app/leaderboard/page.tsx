@@ -430,12 +430,12 @@ function PresidentLeaderboard({
       </div>
 
       <div className="mt-4 space-y-1 text-center">
-        <p className="text-ink-lo text-xs">
+        <p className="font-sans text-xs text-ink-lo">
           Higher score = better presidential performance. Computed from: public mandate (21.67%) +
           effectiveness (21.67%) + agency alignment (21.67%) + historical legacy (35%). Click any
           row to view full profile.
         </p>
-        <p className="text-ink-min text-xs font-mono">
+        <p className="font-sans text-xs text-ink-min">
           <span className="text-signal-amber border border-signal-amber/40 px-1 mr-1.5">HIST</span>=
           score uses historical/expert consensus estimates; live API data unavailable for that era
         </p>
@@ -631,12 +631,12 @@ function JusticeLeaderboard({
       </div>
 
       <div className="mt-4 space-y-1 text-center">
-        <p className="text-ink-lo text-xs">
+        <p className="font-sans text-xs text-ink-lo">
           Higher score = more impartial jurisprudence. Computed from: ideological consistency (35%)
           + independence (30%) + judicial restraint (20%) + bipartisan agreement (15%). Click any
           row to view full profile.
         </p>
-        <p className="text-ink-min text-xs font-mono">
+        <p className="font-sans text-xs text-ink-min">
           <span className="text-ink-lo border border-white/15 px-1 mr-1.5">~N</span>= fewer than 100
           cases decided; score has higher variance and may shift as more decisions are issued
         </p>
@@ -1190,12 +1190,12 @@ function LeaderboardContent() {
               {/* Footer note */}
               {!activeLoading && !activeError && displayed.length > 0 && (
                 <div className="mt-4 space-y-1 text-center">
-                  <p className="text-ink-lo text-xs">
+                  <p className="font-sans text-xs text-ink-lo">
                     Higher score = better constituent representation. Computed from: funding
                     independence (33%) + independent voting (33%) + legislative effectiveness (34%).
                     Click any row to view full profile.
                   </p>
-                  <p className="text-ink-min text-xs font-mono">
+                  <p className="font-sans text-xs text-ink-min">
                     Scores use Bayesian shrinkage — members with limited public data are pulled
                     toward 50, not penalized or rewarded
                   </p>

@@ -80,7 +80,7 @@ function Snippet({ text }: { text: string }) {
   const segments = splitHighlights(text);
   if (segments.length === 0) return null;
   return (
-    <p className="text-xs text-ink-lo leading-relaxed mb-3 line-clamp-3">
+    <p className="mb-3 line-clamp-3 font-sans text-xs leading-relaxed text-ink-lo">
       {segments.map((segment, i) =>
         segment.match ? (
           <mark key={i} className="bg-signal-cyan/20 text-signal-cyan px-0.5">
@@ -542,7 +542,7 @@ function ExplorePageInner() {
 
           {/* Source attribution */}
           <div className="mt-12 text-center">
-            <p className="text-ink-lo text-xs max-w-lg mx-auto">
+            <p className="mx-auto max-w-lg font-sans text-xs text-ink-lo">
               Data sourced from the Congressional Record (GovInfo API), the Federal Register
               (federalregister.gov), and Supreme Court opinions (supremecourt.gov via Oyez). Comment
               links go directly to regulations.gov.
