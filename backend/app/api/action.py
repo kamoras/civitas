@@ -8,6 +8,7 @@ import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, field_validator
+from sqlalchemy.exc import OperationalError, TimeoutError as SATimeoutError
 from sqlalchemy.orm import Session, selectinload
 
 from datetime import date
@@ -257,14 +258,28 @@ def _trending_ids_for(issues: list[ActionIssue], db_visits: Session) -> set[str]
     about current momentum, not all-time popularity. IssueView lives in
     the separate visits database (see models.py), so this is its own
     query rather than a join.
+
+    get_visits_db has no error handling of its own — its docstring says
+    it's for the read-only admin visitor-stats endpoints, where a failure
+    is low-stakes. This is the first non-admin caller, and /action/issues
+    is one of the most-hit routes on the site: a locked or briefly
+    unavailable visits DB (this codebase has a documented 2026-07 incident
+    of exactly that, under sustained write load from track_visit's own
+    consumer) must not take down issue listing over a badge. Best-effort,
+    matching track_visit's own write path — degrade to "nothing trends"
+    rather than propagate.
     """
     public_ids = {to_public_id(i.id) for i in issues}
     today = utcnow().date().isoformat()
-    rows = (
-        db_visits.query(IssueView.issue_public_id, IssueView.count)
-        .filter(IssueView.date == today, IssueView.issue_public_id.in_(public_ids))
-        .all()
-    )
+    try:
+        rows = (
+            db_visits.query(IssueView.issue_public_id, IssueView.count)
+            .filter(IssueView.date == today, IssueView.issue_public_id.in_(public_ids))
+            .all()
+        )
+    except (OperationalError, SATimeoutError):
+        logger.warning("Trending lookup failed (visits DB unavailable) — no issues flagged trending")
+        return set()
     view_counts = {pid: count for pid, count in rows}
     return compute_trending_issue_ids(view_counts)
 

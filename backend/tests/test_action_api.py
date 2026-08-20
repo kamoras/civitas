@@ -482,3 +482,31 @@ class TestTrendingFlag:
         resp = await get_action_issue(to_public_id(issue.id), Response(), db=db_session)
 
         assert resp["isTrending"] is False
+
+    async def test_visits_db_failure_degrades_to_no_trending_instead_of_500ing(self, db_session):
+        """/action/issues is one of the most-hit routes on the site;
+        get_visits_db has no error handling of its own (its docstring says
+        it's built for low-stakes admin endpoints) — a locked or briefly
+        unavailable visits DB must not take down issue listing over a
+        badge (2026-07 incident: exactly this kind of lock contention has
+        happened to this same database before, under track_visit's own
+        write load)."""
+        from unittest.mock import MagicMock
+
+        from fastapi import Response
+        from sqlalchemy.exc import OperationalError
+
+        from app.api.action import get_action_issues
+
+        issue = ActionIssue(date="2026-08-19", rank=1, title="Issue", summary="s")
+        db_session.add(issue)
+        db_session.commit()
+
+        broken_visits_db = MagicMock()
+        broken_visits_db.query.side_effect = OperationalError("stmt", {}, Exception("database is locked"))
+
+        resp = await get_action_issues(
+            Response(), date=issue.date, db=db_session, db_visits=broken_visits_db,
+        )
+
+        assert resp["issues"][0]["isTrending"] is False
