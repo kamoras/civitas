@@ -342,6 +342,16 @@ def _apply_matched_issue_update(
         match.title, match.facts, new_values["title"], new_values["facts"],
     )
 
+    # Snapshot the OUTGOING facts as the new "previous" baseline, but only
+    # when they're actually about to change — not on every hourly touch,
+    # or the "new" marker would light up on facts that are word-for-word
+    # what a reader already saw. Set comparison, not string equality: the
+    # LLM does not promise a stable order between runs, and this cares
+    # about content, not sequence (app/fact_diff.py's new_facts_since
+    # feels the same way about the read side).
+    if set(json.loads(match.facts or "[]")) != set(json.loads(new_values["facts"] or "[]")):
+        match.previous_facts = match.facts
+
     match.rank = rank
     match.date = today
     match.is_current = True

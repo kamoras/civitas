@@ -129,6 +129,7 @@ def _migrate_columns() -> None:
         ("action_issues", "bsky_posted_facts", "TEXT"),
         ("action_issues", "is_current", "INTEGER DEFAULT 1"),
         ("action_issues", "primary_article_date", "TEXT"),
+        ("action_issues", "previous_facts", "TEXT DEFAULT '[]'"),
         ("senators", "website_url", "TEXT DEFAULT ''"),
         ("senators", "contact_form_url", "TEXT DEFAULT ''"),
         ("senators", "office_phone", "TEXT DEFAULT ''"),

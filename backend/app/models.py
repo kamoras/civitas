@@ -925,6 +925,17 @@ class ActionIssue(Base):
     # non-posting run would be silently absorbed into the baseline and never
     # read as new again (see _apply_matched_issue_update).
     bsky_posted_facts: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    # `facts` as of the last time it genuinely CHANGED (see
+    # _apply_matched_issue_update) — not on every hourly touch the way
+    # bsky_posted_facts's docstring above warns against for that column.
+    # This is a separate baseline, deliberately not reused from
+    # bsky_posted_facts: that one only advances when the Bluesky-specific
+    # repost gate runs (a no-op with no BSKY_* credentials configured, and
+    # gated on Bluesky's own near-duplicate suppression logic, not on
+    # whether the reader-facing content changed at all), so it isn't a
+    # reliable "what did this issue say last time a reader would have seen
+    # it" signal. Read by app/fact_diff.py to mark newly-added facts.
+    previous_facts: Mapped[str] = mapped_column(Text, default="[]")
     is_current: Mapped[bool] = mapped_column(Boolean, default=True)
     primary_article_date: Mapped[str | None] = mapped_column(String(10), nullable=True, default=None)
 

@@ -7,7 +7,7 @@ import { ActionIssue } from "@/types/action";
 import { usableRecord } from "@/lib/ssrPayload";
 import { formatUtcDate } from "@/lib/formatting";
 import { ACTION_CENTER_HREF } from "@/lib/routes";
-import { PolicyBadge, MonitorChips } from "@/components/action/IssueEnrichment";
+import { PolicyBadge, MonitorChips, NewFactTag } from "@/components/action/IssueEnrichment";
 import IssueActions from "./IssueActions";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
@@ -183,7 +183,10 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
                 {issue.facts.map((fact, i) => (
                   <li key={i} className="flex gap-3 text-sm text-ink">
                     <span className="text-ink-min shrink-0 mt-0.5">▸</span>
-                    <span>{fact}</span>
+                    <span>
+                      {fact}
+                      {issue.newFacts?.includes(fact) && <NewFactTag />}
+                    </span>
                   </li>
                 ))}
               </ul>

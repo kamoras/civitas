@@ -1098,6 +1098,51 @@ class TestApplyMatchedIssueUpdate:
         assert match.date == "2026-07-20"
         assert match.is_current is True
 
+    def test_previous_facts_snapshots_the_outgoing_facts_when_they_change(self):
+        match = ActionIssue(
+            id=1, date="2026-07-19", rank=1, title="Story",
+            facts=json.dumps(["An old fact."]), primary_article_date="2026-07-19",
+        )
+        facts = ["An old fact.", "A brand new fact."]
+        new_values = _new_values_for("Story", facts, "2026-07-20")
+
+        _apply_matched_issue_update(match, new_values, 1, "2026-07-20", "2026-07-20", facts, "Story")
+
+        assert json.loads(match.previous_facts) == ["An old fact."]
+        assert json.loads(match.facts) == facts
+
+    def test_previous_facts_untouched_when_nothing_actually_changed(self):
+        # An hourly touch that reconfirms the same facts (LLM regenerates
+        # the whole list every run) must not overwrite the baseline the
+        # "new" marker diffs against with a copy of itself.
+        match = ActionIssue(
+            id=1, date="2026-07-19", rank=1, title="Story",
+            facts=json.dumps(["An old fact."]),
+            previous_facts=json.dumps(["Something from two versions ago."]),
+            primary_article_date="2026-07-19",
+        )
+        new_values = _new_values_for("Story", ["An old fact."], "2026-07-19")
+
+        _apply_matched_issue_update(match, new_values, 1, "2026-07-19", "2026-07-19", ["An old fact."], "Story")
+
+        assert json.loads(match.previous_facts) == ["Something from two versions ago."]
+
+    def test_previous_facts_ignores_pure_reordering(self):
+        # Set comparison, not string equality — the LLM makes no promise
+        # about a stable order between runs, and a reshuffled list with
+        # the same content isn't a content change.
+        match = ActionIssue(
+            id=1, date="2026-07-19", rank=1, title="Story",
+            facts=json.dumps(["fact a", "fact b"]),
+            previous_facts=json.dumps(["baseline"]),
+            primary_article_date="2026-07-19",
+        )
+        new_values = _new_values_for("Story", ["fact b", "fact a"], "2026-07-19")
+
+        _apply_matched_issue_update(match, new_values, 1, "2026-07-19", "2026-07-19", ["fact b", "fact a"], "Story")
+
+        assert json.loads(match.previous_facts) == ["baseline"]
+
     def test_new_date_with_new_information_allows_repost(self):
         match = ActionIssue(
             id=1, date="2026-07-19", rank=1, title="Story",

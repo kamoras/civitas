@@ -1,5 +1,7 @@
 """Tests for the /action/issues fallback logic in app/api/action.py."""
 
+import json
+
 from app.api.action import _latest_current_issues
 from app.issue_ids import to_public_id
 from app.models import ActionIssue
@@ -510,3 +512,43 @@ class TestTrendingFlag:
         )
 
         assert resp["issues"][0]["isTrending"] is False
+
+
+class TestNewFactsField:
+    """new_facts (app/fact_diff.py) through the real endpoint — the model/
+    pipeline-level snapshot behavior is covered in test_action_center.py's
+    TestApplyMatchedIssueUpdate; this pins the read side."""
+
+    async def test_never_updated_issue_has_no_new_facts(self, db_session):
+        from fastapi import Response
+
+        from app.api.action import get_action_issue
+
+        issue = ActionIssue(
+            date="2026-08-19", rank=1, title="Issue", summary="s",
+            facts=json.dumps(["Only fact."]),
+        )
+        db_session.add(issue)
+        db_session.commit()
+
+        resp = await get_action_issue(to_public_id(issue.id), Response(), db=db_session)
+
+        assert resp["newFacts"] == []
+
+    async def test_updated_issue_reports_only_the_added_fact(self, db_session):
+        from fastapi import Response
+
+        from app.api.action import get_action_issue
+
+        issue = ActionIssue(
+            date="2026-08-19", rank=1, title="Issue", summary="s",
+            facts=json.dumps(["Old fact.", "Brand new fact."]),
+            previous_facts=json.dumps(["Old fact."]),
+        )
+        db_session.add(issue)
+        db_session.commit()
+
+        resp = await get_action_issue(to_public_id(issue.id), Response(), db=db_session)
+
+        assert resp["newFacts"] == ["Brand new fact."]
+        assert resp["facts"] == ["Old fact.", "Brand new fact."]
