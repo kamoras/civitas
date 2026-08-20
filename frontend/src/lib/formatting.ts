@@ -80,6 +80,18 @@ export function issueRef(publicId: string | undefined): string {
 }
 
 /**
+ * Whether `fact` should carry the [NEW] marker. Guards the same way
+ * issueRef/issueDateLabel do: `newFacts` typed non-optional, but a
+ * response cached (browser or nginx) from before the field existed won't
+ * have it — confirmed live, this exact gap crashed the whole Action
+ * Center (`issue.newFacts.includes` with no guard) for every visitor
+ * whose browser held one of those responses, 2026-08-20.
+ */
+export function isNewFact(newFacts: string[] | undefined, fact: string): boolean {
+  return (newFacts ?? []).includes(fact);
+}
+
+/**
  * Format a Monday–Sunday span for display: "Jul 13–19, 2026", or
  * "Jun 29–Jul 5, 2026" when the week crosses a month boundary.
  *

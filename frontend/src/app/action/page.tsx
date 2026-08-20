@@ -10,7 +10,7 @@ import PageMasthead from "@/components/layout/PageMasthead";
 import { fetchActionIssues, fetchOpenComments, OpenCommentItem } from "@/lib/api";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { useUserState } from "@/hooks/useUserState";
-import { describeDaysLeft, formatUtcDate, issueDateLabel, issueRef } from "@/lib/formatting";
+import { describeDaysLeft, formatUtcDate, isNewFact, issueDateLabel, issueRef } from "@/lib/formatting";
 import { PARTY_COLORS, PARTY_BORDER } from "@/lib/partyStyles";
 import StancePulse from "@/components/action/StancePulse";
 import { LogActionButton } from "@/components/action/CivicTracker";
@@ -218,7 +218,7 @@ function HeroIssue({
                 </span>
                 <span className="font-display text-[15px] leading-relaxed text-ink">
                   {fact}
-                  {issue.newFacts.includes(fact) && <NewFactTag />}
+                  {isNewFact(issue.newFacts, fact) && <NewFactTag />}
                 </span>
               </li>
             ))}
@@ -347,7 +347,7 @@ function SecondaryIssue({
                     </span>
                     <span className="font-display text-[15px] leading-relaxed text-ink">
                       {fact}
-                      {issue.newFacts.includes(fact) && <NewFactTag />}
+                      {isNewFact(issue.newFacts, fact) && <NewFactTag />}
                     </span>
                   </li>
                 ))}
