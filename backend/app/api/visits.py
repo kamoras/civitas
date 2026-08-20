@@ -21,7 +21,8 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import VisitsSessionLocal
-from app.models import PageView, SiteVisit
+from app.issue_ids import from_public_id
+from app.models import IssueView, PageView, SiteVisit
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,10 @@ class _VisitEvent:
     os: str
     device_type: str
     normalized_path: str
+    # Set only when the raw path was /issue/{a well-formed public_id} — see
+    # _extract_issue_public_id. None for every other page, including a
+    # malformed /issue/ path, which still counts toward normalized_path.
+    issue_public_id: str | None = None
 
 
 def _write_visit_batch(batch: list["_VisitEvent"], db: Session) -> None:
@@ -105,6 +110,15 @@ def _write_visit_batch(batch: list["_VisitEvent"], db: Session) -> None:
                 set_={"count": PageView.count + 1},
             )
             db.execute(page_stmt)
+
+            if event.issue_public_id:
+                issue_stmt = sqlite_insert(IssueView).values(
+                    date=event.date, issue_public_id=event.issue_public_id, count=1,
+                ).on_conflict_do_update(
+                    index_elements=["date", "issue_public_id"],
+                    set_={"count": IssueView.count + 1},
+                )
+                db.execute(issue_stmt)
         db.commit()
     except (OperationalError, SATimeoutError):
         # Best-effort (see module docstring) — drop this batch rather
@@ -236,6 +250,22 @@ def _normalize_path(raw: str) -> str:
     return "/other"
 
 
+def _extract_issue_public_id(raw: str) -> str | None:
+    """The issue public_id out of a raw /issue/{id} path, or None.
+
+    Deliberately not folded into _normalize_path: that function's whole
+    job is collapsing per-id routes away (see its docstring) — this is
+    the one place that per-id detail is kept, for IssueView, and only
+    ever for a well-formed id (from_public_id's own validation), so a
+    malformed or made-up path segment can't grow that table with junk.
+    """
+    path = (raw or "/").split("?")[0].rstrip("/") or "/"
+    if not path.startswith("/issue/"):
+        return None
+    candidate = path[len("/issue/"):]
+    return candidate if from_public_id(candidate) is not None else None
+
+
 def _track_ip(request: Request) -> str:
     # NOT app.api.rate_limit.client_ip(): that function only trusts
     # X-Forwarded-For when the direct TCP peer is nginx (127.0.0.1), which
@@ -281,6 +311,7 @@ async def track_visit(request: Request, path: str = Query("/")) -> None:
         os=_parse_os(user_agent),
         device_type=_parse_device(user_agent),
         normalized_path=_normalize_path(path),
+        issue_public_id=_extract_issue_public_id(path),
     )
     try:
         _visit_queue.put_nowait(event)

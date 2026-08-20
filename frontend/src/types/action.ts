@@ -60,6 +60,9 @@ export interface ActionIssue {
   concernedCount: number;
   notPriorityCount: number;
   fullStory?: string | null;
+  /** Only ever true from the issues-list fetch — the single-issue lookup
+   *  has no peer issues to judge traction against. */
+  isTrending: boolean;
 }
 
 export interface MyRepSenator {

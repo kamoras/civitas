@@ -13,8 +13,11 @@ from unittest.mock import MagicMock
 from sqlalchemy.exc import OperationalError
 
 from app.api.admin import admin_top_pages
-from app.api.visits import _VisitEvent, _normalize_path, _visit_queue, _write_visit_batch, track_visit
-from app.models import PageView
+from app.api.visits import (
+    _extract_issue_public_id, _VisitEvent, _normalize_path, _visit_queue, _write_visit_batch, track_visit,
+)
+from app.issue_ids import to_public_id
+from app.models import IssueView, PageView
 
 
 def _make_request(peer_ip: str = "203.0.113.5", user_agent: str = "Mozilla/5.0") -> MagicMock:
@@ -71,6 +74,28 @@ class TestNormalizePath:
         assert _normalize_path("/feedback") == "/feedback"
 
 
+class TestExtractIssuePublicId:
+    def test_well_formed_issue_path_extracts_the_id(self):
+        pid = to_public_id(42)
+        assert _extract_issue_public_id(f"/issue/{pid}") == pid
+
+    def test_trailing_slash_and_query_string_ignored(self):
+        pid = to_public_id(42)
+        assert _extract_issue_public_id(f"/issue/{pid}/") == pid
+        assert _extract_issue_public_id(f"/issue/{pid}?ref=bsky") == pid
+
+    def test_malformed_id_is_rejected(self):
+        # Not from_public_id's own letter-prefixed hex format — a made-up
+        # string here must not grow IssueView with junk (see
+        # _extract_issue_public_id's docstring).
+        assert _extract_issue_public_id("/issue/not-a-real-id") is None
+
+    def test_non_issue_paths_return_none(self):
+        assert _extract_issue_public_id("/politicians/chuck-grassley") is None
+        assert _extract_issue_public_id("/issue") is None
+        assert _extract_issue_public_id("/") is None
+
+
 class TestKnownRoutesStayInSync:
     def test_every_top_level_frontend_page_is_tracked_or_dynamic(self):
         """Every real top-level page.tsx route must resolve to something
@@ -112,6 +137,45 @@ class TestTrackVisitPageViews:
 
         rows = {r.path: r.count for r in db_session.query(PageView).all()}
         assert rows == {"/leaderboard": 1, "/compare": 1}
+
+
+class TestTrackVisitIssueViews:
+    """/issue/{id} is the one path PageView's normalization deliberately
+    throws away (collapsed to "/issue/[id]") — IssueView is where that
+    per-id detail survives, for the trending computation (app/trending.py)."""
+
+    async def test_issue_view_accumulates_alongside_the_normalized_page_view(self, db_session):
+        pid = to_public_id(1)
+        await track_visit(_make_request(), path=f"/issue/{pid}")
+        await track_visit(_make_request(), path=f"/issue/{pid}")
+        _drain_queue_and_write(db_session)
+
+        issue_rows = db_session.query(IssueView).all()
+        assert len(issue_rows) == 1
+        assert issue_rows[0].issue_public_id == pid
+        assert issue_rows[0].count == 2
+        # Still rolls up into the normal page-view template too — this is
+        # additive, not a replacement for the existing aggregate.
+        page_rows = db_session.query(PageView).all()
+        assert page_rows[0].path == "/issue/[id]"
+        assert page_rows[0].count == 2
+
+    async def test_different_issues_get_separate_rows(self, db_session):
+        await track_visit(_make_request(), path=f"/issue/{to_public_id(1)}")
+        await track_visit(_make_request(), path=f"/issue/{to_public_id(2)}")
+        _drain_queue_and_write(db_session)
+
+        rows = {r.issue_public_id: r.count for r in db_session.query(IssueView).all()}
+        assert rows == {to_public_id(1): 1, to_public_id(2): 1}
+
+    async def test_malformed_issue_id_writes_no_issue_view_row(self, db_session):
+        await track_visit(_make_request(), path="/issue/not-a-real-id")
+        _drain_queue_and_write(db_session)
+
+        assert db_session.query(IssueView).all() == []
+        # The page-view aggregate still counts it — only the per-id table
+        # is protected against junk.
+        assert db_session.query(PageView).one().path == "/issue/[id]"
 
 
 class TestVisitQueueArchitecture:

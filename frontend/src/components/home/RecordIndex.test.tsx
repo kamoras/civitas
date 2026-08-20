@@ -10,6 +10,7 @@ function issue(o: Partial<ActionIssue> = {}): ActionIssue {
     publicId: "i00000007",
     date: "2026-08-18",
     firstSurfaced: "2026-08-18",
+    isTrending: false,
     rank: 1,
     title: "Prescription drug pricing",
     summary: "A summary of the issue.",
