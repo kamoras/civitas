@@ -138,7 +138,7 @@ export default function Masthead() {
             <br />
             or PAC money
             <br />
-            <span className="text-signal-red/85">AGPL-3.0 · SELF-HOSTED</span>
+            <span className="text-signal-red">AGPL-3.0 · SELF-HOSTED</span>
           </p>
         </div>
       </div>

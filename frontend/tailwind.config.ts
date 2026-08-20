@@ -17,9 +17,20 @@ const config: Config = {
            the ramp stops at a measured floor and there is nothing dimmer to
            reach for.
 
-           Ratios are WCAG 2.2 relative-luminance contrast, computed rather
-           than estimated, and quoted against the LIGHTEST background any text
-           in the app is actually composited on — which is not `surface.raised`
+           Quoted in APCA Lc first, then WCAG 2.2 — because a reader told us
+           the grey was hard to read and WCAG said it was fine.
+
+           WCAG 2.x is polarity-blind and systematically overrates light text
+           on dark: the old ramp cleared its 4.5:1 floor everywhere and still
+           put 61 elements on the homepage at Lc 35, below APCA's hard floor
+           of 45 for any meaningful text, with secondary prose at 48 against a
+           body target of 75. Lc is the number to design to in dark mode; the
+           ratio is kept alongside it because that is what axe and the law
+           still measure. Targets: 90+ fluent body, 75 secondary, 60 the floor
+           for short non-fluent labels.
+
+           Both are computed rather than estimated, and quoted against the
+           LIGHTEST background any text in the app is actually composited on — which is not `surface.raised`
            (#191512) but #262010, a 10% amber wash sitting on top of it. That
            distinction cost two tokens: measured against `raised` the floor
            read 4.74:1 and axe still failed it, because a tinted badge is a
@@ -45,10 +56,12 @@ const config: Config = {
         // for "technical", not a decision anyone made about public records.
         // Same luminance ramp, warmed off the phosphor axis.
         ink: {
-          hi: "#F2EEE7", // 15.69:1 — headings, figures, emphasis
-          DEFAULT: "#C4BDB2", //  9.74:1 — body prose
-          lo: "#A29A8F", //  6.53:1 — secondary, captions
-          min: "#979089", //  5.11:1 — FLOOR. Nothing dimmer ships.
+          // APCA Lc against `surface.raised`, with the WCAG 2.x ratio after it.
+          // Lc is the one that matters here and the reason this ramp moved.
+          hi: "#F2EEE7", // Lc 96 · 15.69:1 — headings, figures, emphasis
+          DEFAULT: "#E3DCD1", // Lc 85 · 13.33:1 — body prose
+          lo: "#CDC7BC", // Lc 72 · 10.79:1 — secondary, captions
+          min: "#BBB5AC", // Lc 62 ·  8.92:1 — FLOOR. Nothing dimmer ships.
         },
 
         // Phosphor. STATUS ONLY now, not structure.
@@ -68,12 +81,20 @@ const config: Config = {
         },
 
         // Score tiers and categorical tags. `magenta` doubles as the second
-        // print plate in the overprint wordmark and the stamp rule.
+        // print plate in the overprint wordmark.
+        //
+        // The party hues below are lighter than a party's "real" colour on
+        // purpose. A saturated red or blue is inherently low-luminance, and
+        // these are set at 12px inside a tinted badge — the worst case in the
+        // app. At their old values that badge measured Lc 44, under APCA's
+        // hard floor, while passing WCAG at 6:1. Lightening to Lc 56 keeps
+        // them recognisably red/blue/purple; taking them to Lc 60 turned red
+        // into pink, which costs more legibility (of the party) than it buys.
         signal: {
           cyan: "#4DE3E8", // 11.64:1
           amber: "#FFD84D", // 13.12:1
           orange: "#FF8A3D", //  7.74:1
-          red: "#FF5C5C", //  5.99:1
+          red: "#FF8989", // Lc 56 ·  9.02:1
           magenta: "#FF6BD6", //  7.19:1
         },
 
@@ -91,9 +112,9 @@ const config: Config = {
           raised: "#191512",
         },
 
-        "dem-blue": "#6699ff", //  6.54:1 — was #0066ff (4.22:1), which failed even at full opacity
-        "rep-red": "#ff5c5c", //  9.74:1 — matches signal.red; kept as an alias for party call sites
-        "ind-purple": "#bd7dff", //  6.39:1 — lightened twice; see the composite note above
+        "dem-blue": "#82acff", // Lc 56 ·  9.06:1 — was #0066ff (4.22:1), which failed even at full opacity
+        "rep-red": "#ff8989", // Lc 56 ·  9.02:1 — alias of signal.red — matches signal.red; kept as an alias for party call sites
+        "ind-purple": "#c995ff", // Lc 56 ·  9.06:1 — lightened twice; see the composite note above
       },
       fontFamily: {
         /* Three faces, one job each. `display` and `sans` are both Archivo:
