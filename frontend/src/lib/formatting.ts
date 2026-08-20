@@ -67,6 +67,19 @@ export function issueDateLabel(issue: { date: string; firstSurfaced?: string }):
 }
 
 /**
+ * The "ISSUE-XXXXXXXX" docket reference — upper-cased to match ISSUE's own
+ * capitalization. `publicId` typed optional and guarded, not just because
+ * TypeScript allows a caller to pass one: the exact stale-cache window
+ * issueDateLabel's own fallback guards against (an nginx response cached
+ * from before a deploy that added a field) applies here too, and calling
+ * `.toUpperCase()` on a genuinely missing value throws — a crash, not just
+ * a display glitch like the date label's.
+ */
+export function issueRef(publicId: string | undefined): string {
+  return `ISSUE-${(publicId ?? "").toUpperCase()}`;
+}
+
+/**
  * Format a Monday–Sunday span for display: "Jul 13–19, 2026", or
  * "Jun 29–Jul 5, 2026" when the week crosses a month boundary.
  *

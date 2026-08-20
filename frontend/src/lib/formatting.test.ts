@@ -5,6 +5,7 @@ import {
   formatUtcDate,
   formatWeekRange,
   issueDateLabel,
+  issueRef,
   localDateStr,
   safeHref,
 } from "./formatting";
@@ -102,6 +103,18 @@ describe("issueDateLabel", () => {
     // backend already is (confirmed live, 2026-08-20).
     expect(issueDateLabel({ date: "2026-08-20", firstSurfaced: undefined })).toBe("2026-08-20");
     expect(issueDateLabel({ date: "2026-08-20", firstSurfaced: "" })).toBe("2026-08-20");
+  });
+});
+
+describe("issueRef", () => {
+  it("upper-cases the public id to match ISSUE's own capitalization", () => {
+    expect(issueRef("i7a2c9f01")).toBe("ISSUE-I7A2C9F01");
+  });
+
+  it("never throws on a missing public id — a crash, not just a display glitch", () => {
+    // The same stale-cache window issueDateLabel's fallback guards against
+    // would otherwise call .toUpperCase() on undefined here.
+    expect(issueRef(undefined)).toBe("ISSUE-");
   });
 });
 
