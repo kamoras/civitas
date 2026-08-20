@@ -24,7 +24,6 @@ type Status = "idle" | "submitting" | "success" | "error";
 export default function FeedbackPage() {
   const [category, setCategory] = useState<FeedbackSubmission["category"]>("bug");
   const [message, setMessage] = useState("");
-  const [email, setEmail] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [issueUrl, setIssueUrl] = useState<string | null>(null);
@@ -52,7 +51,6 @@ export default function FeedbackPage() {
       const res = await submitFeedback({
         category,
         message: trimmed,
-        email: email.trim() || undefined,
         pageUrl: referringPage(),
       });
       setIssueUrl(res.issueUrl);
@@ -87,8 +85,15 @@ export default function FeedbackPage() {
                 </p>
                 {issueUrl && (
                   <p className="font-mono text-xs text-ink-min">
-                    Tracked internally as{" "}
-                    <span className="text-ink-lo">{issueUrl.split("/").pop()}</span>.
+                    Filed as a public issue:{" "}
+                    <a
+                      href={issueUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-signal-cyan hover:underline"
+                    >
+                      #{issueUrl.split("/").pop()}
+                    </a>
                   </p>
                 )}
                 <button
@@ -96,7 +101,6 @@ export default function FeedbackPage() {
                   onClick={() => {
                     setStatus("idle");
                     setMessage("");
-                    setEmail("");
                     setIssueUrl(null);
                   }}
                   className="font-mono text-xs text-signal-cyan hover:underline tracking-widest"
@@ -150,26 +154,6 @@ export default function FeedbackPage() {
                   </p>
                 </div>
 
-                <div>
-                  <label
-                    htmlFor="email"
-                    className="block font-mono text-xs uppercase tracking-widest text-ink-lo mb-1.5"
-                  >
-                    Email{" "}
-                    <span className="text-ink-min normal-case">
-                      (optional — only if you want a reply)
-                    </span>
-                  </label>
-                  <input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    className="w-full font-mono text-sm bg-surface-base border border-white/[0.07] focus:border-phos/40 text-ink-hi placeholder-white/15 px-3 py-2 outline-none"
-                  />
-                </div>
-
                 {status === "error" && (
                   <p className="font-mono text-xs text-signal-red">{errorMessage}</p>
                 )}
@@ -183,7 +167,17 @@ export default function FeedbackPage() {
                 </button>
 
                 <p className="font-mono text-xs text-ink-min text-center">
-                  Feedback is tracked internally and not published publicly.
+                  Filed as a public issue in our{" "}
+                  <a
+                    href="https://github.com/kamoras/civitas"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-ink-lo hover:underline"
+                  >
+                    open-source repo
+                  </a>
+                  . Don&apos;t include anything you wouldn&apos;t want public — including your
+                  own email, if you&apos;d rather not.
                 </p>
               </form>
             )}

@@ -1611,7 +1611,6 @@ export async function fetchPoliticianDirectory(params?: {
 export interface FeedbackSubmission {
   category: "bug" | "idea" | "accessibility" | "data" | "other";
   message: string;
-  email?: string;
   pageUrl?: string;
 }
 
@@ -1624,7 +1623,6 @@ export async function submitFeedback(
     body: JSON.stringify({
       category: submission.category,
       message: submission.message,
-      email: submission.email || undefined,
       page_url: submission.pageUrl,
     }),
   });

@@ -13,7 +13,6 @@ def _request(**overrides):
     defaults = {
         "category": "bug",
         "message": "The bills page shows the wrong stage for some entries.",
-        "email": None,
         "page_url": "https://civitas-research.org/bills",
     }
     defaults.update(overrides)
@@ -36,18 +35,6 @@ class TestValidation:
     def test_whitespace_only_message_rejected(self):
         with pytest.raises(ValidationError):
             _request(message="          ")
-
-    def test_valid_email_accepted(self):
-        req = _request(email="user@example.com")
-        assert req.email == "user@example.com"
-
-    def test_invalid_email_rejected(self):
-        with pytest.raises(ValidationError):
-            _request(email="not-an-email")
-
-    def test_blank_email_normalizes_to_none(self):
-        req = _request(email="   ")
-        assert req.email is None
 
 
 class TestSubmitFeedback:
@@ -121,10 +108,21 @@ class TestSubmitFeedback:
     def test_issue_body_includes_category_and_page(self):
         from app.api.feedback import _build_issue_body
 
-        body = _build_issue_body(_request(email="user@example.com"))
+        body = _build_issue_body(_request())
         assert "Bug report" in body
         assert "https://civitas-research.org/bills" in body
-        assert "user@example.com" in body
+
+    def test_issue_body_never_carries_a_contact_field(self):
+        """#95 (2026-07): a real email address went out in a public GitHub
+        issue via the old optional "contact" field — the repo went public
+        after that field shipped, and it kept publishing whatever a visitor
+        typed there. There's no field left to carry one; pin that it stays
+        gone rather than relying on absence-of-a-feature to hold on its
+        own."""
+        from app.api.feedback import _build_issue_body
+
+        assert not hasattr(_request(), "email")
+        assert "Contact" not in _build_issue_body(_request())
 
 
 class TestFeedbackInjectionHardening:
@@ -132,7 +130,7 @@ class TestFeedbackInjectionHardening:
         from app.api.feedback import _build_issue_body, FeedbackRequest
         body = FeedbackRequest(
             message="@torvalds see http://phish ![](http://track/x.png)",
-            category="bug", pageUrl=None, email=None,
+            category="bug", page_url=None,
         )
         out = _build_issue_body(body)
         # The message is inside a fenced code block, so none of it renders.
@@ -142,7 +140,7 @@ class TestFeedbackInjectionHardening:
         from app.api.feedback import _build_issue_body, FeedbackRequest
         body = FeedbackRequest(
             message="here is ``` a fence break attempt",
-            category="bug", pageUrl=None, email=None,
+            category="bug", page_url=None,
         )
         out = _build_issue_body(body)
         # Opening fence must be longer than any backtick run in the body.
@@ -152,7 +150,7 @@ class TestFeedbackInjectionHardening:
         from app.api.feedback import _build_issue_body, FeedbackRequest
         body = FeedbackRequest(
             message="a valid feedback message",
-            category="bug", pageUrl="http://x/@evil#1", email=None,
+            category="bug", page_url="http://x/@evil#1",
         )
         out = _build_issue_body(body)
         assert "@evil" not in out  # zero-width space inserted after @/#
