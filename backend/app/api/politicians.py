@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json
 from app.config_definitions import JUSTICE_SCORE_WEIGHTS
 from app.database import get_db
+from app.issue_ids import to_public_id
 from app.models import ActionIssue, ExploreDocument, Justice, President, Representative, Senator
 from app.pipeline.analyze.president_scorer import compute_president_overall_score
 from app.pipeline.analyze.score_calculator import compute_overall_score
@@ -376,6 +377,7 @@ def _get_active_issues(politician_id: str, db: Session) -> list[dict]:
         if any(isinstance(e, dict) and e.get("id") == politician_id for e in related):
             result.append({
                 "id": issue.id,
+                "publicId": to_public_id(issue.id),
                 "title": issue.title,
                 "summary": issue.summary,
                 "rank": issue.rank,

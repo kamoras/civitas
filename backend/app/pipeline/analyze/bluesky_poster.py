@@ -24,6 +24,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.issue_ids import to_public_id
 from app.pipeline.analyze.bluesky_utils import publish_post
 from app.pipeline.analyze.grounding import (
     grounding_violations,
@@ -245,7 +246,7 @@ Return JSON: {{"post": "<your post text>"}}"""
 def _publish(text: str, issue) -> bool:
     """Post to Bluesky. Returns True on success."""
     text = re.sub(r"#(\w+)", r"\1", text).strip()  # final hashtag guard
-    url = f"https://civitas-research.org/issue/{issue.id}"
+    url = f"https://civitas-research.org/issue/{to_public_id(issue.id)}"
     return publish_post(
         text, url,
         success_msg=f"Posted to Bluesky: {issue.title[:80]}",

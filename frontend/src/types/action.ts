@@ -37,6 +37,8 @@ export interface RelatedBill {
 
 export interface ActionIssue {
   id: number;
+  /** Shown to readers and used in share links — not the raw autoincrement id. */
+  publicId: string;
   date: string;
   rank: number;
   title: string;

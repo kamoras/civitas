@@ -16,6 +16,7 @@ from app.api.admin import require_admin
 from app.api.rate_limit import WriteRateLimit, client_ip
 from app.database import get_db
 from app.election_calendar import next_election_day, seats_up_for_year
+from app.issue_ids import from_public_id, to_public_id
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.time_utils import utcnow
 from app.models import (
@@ -226,6 +227,7 @@ def _build_issue_response(
 
     return ActionIssueSchema(
         id=issue.id,
+        public_id=to_public_id(issue.id),
         date=issue.date,
         rank=issue.rank,
         title=issue.title,
@@ -297,10 +299,29 @@ async def get_action_issues(
 
 
 @router.get("/issues/{issue_id}")
-async def get_action_issue(issue_id: int, response: Response, db: Session = Depends(get_db)):
-    """Return a single action issue by ID (used for OG metadata / deep-link previews)."""
+async def get_action_issue(issue_id: str, response: Response, db: Session = Depends(get_db)):
+    """Return a single action issue by its public id (used for OG metadata /
+    deep-link previews).
+
+    Falls back to the legacy numeric id when the path segment is all
+    digits: every share link published before public ids existed points at
+    the raw autoincrement id, and `from_public_id` only ever accepts its own
+    letter-prefixed format, so the two paths can't collide.
+    """
     response.headers["Cache-Control"] = "public, max-age=300"
-    issue = db.query(ActionIssue).filter(ActionIssue.id == issue_id).first()
+    resolved_id = from_public_id(issue_id)
+    if resolved_id is None and issue_id.isdigit():
+        # SQLite's INTEGER column caps at a signed 8-byte int; a longer
+        # digit string (a bot, a mistyped URL) isn't a ROWID that could
+        # ever exist, and binding it as a query parameter overflows and
+        # raises rather than just missing — a real id never gets close to
+        # this bound, so treat anything past it as "no such issue".
+        candidate = int(issue_id)
+        resolved_id = candidate if candidate <= 2**63 - 1 else None
+    issue = (
+        db.query(ActionIssue).filter(ActionIssue.id == resolved_id).first()
+        if resolved_id is not None else None
+    )
     if not issue:
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Issue not found")

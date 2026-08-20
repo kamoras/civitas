@@ -179,7 +179,7 @@ function HeroIssue({
         <span className="text-ink-min" aria-hidden="true">
           ·
         </span>
-        <span className="text-ink-min">ISSUE-{issue.id}</span>
+        <span className="text-ink-min">ISSUE-{issue.publicId}</span>
       </div>
 
       <h2 className="mb-4 font-display text-2xl font-bold leading-tight text-ink-hi sm:text-[28px]">
@@ -236,7 +236,7 @@ function HeroIssue({
       />
       <div className="mt-3 flex items-center justify-between gap-3">
         <a
-          href={`/issue/${issue.id}`}
+          href={`/issue/${issue.publicId}`}
           className="border border-phos/40 px-3 py-1.5 font-mono text-xs uppercase tracking-[0.12em] text-phos-mid transition-colors hover:border-phos hover:text-phos"
         >
           Read full story →
@@ -260,7 +260,7 @@ function SecondaryIssue({
   userState: string | null;
   onNavigate?: (tab: Tab) => void;
   deepLinked?: boolean;
-  onToggle?: (id: number, expanded: boolean) => void;
+  onToggle?: (id: string, expanded: boolean) => void;
 }) {
   const [expanded, setExpanded] = useState(deepLinked);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -281,7 +281,7 @@ function SecondaryIssue({
   function handleToggle() {
     const next = !expanded;
     setExpanded(next);
-    onToggle?.(issue.id, next);
+    onToggle?.(issue.publicId, next);
   }
 
   return (
@@ -295,7 +295,7 @@ function SecondaryIssue({
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex flex-wrap items-center gap-2 font-mono text-xs">
             <span className="text-ink-min">
-              {issue.date} · ISSUE-{issue.id}
+              {issue.date} · ISSUE-{issue.publicId}
             </span>
             {issue.policyAreas.map((area) => (
               <PolicyBadge key={area} area={area} />
@@ -497,8 +497,8 @@ function IssuesTab({
   onNavigate?: (tab: Tab) => void;
   initialDate?: string | null;
   onDateChange?: (date: string | null) => void;
-  initialIssueId?: number | null;
-  onIssueChange?: (id: number | null) => void;
+  initialIssueId?: string | null;
+  onIssueChange?: (id: string | null) => void;
 }) {
   // The selected day IS the request. Keying the fetch on it means the pager
   // can't get out of step with what is on screen: there is no separate
@@ -662,7 +662,7 @@ function IssuesTab({
         issue={heroIssue}
         userState={userState}
         onNavigate={onNavigate}
-        isDeepLinked={initialIssueId === heroIssue.id}
+        isDeepLinked={initialIssueId === heroIssue.publicId}
       />
 
       {secondaryIssues.length > 0 && (
@@ -677,7 +677,7 @@ function IssuesTab({
                 issue={issue}
                 userState={userState}
                 onNavigate={onNavigate}
-                deepLinked={initialIssueId === issue.id}
+                deepLinked={initialIssueId === issue.publicId}
                 onToggle={(id, expanded) => onIssueChange?.(expanded ? id : null)}
               />
             ))}
@@ -818,13 +818,10 @@ function ActionPageInner() {
   // re-reading them would make IssuesTab treat the user's own click as a fresh
   // arrival: SecondaryIssue would smooth-scroll the card out from under them,
   // and the day pager would reload the day it just loaded.
-  const [deepLink] = useState(() => {
-    const rawIssue = searchParams.get("issue");
-    return {
-      date: searchParams.get("date"),
-      issue: rawIssue ? parseInt(rawIssue, 10) || null : null,
-    };
-  });
+  const [deepLink] = useState(() => ({
+    date: searchParams.get("date"),
+    issue: searchParams.get("issue"),
+  }));
 
   const setActiveTab = useCallback(
     (tab: Tab) => {
@@ -846,7 +843,7 @@ function ActionPageInner() {
 
   // Update URL when a secondary issue is expanded/collapsed
   const handleIssueChange = useCallback(
-    (id: number | null) => {
+    (id: string | null) => {
       const url = id ? `/action?issue=${id}` : "/action";
       replaceUrl(url);
     },

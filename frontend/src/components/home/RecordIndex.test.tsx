@@ -7,6 +7,7 @@ import type { BillInFlight } from "@/types/bill";
 function issue(o: Partial<ActionIssue> = {}): ActionIssue {
   return {
     id: 7,
+    publicId: "i00000007",
     date: "2026-08-18",
     rank: 1,
     title: "Prescription drug pricing",

@@ -77,7 +77,16 @@ export default function RootLayout({
         width bumps in BillRow and BillStageFlow that this required.
       */}
       <body
-        className={`${archivo.variable} ${pressStart.variable} ${shareTech.variable} font-mono antialiased`}
+        /* No `antialiased`.
+
+           `-webkit-font-smoothing: antialiased` THINS glyphs. On a light-on-
+           dark page that is the wrong direction: the stems of an already-thin
+           monospace get thinner still, which is a third of why a reader
+           reported the grey text as hard to read (the other two thirds being
+           the ink ramp and 12px). Letting the platform use its default
+           smoothing renders the same text perceptibly heavier at zero layout
+           cost. */
+        className={`${archivo.variable} ${pressStart.variable} ${shareTech.variable} font-mono`}
       >
         <ConfigProvider>
           <a

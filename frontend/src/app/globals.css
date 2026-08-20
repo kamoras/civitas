@@ -9,12 +9,12 @@
   --surface-base: #0e0c0a;
   --surface: #14110e;
   --ink-hi: #f2eee7;
-  --ink: #c4bdb2;
-  --ink-lo: #a29a8f;
-  --ink-min: #979089;
+  --ink: #e3dcd1;
+  --ink-lo: #cdc7bc;
+  --ink-min: #bbb5ac;
   --phos: #00ff41;
   --signal-cyan: #4de3e8;
-  --signal-red: #ff5c5c;
+  --signal-red: #ff8989;
   --signal-magenta: #ff6bd6;
   --hairline: rgba(255, 255, 255, 0.09);
 
