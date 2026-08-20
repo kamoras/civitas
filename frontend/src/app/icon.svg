@@ -1,11 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Dark background -->
-  <rect width="32" height="32" fill="#0a0208"/>
-  <!-- Pixel-art "C" in matrix green — three bars forming the letter -->
+  <!-- surface.base, not the old violet-cast CRT black -->
+  <rect width="32" height="32" fill="#0e0c0a"/>
+  <!-- Pixel-art "C" in ink-hi, not phosphor — phosphor lands on data, never
+       on chrome, and a tab icon is chrome. Three bars forming the letter. -->
   <!-- Left vertical bar -->
-  <rect x="3"  y="4"  width="6"  height="24" fill="#00ff41"/>
+  <rect x="3"  y="4"  width="6"  height="24" fill="#f2eee7"/>
   <!-- Top horizontal bar -->
-  <rect x="9"  y="4"  width="19" height="6"  fill="#00ff41"/>
+  <rect x="9"  y="4"  width="19" height="6"  fill="#f2eee7"/>
   <!-- Bottom horizontal bar -->
-  <rect x="9"  y="22" width="19" height="6"  fill="#00ff41"/>
+  <rect x="9"  y="22" width="19" height="6"  fill="#f2eee7"/>
 </svg>
