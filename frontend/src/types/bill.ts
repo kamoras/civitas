@@ -32,6 +32,7 @@ export interface PaginatedBills {
 export interface RelatedIssue {
   id: number;
   date: string;
+  firstSurfaced: string;
   title: string;
 }
 

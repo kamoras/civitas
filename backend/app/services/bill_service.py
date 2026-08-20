@@ -249,12 +249,15 @@ def _parse_policy_areas(raw_json: str | None) -> list[PolicyAreaDetail]:
 def _issues_mentioning(db: Session, bill_id: str) -> list[RelatedIssueSchema]:
     """Current Action Center issues whose related_bill_ids references this bill."""
     issues = (
-        db.query(ActionIssue.id, ActionIssue.date, ActionIssue.title, ActionIssue.related_bill_ids)
+        db.query(
+            ActionIssue.id, ActionIssue.date, ActionIssue.created_at,
+            ActionIssue.title, ActionIssue.related_bill_ids,
+        )
         .filter(ActionIssue.is_current == True)  # noqa: E712
         .all()
     )
     result: list[RelatedIssueSchema] = []
-    for issue_id, date, title, related_bill_ids in issues:
+    for issue_id, date, created_at, title, related_bill_ids in issues:
         if not related_bill_ids:
             continue
         try:
@@ -262,7 +265,9 @@ def _issues_mentioning(db: Session, bill_id: str) -> list[RelatedIssueSchema]:
         except (json.JSONDecodeError, TypeError):
             continue
         if any(isinstance(e, dict) and e.get("id") == bill_id for e in entries):
-            result.append(RelatedIssueSchema(id=issue_id, date=date, title=title))
+            result.append(RelatedIssueSchema(
+                id=issue_id, date=date, first_surfaced=created_at.strftime("%Y-%m-%d"), title=title,
+            ))
     return result
 
 

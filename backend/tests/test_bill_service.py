@@ -415,6 +415,9 @@ class TestGetBillDetail:
         assert detail.mention_count == 1
         assert len(detail.related_issues) == 1
         assert detail.related_issues[0].date == "2026-07-01"
+        # first_surfaced is the label shown next to the title; date drives
+        # the /action?date= link only — see RelatedIssueSchema's docstring.
+        assert detail.related_issues[0].first_surfaced != ""
 
     def test_excludes_non_current_issues_from_related(self, db_session):
         senator = _make_senator(db_session)

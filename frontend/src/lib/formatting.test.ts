@@ -4,6 +4,7 @@ import {
   formatCurrency,
   formatUtcDate,
   formatWeekRange,
+  issueDateLabel,
   localDateStr,
   safeHref,
 } from "./formatting";
@@ -78,6 +79,20 @@ describe("formatUtcDate", () => {
     );
     expect(result).toContain("2026");
     expect(result).toMatch(/1\/1\/2026|1\/1\/26/);
+  });
+});
+
+describe("issueDateLabel", () => {
+  it("shows a single date when the story hasn't been re-matched since it surfaced", () => {
+    expect(issueDateLabel({ date: "2026-08-19", firstSurfaced: "2026-08-19" })).toBe(
+      "2026-08-19"
+    );
+  });
+
+  it("shows both dates when a still-trending story's date has drifted from its origin", () => {
+    expect(issueDateLabel({ date: "2026-08-20", firstSurfaced: "2026-08-15" })).toBe(
+      "2026-08-15 · updated 2026-08-20"
+    );
   });
 });
 

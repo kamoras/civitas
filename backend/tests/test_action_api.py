@@ -385,3 +385,35 @@ class TestIssueLookupByPublicId:
             assert False, "expected HTTPException"
         except HTTPException as exc:
             assert exc.status_code == 404
+
+
+class TestFirstSurfacedDate:
+    """`date` is bumped to today on every pipeline run that re-matches a
+    story, whether or not anything changed (action_center.py's
+    _apply_matched_issue_update) — so a week-old story that's still trending
+    displays today's date as if that's when it happened. `first_surfaced`
+    (issue.created_at) is set once at insert and never touched again."""
+
+    async def test_first_surfaced_stays_fixed_while_date_advances(self, db_session):
+        from datetime import datetime
+
+        from fastapi import Response
+
+        from app.api.action import get_action_issue
+
+        issue = ActionIssue(
+            date="2026-08-15", rank=1, title="Issue", summary="s",
+            created_at=datetime(2026, 8, 15, 9, 0, 0),
+        )
+        db_session.add(issue)
+        db_session.commit()
+
+        # Simulate _apply_matched_issue_update re-matching this story to
+        # fresh coverage five days later without touching created_at.
+        issue.date = "2026-08-20"
+        db_session.commit()
+
+        resp = await get_action_issue(to_public_id(issue.id), Response(), db=db_session)
+
+        assert resp["firstSurfaced"] == "2026-08-15"
+        assert resp["date"] == "2026-08-20"

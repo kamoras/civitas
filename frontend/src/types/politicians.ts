@@ -60,6 +60,7 @@ export interface PoliticianActiveIssue {
   summary: string;
   rank: number;
   date: string;
+  firstSurfaced: string;
   policyAreas: string[];
 }
 

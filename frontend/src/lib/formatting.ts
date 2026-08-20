@@ -48,6 +48,19 @@ export function formatUtcDate(
 }
 
 /**
+ * A story's date, honestly. `date` is bumped to today on every pipeline run
+ * that re-matches an ActionIssue to fresh coverage, whether or not anything
+ * changed, so a week-old story still trending shows today's date as if
+ * that's when it happened. When the two differ, say both rather than pick
+ * one: "2026-08-19 · updated 2026-08-20".
+ */
+export function issueDateLabel(issue: { date: string; firstSurfaced: string }): string {
+  return issue.firstSurfaced === issue.date
+    ? issue.date
+    : `${issue.firstSurfaced} · updated ${issue.date}`;
+}
+
+/**
  * Format a Monday–Sunday span for display: "Jul 13–19, 2026", or
  * "Jun 29–Jul 5, 2026" when the week crosses a month boundary.
  *
