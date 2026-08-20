@@ -248,7 +248,12 @@ class PaginatedBillsSchema(CamelModel):
 
 class RelatedIssueSchema(CamelModel):
     id: int
+    # `date` is the trending-day the /action?date= link needs, not when this
+    # happened — see ActionIssueSchema.first_surfaced's docstring. The label
+    # shown next to this title has to use first_surfaced, not date, or this
+    # list carries the exact same "today" drift the rest of the site fixed.
     date: str
+    first_surfaced: str
     title: str
 
 

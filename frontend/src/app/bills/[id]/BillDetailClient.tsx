@@ -183,7 +183,7 @@ export default function BillDetailClient({ bill }: { bill: BillDetail }) {
                         className="flex items-baseline gap-3 text-sm hover:text-phos transition-colors"
                       >
                         <span className="font-mono text-xs text-ink-min shrink-0">
-                          {issue.date}
+                          {issue.firstSurfaced}
                         </span>
                         <span className="text-ink truncate">{issue.title}</span>
                       </Link>
