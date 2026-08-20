@@ -5,24 +5,24 @@ import { formatCurrency } from "@/lib/formatting";
 // D/R/I keys (those back President/Justice's own party codes), so this
 // mirrors PresidentClient.tsx's local PARTY_META + getPartyMeta fallback
 // pattern rather than reusing partyStyles.ts directly.
-const PARTY_META: Record<string, { label: string; color: string; border: string }> = {
-  DEM: { label: "DEMOCRAT", color: "text-dem-blue", border: "border-dem-blue/40" },
-  REP: { label: "REPUBLICAN", color: "text-rep-red", border: "border-rep-red/40" },
-  IND: { label: "INDEPENDENT", color: "text-white/70", border: "border-white/30" },
+const PARTY_META: Record<string, { label: string; color: string; rule: string }> = {
+  DEM: { label: "DEMOCRAT", color: "text-dem-blue", rule: "bg-dem-blue" },
+  REP: { label: "REPUBLICAN", color: "text-signal-red", rule: "bg-signal-red" },
+  IND: { label: "INDEPENDENT", color: "text-ind-purple", rule: "bg-ind-purple" },
   // State affiliates of the Democratic Party — styled as Democrats.
-  DFL: { label: "DEMOCRAT (DFL)", color: "text-dem-blue", border: "border-dem-blue/40" },
-  DNL: { label: "DEMOCRAT (D-NPL)", color: "text-dem-blue", border: "border-dem-blue/40" },
-  LIB: { label: "LIBERTARIAN", color: "text-white/70", border: "border-white/30" },
-  GRE: { label: "GREEN", color: "text-matrix-green/80", border: "border-matrix-green/40" },
-  CON: { label: "CONSTITUTION", color: "text-white/70", border: "border-white/30" },
-  NON: { label: "NO PARTY AFFILIATION", color: "text-white/50", border: "border-white/20" },
-  NPA: { label: "NO PARTY AFFILIATION", color: "text-white/50", border: "border-white/20" },
-  NNE: { label: "NO PARTY AFFILIATION", color: "text-white/50", border: "border-white/20" },
-  UNK: { label: "UNAFFILIATED/UNKNOWN", color: "text-white/50", border: "border-white/20" },
+  DFL: { label: "DEMOCRAT (DFL)", color: "text-dem-blue", rule: "bg-dem-blue" },
+  DNL: { label: "DEMOCRAT (D-NPL)", color: "text-dem-blue", rule: "bg-dem-blue" },
+  LIB: { label: "LIBERTARIAN", color: "text-ink-lo", rule: "bg-ink-min" },
+  GRE: { label: "GREEN", color: "text-phos-mid", rule: "bg-phos-mid" },
+  CON: { label: "CONSTITUTION", color: "text-ink-lo", rule: "bg-ink-min" },
+  NON: { label: "NO PARTY AFFILIATION", color: "text-ink-lo", rule: "bg-ink-min" },
+  NPA: { label: "NO PARTY AFFILIATION", color: "text-ink-lo", rule: "bg-ink-min" },
+  NNE: { label: "NO PARTY AFFILIATION", color: "text-ink-lo", rule: "bg-ink-min" },
+  UNK: { label: "UNAFFILIATED/UNKNOWN", color: "text-ink-lo", rule: "bg-ink-min" },
 };
 
 function getPartyMeta(party: string) {
-  return PARTY_META[party] ?? { label: party, color: "text-white/50", border: "border-white/20" };
+  return PARTY_META[party] ?? { label: party, color: "text-ink-lo", rule: "bg-ink-min" };
 }
 
 const INCUMBENT_LABELS: Record<string, string> = {
@@ -38,55 +38,61 @@ export default function CandidateCard({ candidate }: { candidate: CandidateSumma
   const syncedOn = candidate.lastFinancialsSync?.slice(0, 10) ?? null;
 
   return (
-    <div className={`border ${pm.border} bg-terminal-bg/50 p-4`}>
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <h4 className="font-pixel text-sm text-white/90">
-          <a
-            href={`https://www.fec.gov/data/candidate/${encodeURIComponent(candidate.id)}/`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-neon-cyan transition-colors"
-          >
-            {candidate.name}{" "}
-            <span aria-hidden="true" className="text-[10px] text-neon-cyan/60">
-              ↗
-            </span>
-          </a>
-        </h4>
+    // Party reads as a 3px rule down the left edge rather than a tinted
+    // outline around the whole card: it identifies the candidate without
+    // wrapping every figure in a partisan colour.
+    <article className="relative border border-white/[0.09] bg-surface p-4 pl-5">
+      <span className={`absolute inset-y-0 left-0 w-[3px] ${pm.rule}`} aria-hidden="true" />
+
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 className="font-display text-lg font-semibold leading-tight text-ink-hi">
+            <a
+              href={`https://www.fec.gov/data/candidate/${encodeURIComponent(candidate.id)}/`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition-colors hover:text-phos"
+            >
+              {candidate.name}{" "}
+              <span aria-hidden="true" className="font-mono text-xs text-phos-mid">
+                ↗
+              </span>
+            </a>
+          </h3>
+          <p className={`mt-0.5 font-mono text-xs tracking-[0.1em] ${pm.color}`}>{pm.label}</p>
+        </div>
+
         {candidate.incumbentChallenge && (
-          <span className="text-[9px] font-pixel px-1.5 py-0.5 border border-matrix-green/20 text-matrix-green/50 shrink-0">
+          <span className="shrink-0 border border-white/15 px-2 py-0.5 font-mono text-xs tracking-[0.1em] text-ink-lo">
             {INCUMBENT_LABELS[candidate.incumbentChallenge] ?? candidate.incumbentChallenge}
           </span>
         )}
       </div>
-      <span className={`text-[10px] font-pixel ${pm.color}`}>{pm.label}</span>
 
       {syncedOn == null ? (
         // Never synced ≠ raised $0 — don't show figures that read as zeros.
-        <p className="mt-3 text-[9px] font-pixel text-matrix-green/40 tracking-widest">
-          AWAITING FEC SYNC
-        </p>
+        <p className="mt-3 font-mono text-xs tracking-[0.12em] text-ink-min">AWAITING FEC SYNC</p>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-2 mt-3">
-            <div className="text-center border border-matrix-green/20 px-2 py-1.5">
-              <div className="text-[9px] text-matrix-green/40 tracking-widest">RAISED</div>
-              <div className="text-sm font-bold text-white/80 tabular-nums">
+          <dl className="mt-3 grid grid-cols-2 gap-x-8 gap-y-1">
+            <div>
+              <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">Raised</dt>
+              <dd className="font-mono text-xl tabular-nums text-ink-hi">
                 {candidate.contributions != null ? formatCurrency(candidate.contributions) : "—"}
-              </div>
+              </dd>
             </div>
-            <div className="text-center border border-matrix-green/20 px-2 py-1.5">
-              <div className="text-[9px] text-matrix-green/40 tracking-widest">CASH ON HAND</div>
-              <div className="text-sm font-bold text-white/80 tabular-nums">
+            <div>
+              <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+                Cash on hand
+              </dt>
+              <dd className="font-mono text-xl tabular-nums text-ink-hi">
                 {candidate.cashOnHand != null ? formatCurrency(candidate.cashOnHand) : "—"}
-              </div>
+              </dd>
             </div>
-          </div>
-          <p className="mt-1.5 text-[8px] font-pixel text-matrix-green/30 tracking-widest">
-            AS OF {syncedOn}
-          </p>
+          </dl>
+          <p className="mt-2 font-mono text-xs tracking-[0.08em] text-ink-min">AS OF {syncedOn}</p>
         </>
       )}
-    </div>
+    </article>
   );
 }

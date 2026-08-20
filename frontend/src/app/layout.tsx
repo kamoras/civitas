@@ -1,12 +1,16 @@
 import type { Metadata } from "next";
-import { VT323, Press_Start_2P, Share_Tech_Mono } from "next/font/google";
+import { Archivo, Press_Start_2P, Share_Tech_Mono } from "next/font/google";
 import ConfigProvider from "@/components/providers/ConfigProvider";
 import "./globals.css";
 
-const vt323 = VT323({
-  weight: "400",
+// Display and prose. 400 for body, 600 for headings, 800 for the blunt
+// statement type the masthead is built on — a grotesque at heavy weight
+// reads broadsheet and poster, where a bookish serif reads endowment.
+const archivo = Archivo({
+  weight: ["400", "600", "800"],
   subsets: ["latin"],
-  variable: "--font-vt323",
+  variable: "--font-archivo",
+  display: "swap",
 });
 
 const pressStart = Press_Start_2P({
@@ -35,7 +39,8 @@ export const metadata: Metadata = {
   ],
   openGraph: {
     title: "CIVITAS // PUBLIC RECORD",
-    description: "Congressional scorecards, campaign finance data, and civic actions — all sourced from public federal records.",
+    description:
+      "Congressional scorecards, campaign finance data, and civic actions — all sourced from public federal records.",
     type: "website",
   },
 };
@@ -48,9 +53,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       {/*
-        `font-mono` (Share Tech Mono), not `font-terminal` (VT323).
-        This governs every element that does not name a font itself, which is
-        most of the site's prose. Measured from the shipped woff2 files:
+        `font-mono` is Share Tech Mono. It governs every element that does not
+        name a font itself, which is most of the site's prose.
+
+        It used to be VT323, and that face is now gone from the bundle rather
+        than merely unused — it had zero call sites left but was still being
+        fetched from Google Fonts on every page load. Why it went, measured
+        from the shipped woff2 files:
 
                           x-height/em   advance/em
           VT323               0.400        0.400
@@ -68,12 +77,12 @@ export default function RootLayout({
         width bumps in BillRow and BillStageFlow that this required.
       */}
       <body
-        className={`${vt323.variable} ${pressStart.variable} ${shareTech.variable} font-mono antialiased`}
+        className={`${archivo.variable} ${pressStart.variable} ${shareTech.variable} font-mono antialiased`}
       >
         <ConfigProvider>
           <a
             href="#main-content"
-            className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:top-2 focus-visible:left-2 focus-visible:z-[10000] focus-visible:bg-crt-black focus-visible:text-matrix-green focus-visible:border-2 focus-visible:border-matrix-green focus-visible:px-4 focus-visible:py-2 focus-visible:text-lg focus-visible:font-terminal"
+            className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:top-2 focus-visible:left-2 focus-visible:z-[10000] focus-visible:bg-surface-base focus-visible:text-ink-hi focus-visible:border-2 focus-visible:border-phos/40 focus-visible:px-4 focus-visible:py-2 focus-visible:text-lg focus-visible:font-mono"
           >
             Skip to main content
           </a>

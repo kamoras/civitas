@@ -20,9 +20,7 @@ function currentCongress(): number {
 function congressOrdinal(congress: number): string {
   const mod100 = congress % 100;
   const suffix =
-    mod100 >= 11 && mod100 <= 13
-      ? "th"
-      : { 1: "st", 2: "nd", 3: "rd" }[congress % 10] ?? "th";
+    mod100 >= 11 && mod100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" }[congress % 10] ?? "th");
   return `${congress}${suffix}`;
 }
 

@@ -45,9 +45,7 @@ export default function IssueActions({
     <>
       {hasWhatYouCanDo && (
         <section className="mb-10">
-          <h2 className="text-xs text-matrix-green/40 mb-4 tracking-widest">
-            WHAT YOU CAN DO
-          </h2>
+          <h2 className="text-xs text-ink-min mb-4 tracking-widest">WHAT YOU CAN DO</h2>
           <RepresentativeContacts issue={issue} userState={userState} />
           <TrackLegislation issue={issue} />
         </section>
@@ -61,7 +59,7 @@ export default function IssueActions({
         <RelatedDocuments issue={issue} today={today} className="mb-6" />
         <SourceList
           issue={issue}
-          className="flex items-center gap-2 flex-wrap pt-4 border-t border-matrix-green/10"
+          className="flex items-center gap-2 flex-wrap pt-4 border-t border-white/[0.07]"
         />
       </section>
 

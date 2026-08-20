@@ -5,10 +5,7 @@ export interface ScoreTerm {
 }
 
 export type ScoreKey =
-  | "fundingIndependence"
-  | "independentVoting"
-  | "fundingDiversity"
-  | "legislativeEffectiveness";
+  "fundingIndependence" | "independentVoting" | "fundingDiversity" | "legislativeEffectiveness";
 
 export const SCORE_TERMS: Record<ScoreKey, ScoreTerm> = {
   fundingIndependence: {

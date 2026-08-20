@@ -12,7 +12,9 @@ export default function RaceFinancials({ candidates }: { candidates: CandidateSu
   const withFunds = candidates.filter((c) => c.cashOnHand != null);
   if (withFunds.length === 0) {
     return (
-      <p className="text-sm text-matrix-green/40">No fundraising data synced for this race yet.</p>
+      <p className="font-mono text-base text-ink-min">
+        No fundraising data synced for this race yet.
+      </p>
     );
   }
 
@@ -20,30 +22,33 @@ export default function RaceFinancials({ candidates }: { candidates: CandidateSu
 
   return (
     <div>
-      <h4 className="font-pixel text-[10px] text-matrix-green/40 tracking-widest mb-3">
-        CASH ON HAND
-      </h4>
-      <div className="space-y-3">
+      <h3 className="mb-3 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+        Cash on hand
+      </h3>
+      <ol className="space-y-3">
         {withFunds
           .slice()
           .sort((a, b) => (b.cashOnHand as number) - (a.cashOnHand as number))
           .map((c) => (
-            <div key={c.id}>
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-matrix-green/60">{c.name}</span>
-                <span className="text-sm font-bold tabular-nums text-white/80">
+            <li key={c.id}>
+              <div className="mb-1 flex items-baseline justify-between gap-4">
+                <span className="font-display text-[15px] text-ink">{c.name}</span>
+                <span className="font-mono text-base tabular-nums text-ink-hi">
                   {formatCurrency(c.cashOnHand as number)}
                 </span>
               </div>
-              <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+              {/* Square bar on a square track: the register has no 
+                  corners, and this is the same bar language the scorecard and
+                  leaderboard use. */}
+              <div className="h-2 w-full bg-white/10">
                 <div
-                  className="h-full rounded-full bg-neon-cyan/60 transition-all duration-700"
+                  className="h-full bg-phos-mid"
                   style={{ width: `${max > 0 ? ((c.cashOnHand as number) / max) * 100 : 0}%` }}
                 />
               </div>
-            </div>
+            </li>
           ))}
-      </div>
+      </ol>
     </div>
   );
 }

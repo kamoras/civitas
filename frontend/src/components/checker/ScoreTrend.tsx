@@ -6,6 +6,18 @@ interface ScoreTrendProps {
   snapshots: ScoreSnapshot[];
 }
 
+/* SVG paints through `stroke`/`fill` attributes and an inline `style`, none of
+   which a Tailwind class reaches, so the palette has to be named in JS here.
+   These mirror tailwind.config.ts — the ratios live there. Before this they
+   were a set of hand-written hexes (#ff5555, #00e5ff, #888, #333, #ffaa00)
+   that predate the token scales and appear nowhere else on the site. */
+const PHOS = "#00FF41";
+const SIGNAL_RED = "#FF5C5C";
+const SIGNAL_CYAN = "#4DE3E8";
+const SIGNAL_ORANGE = "#FF8A3D";
+const INK_MIN = "#7C8B7F";
+const HAIRLINE = "#2A2F2B";
+
 function congressForDate(dateStr: string): number {
   const year = parseInt(dateStr.slice(0, 4), 10);
   return Math.floor((year - 1789) / 2) + 1;
@@ -15,10 +27,14 @@ function ordinal(n: number): string {
   const mod100 = n % 100;
   if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
   switch (n % 10) {
-    case 1: return `${n}st`;
-    case 2: return `${n}nd`;
-    case 3: return `${n}rd`;
-    default: return `${n}th`;
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
   }
 }
 
@@ -72,7 +88,7 @@ export default function ScoreTrend({ snapshots }: ScoreTrendProps) {
     }
   }
 
-  const changeColor = change > 0 ? "#00ff41" : change < 0 ? "#ff5555" : "#888";
+  const changeColor = change > 0 ? PHOS : change < 0 ? SIGNAL_RED : INK_MIN;
   const changeLabel = change > 0 ? `↑ +${change}` : change < 0 ? `↓ ${change}` : "→ 0";
 
   return (
@@ -81,8 +97,8 @@ export default function ScoreTrend({ snapshots }: ScoreTrendProps) {
       aria-label={`Score trend from ${snapshots[0].date} to ${snapshots[snapshots.length - 1].date}: ${first} to ${last}`}
     >
       <div className="flex items-center justify-between mb-1">
-        <span className="font-pixel text-[9px] text-neon-cyan/50 tracking-widest">SCORE HISTORY</span>
-        <span className="font-pixel text-[9px]" style={{ color: changeColor }}>
+        <span className="font-mono text-xs text-ink-lo tracking-widest">SCORE HISTORY</span>
+        <span className="font-mono text-xs" style={{ color: changeColor }}>
           {changeLabel} since first snapshot
         </span>
       </div>
@@ -94,7 +110,15 @@ export default function ScoreTrend({ snapshots }: ScoreTrendProps) {
         aria-hidden="true"
       >
         {/* Reference line at 50 */}
-        <line x1={PAD} y1={midY} x2={W - PAD} y2={midY} stroke="#333" strokeWidth="0.5" strokeDasharray="3,3" />
+        <line
+          x1={PAD}
+          y1={midY}
+          x2={W - PAD}
+          y2={midY}
+          stroke={HAIRLINE}
+          strokeWidth="0.5"
+          strokeDasharray="3,3"
+        />
         {/* Methodology-change markers */}
         {versionChanges.map(({ i, version }) => (
           <line
@@ -103,7 +127,7 @@ export default function ScoreTrend({ snapshots }: ScoreTrendProps) {
             y1={PAD}
             x2={toX(i)}
             y2={H - PAD}
-            stroke="#00e5ff"
+            stroke={SIGNAL_CYAN}
             strokeWidth="0.75"
             strokeDasharray="2,2"
             opacity="0.6"
@@ -117,57 +141,43 @@ export default function ScoreTrend({ snapshots }: ScoreTrendProps) {
             y1={PAD}
             x2={toX(i)}
             y2={H - PAD}
-            stroke="#ffaa00"
+            stroke={SIGNAL_ORANGE}
             strokeWidth="0.75"
             strokeDasharray="4,2"
             opacity="0.6"
           />
         ))}
         {/* Trend line */}
-        <polyline points={points} stroke="#00ff41" strokeWidth="1.5" fill="none" opacity="0.8" />
+        <polyline points={points} stroke={PHOS} strokeWidth="1.5" fill="none" opacity="0.8" />
         {/* First point */}
-        <circle cx={toX(0)} cy={toY(first)} r="2.5" fill="#00ff41" />
+        <circle cx={toX(0)} cy={toY(first)} r="2.5" fill={PHOS} />
         {/* Last point */}
-        <circle cx={toX(scores.length - 1)} cy={toY(last)} r="2.5" fill="#00ff41" />
-        {/* First score label */}
-        <text
-          x={PAD + 2}
-          y={toY(first) - 4}
-          fontSize="7"
-          fill="#00ff41"
-          fontFamily="monospace"
-          opacity="0.7"
-        >
-          {first}
-        </text>
-        {/* Last score label */}
-        <text
-          x={W - PAD - 2}
-          y={toY(last) - 4}
-          fontSize="7"
-          fill="#00ff41"
-          fontFamily="monospace"
-          textAnchor="end"
-          opacity="0.7"
-        >
-          {last}
-        </text>
+        <circle cx={toX(scores.length - 1)} cy={toY(last)} r="2.5" fill={PHOS} />
       </svg>
-      <div className="flex justify-between text-[8px] text-matrix-green/30 font-mono mt-0.5">
-        <span>{snapshots[0].date}</span>
-        <span>{snapshots[snapshots.length - 1].date}</span>
+      {/* The endpoint scores read here rather than as <text> inside the svg.
+          `preserveAspectRatio="none"` is what lets the 200-unit viewBox stretch
+          to the panel width, and it stretches glyphs with everything else — at
+          a typical ~845px render that is 4.2x horizontally against 1x
+          vertically, which smeared both numbers into the trend line. Nothing
+          about them needs to be positioned in chart space. */}
+      <div className="flex justify-between text-xs text-ink-min font-mono mt-0.5">
+        <span>
+          {snapshots[0].date} · <span className="text-phos-mid">{first}</span>
+        </span>
+        <span>
+          <span className="text-phos-mid">{last}</span> · {snapshots[snapshots.length - 1].date}
+        </span>
       </div>
       {versionChanges.length > 0 && (
-        <div className="text-[8px] text-neon-cyan/40 font-mono mt-0.5">
-          ┊ methodology updated ({versionChanges.map((v) => v.version).join(", ")}) — see
-          {" "}
-          <a href="/changelog" className="underline underline-offset-2 hover:text-neon-cyan/70">
+        <div className="text-xs text-ink-lo font-mono mt-0.5">
+          ┊ methodology updated ({versionChanges.map((v) => v.version).join(", ")}) — see{" "}
+          <a href="/changelog" className="underline underline-offset-2 hover:text-phos">
             scoring changelog
           </a>
         </div>
       )}
       {congressChanges.length > 0 && (
-        <div className="text-[8px] text-[#ffaa00]/50 font-mono mt-0.5">
+        <div className="text-xs text-signal-orange font-mono mt-0.5">
           ┊ {congressChanges.map((c) => `${ordinal(c.congress)} Congress`).join(", ")} began —
           scores reset to reflect the new term
         </div>

@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { PoliticianProfile } from "@/types/politicians";
+import { usableRecord } from "@/lib/ssrPayload";
 import PoliticianProfileClient from "./PoliticianProfileClient";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
@@ -12,7 +13,7 @@ async function fetchProfile(id: string): Promise<PoliticianProfile | null> {
       next: { revalidate: 120 },
     });
     if (!res.ok) return null;
-    return await res.json();
+    return usableRecord<PoliticianProfile>(await res.json(), "identity", "branch");
   } catch {
     return null;
   }

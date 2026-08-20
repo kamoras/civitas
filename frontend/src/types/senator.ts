@@ -56,7 +56,14 @@ export interface Senator {
 export interface Donor {
   name: string;
   total: number;
-  type: "PAC" | "Individual" | "SuperPAC" | "Org/Employees" | "Party/Ideological" | "CandidateAffiliated" | "Self-Funded";
+  type:
+    | "PAC"
+    | "Individual"
+    | "SuperPAC"
+    | "Org/Employees"
+    | "Party/Ideological"
+    | "CandidateAffiliated"
+    | "Self-Funded";
   industry: string;
   pacSponsor: string | null;
   pacIndustry: string | null;

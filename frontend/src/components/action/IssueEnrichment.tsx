@@ -25,7 +25,7 @@ import type { ActionIssue, ActionItem, RelatedBill } from "@/types/action";
 
 export function PolicyBadge({ area }: { area: string }) {
   return (
-    <span className="text-[10px] px-2 py-0.5 border font-mono tracking-wide border-neon-yellow/25 text-neon-yellow/70 bg-neon-yellow/5">
+    <span className="text-xs px-2 py-0.5 border font-mono tracking-wide border-signal-amber/40 text-signal-amber bg-signal-amber/10">
       {area}
     </span>
   );
@@ -38,21 +38,19 @@ export function SourceBadge({ name, url }: { name: string; url?: string }) {
         href={safeHref(url) || "#"}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-[10px] px-1.5 py-0.5 border border-matrix-green/20 text-matrix-green/50 hover:text-neon-cyan hover:border-neon-cyan/30 transition-colors"
+        className="text-xs px-1.5 py-0.5 border border-white/[0.07] text-ink-lo hover:text-phos hover:border-white/15 transition-colors"
       >
         {name} <span aria-hidden="true">↗</span>
       </a>
     );
   }
   return (
-    <span className="text-[10px] px-1.5 py-0.5 border border-matrix-green/20 text-matrix-green/50">
-      {name}
-    </span>
+    <span className="text-xs px-1.5 py-0.5 border border-white/[0.07] text-ink-lo">{name}</span>
   );
 }
 
 const MONITOR_CHIP_CLASS =
-  "text-[10px] font-mono tracking-wide px-2 py-0.5 border border-amber-400/25 text-amber-400/60 hover:text-amber-400/90 hover:border-amber-400/50 transition-colors bg-amber-400/5";
+  "text-xs font-mono tracking-wide px-2 py-0.5 border border-signal-amber/40 text-signal-amber hover:text-signal-amber hover:border-signal-amber/40 transition-colors bg-signal-amber/10";
 
 function monitorLabel(slug: string) {
   return `${slug.replace(/-/g, " ").slice(0, 40)}${slug.length > 40 ? "…" : ""}`;
@@ -75,7 +73,7 @@ export function MonitorChips({
   if (!slugs || slugs.length === 0) return null;
   return (
     <div className={`flex items-center gap-2 flex-wrap ${className}`}>
-      <span className="font-mono text-[10px] tracking-widest text-amber-400/40">TRACKING</span>
+      <span className="font-mono text-xs tracking-widest text-signal-amber">TRACKING</span>
       {slugs.map((slug) =>
         onSelect ? (
           <button key={slug} onClick={onSelect} className={MONITOR_CHIP_CLASS}>
@@ -85,7 +83,7 @@ export function MonitorChips({
           <Link key={slug} href={ACTION_CENTER_MONITORS_HREF} className={MONITOR_CHIP_CLASS}>
             {monitorLabel(slug)}
           </Link>
-        ),
+        )
       )}
     </div>
   );
@@ -104,7 +102,7 @@ export function RepresentativeContacts({
 
   return (
     <div className="mb-6">
-      <h3 className="font-mono text-[10px] tracking-widest text-neon-pink/60 mb-3 uppercase">
+      <h3 className="font-mono text-xs tracking-widest text-ink-lo mb-3 uppercase">
         {senators.length > 0 ? "Contact Representatives" : "Contact Your Representatives"}
       </h3>
 
@@ -115,14 +113,12 @@ export function RepresentativeContacts({
             return (
               <div
                 key={s.id}
-                className={`flex items-center gap-3 px-3 py-2.5 border ${PARTY_BORDER[s.party]} bg-matrix-dark-green/20`}
+                className={`flex items-center gap-3 px-3 py-2.5 border ${PARTY_BORDER[s.party]} bg-white/[0.03]`}
               >
-                <span className={`font-mono text-[10px] shrink-0 ${PARTY_COLORS[s.party]}`}>
+                <span className={`font-mono text-xs shrink-0 ${PARTY_COLORS[s.party]}`}>
                   {s.party}-{s.state}
                 </span>
-                <span className="text-sm text-matrix-green/80 flex-1 min-w-0 truncate">
-                  {s.name}
-                </span>
+                <span className="text-sm text-ink flex-1 min-w-0 truncate">{s.name}</span>
                 <div className="flex items-center gap-2 shrink-0">
                   <a
                     href={url || "https://www.senate.gov/senators/senators-contact.htm"}
@@ -130,15 +126,15 @@ export function RepresentativeContacts({
                     rel="noopener noreferrer"
                     className={
                       url
-                        ? "text-[10px] font-mono tracking-widest text-neon-cyan border border-neon-cyan/40 hover:border-neon-cyan hover:bg-neon-cyan/10 px-2 py-1 transition-colors"
-                        : "text-[10px] font-mono tracking-widest text-neon-cyan/60 border border-neon-cyan/30 hover:border-neon-cyan/60 px-2 py-1 transition-colors"
+                        ? "text-xs font-mono tracking-widest text-signal-cyan border border-signal-cyan/40 hover:border-signal-cyan/40 hover:bg-signal-cyan/10 px-2 py-1 transition-colors"
+                        : "text-xs font-mono tracking-widest text-ink-lo border border-white/15 hover:border-signal-cyan/40 px-2 py-1 transition-colors"
                     }
                   >
                     CONTACT ↗
                   </a>
                   <Link
                     href={`/politicians/${s.id}`}
-                    className="text-[10px] font-mono tracking-wide text-matrix-green/50 hover:text-matrix-green transition-colors"
+                    className="text-xs font-mono tracking-wide text-ink-lo hover:text-phos transition-colors"
                   >
                     SCORE: {Math.round(s.overallScore)}
                   </Link>
@@ -150,7 +146,7 @@ export function RepresentativeContacts({
       ) : userState ? (
         <a
           href={`/politicians?branch=senate&state=${userState}`}
-          className="inline-flex items-center gap-2 text-[10px] font-mono tracking-widest text-neon-cyan border border-neon-cyan/40 hover:border-neon-cyan hover:bg-neon-cyan/10 px-3 py-1.5 transition-colors"
+          className="inline-flex items-center gap-2 text-xs font-mono tracking-widest text-signal-cyan border border-signal-cyan/40 hover:border-signal-cyan/40 hover:bg-signal-cyan/10 px-3 py-1.5 transition-colors"
         >
           VIEW {userState} SENATORS &amp; CONTACT INFO →
         </a>
@@ -159,7 +155,7 @@ export function RepresentativeContacts({
           href="https://www.senate.gov/senators/senators-contact.htm"
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 text-[10px] font-mono tracking-widest text-neon-cyan border border-neon-cyan/40 hover:border-neon-cyan hover:bg-neon-cyan/10 px-3 py-1.5 transition-colors"
+          className="inline-flex items-center gap-2 text-xs font-mono tracking-widest text-signal-cyan border border-signal-cyan/40 hover:border-signal-cyan/40 hover:bg-signal-cyan/10 px-3 py-1.5 transition-colors"
         >
           FIND YOUR SENATORS ↗
         </a>
@@ -180,7 +176,7 @@ export function billLink(bill: RelatedBill): { href: string; internal: boolean }
  */
 export function trackActionLink(
   issue: ActionIssue,
-  action: ActionItem,
+  action: ActionItem
 ): { href: string; internal: boolean } {
   const match = issue.relatedBills?.find((b) => b.url === action.url && b.internalUrl);
   if (match?.internalUrl) return { href: match.internalUrl, internal: true };
@@ -202,20 +198,20 @@ export function TrackLegislation({ issue }: { issue: ActionIssue }) {
 
   return (
     <div className="mb-6">
-      <h3 className="font-mono text-[10px] tracking-widest text-neon-cyan/60 mb-3 uppercase">
+      <h3 className="font-mono text-xs tracking-widest text-ink-lo mb-3 uppercase">
         Track Legislation
       </h3>
       <div className="space-y-2">
         {actions.map((action, i) => {
           const { href, internal } = trackActionLink(issue, action);
           const linkClass =
-            "flex items-center gap-3 p-3 border border-neon-cyan/20 bg-neon-cyan/5 hover:border-neon-cyan/40 hover:bg-neon-cyan/10 transition-all group";
+            "flex items-center gap-3 p-3 border border-white/15 bg-signal-cyan/10 hover:border-signal-cyan/40 hover:bg-signal-cyan/10 transition-all group";
           const inner = (
             <>
-              <span className="text-sm text-matrix-green/80 group-hover:text-matrix-green flex-1">
+              <span className="text-sm text-ink group-hover:text-phos flex-1">
                 {trackActionText(action, internal)}
               </span>
-              <span className="text-[10px] font-mono tracking-wide text-neon-cyan/50 shrink-0">
+              <span className="text-xs font-mono tracking-wide text-ink-lo shrink-0">
                 {internal ? "VIEW BILL →" : "CONGRESS.GOV ↗"}
               </span>
             </>
@@ -240,23 +236,21 @@ export function OfficialLegislation({ issue }: { issue: ActionIssue }) {
 
   return (
     <div className="mb-6">
-      <h3 className="font-mono text-[10px] tracking-widest text-neon-yellow/60 mb-3 uppercase">
+      <h3 className="font-mono text-xs tracking-widest text-ink-lo mb-3 uppercase">
         Official Legislation
       </h3>
       <div className="space-y-2">
         {issue.relatedBills.map((bill) => {
           const { href, internal } = billLink(bill);
           const linkClass =
-            "flex items-center gap-3 p-3 border border-neon-yellow/20 bg-neon-yellow/5 hover:border-neon-yellow/40 hover:bg-neon-yellow/10 transition-all group";
+            "flex items-center gap-3 p-3 border border-signal-amber/40 bg-signal-amber/10 hover:border-signal-amber/40 hover:bg-signal-amber/10 transition-all group";
           const inner = (
             <>
-              <span className="text-[10px] font-mono tracking-wide text-neon-yellow/60 border border-neon-yellow/30 px-1.5 py-0.5 shrink-0">
+              <span className="text-xs font-mono tracking-wide text-ink-lo border border-signal-amber/40 px-1.5 py-0.5 shrink-0">
                 {bill.id}
               </span>
-              <span className="text-sm text-matrix-green/80 group-hover:text-matrix-green truncate">
-                {bill.name}
-              </span>
-              <span className="text-[10px] font-mono tracking-wide text-neon-cyan/50 shrink-0 ml-auto">
+              <span className="text-sm text-ink group-hover:text-phos truncate">{bill.name}</span>
+              <span className="text-xs font-mono tracking-wide text-ink-lo shrink-0 ml-auto">
                 {internal ? "VIEW BILL →" : "CONGRESS.GOV ↗"}
               </span>
             </>
@@ -299,7 +293,7 @@ export function RelatedDocuments({
 
   return (
     <div className={className}>
-      <h3 className="font-mono text-[10px] tracking-widest text-matrix-green/40 mb-3 uppercase">
+      <h3 className="font-mono text-xs tracking-widest text-ink-min mb-3 uppercase">
         Related Documents
       </h3>
       <div className="space-y-2">
@@ -312,22 +306,21 @@ export function RelatedDocuments({
           return (
             <div key={doc.id} className="space-y-1">
               <div className="flex items-center gap-2 text-sm">
-                <span className="text-[10px] px-1 py-0.5 border border-matrix-green/20 text-matrix-green/40 font-mono tracking-wide shrink-0">
+                <span className="text-xs px-1 py-0.5 border border-white/[0.07] text-ink-min font-mono tracking-wide shrink-0">
                   {doc.docType.replace(/_/g, " ")}
                 </span>
                 <Link
                   href={`/explore/${doc.id}`}
-                  className="text-neon-cyan/70 hover:text-neon-cyan transition-colors truncate"
+                  className="text-signal-cyan hover:text-phos transition-colors truncate"
                 >
                   {doc.title}
                 </Link>
-                <span className="text-matrix-green/30 text-[10px] shrink-0">{doc.date}</span>
+                <span className="text-ink-min text-xs shrink-0">{doc.date}</span>
               </div>
               {commentOpen && (
                 <Link
                   href={`/explore/${doc.id}#comment`}
-                  className="inline-flex items-center gap-1.5 text-[10px] font-mono tracking-wide
-                             text-neon-cyan/70 hover:text-neon-cyan border border-neon-cyan/30 hover:border-neon-cyan/60
+                  className="inline-flex items-center gap-1.5 text-xs font-mono tracking-wide text-signal-cyan hover:text-phos border border-white/15 hover:border-signal-cyan/40
                              px-2 py-0.5 transition-colors"
                 >
                   → SUBMIT COMMENT
@@ -343,7 +336,7 @@ export function RelatedDocuments({
 
 export function SourceList({
   issue,
-  className = "flex items-center gap-2 flex-wrap pt-4 border-t border-matrix-green/10",
+  className = "flex items-center gap-2 flex-wrap pt-4 border-t border-white/[0.07]",
 }: {
   issue: ActionIssue;
   className?: string;
@@ -351,7 +344,7 @@ export function SourceList({
   if (!issue.sourceNames || issue.sourceNames.length === 0) return null;
   return (
     <div className={className}>
-      <span className="text-[10px] text-matrix-green/30">SOURCES:</span>
+      <span className="text-xs text-ink-min">SOURCES:</span>
       {issue.sourceNames.map((name, i) => (
         <SourceBadge key={name} name={name} url={issue.sourceUrls?.[i]} />
       ))}

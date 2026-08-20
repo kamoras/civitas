@@ -373,7 +373,7 @@ def _get_active_issues(politician_id: str, db: Session) -> list[dict]:
                     related.extend(json.loads(field))
                 except (json.JSONDecodeError, TypeError):
                     pass
-        if any(e.get("id") == politician_id for e in related):
+        if any(isinstance(e, dict) and e.get("id") == politician_id for e in related):
             result.append({
                 "id": issue.id,
                 "title": issue.title,

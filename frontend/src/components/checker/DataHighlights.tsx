@@ -42,19 +42,19 @@ export default function DataHighlights({ senator, chamber = "senate" }: DataHigh
   return (
     <CollapsibleSection
       title={title}
-      titleColor="text-neon-yellow neon-yellow"
+      titleColor="text-signal-amber"
       summary={comments[0]?.slice(0, 80) + (comments[0]?.length > 80 ? "..." : "")}
       source={highlights ? "Auto-generated from data" : undefined}
     >
       <div className="space-y-3">
         {comments.map((comment, i) => (
-          <div key={i} className="terminal-window p-4 border-l-2 border-l-neon-yellow/50">
-            <p className="text-sm text-matrix-green/80 leading-relaxed">{comment}</p>
+          <div key={i} className="panel p-4 border-l-2 border-l-signal-amber">
+            <p className="text-base text-ink leading-relaxed">{comment}</p>
           </div>
         ))}
       </div>
       {highlights && (
-        <div className="text-[10px] text-matrix-green/25 mt-3">
+        <div className="text-xs text-ink-min mt-3">
           Auto-generated from data (no LLM) · fec.gov · congress.gov
         </div>
       )}

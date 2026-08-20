@@ -1,6 +1,24 @@
 "use client";
 
-import { useId, useState, type ReactNode } from "react";
+import { createContext, useContext, useId, useState, type ReactNode } from "react";
+
+/**
+ * What heading level these sections sit at.
+ *
+ * The level is a property of where the section is mounted, not of the section,
+ * so it is read from context rather than passed down: the five components that
+ * render one of these (VotingRecord, SponsoredBills, StockTrades,
+ * PlatformTracker, DataHighlights) are all mounted by SenatorCard, and
+ * threading a prop through each of them to say "you are one level down from my
+ * title" is more code than reading it.
+ *
+ * Defaults to h3, which is what every one of them rendered before the member's
+ * name became the page's h1 on /politicians/[id] — after which h1 → h3 skipped
+ * a level and axe-core reported `heading-order` on every profile.
+ */
+const SectionHeadingLevel = createContext<"h2" | "h3">("h3");
+
+export const SectionHeadingLevelProvider = SectionHeadingLevel.Provider;
 
 interface CollapsibleSectionProps {
   title: string;
@@ -18,7 +36,7 @@ interface CollapsibleSectionProps {
 
 export default function CollapsibleSection({
   title,
-  titleColor = "text-neon-cyan neon-cyan",
+  titleColor = "text-signal-cyan",
   summary,
   alwaysVisible,
   defaultOpen = false,
@@ -27,6 +45,7 @@ export default function CollapsibleSection({
 }: CollapsibleSectionProps) {
   const [open, setOpen] = useState(defaultOpen);
   const contentId = useId();
+  const Heading = useContext(SectionHeadingLevel);
 
   return (
     <div>
@@ -36,23 +55,22 @@ export default function CollapsibleSection({
         aria-expanded={open}
         aria-controls={contentId}
       >
-        <h3 className={`text-lg ${titleColor} flex items-center gap-2`}>
-          <span className="text-matrix-green/40 text-base font-mono group-hover:text-matrix-green transition-colors" aria-hidden="true">
+        <Heading className={`text-lg ${titleColor} flex items-center gap-2`}>
+          <span
+            className="text-ink-min text-base font-mono group-hover:text-phos transition-colors"
+            aria-hidden="true"
+          >
             {open ? "−" : "+"}
           </span>
           {title}
-        </h3>
+        </Heading>
         <span className="flex items-center gap-3">
           {!open && summary && (
-            <span className="text-xs text-matrix-green/50 max-w-xs truncate hidden sm:inline">
+            <span className="text-xs text-ink-lo max-w-xs truncate hidden sm:inline">
               {summary}
             </span>
           )}
-          {source && (
-            <span className="text-[10px] text-matrix-green/50 hidden sm:inline">
-              {source}
-            </span>
-          )}
+          {source && <span className="text-xs text-ink-lo hidden sm:inline">{source}</span>}
         </span>
       </button>
       {alwaysVisible}

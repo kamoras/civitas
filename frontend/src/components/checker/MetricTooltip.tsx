@@ -27,7 +27,7 @@ export default function MetricTooltip({ text, children }: MetricTooltipProps) {
 
   // Position the tooltip in viewport coordinates (position: fixed) rather
   // than as an absolutely-positioned child of the trigger. The trigger
-  // lives inside `.terminal-window`, which sets `overflow: hidden` — an
+  // lives inside `.panel`, which sets `overflow: hidden` — an
   // absolutely-positioned popover near the card's edge is clipped by that
   // ancestor no matter how high its z-index, because overflow clipping and
   // stacking order are independent. Portaling to <body> and positioning
@@ -104,9 +104,21 @@ export default function MetricTooltip({ text, children }: MetricTooltipProps) {
         onMouseLeave={() => setOpen(false)}
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
-        onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setOpen(false);
+        }}
         title={text}
-        className="ml-0.5 text-matrix-green/25 hover:text-matrix-green/60 transition-colors cursor-help text-[9px] leading-none align-super"
+        // A real 24x24 box (WCAG 2.2 SC 2.5.8), with the extra height taken
+        // straight back out again by `-my-1.5`. The glyph was 19-21px x 12px.
+        //
+        // Negative margin rather than a `::before` overlay: the overlay does
+        // enlarge the clickable area, but axe measures the element's own
+        // border box and cannot see it, so the violation stands and the next
+        // person auditing this has to relitigate whether the tool is wrong.
+        // This way the box axe measures and the box a thumb hits are the same
+        // 24x24, while the line it sits on keeps its original height — which
+        // matters at 53 call sites across the scorecards.
+        className="ml-0.5 -my-1.5 inline-flex h-6 w-6 items-center justify-center align-middle text-xs leading-none text-ink-min transition-colors cursor-help hover:text-phos"
         aria-label={`More info: ${text.slice(0, 60)}${text.length > 60 ? "…" : ""}`}
         aria-describedby={tooltipId}
       >
@@ -118,24 +130,27 @@ export default function MetricTooltip({ text, children }: MetricTooltipProps) {
         visible bubble below is portaled and aria-hidden (decorative), so
         assistive tech reads this text, not the floating copy.
       */}
-      <span id={tooltipId} className="sr-only">{text}</span>
-      {open && createPortal(
-        <div
-          ref={tooltipRef}
-          role="tooltip"
-          aria-hidden="true"
-          style={{
-            left: coords ? `${coords.left}px` : "-9999px",
-            top: coords ? `${coords.top}px` : "-9999px",
-          }}
-          className={`fixed z-[100] w-48 sm:w-56 max-w-[calc(100vw-16px)] px-2.5 py-2 text-[11px] leading-snug text-matrix-green/90 bg-black/95 border border-matrix-green/30 shadow-lg pointer-events-none transition-opacity ${
-            coords ? "opacity-100" : "opacity-0"
-          }`}
-        >
-          {text}
-        </div>,
-        document.body,
-      )}
+      <span id={tooltipId} className="sr-only">
+        {text}
+      </span>
+      {open &&
+        createPortal(
+          <div
+            ref={tooltipRef}
+            role="tooltip"
+            aria-hidden="true"
+            style={{
+              left: coords ? `${coords.left}px` : "-9999px",
+              top: coords ? `${coords.top}px` : "-9999px",
+            }}
+            className={`fixed z-[100] w-48 sm:w-56 max-w-[calc(100vw-16px)] px-2.5 py-2 text-xs leading-snug text-ink-hi bg-black/95 border border-white/15 shadow-lg pointer-events-none transition-opacity ${
+              coords ? "opacity-100" : "opacity-0"
+            }`}
+          >
+            {text}
+          </div>,
+          document.body
+        )}
     </span>
   );
 }

@@ -77,7 +77,7 @@ export default function MonitorsTab() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <div className="text-amber-400 animate-pulse font-pixel text-sm">
+        <div className="text-signal-amber animate-pulse font-mono text-sm">
           {">"} SCANNING NATIONAL CONCERNS...
         </div>
       </div>
@@ -86,12 +86,19 @@ export default function MonitorsTab() {
 
   if (fetchError) {
     return (
-      <div className="terminal-window max-w-lg mx-auto p-8 text-center space-y-4" role="alert">
-        <div className="font-pixel text-sm text-red-400">CONNECTION ERROR</div>
-        <p className="text-matrix-green/50 text-sm">Could not load monitors.</p>
+      <div className="panel max-w-lg mx-auto p-8 text-center space-y-4" role="alert">
+        <div className="font-mono text-sm text-signal-red">CONNECTION ERROR</div>
+        <p className="text-ink-lo text-base">Could not load monitors.</p>
         <button
-          onClick={() => { setFetchError(false); setLoading(true); fetchMonitors().then((d) => setMonitors(d.monitors)).catch(() => setFetchError(true)).finally(() => setLoading(false)); }}
-          className="text-neon-cyan font-pixel text-sm border border-neon-cyan/30 px-4 py-2 hover:bg-neon-cyan/10 transition-colors"
+          onClick={() => {
+            setFetchError(false);
+            setLoading(true);
+            fetchMonitors()
+              .then((d) => setMonitors(d.monitors))
+              .catch(() => setFetchError(true))
+              .finally(() => setLoading(false));
+          }}
+          className="text-signal-cyan font-mono text-sm border border-white/15 px-4 py-2 hover:bg-signal-cyan/10 transition-colors"
         >
           [RETRY]
         </button>
@@ -101,12 +108,11 @@ export default function MonitorsTab() {
 
   if (monitors.length === 0) {
     return (
-      <div className="terminal-window max-w-lg mx-auto p-8 text-center space-y-4">
-        <div className="font-pixel text-sm text-amber-400/80">NO ACTIVE MONITORS</div>
-        <p className="text-matrix-green/50 text-sm">
-          National monitors are automatically created when an issue persists across
-          multiple days in the news cycle. Check back as the system identifies
-          ongoing concerns.
+      <div className="panel max-w-lg mx-auto p-8 text-center space-y-4">
+        <div className="font-mono text-sm text-signal-amber">NO ACTIVE MONITORS</div>
+        <p className="text-ink-lo text-base">
+          National monitors are automatically created when an issue persists across multiple days in
+          the news cycle. Check back as the system identifies ongoing concerns.
         </p>
       </div>
     );
@@ -114,7 +120,7 @@ export default function MonitorsTab() {
 
   return (
     <div className="space-y-6">
-      <div className="text-center text-[10px] text-matrix-green/40 font-pixel mb-2">
+      <div className="text-center text-xs text-ink-min font-mono mb-2">
         ONGOING NATIONAL CONCERNS — AUTO-DETECTED FROM RECURRING NEWS PATTERNS
       </div>
 
@@ -123,35 +129,29 @@ export default function MonitorsTab() {
           <button
             key={m.slug}
             onClick={() => openMonitor(m.slug)}
-            className={`terminal-window p-4 text-left transition-colors hover:border-amber-400/30 ${
-              selected?.slug === m.slug ? "border-amber-400/50" : ""
+            className={`panel p-4 text-left transition-colors hover:border-signal-amber/40 ${
+              selected?.slug === m.slug ? "border-signal-amber/40" : ""
             }`}
             aria-label={`View monitor: ${m.title}`}
           >
             <div className="flex items-center gap-2 mb-2">
               <span
-                className={`w-2 h-2 rounded-full ${
-                  m.status === "active" ? "bg-green-400" : "bg-amber-400/50"
-                }`}
+                className={`w-2 h-2  ${m.status === "active" ? "bg-phos" : "bg-signal-amber/10"}`}
                 aria-label={m.status === "active" ? "Active" : "Watching"}
               />
-              <span className="font-pixel text-[10px] text-amber-400/60 uppercase">
-                {m.category}
-              </span>
+              <span className="font-mono text-xs text-signal-amber uppercase">{m.category}</span>
             </div>
-            <h3 className="font-pixel text-sm text-matrix-green mb-1 leading-relaxed">
-              {m.title}
-            </h3>
+            <h2 className="font-mono text-sm text-ink-hi mb-1 leading-relaxed">{m.title}</h2>
             {selected?.slug !== m.slug && m.description && (
-              <p className="text-xs text-matrix-green/40 mb-2 line-clamp-1 leading-snug">
+              <p className="mb-2 line-clamp-1 font-sans text-xs leading-snug text-ink-min">
                 {m.description}
               </p>
             )}
-            <div className="flex items-center gap-3 text-[10px] text-matrix-green/40">
-              <span>{m.updateCount} update{m.updateCount !== 1 ? "s" : ""}</span>
-              {m.lastArticleDate && (
-                <span>latest: {m.lastArticleDate}</span>
-              )}
+            <div className="flex items-center gap-3 text-xs text-ink-min">
+              <span>
+                {m.updateCount} update{m.updateCount !== 1 ? "s" : ""}
+              </span>
+              {m.lastArticleDate && <span>latest: {m.lastArticleDate}</span>}
               <span>tracking since {m.createdAt}</span>
             </div>
           </button>
@@ -160,7 +160,7 @@ export default function MonitorsTab() {
 
       {detailLoading && (
         <div className="flex items-center justify-center py-8">
-          <div className="text-amber-400 animate-pulse font-pixel text-sm">
+          <div className="text-signal-amber animate-pulse font-mono text-sm">
             {">"} LOADING TIMELINE...
           </div>
         </div>
@@ -169,21 +169,21 @@ export default function MonitorsTab() {
       {selected && !detailLoading && (
         <div
           ref={detailRef}
-          className="terminal-window border-t-2 border-t-amber-400/50 p-5 sm:p-6 scroll-mt-4"
+          className="panel border-t-2 border-t-signal-amber/50 p-5 sm:p-6 scroll-mt-4"
           role="region"
           aria-label={`Monitor: ${selected.title}`}
         >
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="font-pixel text-base sm:text-lg text-amber-400">
+              <h2 className="font-display font-semibold text-base sm:text-lg text-signal-amber">
                 {selected.title}
-              </h3>
+              </h2>
               <div className="flex items-center gap-2 mt-1">
                 <span
-                  className={`text-[10px] font-pixel px-2 py-0.5 border ${
+                  className={`text-xs font-mono px-2 py-0.5 border ${
                     selected.status === "active"
-                      ? "border-green-400/30 text-green-400/80"
-                      : "border-amber-400/30 text-amber-400/60"
+                      ? "border-phos/30 text-phos-mid"
+                      : "border-signal-amber/40 text-signal-amber"
                   }`}
                 >
                   {selected.status.toUpperCase()}
@@ -191,7 +191,7 @@ export default function MonitorsTab() {
                 {selected.policyAreas.map((area) => (
                   <span
                     key={area}
-                    className="text-[10px] font-pixel px-2 py-0.5 border border-neon-yellow/30 text-neon-yellow/80"
+                    className="text-xs font-mono px-2 py-0.5 border border-signal-amber/40 text-signal-amber"
                   >
                     {area}
                   </span>
@@ -200,60 +200,56 @@ export default function MonitorsTab() {
             </div>
             <button
               onClick={() => setSelected(null)}
-              className="text-matrix-green/40 hover:text-matrix-green font-pixel text-xs"
+              className="text-ink-min hover:text-phos font-mono text-xs"
               aria-label="Close monitor detail"
             >
               [CLOSE]
             </button>
           </div>
 
-          <p className="text-matrix-green/70 text-sm mb-6 leading-relaxed">
-            {selected.description}
-          </p>
+          <p className="text-ink text-base mb-6 leading-relaxed">{selected.description}</p>
 
-          <h4 className="font-pixel text-sm text-amber-400/80 mb-4">
+          <h4 className="font-mono text-sm text-signal-amber mb-4">
             {">"} TIMELINE ({selected.updates.length} updates)
           </h4>
 
-          <div className="relative pl-4 border-l border-amber-400/20 space-y-4" role="list">
+          <div className="relative pl-4 border-l border-signal-amber/40 space-y-4" role="list">
             {selected.updates.map((update) => {
               const { timeLabel, isRecent } = formatUpdateTime(update);
               return (
                 <div key={update.id} className="relative" role="listitem">
                   <div
-                    className={`absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full border ${
+                    className={`absolute -left-[21px] top-1 w-2.5 h-2.5  border ${
                       isRecent
-                        ? "bg-red-400 border-red-400 animate-pulse"
-                        : "bg-amber-400/40 border-amber-400/60"
+                        ? "bg-signal-red border-signal-red animate-pulse"
+                        : "bg-signal-amber/10 border-signal-amber/40"
                     }`}
                     aria-hidden="true"
                   />
                   <div className="flex items-center gap-2 mb-1">
                     <time
                       dateTime={update.createdAt || undefined}
-                      className="text-[10px] text-matrix-green/40 font-pixel"
+                      className="text-xs text-ink-min font-mono"
                     >
                       {timeLabel}
                     </time>
                     {isRecent && (
-                      <span className="text-[9px] font-pixel px-1.5 py-0.5 bg-red-500/20 border border-red-400/40 text-red-400 animate-pulse">
+                      <span className="text-xs font-mono px-1.5 py-0.5 bg-signal-red/10 border border-signal-red/40 text-signal-red animate-pulse">
                         BREAKING
                       </span>
                     )}
                     {update.sourceName && (
-                      <span className="text-[10px] text-matrix-green/30 font-pixel">
+                      <span className="text-xs text-ink-min font-mono">
                         via {update.sourceName}
                       </span>
                     )}
                   </div>
-                  <p className="text-sm text-matrix-green/80 leading-relaxed mb-1">
-                    {update.summary}
-                  </p>
+                  <p className="text-base text-ink leading-relaxed mb-1">{update.summary}</p>
                   <a
                     href={safeHref(update.sourceUrl) || "#"}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[10px] text-neon-cyan/60 hover:text-neon-cyan transition-colors"
+                    className="text-xs text-ink-lo hover:text-phos transition-colors"
                   >
                     {update.articleTitle || "Source"} <span aria-hidden="true">↗</span>
                   </a>

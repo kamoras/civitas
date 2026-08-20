@@ -5,7 +5,7 @@ import Link from "next/link";
 import { SponsoredBill } from "@/types/senator";
 import CollapsibleSection from "../shared/CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
-import { PARTY_BADGE } from "@/lib/partyStyles";
+import { PARTY_BADGE, policyAreaBadgeClass } from "@/lib/partyStyles";
 
 interface SponsoredBillsProps {
   bills: SponsoredBill[];
@@ -63,7 +63,9 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
 
   if (!bills || bills.length === 0) return null;
 
-  const substantive = bills.filter((b) => SUBSTANTIVE_BILL_TYPES.has((b.billType || "").toLowerCase()));
+  const substantive = bills.filter((b) =>
+    SUBSTANTIVE_BILL_TYPES.has((b.billType || "").toLowerCase())
+  );
   const lawBills = substantive.filter((b) => b.isLaw);
   const advancingBills = substantive.filter(isAdvancing);
   const lawCount = lawBills.length;
@@ -72,7 +74,8 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
   const filtered = filter === "law" ? lawBills : filter === "advancing" ? advancingBills : bills;
   const visible = showAll ? filtered : filtered.slice(0, INITIAL_VISIBLE);
 
-  const toggleFilter = (next: BillFilter) => setFilter((current) => (current === next ? "all" : next));
+  const toggleFilter = (next: BillFilter) =>
+    setFilter((current) => (current === next ? "all" : next));
 
   const summaryParts: string[] = [`${bills.length} bills`];
   if (lawCount > 0) summaryParts.push(`${lawCount} became law`);
@@ -93,47 +96,82 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
             role="button"
             tabIndex={0}
             onClick={() => setFilter("all")}
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setFilter("all"); } }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setFilter("all");
+              }
+            }}
             aria-pressed={filter === "all"}
-            className={`terminal-window p-2 transition-colors cursor-pointer ${filter === "all" ? "border-matrix-green/60 bg-matrix-green/5" : "hover:bg-white/[0.03]"}`}
+            className={`panel p-2 transition-colors cursor-pointer ${filter === "all" ? "border-ink-lo bg-white/[0.06]" : "hover:bg-white/[0.03]"}`}
           >
-            <div className="text-xl font-pixel text-matrix-green">{bills.length}</div>
-            <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Number of bills this senator introduced as primary sponsor. Sponsoring a bill means they authored or championed it.">BILLS SPONSORED</MetricTooltip></div>
+            <div className="text-xl font-display font-semibold text-ink-hi">{bills.length}</div>
+            <div className="text-xs text-ink-min">
+              <MetricTooltip text="Number of bills this senator introduced as primary sponsor. Sponsoring a bill means they authored or championed it.">
+                BILLS SPONSORED
+              </MetricTooltip>
+            </div>
           </div>
           <div
             role="button"
             tabIndex={lawCount === 0 ? -1 : 0}
-            onClick={() => { if (lawCount > 0) toggleFilter("law"); }}
-            onKeyDown={(e) => { if (lawCount > 0 && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggleFilter("law"); } }}
+            onClick={() => {
+              if (lawCount > 0) toggleFilter("law");
+            }}
+            onKeyDown={(e) => {
+              if (lawCount > 0 && (e.key === "Enter" || e.key === " ")) {
+                e.preventDefault();
+                toggleFilter("law");
+              }
+            }}
             aria-pressed={filter === "law"}
             aria-disabled={lawCount === 0}
-            className={`terminal-window p-2 transition-colors ${lawCount === 0 ? "cursor-default" : "cursor-pointer"} ${filter === "law" ? "border-neon-cyan/60 bg-neon-cyan/5" : lawCount > 0 ? "hover:bg-white/[0.03]" : ""}`}
+            className={`panel p-2 transition-colors ${lawCount === 0 ? "cursor-default" : "cursor-pointer"} ${filter === "law" ? "border-signal-cyan/40 bg-signal-cyan/10" : lawCount > 0 ? "hover:bg-white/[0.03]" : ""}`}
           >
-            <div className={`text-xl font-pixel ${lawCount > 0 ? "text-neon-cyan" : "text-matrix-green/30"}`}>
+            <div
+              className={`text-xl font-display font-semibold ${lawCount > 0 ? "text-signal-cyan" : "text-ink-min"}`}
+            >
               {lawCount}
             </div>
-            <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="How many of this senator's sponsored bills (S./H.R./joint resolutions — not simple/concurrent resolutions) were signed into law. Most bills never pass — even 1 is notable. Click to filter the list below to just these.">BECAME LAW</MetricTooltip></div>
+            <div className="text-xs text-ink-min">
+              <MetricTooltip text="How many of this senator's sponsored bills (S./H.R./joint resolutions — not simple/concurrent resolutions) were signed into law. Most bills never pass — even 1 is notable. Click to filter the list below to just these.">
+                BECAME LAW
+              </MetricTooltip>
+            </div>
           </div>
           <div
             role="button"
             tabIndex={advancedCount === 0 ? -1 : 0}
-            onClick={() => { if (advancedCount > 0) toggleFilter("advancing"); }}
-            onKeyDown={(e) => { if (advancedCount > 0 && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggleFilter("advancing"); } }}
+            onClick={() => {
+              if (advancedCount > 0) toggleFilter("advancing");
+            }}
+            onKeyDown={(e) => {
+              if (advancedCount > 0 && (e.key === "Enter" || e.key === " ")) {
+                e.preventDefault();
+                toggleFilter("advancing");
+              }
+            }}
             aria-pressed={filter === "advancing"}
             aria-disabled={advancedCount === 0}
-            className={`terminal-window p-2 transition-colors ${advancedCount === 0 ? "cursor-default" : "cursor-pointer"} ${filter === "advancing" ? "border-neon-yellow/60 bg-neon-yellow/5" : advancedCount > 0 ? "hover:bg-white/[0.03]" : ""}`}
+            className={`panel p-2 transition-colors ${advancedCount === 0 ? "cursor-default" : "cursor-pointer"} ${filter === "advancing" ? "border-signal-amber/40 bg-signal-amber/10" : advancedCount > 0 ? "hover:bg-white/[0.03]" : ""}`}
           >
-            <div className={`text-xl font-pixel ${advancedCount > 0 ? "text-neon-yellow" : "text-matrix-green/30"}`}>
+            <div
+              className={`text-xl font-display font-semibold ${advancedCount > 0 ? "text-signal-amber" : "text-ink-min"}`}
+            >
               {advancedCount}
             </div>
-            <div className="text-[10px] text-matrix-green/40"><MetricTooltip text="Substantive bills (S./H.R./joint resolutions) that passed at least one chamber or were reported out of committee. Simple/concurrent resolutions (commemorative, e.g. designating an awareness month) are excluded — they're routinely agreed to without debate and aren't meaningful legislative progress, matching how the Legislative Effectiveness score itself counts advancement. Click to filter the list below to just these.">ADVANCING</MetricTooltip></div>
+            <div className="text-xs text-ink-min">
+              <MetricTooltip text="Substantive bills (S./H.R./joint resolutions) that passed at least one chamber or were reported out of committee. Simple/concurrent resolutions (commemorative, e.g. designating an awareness month) are excluded — they're routinely agreed to without debate and aren't meaningful legislative progress, matching how the Legislative Effectiveness score itself counts advancement. Click to filter the list below to just these.">
+                ADVANCING
+              </MetricTooltip>
+            </div>
           </div>
         </div>
 
         {filter !== "all" && (
           <button
             onClick={() => setFilter("all")}
-            className="font-mono text-[9px] text-matrix-green/30 hover:text-matrix-green/60 transition-colors tracking-widest"
+            className="font-mono text-xs text-ink-min hover:text-phos transition-colors tracking-widest"
           >
             CLEAR FILTER
           </button>
@@ -147,10 +185,8 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
             return (
               <div
                 key={bill.billId}
-                className={`terminal-window p-2.5 border-l-4 ${
-                  bill.isLaw
-                    ? "border-l-neon-cyan/50"
-                    : "border-l-matrix-green/20"
+                className={`panel p-2.5 border-l-4 ${
+                  bill.isLaw ? "border-l-signal-cyan" : "border-l-white/[0.07]"
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
@@ -158,45 +194,39 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
                     <div className="flex items-center gap-2 flex-wrap">
                       <Link
                         href={url}
-                        className="text-sm text-matrix-green/80 hover:text-neon-cyan transition-colors"
+                        className="text-sm text-ink hover:text-phos transition-colors"
                       >
                         {bill.title}
                       </Link>
                     </div>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span className="text-[10px] text-matrix-green/30">{bill.billId}</span>
+                      <span className="text-xs text-ink-min">{bill.billId}</span>
                       {bill.introducedDate && (
-                        <span className="text-[10px] text-matrix-green/30">{bill.introducedDate}</span>
+                        <span className="text-xs text-ink-min">{bill.introducedDate}</span>
                       )}
                       {bill.isLaw && (
-                        <span className="text-[10px] px-1.5 py-0.5 border text-neon-cyan border-neon-cyan/30 bg-neon-cyan/10 font-pixel">
+                        <span className="text-xs px-1.5 py-0.5 border text-signal-cyan border-white/15 bg-signal-cyan/10 font-mono">
                           SIGNED INTO LAW
                         </span>
                       )}
                       {badge && (
-                        <span className={`text-[10px] px-1 py-0.5 border font-pixel ${badge.className}`}>
+                        <span className={`text-xs px-1 py-0.5 border font-mono ${badge.className}`}>
                           {badge.label}
                         </span>
                       )}
-                      {bill.policyAreas?.filter(a => a.area !== "PROCEDURAL").map((a) => (
-                        <span
-                          key={a.area}
-                          className={`text-[10px] px-1.5 py-0.5 border ${
-                            a.party === "R"
-                              ? "text-red-400/70 border-red-400/30 bg-red-400/5"
-                              : a.party === "D"
-                              ? "text-blue-400/70 border-blue-400/30 bg-blue-400/5"
-                              : "text-neon-yellow/70 border-neon-yellow/30 bg-neon-yellow/5"
-                          }`}
-                        >
-                          {a.area}
-                        </span>
-                      ))}
+                      {bill.policyAreas
+                        ?.filter((a) => a.area !== "PROCEDURAL")
+                        .map((a) => (
+                          <span
+                            key={a.area}
+                            className={`text-xs px-1.5 py-0.5 border ${policyAreaBadgeClass(a.party)}`}
+                          >
+                            {a.area}
+                          </span>
+                        ))}
                     </div>
                     {bill.latestAction && (
-                      <div className="text-[10px] text-matrix-green/40 mt-1 truncate">
-                        {bill.latestAction}
-                      </div>
+                      <div className="text-xs text-ink-min mt-1 truncate">{bill.latestAction}</div>
                     )}
                   </div>
                 </div>
@@ -206,15 +236,13 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
         </div>
 
         {filtered.length === 0 && (
-          <div className="text-xs text-matrix-green/40 font-terminal py-2">
-            No bills match this filter.
-          </div>
+          <div className="text-xs text-ink-min font-mono py-2">No bills match this filter.</div>
         )}
 
         {filtered.length > INITIAL_VISIBLE && (
           <button
             onClick={() => setShowAll(!showAll)}
-            className="text-xs text-matrix-green/50 hover:text-matrix-green transition-colors font-terminal"
+            className="text-xs text-ink-lo hover:text-phos transition-colors font-mono"
           >
             {showAll ? `[-] Show less` : `[+] Show all ${filtered.length} bills`}
           </button>

@@ -3,6 +3,7 @@
 import { useState, type KeyboardEvent } from "react";
 import type { ActionIssue } from "@/types/action";
 import { useCopyFeedback } from "@/hooks/useCopyFeedback";
+import { BOXED_CONTROL } from "@/lib/controlStyles";
 
 interface ShareButtonsProps {
   issue: ActionIssue;
@@ -36,8 +37,7 @@ export default function ShareButtons({
   className = "",
   shareUrl: shareUrlOverride,
 }: ShareButtonsProps) {
-  const shareUrl =
-    shareUrlOverride ?? `https://civitas-research.org/action?issue=${issue.id}`;
+  const shareUrl = shareUrlOverride ?? `https://civitas-research.org/action?issue=${issue.id}`;
   const shareText = buildShareText(issue.title, shareUrl);
   const encodedText = encodeURIComponent(shareText);
 
@@ -57,16 +57,16 @@ export default function ShareButtons({
   }
 
   return (
-    <div className={`pt-4 border-t border-matrix-green/10 ${className}`}>
+    <div className={`pt-4 border-t border-white/[0.07] ${className}`}>
       <div className="flex items-center gap-1.5 flex-wrap">
-        <span className="text-[10px] font-pixel text-matrix-green/30 mr-1">SHARE:</span>
+        <span className="text-xs font-mono text-ink-min mr-1">SHARE:</span>
 
         {/* X / Twitter */}
         <a
           href={`https://x.com/intent/tweet?text=${encodedText}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[10px] font-pixel px-2 py-1 border border-matrix-green/20 text-matrix-green/50 hover:text-neon-cyan hover:border-neon-cyan/40 transition-colors bg-transparent"
+          className="text-xs font-mono px-2 py-1 border border-white/[0.07] text-ink-lo hover:text-phos hover:border-signal-cyan/40 transition-colors bg-transparent"
           aria-label="Share on X (Twitter)"
         >
           [ X ]
@@ -77,7 +77,7 @@ export default function ShareButtons({
           href={`https://bsky.app/intent/compose?text=${encodedText}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[10px] font-pixel px-2 py-1 border border-matrix-green/20 text-matrix-green/50 hover:text-neon-cyan hover:border-neon-cyan/40 transition-colors bg-transparent"
+          className="text-xs font-mono px-2 py-1 border border-white/[0.07] text-ink-lo hover:text-phos hover:border-signal-cyan/40 transition-colors bg-transparent"
           aria-label="Share on Bluesky"
         >
           [ BSKY ]
@@ -87,7 +87,7 @@ export default function ShareButtons({
         {!showMastodonInput ? (
           <button
             onClick={() => setShowMastodonInput(true)}
-            className="text-[10px] font-pixel px-2 py-1 border border-matrix-green/20 text-matrix-green/50 hover:text-neon-cyan hover:border-neon-cyan/40 transition-colors"
+            className="text-xs font-mono px-2 py-1 border border-white/[0.07] text-ink-lo hover:text-phos hover:border-signal-cyan/40 transition-colors"
             aria-label="Share on Mastodon"
           >
             [ MASTODON ]
@@ -104,19 +104,19 @@ export default function ShareButtons({
               }}
               placeholder="mastodon.social"
               aria-label="Mastodon instance"
-              className="text-[10px] font-mono bg-crt-black border border-neon-cyan/30 text-neon-cyan px-2 py-1 w-32 focus:outline-none focus:border-neon-cyan/60"
+              className="text-xs font-mono bg-surface-base border border-white/15 text-signal-cyan px-2 py-1 w-32 focus:outline-none focus:border-signal-cyan/40"
               autoFocus
             />
             <button
               onClick={handleMastodonShare}
-              className="text-[10px] font-pixel px-2 py-1 border border-neon-cyan/30 text-neon-cyan/70 hover:text-neon-cyan hover:border-neon-cyan/60 transition-colors"
+              className="text-xs font-mono px-2 py-1 border border-white/15 text-signal-cyan hover:text-phos hover:border-signal-cyan/40 transition-colors"
               aria-label="Open Mastodon share"
             >
               GO
             </button>
             <button
               onClick={() => setShowMastodonInput(false)}
-              className="text-[10px] font-pixel text-matrix-green/30 hover:text-matrix-green/60 transition-colors px-1"
+              className="text-xs font-mono text-ink-min hover:text-phos transition-colors px-1"
               aria-label="Cancel Mastodon share"
             >
               ✕
@@ -127,10 +127,8 @@ export default function ShareButtons({
         {/* Copy link */}
         <button
           onClick={handleCopy}
-          className={`text-[10px] font-pixel px-2 py-1 border transition-colors ${
-            copied
-              ? "border-neon-cyan/60 text-neon-cyan bg-neon-cyan/10"
-              : "border-matrix-green/20 text-matrix-green/50 hover:text-neon-cyan hover:border-neon-cyan/40"
+          className={`text-xs font-mono px-2 py-1 border transition-colors ${
+            copied ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
           }`}
           aria-label="Copy link to clipboard"
         >

@@ -2,8 +2,8 @@
 
 import { Suspense, useEffect, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import MatrixRain from "@/components/effects/MatrixRain";
 import Navbar from "@/components/layout/Navbar";
+import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
 import {
   fetchSenatorsByState,
@@ -19,6 +19,7 @@ import { getScoreColor, asciiScoreBar } from "@/lib/representation";
 import { formatCurrency } from "@/lib/formatting";
 import { useUserState } from "@/hooks/useUserState";
 import { PARTY_COLORS } from "@/lib/partyStyles";
+import { BOXED_CONTROL } from "@/lib/controlStyles";
 
 type Chamber = "senate" | "house";
 
@@ -37,7 +38,6 @@ const SCORE_LABELS: Record<ScoreKey, string> = {
   independentVoting: "ALIGNMENT",
   legislativeEffectiveness: "LEGIS EFFECT",
 };
-
 
 function ScoreBar({ value, colorClass }: { value: number; colorClass: string }) {
   return (
@@ -67,28 +67,29 @@ function SenatorSelector({
   const label = side === "left" ? "LEFT" : "RIGHT";
 
   useEffect(() => {
-    fetchStates().then(setSenateStates).catch(() => {});
-    fetchRepStates().then(setHouseStates).catch(() => {});
+    fetchStates()
+      .then(setSenateStates)
+      .catch(() => {});
+    fetchRepStates()
+      .then(setHouseStates)
+      .catch(() => {});
   }, []);
 
-  const loadMembers = useCallback(
-    (state: string, ch: Chamber) => {
-      if (!state) return;
-      setLoading(true);
-      if (ch === "senate") {
-        fetchSenatorsByState(state)
-          .then(setMembers)
-          .catch(() => setMembers([]))
-          .finally(() => setLoading(false));
-      } else {
-        fetchRepresentativesByState(state, 1, 60)
-          .then((res) => setMembers(res.entries))
-          .catch(() => setMembers([]))
-          .finally(() => setLoading(false));
-      }
-    },
-    [],
-  );
+  const loadMembers = useCallback((state: string, ch: Chamber) => {
+    if (!state) return;
+    setLoading(true);
+    if (ch === "senate") {
+      fetchSenatorsByState(state)
+        .then(setMembers)
+        .catch(() => setMembers([]))
+        .finally(() => setLoading(false));
+    } else {
+      fetchRepresentativesByState(state, 1, 60)
+        .then((res) => setMembers(res.entries))
+        .catch(() => setMembers([]))
+        .finally(() => setLoading(false));
+    }
+  }, []);
 
   const handleChamberToggle = (newChamber: Chamber) => {
     setChamber(newChamber);
@@ -103,8 +104,8 @@ function SenatorSelector({
       : houseStates.map((s) => ({ code: s.code, name: s.name }));
 
   return (
-    <div className="terminal-window p-4 space-y-3">
-      <div className="font-mono text-xs text-neon-cyan/60 tracking-widest">
+    <div className="panel p-4 space-y-3">
+      <div className="font-mono text-xs text-ink-lo tracking-widest">
         {label} — SELECT LEGISLATOR
       </div>
 
@@ -113,9 +114,7 @@ function SenatorSelector({
         <button
           onClick={() => handleChamberToggle("senate")}
           className={`font-mono text-xs px-2 py-1 border transition-colors ${
-            chamber === "senate"
-              ? "border-neon-cyan/60 bg-neon-cyan/10 text-neon-cyan"
-              : "border-matrix-green/20 text-matrix-green/50 hover:border-matrix-green/40 hover:text-matrix-green/70"
+            chamber === "senate" ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
           }`}
         >
           SEN
@@ -123,9 +122,7 @@ function SenatorSelector({
         <button
           onClick={() => handleChamberToggle("house")}
           className={`font-mono text-xs px-2 py-1 border transition-colors ${
-            chamber === "house"
-              ? "border-neon-cyan/60 bg-neon-cyan/10 text-neon-cyan"
-              : "border-matrix-green/20 text-matrix-green/50 hover:border-matrix-green/40 hover:text-matrix-green/70"
+            chamber === "house" ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
           }`}
         >
           HOUSE
@@ -145,8 +142,7 @@ function SenatorSelector({
             onSelect(null, chamber);
             if (e.target.value) loadMembers(e.target.value, chamber);
           }}
-          className="w-full bg-matrix-dark-green/20 border border-matrix-green/30 text-matrix-green
-                     px-3 py-2 font-mono text-xs focus:outline-none focus:border-neon-cyan/50"
+          className="w-full bg-white/[0.03] border border-white/15 text-ink-hi px-3 py-2 font-mono text-xs focus:outline-none focus:border-signal-cyan/40"
         >
           <option value="">— SELECT STATE —</option>
           {stateOptions.map((s) => (
@@ -158,7 +154,7 @@ function SenatorSelector({
       </div>
 
       {loading && (
-        <div className="text-matrix-green/40 font-mono text-xs tracking-widest animate-pulse">
+        <div className="text-ink-min font-mono text-xs tracking-widest animate-pulse">
           LOADING...
         </div>
       )}
@@ -170,9 +166,7 @@ function SenatorSelector({
               key={s.id}
               onClick={() => onSelect(s, chamber)}
               className={`w-full text-left px-3 py-2 border transition-colors font-mono text-xs ${
-                s.id === selectedId
-                  ? "border-neon-cyan/60 bg-neon-cyan/10 text-neon-cyan"
-                  : "border-matrix-green/20 hover:border-matrix-green/40 text-matrix-green/80"
+                s.id === selectedId ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
               }`}
             >
               <span className={`mr-2 ${PARTY_COLORS[s.party]}`}>[{s.party}]</span>
@@ -227,7 +221,7 @@ function ComparisonTable({
   }) {
     if (side !== actual) return <span className="w-4" />;
     return (
-      <span className="text-matrix-green font-mono text-xs" aria-label="better score">
+      <span className="text-ink-hi font-mono text-xs" aria-label="better score">
         ▲
       </span>
     );
@@ -237,33 +231,33 @@ function ComparisonTable({
   const rightScorecardUrl = `/politicians/${right.id}`;
 
   return (
-    <div className="terminal-window overflow-hidden">
+    <div className="panel overflow-hidden">
       {/* Header */}
-      <div className="grid grid-cols-3 border-b border-matrix-green/20 bg-matrix-dark-green/20">
+      <div className="grid grid-cols-3 border-b border-white/[0.07] bg-white/[0.03]">
         <div className="p-3 text-center">
-          <div className={`font-pixel text-2xl ${leftColorClass}`}>{leftOverall}</div>
-          <div className={`font-pixel text-xs ${PARTY_COLORS[left.party]}`}>
+          <div className={`font-display font-semibold text-2xl ${leftColorClass}`}>
+            {leftOverall}
+          </div>
+          <div className={`font-mono text-xs ${PARTY_COLORS[left.party]}`}>
             [{left.party}] {left.state}
           </div>
-          <div className="text-matrix-green/80 text-xs font-pixel leading-snug mt-1">
-            {left.name}
-          </div>
-          <div className="text-matrix-green/30 font-mono text-[10px] mt-0.5 uppercase tracking-wide">
+          <div className="text-ink text-xs font-mono leading-snug mt-1">{left.name}</div>
+          <div className="text-ink-min font-mono text-xs mt-0.5 uppercase tracking-wide">
             {leftChamber === "house" ? "House" : "Senate"}
           </div>
         </div>
         <div className="p-3 flex items-center justify-center">
-          <span className="text-matrix-green/30 font-pixel text-xs">VS</span>
+          <span className="text-ink-min font-mono text-xs">VS</span>
         </div>
         <div className="p-3 text-center">
-          <div className={`font-pixel text-2xl ${rightColorClass}`}>{rightOverall}</div>
-          <div className={`font-pixel text-xs ${PARTY_COLORS[right.party]}`}>
+          <div className={`font-display font-semibold text-2xl ${rightColorClass}`}>
+            {rightOverall}
+          </div>
+          <div className={`font-mono text-xs ${PARTY_COLORS[right.party]}`}>
             [{right.party}] {right.state}
           </div>
-          <div className="text-matrix-green/80 text-xs font-pixel leading-snug mt-1">
-            {right.name}
-          </div>
-          <div className="text-matrix-green/30 font-mono text-[10px] mt-0.5 uppercase tracking-wide">
+          <div className="text-ink text-xs font-mono leading-snug mt-1">{right.name}</div>
+          <div className="text-ink-min font-mono text-xs mt-0.5 uppercase tracking-wide">
             {rightChamber === "house" ? "House" : "Senate"}
           </div>
         </div>
@@ -276,16 +270,16 @@ function ComparisonTable({
           head-to-head "better score" markers across chambers would imply
           a like-for-like comparison the methodology doesn't support. */}
       {leftChamber !== rightChamber && (
-        <div className="px-3 py-2 border-b border-neon-yellow/20 bg-neon-yellow/5 text-center">
-          <span className="text-neon-yellow/80 font-mono text-[10px] uppercase tracking-wide">
-            Cross-chamber comparison — scores are calibrated within each chamber,
-            so side-by-side numbers are indicative, not like-for-like
+        <div className="px-3 py-2 border-b border-signal-amber/40 bg-signal-amber/10 text-center">
+          <span className="text-signal-amber font-mono text-xs uppercase tracking-wide">
+            Cross-chamber comparison — scores are calibrated within each chamber, so side-by-side
+            numbers are indicative, not like-for-like
           </span>
         </div>
       )}
 
       {/* Score metrics */}
-      <div className="divide-y divide-matrix-green/10">
+      <div className="divide-y divide-white/[0.07]">
         {SCORE_KEYS.map((key) => {
           const lv = left.representationScore[key];
           const rv = right.representationScore[key];
@@ -298,20 +292,20 @@ function ComparisonTable({
               <div className="flex items-center justify-end gap-1.5">
                 <WinnerTag side={w} actual="left" />
                 <div className="text-right">
-                  <div className={`font-pixel text-sm ${lColor}`}>{lv}</div>
+                  <div className={`font-mono text-sm ${lColor}`}>{lv}</div>
                   <div className="hidden sm:block">
                     <ScoreBar value={lv} colorClass={lColor} />
                   </div>
                 </div>
               </div>
               <div className="text-center px-1">
-                <div className="text-[10px] text-matrix-green/50 font-mono leading-snug tracking-wide">
+                <div className="text-xs text-ink-lo font-mono leading-snug tracking-wide">
                   {SCORE_LABELS[key]}
                 </div>
               </div>
               <div className="flex items-center gap-1.5">
                 <div className="text-left">
-                  <div className={`font-pixel text-sm ${rColor}`}>{rv}</div>
+                  <div className={`font-mono text-sm ${rColor}`}>{rv}</div>
                   <div className="hidden sm:block">
                     <ScoreBar value={rv} colorClass={rColor} />
                   </div>
@@ -324,7 +318,7 @@ function ComparisonTable({
       </div>
 
       {/* Funding stats */}
-      <div className="border-t border-matrix-green/20 bg-matrix-dark-green/10 divide-y divide-matrix-green/10">
+      <div className="border-t border-white/[0.07] bg-white/[0.03] divide-y divide-white/[0.07]">
         {[
           {
             label: "TOTAL RAISED",
@@ -339,24 +333,24 @@ function ComparisonTable({
           { label: "PAC %", lv: `${leftPacPct}%`, rv: `${rightPacPct}%` },
         ].map(({ label, lv, rv }) => (
           <div key={label} className="grid grid-cols-3 items-center px-3 py-1.5">
-            <div className="text-right font-mono text-xs text-neon-pink/60">{lv}</div>
-            <div className="text-center text-[10px] text-matrix-green/40 font-mono tracking-wide">{label}</div>
-            <div className="text-left font-mono text-xs text-neon-pink/60">{rv}</div>
+            <div className="text-right font-mono text-xs text-ink-lo">{lv}</div>
+            <div className="text-center text-xs text-ink-min font-mono tracking-wide">{label}</div>
+            <div className="text-left font-mono text-xs text-ink-lo">{rv}</div>
           </div>
         ))}
       </div>
 
       {/* Full scorecard links */}
-      <div className="grid grid-cols-2 border-t border-matrix-green/20">
+      <div className="grid grid-cols-2 border-t border-white/[0.07]">
         <a
           href={leftScorecardUrl}
-          className="p-3 text-center font-mono text-xs tracking-widest text-neon-cyan/60 hover:bg-neon-cyan/5 hover:text-neon-cyan transition-colors border-r border-matrix-green/20"
+          className="p-3 text-center font-mono text-xs tracking-widest text-ink-lo hover:bg-signal-cyan/10 hover:text-phos transition-colors border-r border-white/[0.07]"
         >
           FULL SCORECARD →
         </a>
         <a
           href={rightScorecardUrl}
-          className="p-3 text-center font-mono text-xs tracking-widest text-neon-cyan/60 hover:bg-neon-cyan/5 hover:text-neon-cyan transition-colors"
+          className="p-3 text-center font-mono text-xs tracking-widest text-ink-lo hover:bg-signal-cyan/10 hover:text-phos transition-colors"
         >
           FULL SCORECARD →
         </a>
@@ -372,7 +366,14 @@ function ComparePageInner() {
   const [rightSenator, setRightSenator] = useState<Senator | null>(null);
   const [leftChamber, setLeftChamber] = useState<Chamber>("senate");
   const [rightChamber, setRightChamber] = useState<Chamber>("senate");
-  const [hydrating, setHydrating] = useState(false);
+  // Seeded from the URL rather than switched on inside the effect: whether
+  // this render will hydrate is already knowable from the query string, and
+  // setting it in the effect cost an extra render pass before the first
+  // request even went out. searchParams is stable for the initial render,
+  // which is the only one this initialiser is read on.
+  const [hydrating, setHydrating] = useState(() =>
+    Boolean(searchParams.get("leftId") || searchParams.get("rightId"))
+  );
   const [savedState] = useUserState();
   const [savedStateName, setSavedStateName] = useState<string | null>(null);
   const [quickLoading, setQuickLoading] = useState(false);
@@ -397,8 +398,6 @@ function ComparePageInner() {
 
     if (!leftId && !rightId) return;
 
-    setHydrating(true);
-
     const promises: Promise<void>[] = [];
 
     if (leftId) {
@@ -409,7 +408,7 @@ function ComparePageInner() {
             setLeftSenator(senator);
             setLeftChamber(leftCh);
           })
-          .catch(() => {}),
+          .catch(() => {})
       );
     }
 
@@ -421,7 +420,7 @@ function ComparePageInner() {
             setRightSenator(senator);
             setRightChamber(rightCh);
           })
-          .catch(() => {}),
+          .catch(() => {})
       );
     }
 
@@ -442,7 +441,7 @@ function ComparePageInner() {
       }
       router.replace(params.toString() ? `?${params}` : "/compare", { scroll: false });
     },
-    [router],
+    [router]
   );
 
   const handleLeft = useCallback(
@@ -451,7 +450,7 @@ function ComparePageInner() {
       setLeftChamber(ch);
       updateUrl(s, rightSenator, ch, rightChamber);
     },
-    [rightSenator, rightChamber, updateUrl],
+    [rightSenator, rightChamber, updateUrl]
   );
 
   const handleRight = useCallback(
@@ -460,7 +459,7 @@ function ComparePageInner() {
       setRightChamber(ch);
       updateUrl(leftSenator, s, leftChamber, ch);
     },
-    [leftSenator, leftChamber, updateUrl],
+    [leftSenator, leftChamber, updateUrl]
   );
 
   // Quick-populate from saved state
@@ -485,12 +484,11 @@ function ComparePageInner() {
   if (hydrating) {
     return (
       <>
-        <MatrixRain />
         <Navbar />
-        <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
+        <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
           <div className="max-w-5xl mx-auto">
-            <div className="terminal-window p-8 text-center">
-              <div className="font-mono text-xs text-matrix-green/40 tracking-widest animate-pulse">
+            <div className="panel p-8 text-center">
+              <div className="font-mono text-xs text-ink-min tracking-widest animate-pulse">
                 LOADING...
               </div>
             </div>
@@ -503,19 +501,19 @@ function ComparePageInner() {
 
   return (
     <>
-      <MatrixRain />
       <Navbar />
-      <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
+      <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-8">
-            <h1 className="font-pixel text-xl sm:text-3xl text-matrix-green tracking-widest mb-2">
-              COMPARE LEGISLATORS
-            </h1>
-            <p className="text-matrix-green/40 text-sm max-w-xl mx-auto">
+          <PageMasthead
+            className="mb-8"
+            eyebrow="Compare · two legislators, side by side"
+            title="Compare legislators"
+          >
+            <p>
               Select two legislators to compare their representation scores, funding sources, and
               voting independence side by side.
             </p>
-          </div>
+          </PageMasthead>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <SenatorSelector
@@ -540,8 +538,8 @@ function ComparePageInner() {
               rightChamber={rightChamber}
             />
           ) : (
-            <div className="terminal-window p-8 text-center space-y-4">
-              <div className="font-pixel text-sm text-matrix-green/40">
+            <div className="panel p-8 text-center space-y-4">
+              <div className="font-mono text-sm text-ink-min">
                 {!leftSenator && !rightSenator
                   ? "SELECT TWO LEGISLATORS ABOVE TO COMPARE"
                   : "SELECT A SECOND LEGISLATOR TO COMPARE"}
@@ -550,8 +548,7 @@ function ComparePageInner() {
                 <button
                   onClick={handleQuickCompare}
                   disabled={quickLoading}
-                  className="mt-2 px-4 py-2 border border-neon-cyan/40 text-neon-cyan font-mono text-xs tracking-widest
-                             hover:bg-neon-cyan/10 hover:border-neon-cyan/70 transition-colors
+                  className="mt-2 px-4 py-2 border border-signal-cyan/40 text-signal-cyan font-mono text-xs tracking-widest hover:bg-signal-cyan/10 hover:border-signal-cyan/40 transition-colors
                              disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {quickLoading

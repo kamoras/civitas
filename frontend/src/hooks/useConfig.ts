@@ -32,7 +32,5 @@ export function useCategoryLabel(key: string): string {
 }
 
 export function usePolicyLabel(area: string): string {
-  return area
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return area.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }

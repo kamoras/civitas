@@ -43,7 +43,8 @@ const SCORE_KEYS: ScoreKey[] = [
 ];
 
 const METRIC_BLURBS: Record<ScoreKey, string> = {
-  fundingIndependence: "How little of their campaign comes from PACs, and how diversified their donor base is",
+  fundingIndependence:
+    "How little of their campaign comes from PACs, and how diversified their donor base is",
   independentVoting: "Does their voting match what their state elected them to do?",
   fundingDiversity: "How many different industries fund them",
   legislativeEffectiveness: "How well they advance bills they sponsor",
@@ -73,10 +74,13 @@ function ScoreBar({
   return (
     <div className="flex flex-col gap-0.5">
       <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 text-sm">
-        <div className="w-48 shrink-0" id={`score-label-${label.replace(/\s+/g, "-").toLowerCase()}`}>
-          <span className="text-matrix-green/70">{label}</span>
-          <div className="text-[10px] text-neon-cyan/50 leading-tight">{blurb}</div>
-          {basis && <div className="text-[10px] text-matrix-green/40 italic leading-tight">{basis}</div>}
+        <div
+          className="w-48 shrink-0"
+          id={`score-label-${label.replace(/\s+/g, "-").toLowerCase()}`}
+        >
+          <span className="text-ink">{label}</span>
+          <div className="text-xs text-ink-lo leading-tight">{blurb}</div>
+          {basis && <div className="text-xs text-ink-min italic leading-tight">{basis}</div>}
           {entityType && entityId && dimensionKey && (
             <ScoreBreakdownPanel
               entityType={entityType}
@@ -94,11 +98,13 @@ function ScoreBar({
           aria-valuemax={100}
           aria-labelledby={`score-label-${label.replace(/\s+/g, "-").toLowerCase()}`}
         >
-          <span className={colorClass} aria-hidden="true">{bar}</span>
+          <span className={colorClass} aria-hidden="true">
+            {bar}
+          </span>
         </span>
         <span className="sm:hidden flex-1">
           <span
-            className="block h-2 bg-matrix-dark-green/30 border border-matrix-green/20"
+            className="block h-2 bg-white/[0.03] border border-white/[0.07]"
             role="progressbar"
             aria-valuenow={value}
             aria-valuemin={0}
@@ -111,13 +117,27 @@ function ScoreBar({
             />
           </span>
         </span>
-        <span className={`text-right w-12 shrink-0 font-pixel ${colorClass}`} aria-hidden="true">{value}</span>
+        <span
+          className={`text-right w-12 shrink-0 font-display font-semibold ${colorClass}`}
+          aria-hidden="true"
+        >
+          {value}
+        </span>
       </div>
     </div>
   );
 }
 
-export default function RepresentationScore({ breakdown, votingRecord, funding, sponsoredBills, rank, totalInChamber, entityId, chamber }: RepresentationScoreProps) {
+export default function RepresentationScore({
+  breakdown,
+  votingRecord,
+  funding,
+  sponsoredBills,
+  rank,
+  totalInChamber,
+  entityId,
+  chamber,
+}: RepresentationScoreProps) {
   const entityType = chamber === "house" ? "representative" : "senator";
   const overall = breakdown.overall;
   const label = getScoreLabel(overall);
@@ -138,7 +158,7 @@ export default function RepresentationScore({ breakdown, votingRecord, funding, 
     const pacPct = Math.round(((funding.totalFromPACs ?? 0) / funding.totalRaised) * 100);
     const smallPct = Math.round(funding.smallDonorPercentage ?? 0);
     const external = (funding.topDonors ?? []).filter(
-      (d) => d.type !== "CandidateAffiliated" && d.type !== "Self-Funded",
+      (d) => d.type !== "CandidateAffiliated" && d.type !== "Self-Funded"
     );
     const pool = external.reduce((a, d) => a + (d.total ?? 0), 0);
     const top10 = external.slice(0, 10).reduce((a, d) => a + (d.total ?? 0), 0);
@@ -167,25 +187,39 @@ export default function RepresentationScore({ breakdown, votingRecord, funding, 
     <div>
       <div className="flex items-end gap-4 mb-1">
         <div className="flex items-baseline gap-2 shrink-0">
-          <div className={`text-5xl sm:text-6xl font-pixel ${colorClass}`}>{overall}</div>
-          <div className={`text-2xl sm:text-3xl font-pixel ${colorClass} opacity-70`} title={`Grade: ${grade}`}>{grade}</div>
+          <div className={`text-5xl sm:text-6xl font-display font-semibold ${colorClass}`}>
+            {overall}
+          </div>
+          <div
+            className={`text-2xl sm:text-3xl font-display font-semibold ${colorClass} opacity-70`}
+            title={`Grade: ${grade}`}
+          >
+            {grade}
+          </div>
         </div>
         <div className="pb-2 min-w-0">
-          <div className="text-xs text-matrix-green/40">
+          <div className="text-xs text-ink-min">
             <MetricTooltip text="Weighted average of 3 sub-scores measuring how well this senator represents constituents. Based on funding independence (incl. donor-base diversity), voting alignment with their constituents, and legislative effectiveness. 100 = ideal representation, 0 = none. Scores near 50 mean limited data.">
               REPRESENTATION SCORECARD
             </MetricTooltip>
           </div>
-          <div className={`text-sm font-pixel ${colorClass} tracking-wider break-words`}>{label}</div>
-          <div className="text-[10px] text-matrix-green/50 mt-0.5">100 = fully represents constituents</div>
+          <div className={`text-sm font-mono ${colorClass} tracking-wider break-words`}>
+            {label}
+          </div>
+          <div className="text-xs text-ink-lo mt-0.5">100 = fully represents constituents</div>
         </div>
       </div>
 
       {rank != null && totalInChamber != null && (
         <div className="mb-4 text-xs font-mono tracking-wide">
-          <span className="text-neon-cyan/80">RANKS #{rank} OF {totalInChamber}</span>
-          <span className="text-matrix-green/30 mx-2">·</span>
-          <span className="text-matrix-green/60">BETTER THAN {Math.round(((totalInChamber - rank) / totalInChamber) * 100)}% OF THE CHAMBER</span>
+          <span className="text-signal-cyan">
+            RANKS #{rank} OF {totalInChamber}
+          </span>
+          <span className="text-ink-min mx-2">·</span>
+          <span className="text-ink-lo">
+            BETTER THAN {Math.round(((totalInChamber - rank) / totalInChamber) * 100)}% OF THE
+            CHAMBER
+          </span>
         </div>
       )}
 
@@ -207,8 +241,9 @@ export default function RepresentationScore({ breakdown, votingRecord, funding, 
         })}
       </div>
 
-      <div className="mt-3 text-[10px] text-matrix-green/50">
-        Data: fec.gov · congress.gov · govinfo.gov · voteview.com · Scores regress toward 50 when data is sparse
+      <div className="mt-3 text-xs text-ink-lo">
+        Data: fec.gov · congress.gov · govinfo.gov · voteview.com · Scores regress toward 50 when
+        data is sparse
       </div>
     </div>
   );

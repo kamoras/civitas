@@ -69,24 +69,24 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
-        className="relative z-10 w-full max-w-lg max-h-[85vh] overflow-y-auto border border-matrix-green/30 bg-crt-black shadow-2xl outline-none"
+        className="relative z-10 w-full max-w-lg max-h-[85vh] overflow-y-auto border border-white/15 bg-surface-base shadow-2xl outline-none"
       >
         {title && (
-          <div className="sticky top-0 flex items-center justify-between gap-3 border-b border-matrix-green/20 bg-crt-black px-4 py-3">
-            <h3 className="text-neon-cyan text-sm tracking-widest">{title.toUpperCase()}</h3>
+          <div className="sticky top-0 flex items-center justify-between gap-3 border-b border-white/[0.07] bg-surface-base px-4 py-3">
+            <h3 className="text-signal-cyan text-sm tracking-widest">{title.toUpperCase()}</h3>
             <button
               type="button"
               onClick={onClose}
               aria-label="Close"
-              className="text-matrix-green/50 hover:text-matrix-green transition-colors text-lg leading-none px-1 shrink-0"
+              className="text-ink-lo hover:text-phos transition-colors text-lg leading-none px-1 shrink-0"
             >
               ×
             </button>
           </div>
         )}
-        <div className="p-4 text-sm text-matrix-green/80 leading-relaxed">{children}</div>
+        <div className="p-4 text-sm text-ink leading-relaxed">{children}</div>
       </div>
     </div>,
-    document.body,
+    document.body
   );
 }

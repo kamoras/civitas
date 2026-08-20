@@ -6,6 +6,7 @@ import { fetchElectionInfo } from "@/lib/api";
 import type { ElectionInfo, ElectionState, ElectionSenator } from "@/lib/api";
 import { PARTY_COLORS, PARTY_BORDER } from "@/lib/partyStyles";
 import RaceMap, { FIPS_TO_STATE } from "@/components/elections/RaceMap";
+import { BOXED_CONTROL } from "@/lib/controlStyles";
 
 function formatCountdown(days: number): { value: string; unit: string }[] {
   if (days <= 0) return [{ value: "TODAY", unit: "" }];
@@ -31,26 +32,22 @@ function SenatorRow({ senator }: { senator: ElectionSenator }) {
   return (
     <Link
       href={`/politicians/${senator.id}`}
-      className={`flex items-center justify-between gap-3 p-3 border ${PARTY_BORDER[senator.party]} bg-matrix-dark-green/20 hover:border-neon-cyan/40 transition-all group`}
+      className={`flex items-center justify-between gap-3 p-3 border ${PARTY_BORDER[senator.party]} bg-white/[0.03] hover:border-signal-cyan/40 transition-all group`}
     >
       <div className="flex items-center gap-2 min-w-0">
-        <span className={`font-pixel text-[10px] shrink-0 ${PARTY_COLORS[senator.party]}`}>
+        <span className={`font-mono text-xs shrink-0 ${PARTY_COLORS[senator.party]}`}>
           [{senator.party}]
         </span>
-        <span className="text-sm text-matrix-green/80 group-hover:text-matrix-green truncate">
-          {senator.name}
-        </span>
+        <span className="text-sm text-ink group-hover:text-phos truncate">{senator.name}</span>
         {senator.upForElection && (
-          <span className="text-[9px] font-pixel px-1.5 py-0.5 bg-neon-yellow/10 border border-neon-yellow/30 text-neon-yellow/80 shrink-0">
+          <span className="text-xs font-mono px-1.5 py-0.5 bg-signal-amber/10 border border-signal-amber/40 text-signal-amber shrink-0">
             UP IN {nextElectionYear()}
           </span>
         )}
       </div>
       <div className="flex items-center gap-3 shrink-0">
-        <span className="text-[10px] text-matrix-green/40">
-          {senator.yearsInOffice}yr
-        </span>
-        <span className="text-sm font-pixel text-neon-cyan/70">
+        <span className="text-xs text-ink-min">{senator.yearsInOffice}yr</span>
+        <span className="text-sm font-mono text-signal-cyan">
           {Math.round(senator.overallScore)}
         </span>
       </div>
@@ -58,26 +55,18 @@ function SenatorRow({ senator }: { senator: ElectionSenator }) {
   );
 }
 
-function StatePanel({
-  stateData,
-  onClose,
-}: {
-  stateData: ElectionState;
-  onClose: () => void;
-}) {
+function StatePanel({ stateData, onClose }: { stateData: ElectionState; onClose: () => void }) {
   return (
     <div
-      className="terminal-window border-t-2 border-t-neon-cyan/50 p-5"
+      className="panel border-t-2 border-t-signal-cyan p-5"
       role="region"
       aria-label={`${stateData.state} election details`}
     >
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-pixel text-lg text-matrix-green">
-          {stateData.state}
-        </h3>
+        <h2 className="font-display font-semibold text-lg text-ink-hi">{stateData.state}</h2>
         <button
           onClick={onClose}
-          className="font-pixel text-sm text-matrix-green/40 hover:text-matrix-green"
+          className="font-mono text-sm text-ink-min hover:text-phos"
           aria-label="Close state detail panel"
         >
           [✕]
@@ -86,12 +75,12 @@ function StatePanel({
 
       <div className="flex gap-3 mb-4 flex-wrap">
         {stateData.hasSenateRace && (
-          <span className="text-[10px] font-pixel px-2 py-1 border border-neon-yellow/30 text-neon-yellow/80 bg-neon-yellow/5">
+          <span className="text-xs font-mono px-2 py-1 border border-signal-amber/40 text-signal-amber bg-signal-amber/10">
             SENATE RACE
           </span>
         )}
         {stateData.hasHouseRace && (
-          <span className="text-[10px] font-pixel px-2 py-1 border border-neon-pink/30 text-neon-pink/80 bg-neon-pink/5">
+          <span className="text-xs font-mono px-2 py-1 border border-signal-magenta/40 text-ink-lo bg-signal-magenta/10">
             {stateData.houseDistricts} HOUSE {stateData.houseDistricts === 1 ? "SEAT" : "SEATS"}
           </span>
         )}
@@ -99,7 +88,7 @@ function StatePanel({
 
       {stateData.senators.length > 0 && (
         <div className="mb-4">
-          <h4 className="font-pixel text-xs text-matrix-green/50 mb-2">CURRENT SENATORS</h4>
+          <h4 className="font-mono text-xs text-ink-lo mb-2">CURRENT SENATORS</h4>
           <div className="space-y-2">
             {stateData.senators.map((s) => (
               <SenatorRow key={s.id} senator={s} />
@@ -110,33 +99,32 @@ function StatePanel({
 
       {stateData.hasHouseRace && (
         <div>
-          <h4 className="font-pixel text-xs text-matrix-green/50 mb-2">HOUSE RACES</h4>
-          <div className="p-3 border border-neon-pink/20 bg-neon-pink/5">
+          <h4 className="font-mono text-xs text-ink-lo mb-2">HOUSE RACES</h4>
+          <div className="p-3 border border-signal-magenta/40 bg-signal-magenta/10">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-matrix-green/70">
+              <span className="text-sm text-ink">
                 {stateData.houseDistricts === 1
                   ? "At-large district"
                   : `${stateData.houseDistricts} congressional districts`}
               </span>
-              <span className="text-[10px] font-pixel text-neon-pink/60">
-                ALL UP IN {nextElectionYear()}
-              </span>
+              <span className="text-xs font-mono text-ink-lo">ALL UP IN {nextElectionYear()}</span>
             </div>
-            <p className="text-[11px] text-matrix-green/40 mt-2">
-              All {stateData.houseDistricts === 1 ? "1 seat" : `${stateData.houseDistricts} seats`} in the U.S. House are elected every 2 years.
+            <p className="text-xs text-ink-min mt-2">
+              All {stateData.houseDistricts === 1 ? "1 seat" : `${stateData.houseDistricts} seats`}{" "}
+              in the U.S. House are elected every 2 years.
             </p>
           </div>
         </div>
       )}
 
       {stateData.senators.length === 0 && !stateData.hasHouseRace && (
-        <p className="text-sm text-matrix-green/40">No election data available for this state.</p>
+        <p className="text-base text-ink-min">No election data available for this state.</p>
       )}
 
       {(stateData.hasSenateRace || stateData.hasHouseRace) && (
         <Link
           href={`/elections?state=${stateData.state}`}
-          className="inline-block mt-4 text-[11px] font-pixel text-neon-cyan/70 hover:text-neon-cyan"
+          className="inline-block mt-4 text-xs font-mono text-signal-cyan hover:text-phos"
         >
           View full race coverage →
         </Link>
@@ -172,9 +160,7 @@ export default function ElectionsTab() {
   const houseOnlyStates = useMemo(() => {
     if (!data) return new Set<string>();
     return new Set(
-      data.states
-        .filter((s) => s.hasHouseRace && !s.hasSenateRace)
-        .map((s) => s.state)
+      data.states.filter((s) => s.hasHouseRace && !s.hasSenateRace).map((s) => s.state)
     );
   }, [data]);
 
@@ -182,16 +168,19 @@ export default function ElectionsTab() {
 
   if (loading) {
     return (
-      <div className="terminal-window max-w-md mx-auto p-6 text-center">
-        <div className="text-neon-cyan animate-pulse text-lg">{">"} LOADING ELECTION DATA...</div>
+      <div className="panel max-w-md mx-auto p-6 text-center">
+        <div className="text-signal-cyan animate-pulse text-lg">{">"} LOADING ELECTION DATA...</div>
       </div>
     );
   }
 
-  if (!data) {
+  // The countdown is the whole point of the header, so a payload without one
+  // is "unavailable", not a header reading "NaN DAYS". This tab is the first
+  // thing to go quiet when the elections pipeline has not run yet.
+  if (!data?.nextElection) {
     return (
-      <div className="terminal-window max-w-md mx-auto p-6 text-center">
-        <div className="text-matrix-green/50">Election data unavailable.</div>
+      <div className="panel max-w-md mx-auto p-6 text-center">
+        <div className="text-ink-lo">Election data unavailable.</div>
       </div>
     );
   }
@@ -202,66 +191,64 @@ export default function ElectionsTab() {
   return (
     <div className="space-y-6">
       {/* Countdown header */}
-      <div className="terminal-window border-t-2 border-t-neon-yellow/50 p-6 text-center">
+      <div className="panel border-t-2 border-t-signal-amber p-6 text-center">
         {el.isElectionDay ? (
           <div>
-            <div className="font-pixel text-2xl sm:text-4xl text-neon-yellow animate-pulse mb-3">
+            <div className="font-display font-semibold text-2xl sm:text-4xl text-signal-amber animate-pulse mb-3">
               ELECTION DAY
             </div>
-            <p className="text-matrix-green/60 text-sm">{el.type}</p>
+            <p className="text-ink-lo text-base">{el.type}</p>
           </div>
         ) : (
           <div>
-            <div className="text-[10px] font-pixel text-matrix-green/40 mb-3">
-              NEXT FEDERAL ELECTION
-            </div>
+            <div className="text-xs font-mono text-ink-min mb-3">NEXT FEDERAL ELECTION</div>
             <div className="flex items-center justify-center gap-4 sm:gap-6 mb-4">
               {countdown.map((part, i) => (
                 <div key={i} className="text-center">
-                  <div className="font-pixel text-3xl sm:text-5xl text-neon-cyan">
+                  <div className="font-display font-semibold text-3xl sm:text-5xl text-signal-cyan">
                     {part.value}
                   </div>
-                  <div className="text-[10px] font-pixel text-matrix-green/40 mt-1">
-                    {part.unit}
-                  </div>
+                  <div className="text-xs font-mono text-ink-min mt-1">{part.unit}</div>
                 </div>
               ))}
             </div>
-            <div className="text-sm text-matrix-green/60 mb-1">{el.type}</div>
-            <div className="text-[10px] text-matrix-green/30 font-pixel">{el.date}</div>
+            <div className="text-sm text-ink-lo mb-1">{el.type}</div>
+            <div className="text-xs text-ink-min font-mono">{el.date}</div>
           </div>
         )}
 
-        <div className="flex justify-center gap-6 mt-5 pt-4 border-t border-matrix-green/10">
+        <div className="flex justify-center gap-6 mt-5 pt-4 border-t border-white/[0.07]">
           <div className="text-center">
-            <div className="font-pixel text-xl text-neon-yellow">{data.senateSeatsUp}</div>
-            <div className="text-[10px] font-pixel text-matrix-green/40">SENATE SEATS</div>
+            <div className="font-display font-semibold text-xl text-signal-amber">
+              {data.senateSeatsUp}
+            </div>
+            <div className="text-xs font-mono text-ink-min">SENATE SEATS</div>
           </div>
           <div className="text-center">
-            <div className="font-pixel text-xl text-neon-pink">{data.houseSeatsUp}</div>
-            <div className="text-[10px] font-pixel text-matrix-green/40">HOUSE SEATS</div>
+            <div className="font-display font-semibold text-xl text-signal-magenta">
+              {data.houseSeatsUp}
+            </div>
+            <div className="text-xs font-mono text-ink-min">HOUSE SEATS</div>
           </div>
           {el.year % 4 === 0 && (
             <div className="text-center">
-              <div className="font-pixel text-xl text-neon-cyan">1</div>
-              <div className="text-[10px] font-pixel text-matrix-green/40">PRESIDENCY</div>
+              <div className="font-display font-semibold text-xl text-signal-cyan">1</div>
+              <div className="text-xs font-mono text-ink-min">PRESIDENCY</div>
             </div>
           )}
         </div>
       </div>
 
       {/* Interactive US map */}
-      <div className="terminal-window p-4">
+      <div className="panel p-4">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <h3 className="font-pixel text-xs text-matrix-green/50">
-            {">"} SELECT A STATE
-          </h3>
+          <h2 className="font-mono text-xs text-ink-lo">{">"} SELECT A STATE</h2>
           <div className="flex items-center gap-3 flex-wrap">
-            <span className="flex items-center gap-1.5 text-[10px] text-matrix-green/40">
-              <span className="w-3 h-2 bg-neon-yellow/40 inline-block" /> SENATE + HOUSE
+            <span className="flex items-center gap-1.5 text-xs text-ink-min">
+              <span className="w-3 h-2 bg-signal-amber/10 inline-block" /> SENATE + HOUSE
             </span>
-            <span className="flex items-center gap-1.5 text-[10px] text-matrix-green/40">
-              <span className="w-3 h-2 inline-block bg-neon-pink/30" /> HOUSE ONLY
+            <span className="flex items-center gap-1.5 text-xs text-ink-min">
+              <span className="w-3 h-2 inline-block bg-signal-magenta/10" /> HOUSE ONLY
             </span>
           </div>
         </div>
@@ -288,38 +275,33 @@ export default function ElectionsTab() {
         />
       </div>
 
-      <details className="terminal-window p-4 mt-4">
-        <summary className="font-pixel text-xs text-matrix-green/60 hover:text-matrix-green cursor-pointer">
+      <details className="panel p-4 mt-4">
+        <summary className="font-mono text-xs text-ink-lo hover:text-phos cursor-pointer">
           List all states (keyboard accessible)
         </summary>
         <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-2 mt-3">
           {Object.values(FIPS_TO_STATE).map((abbr) => (
-              <button
-                key={abbr}
-                onClick={() => setSelectedState(selectedState === abbr ? null : abbr)}
-                className={`font-pixel text-[10px] py-1.5 px-2 border rounded transition-colors ${
-                  selectedState === abbr
-                    ? "border-neon-cyan bg-neon-cyan/20 text-neon-cyan"
-                    : "border-matrix-green/20 text-matrix-green/70 hover:border-matrix-green/40"
-                }`}
-              >
-                {abbr}
-              </button>
-            ))}
+            <button
+              key={abbr}
+              onClick={() => setSelectedState(selectedState === abbr ? null : abbr)}
+              className={`font-mono text-xs py-1.5 px-2 border  transition-colors ${
+                selectedState === abbr ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
+              }`}
+            >
+              {abbr}
+            </button>
+          ))}
         </div>
       </details>
 
       {/* State detail panel */}
       {selectedData && (
-        <StatePanel
-          stateData={selectedData}
-          onClose={() => setSelectedState(null)}
-        />
+        <StatePanel stateData={selectedData} onClose={() => setSelectedState(null)} />
       )}
 
       {!selectedData && (
-        <div className="terminal-window p-4 text-center">
-          <p className="text-matrix-green/40 text-sm">
+        <div className="panel p-4 text-center">
+          <p className="text-ink-min text-base">
             Click a state on the map to see its races and representatives.
           </p>
         </div>

@@ -2,16 +2,30 @@
 
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
-import MatrixRain from "@/components/effects/MatrixRain";
 import Footer from "@/components/layout/Footer";
+import PageMasthead from "@/components/layout/PageMasthead";
 import BackToTop from "@/components/BackToTop";
-import TerminalTitlebar from "@/components/TerminalTitlebar";
 import CandidateCard from "@/components/elections/CandidateCard";
 import CoverageFeed from "@/components/elections/CoverageFeed";
 import RaceFinancials from "@/components/elections/RaceFinancials";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
-import { formatPvi, isActiveCandidate, pviColor, raceTitleLabel } from "@/lib/elections";
+import { formatPvi, pviTextColor, isActiveCandidate, raceTitleLabel } from "@/lib/elections";
 import type { RaceDetail } from "@/types/election";
+
+/* The `.dat` titlebars come off here for the same reason they came off the
+   scorecard: a race is a contest between people, not a file on a disk, and
+   four stacked fake window chromes were the loudest thing on the page.
+   Sections are now separated by the rule weights the rest of the register
+   uses. */
+
+function SectionHeading({ children, aside }: { children: React.ReactNode; aside?: string }) {
+  return (
+    <h2 className="mb-3 flex items-baseline justify-between border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
+      <span>{children}</span>
+      {aside && <span aria-hidden="true">{aside}</span>}
+    </h2>
+  );
+}
 
 export default function RaceDetailClient({ race }: { race: RaceDetail }) {
   // FEC candidate files include paper filers and prior-cycle records —
@@ -21,93 +35,103 @@ export default function RaceDetailClient({ race }: { race: RaceDetail }) {
   const otherFilers = race.candidates.filter((c) => !isActiveCandidate(c));
 
   return (
-    <div className="min-h-screen bg-crt-black text-matrix-green">
-      <MatrixRain />
+    <div className="min-h-screen bg-surface-base text-ink">
       <Navbar />
-      <main id="main-content" tabIndex={-1} className="pt-24 pb-16 px-4">
-        <div className="max-w-3xl mx-auto">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="px-4 pb-16 pt-[var(--header-clearance)] sm:px-6"
+      >
+        <div className="mx-auto max-w-4xl">
           <Link
             href="/elections"
-            className="inline-block mb-6 font-mono text-xs text-matrix-green/50 hover:text-neon-cyan transition-colors"
+            className="mb-6 inline-block font-mono text-xs uppercase tracking-[0.12em] text-ink-lo transition-colors hover:text-ink-hi"
           >
-            ← BACK TO RACES
+            ← Back to races
           </Link>
 
-          <div className="terminal-window mb-6">
-            <TerminalTitlebar title={`${race.id.toLowerCase()}.dat`} />
-            <div className="p-6">
-              <div className="flex items-start justify-between gap-4 mb-2 flex-wrap">
-                <h1 className="font-pixel text-lg sm:text-2xl text-white/90">
-                  {race.cycleYear} {raceTitleLabel(race)}
-                  {race.isSpecial && (
-                    <span className="ml-2 text-[10px] font-pixel px-1.5 py-0.5 border border-neon-yellow/30 text-neon-yellow/80 align-middle">
-                      SPECIAL
-                    </span>
-                  )}
-                </h1>
-                <span className={`font-pixel text-sm ${pviColor(race.pvi)}`}>
+          {/* ── Masthead ── */}
+          <PageMasthead
+            eyebrow={`Race · ${race.id}`}
+            title={`${race.cycleYear} ${raceTitleLabel(race)}`}
+            aside={
+              <div className="text-right">
+                <p className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
+                  Partisan lean
+                </p>
+                <p className={`mt-1 font-mono text-2xl ${pviTextColor(race.pvi)}`}>
                   {formatPvi(race.pvi)}
-                  {race.pviLevel === "state" && race.office === "H" && (
-                    <span className="ml-1.5 font-pixel text-[8px] text-matrix-green/40 align-middle">
-                      (STATEWIDE LEAN)
-                    </span>
-                  )}
-                </span>
+                </p>
+                {race.pviLevel === "state" && race.office === "H" && (
+                  <p className="font-mono text-xs text-ink-min">statewide</p>
+                )}
               </div>
-              <p className="text-xs text-matrix-green/40">
+            }
+          >
+            <span className="flex flex-wrap items-center gap-3 font-mono text-xs text-ink-lo">
+              <span>
                 {race.candidates.length} {race.candidates.length === 1 ? "candidate" : "candidates"}{" "}
                 on record
-              </p>
-              <PviMethodologyNote />
-            </div>
-          </div>
-
-          <div className="terminal-window mb-6">
-            <TerminalTitlebar title="candidates.dat" />
-            <div className="p-6 space-y-3">
-              {race.candidates.length === 0 && (
-                <p className="text-sm text-matrix-green/40">
-                  No candidates on record for this race yet.
-                </p>
+              </span>
+              {race.isSpecial && (
+                <span className="border border-signal-amber/40 px-2 py-0.5 tracking-[0.12em] text-signal-amber">
+                  SPECIAL ELECTION
+                </span>
               )}
+            </span>
+            <span className="mt-3 block">
+              <PviMethodologyNote />
+            </span>
+          </PageMasthead>
+
+          {/* ── Candidates ── */}
+          <section className="mt-10">
+            <SectionHeading aside={`${activeCandidates.length} active`}>Candidates</SectionHeading>
+
+            {race.candidates.length === 0 && (
+              <p className="font-mono text-base text-ink-min">
+                No candidates on record for this race yet.
+              </p>
+            )}
+
+            <div className="space-y-3">
               {activeCandidates.map((c) => (
                 <CandidateCard key={c.id} candidate={c} />
               ))}
-              {otherFilers.length > 0 && (
-                <details className="border border-matrix-green/20 bg-terminal-bg/30 p-3">
-                  <summary className="font-pixel text-[10px] text-matrix-green/50 hover:text-matrix-green cursor-pointer">
-                    OTHER FEC FILERS ({otherFilers.length})
-                  </summary>
-                  <p className="text-[10px] text-matrix-green/40 mt-2">
-                    Paper filers and prior-cycle candidates on FEC record who have not raised funds
-                    this cycle.
-                  </p>
-                  <div className="space-y-3 mt-3">
-                    {otherFilers.map((c) => (
-                      <CandidateCard key={c.id} candidate={c} />
-                    ))}
-                  </div>
-                </details>
-              )}
             </div>
-          </div>
 
-          <div className="terminal-window mb-6">
-            <TerminalTitlebar title="fundraising.dat" />
-            <div className="p-6">
-              <RaceFinancials candidates={activeCandidates} />
-              <p className="text-[10px] text-matrix-green/30 mt-3">
-                Per FEC filings — totals lag by up to a quarter and amendments. Source: fec.gov.
-              </p>
-            </div>
-          </div>
+            {otherFilers.length > 0 && (
+              <details className="mt-4 border border-white/[0.09] bg-surface p-4">
+                <summary className="cursor-pointer font-mono text-xs uppercase tracking-[0.14em] text-ink-lo hover:text-ink-hi">
+                  Other FEC filers ({otherFilers.length})
+                </summary>
+                <p className="mt-2 font-mono text-xs leading-relaxed text-ink-min">
+                  Paper filers and prior-cycle candidates on FEC record who have not raised funds
+                  this cycle.
+                </p>
+                <div className="mt-3 space-y-3">
+                  {otherFilers.map((c) => (
+                    <CandidateCard key={c.id} candidate={c} />
+                  ))}
+                </div>
+              </details>
+            )}
+          </section>
 
-          <div className="terminal-window mb-6">
-            <TerminalTitlebar title="coverage.dat" />
-            <div className="p-6">
-              <CoverageFeed items={race.coverage} />
-            </div>
-          </div>
+          {/* ── Fundraising ── */}
+          <section className="mt-10">
+            <SectionHeading>Fundraising</SectionHeading>
+            <RaceFinancials candidates={activeCandidates} />
+            <p className="mt-3 font-mono text-xs leading-relaxed text-ink-min">
+              Per FEC filings — totals lag by up to a quarter and amendments. Source: fec.gov.
+            </p>
+          </section>
+
+          {/* ── Coverage ── */}
+          <section className="mt-10">
+            <SectionHeading aside={`${race.coverage.length} items`}>Coverage</SectionHeading>
+            <CoverageFeed items={race.coverage} />
+          </section>
         </div>
       </main>
       <BackToTop />

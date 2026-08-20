@@ -45,7 +45,7 @@ const _breakdownCache = new Map<string, Promise<Record<string, FetchedDimension>
 
 function fetchEntityBreakdown(
   entityType: BreakdownEntityType,
-  entityId: string,
+  entityId: string
 ): Promise<Record<string, FetchedDimension>> {
   const key = `${entityType}:${entityId}`;
   const cached = _breakdownCache.get(key);
@@ -53,13 +53,22 @@ function fetchEntityBreakdown(
 
   const promise = (async () => {
     if (entityType === "senator") {
-      return (await fetchSenatorScoreBreakdown(entityId)) as unknown as Record<string, FetchedDimension>;
+      return (await fetchSenatorScoreBreakdown(entityId)) as unknown as Record<
+        string,
+        FetchedDimension
+      >;
     }
     if (entityType === "representative") {
-      return (await fetchRepScoreBreakdown(entityId)) as unknown as Record<string, FetchedDimension>;
+      return (await fetchRepScoreBreakdown(entityId)) as unknown as Record<
+        string,
+        FetchedDimension
+      >;
     }
     if (entityType === "president") {
-      return (await fetchPresidentScoreBreakdown(entityId)) as unknown as Record<string, FetchedDimension>;
+      return (await fetchPresidentScoreBreakdown(entityId)) as unknown as Record<
+        string,
+        FetchedDimension
+      >;
     }
     const justice = await fetchJusticeScoreBreakdown(entityId);
     return justice.breakdown as unknown as Record<string, FetchedDimension>;
@@ -74,19 +83,21 @@ function formatWeight(w: number): string {
 
 function ComponentRow({ c }: { c: ScoreBreakdownComponent }) {
   return (
-    <div className="py-2.5 border-t border-matrix-green/10 first:border-t-0 first:pt-0">
+    <div className="py-2.5 border-t border-white/[0.07] first:border-t-0 first:pt-0">
       <div className="flex items-baseline justify-between gap-3">
-        <span className="text-matrix-green/80 text-sm">
+        <span className="text-ink text-sm">
           {c.label}
           {c.weight !== undefined && (
-            <span className="text-matrix-green/40"> ({formatWeight(c.weight)} of this score)</span>
+            <span className="text-ink-min"> ({formatWeight(c.weight)} of this score)</span>
           )}
         </span>
         {c.score !== undefined && (
-          <span className={`font-mono shrink-0 text-base ${getScoreColor(c.score)}`}>{c.score.toFixed(1)}</span>
+          <span className={`font-mono shrink-0 text-base ${getScoreColor(c.score)}`}>
+            {c.score.toFixed(1)}
+          </span>
         )}
       </div>
-      <div className="text-matrix-green/50 text-sm leading-relaxed mt-1">{c.detail}</div>
+      <div className="text-ink-lo text-sm leading-relaxed mt-1">{c.detail}</div>
     </div>
   );
 }
@@ -94,8 +105,9 @@ function ComponentRow({ c }: { c: ScoreBreakdownComponent }) {
 function DimensionBody({ dimension }: { dimension: FetchedDimension }) {
   if (dimension.seedOnly) {
     return (
-      <p className="text-matrix-green/50 italic">
-        Editorial estimate — not computed from a live formula. See the methodology page for sourcing.
+      <p className="text-ink-lo italic">
+        Editorial estimate — not computed from a live formula. See the methodology page for
+        sourcing.
       </p>
     );
   }
@@ -106,23 +118,30 @@ function DimensionBody({ dimension }: { dimension: FetchedDimension }) {
           <ComponentRow key={i} c={c} />
         ))}
         {dimension.note && (
-          <p className="text-matrix-green/40 italic mt-3 pt-3 border-t border-matrix-green/10">{dimension.note}</p>
+          <p className="text-ink-min italic mt-3 pt-3 border-t border-white/[0.07]">
+            {dimension.note}
+          </p>
         )}
       </div>
     );
   }
   if (dimension.note) {
-    return <p className="text-matrix-green/50 italic">{dimension.note}</p>;
+    return <p className="text-ink-lo italic">{dimension.note}</p>;
   }
   // Justice dimensions: no components array, just a plain-language detail
   // string plus raw supporting numbers (already shown elsewhere on the page).
   if (dimension.detail) {
-    return <p className="text-matrix-green/70 leading-relaxed">{dimension.detail}</p>;
+    return <p className="text-ink leading-relaxed">{dimension.detail}</p>;
   }
-  return <p className="text-matrix-green/40 italic">No breakdown available.</p>;
+  return <p className="text-ink-min italic">No breakdown available.</p>;
 }
 
-export default function ScoreBreakdownPanel({ entityType, entityId, dimensionKey, label }: ScoreBreakdownPanelProps) {
+export default function ScoreBreakdownPanel({
+  entityType,
+  entityId,
+  dimensionKey,
+  label,
+}: ScoreBreakdownPanelProps) {
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<LoadState>("idle");
   const [dimension, setDimension] = useState<FetchedDimension | null>(null);
@@ -145,16 +164,18 @@ export default function ScoreBreakdownPanel({ entityType, entityId, dimensionKey
       <button
         type="button"
         onClick={handleOpen}
-        className="text-[10px] text-matrix-green/40 hover:text-matrix-green/70 transition-colors underline underline-offset-2 cursor-pointer"
+        className="text-xs text-ink-min hover:text-phos transition-colors underline underline-offset-2 cursor-pointer"
       >
         show the math
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title={label}>
-        {state === "loading" && <p className="text-matrix-green/40">Loading…</p>}
-        {state === "error" && <p className="text-red-500/70">Couldn&apos;t load the breakdown — try again.</p>}
+        {state === "loading" && <p className="text-ink-min">Loading…</p>}
+        {state === "error" && (
+          <p className="text-signal-red">Couldn&apos;t load the breakdown — try again.</p>
+        )}
         {state === "ready" && dimension && <DimensionBody dimension={dimension} />}
         {state === "ready" && !dimension && (
-          <p className="text-matrix-green/40 italic">No breakdown data for this dimension.</p>
+          <p className="text-ink-min italic">No breakdown data for this dimension.</p>
         )}
       </Modal>
     </div>

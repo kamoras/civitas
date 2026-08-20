@@ -67,43 +67,43 @@ export default function AddressLookup({ ballotState, onResolved }: AddressLookup
           onChange={(e) => setAddress(e.target.value)}
           placeholder="Enter your address to find your district"
           aria-label="Your address"
-          className="flex-1 min-w-[220px] bg-crt-black border border-matrix-green/30 text-matrix-green font-mono text-xs px-3 py-2 placeholder:text-matrix-green/30"
+          className="flex-1 min-w-[220px] bg-surface-base border border-white/15 text-ink-hi font-mono text-xs px-3 py-2 placeholder:text-ink-min"
         />
         <button
           type="submit"
           disabled={status.kind === "loading" || !address.trim()}
-          className="font-pixel text-[10px] px-3 py-2 border border-neon-cyan/40 text-neon-cyan/90 hover:bg-neon-cyan/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="font-mono text-xs px-3 py-2 border border-signal-cyan/40 text-signal-cyan hover:bg-signal-cyan/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {status.kind === "loading" ? "LOOKING UP…" : "FIND MY DISTRICT"}
         </button>
       </form>
-      <p className="text-[10px] text-matrix-green/30 mt-1.5">
+      <p className="text-xs text-ink-min mt-1.5">
         Resolved via the free U.S. Census Bureau geocoder — never stored, on this page or anywhere
         else.
       </p>
       {status.kind === "no-match" && (
-        <p className="text-[11px] text-neon-yellow/70 mt-1.5">
+        <p className="text-xs text-signal-amber mt-1.5">
           Couldn&apos;t match that address. Try including your city and ZIP code, or use the
           dropdown below.
         </p>
       )}
       {status.kind === "wrong-state" && (
-        <p className="text-[11px] text-neon-yellow/70 mt-1.5">
+        <p className="text-xs text-signal-amber mt-1.5">
           That address is in {status.state}, not {ballotState} —{" "}
-          <Link href={`/elections/states/${status.state}`} className="text-neon-cyan/80 underline">
+          <Link href={`/elections/states/${status.state}`} className="text-signal-cyan underline">
             view {status.state}&apos;s ballot instead
           </Link>
           .
         </p>
       )}
       {status.kind === "district-not-found" && (
-        <p className="text-[11px] text-neon-yellow/70 mt-1.5">
+        <p className="text-xs text-signal-amber mt-1.5">
           Found district {status.district}, but it&apos;s not in our House data for {ballotState}{" "}
           yet — use the dropdown below.
         </p>
       )}
       {status.kind === "error" && (
-        <p className="text-[11px] text-rep-red/70 mt-1.5">{status.message}</p>
+        <p className="text-xs text-signal-red mt-1.5">{status.message}</p>
       )}
     </div>
   );

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { formatCurrency, formatUtcDate, formatWeekRange, localDateStr, safeHref } from "./formatting";
+import {
+  describeDaysLeft,
+  formatCurrency,
+  formatUtcDate,
+  formatWeekRange,
+  localDateStr,
+  safeHref,
+} from "./formatting";
 
 describe("formatCurrency", () => {
   it("formats billions", () => {
@@ -52,8 +59,9 @@ describe("localDateStr", () => {
 
 describe("formatUtcDate", () => {
   it("formats a date string using the given locale/options", () => {
-    expect(formatUtcDate("2026-07-04", { year: "numeric", month: "long", day: "numeric" }, "en-US"))
-      .toBe("July 4, 2026");
+    expect(
+      formatUtcDate("2026-07-04", { year: "numeric", month: "long", day: "numeric" }, "en-US")
+    ).toBe("July 4, 2026");
   });
 
   it("returns an empty string for an empty input", () => {
@@ -63,7 +71,11 @@ describe("formatUtcDate", () => {
   it("preserves the calendar date regardless of local timezone", () => {
     // Parsed as local noon specifically so a UTC-negative timezone can't
     // roll the date back to the previous day.
-    const result = formatUtcDate("2026-01-01", { year: "numeric", month: "numeric", day: "numeric" }, "en-US");
+    const result = formatUtcDate(
+      "2026-01-01",
+      { year: "numeric", month: "numeric", day: "numeric" },
+      "en-US"
+    );
     expect(result).toContain("2026");
     expect(result).toMatch(/1\/1\/2026|1\/1\/26/);
   });
@@ -116,5 +128,39 @@ describe("formatWeekRange", () => {
 
   it("falls back to the raw range for unparseable dates", () => {
     expect(formatWeekRange("", "")).toBe("–");
+  });
+});
+
+describe("describeDaysLeft", () => {
+  // Comment deadlines arrive as bare dates from regulations.gov; the reader's
+  // timezone must not shift which day the countdown lands on.
+  const asOf = Date.UTC(2026, 7, 18, 15, 0, 0);
+
+  it("counts whole days to a future deadline", () => {
+    expect(describeDaysLeft("2026-08-25", asOf)).toBe("7 days left");
+  });
+
+  it("says 'closes today' on the deadline itself", () => {
+    expect(describeDaysLeft("2026-08-18", asOf)).toBe("closes today");
+  });
+
+  it("says 'closes today' for a deadline already past", () => {
+    expect(describeDaysLeft("2026-08-01", asOf)).toBe("closes today");
+  });
+
+  it("uses the singular for the last full day", () => {
+    expect(describeDaysLeft("2026-08-19", asOf)).toBe("1 day left");
+  });
+
+  it("treats an offset-less timestamp as UTC, not viewer-local", () => {
+    // The suite runs in America/Los_Angeles (see vitest.config.ts). Parsed as
+    // local time this would be 7-8h later and could round to a different day.
+    expect(describeDaysLeft("2026-08-21T00:00:00", asOf)).toBe(
+      describeDaysLeft("2026-08-21T00:00:00Z", asOf)
+    );
+  });
+
+  it("returns empty string for an unparseable date rather than 'NaN days left'", () => {
+    expect(describeDaysLeft("not a date", asOf)).toBe("");
   });
 });

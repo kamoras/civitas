@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { BillDetail } from "@/types/bill";
+import { usableRecord } from "@/lib/ssrPayload";
 import BillDetailClient from "./BillDetailClient";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
@@ -12,7 +13,7 @@ async function fetchBill(id: string): Promise<BillDetail | null> {
       next: { revalidate: 120 },
     });
     if (!res.ok) return null;
-    return await res.json();
+    return usableRecord<BillDetail>(await res.json(), "billId", "title");
   } catch {
     return null;
   }
@@ -43,11 +44,7 @@ export async function generateMetadata({
   };
 }
 
-export default async function BillDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function BillDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const bill = await fetchBill(id);
 

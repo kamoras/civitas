@@ -38,10 +38,10 @@ export default function NotablePartyBreaks({
   }
 
   return (
-    <div className="mt-2 border-t border-matrix-green/10 pt-2">
+    <div className="mt-2 border-t border-white/[0.07] pt-2">
       <button
         onClick={handleToggle}
-        className="font-pixel text-[10px] text-neon-cyan/60 hover:text-neon-cyan transition-colors flex items-center gap-1"
+        className="font-mono text-xs text-ink-lo hover:text-phos transition-colors flex items-center gap-1"
         aria-expanded={open}
       >
         <span aria-hidden="true">{open ? "▼" : "▶"}</span>
@@ -51,51 +51,55 @@ export default function NotablePartyBreaks({
       {open && (
         <div className="mt-2 space-y-2" role="list" aria-label="Party break votes">
           {loading && (
-            <div className="text-[10px] text-matrix-green/40 font-pixel animate-pulse">
-              LOADING VOTES...
-            </div>
+            <div className="text-xs text-ink-min font-mono animate-pulse">LOADING VOTES...</div>
           )}
           {votes && votes.length === 0 && (
-            <div className="text-[10px] text-matrix-green/40 font-pixel italic">
+            <div className="text-xs text-ink-min font-mono italic">
               No key party-break votes found.
             </div>
           )}
-          {votes && votes.map((vote) => (
-            <div key={`${vote.billId}-${vote.date}`} role="listitem" className="flex flex-col gap-0.5 py-1 border-b border-matrix-green/10">
-              <div className="flex items-start justify-between gap-2">
-                <a
-                  href={`https://www.congress.gov/search?q=${encodeURIComponent(vote.billName)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[11px] text-matrix-green/80 hover:text-neon-cyan transition-colors leading-snug flex-1 min-w-0"
-                >
-                  {vote.billName}
-                </a>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <span
-                    className={`font-pixel text-[10px] px-1 py-0.5 border ${
-                      vote.vote === "Yea"
-                        ? "text-matrix-green border-matrix-green/40 bg-matrix-green/10"
-                        : "text-red-400 border-red-400/40 bg-red-400/10"
-                    }`}
+          {votes &&
+            votes.map((vote) => (
+              <div
+                key={`${vote.billId}-${vote.date}`}
+                role="listitem"
+                className="flex flex-col gap-0.5 py-1 border-b border-white/[0.07]"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <a
+                    href={`https://www.congress.gov/search?q=${encodeURIComponent(vote.billName)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-ink hover:text-phos transition-colors leading-snug flex-1 min-w-0"
                   >
-                    {vote.vote.toUpperCase()}
-                  </span>
-                  <span className="text-[9px] text-matrix-green/30 font-mono">{vote.date}</span>
+                    {vote.billName}
+                  </a>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span
+                      className={`font-mono text-xs px-1 py-0.5 border ${
+                        vote.vote === "Yea"
+                          ? "text-ink-hi border-white/15 bg-white/[0.03]"
+                          : "text-signal-red border-signal-red/40 bg-signal-red/10"
+                      }`}
+                    >
+                      {vote.vote.toUpperCase()}
+                    </span>
+                    <span className="text-xs text-ink-min font-mono">{vote.date}</span>
+                  </div>
                 </div>
+                {vote.policyArea && vote.policyArea !== "PROCEDURAL" && (
+                  <span className="text-xs text-ink-lo font-mono">
+                    {vote.policyArea.replace(/_/g, " ")}
+                  </span>
+                )}
+                {vote.description && (
+                  <p className="text-xs text-ink-lo leading-snug">
+                    {vote.description.slice(0, 100)}
+                    {vote.description.length > 100 ? "…" : ""}
+                  </p>
+                )}
               </div>
-              {vote.policyArea && vote.policyArea !== "PROCEDURAL" && (
-                <span className="text-[9px] text-neon-cyan/40 font-pixel">
-                  {vote.policyArea.replace(/_/g, " ")}
-                </span>
-              )}
-              {vote.description && (
-                <p className="text-[10px] text-matrix-green/50 leading-snug">
-                  {vote.description.slice(0, 100)}{vote.description.length > 100 ? "…" : ""}
-                </p>
-              )}
-            </div>
-          ))}
+            ))}
         </div>
       )}
     </div>

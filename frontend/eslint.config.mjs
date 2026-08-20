@@ -1,5 +1,5 @@
-import coreWebVitals from 'eslint-config-next/core-web-vitals';
-import typescript from 'eslint-config-next/typescript';
+import coreWebVitals from "eslint-config-next/core-web-vitals";
+import typescript from "eslint-config-next/typescript";
 
 // react-hooks/set-state-in-effect and react-hooks/purity are new strict rules
 // introduced in eslint-plugin-react-hooks v5 (shipped with Next.js 16). The
@@ -14,15 +14,15 @@ const config = [
   ...typescript,
   {
     settings: {
-      react: { version: '19' },
+      react: { version: "19" },
     },
     rules: {
-      'react-hooks/set-state-in-effect': 'warn',
-      'react-hooks/purity': 'warn',
-      'jsx-a11y/anchor-is-valid': 'warn',
-      'jsx-a11y/click-events-have-key-events': 'warn',
-      'jsx-a11y/no-static-element-interactions': 'warn',
-      'jsx-a11y/no-noninteractive-element-interactions': 'warn',
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/purity": "warn",
+      "jsx-a11y/anchor-is-valid": "warn",
+      "jsx-a11y/click-events-have-key-events": "warn",
+      "jsx-a11y/no-static-element-interactions": "warn",
+      "jsx-a11y/no-noninteractive-element-interactions": "warn",
     },
   },
 ];

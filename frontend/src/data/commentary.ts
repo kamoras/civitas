@@ -57,7 +57,9 @@ export function generateCommentary(senator: Senator): string[] {
   // Lobbying matches
   if (lobbyingMatches.length > 0) {
     const aligned = lobbyingMatches.filter((m) => m.senatorVoteAligned);
-    const withResult = lobbyingMatches.filter((m) => m.senatorVoteAligned !== null && m.senatorVoteAligned !== undefined);
+    const withResult = lobbyingMatches.filter(
+      (m) => m.senatorVoteAligned !== null && m.senatorVoteAligned !== undefined
+    );
     if (aligned.length > 0 && withResult.length > 0) {
       comments.push(
         `In ${aligned.length} of ${withResult.length} evaluable donor-vote overlaps, ${senator.name} voted in the same direction as the donor's industry interests. This is a correlation — not evidence of influence — but worth noting.`

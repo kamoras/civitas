@@ -50,14 +50,11 @@ export default function GlobeTab() {
         if (globeRef.current) {
           const controls = globeRef.current.controls();
           if (controls) controls.autoRotate = false;
-          globeRef.current.pointOfView(
-            { lat: country.lat, lng: country.lng, altitude: 1.8 },
-            800,
-          );
+          globeRef.current.pointOfView({ lat: country.lat, lng: country.lng, altitude: 1.8 }, 800);
         }
       }
     },
-    [countries, scrollToDetail],
+    [countries, scrollToDetail]
   );
 
   const pointsData = countries.map((c) => ({
@@ -78,7 +75,7 @@ export default function GlobeTab() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <div className="text-neon-cyan animate-pulse font-pixel text-sm">
+        <div className="text-signal-cyan animate-pulse font-mono text-sm">
           {">"} MAPPING GLOBAL RELATIONS...
         </div>
       </div>
@@ -87,15 +84,15 @@ export default function GlobeTab() {
 
   if (countries.length === 0) {
     return (
-      <div className="terminal-window max-w-md mx-auto p-6 text-center">
-        <div className="text-matrix-green/50">No international news found in current feeds.</div>
+      <div className="panel max-w-md mx-auto p-6 text-center">
+        <div className="text-ink-lo">No international news found in current feeds.</div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="text-center text-[10px] text-matrix-green/40 font-pixel mb-2">
+      <div className="text-center text-xs text-ink-min font-mono mb-2">
         CLICK OR TAP A POINT TO SEE U.S.-RELATED NEWS FOR THAT COUNTRY
       </div>
 
@@ -112,7 +109,10 @@ export default function GlobeTab() {
           pointAltitude={0.01}
           pointRadius="size"
           pointColor="color"
-          pointLabel={(d: object) => { const p = d as { country: string }; return `<div style="font-family:monospace;font-size:11px;color:#00ff41;background:rgba(0,0,0,0.85);padding:6px 10px;border:1px solid #00ff4133;border-radius:2px"><b>${p.country}</b><br/>${countries.find((c) => c.country === p.country)?.articleCount || 0} articles</div>`; }}
+          pointLabel={(d: object) => {
+            const p = d as { country: string };
+            return `<div style="font-family:monospace;font-size:11px;color:#00ff41;background:rgba(0,0,0,0.85);padding:6px 10px;border:1px solid #00ff4133;border-radius:2px"><b>${p.country}</b><br/>${countries.find((c) => c.country === p.country)?.articleCount || 0} articles</div>`;
+          }}
           onPointClick={handlePointClick}
           atmosphereColor="#00ff41"
           atmosphereAltitude={0.15}
@@ -122,12 +122,12 @@ export default function GlobeTab() {
       {selected && (
         <div
           ref={detailRef}
-          className="terminal-window border-t-2 border-t-green-400/50 p-5 sm:p-6 scroll-mt-4"
+          className="panel border-t-2 border-t-phos/50 p-5 sm:p-6 scroll-mt-4"
           role="region"
           aria-label={`U.S. and ${selected.country} news`}
         >
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-pixel text-base sm:text-lg text-green-400">
+            <h3 className="font-display font-semibold text-base sm:text-lg text-phos-mid">
               U.S. &amp; {selected.country}
             </h3>
             <button
@@ -138,35 +138,30 @@ export default function GlobeTab() {
                   if (controls) controls.autoRotate = true;
                 }
               }}
-              className="text-matrix-green/40 hover:text-matrix-green font-pixel text-xs"
+              className="text-ink-min hover:text-phos font-mono text-xs"
               aria-label="Close country detail panel"
             >
               [CLOSE]
             </button>
           </div>
-          <div className="text-[10px] text-matrix-green/40 mb-4">
+          <div className="text-xs text-ink-min mb-4">
             {selected.articleCount} article{selected.articleCount !== 1 ? "s" : ""} from recent news
           </div>
           <div className="space-y-3">
             {selected.articles.map((article, i) => (
-              <div
-                key={i}
-                className="border-l-2 border-l-green-400/30 pl-3"
-              >
+              <div key={i} className="border-l-2 border-l-phos/30 pl-3">
                 <a
                   href={safeHref(article.url) || "#"}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-sm text-matrix-green/80 hover:text-neon-cyan transition-colors leading-relaxed"
+                  className="text-sm text-ink hover:text-phos transition-colors leading-relaxed"
                 >
                   {article.title}
                 </a>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="text-[10px] text-matrix-green/30">{article.source}</span>
+                  <span className="text-xs text-ink-min">{article.source}</span>
                   {article.date && (
-                    <span className="text-[10px] text-matrix-green/20">
-                      {article.date.split("T")[0]}
-                    </span>
+                    <span className="text-xs text-ink-min">{article.date.split("T")[0]}</span>
                   )}
                 </div>
               </div>
@@ -186,19 +181,14 @@ export default function GlobeTab() {
                 if (globeRef.current) {
                   const controls = globeRef.current.controls();
                   if (controls) controls.autoRotate = false;
-                  globeRef.current.pointOfView(
-                    { lat: c.lat, lng: c.lng, altitude: 1.8 },
-                    800,
-                  );
+                  globeRef.current.pointOfView({ lat: c.lat, lng: c.lng, altitude: 1.8 }, 800);
                 }
               }}
-              className="terminal-window p-2.5 text-left hover:border-green-400/30 transition-colors"
+              className="panel p-2.5 text-left hover:border-phos/30 transition-colors"
               aria-label={`View news about ${c.country}`}
             >
-              <div className="font-pixel text-[10px] text-green-400/80 truncate">
-                {c.country}
-              </div>
-              <div className="text-[10px] text-matrix-green/40 mt-0.5">
+              <div className="font-mono text-xs text-phos-mid truncate">{c.country}</div>
+              <div className="text-xs text-ink-min mt-0.5">
                 {c.articleCount} article{c.articleCount !== 1 ? "s" : ""}
               </div>
             </button>
