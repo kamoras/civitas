@@ -81,7 +81,16 @@ export default function Footer() {
         */}
         <div className="grid grid-cols-1 gap-6 pt-5 md:grid-cols-12 md:gap-9">
           <div className="md:col-span-4">
+            {/* CIVITAS appears at the top of every page (nav) and, on the
+                homepage, in the overprint mark too — this colophon is the
+                one place the FULL name belongs: civitas-research.org is the
+                domain, "Civitas" alone is the mark, "Civitas Research" is
+                the standing name for the project itself, stated once, the
+                way a masthead credits a publication under its logo rather
+                than repeating the logo. */}
             <p className="font-mono text-xs leading-[1.9] tracking-[0.08em] text-ink-min">
+              CIVITAS RESEARCH
+              <br />
               NON-PROFIT PUBLIC-INTEREST PROJECT
               <br />
               NO PARTY, CANDIDATE OR PAC MONEY

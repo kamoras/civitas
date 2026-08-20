@@ -151,9 +151,17 @@ export default function RecordsBand() {
             showing this from 640px wrapped the band and put the fixed header
             at 102px, past the clearance every page reserves. Below
             `lg` the wordmark immediately underneath already says "CIVITAS",
-            so nothing is lost. Measured across 320-1280px. */}
+            so nothing is lost. Measured across 320-1280px.
+
+            No "CIVITAS" prefix on the label itself (2026-08, reader feedback):
+            it sat 86px above the nav wordmark, which sits directly above the
+            homepage's own overprint mark — three repeats of the same word
+            stacked at the top of one screen. This band is the one of the
+            three that costs nothing to drop: "PUBLIC RECORDS OFFICE" reads as
+            this office's, the nav's, by proximity — a letterhead names the
+            department once it's under the company's own logo. */}
         <span className="hidden font-mono text-xs tracking-[0.16em] text-ink-lo lg:inline">
-          CIVITAS <span className="text-ink-min">/</span> PUBLIC RECORDS OFFICE
+          PUBLIC RECORDS OFFICE
         </span>
 
         {/*
