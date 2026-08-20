@@ -45,6 +45,15 @@ export function TrendingBadge() {
   );
 }
 
+/** Marks a fact added since this issue's last genuine content change (see
+ *  backend/app/fact_diff.py). Phosphor, matching TrendingBadge/"TOP ISSUE" —
+ *  this is a computed fact about the data, not decoration. `[NEW]` rather
+ *  than a bare dot: the site already uses bracketed tags for exactly this
+ *  register (the navbar's [BSKY]). */
+export function NewFactTag() {
+  return <span className="ml-2 align-middle font-mono text-[10px] text-phos-mid">[NEW]</span>;
+}
+
 export function SourceBadge({ name, url }: { name: string; url?: string }) {
   if (url) {
     return (

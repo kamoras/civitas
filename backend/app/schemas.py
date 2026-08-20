@@ -572,6 +572,12 @@ class ActionIssueSchema(CamelModel):
     title: str
     summary: str
     facts: list[str] = []
+    # Subset of `facts` (by exact text) not present as of this issue's last
+    # genuine content change — empty for an issue that's never been updated,
+    # not "every fact", since that would just mean the issue is new, not
+    # that anything changed since a reader might have last seen it. See
+    # app/fact_diff.py.
+    new_facts: list[str] = []
     actions: list[ActionItemSchema] = []
     source_urls: list[str] = []
     source_names: list[str] = []

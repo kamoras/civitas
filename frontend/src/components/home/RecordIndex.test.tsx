@@ -15,6 +15,7 @@ function issue(o: Partial<ActionIssue> = {}): ActionIssue {
     title: "Prescription drug pricing",
     summary: "A summary of the issue.",
     facts: [],
+    newFacts: [],
     actions: [],
     sourceUrls: [],
     sourceNames: [],

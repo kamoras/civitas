@@ -19,6 +19,7 @@ import BackToTop from "@/components/BackToTop";
 import {
   PolicyBadge,
   TrendingBadge,
+  NewFactTag,
   MonitorChips,
   RepresentativeContacts,
   TrackLegislation,
@@ -215,7 +216,10 @@ function HeroIssue({
                 <span className="mt-0.5 shrink-0 font-mono text-xs text-phos-mid">
                   {String(i + 1).padStart(2, "0")}
                 </span>
-                <span className="font-display text-[15px] leading-relaxed text-ink">{fact}</span>
+                <span className="font-display text-[15px] leading-relaxed text-ink">
+                  {fact}
+                  {issue.newFacts.includes(fact) && <NewFactTag />}
+                </span>
               </li>
             ))}
           </ol>
@@ -343,6 +347,7 @@ function SecondaryIssue({
                     </span>
                     <span className="font-display text-[15px] leading-relaxed text-ink">
                       {fact}
+                      {issue.newFacts.includes(fact) && <NewFactTag />}
                     </span>
                   </li>
                 ))}

@@ -17,6 +17,7 @@ from app.api.admin import require_admin
 from app.api.rate_limit import WriteRateLimit, client_ip
 from app.database import get_db, get_visits_db
 from app.election_calendar import next_election_day, seats_up_for_year
+from app.fact_diff import new_facts_since
 from app.issue_ids import from_public_id, to_public_id
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.time_utils import utcnow
@@ -228,6 +229,13 @@ def _build_issue_response(
         getattr(issue, "related_monitor_slugs", "[]")
     )
 
+    current_facts = _parse_json_field(issue.facts)
+    previous_facts = _parse_json_field(getattr(issue, "previous_facts", "[]"))
+    # Empty previous_facts means never-updated, not "everything changed" —
+    # marking a brand-new issue's own facts as "new" would be true but
+    # meaningless (of course they are, the issue just appeared).
+    new_facts = new_facts_since(current_facts, previous_facts) if previous_facts else []
+
     return ActionIssueSchema(
         id=issue.id,
         public_id=to_public_id(issue.id),
@@ -236,7 +244,8 @@ def _build_issue_response(
         rank=issue.rank,
         title=issue.title,
         summary=issue.summary,
-        facts=_parse_json_field(issue.facts),
+        facts=current_facts,
+        new_facts=new_facts,
         actions=action_items,
         source_urls=_parse_json_field(issue.source_urls),
         source_names=_parse_json_field(issue.source_names),

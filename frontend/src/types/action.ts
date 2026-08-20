@@ -49,6 +49,9 @@ export interface ActionIssue {
   title: string;
   summary: string;
   facts: string[];
+  /** Subset of `facts` not present as of this issue's last genuine content
+   *  change — empty for an issue that's never been updated. */
+  newFacts: string[];
   actions: ActionItem[];
   sourceUrls: string[];
   sourceNames: string[];
