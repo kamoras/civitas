@@ -14,18 +14,25 @@
  * a fill behind a call to action" (tailwind.config.ts) — and it made the
  * loudest mark on a leaderboard the word ALL rather than any of the data.
  *
- * The surviving answer is phosphor as border and text over a 10% wash. It
- * reads as selected without competing with the figures, it is the same
- * colour language as the tab rule below, and the wash is an established
- * idiom here already (the homepage's REQUEST A RECORD header uses it).
+ * The surviving answer is INK, not phosphor: a bright rule, bright text and a
+ * faint wash, against a dim rule and dim text.
+ *
+ * Phosphor was the obvious choice and it was wrong. Green on the furniture —
+ * selected filters, tab rules, the band's edge, the scrollbar — is what made
+ * the site read as a terminal rather than a register, whatever the words
+ * said. The rule now is that phosphor lands on the DATA (a score, a live
+ * figure, a run that completed) and never on the chrome around it. That
+ * leaves a leaderboard whose loudest green is the score column, which is
+ * where a reader should be looking anyway.
  *
  * Selection is never carried by colour alone: BOXED keeps a border on both
- * states and TAB keeps a 3px rule, so the shape changes too.
+ * states and TAB keeps a 3px rule, so weight and shape change too — which is
+ * also why an ink treatment is legible at all.
  */
 
 /** A boxed control — filter pill, segmented button, pagination number. */
 export const BOXED_CONTROL = {
-  selected: "border-phos bg-phos/10 text-phos",
+  selected: "border-ink-lo bg-white/[0.06] text-ink-hi",
   unselected: "border-white/[0.07] text-ink-lo hover:border-white/30 hover:text-ink",
 } as const;
 
@@ -35,7 +42,7 @@ export const BOXED_CONTROL = {
  * appears to punch through the strip's rule.
  */
 export const TAB_CONTROL = {
-  selected: "border-phos text-ink-hi",
+  selected: "border-ink-hi text-ink-hi",
   unselected: "border-transparent text-ink-min hover:text-ink-lo",
 } as const;
 

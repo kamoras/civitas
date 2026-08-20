@@ -143,7 +143,7 @@ export default function RecordsBand() {
     run?.completedAt && state.label === "COMPLETE" ? formatRunTimestamp(run.completedAt) : null;
 
   return (
-    <div className="border-b-3 border-phos bg-surface-base">
+    <div className="border-b-3 border-ink-min/60 bg-surface-base">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-6 gap-y-1 px-4 py-2 sm:px-6">
         {/* Revealed at `lg`, matching the nav's breakpoint — not `sm`.
 

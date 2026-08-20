@@ -29,7 +29,7 @@ export default function PageMasthead({
   className?: string;
 }) {
   return (
-    <header className={`border-b-3 border-phos pb-5 ${className}`.trim()}>
+    <header className={`border-b-3 border-ink-min/60 pb-5 ${className}`.trim()}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">{eyebrow}</p>

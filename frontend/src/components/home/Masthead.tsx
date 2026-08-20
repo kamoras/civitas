@@ -50,29 +50,34 @@ export default function Masthead() {
             <span className="relative">CIVITAS</span>
           </div>
 
-          <h1 className="mt-6 font-display text-3xl font-extrabold uppercase leading-[1.03] tracking-[-0.025em] text-ink-hi sm:mt-7 sm:text-[43px]">
-            Who funds them.
-            <br />
-            How they vote.
-            <br />
-            What they pass.
+          {/* A statement of scope, not a slogan.
+
+              The same three clauses were set at 43px extrabold uppercase over
+              three lines, which is billboard treatment — the one place the
+              voice slipped from register to pitch. The clauses are the honest
+              description of what the record covers, so they stay; what goes is
+              the shouting. A masthead states its remit and gets out of the
+              way. */}
+          <h1 className="mt-6 max-w-2xl font-display text-[26px] font-semibold leading-[1.22] tracking-[-0.015em] text-ink-hi sm:mt-7 sm:text-[32px]">
+            A public record of who funds every member of Congress, how they vote, and what they
+            pass.
           </h1>
 
           <p className="mt-4 max-w-xl font-display text-base leading-relaxed text-ink-lo sm:text-[17px]">
-            Every member of Congress, scored nightly from federal filings. Every number traces back
-            to the document it came from. Nothing here is an estimate.
+            Scored nightly from federal filings. Every number traces back to the document it came
+            from. Nothing here is an estimate.
           </p>
         </div>
 
         <div className="md:col-span-4">
           <form
             onSubmit={submit}
-            className="border border-phos/35"
+            className="border border-ink-min/45"
             aria-labelledby="request-a-record"
           >
             <h2
               id="request-a-record"
-              className="border-b border-phos/35 bg-phos/10 px-3 py-1.5 font-mono text-xs tracking-[0.16em] text-phos-mid"
+              className="border-b border-ink-min/45 bg-white/[0.04] px-3 py-1.5 font-mono text-xs tracking-[0.16em] text-ink-lo"
             >
               REQUEST A RECORD
             </h2>
@@ -133,7 +138,7 @@ export default function Masthead() {
             <br />
             or PAC money
             <br />
-            <span className="text-signal-magenta">AGPL-3.0 · SELF-HOSTED</span>
+            <span className="text-signal-red/85">AGPL-3.0 · SELF-HOSTED</span>
           </p>
         </div>
       </div>

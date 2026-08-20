@@ -41,7 +41,7 @@ const NAV_LINKS: readonly { href: string; label: string; accent?: boolean }[] = 
  */
 function navLinkClass(active: boolean, accent: boolean | undefined, size: "sm" | "xs"): string {
   const base = `font-mono ${size === "xs" ? "text-xs" : "text-sm"} uppercase whitespace-nowrap border-b-2 pb-0.5 transition-colors`;
-  if (active) return `${base} border-phos text-phos`;
+  if (active) return `${base} border-ink-hi text-ink-hi`;
   return `${base} border-transparent ${accent ? "text-ink-hi hover:text-phos" : "text-ink-lo hover:text-ink-hi"}`;
 }
 

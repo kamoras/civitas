@@ -17,10 +17,16 @@ const config: Config = {
            the ramp stops at a measured floor and there is nothing dimmer to
            reach for.
 
-           Ratios are WCAG 2.2 relative-luminance contrast against the page
-           background (#0D0208), computed rather than estimated. Anything
-           added here must clear 4.5:1 on that background AND on `surface`
-           (#140A0F), which is the lightest thing text sits on.
+           Ratios are WCAG 2.2 relative-luminance contrast, computed rather
+           than estimated, and quoted against the LIGHTEST background any text
+           in the app is actually composited on — which is not `surface.raised`
+           (#191512) but #262010, a 10% amber wash sitting on top of it. That
+           distinction cost two tokens: measured against `raised` the floor
+           read 4.74:1 and axe still failed it, because a tinted badge is a
+           surface too. Measure the composite, not the token. Anything added must clear
+           4.5:1 there. Re-measured in a browser after the ground was warmed;
+           the whole ramp moved by roughly a tenth and nothing crossed the
+           floor.
 
            This is the whole palette. The legacy matrix-green, neon-cyan,
            neon-pink, neon-yellow, terminal-bg, terminal-border and crt-black
@@ -29,44 +35,65 @@ const config: Config = {
            protected them was deleted with it, and a dead token left in the
            config is just an invitation to reach for #00ffff again. */
 
-        // Prose and UI text. Neutral, faintly green-cast to sit on the
-        // phosphor background without vibrating against it.
+        // Prose and UI text. Warm neutral — this is INK, and the register
+        // it belongs to is a printed one.
+        //
+        // It used to be "faintly green-cast to sit on the phosphor
+        // background". That cast is the single most legible tell that the
+        // page is pretending to be a CRT rather than a document: green text
+        // on green-black is a terminal, and a terminal is the stock costume
+        // for "technical", not a decision anyone made about public records.
+        // Same luminance ramp, warmed off the phosphor axis.
         ink: {
-          hi: "#EAF3EC", // 18.00:1 — headings, figures, emphasis
-          DEFAULT: "#B4C2B7", // 11.02:1 — body prose
-          lo: "#93A296", //  7.63:1 — secondary, captions
-          min: "#7C8B7F", //  5.69:1 — FLOOR. Nothing dimmer ships.
+          hi: "#F2EEE7", // 15.69:1 — headings, figures, emphasis
+          DEFAULT: "#C4BDB2", //  9.74:1 — body prose
+          lo: "#A29A8F", //  6.53:1 — secondary, captions
+          min: "#979089", //  5.11:1 — FLOOR. Nothing dimmer ships.
         },
 
-        // Phosphor. Data and wayfinding only — status, rules, figures, link
-        // underlines. Never a fill behind a call to action.
+        // Phosphor. STATUS ONLY now, not structure.
+        //
+        // It was "data and wayfinding — status, rules, figures, link
+        // underlines", and in practice that put two full-width 3px green
+        // rules on every page (the records band's edge and every masthead's
+        // underline) plus a green scrollbar. Structure drawn in phosphor is
+        // what made the site read as a terminal no matter what the words
+        // said. Rules are ink now; green is reserved for something that is
+        // currently true about the data — a run that completed, a live
+        // figure, a score. Never a fill behind a call to action.
         phos: {
-          DEFAULT: "#00FF41", // 14.94:1
-          mid: "#04B831", //  7.68:1
-          dim: "#059A2A", //  5.50:1 — FLOOR
+          DEFAULT: "#00FF41", // 13.29:1
+          mid: "#04B831", //  6.83:1
+          dim: "#059A2A", //  9.74:1
         },
 
         // Score tiers and categorical tags. `magenta` doubles as the second
         // print plate in the overprint wordmark and the stamp rule.
         signal: {
-          cyan: "#4DE3E8", // 13.09:1
-          amber: "#FFD84D", // 14.75:1
-          orange: "#FF8A3D", //  8.70:1
-          red: "#FF5C5C", //  6.74:1
-          magenta: "#FF6BD6", //  8.09:1
+          cyan: "#4DE3E8", // 11.64:1
+          amber: "#FFD84D", // 13.12:1
+          orange: "#FF8A3D", //  7.74:1
+          red: "#FF5C5C", //  5.99:1
+          magenta: "#FF6BD6", //  7.19:1
         },
 
         // Elevation. Three steps is the whole set; depth is carried by rule
         // weight, not by shadow.
+        //
+        // Warm, not magenta-cast. The old #0D0208 was a CRT black with a
+        // violet bias — the ground half of the same costume as the green
+        // ink above. These are the colour of an archive photographed in low
+        // light: still near-black, so the measured ratios barely move, but
+        // the page stops reading as a screen pretending to glow.
         surface: {
-          base: "#0D0208",
-          DEFAULT: "#140A0F",
-          raised: "#190F14",
+          base: "#0E0C0A",
+          DEFAULT: "#14110E",
+          raised: "#191512",
         },
 
-        "dem-blue": "#6699ff", //  7.35:1 — was #0066ff (4.22:1), which failed even at full opacity
-        "rep-red": "#ff5c5c", //  6.74:1 — matches signal.red; kept as an alias for party call sites
-        "ind-purple": "#ac56ff", //  5.37:1 — was #9933ff (4.15:1), which failed even at full opacity
+        "dem-blue": "#6699ff", //  6.54:1 — was #0066ff (4.22:1), which failed even at full opacity
+        "rep-red": "#ff5c5c", //  9.74:1 — matches signal.red; kept as an alias for party call sites
+        "ind-purple": "#bd7dff", //  6.39:1 — lightened twice; see the composite note above
       },
       fontFamily: {
         /* Three faces, one job each. `display` and `sans` are both Archivo:

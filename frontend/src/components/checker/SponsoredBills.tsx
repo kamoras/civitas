@@ -103,7 +103,7 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
               }
             }}
             aria-pressed={filter === "all"}
-            className={`panel p-2 transition-colors cursor-pointer ${filter === "all" ? "border-phos/40 bg-white/[0.03]" : "hover:bg-white/[0.03]"}`}
+            className={`panel p-2 transition-colors cursor-pointer ${filter === "all" ? "border-ink-lo bg-white/[0.06]" : "hover:bg-white/[0.03]"}`}
           >
             <div className="text-xl font-display font-semibold text-ink-hi">{bills.length}</div>
             <div className="text-xs text-ink-min">

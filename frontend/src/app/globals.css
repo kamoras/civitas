@@ -6,13 +6,15 @@
      cannot reach a utility class — pseudo-elements, ::selection, the
      scrollbar. Keep the two in step; the config is the source of truth and
      carries the measured contrast ratios. */
-  --surface-base: #0d0208;
-  --surface: #140a0f;
-  --ink-hi: #eaf3ec;
-  --ink: #b4c2b7;
-  --ink-min: #7c8b7f;
+  --surface-base: #0e0c0a;
+  --surface: #14110e;
+  --ink-hi: #f2eee7;
+  --ink: #c4bdb2;
+  --ink-lo: #a29a8f;
+  --ink-min: #979089;
   --phos: #00ff41;
   --signal-cyan: #4de3e8;
+  --signal-red: #ff5c5c;
   --signal-magenta: #ff6bd6;
   --hairline: rgba(255, 255, 255, 0.09);
 
@@ -75,12 +77,14 @@ li {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--phos);
-  border-radius: 2px;
+  /* Ink, not phosphor. A glowing green scrollbar is the most literal
+     terminal cue available and it rode every scroll container in the app,
+     including small ones inside content. Green is reserved for status. */
+  background: var(--ink-min);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--signal-cyan);
+  background: var(--ink-lo);
 }
 
 /* ===== CRT SCANLINES ===== */
@@ -396,12 +400,16 @@ a[target="_blank"] {
    a stamped border. The rotation is deliberate and small; anything past
    ~3deg starts to read as a sticker. */
 .stamp {
+  /* A rubber stamp, in stamp ink.
+
+     It was magenta with a magenta glow, which made a compliance notice the
+     most saturated thing on the homepage and read as a sticker rather than an
+     impression. Real stamps are red, sit flat on the page, and are slightly
+     off-register — the tilt below is the only part of that worth keeping.
+     The glow is gone; a stamp does not emit light. */
   display: inline-block;
-  border: 2px solid var(--signal-magenta);
-  box-shadow:
-    0 0 0 1px var(--surface-base),
-    0 0 0 3px rgba(255, 107, 214, 0.35);
-  color: var(--signal-magenta);
+  border: 2px solid var(--signal-red);
+  color: var(--signal-red);
   font-family: var(--font-share-tech), ui-monospace, monospace;
   text-transform: uppercase;
   letter-spacing: 0.14em;
