@@ -40,11 +40,23 @@ const WORDMARK_STYLE = {
  * else in its default face — a scrambled mix, not a design choice. One font
  * for the whole image reads as consistent even where the site itself would
  * use a second (monospace) face for labels; this is a compact preview
- * asset, not the site chrome. */
+ * asset, not the site chrome.
+ *
+ * The User-Agent header is not incidental: Google's CSS2 API answers a
+ * DIFFERENT font format depending on it — truetype for a plain/absent UA,
+ * woff2 for a browser-like one — and confirmed live in this exact Next.js
+ * version, handing Satori a woff2 buffer hard-crashes the edge function
+ * (kills the connection outright, "failed to pipe response", no catchable
+ * JS error to fall back from) rather than failing gracefully. An edge
+ * runtime's own fetch() can plausibly send a browser-like default UA, so
+ * this pins a deliberately non-browser one to force the truetype branch
+ * every time rather than leaving it to whatever the runtime happens to
+ * send. */
 async function loadArchivoBold(text: string): Promise<ArrayBuffer> {
   const css = await (
     await fetch(
-      `https://fonts.googleapis.com/css2?family=Archivo:wght@700&text=${encodeURIComponent(text)}`
+      `https://fonts.googleapis.com/css2?family=Archivo:wght@700&text=${encodeURIComponent(text)}`,
+      { headers: { "User-Agent": "civitas-og-image-generator" } }
     )
   ).text();
   const src = css.match(/src: url\(([^)]+)\) format\('(?:opentype|truetype)'\)/);
@@ -54,9 +66,16 @@ async function loadArchivoBold(text: string): Promise<ArrayBuffer> {
 }
 
 export default async function OgImage() {
-  const archivoBold = await loadArchivoBold(
-    `${WORDMARK}${SUBTITLE}${DESCRIPTION}${DOMAIN}`
-  );
+  // The old version had no external dependency and never failed. This route
+  // is hit by every crawler unfurling any page link, so an outage on
+  // Google's end (or its response shape changing) degrades to Satori's
+  // default face rather than 500ing every social-share preview on the site.
+  let archivoBold: ArrayBuffer | null = null;
+  try {
+    archivoBold = await loadArchivoBold(`${WORDMARK}${SUBTITLE}${DESCRIPTION}${DOMAIN}`);
+  } catch {
+    // fall through with archivoBold still null
+  }
 
   return new ImageResponse(
     (
@@ -177,6 +196,15 @@ export default async function OgImage() {
         </div>
       </div>
     ),
-    { ...size, fonts: [{ name: "Archivo", data: archivoBold, weight: 700, style: "normal" }] }
+    {
+      ...size,
+      // Satori requires at least one *loaded* font — passing an empty array
+      // throws "No fonts are loaded", it isn't a valid empty-fallback value
+      // the way [] usually is. Omitting the key entirely is what actually
+      // falls back to Satori's own default face.
+      ...(archivoBold
+        ? { fonts: [{ name: "Archivo", data: archivoBold, weight: 700, style: "normal" }] }
+        : {}),
+    }
   );
 }
