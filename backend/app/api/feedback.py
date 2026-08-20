@@ -1,13 +1,19 @@
 """
 Site feedback form -> GitHub issue.
 
-Visitors can't file GitHub issues directly (the repo is private), so this
-endpoint is the actual reporting path advertised on /accessibility and
-/feedback: it takes a form submission and creates the issue server-side
+Visitors can't file GitHub issues directly (no account prompt on the site),
+so this endpoint is the actual reporting path advertised on /accessibility
+and /feedback: it takes a form submission and creates the issue server-side
 using our own token, never exposing any credential to the client.
+
+kamoras/civitas is a public repo, so every issue this creates is public too
+— the form says so and collects no contact info, on purpose. It used to
+carry an optional "email if you want a reply" field from back when the repo
+was private; once the repo went public that field was quietly publishing
+whatever a visitor typed there (#95 shipped a real address). Dropped rather
+than kept behind an honesty relabel: there's no private place to put it.
 """
 import logging
-import re
 
 import httpx
 from fastapi import APIRouter, HTTPException
@@ -32,15 +38,11 @@ _CATEGORY_LABELS: dict[str, str] = {
 
 _MESSAGE_MAX_LEN = 4000
 _GITHUB_API_TIMEOUT = 15.0
-# Loose on purpose — this only gates what we'll echo into a GitHub issue for
-# optional follow-up contact, not a mailbox-existence check.
-_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class FeedbackRequest(BaseModel):
     category: str = Field(..., pattern="^(bug|idea|accessibility|data|other)$")
     message: str = Field(..., min_length=10, max_length=_MESSAGE_MAX_LEN)
-    email: str | None = Field(None, max_length=254)
     page_url: str | None = Field(None, max_length=500)
 
     @field_validator("message")
@@ -49,16 +51,6 @@ class FeedbackRequest(BaseModel):
         v = v.strip()
         if len(v) < 10:
             raise ValueError("message must be at least 10 characters")
-        return v
-
-    @field_validator("email")
-    @classmethod
-    def validate_email(cls, v: str | None) -> str | None:
-        if v is None or v.strip() == "":
-            return None
-        v = v.strip()
-        if not _EMAIL_RE.match(v):
-            raise ValueError("not a valid email address")
         return v
 
 
@@ -82,7 +74,7 @@ def _fence(text: str) -> str:
 
 def _sanitize_field(text: str) -> str:
     """Neutralize @mentions and #issue-refs in a short single-line field
-    (page URL, contact) that is shown inline rather than fenced."""
+    (page URL) that is shown inline rather than fenced."""
     return text.replace("@", "@​").replace("#", "#​")
 
 
@@ -95,11 +87,6 @@ def _build_issue_body(body: FeedbackRequest) -> str:
     ]
     if body.page_url:
         lines.append(f"**Page:** {_sanitize_field(body.page_url)}")
-    if body.email:
-        # Regex-validated to a real address; its "@" is not at a word
-        # boundary (it follows the local part), so GitHub doesn't render it
-        # as a mention — shown verbatim so the contact stays usable.
-        lines.append(f"**Contact:** {body.email}")
     lines.append("")
     lines.append("_Submitted via the site feedback form. Message body is quoted verbatim; treat links with caution._")
     return "\n".join(lines)
