@@ -149,8 +149,21 @@ export default function FeedbackPage() {
                     placeholder="Describe what you were trying to do, what happened, and what you expected instead."
                     className="w-full font-mono text-sm bg-surface-base border border-white/[0.07] focus:border-phos/40 text-ink-hi placeholder-white/15 px-3 py-2 outline-none resize-y"
                   />
-                  <p className="font-mono text-xs text-ink-min mt-1 text-right">
-                    {trimmed.length} / {MESSAGE_MAX}
+                  <p className="font-mono text-xs mt-1 flex items-center justify-between">
+                    {/* The button disables below MESSAGE_MIN with nothing on
+                        the page saying why — reported live as "blocked from
+                        submitting" with no visible cause. This is the cause,
+                        made visible instead of silent. */}
+                    <span className="text-signal-amber">
+                      {trimmed.length > 0 && trimmed.length < MESSAGE_MIN
+                        ? `${MESSAGE_MIN - trimmed.length} more character${
+                            MESSAGE_MIN - trimmed.length === 1 ? "" : "s"
+                          } needed`
+                        : ""}
+                    </span>
+                    <span className="text-ink-min">
+                      {trimmed.length} / {MESSAGE_MAX}
+                    </span>
                   </p>
                 </div>
 
