@@ -311,7 +311,13 @@ async def get_action_issue(issue_id: str, response: Response, db: Session = Depe
     response.headers["Cache-Control"] = "public, max-age=300"
     resolved_id = from_public_id(issue_id)
     if resolved_id is None and issue_id.isdigit():
-        resolved_id = int(issue_id)
+        # SQLite's INTEGER column caps at a signed 8-byte int; a longer
+        # digit string (a bot, a mistyped URL) isn't a ROWID that could
+        # ever exist, and binding it as a query parameter overflows and
+        # raises rather than just missing — a real id never gets close to
+        # this bound, so treat anything past it as "no such issue".
+        candidate = int(issue_id)
+        resolved_id = candidate if candidate <= 2**63 - 1 else None
     issue = (
         db.query(ActionIssue).filter(ActionIssue.id == resolved_id).first()
         if resolved_id is not None else None

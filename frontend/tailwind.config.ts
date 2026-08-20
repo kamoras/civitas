@@ -113,7 +113,7 @@ const config: Config = {
         },
 
         "dem-blue": "#82acff", // Lc 56 ·  9.06:1 — was #0066ff (4.22:1), which failed even at full opacity
-        "rep-red": "#ff8989", // Lc 56 ·  9.02:1 — alias of signal.red — matches signal.red; kept as an alias for party call sites
+        "rep-red": "#ff8989", // Lc 56 ·  9.02:1 — matches signal.red; kept as an alias for party call sites
         "ind-purple": "#c995ff", // Lc 56 ·  9.06:1 — lightened twice; see the composite note above
       },
       fontFamily: {

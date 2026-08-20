@@ -371,3 +371,17 @@ class TestIssueLookupByPublicId:
             assert False, "expected HTTPException"
         except HTTPException as exc:
             assert exc.status_code == 404
+
+    async def test_oversized_numeric_id_404s_instead_of_500ing(self, db_session):
+        """A digit string past SQLite's 8-byte INTEGER range (a bot, a
+        mistyped URL) used to reach the DB driver and raise OverflowError
+        instead of just missing."""
+        from fastapi import HTTPException, Response
+
+        from app.api.action import get_action_issue
+
+        try:
+            await get_action_issue("9" * 40, Response(), db=db_session)
+            assert False, "expected HTTPException"
+        except HTTPException as exc:
+            assert exc.status_code == 404
