@@ -14,13 +14,14 @@ from datetime import date
 
 from app.api.admin import require_admin
 from app.api.rate_limit import WriteRateLimit, client_ip
-from app.database import get_db
+from app.database import get_db, get_visits_db
 from app.election_calendar import next_election_day, seats_up_for_year
 from app.issue_ids import from_public_id, to_public_id
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.time_utils import utcnow
+from app.trending import compute_trending_issue_ids
 from app.models import (
-    ActionIssue, ExploreDocument, MonitorStatus,
+    ActionIssue, ExploreDocument, IssueView, MonitorStatus,
     NationalMonitor, Race, RepSponsoredBill, SponsoredBill,
     TimelineEntry, Representative, Senator,
     WeekSummary, MonthSummary, YearSummary,
@@ -152,6 +153,7 @@ def _build_issue_response(
     issue: ActionIssue, db: Session,
     explore_docs_map: dict[int, ExploreDocument] | None = None,
     internal_bills: dict[str, set[int]] | None = None,
+    is_trending: bool = False,
 ) -> dict:
     explore_ids = _parse_json_field(issue.related_explore_ids)
     related_docs: list[dict] = []
@@ -245,7 +247,26 @@ def _build_issue_response(
         concerned_count=getattr(issue, "concerned_count", 0) or 0,
         not_priority_count=getattr(issue, "not_priority_count", 0) or 0,
         full_story=getattr(issue, "full_story", None),
+        is_trending=is_trending,
     ).model_dump(by_alias=True)
+
+
+def _trending_ids_for(issues: list[ActionIssue], db_visits: Session) -> set[str]:
+    """Which of these issues' public_ids clear app/trending.py's traction
+    bar, judged against TODAY's view counts only — a trending badge is
+    about current momentum, not all-time popularity. IssueView lives in
+    the separate visits database (see models.py), so this is its own
+    query rather than a join.
+    """
+    public_ids = {to_public_id(i.id) for i in issues}
+    today = utcnow().date().isoformat()
+    rows = (
+        db_visits.query(IssueView.issue_public_id, IssueView.count)
+        .filter(IssueView.date == today, IssueView.issue_public_id.in_(public_ids))
+        .all()
+    )
+    view_counts = {pid: count for pid, count in rows}
+    return compute_trending_issue_ids(view_counts)
 
 
 @router.get("/issues")
@@ -253,6 +274,7 @@ async def get_action_issues(
     response: Response,
     date: str | None = Query(None, description="Date in YYYY-MM-DD format; defaults to most recent"),
     db: Session = Depends(get_db),
+    db_visits: Session = Depends(get_visits_db),
 ):
     """Return the current day's action issues (or most recent available)."""
     response.headers["Cache-Control"] = "public, max-age=300"
@@ -289,10 +311,15 @@ async def get_action_issues(
         all_bill_ids |= _issue_bill_ids(i)
     internal_bills = _internal_bill_congresses(db, all_bill_ids)
 
+    trending_ids = _trending_ids_for(issues, db_visits)
+
     return {
         "date": issue_date,
         "issues": [
-            _build_issue_response(i, db, explore_docs_map, internal_bills)
+            _build_issue_response(
+                i, db, explore_docs_map, internal_bills,
+                is_trending=to_public_id(i.id) in trending_ids,
+            )
             for i in issues
         ],
         "availableDates": available_dates,

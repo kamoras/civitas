@@ -31,6 +31,20 @@ export function PolicyBadge({ area }: { area: string }) {
   );
 }
 
+/** Phosphor, matching "TOP ISSUE": this is a computed figure (today's view
+ *  count clearing app/trending.py's traction bar), not chrome — the rule
+ *  established during the rebrand is phosphor lands on data, never
+ *  decoration, and a badge that's silently wrong more often than right
+ *  would be worse than no badge, so this only ever renders when the
+ *  backend has already done that judgment. */
+export function TrendingBadge() {
+  return (
+    <span className="border border-phos/40 px-2 py-0.5 font-mono text-xs tracking-[0.14em] text-phos-mid">
+      ▲ TRENDING
+    </span>
+  );
+}
+
 export function SourceBadge({ name, url }: { name: string; url?: string }) {
   if (url) {
     return (

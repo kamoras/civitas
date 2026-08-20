@@ -320,7 +320,7 @@ class TestSingleIssueEnrichment:
 
         issue, _ = self._make_issue_with_doc(db_session)
 
-        listed = await get_action_issues(Response(), date=issue.date, db=db_session)
+        listed = await get_action_issues(Response(), date=issue.date, db=db_session, db_visits=db_session)
         single = await get_action_issue(to_public_id(issue.id), Response(), db=db_session)
 
         assert single == listed["issues"][0]
@@ -417,3 +417,68 @@ class TestFirstSurfacedDate:
 
         assert resp["firstSurfaced"] == "2026-08-15"
         assert resp["date"] == "2026-08-20"
+
+
+class TestTrendingFlag:
+    """is_trending (app/trending.py) needs the whole day's view-count
+    spread, so it's only computed by the list endpoint — see
+    ActionIssueSchema.is_trending's docstring."""
+
+    async def test_issue_with_no_recorded_views_is_not_trending(self, db_session):
+        from fastapi import Response
+
+        from app.api.action import get_action_issues
+
+        issue = ActionIssue(date="2026-08-19", rank=1, title="Issue", summary="s")
+        db_session.add(issue)
+        db_session.commit()
+
+        resp = await get_action_issues(
+            Response(), date=issue.date, db=db_session, db_visits=db_session,
+        )
+
+        assert resp["issues"][0]["isTrending"] is False
+
+    async def test_issue_clearing_the_traction_bar_is_flagged_trending(self, db_session):
+        from fastapi import Response
+
+        from app.api.action import get_action_issues
+        from app.models import IssueView
+        from app.time_utils import utcnow
+
+        today = utcnow().date().isoformat()
+        hot = ActionIssue(date=today, rank=1, title="Hot issue", summary="s")
+        quiet = ActionIssue(date=today, rank=2, title="Quiet issue", summary="s")
+        db_session.add_all([hot, quiet])
+        db_session.commit()
+
+        db_session.add(IssueView(date=today, issue_public_id=to_public_id(hot.id), count=100))
+        db_session.add(IssueView(date=today, issue_public_id=to_public_id(quiet.id), count=1))
+        db_session.commit()
+
+        resp = await get_action_issues(
+            Response(), date=today, db=db_session, db_visits=db_session,
+        )
+
+        by_title = {i["title"]: i["isTrending"] for i in resp["issues"]}
+        assert by_title == {"Hot issue": True, "Quiet issue": False}
+
+    async def test_single_issue_endpoint_never_flags_trending(self, db_session):
+        """get_action_issue has no peer issues to judge against — always
+        False rather than a misleading answer computed from nothing."""
+        from fastapi import Response
+
+        from app.api.action import get_action_issue
+        from app.models import IssueView
+        from app.time_utils import utcnow
+
+        today = utcnow().date().isoformat()
+        issue = ActionIssue(date=today, rank=1, title="Issue", summary="s")
+        db_session.add(issue)
+        db_session.commit()
+        db_session.add(IssueView(date=today, issue_public_id=to_public_id(issue.id), count=1000))
+        db_session.commit()
+
+        resp = await get_action_issue(to_public_id(issue.id), Response(), db=db_session)
+
+        assert resp["isTrending"] is False

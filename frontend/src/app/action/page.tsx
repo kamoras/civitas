@@ -18,6 +18,7 @@ import ShareButtons from "@/components/action/ShareButtons";
 import BackToTop from "@/components/BackToTop";
 import {
   PolicyBadge,
+  TrendingBadge,
   MonitorChips,
   RepresentativeContacts,
   TrackLegislation,
@@ -175,6 +176,7 @@ function HeroIssue({
         <span className="border border-phos/40 px-2 py-0.5 tracking-[0.14em] text-phos-mid">
           TOP ISSUE
         </span>
+        {issue.isTrending && <TrendingBadge />}
         <span className="text-ink-lo">{issueDateLabel(issue)}</span>
         <span className="text-ink-min" aria-hidden="true">
           ·
@@ -297,6 +299,7 @@ function SecondaryIssue({
             <span className="text-ink-min">
               {issueDateLabel(issue)} · ISSUE-{issue.publicId}
             </span>
+            {issue.isTrending && <TrendingBadge />}
             {issue.policyAreas.map((area) => (
               <PolicyBadge key={area} area={area} />
             ))}

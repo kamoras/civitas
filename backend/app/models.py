@@ -1373,3 +1373,28 @@ class PageView(VisitsBase):
     date: Mapped[str] = mapped_column(String(10), primary_key=True)  # YYYY-MM-DD
     path: Mapped[str] = mapped_column(String(100), primary_key=True)
     count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class IssueView(VisitsBase):
+    """Per-issue daily view counts, from /issue/{public_id} page loads —
+    the signal behind ActionIssue's "trending" badge (app/trending.py).
+
+    Deliberately its own table rather than folded into PageView: that
+    table normalizes every dynamic route (including /issue/[id]) down to
+    its template specifically so per-id storage never happens — see
+    _normalize_path's docstring. This table is the one deliberate
+    exception, safe for the same reason PageView's normalization exists to
+    avoid it elsewhere: ActionIssue rows are inherently few (is_current
+    scopes to a handful at a time), nothing like the politician/bill
+    catalog PageView protects against fragmenting across.
+
+    Keyed on issue_public_id (app/issue_ids.py), not the internal
+    autoincrement id — that's what actually appears in track_visit's raw
+    path, and it's the id ActionIssueSchema.is_trending has to match back
+    against on read.
+    """
+    __tablename__ = "issue_views"
+
+    date: Mapped[str] = mapped_column(String(10), primary_key=True)  # YYYY-MM-DD
+    issue_public_id: Mapped[str] = mapped_column(String(16), primary_key=True)
+    count: Mapped[int] = mapped_column(Integer, default=0)

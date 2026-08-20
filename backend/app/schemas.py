@@ -583,6 +583,11 @@ class ActionIssueSchema(CamelModel):
     concerned_count: int = 0
     not_priority_count: int = 0
     full_story: str | None = None
+    # Computed only by the list endpoint (app/trending.py needs the whole
+    # day's view-count spread to judge any one issue) — always False from
+    # the single-issue endpoint, which is mostly hit for OG-crawler
+    # metadata and doesn't have peers to compare against.
+    is_trending: bool = False
 
 
 class MonitorUpdateSchema(CamelModel):
