@@ -411,6 +411,80 @@ class TestColumnJoining:
         assert all(r["district"] == 25 for r in records)
 
 
+class TestHeaderlessColumns:
+    """Minnesota publishes one semicolon file with NO header row, so the
+    columns are named positionally in config."""
+
+    _FMT = {
+        "delimiter": ";",
+        "columns": ["state", "county", "precinct", "office_id", "office_name",
+                    "district", "candidate_id", "candidate", "suffix", "incumbent",
+                    "party", "reporting", "total_precincts", "votes", "percent", "total"],
+        "contest_column": ["office_name", "party"],
+        "choice_column": "candidate", "party_column": "party", "votes_column": "votes",
+    }
+    _TXT = (
+        "MN;01;;0111;U.S. Representative District 8;8;0301;Pete Stauber;;;R;51;51;2273;87.29;2604\n"
+        "MN;02;;0111;U.S. Representative District 8;8;0301;Pete Stauber;;;R;51;51;1000;87.29;2604\n"
+        "MN;01;;0111;U.S. Representative District 8;8;0302;Anthony Hamilton;;;R;51;51;331;12.71;2604\n"
+        "MN;01;;0111;U.S. Representative District 8;8;0401;Luke Gulbranson;;;DFL;51;51;256;16.30;1571\n"
+        "MN;01;;0111;U.S. Representative District 8;8;0402;John Munter;;;DFL;51;51;900;8.27;1571\n"
+    ).encode()
+
+    def test_positional_columns_are_read(self):
+        rows = tb._rows(self._TXT, self._FMT)
+        assert rows[0]["candidate"] == "Pete Stauber"
+        assert rows[0]["office_name"] == "U.S. Representative District 8"
+
+    @pytest.mark.asyncio
+    async def test_votes_sum_across_counties_and_dfl_is_democratic(self, monkeypatch):
+        """Minnesota's Democrats are the DFL, and every candidate appears
+        once per county."""
+        async def fake_discover(client, state, year, discovery):
+            return [tb._stage("https://example.gov/mn.txt")]
+
+        async def fake_get(client, url, label):
+            return _Resp(content=self._TXT)
+
+        monkeypatch.setattr(tb, "_discover_urls", fake_discover)
+        monkeypatch.setattr(tb, "_get", fake_get)
+        records = await tb.fetch_confirmed_candidates(None, 2026, "MN", {"format": self._FMT})
+        assert sorted((r["party"], r["last_name"]) for r in records) == [
+            ("D", "Munter"), ("R", "Stauber"),
+        ]
+
+
+class TestPrimaryDateTemplating:
+    """A state whose results file is addressed by election date can be
+    reached without crawling that state for the date — the national
+    calendar supplies it. Minnesota needs exactly this: its files are open
+    while the page listing them sits behind a bot manager."""
+
+    _DISCOVERY = {
+        "mode": "direct_url",
+        "url": "https://files.example.gov/{primary_date_compact}/allraces.txt",
+    }
+
+    @pytest.mark.asyncio
+    async def test_the_known_primary_date_fills_the_url(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.pipeline.fetch.state_election_dates.primary_date",
+            lambda state, year: "2026-08-11",
+        )
+        stages = await tb._discover_urls(None, "MN", 2026, self._DISCOVERY)
+        assert stages == [tb._stage(
+            "https://files.example.gov/20260811/allraces.txt", held="2026-08-11",
+        )]
+
+    @pytest.mark.asyncio
+    async def test_an_unknown_date_yields_nothing_rather_than_a_broken_url(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.pipeline.fetch.state_election_dates.primary_date",
+            lambda state, year: None,
+        )
+        assert await tb._discover_urls(None, "MN", 2026, self._DISCOVERY) == []
+
+
 class TestHtmlTableReader:
     """Maryland publishes results as HTML tables under headings and offers
     no downloadable file at all. A table alone never says which contest it

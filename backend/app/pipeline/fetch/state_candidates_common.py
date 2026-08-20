@@ -52,12 +52,18 @@ _SENATE_RE = re.compile(
 # Spelled-out names and the states' own abbreviations both occur; the
 # shared matcher in state_candidates.py speaks single-letter codes.
 _PARTY_PATTERNS = [
-    (re.compile(r"\b(?:democratic|democrat|dem)\b", re.IGNORECASE), "D"),
+    # Two states don't call their Democrats Democrats on the ballot:
+    # Minnesota's party is the Democratic-Farmer-Labor (DFL) and North
+    # Dakota's the Democratic-NPL. Both are the state Democratic party and
+    # FEC files their candidates as DEM.
+    (re.compile(r"\b(?:democratic|democrat|dem|dfl|d-npl|dnl|npl)\b", re.IGNORECASE), "D"),
     (re.compile(r"\b(?:republican|rep|gop)\b", re.IGNORECASE), "R"),
     (re.compile(r"\b(?:libertarian|lib)\b", re.IGNORECASE), "L"),
     (re.compile(r"\b(?:green|gre)\b", re.IGNORECASE), "G"),
     (re.compile(r"\b(?:constitution|con|cst)\b", re.IGNORECASE), "C"),
 ]
+
+_SINGLE_LETTER_PARTIES = {"D", "R", "L", "G", "C"}
 
 # Generational suffixes must not be mistaken for a surname.
 _NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
@@ -128,8 +134,15 @@ def normalize_party(text: str) -> str | None:
     don't run in a party primary, so a party-primary contest that appears
     to be theirs is a label this doesn't understand, not a race to confirm.
     """
+    value = (text or "").strip()
+    # A dedicated party column sometimes holds nothing but the letter
+    # ("R", "D" — Minnesota's results file). That is only safe to read
+    # when the WHOLE value is the code: a contest label containing a
+    # stray "R" must never become a Republican.
+    if value.upper() in _SINGLE_LETTER_PARTIES:
+        return value.upper()
     for pattern, code in _PARTY_PATTERNS:
-        if pattern.search(text or ""):
+        if pattern.search(value):
             return code
     return None
 

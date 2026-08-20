@@ -68,6 +68,44 @@
       },
       "description": "Maryland publishes results as HTML tables under headings rather than as any downloadable file, which is why the html_table reader exists — the table alone never says which contest it is, so every row carries the heading stack it appeared under and the contest is built from it ('Representative in Congress' + 'District 1'). The link pattern deliberately matches EVERY office summary page rather than pinning the congressional one's internal office number: parse_office already refuses Governor, Comptroller and the state legislature, so matching broadly costs a few extra pages and survives Maryland renumbering its offices. The party heading joins the contest key ('Democratic Candidates - Vote for 1'): without it both parties' candidates for a district tally as ONE race and, in a district that leans hard either way, the other party's nominee is dropped entirely — 8 records instead of 16. Verified live 2026-08-18 against the real 2026-06-23 primary: 92 candidate rows across all 8 districts."
     },
+    "MN": {
+      "source_name": "Minnesota Secretary of State (election night reporting files)",
+      "strategy": "tabular",
+      "runoff_threshold_pct": null,
+      "discovery": {
+        "mode": "direct_url",
+        "url": "https://electionresultsfiles.sos.mn.gov/{primary_date_compact}/allracesbycounty.txt"
+      },
+      "format": {
+        "delimiter": ";",
+        "columns": [
+          "state",
+          "county_id",
+          "precinct_id",
+          "office_id",
+          "office_name",
+          "district",
+          "candidate_id",
+          "candidate",
+          "suffix",
+          "incumbent",
+          "party",
+          "precincts_reporting",
+          "precincts_total",
+          "votes",
+          "percent",
+          "total_votes"
+        ],
+        "contest_column": [
+          "office_name",
+          "party"
+        ],
+        "choice_column": "candidate",
+        "party_column": "party",
+        "votes_column": "votes"
+      },
+      "description": "Minnesota was written off twice as captcha-blocked, and the interesting part is HOW it is blocked: its bot manager challenges the SECOND request in a window, whatever client makes it — so the page listing its result files is effectively unreachable from a pipeline that also has to fetch anything else. Its FILE host is wide open and answers every time. So Minnesota is addressed directly by election date, which is known for every state from the FEC's national calendar (state_election_dates.py) — the calendar and the fetcher composing to reach a state neither could reach alone, with no browser and without touching the protected host. One semicolon-delimited file carries every race, county by county; it has NO header row, so the columns are named positionally in config. Minnesota's Democrats are the DFL, which normalize_party now reads, and its party column holds bare letter codes, read only when the whole value is the code. Verified live 2026-08-19 on the real 2026-08-11 primary: Pete Stauber taking MN-08's Republican primary with 87.29%."
+    },
     "CA": {
       "source_name": "California Secretary of State (certified Statement of Vote)",
       "strategy": "tabular",

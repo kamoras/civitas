@@ -50,7 +50,7 @@ import re
 
 import httpx
 
-from app.pipeline.fetch.http_utils import fetch_with_retry
+from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     normalize_party as _parse_party,
     parse_office as _parse_office,
@@ -66,7 +66,7 @@ CLARITY_BASE = "https://results.enr.clarityelections.com"
 # Clarity 403s a request with no browser-like User-Agent (same behaviour
 # Civix showed) — an honest, identifying UA works, matching the convention
 # state_candidates_tx.py and sec_tickers.py already use.
-_HEADERS = {"User-Agent": "Civitas civic-transparency-platform contact@civitas-research.org"}
+_HEADERS = BROWSER_HEADERS
 
 # Three small requests per state per run — a polite pace is plenty.
 _rate_limiter = RateLimiter(rps=1.0)

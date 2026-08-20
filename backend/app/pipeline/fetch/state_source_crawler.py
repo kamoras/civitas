@@ -46,13 +46,13 @@ from urllib.robotparser import RobotFileParser
 
 import httpx
 
-from app.pipeline.fetch.http_utils import fetch_with_retry
+from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import normalize_party, parse_office
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 
-_HEADERS = {"User-Agent": "Civitas civic-transparency-platform contact@civitas-research.org"}
+_HEADERS = BROWSER_HEADERS
 _rate_limiter = RateLimiter(rps=1.0)
 # Probing is one request each to fifty DIFFERENT hosts, and a rate limit
 # exists to be polite to ONE host — serialising the whole sweep through

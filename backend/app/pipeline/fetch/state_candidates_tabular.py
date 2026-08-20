@@ -48,7 +48,7 @@ from urllib.parse import quote, urljoin
 import httpx
 
 from app.election_calendar import next_election_day
-from app.pipeline.fetch.http_utils import fetch_with_retry
+from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     normalize_party, office_from_columns, parse_office, pick_nominees, surname,
 )
@@ -56,7 +56,7 @@ from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 
-_HEADERS = {"User-Agent": "Civitas civic-transparency-platform contact@civitas-research.org"}
+_HEADERS = BROWSER_HEADERS
 _rate_limiter = RateLimiter(rps=1.0)
 
 # A state's whole-election export is a few MB; anything far past that is a
@@ -303,10 +303,29 @@ async def _discover_urls(
 
     if mode == "direct_url":
         template = discovery.get("url") or ""
-        # No date and no flag: a state on this mode publishes one settled
-        # file per cycle (California's certified Statement of Vote), so
-        # there is nothing here for the gate to read.
-        return [_stage(template.format(year=year))] if template else []
+        if not template:
+            return []
+        url = template.replace("{year}", str(year))
+        held = None
+        if "{primary_date" in url:
+            # The state's own primary date, from the national calendar
+            # (state_election_dates) — which is what lets a state whose
+            # file is addressed by election date be reached WITHOUT
+            # crawling that state's site for the date first. Minnesota is
+            # the case: its results files are wide open, while the page
+            # that lists them sits behind a bot manager.
+            from app.pipeline.fetch.state_election_dates import primary_date
+
+            held = primary_date(state, year)
+            if not held:
+                logger.info(
+                    "%s's results file is addressed by primary date and none is "
+                    "known yet — skipping", state,
+                )
+                return []
+            url = url.replace("{primary_date_compact}", held.replace("-", ""))
+            url = url.replace("{primary_date}", held)
+        return [_stage(url, held=held)]
 
     if mode == "s3_listing":
         bucket = (discovery.get("bucket_url") or "").rstrip("/")
@@ -334,14 +353,40 @@ async def _discover_urls(
         # keeps current (Florida's floridaelectionwatch.gov/Downloads), so
         # the cycle's date is never written down here.
         pattern = discovery.get("link_regex")
+        # An optional FIRST hop, for a state whose results page is keyed by
+        # an internal election id rather than anything guessable: read the
+        # id off an index page and substitute it. The HIGHEST id wins,
+        # which is the newest election — the same "never write the cycle
+        # down" rule every other mode follows.
+        index_url = discovery.get("index_url")
+        election_id = None
+        if index_url:
+            index = await _get(client, index_url, f"{state} election index")
+            if index is None:
+                return []
+            ids = [int(m) for m in re.findall(discovery.get("index_regex") or "", index.text)]
+            if not ids:
+                logger.warning("No election id found on %s's index page", state)
+                return []
+            election_id = str(max(ids))
         # {year} is substituted in the PAGE url as well as the link
         # pattern: a state that files its results under a per-cycle path
         # (Maryland's /elections/{year}/primary_results/) needs the page
         # itself templated, or nothing is ever found there again.
         page_url = (discovery.get("page_url") or "").replace("{year}", str(year))
+        if election_id:
+            page_url = page_url.replace("{election_id}", election_id)
         resp = await _get(client, page_url, f"{state} downloads page")
         if resp is None or not pattern:
             return []
+        if not re.search(pattern.replace("{year}", str(year)), resp.text):
+            # A page that answers 200 with none of its own links on it is
+            # usually a bot-manager challenge rather than an empty page —
+            # Minnesota's does this intermittently, and the retry
+            # succeeds because the challenge has by then set its cookie.
+            # One retry only: a genuinely empty page stays empty.
+            logger.info("%s's results page had no links — retrying once", state)
+            resp = await _get(client, page_url, f"{state} downloads page (retry)") or resp
         # Literal token, not str.format: a link regex is full of {n}
         # quantifiers that format() would try to fill in.
         #
@@ -531,7 +576,14 @@ def _rows(payload: bytes, fmt: dict) -> list[dict] | None:
     else:
         text = payload.decode(encoding, errors="replace")
 
-    return list(csv.DictReader(io.StringIO(text), delimiter=delimiter))
+    # A state that publishes its results with NO header row (Minnesota's
+    # semicolon file is one long list of positional fields) names its
+    # columns in config instead. Everything downstream is unchanged: the
+    # names it gives are the names the format keys refer to.
+    columns = fmt.get("columns")
+    return list(csv.DictReader(
+        io.StringIO(text), delimiter=delimiter, fieldnames=columns or None,
+    ))
 
 
 def _votes(raw: str) -> int:

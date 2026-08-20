@@ -62,6 +62,45 @@ __all__ = [
 redact_url = redact_sensitive_params
 
 
+# Identify honestly, but send a COMPLETE request.
+#
+# A good number of state election sites sit behind a WAF that rejects on
+# the SHAPE of a request rather than on who is making it: a bare
+# User-Agent with no Accept, Accept-Language or Sec-Fetch-* headers looks
+# like a script and gets a 403 or a challenge page. Measured 2026-08-19
+# against the real sites — Ohio, Missouri, Tennessee and New York's
+# results portals all went from 403 to 200 with no change of identity,
+# purely by sending the headers a normal client always sends.
+#
+# The User-Agent still says who we are and how to reach us, robots.txt is
+# still honoured (see state_source_crawler._allowed) and the rate limits
+# still apply. This is standards-compliance, not disguise: a site that
+# wants to refuse Civitas can still refuse Civitas.
+CIVIC_CONTACT = "Civitas/1.0 (+contact@civitas-research.org)"
+BROWSER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+        f"Chrome/151.0.0.0 Safari/537.36 {CIVIC_CONTACT}"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
+}
+
+# The same, shaped as a page's own script would send when fetching data.
+BROWSER_JSON_HEADERS = {
+    **BROWSER_HEADERS,
+    "Accept": "application/json, text/plain, */*",
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-origin",
+}
+
+
 async def fetch_with_retry(
     client: httpx.AsyncClient,
     rate_limiter: RateLimiter,

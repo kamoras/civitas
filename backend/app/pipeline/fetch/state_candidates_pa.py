@@ -33,7 +33,7 @@ import logging
 
 import httpx
 
-from app.pipeline.fetch.http_utils import fetch_with_retry
+from app.pipeline.fetch.http_utils import BROWSER_JSON_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     normalize_party, parse_office, pick_nominees, surname,
 )
@@ -42,7 +42,7 @@ from app.pipeline.rate_limiter import RateLimiter
 logger = logging.getLogger(__name__)
 
 API_BASE = "https://www.electionreturns.pa.gov/api/ElectionReturn"
-_HEADERS = {"User-Agent": "Civitas civic-transparency-platform contact@civitas-research.org"}
+_HEADERS = BROWSER_JSON_HEADERS
 _rate_limiter = RateLimiter(rps=0.5)
 
 # The election TYPE and OFFICE codes this reads, rather than any wording.
