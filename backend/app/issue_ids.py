@@ -23,7 +23,14 @@ def to_public_id(issue_id: int) -> str:
 
 
 def from_public_id(public_id: str) -> int | None:
-    """Inverse of `to_public_id`. None if the string isn't a well-formed one."""
+    """Inverse of `to_public_id`. None if the string isn't a well-formed one.
+
+    Case-insensitive: `to_public_id` only ever emits lowercase, but the UI
+    displays it upper-cased (matching "ISSUE-"), and a reader who copies
+    that label straight into a URL should land on the issue, not a 404
+    over letter case alone.
+    """
+    public_id = public_id.lower()
     if not public_id.startswith(_PREFIX) or len(public_id) != len(_PREFIX) + 8:
         return None
     try:

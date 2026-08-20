@@ -33,3 +33,12 @@ class TestFromPublicId:
 
     def test_rejects_wrong_length(self):
         assert from_public_id("iabc") is None
+
+    def test_upper_cased_id_still_resolves(self):
+        # The UI displays this upper-cased (matching "ISSUE-"); a reader
+        # copying that label straight into a URL must not 404 over case.
+        public_id = to_public_id(42)
+        assert from_public_id(public_id.upper()) == 42
+        # Mixed case too, not just fully-upper.
+        mixed = public_id[0] + public_id[1:].upper()
+        assert from_public_id(mixed) == 42

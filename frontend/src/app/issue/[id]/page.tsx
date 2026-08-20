@@ -131,8 +131,13 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
             <h1 className="text-xl leading-tight text-ink-hi">{issue.title}</h1>
             <p className="text-base text-ink leading-relaxed">{issue.summary}</p>
             <div className="text-xs text-ink-min">
-              {formatUtcDate(issue.firstSurfaced)}
-              {issue.firstSurfaced !== issue.date && ` · updated ${formatUtcDate(issue.date)}`}
+              {/* firstSurfaced missing (not merely equal to date) falls back to
+                  date alone — see issueDateLabel's docstring in lib/formatting.ts
+                  for why that's a real case, not just a hypothetical. */}
+              {formatUtcDate(issue.firstSurfaced || issue.date)}
+              {issue.firstSurfaced &&
+                issue.firstSurfaced !== issue.date &&
+                ` · updated ${formatUtcDate(issue.date)}`}
             </div>
             <MonitorChips slugs={issue.relatedMonitorSlugs} />
           </header>

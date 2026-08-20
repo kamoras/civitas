@@ -53,11 +53,17 @@ export function formatUtcDate(
  * changed, so a week-old story still trending shows today's date as if
  * that's when it happened. When the two differ, say both rather than pick
  * one: "2026-08-19 · updated 2026-08-20".
+ *
+ * `firstSurfaced` falsy (missing, not merely equal to `date`) falls back to
+ * `date` alone rather than interpolating "undefined" into the page — a real
+ * case, not a hypothetical: nginx's proxy_cache for this endpoint can still
+ * be serving a response cached from BEFORE a deploy that added this field,
+ * for up to its own TTL regardless of how fresh the backend already is.
  */
-export function issueDateLabel(issue: { date: string; firstSurfaced: string }): string {
-  return issue.firstSurfaced === issue.date
-    ? issue.date
-    : `${issue.firstSurfaced} · updated ${issue.date}`;
+export function issueDateLabel(issue: { date: string; firstSurfaced?: string }): string {
+  return issue.firstSurfaced && issue.firstSurfaced !== issue.date
+    ? `${issue.firstSurfaced} · updated ${issue.date}`
+    : issue.date;
 }
 
 /**

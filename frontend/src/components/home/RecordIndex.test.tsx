@@ -98,18 +98,27 @@ describe("buildRecordEntries", () => {
       buildRecordEntries([], [monitor()], []),
       buildRecordEntries([], [], [bill()]),
     ];
-    expect(i[0].ref).toBe("ISSUE-7");
+    expect(i[0].ref).toBe("ISSUE-I00000007");
     expect(m[0].ref).toBe("MON-3");
     expect(b[0].ref).toBe("HR4901-119");
   });
 
+  it("uses the public id, not the raw autoincrement id — that's the whole reason it exists", () => {
+    // #398 regression: the homepage docket reference was quoting the raw
+    // int id (a running count of every issue ever), same bug as the
+    // Action Center's ISSUE- label had before publicId existed.
+    const [entry] = buildRecordEntries([issue({ id: 999, publicId: "iabcdef01" })], [], []);
+    expect(entry.ref).toBe("ISSUE-IABCDEF01");
+    expect(entry.href).toBe("/issue/iabcdef01"); // href stays lower-case — it's a real URL, not a label
+  });
+
   it("sorts the merged feeds newest first", () => {
     const entries = buildRecordEntries(
-      [issue({ id: 1, date: "2026-08-10" })],
+      [issue({ id: 1, publicId: "i00000001", date: "2026-08-10" })],
       [monitor({ id: 2, updatedAt: "2026-08-19T00:00:00Z" })],
       [bill({ billId: "s100-119", latestActionDate: "2026-08-15" })]
     );
-    expect(entries.map((e) => e.ref)).toEqual(["MON-2", "S100-119", "ISSUE-1"]);
+    expect(entries.map((e) => e.ref)).toEqual(["MON-2", "S100-119", "ISSUE-I00000001"]);
   });
 
   it("orders a date-only issue against an offset-less monitor timestamp correctly", () => {
@@ -117,11 +126,11 @@ describe("buildRecordEntries", () => {
     // different rules — date-only as UTC, offset-less date-time as local. Sorting
     // them with a bare `new Date` silently interleaves the sources wrongly.
     const entries = buildRecordEntries(
-      [issue({ id: 1, date: "2026-08-18" })],
+      [issue({ id: 1, publicId: "i00000001", date: "2026-08-18" })],
       [monitor({ id: 2, lastArticleDate: "2026-08-17T20:00:00" })],
       []
     );
-    expect(entries.map((e) => e.ref)).toEqual(["ISSUE-1", "MON-2"]);
+    expect(entries.map((e) => e.ref)).toEqual(["ISSUE-I00000001", "MON-2"]);
   });
 
   it("caps the list so the index stays a front page, not a feed", () => {

@@ -94,6 +94,15 @@ describe("issueDateLabel", () => {
       "2026-08-15 · updated 2026-08-20"
     );
   });
+
+  it("falls back to date alone rather than rendering the literal word 'undefined'", () => {
+    // A real case, not a hypothetical: nginx's proxy_cache for this endpoint
+    // can serve a response cached from before a deploy that added
+    // firstSurfaced, for up to its own TTL regardless of how fresh the
+    // backend already is (confirmed live, 2026-08-20).
+    expect(issueDateLabel({ date: "2026-08-20", firstSurfaced: undefined })).toBe("2026-08-20");
+    expect(issueDateLabel({ date: "2026-08-20", firstSurfaced: "" })).toBe("2026-08-20");
+  });
 });
 
 describe("safeHref", () => {

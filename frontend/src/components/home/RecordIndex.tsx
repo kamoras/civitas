@@ -75,11 +75,16 @@ export function buildRecordEntries(
 ): RecordEntry[] {
   const entries: RecordEntry[] = [
     ...issues.map((i) => ({
-      ref: `ISSUE-${i.id}`,
+      // publicId, not the raw autoincrement id — this ref is the whole
+      // point of the component ("an entry you can quote at someone"), so
+      // quoting it can't read as a running count of every issue ever.
+      // Upper-cased to match ISSUE/MON/the bill-id refs below, which are
+      // themselves already uppercase.
+      ref: `ISSUE-${i.publicId.toUpperCase()}`,
       date: i.date,
       title: i.title,
       detail: i.summary ? clamp(i.summary, 78) : i.policyAreas.join(" · "),
-      href: `/issue/${i.id}`,
+      href: `/issue/${i.publicId}`,
       tone: "text-phos-mid",
     })),
     // ACTIVE only. The endpoint already filters to ACTIVE + WATCHING, so
