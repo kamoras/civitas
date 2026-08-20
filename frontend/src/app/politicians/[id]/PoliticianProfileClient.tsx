@@ -9,6 +9,7 @@ import SenatorCard from "@/components/checker/SenatorCard";
 import { PresidentCard } from "@/components/president/PresidentClient";
 import { JusticeCard } from "@/components/justice/JusticeClient";
 import { formerOfficeNotice } from "@/lib/officeStatus";
+import { issueDateLabel } from "@/lib/formatting";
 import type { PoliticianProfile, GovernmentDoc } from "@/types/politicians";
 import type { Senator } from "@/types/senator";
 import type { President } from "@/types/president";
@@ -169,7 +170,9 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="font-mono text-xs text-ink-min">RANK #{issue.rank}</span>
-                          <span className="font-mono text-xs text-ink-min">{issue.date}</span>
+                          <span className="font-mono text-xs text-ink-min">
+                            {issueDateLabel(issue)}
+                          </span>
                         </div>
                         <p className="mb-1 font-sans text-base text-ink-hi">{issue.title}</p>
                         {issue.summary && (

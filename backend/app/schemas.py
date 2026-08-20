@@ -550,6 +550,18 @@ class RelatedBillSchema(CamelModel):
 class ActionIssueSchema(CamelModel):
     id: int
     public_id: str
+    # `date` is bumped to today on every pipeline run that so much as
+    # re-matches this story to fresh coverage, whether or not anything
+    # actually changed (action_center.py's _apply_matched_issue_update sets
+    # match.date = today unconditionally on a match) — so an issue that has
+    # simply stayed the top story for a week shows today's date forever,
+    # which reads as "this happened today." `first_surfaced` is the row's
+    # created_at, set once and never touched again: the closest available
+    # proxy for when the underlying story actually broke. `date` still
+    # drives day-based browsing (which stories were trending ON day X) and
+    # keeps its own meaning there — the display layer is what has to stop
+    # treating it as the story's origin.
+    first_surfaced: str
     date: str
     rank: int
     title: str

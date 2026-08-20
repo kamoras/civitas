@@ -5,6 +5,7 @@ import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import { ActionIssue } from "@/types/action";
 import { usableRecord } from "@/lib/ssrPayload";
+import { formatUtcDate } from "@/lib/formatting";
 import { ACTION_CENTER_HREF } from "@/lib/routes";
 import { PolicyBadge, MonitorChips } from "@/components/action/IssueEnrichment";
 import IssueActions from "./IssueActions";
@@ -130,11 +131,8 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
             <h1 className="text-xl leading-tight text-ink-hi">{issue.title}</h1>
             <p className="text-base text-ink leading-relaxed">{issue.summary}</p>
             <div className="text-xs text-ink-min">
-              {new Date(issue.date + "T12:00:00").toLocaleDateString("en-US", {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
+              {formatUtcDate(issue.firstSurfaced)}
+              {issue.firstSurfaced !== issue.date && ` · updated ${formatUtcDate(issue.date)}`}
             </div>
             <MonitorChips slugs={issue.relatedMonitorSlugs} />
           </header>

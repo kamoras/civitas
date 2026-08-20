@@ -382,6 +382,7 @@ def _get_active_issues(politician_id: str, db: Session) -> list[dict]:
                 "summary": issue.summary,
                 "rank": issue.rank,
                 "date": issue.date,
+                "firstSurfaced": issue.created_at.strftime("%Y-%m-%d"),
                 "policyAreas": json.loads(issue.policy_areas or "[]"),
             })
     return result

@@ -10,7 +10,7 @@ import PageMasthead from "@/components/layout/PageMasthead";
 import { fetchActionIssues, fetchOpenComments, OpenCommentItem } from "@/lib/api";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { useUserState } from "@/hooks/useUserState";
-import { describeDaysLeft, formatUtcDate } from "@/lib/formatting";
+import { describeDaysLeft, formatUtcDate, issueDateLabel } from "@/lib/formatting";
 import { PARTY_COLORS, PARTY_BORDER } from "@/lib/partyStyles";
 import StancePulse from "@/components/action/StancePulse";
 import { LogActionButton } from "@/components/action/CivicTracker";
@@ -175,7 +175,7 @@ function HeroIssue({
         <span className="border border-phos/40 px-2 py-0.5 tracking-[0.14em] text-phos-mid">
           TOP ISSUE
         </span>
-        <span className="text-ink-lo">{issue.date}</span>
+        <span className="text-ink-lo">{issueDateLabel(issue)}</span>
         <span className="text-ink-min" aria-hidden="true">
           ·
         </span>
@@ -295,7 +295,7 @@ function SecondaryIssue({
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex flex-wrap items-center gap-2 font-mono text-xs">
             <span className="text-ink-min">
-              {issue.date} · ISSUE-{issue.publicId}
+              {issueDateLabel(issue)} · ISSUE-{issue.publicId}
             </span>
             {issue.policyAreas.map((area) => (
               <PolicyBadge key={area} area={area} />

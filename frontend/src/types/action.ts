@@ -39,7 +39,12 @@ export interface ActionIssue {
   id: number;
   /** Shown to readers and used in share links — not the raw autoincrement id. */
   publicId: string;
+  /** Bumped to today on every pipeline run that re-matches this story to
+   *  fresh coverage, whether or not anything changed — the day this
+   *  appears under, not when it happened. Use `firstSurfaced` for that. */
   date: string;
+  /** When this story was first surfaced (row created), fixed forever after. */
+  firstSurfaced: string;
   rank: number;
   title: string;
   summary: string;

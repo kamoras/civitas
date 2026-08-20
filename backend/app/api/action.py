@@ -228,6 +228,7 @@ def _build_issue_response(
     return ActionIssueSchema(
         id=issue.id,
         public_id=to_public_id(issue.id),
+        first_surfaced=issue.created_at.strftime("%Y-%m-%d"),
         date=issue.date,
         rank=issue.rank,
         title=issue.title,
