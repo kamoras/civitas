@@ -1,6 +1,7 @@
 """Tests for the /action/issues fallback logic in app/api/action.py."""
 
 from app.api.action import _latest_current_issues
+from app.issue_ids import to_public_id
 from app.models import ActionIssue
 
 
@@ -301,7 +302,7 @@ class TestSingleIssueEnrichment:
 
         issue, doc = self._make_issue_with_doc(db_session)
 
-        resp = await get_action_issue(issue.id, Response(), db=db_session)
+        resp = await get_action_issue(to_public_id(issue.id), Response(), db=db_session)
 
         assert [d["id"] for d in resp["relatedExploreDocs"]] == [doc.id]
         assert resp["relatedExploreDocs"][0]["title"] == "Proposed Rule on Something"
@@ -320,6 +321,53 @@ class TestSingleIssueEnrichment:
         issue, _ = self._make_issue_with_doc(db_session)
 
         listed = await get_action_issues(Response(), date=issue.date, db=db_session)
-        single = await get_action_issue(issue.id, Response(), db=db_session)
+        single = await get_action_issue(to_public_id(issue.id), Response(), db=db_session)
 
         assert single == listed["issues"][0]
+
+
+class TestIssueLookupByPublicId:
+    """A public id (app/issue_ids.py) replaced the raw autoincrement id as
+    the identifier shown to readers and published in share links (#issue
+    relabeling). Old links pointing at the bare id still have to resolve."""
+
+    async def test_looks_up_by_public_id(self, db_session):
+        from fastapi import Response
+
+        from app.api.action import get_action_issue
+
+        issue = ActionIssue(date="2026-08-19", rank=1, title="Issue", summary="s")
+        db_session.add(issue)
+        db_session.commit()
+
+        resp = await get_action_issue(to_public_id(issue.id), Response(), db=db_session)
+
+        assert resp["id"] == issue.id
+        assert resp["publicId"] == to_public_id(issue.id)
+
+    async def test_falls_back_to_legacy_numeric_id(self, db_session):
+        """A Bluesky post from before public_id existed links to the bare
+        int id — it has to keep resolving, not 404 a link that's already
+        out in the world."""
+        from fastapi import Response
+
+        from app.api.action import get_action_issue
+
+        issue = ActionIssue(date="2026-08-19", rank=1, title="Issue", summary="s")
+        db_session.add(issue)
+        db_session.commit()
+
+        resp = await get_action_issue(str(issue.id), Response(), db=db_session)
+
+        assert resp["id"] == issue.id
+
+    async def test_unknown_identifier_404s(self, db_session):
+        from fastapi import HTTPException, Response
+
+        from app.api.action import get_action_issue
+
+        try:
+            await get_action_issue("iNoSuchIssue", Response(), db=db_session)
+            assert False, "expected HTTPException"
+        except HTTPException as exc:
+            assert exc.status_code == 404

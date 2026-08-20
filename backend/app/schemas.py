@@ -549,6 +549,7 @@ class RelatedBillSchema(CamelModel):
 
 class ActionIssueSchema(CamelModel):
     id: int
+    public_id: str
     date: str
     rank: int
     title: str

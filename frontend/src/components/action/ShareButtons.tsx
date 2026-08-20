@@ -37,7 +37,7 @@ export default function ShareButtons({
   className = "",
   shareUrl: shareUrlOverride,
 }: ShareButtonsProps) {
-  const shareUrl = shareUrlOverride ?? `https://civitas-research.org/action?issue=${issue.id}`;
+  const shareUrl = shareUrlOverride ?? `https://civitas-research.org/action?issue=${issue.publicId}`;
   const shareText = buildShareText(issue.title, shareUrl);
   const encodedText = encodeURIComponent(shareText);
 

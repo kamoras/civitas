@@ -179,7 +179,7 @@ export default function PoliticianProfileClient({ profile }: { profile: Politici
                         )}
                       </div>
                       <Link
-                        href={`/issue/${issue.id}`}
+                        href={`/issue/${issue.publicId}`}
                         className="shrink-0 font-mono text-xs text-ink-lo hover:text-phos transition-colors tracking-widest whitespace-nowrap"
                       >
                         VIEW →

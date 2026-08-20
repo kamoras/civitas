@@ -55,6 +55,7 @@ export interface PoliticianIdentity {
 
 export interface PoliticianActiveIssue {
   id: number;
+  publicId: string;
   title: string;
   summary: string;
   rank: number;
