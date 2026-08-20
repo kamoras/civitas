@@ -10,7 +10,7 @@ import PageMasthead from "@/components/layout/PageMasthead";
 import { fetchActionIssues, fetchOpenComments, OpenCommentItem } from "@/lib/api";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { useUserState } from "@/hooks/useUserState";
-import { describeDaysLeft, formatUtcDate, issueDateLabel } from "@/lib/formatting";
+import { describeDaysLeft, formatUtcDate, issueDateLabel, issueRef } from "@/lib/formatting";
 import { PARTY_COLORS, PARTY_BORDER } from "@/lib/partyStyles";
 import StancePulse from "@/components/action/StancePulse";
 import { LogActionButton } from "@/components/action/CivicTracker";
@@ -181,7 +181,7 @@ function HeroIssue({
         <span className="text-ink-min" aria-hidden="true">
           ·
         </span>
-        <span className="text-ink-min">ISSUE-{issue.publicId}</span>
+        <span className="text-ink-min">{issueRef(issue.publicId)}</span>
       </div>
 
       <h2 className="mb-4 font-display text-2xl font-bold leading-tight text-ink-hi sm:text-[28px]">
@@ -297,7 +297,7 @@ function SecondaryIssue({
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex flex-wrap items-center gap-2 font-mono text-xs">
             <span className="text-ink-min">
-              {issueDateLabel(issue)} · ISSUE-{issue.publicId}
+              {issueDateLabel(issue)} · {issueRef(issue.publicId)}
             </span>
             {issue.isTrending && <TrendingBadge />}
             {issue.policyAreas.map((area) => (

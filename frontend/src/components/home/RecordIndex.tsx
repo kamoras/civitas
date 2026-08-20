@@ -7,7 +7,7 @@ import type { NationalMonitor } from "@/lib/api";
 import type { ActionIssue } from "@/types/action";
 import type { BillInFlight } from "@/types/bill";
 import { ACTION_CENTER_MONITORS_HREF } from "@/lib/routes";
-import { parseUtc } from "@/lib/formatting";
+import { issueRef, parseUtc } from "@/lib/formatting";
 
 /**
  * The dense, dated index of what has recently entered the record.
@@ -75,11 +75,14 @@ export function buildRecordEntries(
 ): RecordEntry[] {
   const entries: RecordEntry[] = [
     ...issues.map((i) => ({
-      ref: `ISSUE-${i.id}`,
+      // publicId, not the raw autoincrement id — this ref is the whole
+      // point of the component ("an entry you can quote at someone"), so
+      // quoting it can't read as a running count of every issue ever.
+      ref: issueRef(i.publicId),
       date: i.date,
       title: i.title,
       detail: i.summary ? clamp(i.summary, 78) : i.policyAreas.join(" · "),
-      href: `/issue/${i.id}`,
+      href: `/issue/${i.publicId}`,
       tone: "text-phos-mid",
     })),
     // ACTIVE only. The endpoint already filters to ACTIVE + WATCHING, so

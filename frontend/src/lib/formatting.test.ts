@@ -5,6 +5,7 @@ import {
   formatUtcDate,
   formatWeekRange,
   issueDateLabel,
+  issueRef,
   localDateStr,
   safeHref,
 } from "./formatting";
@@ -93,6 +94,27 @@ describe("issueDateLabel", () => {
     expect(issueDateLabel({ date: "2026-08-20", firstSurfaced: "2026-08-15" })).toBe(
       "2026-08-15 · updated 2026-08-20"
     );
+  });
+
+  it("falls back to date alone rather than rendering the literal word 'undefined'", () => {
+    // A real case, not a hypothetical: nginx's proxy_cache for this endpoint
+    // can serve a response cached from before a deploy that added
+    // firstSurfaced, for up to its own TTL regardless of how fresh the
+    // backend already is (confirmed live, 2026-08-20).
+    expect(issueDateLabel({ date: "2026-08-20", firstSurfaced: undefined })).toBe("2026-08-20");
+    expect(issueDateLabel({ date: "2026-08-20", firstSurfaced: "" })).toBe("2026-08-20");
+  });
+});
+
+describe("issueRef", () => {
+  it("upper-cases the public id to match ISSUE's own capitalization", () => {
+    expect(issueRef("i7a2c9f01")).toBe("ISSUE-I7A2C9F01");
+  });
+
+  it("never throws on a missing public id — a crash, not just a display glitch", () => {
+    // The same stale-cache window issueDateLabel's fallback guards against
+    // would otherwise call .toUpperCase() on undefined here.
+    expect(issueRef(undefined)).toBe("ISSUE-");
   });
 });
 
