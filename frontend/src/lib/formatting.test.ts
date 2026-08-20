@@ -5,6 +5,7 @@ import {
   formatUtcDate,
   formatWeekRange,
   issueDateLabel,
+  isNewFact,
   issueRef,
   localDateStr,
   safeHref,
@@ -115,6 +116,22 @@ describe("issueRef", () => {
     // The same stale-cache window issueDateLabel's fallback guards against
     // would otherwise call .toUpperCase() on undefined here.
     expect(issueRef(undefined)).toBe("ISSUE-");
+  });
+});
+
+describe("isNewFact", () => {
+  it("is true when the fact is in the new-facts list", () => {
+    expect(isNewFact(["a new fact"], "a new fact")).toBe(true);
+  });
+
+  it("is false when the fact isn't in the list", () => {
+    expect(isNewFact(["something else"], "a fact")).toBe(false);
+  });
+
+  it("never throws when newFacts is missing — this exact gap crashed the whole Action Center live", () => {
+    // 2026-08-20: issue.newFacts.includes(fact) with no guard, called from a
+    // response cached (browser or nginx) from before the field existed.
+    expect(isNewFact(undefined, "a fact")).toBe(false);
   });
 });
 

@@ -5,7 +5,7 @@ import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import { ActionIssue } from "@/types/action";
 import { usableRecord } from "@/lib/ssrPayload";
-import { formatUtcDate } from "@/lib/formatting";
+import { formatUtcDate, isNewFact } from "@/lib/formatting";
 import { ACTION_CENTER_HREF } from "@/lib/routes";
 import { PolicyBadge, MonitorChips, NewFactTag } from "@/components/action/IssueEnrichment";
 import IssueActions from "./IssueActions";
@@ -185,7 +185,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
                     <span className="text-ink-min shrink-0 mt-0.5">▸</span>
                     <span>
                       {fact}
-                      {issue.newFacts?.includes(fact) && <NewFactTag />}
+                      {isNewFact(issue.newFacts, fact) && <NewFactTag />}
                     </span>
                   </li>
                 ))}
