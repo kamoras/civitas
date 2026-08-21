@@ -288,6 +288,96 @@ def _bsky_repost_has_new_information(old_facts_json: str, new_facts: list[str]) 
     return bool(_development_markers(new_facts) - _development_markers(old_facts))
 
 
+def _retry_until_grounded(
+    user_prompt: str, reasons: list[str], rank: int, db: "Session",
+    issue_source_text: str, title: str,
+) -> tuple[str, str, list[str]] | None:
+    """Re-generates issue text up to twice after it failed the mechanical
+    hedge/editorializing/former-status check, returning (title, summary,
+    facts) once grounded or None if every attempt still failed.
+
+    Extracted from _run_refresh (2026-08) for direct testability, matching
+    _apply_matched_issue_update's precedent — _run_refresh as a whole calls
+    a real LLM and can't reasonably be driven end-to-end in a unit test,
+    but the retry LOOP itself (does a second attempt with a strengthened
+    prompt actually get used, does a fixed reason stop being reported)
+    can be, with call_llm mocked.
+
+    One retry cleared close to none of these live (2026-08 audit via
+    admin_action_metrics: 67 of 192 clusters considered over 48h were
+    rejected here, 39 of 48 hourly runs produced zero new topics — the
+    Action Center's whole supply of new stories was starved by this gate
+    more than by a quiet news cycle). Two attempts, the second adding a
+    concrete before/after example rather than only the abstract rule: the
+    local model doesn't reliably turn "don't hedge" into a fix on its own,
+    but a worked example gives it a pattern to copy.
+    """
+    from app.pipeline.analyze.grounding import (
+        hedge_and_editorializing_violations,
+        ungrounded_former_official_claims,
+    )
+    from app.pipeline.analyze.ollama_client import call_llm, extract_json
+
+    for attempt in range(1, 3):
+        logger.warning(
+            "Issue text failed grounding for rank %d (attempt %d): %s — retrying",
+            rank, attempt, "; ".join(reasons),
+        )
+        correction = (
+            f"\n\nYour previous response was rejected because it contained "
+            f"{'; '.join(reasons)}. Report events directly instead of "
+            "through phrases like 'reports say' or 'coverage indicates,' "
+            "do not call any official 'former' unless the articles do, "
+            "do not evaluate whether any action was warranted or "
+            "justified, and name the specific office-holder instead of "
+            "a vague indefinite phrase like 'a president' or 'a "
+            "Speaker' — there is only one at a time."
+        )
+        if attempt > 1:
+            correction += (
+                "\n\nExample fix: rewrite \"Recent reports highlight the "
+                "administration's plans to expand the program\" as \"The "
+                "administration plans to expand the program.\" State WHO "
+                "did WHAT — never who is talking about it."
+            )
+        retry_result = call_llm(
+            prompt_version=ACTION_CENTER_PROMPT_VERSION,
+            system_prompt=_SYSTEM_PROMPT,
+            user_prompt=user_prompt + correction,
+            cache_key=None,
+            db_session=db,
+            max_tokens=1024,
+            num_ctx=4096,
+        )
+        if isinstance(retry_result, str):
+            retry_result = extract_json(retry_result)
+        if isinstance(retry_result, dict):
+            retry_summary = _fix_impossible_senate_vote_counts(retry_result.get("summary", ""))
+            retry_facts = _validate_facts(retry_result.get("facts", []), source_text=issue_source_text)
+            retry_facts = [_fix_impossible_senate_vote_counts(f) for f in retry_facts]
+            retry_combined = retry_summary + " " + " ".join(retry_facts)
+            retry_reasons = hedge_and_editorializing_violations(retry_combined)
+            retry_former = ungrounded_former_official_claims(retry_combined, issue_source_text)
+            if retry_summary and not retry_reasons and not retry_former:
+                fixed_title, fixed_summary, fixed_facts = _validate_politician_roles(
+                    title, retry_summary, retry_facts, db,
+                )
+                return fixed_title, fixed_summary, fixed_facts
+            # Feed the NEXT attempt the reasons THIS attempt actually failed
+            # for, not the original ones — a fixed hedge phrase replaced by a
+            # different one needs a correction prompt naming the new problem.
+            reasons = retry_reasons + (
+                [f"'former' office-holder status the articles never state ({', '.join(retry_former)})"]
+                if retry_former else []
+            )
+    logger.error(
+        "Issue text still had hedging/editorializing language for rank %d "
+        "after 2 attempts — skipping: %s",
+        rank, "; ".join(reasons),
+    )
+    return None
+
+
 # Attributes copied from a fresh cluster pass onto a matched existing
 # ActionIssue row (_apply_matched_issue_update) — a fixed set regardless of
 # which cluster is being processed, so this lives at module scope rather
@@ -4257,54 +4347,13 @@ def _run_refresh(db: Session) -> int:
                 f"({', '.join(summary_former)})"
             )
         if reasons:
-            logger.warning(
-                "Issue text failed grounding for rank %d: %s — retrying",
-                rank, "; ".join(reasons),
+            retried = _retry_until_grounded(
+                user_prompt, reasons, rank, db, issue_source_text, title,
             )
-            retry_result = call_llm(
-                prompt_version=ACTION_CENTER_PROMPT_VERSION,
-                system_prompt=_SYSTEM_PROMPT,
-                user_prompt=user_prompt + (
-                    f"\n\nYour previous response was rejected because it contained "
-                    f"{'; '.join(reasons)}. Report events directly instead of "
-                    "through phrases like 'reports say' or 'coverage indicates,' "
-                    "do not call any official 'former' unless the articles do, "
-                    "do not evaluate whether any action was warranted or "
-                    "justified, and name the specific office-holder instead of "
-                    "a vague indefinite phrase like 'a president' or 'a "
-                    "Speaker' — there is only one at a time."
-                ),
-                cache_key=None,
-                db_session=db,
-                max_tokens=1024,
-                num_ctx=4096,
-            )
-            if isinstance(retry_result, str):
-                retry_result = extract_json(retry_result)
-            resolved = False
-            if isinstance(retry_result, dict):
-                retry_summary = _fix_impossible_senate_vote_counts(retry_result.get("summary", ""))
-                retry_facts = _validate_facts(
-                    retry_result.get("facts", []),
-                    source_text=issue_source_text,
-                )
-                retry_facts = [_fix_impossible_senate_vote_counts(f) for f in retry_facts]
-                retry_combined = retry_summary + " " + " ".join(retry_facts)
-                if (
-                    retry_summary
-                    and not hedge_and_editorializing_violations(retry_combined)
-                    and not ungrounded_former_official_claims(retry_combined, issue_source_text)
-                ):
-                    title, summary, facts = _validate_politician_roles(title, retry_summary, retry_facts, db)
-                    resolved = True
-            if not resolved:
-                logger.error(
-                    "Issue text still had hedging/editorializing language for "
-                    "rank %d after retry — skipping: %s",
-                    rank, "; ".join(reasons),
-                )
+            if retried is None:
                 action_metrics.increment("issues_skipped_grounding")
                 continue
+            title, summary, facts = retried
 
         # Second-pass check for who-did-what-to-whom role reversal (see
         # _check_summary_roles). One retry with a corrective note; if the

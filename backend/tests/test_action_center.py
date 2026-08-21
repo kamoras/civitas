@@ -23,6 +23,7 @@ from app.pipeline.analyze.action_center import (
     _find_related_officials,
     _find_matching_issue,
     _apply_matched_issue_update,
+    _retry_until_grounded,
     _bsky_repost_has_new_information,
     _fix_impossible_senate_vote_counts,
     _is_exact_content_duplicate,
@@ -1076,6 +1077,131 @@ def _new_values_for(title: str, facts: list[str], primary_article_date: str) -> 
         "related_senators": "[]", "related_officials": "[]",
         "primary_article_date": primary_article_date,
     }
+
+
+class TestRetryUntilGrounded:
+    """_retry_until_grounded, extracted from _run_refresh (2026-08) for
+    direct testability — a single retry cleared close to none of these
+    live (admin_action_metrics audit: 67 of 192 clusters considered over
+    48h were rejected here, 39 of 48 hourly runs produced zero new
+    topics), which is what motivated a second attempt in the first place."""
+
+    def _mock_db(self):
+        mock_db = MagicMock()
+        # _validate_politician_roles queries Senator/Representative — empty
+        # lists so the "Senator X" name-check finds nothing to strip and
+        # doesn't error on a non-iterable MagicMock.
+        mock_db.query.return_value.all.return_value = []
+        return mock_db
+
+    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    def test_first_attempt_succeeds(self, mock_call_llm):
+        mock_call_llm.return_value = json.dumps({
+            "summary": "The Senate confirmed the nominee.",
+            "facts": ["The vote was unanimous."],
+        })
+
+        result = _retry_until_grounded(
+            user_prompt="generate the issue",
+            reasons=["hedging attribution phrases (reports say)"],
+            rank=1, db=self._mock_db(), issue_source_text="source article text",
+            title="Original Title",
+        )
+
+        assert result == ("Original Title", "The Senate confirmed the nominee.", ["The vote was unanimous."])
+        assert mock_call_llm.call_count == 1
+
+    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    def test_second_attempt_succeeds_after_first_still_hedges(self, mock_call_llm):
+        mock_call_llm.side_effect = [
+            json.dumps({
+                "summary": "Recent reports highlight the administration's plans.",
+                "facts": ["The plan was discussed."],
+            }),
+            json.dumps({
+                "summary": "The administration announced its plans.",
+                "facts": ["The plan was discussed."],
+            }),
+        ]
+
+        result = _retry_until_grounded(
+            user_prompt="generate the issue",
+            reasons=["hedging attribution phrases (reports say)"],
+            rank=1, db=self._mock_db(), issue_source_text="source article text",
+            title="Original Title",
+        )
+
+        assert result is not None
+        assert result[1] == "The administration announced its plans."
+        assert mock_call_llm.call_count == 2
+        # The second attempt's prompt carries the worked example — the
+        # whole point of trying a second time with a different correction.
+        second_call_prompt = mock_call_llm.call_args_list[1].kwargs["user_prompt"]
+        assert "Example fix" in second_call_prompt
+
+    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    def test_both_attempts_still_hedging_returns_none(self, mock_call_llm):
+        mock_call_llm.return_value = json.dumps({
+            "summary": "Recent reports highlight the administration's plans.",
+            "facts": ["The plan was discussed."],
+        })
+
+        result = _retry_until_grounded(
+            user_prompt="generate the issue",
+            reasons=["hedging attribution phrases (reports say)"],
+            rank=1, db=self._mock_db(), issue_source_text="source article text",
+            title="Original Title",
+        )
+
+        assert result is None
+        assert mock_call_llm.call_count == 2
+
+    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    def test_second_attempts_correction_names_the_new_failure_not_the_original(self, mock_call_llm):
+        # Attempt 1 fixes the original hedge but introduces a DIFFERENT one —
+        # attempt 2's prompt must name what attempt 1 actually got wrong.
+        mock_call_llm.side_effect = [
+            json.dumps({
+                "summary": "Analysts note the administration's plans.",
+                "facts": ["The plan was discussed."],
+            }),
+            json.dumps({
+                "summary": "The administration announced its plans.",
+                "facts": ["The plan was discussed."],
+            }),
+        ]
+
+        _retry_until_grounded(
+            user_prompt="generate the issue",
+            reasons=["hedging attribution phrases (reports say)"],
+            rank=1, db=self._mock_db(), issue_source_text="source article text",
+            title="Original Title",
+        )
+
+        # "reports say" (the ORIGINAL reason) also appears verbatim in the
+        # correction template's own static example text, so check the
+        # specific "rejected because it contained X" clause rather than
+        # the prompt as a whole.
+        second_call_prompt = mock_call_llm.call_args_list[1].kwargs["user_prompt"]
+        assert "rejected because it contained hedging attribution phrases (Analysts note)" in second_call_prompt
+        assert "rejected because it contained hedging attribution phrases (reports say)" not in second_call_prompt
+
+    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    def test_unparseable_response_counts_as_a_failed_attempt(self, mock_call_llm):
+        mock_call_llm.side_effect = [
+            "not valid json at all",
+            json.dumps({"summary": "The administration announced its plans.", "facts": []}),
+        ]
+
+        result = _retry_until_grounded(
+            user_prompt="generate the issue",
+            reasons=["hedging attribution phrases (reports say)"],
+            rank=1, db=self._mock_db(), issue_source_text="source article text",
+            title="Original Title",
+        )
+
+        assert result is not None
+        assert mock_call_llm.call_count == 2
 
 
 class TestApplyMatchedIssueUpdate:
