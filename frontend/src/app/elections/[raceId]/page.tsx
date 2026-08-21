@@ -1,55 +1,33 @@
-import { Metadata } from "next";
-import { notFound } from "next/navigation";
-import { raceTitleLabel } from "@/lib/elections";
-import type { RaceDetail } from "@/types/election";
-import { usableRecord } from "@/lib/ssrPayload";
-import RaceDetailClient from "./RaceDetailClient";
+import { notFound, redirect } from "next/navigation";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
-const SITE = "https://civitas-research.org";
 
-async function fetchRace(raceId: string): Promise<RaceDetail | null> {
+/** 2026-08 revamp: race detail merged into the state ballot page (no more
+ * "top level page + nested full race page" maze) — this route now only
+ * exists so old links (Bluesky posts already published under
+ * /elections/{raceId}) keep working, by redirecting to the race's
+ * section of its state page. */
+export default async function RaceDetailRedirect({
+  params,
+}: {
+  params: Promise<{ raceId: string }>;
+}) {
+  const { raceId } = await params;
+
+  let state: string | null = null;
   try {
     const res = await fetch(`${BACKEND}/api/elections/races/${encodeURIComponent(raceId)}`, {
       next: { revalidate: 120 },
     });
-    if (!res.ok) return null;
-    return usableRecord<RaceDetail>(await res.json(), "id", "state");
+    if (res.ok) {
+      const data = await res.json();
+      state = typeof data?.state === "string" ? data.state : null;
+    }
   } catch {
-    return null;
+    state = null;
   }
-}
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ raceId: string }>;
-}): Promise<Metadata> {
-  const { raceId } = await params;
-  const race = await fetchRace(raceId);
+  if (!state) notFound();
 
-  const title = race ? `${raceTitleLabel(race)} ${race.cycleYear} — Civitas` : "Race — Civitas";
-  const description = race
-    ? `${race.candidates.length} ${race.candidates.length === 1 ? "candidate" : "candidates"}, fundraising, and live coverage for the ${race.cycleYear} ${raceTitleLabel(race)} race.`
-    : "Election race detail on Civitas.";
-
-  return {
-    title,
-    description,
-    openGraph: {
-      title,
-      description,
-      url: `${SITE}/elections/${raceId}`,
-      siteName: "Civitas",
-    },
-  };
-}
-
-export default async function RaceDetailPage({ params }: { params: Promise<{ raceId: string }> }) {
-  const { raceId } = await params;
-  const race = await fetchRace(raceId);
-
-  if (!race) notFound();
-
-  return <RaceDetailClient race={race} />;
+  redirect(`/elections/states/${state}#race-${raceId}`);
 }

@@ -1,5 +1,7 @@
-import type { CandidateSummary } from "@/types/election";
+import Link from "next/link";
+import type { BallotCandidate } from "@/types/election";
 import { formatCurrency } from "@/lib/formatting";
+import { getScoreColor } from "@/lib/representation";
 
 // FEC's party codes ("DEM"/"REP"/"IND"/...) don't match lib/partyStyles.ts's
 // D/R/I keys (those back President/Justice's own party codes), so this
@@ -31,7 +33,7 @@ const INCUMBENT_LABELS: Record<string, string> = {
   O: "OPEN SEAT",
 };
 
-export default function CandidateCard({ candidate }: { candidate: CandidateSummary }) {
+export default function CandidateCard({ candidate }: { candidate: BallotCandidate }) {
   const pm = getPartyMeta(candidate.party);
   // UTC date only, sliced from the ISO string — deterministic across
   // server and client renders, so no locale/hydration hazard.
@@ -62,11 +64,22 @@ export default function CandidateCard({ candidate }: { candidate: CandidateSumma
           <p className={`mt-0.5 font-mono text-xs tracking-[0.1em] ${pm.color}`}>{pm.label}</p>
         </div>
 
-        {candidate.incumbentChallenge && (
-          <span className="shrink-0 border border-white/15 px-2 py-0.5 font-mono text-xs tracking-[0.1em] text-ink-lo">
-            {INCUMBENT_LABELS[candidate.incumbentChallenge] ?? candidate.incumbentChallenge}
-          </span>
-        )}
+        <div className="flex shrink-0 items-center gap-2">
+          {candidate.incumbentChallenge && (
+            <span className="border border-white/15 px-2 py-0.5 font-mono text-xs tracking-[0.1em] text-ink-lo">
+              {INCUMBENT_LABELS[candidate.incumbentChallenge] ?? candidate.incumbentChallenge}
+            </span>
+          )}
+          {candidate.incumbentRecord && (
+            <Link
+              href={`/politicians/${candidate.incumbentRecord.id}`}
+              className={`font-mono text-xs hover:underline ${getScoreColor(candidate.incumbentRecord.score)}`}
+              title="View this member's full Representation Scorecard"
+            >
+              SCORE: {candidate.incumbentRecord.score.toFixed(0)} →
+            </Link>
+          )}
+        </div>
       </div>
 
       {syncedOn == null ? (
