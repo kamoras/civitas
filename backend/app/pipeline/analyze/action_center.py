@@ -4600,6 +4600,15 @@ def _run_refresh(db: Session) -> int:
         .all()
     )
     n_retired, n_graced = _retire_untouched_issues(all_current, _matched_issue_ids, _grace_cutoff)
+    # Structured, not just logged: every other pipeline gate feeds
+    # admin_action_metrics, but retirement/grace never did, which is
+    # exactly why _RETIREMENT_GRACE_HOURS (90min -> 24h, 2026-08) had no
+    # real history to validate against — there's no retired_at column
+    # either, so free-text log lines were the only record. This is the
+    # fix for THAT gap, not a claim that 24h is now proven correct; give
+    # it real time to accumulate before revisiting the number.
+    action_metrics.increment("issues_retired", n_retired)
+    action_metrics.increment("issues_graced", n_graced)
     if n_retired:
         logger.info("Retired %d stale issues not in current clusters", n_retired)
     if n_graced:
