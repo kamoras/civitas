@@ -304,7 +304,18 @@ def _retire_untouched_issues(
     is the exact mechanic _RETIREMENT_GRACE_HOURS controls, and a change
     to that constant deserves a real test pinning what it actually does
     rather than only a comment asserting it.
+
+    Also records issues_retired/issues_graced on action_metrics: every
+    other pipeline gate feeds admin_action_metrics, but retirement/grace
+    never did, which is exactly why _RETIREMENT_GRACE_HOURS (90min -> 24h,
+    2026-08) had no real history to validate against — there's no
+    retired_at column either, so free-text log lines were the only
+    record. This closes THAT gap; it isn't a claim that 24h is now proven
+    correct, so give it real time to accumulate before revisiting the
+    number.
     """
+    from app.pipeline.analyze import action_metrics
+
     n_retired = n_graced = 0
     for row in all_current:
         if row.id not in matched_issue_ids:
@@ -314,6 +325,8 @@ def _retire_untouched_issues(
             else:
                 row.is_current = False
                 n_retired += 1
+    action_metrics.increment("issues_retired", n_retired)
+    action_metrics.increment("issues_graced", n_graced)
     return n_retired, n_graced
 
 
@@ -4600,15 +4613,6 @@ def _run_refresh(db: Session) -> int:
         .all()
     )
     n_retired, n_graced = _retire_untouched_issues(all_current, _matched_issue_ids, _grace_cutoff)
-    # Structured, not just logged: every other pipeline gate feeds
-    # admin_action_metrics, but retirement/grace never did, which is
-    # exactly why _RETIREMENT_GRACE_HOURS (90min -> 24h, 2026-08) had no
-    # real history to validate against — there's no retired_at column
-    # either, so free-text log lines were the only record. This is the
-    # fix for THAT gap, not a claim that 24h is now proven correct; give
-    # it real time to accumulate before revisiting the number.
-    action_metrics.increment("issues_retired", n_retired)
-    action_metrics.increment("issues_graced", n_graced)
     if n_retired:
         logger.info("Retired %d stale issues not in current clusters", n_retired)
     if n_graced:

@@ -1145,6 +1145,23 @@ class TestRetireUntouchedIssues:
         assert old_unmatched.is_current is False
         assert recent_unmatched.is_current is True
 
+    def test_records_retired_and_graced_counts_on_action_metrics(self):
+        # admin_action_metrics is the only way to check _RETIREMENT_GRACE_HOURS
+        # against real history — before this, retirement/grace were logged as
+        # free text only, so the 24h value had nothing to be validated against.
+        from app.pipeline.analyze import action_metrics
+
+        action_metrics.reset()
+        now = utcnow()
+        old_unmatched = self._issue(2, now - timedelta(hours=25))
+        recent_unmatched = self._issue(3, now - timedelta(hours=1))
+
+        _retire_untouched_issues([old_unmatched, recent_unmatched], set(), now - timedelta(hours=24))
+
+        counts = action_metrics.snapshot()
+        assert counts["issues_retired"] == 1
+        assert counts["issues_graced"] == 1
+
 
 class TestRetryUntilGrounded:
     """_retry_until_grounded, extracted from _run_refresh (2026-08) for
