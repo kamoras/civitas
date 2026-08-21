@@ -11,7 +11,7 @@ const RECENT_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 // the useSyncExternalStore server/client-snapshot idiom (see StancePulse.tsx
 // for repo precedent), which avoids a setState-in-effect.
 const noopSubscribe = () => () => {};
-function useMounted(): boolean {
+export function useMounted(): boolean {
   return useSyncExternalStore(
     noopSubscribe,
     () => true,

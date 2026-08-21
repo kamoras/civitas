@@ -1,27 +1,45 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
-import BallotRaceOptions from "@/components/elections/BallotRaceOptions";
-import CoverageFeed from "@/components/elections/CoverageFeed";
+import RaceFullDetail from "@/components/elections/RaceFullDetail";
+import CoverageFeed, { useMounted } from "@/components/elections/CoverageFeed";
 import AddressLookup from "@/components/elections/AddressLookup";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import { districtCountiesLabel, formatPvi, pviColor, raceShortLabel } from "@/lib/elections";
-import type { StateBallot } from "@/types/election";
+import type { StateBallot, RaceCoverageItem } from "@/types/election";
 
 function HouseSection({
   state,
   houseRaces,
+  coverage,
 }: {
   state: string;
   houseRaces: StateBallot["houseRaces"];
+  coverage: RaceCoverageItem[];
 }) {
   const [selectedId, setSelectedId] = useState("");
-  const selected = houseRaces.find((r) => r.id === selectedId) || null;
+
+  // A House race only renders once selected, so a #race-{id} deep link
+  // (old /elections/{raceId} redirects, and new Bluesky post links) needs
+  // to select it before the browser's anchor-scroll would have any
+  // element to find. SSR always renders unselected (window is undefined
+  // there), so the hash is only read once mounted — same
+  // useSyncExternalStore idiom CoverageFeed uses to avoid a hydration
+  // mismatch, here avoiding a setState-in-effect too.
+  const mounted = useMounted();
+  const hashRaceId = mounted ? (window.location.hash.match(/^#race-(.+)$/)?.[1] ?? null) : null;
+  const selected = houseRaces.find((r) => r.id === (selectedId || hashRaceId)) || null;
+
+  useEffect(() => {
+    if (selected) {
+      document.getElementById(`race-${selected.id}`)?.scrollIntoView();
+    }
+  }, [selected]);
 
   return (
     <section className="panel mb-6">
@@ -56,7 +74,7 @@ function HouseSection({
           }}
         />
         <select
-          value={selectedId}
+          value={selected?.id ?? ""}
           onChange={(e) => setSelectedId(e.target.value)}
           className="bg-surface-base border border-white/15 text-ink-hi font-mono text-xs px-3 py-2 mb-4"
           aria-label="Select your district"
@@ -87,7 +105,10 @@ function HouseSection({
             {selected.counties && (
               <p className="text-xs text-ink-min mb-3">Covers: {selected.counties.join(", ")}</p>
             )}
-            <BallotRaceOptions race={selected} />
+            <RaceFullDetail
+              race={selected}
+              coverage={coverage.filter((item) => item.race?.id === selected.id)}
+            />
           </div>
         )}
       </div>
@@ -181,7 +202,10 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                         {race.isSpecial ? "SPECIAL ELECTION" : "REGULAR ELECTION"}
                       </p>
                     )}
-                    <BallotRaceOptions race={race} />
+                    <RaceFullDetail
+                      race={race}
+                      coverage={ballot.coverage.filter((item) => item.race?.id === race.id)}
+                    />
                   </div>
                 ))}
               </div>
@@ -189,7 +213,11 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
           )}
 
           {ballot.houseRaces.length > 0 && (
-            <HouseSection state={ballot.state} houseRaces={ballot.houseRaces} />
+            <HouseSection
+              state={ballot.state}
+              houseRaces={ballot.houseRaces}
+              coverage={ballot.coverage}
+            />
           )}
 
           {!hasFederalRaces && (

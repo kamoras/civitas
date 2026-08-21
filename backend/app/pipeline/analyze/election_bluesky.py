@@ -171,7 +171,10 @@ Return JSON: {{"post": "<your sentence>"}}"""
 
 
 def _publish(text: str, race: Race) -> bool:
-    url = f"https://civitas-research.org/elections/{race.id}"
+    # 2026-08: race detail merged into the state ballot page — old
+    # /elections/{race.id} links still redirect here, but new posts go
+    # straight to the merged page.
+    url = f"https://civitas-research.org/elections/states/{race.state}#race-{race.id}"
     return publish_post(
         text, url,
         success_msg=f"Posted election coverage update: {race.id}",
