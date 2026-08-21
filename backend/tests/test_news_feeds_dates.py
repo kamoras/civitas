@@ -96,6 +96,20 @@ class TestStripHtml:
         text = "The House passed the bill. It now goes to the Senate."
         assert _strip_html(text) is text
 
+    def test_a_tag_truncated_before_its_closing_bracket_is_still_removed(self):
+        """Live ingestion strips before truncating to MAX_SUMMARY_CHARS, so
+        this can't happen going forward — but rows stored before this
+        function existed truncated the raw HTML first, freezing a dangling
+        "</s" (missing its ">") into the summary forever. _HTML_TAG_RE
+        requires a closing ">" and misses this; a bare trailing "<" that
+        isn't a tag (the comparison-operator case above) must still survive."""
+        raw = "(AP Photo/Chuck Burton)</s"
+        assert _strip_html(raw) == "(AP Photo/Chuck Burton)"
+
+    def test_comparison_operator_at_the_very_end_of_the_string_still_survives(self):
+        text = "The gap narrowed to <"
+        assert _strip_html(text) == text
+
     def test_atom_entries_are_stripped_too(self):
         """The Atom branch builds its NewsArticle separately from the RSS
         one, so it is its own chance to forget the strip.
