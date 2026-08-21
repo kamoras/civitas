@@ -152,6 +152,11 @@ MAX_ISSUES = 4
 # mechanically enforced.
 ACTION_CENTER_PROMPT_VERSION = "action-v21"
 
+# Minimum age (from created_at, i.e. first_surfaced) before an issue is
+# eligible for retirement just for not re-matching this run — see the
+# retirement pass in _run_refresh for the full reasoning (2026-08 audit).
+_RETIREMENT_GRACE_HOURS = 24
+
 # No-signature fallback for topic matching (rows with no stored facts —
 # rare). Measured under the similarity model (2026-07-22): a reworded
 # same headline scores 0.823, a different-story same-vocab pair 0.552 —
@@ -286,6 +291,30 @@ def _bsky_repost_has_new_information(old_facts_json: str, new_facts: list[str]) 
     if _issue_signature("", new_facts) - _issue_signature("", old_facts):
         return True
     return bool(_development_markers(new_facts) - _development_markers(old_facts))
+
+
+def _retire_untouched_issues(
+    all_current: list[ActionIssue], matched_issue_ids: set[int], grace_cutoff: datetime,
+) -> tuple[int, int]:
+    """Flip is_current=False on rows this run didn't match, EXCEPT ones
+    still younger than grace_cutoff — returns (n_retired, n_graced).
+
+    Extracted from _run_refresh (2026-08) for direct testability, same
+    precedent as _apply_matched_issue_update/_retry_until_grounded — this
+    is the exact mechanic _RETIREMENT_GRACE_HOURS controls, and a change
+    to that constant deserves a real test pinning what it actually does
+    rather than only a comment asserting it.
+    """
+    n_retired = n_graced = 0
+    for row in all_current:
+        if row.id not in matched_issue_ids:
+            if row.created_at and row.created_at > grace_cutoff:
+                # Too young to retire — give it another run to prove itself.
+                n_graced += 1
+            else:
+                row.is_current = False
+                n_retired += 1
+    return n_retired, n_graced
 
 
 def _retry_until_grounded(
@@ -4552,26 +4581,25 @@ def _run_refresh(db: Session) -> int:
         _matched_issue_ids.add(ni.id)
 
     # Retire issues not touched in this run, but only after a grace period.
-    # An issue must miss two consecutive hourly runs (~2h) before being retired.
-    # This prevents a briefly-trending topic from displacing a solid story on
-    # a single run, then the original story coming back an hour later.
-    # Grace period: issue must be older than 90 minutes to be eligible for retirement.
-    _grace_cutoff = utcnow() - timedelta(minutes=90)
+    # 24h, not the original 90 minutes: reader feedback that issues "come
+    # and go too quickly" turned out to be mostly a SUPPLY problem (2026-08
+    # audit via admin_action_metrics: the grounding-rejection gate alone
+    # was suppressing enough candidates that 39 of 48 hourly runs produced
+    # zero new topics — see _retry_until_grounded), not a retirement-timing
+    # one — but 90 minutes was still too short on its own merits once
+    # supply is healthier: a story that stops clustering the moment it
+    # crosses that age gets pulled the very next run, even if it's still
+    # the most substantive thing on the board. Every issue now gets a
+    # guaranteed full day in the record before it can be retired purely
+    # for not re-matching, matching how a register reads: today's docket
+    # doesn't quietly shrink hour to hour.
+    _grace_cutoff = utcnow() - timedelta(hours=_RETIREMENT_GRACE_HOURS)
     all_current = (
         db.query(ActionIssue)
         .filter(ActionIssue.is_current == True)  # noqa: E712
         .all()
     )
-    n_retired = 0
-    n_graced = 0
-    for row in all_current:
-        if row.id not in _matched_issue_ids:
-            if row.created_at and row.created_at > _grace_cutoff:
-                # Too young to retire — give it another run to prove itself.
-                n_graced += 1
-            else:
-                row.is_current = False
-                n_retired += 1
+    n_retired, n_graced = _retire_untouched_issues(all_current, _matched_issue_ids, _grace_cutoff)
     if n_retired:
         logger.info("Retired %d stale issues not in current clusters", n_retired)
     if n_graced:

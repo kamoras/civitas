@@ -65,6 +65,100 @@ class TestLatestCurrentIssues:
 
         assert [i.title for i in issues] == ["Current"]
 
+    def test_stale_fallback_never_returns_duplicate_ranks(self, db_session):
+        """Regression, confirmed live 2026-08-21: rows retired across
+        several DIFFERENT hourly runs can share one `date` value (date is
+        only touched by a match/create, never by retirement) while each
+        held rank 1 from ITS OWN run's independent renumbering pass — the
+        stale-data fallback used to hand those raw stored ranks straight
+        to the reader, so the Action Center showed four simultaneous
+        "#1"s."""
+        db_session.add(_make_issue("2026-08-20", 1, "Was #1 this morning", is_current=False))
+        db_session.add(_make_issue("2026-08-20", 1, "Was #1 this evening", is_current=False))
+        db_session.add(_make_issue("2026-08-20", 2, "Was #2 twice", is_current=False))
+        db_session.add(_make_issue("2026-08-20", 2, "Also #2 twice", is_current=False))
+        db_session.commit()
+
+        issues = _latest_current_issues(db_session)
+
+        assert sorted(i.rank for i in issues) == [1, 2, 3, 4]
+
+    def test_requested_date_fallback_also_gets_clean_ranks(self, db_session):
+        db_session.add(_make_issue("2026-07-14", 1, "First one", is_current=False))
+        db_session.add(_make_issue("2026-07-14", 1, "Second one", is_current=False))
+        db_session.commit()
+
+        issues = _latest_current_issues(db_session, for_date="2026-07-14")
+
+        assert sorted(i.rank for i in issues) == [1, 2]
+
+
+class TestRenumberForDisplay:
+    def test_preserves_relative_order_when_ranks_already_distinct(self, db_session):
+        from app.api.action import _renumber_for_display
+
+        first = _make_issue("2026-08-20", 1, "First", is_current=False)
+        second = _make_issue("2026-08-20", 2, "Second", is_current=False)
+        db_session.add_all([first, second])
+        db_session.commit()
+
+        result = _renumber_for_display([first, second])
+
+        assert [i.title for i in result] == ["First", "Second"]
+        assert [i.rank for i in result] == [1, 2]
+
+    def test_breaks_a_rank_tie_by_most_recently_touched_first(self, db_session):
+        from datetime import datetime
+
+        from app.api.action import _renumber_for_display
+
+        older = ActionIssue(
+            date="2026-08-20", rank=1, title="Older #1", is_current=False,
+            created_at=datetime(2026, 8, 20, 8, 0, 0),
+        )
+        newer = ActionIssue(
+            date="2026-08-20", rank=1, title="Newer #1", is_current=False,
+            created_at=datetime(2026, 8, 20, 20, 0, 0),
+        )
+        db_session.add_all([older, newer])
+        db_session.commit()
+
+        result = _renumber_for_display([older, newer])
+
+        assert [i.title for i in result] == ["Newer #1", "Older #1"]
+        assert [i.rank for i in result] == [1, 2]
+
+    def test_closes_gaps_from_skipped_ranks(self, db_session):
+        from app.api.action import _renumber_for_display
+
+        a = _make_issue("2026-08-20", 3, "A", is_current=False)
+        b = _make_issue("2026-08-20", 7, "B", is_current=False)
+        db_session.add_all([a, b])
+        db_session.commit()
+
+        result = _renumber_for_display([a, b])
+
+        assert [i.rank for i in result] == [1, 2]
+
+    def test_does_not_persist_the_renumbering(self, db_session):
+        """Purely a display fix — these rows are is_current=False, and the
+        real stored rank belongs to whichever run last touched the row,
+        not to a read request."""
+        from app.api.action import _renumber_for_display
+
+        a = _make_issue("2026-08-20", 1, "A", is_current=False)
+        b = _make_issue("2026-08-20", 1, "B", is_current=False)
+        db_session.add_all([a, b])
+        db_session.commit()
+
+        _renumber_for_display([a, b])
+        db_session.rollback()
+
+        db_session.refresh(a)
+        db_session.refresh(b)
+        assert a.rank == 1
+        assert b.rank == 1
+
 
 class TestRelatedBillInternalLinks:
     """The issues API should point related bills at our own /bills/{id} page
@@ -552,3 +646,38 @@ class TestNewFactsField:
 
         assert resp["newFacts"] == ["Brand new fact."]
         assert resp["facts"] == ["Old fact.", "Brand new fact."]
+
+
+class TestCacheHeaderMatchesNginx:
+    """The browser's own HTTP cache honors Cache-Control independently of
+    nginx's proxy_cache — a mismatch between the two just relocates the
+    staleness window rather than closing it (2026-08 incident: a browser
+    holding a response cached before a deploy added a field crashed the
+    whole Action Center). This doesn't read nginx/civitas.conf — it just
+    pins that this endpoint's own number is the deliberately-short one, so
+    a future change to one side without the other is at least a failing
+    test, not a silent drift back to five minutes."""
+
+    async def test_issues_list_cache_header_is_short(self, db_session):
+        from fastapi import Response
+
+        from app.api.action import get_action_issues
+
+        resp = Response()
+        await get_action_issues(resp, date=None, db=db_session, db_visits=db_session)
+
+        assert resp.headers["Cache-Control"] == "public, max-age=30"
+
+    async def test_single_issue_cache_header_is_short(self, db_session):
+        from fastapi import Response
+
+        from app.api.action import get_action_issue
+
+        issue = ActionIssue(date="2026-08-21", rank=1, title="Issue", summary="s")
+        db_session.add(issue)
+        db_session.commit()
+
+        resp = Response()
+        await get_action_issue(to_public_id(issue.id), resp, db=db_session)
+
+        assert resp.headers["Cache-Control"] == "public, max-age=30"

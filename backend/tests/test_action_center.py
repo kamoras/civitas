@@ -23,6 +23,7 @@ from app.pipeline.analyze.action_center import (
     _find_related_officials,
     _find_matching_issue,
     _apply_matched_issue_update,
+    _retire_untouched_issues,
     _retry_until_grounded,
     _bsky_repost_has_new_information,
     _fix_impossible_senate_vote_counts,
@@ -1077,6 +1078,72 @@ def _new_values_for(title: str, facts: list[str], primary_article_date: str) -> 
         "related_senators": "[]", "related_officials": "[]",
         "primary_article_date": primary_article_date,
     }
+
+
+class TestRetireUntouchedIssues:
+    """_retire_untouched_issues, extracted from _run_refresh (2026-08) for
+    direct testability — pins what _RETIREMENT_GRACE_HOURS (90min -> 24h,
+    2026-08 audit) actually controls, not just what the comment claims."""
+
+    def _issue(self, id: int, created_at: datetime | None) -> ActionIssue:
+        row = ActionIssue(date="2026-08-20", rank=1, title=f"Issue {id}", summary="s")
+        row.id = id
+        row.created_at = created_at
+        row.is_current = True
+        return row
+
+    def test_a_matched_issue_is_never_retired_regardless_of_age(self):
+        now = utcnow()
+        ancient = self._issue(1, now - timedelta(days=5))
+
+        n_retired, n_graced = _retire_untouched_issues([ancient], {1}, now - timedelta(hours=24))
+
+        assert (n_retired, n_graced) == (0, 0)
+        assert ancient.is_current is True
+
+    def test_unmatched_issue_past_the_grace_cutoff_is_retired(self):
+        now = utcnow()
+        old = self._issue(2, now - timedelta(hours=25))
+
+        n_retired, n_graced = _retire_untouched_issues([old], set(), now - timedelta(hours=24))
+
+        assert (n_retired, n_graced) == (1, 0)
+        assert old.is_current is False
+
+    def test_unmatched_issue_within_the_grace_cutoff_is_spared(self):
+        now = utcnow()
+        recent = self._issue(3, now - timedelta(hours=1))
+
+        n_retired, n_graced = _retire_untouched_issues([recent], set(), now - timedelta(hours=24))
+
+        assert (n_retired, n_graced) == (0, 1)
+        assert recent.is_current is True
+
+    def test_missing_created_at_is_treated_as_eligible_for_retirement(self):
+        # Can't prove it's young without a timestamp — fails closed rather
+        # than sparing indefinitely.
+        now = utcnow()
+        undated = self._issue(4, None)
+
+        n_retired, n_graced = _retire_untouched_issues([undated], set(), now - timedelta(hours=24))
+
+        assert (n_retired, n_graced) == (1, 0)
+        assert undated.is_current is False
+
+    def test_mixed_batch_counts_each_correctly(self):
+        now = utcnow()
+        matched = self._issue(1, now - timedelta(hours=48))
+        old_unmatched = self._issue(2, now - timedelta(hours=25))
+        recent_unmatched = self._issue(3, now - timedelta(hours=1))
+
+        n_retired, n_graced = _retire_untouched_issues(
+            [matched, old_unmatched, recent_unmatched], {1}, now - timedelta(hours=24),
+        )
+
+        assert (n_retired, n_graced) == (1, 1)
+        assert matched.is_current is True
+        assert old_unmatched.is_current is False
+        assert recent_unmatched.is_current is True
 
 
 class TestRetryUntilGrounded:

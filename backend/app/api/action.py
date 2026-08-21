@@ -39,6 +39,14 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/action")
 
+# Kept in step with nginx/civitas.conf's proxy_cache_valid for the same
+# /api/action/issues location — the browser's own HTTP cache honors this
+# header independently of nginx's, so a mismatch between the two just
+# moves the staleness window rather than closing it (2026-08 incident: a
+# response cached before a deploy added a field crashed the whole Action
+# Center for any visitor whose BROWSER, not nginx, was still holding it).
+_ACTION_ISSUES_CACHE_TTL_S = 30
+
 
 def _parse_json_field(raw: str, default: list | None = None) -> list:
     try:
@@ -46,6 +54,33 @@ def _parse_json_field(raw: str, default: list | None = None) -> list:
         return val if isinstance(val, list) else (default or [])
     except (json.JSONDecodeError, TypeError):
         return default or []
+
+
+def _renumber_for_display(issues: list[ActionIssue]) -> list[ActionIssue]:
+    """Give a degraded-fallback result set consistent, gap-free, non-
+    duplicate ranks — in memory only, never persisted (these rows are
+    is_current=False; a real run's own renumbering pass, not a read
+    request, owns the stored value).
+
+    A row's stored `rank` is only ever kept unique WITHIN the single run
+    that last touched it (_apply_matched_issue_update's renumbering pass
+    operates over that run's is_current set). _latest_current_issues's
+    fallback branches can return rows last touched by DIFFERENT runs that
+    happen to share a `date` value — each independently had its own #1,
+    #2... — so the raw stored ranks collide (confirmed live, 2026-08:
+    four rows sharing rank 1 on the same date once everything had
+    retired). Sorted by the stored rank first, so relative importance
+    from each row's own run is preserved, then by recency as the
+    tiebreaker among collisions — the more recently touched one reads as
+    the "realer" #1.
+    """
+    ordered = sorted(
+        issues,
+        key=lambda i: (i.rank or 0, -(i.created_at.timestamp() if i.created_at else 0)),
+    )
+    for new_rank, issue in enumerate(ordered, start=1):
+        issue.rank = new_rank
+    return ordered
 
 
 def _latest_current_issues(db: Session, for_date: str | None = None) -> list[ActionIssue]:
@@ -73,7 +108,7 @@ def _latest_current_issues(db: Session, for_date: str | None = None) -> list[Act
             return issues
         # Requested date has rows but none are current (or has none at
         # all) — fall back to whatever that date has rather than nothing.
-        return (
+        return _renumber_for_display(
             db.query(ActionIssue)
             .filter(ActionIssue.date == for_date)
             .order_by(ActionIssue.rank)
@@ -105,7 +140,7 @@ def _latest_current_issues(db: Session, for_date: str | None = None) -> list[Act
     )
     if not fallback_date:
         return []
-    return (
+    return _renumber_for_display(
         db.query(ActionIssue)
         .filter(ActionIssue.date == fallback_date)
         .order_by(ActionIssue.rank)
@@ -301,7 +336,7 @@ async def get_action_issues(
     db_visits: Session = Depends(get_visits_db),
 ):
     """Return the current day's action issues (or most recent available)."""
-    response.headers["Cache-Control"] = "public, max-age=300"
+    response.headers["Cache-Control"] = f"public, max-age={_ACTION_ISSUES_CACHE_TTL_S}"
     issues = _latest_current_issues(db, for_date=date)
 
     if not issues:
@@ -360,7 +395,7 @@ async def get_action_issue(issue_id: str, response: Response, db: Session = Depe
     the raw autoincrement id, and `from_public_id` only ever accepts its own
     letter-prefixed format, so the two paths can't collide.
     """
-    response.headers["Cache-Control"] = "public, max-age=300"
+    response.headers["Cache-Control"] = f"public, max-age={_ACTION_ISSUES_CACHE_TTL_S}"
     resolved_id = from_public_id(issue_id)
     if resolved_id is None and issue_id.isdigit():
         # SQLite's INTEGER column caps at a signed 8-byte int; a longer
