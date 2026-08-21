@@ -304,6 +304,15 @@ class TestMatchCandidate:
 
 class TestSyncConfirmedCandidates:
     @pytest.fixture(autouse=True)
+    def _no_calendar(self, monkeypatch):
+        """The nightly sync refreshes the national calendar first; these
+        tests are about matching, not about the FEC."""
+        async def none(client, cycle):
+            return {}
+
+        monkeypatch.setattr(sc.election_dates, "fetch_fec_calendar", none)
+
+    @pytest.fixture(autouse=True)
     def _only_texas(self, monkeypatch):
         """Scope the sync loop to the one state each test mocks. Without
         this, every other registered state runs its real strategy against

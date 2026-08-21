@@ -170,17 +170,6 @@ async def crawl_for_new_sources(
     lost by waiting — a source adopted the week after certification is
     still months before the general.
     """
-    # Every state's primary and runoff date in three calls, needing no
-    # per-state coverage at all — so a state nobody has an adapter for
-    # still gets a real date instead of a blank. Per-state reads below
-    # still run and still win: a state is the authority on its own
-    # election, and this is the floor, not the ceiling.
-    try:
-        for state, dates in (await election_dates.fetch_fec_calendar(client, cycle)).items():
-            election_dates.save(state, cycle, dates)
-    except Exception:
-        logger.exception("FEC election-date calendar read failed")
-
     hand_verified = (_sources_file().get("states") or {})
     outcomes: dict[str, str] = {}
     for state in sorted(ELECTION_DOMAINS):
@@ -365,6 +354,17 @@ async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycl
     `confirmed` (candidates newly or already flagged), `unmatched`
     (records that couldn't be safely matched to one FEC candidate), and
     `status` (`ok` / `fetch_failed` / `not_configured`)."""
+    # Refresh the national calendar FIRST and every run, not just on the
+    # weekly crawl: a state whose results file is addressed by election
+    # date (Minnesota) can't be fetched at all without it, so leaving it
+    # to the weekly pass would leave that state dark until the next
+    # Sunday — and dark on a fresh deploy. Three calls.
+    try:
+        for state, dates in (await election_dates.fetch_fec_calendar(client, cycle)).items():
+            election_dates.save(state, cycle, dates)
+    except Exception:
+        logger.exception("FEC election-date calendar read failed")
+
     results: dict[str, dict] = {}
     for state in sorted(configured_states()):
         source = source_for_state(state)
