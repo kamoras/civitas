@@ -298,6 +298,17 @@ async def _discover_urls(
     """
     mode = discovery.get("mode")
 
+    def _calendar_date() -> str | None:
+        """This state's primary date from the national calendar, for a
+        file that doesn't date itself — without it such a file can never
+        clear the certification gate, since an undatable result is one
+        whose freshness is unknown."""
+        if not discovery.get("date_from_calendar"):
+            return None
+        from app.pipeline.fetch.state_election_dates import primary_date
+
+        return primary_date(state, year)
+
     if mode == "sos_api_report":
         return await _sos_api_report_urls(client, state, year, discovery)
 
@@ -421,7 +432,8 @@ async def _discover_urls(
         if dated:
             earliest = min(_date_in(ln) for ln in dated)
             wanted = [ln for ln in wanted if _date_in(ln) == earliest]
-        return [_stage(ln, held=_date_in(ln)) for ln in wanted]
+        fallback = _calendar_date()
+        return [_stage(ln, held=_date_in(ln) or fallback) for ln in wanted]
 
     logger.error("Unknown results discovery mode %r for %s", mode, state)
     return []
@@ -580,6 +592,11 @@ def _rows(payload: bytes, fmt: dict) -> list[dict] | None:
     # semicolon file is one long list of positional fields) names its
     # columns in config instead. Everything downstream is unchanged: the
     # names it gives are the names the format keys refer to.
+    # A file that opens with its own format banner before the header row
+    # (Hawaii's "#FormatVersion 1") says how many lines to drop.
+    skip = int(fmt.get("skip_lines") or 0)
+    if skip:
+        text = "\n".join(text.splitlines()[skip:])
     columns = fmt.get("columns")
     return list(csv.DictReader(
         io.StringIO(text), delimiter=delimiter, fieldnames=columns or None,
@@ -759,7 +776,7 @@ def _collect(
                 if advance_count == 1:
                     continue
                 party = ""
-            last_name = surname(name)
+            last_name = surname(name, last_first=fmt.get("name_format") == "last_first")
             if not last_name:
                 continue
             records.append({

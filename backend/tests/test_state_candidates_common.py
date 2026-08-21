@@ -89,6 +89,36 @@ class TestOfficeFromColumns:
         assert common.office_from_columns(row, self._SPEC) == ("H", None)
 
 
+class TestLastFirstNames:
+    """Several states print the ballot name the way FEC files it. Taking
+    the trailing token there is not a near miss — it is a different
+    person's name."""
+
+    def test_surname_is_what_precedes_the_comma(self):
+        assert common.surname("CASE, Ed", last_first=True) == "CASE"
+        assert common.surname("Darden, Dustin Thomas House", last_first=True) == "Darden"
+
+    def test_a_multi_word_surname_survives(self):
+        assert common.surname("Van Drew, Jefferson", last_first=True) == "Van Drew"
+
+    def test_the_default_still_reads_first_last(self):
+        assert common.surname("Ed Case") == "Case"
+
+    def test_a_name_without_a_comma_falls_back_rather_than_emptying(self):
+        assert common.surname("Ed Case", last_first=True) == "Case"
+
+
+class TestRomanNumeralDistricts:
+    """Hawaii numbers its congressional districts I and II."""
+
+    def test_reads_a_roman_district(self):
+        assert common.parse_office("U.S. Representative, Dist I") == ("H", 1)
+        assert common.parse_office("U.S. Representative, Dist II") == ("H", 2)
+
+    def test_still_refuses_a_state_race_written_the_same_way(self):
+        assert common.parse_office("State Rep Dist IV") is None
+
+
 class TestNormalizeParty:
     def test_reads_spelled_out_and_abbreviated_forms(self):
         assert common.normalize_party("... - Democratic Party") == "D"

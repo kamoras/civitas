@@ -44,6 +44,17 @@ _HOUSE_ORDINAL_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 _HOUSE_RE = re.compile(_CHAMBER_HOUSE, re.IGNORECASE)
+# Hawaii numbers its congressional districts in Roman numerals ("U.S.
+# Representative, Dist I"). Bounded to I-XX: a state has no more than 52
+# districts and nothing beyond that is worth guessing at.
+_ROMAN = {
+    "I": 1, "II": 2, "III": 3, "IV": 4, "V": 5, "VI": 6, "VII": 7, "VIII": 8,
+    "IX": 9, "X": 10, "XI": 11, "XII": 12, "XIII": 13, "XIV": 14, "XV": 15,
+    "XVI": 16, "XVII": 17, "XVIII": 18, "XIX": 19, "XX": 20,
+}
+_HOUSE_ROMAN_RE = re.compile(
+    r"Dist(?:rict)?\.?\s+([IVX]{1,5})\b", re.IGNORECASE,
+)
 # "Senator" (Colorado) and "Senate" (North Carolina) both appear live.
 _SENATE_RE = re.compile(
     r"(?:United\s+States|U\.?\s*S\.?)\s*Senat(?:e|or)", re.IGNORECASE,
@@ -82,6 +93,9 @@ def parse_office(contest_name: str) -> tuple[str, int | None] | None:
     if _SENATE_RE.search(name):
         return "S", None
     if _HOUSE_RE.search(name):
+        roman = _HOUSE_ROMAN_RE.search(name)
+        if roman and roman.group(1).upper() in _ROMAN:
+            return "H", _ROMAN[roman.group(1).upper()]
         # An ordinal district only counts once the label is already known
         # to be federal — "5th District" alone says nothing about which
         # chamber it belongs to.
@@ -147,7 +161,7 @@ def normalize_party(text: str) -> str | None:
     return None
 
 
-def surname(display_name: str) -> str | None:
+def surname(display_name: str, last_first: bool = False) -> str | None:
     """Trailing token of a "First [Middle] Last" display name, which is
     what the shared matcher compares against the surname FEC stores before
     the comma. "Robert Cruz Jr." -> "Cruz".
@@ -156,6 +170,13 @@ def surname(display_name: str) -> str | None:
     carry an incumbency marker, and "Earl L. Carter (I)" would otherwise
     yield a surname of "(I)" for every sitting member in the state.
     """
+    # Some states print the ballot name the way FEC files it — "CASE, Ed",
+    # "Darden, Dustin Thomas House" — where the surname is everything
+    # BEFORE the comma and the trailing token is a middle name. Taking the
+    # last token there is not a near miss, it is a different person's name.
+    if last_first and "," in (display_name or ""):
+        head = (display_name or "").split(",")[0].strip()
+        return re.sub(r"\s+", " ", re.sub(r"\([^)]*\)", " ", head)).strip() or None
     cleaned = re.sub(r"\([^)]*\)", " ", display_name or "")
     tokens = [t for t in re.split(r"\s+", cleaned.strip()) if t]
     while tokens and tokens[-1].strip(".,").lower() in _NAME_SUFFIXES:

@@ -454,6 +454,17 @@ class TestHeaderlessColumns:
         ]
 
 
+class TestSkipLines:
+    """Hawaii's file opens with its own format banner before the header."""
+
+    def test_the_banner_line_is_dropped(self):
+        payload = (b"#FormatVersion 1\n"
+                   b"Contest Title\tCandidate Name\tTotal Votes\n"
+                   b'"U.S. Representative, Dist I"\t"CASE, Ed"\t63784\n')
+        rows = tb._rows(payload, {"delimiter": "\t", "skip_lines": 1})
+        assert rows[0]["Candidate Name"] == "CASE, Ed"
+
+
 class TestPrimaryDateTemplating:
     """A state whose results file is addressed by election date can be
     reached without crawling that state for the date — the national

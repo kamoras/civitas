@@ -106,6 +106,55 @@
       },
       "description": "Minnesota was written off twice as captcha-blocked, and the interesting part is HOW it is blocked: its bot manager challenges the SECOND request in a window, whatever client makes it — so the page listing its result files is effectively unreachable from a pipeline that also has to fetch anything else. Its FILE host is wide open and answers every time. So Minnesota is addressed directly by election date, which is known for every state from the FEC's national calendar (state_election_dates.py) — the calendar and the fetcher composing to reach a state neither could reach alone, with no browser and without touching the protected host. One semicolon-delimited file carries every race, county by county; it has NO header row, so the columns are named positionally in config. Minnesota's Democrats are the DFL, which normalize_party now reads, and its party column holds bare letter codes, read only when the whole value is the code. Verified live 2026-08-19 on the real 2026-08-11 primary: Pete Stauber taking MN-08's Republican primary with 87.29%."
     },
+    "AK": {
+      "source_name": "Alaska Division of Elections (election night precinct CSV)",
+      "strategy": "tabular",
+      "advance_count": 4,
+      "runoff_threshold_pct": null,
+      "discovery": {
+        "mode": "landing_page",
+        "page_url": "https://www.elections.alaska.gov/election-results/",
+        "link_regex": "https://www\\.elections\\.alaska\\.gov/enr\\d+/results/[^\\\"']*_State_of_Alaska\\.csv",
+        "date_from_calendar": true,
+        "require_official": true,
+        "settle_days": 21
+      },
+      "format": {
+        "delimiter": ",",
+        "contest_column": "Contest_title",
+        "choice_column": "candidate_name",
+        "party_column": "Party_Code",
+        "votes_column": "total_votes",
+        "name_format": "last_first"
+      },
+      "description": "Alaska runs a NONPARTISAN TOP-FOUR primary, so advance_count is 4 and every candidate is in one contest regardless of party — the same structural fork California and Washington's top-two introduced, one step wider. Its results are one precinct-level CSV per election, linked from the division's own results page (the 'enr26' path segment is per-cycle, so the pattern is what's written down, never the URL). Names are printed FEC-style, 'Darden, Dustin Thomas House', where the surname is everything before the comma and the trailing token is a middle name — hence name_format. Alaska's file is election-night data with no certification flag, and its date comes from the national calendar, so it withholds until 21 days past the primary. Verified live 2026-08-19: both federal contests present, 28,455 precinct rows."
+    },
+    "HI": {
+      "source_name": "Hawaii Office of Elections (statewide summary file)",
+      "strategy": "tabular",
+      "runoff_threshold_pct": null,
+      "discovery": {
+        "mode": "landing_page",
+        "page_url": "https://elections.hawaii.gov/election-results/",
+        "link_regex": "https://elections\\.hawaii\\.gov/wp-content/results/{year}[^\\\"']*/summary\\.txt",
+        "date_from_calendar": true,
+        "require_official": true,
+        "settle_days": 21
+      },
+      "format": {
+        "delimiter": "\t",
+        "skip_lines": 1,
+        "contest_column": [
+          "Contest Title",
+          "Contest Party"
+        ],
+        "choice_column": "Candidate Name",
+        "party_column": "Contest Party",
+        "votes_column": "Total Votes",
+        "name_format": "last_first"
+      },
+      "description": "Hawaii publishes one tab-delimited summary per election, opening with a '#FormatVersion' banner before the header row (hence skip_lines). It numbers congressional districts in ROMAN numerals — 'U.S. Representative, Dist I' — which parse_office now reads, bounded to I-XX. Its party lives on the CONTEST ('N' nonpartisan, 'D', 'R', 'G'), so the contest key carries it and the nonpartisan races are skipped for having no party at all. Names are 'CASE, Ed', surname before the comma. The file carries no date, so its date comes from the national calendar and it withholds until 21 days past the primary."
+    },
     "CA": {
       "source_name": "California Secretary of State (certified Statement of Vote)",
       "strategy": "tabular",
