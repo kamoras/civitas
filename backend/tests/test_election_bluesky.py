@@ -320,3 +320,21 @@ class TestDrainStaleUnconsidered:
         assert old.bsky_posted_at is not None
         assert old.bsky_posted is False  # considered, never published
         assert fresh.bsky_posted_at is None
+
+
+class TestPublishUrl:
+    """_publish builds the URL passed to publish_post — 2026-08: this used
+    to point at /elections/{race.id} (a standalone race-detail page); that
+    page was merged into the state ballot page, so the link now points
+    straight there instead of through the redirect that keeps old links
+    working."""
+
+    def test_links_to_the_race_s_section_of_its_state_ballot_page(self, db_session):
+        race = _race(db_session, race_id="2026-HOUSE-GA-6", state="GA", office="H")
+        db_session.commit()
+
+        with patch("app.pipeline.analyze.election_bluesky.publish_post", return_value=True) as mock_publish:
+            assert election_bluesky._publish("some text", race) is True
+
+        url = mock_publish.call_args.args[1]
+        assert url == "https://civitas-research.org/elections/states/GA#race-2026-HOUSE-GA-6"
