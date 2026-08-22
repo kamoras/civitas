@@ -5,6 +5,7 @@ import {
   __resetApiCache,
   __resetShapeReports,
   fetchActionIssues,
+  fetchRecentActionIssues,
   fetchBillsInFlight,
   fetchJusticeLeaderboard,
   fetchLeaderboard,
@@ -210,6 +211,13 @@ describe("API shape guarantees", () => {
     expect(result.availableDates).toEqual([]);
     // Fields the backend did send are preserved, not clobbered by the defaults.
     expect(result.date).toBe("2026-08-18");
+  });
+
+  it("fetchRecentActionIssues hits the is_current-agnostic endpoint with the limit", async () => {
+    const fetchMock = mockJson({ issues: [] });
+    vi.stubGlobal("fetch", fetchMock);
+    await fetchRecentActionIssues(6);
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/action/issues/recent?limit=6"));
   });
 
   it("fetchTimeline always exposes its four lists", async () => {

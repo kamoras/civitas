@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { fetchActionIssues, fetchBillsInFlight, fetchMonitors } from "@/lib/api";
+import { fetchRecentActionIssues, fetchBillsInFlight, fetchMonitors } from "@/lib/api";
 import type { NationalMonitor } from "@/lib/api";
 import type { ActionIssue } from "@/types/action";
 import type { BillInFlight } from "@/types/bill";
@@ -128,7 +128,13 @@ export default function RecordIndex() {
     // Each feed fails independently: one dead endpoint should thin this list,
     // not blank it. Promise.all over already-caught promises never rejects.
     Promise.all([
-      fetchActionIssues()
+      // Deliberately not fetchActionIssues — that's is_current-filtered
+      // (right for the Action Center's own "today's live board" page,
+      // wrong here: it made an entry vanish from this "record" the
+      // instant it retired, per the 2026-08-22 report). This endpoint
+      // ignores is_current so a stopped story just sinks in the list
+      // rather than disappearing outright.
+      fetchRecentActionIssues(MAX_ENTRIES)
         .then((d) => d.issues ?? [])
         .catch((): ActionIssue[] => []),
       fetchMonitors()

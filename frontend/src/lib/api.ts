@@ -1,7 +1,7 @@
 import { LeaderboardEntry, PaginatedStockTrades, PaginatedVotes, Senator } from "@/types/senator";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 import type { Justice, JusticeLeaderboardEntry } from "@/types/justice";
-import type { ActionIssuesResponse, MyRepsResponse } from "@/types/action";
+import type { ActionIssue, ActionIssuesResponse, MyRepsResponse } from "@/types/action";
 import type { PoliticianCard } from "@/types/politicians";
 import type { BillDetail, PaginatedBills } from "@/types/bill";
 import type { GeocodeResult, PviMap, RaceSummary } from "@/types/election";
@@ -30,6 +30,12 @@ const CHAMBER_PATH: Record<Chamber, string> = {
 // Client-side cache TTLs for cachedFetch. Named so the intent (how volatile
 // each endpoint is) is explicit and the same tier can't drift between callers.
 const TTL = {
+  /** Matches the backend's own _ACTION_ISSUES_CACHE_TTL_S — a client cache
+   * outliving what the server itself promises as fresh just relocates the
+   * staleness window (2026-08 incident: a 5-minute client cache held stale
+   * Action Center data long after the backend's own header had been
+   * shortened to fix exactly that). */
+  VOLATILE: 30_000, // 30 sec
   /** Directory/leaderboard lists — refreshed a couple times per session. */
   SHORT: 120_000, // 2 min
   /** Deterministic derived data (score breakdowns, monitors) — changes at most daily. */
@@ -1299,14 +1305,26 @@ export async function fetchConfig(): Promise<AppConfig> {
 
 export async function fetchActionIssues(date?: string): Promise<ActionIssuesResponse> {
   const params = date ? `?date=${date}` : "";
-  // Cached + de-duped like the other Action Center endpoints. The backend
-  // already serves this with `Cache-Control: public, max-age=300`, so a
-  // 5-minute client cache matches its own freshness policy while collapsing
-  // the several consumers that request the same day's issues on load.
+  // Cached + de-duped like the other Action Center endpoints, at the same
+  // TTL as the backend's own Cache-Control header (see TTL.VOLATILE) —
+  // collapses the several consumers that request the same day's issues on
+  // mount without outliving what the server itself promises as fresh.
   const url = `${API_BASE}/action/issues${params}`;
   return withShape<ActionIssuesResponse>(
-    await cachedFetch(url, 300_000),
+    await cachedFetch(url, TTL.VOLATILE),
     { lists: ["issues", "availableDates"] },
+    url
+  );
+}
+
+/** Most recently touched issues regardless of is_current — backs the
+ * homepage's "record index", which needs entries that don't vanish the
+ * instant an issue retires (see backend's get_recent_action_issues). */
+export async function fetchRecentActionIssues(limit = 10): Promise<{ issues: ActionIssue[] }> {
+  const url = `${API_BASE}/action/issues/recent?limit=${limit}`;
+  return withShape<{ issues: ActionIssue[] }>(
+    await cachedFetch(url, TTL.VOLATILE),
+    { lists: ["issues"] },
     url
   );
 }
