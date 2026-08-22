@@ -681,3 +681,76 @@ class TestCacheHeaderMatchesNginx:
         await get_action_issue(to_public_id(issue.id), resp, db=db_session)
 
         assert resp.headers["Cache-Control"] == "public, max-age=30"
+
+
+class TestRecentActionIssues:
+    """The homepage's "record index" used to call the same is_current-
+    filtered query the Action Center page uses, so an issue vanished from
+    the homepage's own "recent record" the instant it retired (2026-08-22
+    report: "we're saying we're collecting a record but records seem to
+    disappear"). This endpoint deliberately ignores is_current."""
+
+    async def test_includes_retired_issues(self, db_session):
+        from fastapi import Response
+
+        from app.api.action import get_recent_action_issues
+
+        db_session.add(_make_issue("2026-08-20", 1, "Retired yesterday", is_current=False))
+        db_session.add(_make_issue("2026-08-21", 1, "Live today", is_current=True))
+        db_session.commit()
+
+        resp = Response()
+        result = await get_recent_action_issues(resp, limit=10, db=db_session)
+
+        assert {i["title"] for i in result["issues"]} == {"Retired yesterday", "Live today"}
+
+    async def test_ordered_by_date_then_rank_newest_first(self, db_session):
+        from fastapi import Response
+
+        from app.api.action import get_recent_action_issues
+
+        db_session.add(_make_issue("2026-08-20", 1, "Older day", is_current=False))
+        db_session.add(_make_issue("2026-08-21", 2, "Newer day, rank 2", is_current=True))
+        db_session.add(_make_issue("2026-08-21", 1, "Newer day, rank 1", is_current=True))
+        db_session.commit()
+
+        resp = Response()
+        result = await get_recent_action_issues(resp, limit=10, db=db_session)
+
+        assert [i["title"] for i in result["issues"]] == [
+            "Newer day, rank 1", "Newer day, rank 2", "Older day",
+        ]
+
+    async def test_respects_the_limit(self, db_session):
+        from fastapi import Response
+
+        from app.api.action import get_recent_action_issues
+
+        for i in range(5):
+            db_session.add(_make_issue("2026-08-21", i + 1, f"Issue {i}", is_current=True))
+        db_session.commit()
+
+        resp = Response()
+        result = await get_recent_action_issues(resp, limit=2, db=db_session)
+
+        assert len(result["issues"]) == 2
+
+    async def test_cache_header_matches_the_rest_of_the_endpoint_family(self, db_session):
+        from fastapi import Response
+
+        from app.api.action import get_recent_action_issues
+
+        resp = Response()
+        await get_recent_action_issues(resp, limit=10, db=db_session)
+
+        assert resp.headers["Cache-Control"] == "public, max-age=30"
+
+    def test_recent_route_is_declared_before_the_catch_all_issue_id_route(self):
+        # FastAPI matches path routes in declaration order — /issues/{issue_id}
+        # would swallow "recent" as a path parameter if it were declared first.
+        from app.api.action import router
+
+        paths = [r.path for r in router.routes if getattr(r, "path", None) in (
+            "/action/issues/recent", "/action/issues/{issue_id}",
+        )]
+        assert paths == ["/action/issues/recent", "/action/issues/{issue_id}"]

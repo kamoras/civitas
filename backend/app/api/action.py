@@ -385,6 +385,45 @@ async def get_action_issues(
     }
 
 
+_RECENT_ISSUES_DEFAULT_LIMIT = 10
+_RECENT_ISSUES_MAX_LIMIT = 30
+
+
+@router.get("/issues/recent")
+async def get_recent_action_issues(
+    response: Response,
+    limit: int = Query(_RECENT_ISSUES_DEFAULT_LIMIT, ge=1, le=_RECENT_ISSUES_MAX_LIMIT),
+    db: Session = Depends(get_db),
+):
+    """The most recently touched issues, regardless of is_current.
+
+    Backs the homepage's "record index" — a permanent-feeling ledger of
+    recent activity — which used to call the same endpoint as the Action
+    Center page and inherited its is_current filter. That reads fine for
+    the Action Center itself (today's live board), but it meant an issue
+    vanished from the homepage's own "recent record" the instant it
+    retired, sometimes shrinking a day's worth of entries to one within
+    24 hours (2026-08-22 report: "we're saying we're collecting a record
+    but records seem to disappear"). Ordered by `date` (bumped on every
+    real update, same signal the homepage already sorts by) rather than
+    `created_at`, so a still-developing story keeps its place near the
+    top and a stopped one just sinks — same recency the reader already
+    sees, without a retired row dropping out of it entirely.
+
+    Route must be declared before /issues/{issue_id} — FastAPI matches
+    path routes in declaration order, and {issue_id} would otherwise
+    swallow "recent" as a path parameter.
+    """
+    response.headers["Cache-Control"] = f"public, max-age={_ACTION_ISSUES_CACHE_TTL_S}"
+    issues = (
+        db.query(ActionIssue)
+        .order_by(ActionIssue.date.desc(), ActionIssue.rank.asc())
+        .limit(limit)
+        .all()
+    )
+    return {"issues": [_build_issue_response(i, db) for i in issues]}
+
+
 @router.get("/issues/{issue_id}")
 async def get_action_issue(issue_id: str, response: Response, db: Session = Depends(get_db)):
     """Return a single action issue by its public id (used for OG metadata /
