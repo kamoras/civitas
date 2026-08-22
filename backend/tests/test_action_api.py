@@ -1,6 +1,9 @@
 """Tests for the /action/issues fallback logic in app/api/action.py."""
 
 import json
+from unittest.mock import patch
+
+import pytest
 
 from app.api.action import _latest_current_issues
 from app.issue_ids import to_public_id
@@ -688,7 +691,46 @@ class TestRecentActionIssues:
     filtered query the Action Center page uses, so an issue vanished from
     the homepage's own "recent record" the instant it retired (2026-08-22
     report: "we're saying we're collecting a record but records seem to
-    disappear"). This endpoint deliberately ignores is_current."""
+    disappear"). This endpoint deliberately ignores is_current.
+
+    dedupe_near_identical_issues is patched to a passthrough throughout —
+    its own correctness (clustering, keep-freshest, threshold calibration)
+    is covered in test_action_center.py; real embeddings on these short,
+    similarly-worded test titles risk an accidental collapse that has
+    nothing to do with what each test below actually checks.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _passthrough_dedupe(self):
+        with patch(
+            "app.pipeline.analyze.action_center.dedupe_near_identical_issues",
+            side_effect=lambda issues: issues,
+        ):
+            yield
+
+    async def test_dedupes_the_oversized_raw_pool_down_to_the_limit(self, db_session):
+        # A near-identical-title cluster can be several rows deep (the
+        # beef-tariff incident was 4), so the endpoint must overfetch past
+        # `limit` before deduping rather than dedupe away entries the
+        # caller actually wanted — this pins that it does, and that the
+        # real dedupe function (not a stand-in) is what gets called.
+        from fastapi import Response
+
+        from app.api.action import _RECENT_ISSUES_RAW_POOL_MULTIPLIER, get_recent_action_issues
+
+        for i in range(5):
+            db_session.add(_make_issue("2026-08-21", i + 1, f"Issue {i}", is_current=True))
+        db_session.commit()
+
+        with patch(
+            "app.pipeline.analyze.action_center.dedupe_near_identical_issues",
+            side_effect=lambda issues: issues,
+        ) as mock_dedupe:
+            resp = Response()
+            await get_recent_action_issues(resp, limit=2, db=db_session)
+
+        (raw_arg,), _ = mock_dedupe.call_args
+        assert len(raw_arg) == min(5, 2 * _RECENT_ISSUES_RAW_POOL_MULTIPLIER)
 
     async def test_includes_retired_issues(self, db_session):
         from fastapi import Response

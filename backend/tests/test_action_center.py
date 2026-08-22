@@ -22,6 +22,7 @@ from app.pipeline.analyze.action_center import (
     _find_related_senators,
     _find_related_officials,
     _find_matching_issue,
+    dedupe_near_identical_issues,
     _apply_matched_issue_update,
     _retire_untouched_issues,
     _retry_until_grounded,
@@ -1140,6 +1141,67 @@ class TestIssueSignatureMatching:
 
         match = _find_matching_issue(title, facts, [existing], recent_embs, title_emb, {420})
         assert match is None
+
+
+class TestDedupeNearIdenticalIssues:
+    """The homepage's recent-issues endpoint deliberately shows issues
+    regardless of is_current (see get_recent_action_issues) — so a row
+    retired specifically for BEING a duplicate (via
+    retire_duplicate_current_issues.py) resurfaced there anyway
+    (2026-08-22 report: "I see 3 copies of the beef import issue on the
+    homepage"). This is the read-time dedup that fixes that without a
+    second is_current flip."""
+
+    def _issue(self, id, title, created_at):
+        row = ActionIssue(date="2026-08-21", rank=1, title=title, facts="[]")
+        row.id = id
+        row.created_at = created_at
+        return row
+
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    def test_collapses_a_cluster_to_its_freshest_member(self, mock_embed):
+        # Identical vectors -> cosine 1.0 (over threshold); orthogonal ->
+        # cosine 0.0 (nowhere close). The threshold's own calibration is
+        # tested in TestIssueSignatureMatching — this exercises clustering.
+        a = self._issue(603, "Trump defends beef import plan amid GOP criticism", datetime(2026, 8, 21, 23))
+        b = self._issue(604, "Trump defends beef import plan amid GOP criticism", datetime(2026, 8, 22, 0))
+        c = self._issue(605, "Trump defends beef import plan after GOP criticism", datetime(2026, 8, 22, 2))
+        d = self._issue(999, "Senate confirms new EPA administrator", datetime(2026, 8, 21, 10))
+        mock_embed.return_value = np.array([
+            [1.0, 0.0], [1.0, 0.0], [1.0, 0.0], [0.0, 1.0],
+        ])
+
+        result = dedupe_near_identical_issues([a, b, c, d])
+
+        assert result == [c, d]
+
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    def test_no_clusters_returns_everything_in_original_order(self, mock_embed):
+        a = self._issue(1, "Senate confirms new EPA administrator", datetime(2026, 8, 20))
+        b = self._issue(2, "House passes defense funding bill", datetime(2026, 8, 21))
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.0, 1.0]])
+
+        result = dedupe_near_identical_issues([a, b])
+
+        assert result == [a, b]
+
+    def test_fewer_than_two_issues_is_a_no_op(self):
+        a = self._issue(1, "Solo issue", datetime(2026, 8, 20))
+        assert dedupe_near_identical_issues([a]) == [a]
+        assert dedupe_near_identical_issues([]) == []
+
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    def test_kept_issues_preserve_their_original_relative_order(self, mock_embed):
+        # Freshest-of-cluster is issue b (middle position) — it must stay
+        # in b's original slot relative to c, not jump to wherever a was.
+        a = self._issue(1, "Trump defends beef import plan amid GOP criticism", datetime(2026, 8, 21))
+        b = self._issue(2, "Senate confirms new EPA administrator", datetime(2026, 8, 20))
+        c = self._issue(3, "Trump defends beef import plan amid GOP criticism", datetime(2026, 8, 20))
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 0.0]])
+
+        result = dedupe_near_identical_issues([a, b, c])
+
+        assert result == [a, b]
 
 
 def _new_values_for(title: str, facts: list[str], primary_article_date: str) -> dict:
