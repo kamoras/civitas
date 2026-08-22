@@ -1,12 +1,13 @@
-"""Tests for scripts/retire_duplicate_current_issues.py's clustering logic
-— the one-time cleanup for ActionIssue rows created before
-_NEAR_IDENTICAL_TITLE_THRESHOLD existed (see action_center.py)."""
+"""Tests for scripts/retire_duplicate_current_issues.py — the one-time
+cleanup for ActionIssue rows created before dedupe_near_identical_issues
+existed (see action_center.py). The clustering logic itself is unit-tested
+in test_action_center.py; this file covers the script's own read-filter-
+retire-commit wiring end to end, against the real embedding model."""
 
 import json
 from datetime import datetime
 
 from app.models import ActionIssue
-from scripts.retire_duplicate_current_issues import _is_duplicate
 
 
 def _issue(id, title, facts, created_at):
@@ -14,26 +15,6 @@ def _issue(id, title, facts, created_at):
     row.id = id
     row.created_at = created_at
     return row
-
-
-class TestIsDuplicate:
-    def test_near_identical_title_is_a_duplicate(self):
-        a = _issue(603, "Trump defends beef import plan amid GOP criticism",
-                   ["GOP lawmakers voiced alarm over the policy's effect on U.S. beef producers."],
-                   datetime(2026, 8, 21, 23, 17))
-        b = _issue(604, "Trump defends beef import plan amid GOP criticism",
-                   ["GOP lawmakers voiced alarm over the policy's effect on U.S. cattle producers."],
-                   datetime(2026, 8, 22, 0, 17))
-        assert _is_duplicate(a, b, sim=0.988) is True
-
-    def test_distinct_development_in_the_same_saga_is_not_a_duplicate(self):
-        a = _issue(535, "Senate passes funding bill to avert October shutdown",
-                   ["Senator Grassley led the floor vote ahead of the October deadline."],
-                   datetime(2026, 8, 18))
-        b = _issue(495, "Senate approves funding bill to avoid shutdown",
-                   ["Senator Collins negotiated the final procedural agreement with House leaders."],
-                   datetime(2026, 8, 19))
-        assert _is_duplicate(a, b, sim=0.795) is False
 
 
 class TestClustersAndKeepsFreshest:

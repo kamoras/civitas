@@ -581,6 +581,75 @@ def _is_exact_content_duplicate(
     return title == cand_title and facts == cand_facts
 
 
+def dedupe_near_identical_issues(issues: list["ActionIssue"]) -> list["ActionIssue"]:
+    """One representative per cluster of near-identical titles (same
+    _NEAR_IDENTICAL_TITLE_THRESHOLD/_is_exact_content_duplicate logic
+    _find_matching_issue and retire_duplicate_current_issues.py use),
+    keeping whichever cluster member has the latest created_at. Relative
+    order of the kept issues is preserved from the input.
+
+    2026-08-22: retiring a duplicate only removes it from is_current —
+    the homepage's recent-issues endpoint deliberately does NOT filter on
+    is_current (so a retired-for-real row doesn't vanish from the
+    record), which means a row retired specifically for BEING a
+    duplicate resurfaced there instead, undoing the whole point of
+    retiring it. Read-time dedup, not a second is_current flip, because
+    "duplicate of something else" and "no longer current" are different
+    facts about a row and conflating them into one flag is exactly what
+    caused this.
+    """
+    if len(issues) < 2:
+        return list(issues)
+
+    embs = np.array(_embed_texts_sim([i.title or "" for i in issues]))
+    sims = embs @ embs.T
+
+    parent = list(range(len(issues)))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    def union(i: int, j: int) -> None:
+        ri, rj = find(i), find(j)
+        if ri != rj:
+            parent[ri] = rj
+
+    for i in range(len(issues)):
+        for j in range(i + 1, len(issues)):
+            a, b = issues[i], issues[j]
+            try:
+                a_facts = json.loads(a.facts or "[]")
+                b_facts = json.loads(b.facts or "[]")
+            except (ValueError, TypeError):
+                a_facts, b_facts = [], []
+            sim = float(sims[i, j])
+            if sim >= _NEAR_IDENTICAL_TITLE_THRESHOLD or _is_exact_content_duplicate(
+                a.title or "", a_facts, b.title or "", b_facts,
+            ):
+                union(i, j)
+
+    clusters: dict[int, list[int]] = {}
+    for idx in range(len(issues)):
+        clusters.setdefault(find(idx), []).append(idx)
+
+    keep_idx = set()
+    for members in clusters.values():
+        # (has a real timestamp, the timestamp itself, id) — a plain
+        # `created_at or id` fallback would compare a datetime against an
+        # int the moment one cluster member lacks a timestamp and another
+        # doesn't, which TypeErrors.
+        best = max(
+            members,
+            key=lambda idx: (issues[idx].created_at is not None, issues[idx].created_at, issues[idx].id),
+        )
+        keep_idx.add(best)
+
+    return [issue for idx, issue in enumerate(issues) if idx in keep_idx]
+
+
 _SYSTEM_PROMPT = """\
 You are a nonpartisan civic information analyst. You present facts without \
 opinion and help citizens engage with their government regardless of their \
