@@ -166,6 +166,19 @@ _RETIREMENT_GRACE_HOURS = 24
 # compressed 0.74+ band and is meaningless on this scale.)
 TOPIC_CHANGE_THRESHOLD = 0.65
 
+# Near-identical-title floor for treating a title-cosine match as
+# conclusive on its own, bypassing signature overlap entirely. Measured
+# against 120 real production issues (2026-08-22 audit, prompted by the
+# beef-tariff duplicate-row incident): every pair scoring >= 0.94 was a
+# genuine same-development duplicate (e.g. "...grant changes" vs "...grant
+# overhaul" at 0.957, "Trump's attorney general" vs "Trump attorney
+# general" at 0.994), while pairs scoring <= 0.883 included legitimately
+# DIFFERENT developments in the same ongoing saga (e.g. a funding bill's
+# separate House/Senate votes, or sequential distinct rulings in the same
+# court case) that must stay separate rows. 0.92 sits in that gap with
+# margin on both sides.
+_NEAR_IDENTICAL_TITLE_THRESHOLD = 0.92
+
 
 def _full_story_should_invalidate(
     old_title: str, old_facts: str, new_title: str, new_facts: str,
@@ -4116,6 +4129,22 @@ def _find_matching_issue(
         except (ValueError, TypeError):
             cand_facts = []
         if _is_exact_content_duplicate(title, facts, candidate.title, cand_facts):
+            return candidate
+        # A near-identical (or byte-identical) title is already conclusive
+        # on its own — the facts are FREE to differ (that's a real update,
+        # not a mismatch) but _is_exact_content_duplicate above requires
+        # facts to match too, so a same-headline story whose facts got
+        # reworded slightly between generations (live 2026-08 bug: "Trump
+        # defends beef import plan amid GOP criticism" regenerated an hour
+        # apart with "cattle producers" vs "producers"/"ranchers" —
+        # different enough to sink _issue_signature's sparse entity
+        # overlap below _signatures_match's floor) fell through every
+        # check below and became a duplicate row with a duplicate Bluesky
+        # post. The prompt already tells the model each issue is a
+        # separate topic, so two rows can't legitimately share a title
+        # this close (see _NEAR_IDENTICAL_TITLE_THRESHOLD for the data
+        # behind that number).
+        if sim >= _NEAR_IDENTICAL_TITLE_THRESHOLD:
             return candidate
         cand_sig = _issue_signature(candidate.title or "", cand_facts)
         if _signatures_match(new_sig, cand_sig):
