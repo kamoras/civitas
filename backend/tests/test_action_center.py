@@ -1059,6 +1059,78 @@ class TestIssueSignatureMatching:
         match = _find_matching_issue(title, facts, [existing], recent_embs, title_emb, set())
         assert match is existing
 
+    def test_find_matching_issue_catches_identical_title_with_reworded_facts(self):
+        # Live 2026-08-22 bug: "Trump defends beef import plan amid GOP
+        # criticism" was regenerated an hour apart with the same title but
+        # "cattle producers"/"ranchers" swapped between generations — enough
+        # to sink _issue_signature's sparse entity overlap below
+        # _signatures_match's floor, and _is_exact_content_duplicate
+        # requires facts to match too so it didn't catch this either. Two
+        # rows created, two Bluesky posts for the same story.
+        title = "Trump defends beef import plan amid GOP criticism"
+        old_facts = [
+            "Trump said the decision was driven by public pressure to lower beef prices.",
+            "GOP lawmakers voiced alarm over the policy's effect on U.S. beef producers.",
+        ]
+        new_facts = [
+            "Trump said the decision was driven by public pressure to lower beef prices.",
+            "GOP lawmakers voiced alarm over the policy's effect on U.S. cattle producers.",
+        ]
+        existing = ActionIssue(
+            id=603, date="2026-08-21", rank=3, title=title, facts=json.dumps(old_facts),
+        )
+        recent_embs = np.array([[1.0, 0.0]])
+        title_emb = np.array([1.0, 0.0])
+
+        match = _find_matching_issue(title, new_facts, [existing], recent_embs, title_emb, set())
+        assert match is existing
+
+    def test_find_matching_issue_catches_near_identical_but_not_byte_identical_title(self):
+        # Real production pair (2026-08-22 audit): "Senate funding patch
+        # delays grant changes" vs "...grant overhaul" scored 0.957 title
+        # cosine — clearly the same specific development, but not a byte-
+        # identical title, so the exact-title check added for the beef
+        # bug wouldn't catch it. Facts are written to share no signature
+        # tokens, isolating that this match comes from the near-identical-
+        # title path, not signature overlap.
+        title = "Senate funding patch delays grant changes"
+        cand_title = "Senate funding patch delays grant overhaul"
+        facts = ["A provision affecting research grants was altered in the latest text."]
+        cand_facts = ["A separate clause affecting award programs was modified in committee."]
+        existing = ActionIssue(
+            id=490, date="2026-08-20", rank=5, title=cand_title, facts=json.dumps(cand_facts),
+        )
+        cosine = 0.957
+        recent_embs = np.array([[cosine, (1 - cosine**2) ** 0.5]])
+        title_emb = np.array([1.0, 0.0])
+
+        match = _find_matching_issue(title, facts, [existing], recent_embs, title_emb, set())
+        assert match is existing
+
+    def test_find_matching_issue_does_not_merge_distinct_developments_in_the_same_saga(self):
+        # Real production title-cosine (0.795) between two genuinely
+        # separate steps of the same funding-bill saga — related, but not
+        # the same specific development. Facts are written to give both
+        # sides a non-empty, non-overlapping signature (1 shared token,
+        # below _SIGNATURE_MATCH_MIN_SHARED) so this isolates the new
+        # near-identical-title path rather than tripping the pre-existing
+        # empty-signature fallback. Below _NEAR_IDENTICAL_TITLE_THRESHOLD
+        # (0.92), this must NOT auto-merge — collapsing every step of an
+        # ongoing saga into one row would hide real distinct developments.
+        title = "Senate passes funding bill to avert October shutdown"
+        cand_title = "Senate approves funding bill to avoid shutdown"
+        facts = ["Senator Grassley led the floor vote ahead of the October deadline."]
+        cand_facts = ["Senator Collins negotiated the final procedural agreement with House leaders."]
+        existing = ActionIssue(
+            id=535, date="2026-08-18", rank=5, title=cand_title, facts=json.dumps(cand_facts),
+        )
+        cosine = 0.795
+        recent_embs = np.array([[cosine, (1 - cosine**2) ** 0.5]])
+        title_emb = np.array([1.0, 0.0])
+
+        match = _find_matching_issue(title, facts, [existing], recent_embs, title_emb, set())
+        assert match is None
+
     def test_find_matching_issue_returns_none_when_already_claimed_this_run(self):
         title = "Republicans introduce crypto legislation with ethical clause"
         facts = ["A new bill text was released by Republican representatives."]
