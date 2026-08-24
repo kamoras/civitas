@@ -32,7 +32,7 @@
     "@types/react-dom": "^19.2.4",
     "@types/react-simple-maps": "^3.0.6",
     "@vitejs/plugin-react": "^6.1.0",
-    "@vitest/coverage-v8": "^4.1.10",
+    "@vitest/coverage-v8": "^4.1.11",
     "eslint": "^10.8.1",
     "eslint-config-next": "^16.3.1",
     "eslint-plugin-jsx-a11y": "^6.10.2",
@@ -41,7 +41,7 @@
     "prettier": "^3.9.6",
     "tailwindcss": "^4.3.2",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "overrides": {
     "d3-color": "3.1.0",
