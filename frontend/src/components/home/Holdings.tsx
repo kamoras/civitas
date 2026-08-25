@@ -55,8 +55,9 @@ export default function Holdings() {
       </dl>
 
       <p className="mt-4 font-display text-base leading-relaxed text-ink-lo">
-        Civitas is a non-profit, volunteer-run project. It takes no money from parties, candidates
-        or PACs, requires no account, and sells nothing.
+        Civitas is an open source, volunteer-run project — not a registered organization of any
+        kind. It takes no money from parties, candidates or PACs, requires no account, and sells
+        nothing.
       </p>
 
       <Link

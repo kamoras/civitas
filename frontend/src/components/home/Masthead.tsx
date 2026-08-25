@@ -122,8 +122,11 @@ export default function Masthead() {
           </form>
 
           {/* Governance disclosure, asserted rather than murmured in a
-              footer. Deliberately not a charity claim — Civitas is a
-              non-profit public-interest project, not a registered 501(c)(3).
+              footer. Deliberately not a charity claim — Civitas isn't a
+              registered nonprofit, or a registered organization of any
+              kind; it's an open source project maintained for free (2026-08
+              correction: earlier copy called it "non-profit," which implies
+              a registered entity that doesn't exist).
 
               Below the request slip, not above it. The stamp is the most
               saturated thing on the page by some margin — full-strength
@@ -132,7 +135,7 @@ export default function Masthead() {
               on, ahead of both the record index and the only control on the
               page. Reading order now runs control, then disclosure. */}
           <p className="stamp mt-7 text-xs leading-[1.75]">
-            Non-profit · free to use
+            Open source · free to use
             <br />
             No party, candidate
             <br />
