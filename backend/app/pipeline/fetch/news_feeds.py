@@ -44,6 +44,31 @@ class NewsArticle:
     categories: list[str] = field(default_factory=list)
 
 
+# Title prefixes for known multi-story digest segments — one feed item
+# whose description briefly covers several UNRELATED headlines, unlike
+# every other item this pipeline ingests (one item = one story). Live
+# 2026-08-25 incident: PBS's "News Wrap: Wildfire forces evacuations near
+# Reno" clustered on its wildfire mention (correctly, by itself), but its
+# description was "...tens of thousands have been urged to evacuate amid a
+# wildfire near Reno... the Supreme Court cleared the way for President
+# Trump's mail-in voting order... the Pentagon says it struck a boat in
+# the eastern Pacific..." — three unrelated stories in one paragraph. The
+# LLM prompt includes an article's full description (see
+# action_center._build_llm_prompt), so all three reached the LLM as if
+# they were one topic, producing an issue titled "Wildfire evacuations
+# near Reno and Indonesia" with Supreme Court and Pentagon facts mixed in.
+# Dedicated single-topic PBS articles exist for the same stories (e.g.
+# "Supreme Court clears the way for Trump mail voting order ahead of
+# midterms") and are ingested normally — this only drops the compilation
+# format, not the coverage.
+_MULTI_TOPIC_DIGEST_TITLE_PREFIXES = ("news wrap:", "news wrap -")
+
+
+def _is_multi_topic_digest(title: str) -> bool:
+    normalized = title.strip().lower()
+    return normalized.startswith(_MULTI_TOPIC_DIGEST_TITLE_PREFIXES)
+
+
 NEWS_FEEDS: list[dict[str, str]] = [
     {
         "name": "AP News",
@@ -279,6 +304,8 @@ def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
             continue
         if pub_date and pub_date < cutoff:
             continue
+        if _is_multi_topic_digest(title):
+            continue
 
         articles.append(NewsArticle(
             title=title,
@@ -332,6 +359,8 @@ def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
         if not title or not link:
             continue
         if pub_date and pub_date < cutoff:
+            continue
+        if _is_multi_topic_digest(title):
             continue
         articles.append(NewsArticle(
             title=title,

@@ -11,6 +11,7 @@ from app.pipeline.fetch.news_feeds import (
     MAX_ARTICLE_AGE_HOURS,
     MAX_SUMMARY_CHARS,
     _extract_body_text,
+    _is_multi_topic_digest,
     _parse_pub_date,
     _parse_rss_feed,
     _strip_html,
@@ -226,6 +227,47 @@ class TestStripHtml:
     def test_malformed_xml_yields_no_articles(self):
         """A feed serving garbage must not take the run down with it."""
         assert _parse_rss_feed(b"<rss><channel><item>truncated", "Test") == []
+
+    def test_a_multi_topic_digest_item_is_dropped(self):
+        """Live 2026-08-25 incident: PBS's "News Wrap: Wildfire forces
+        evacuations near Reno" briefly covered the Reno wildfire, a
+        Supreme Court ruling, and a Pentagon strike in ONE description —
+        three unrelated stories reached the LLM as if they were one topic
+        (see _is_multi_topic_digest's docstring for the verbatim text),
+        producing an issue titled "Wildfire evacuations near Reno and
+        Indonesia" with Supreme Court and Pentagon facts mixed in."""
+        articles = _parse_rss_feed(
+            """<?xml version="1.0"?><rss><channel><item>
+              <title>News Wrap: Wildfire forces evacuations near Reno</title>
+              <link>https://www.pbs.org/newshour/show/news-wrap-wildfire-forces-evacuations-near-reno</link>
+              <description>Tens of thousands evacuate near Reno, the Supreme Court
+                cleared Trump's mail-in voting order, and the Pentagon struck a boat
+                in the eastern Pacific.</description>
+            </item></channel></rss>""".encode(),
+            "PBS NewsHour",
+        )
+        assert articles == []
+
+    def test_a_dedicated_single_topic_article_from_the_same_source_still_ingests(self):
+        # The filter targets the digest FORMAT (title prefix), not the
+        # source — PBS's own dedicated single-topic articles for the same
+        # stories must keep flowing normally.
+        articles = _parse_rss_feed(
+            """<?xml version="1.0"?><rss><channel><item>
+              <title>Supreme Court clears the way for Trump mail voting order</title>
+              <link>https://www.pbs.org/newshour/politics/supreme-court-clears-the-way</link>
+              <description>The Supreme Court ruled 6-3 on Monday.</description>
+            </item></channel></rss>""".encode(),
+            "PBS NewsHour",
+        )
+        assert len(articles) == 1
+
+    def test_is_multi_topic_digest_matches_common_prefix_variants(self):
+        assert _is_multi_topic_digest("News Wrap: Wildfire forces evacuations near Reno")
+        assert _is_multi_topic_digest("news wrap: lowercase variant")
+        assert _is_multi_topic_digest("News Wrap - dash variant")
+        assert not _is_multi_topic_digest("Supreme Court clears the way for Trump mail voting order")
+        assert not _is_multi_topic_digest("Wrapping up the day's news wrap-up")
 
     def test_comment_text_is_not_treated_as_content(self):
         """This parser drops comments, but the extractor should not depend
