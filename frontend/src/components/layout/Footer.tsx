@@ -91,7 +91,7 @@ export default function Footer() {
             <p className="font-mono text-xs leading-[1.9] tracking-[0.08em] text-ink-min">
               CIVITAS RESEARCH
               <br />
-              NON-PROFIT PUBLIC-INTEREST PROJECT
+              OPEN SOURCE PUBLIC-INTEREST PROJECT
               <br />
               NO PARTY, CANDIDATE OR PAC MONEY
               <br />
