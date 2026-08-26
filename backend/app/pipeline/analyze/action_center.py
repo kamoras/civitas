@@ -1703,6 +1703,28 @@ def _validate_facts(facts: list, source_text: str | None = None) -> list:
         # sentence SUBJECT wasn't covered by the "in the articles" form.
         "the article ", "the articles ",
     )
+    # A second meta-fact shape _META_PHRASES doesn't cover: reporting that a
+    # detail is ABSENT, rather than naming "the article(s)" as the subject.
+    # 2026-08-26 audit, ~30% of a sampled window: "No specific date was
+    # provided for when the new block may take effect," "Specific names of
+    # officials were not disclosed in the provided articles," "No official
+    # timeline was provided regarding when renovations would proceed." Two
+    # grammatical shapes cover all three (negation in the subject via "no",
+    # negation in the verb via "not"); both require one of the qualifying
+    # words below so a genuine positive fact — "the official statement was
+    # provided to reporters" — is never caught, only the quantified-absence
+    # claim is. Narrow and evidence-based on purpose, like _HEDGE_PHRASE_RE
+    # in grounding.py — widen with real examples, not speculative phrasing.
+    _ABSENCE_NO_SUBJECT_RE = _re.compile(
+        r"\bno (?:specific|official|further|additional)\b[^.]{0,50}\b(?:was|were)\s+"
+        r"(?:provided|disclosed|specified|released|given|available)\b",
+        _re.IGNORECASE,
+    )
+    _ABSENCE_NOT_VERB_RE = _re.compile(
+        r"\b(?:specific|official)\b[^.]{0,50}\b(?:was|were)\s+not\s+"
+        r"(?:provided|disclosed|specified|released|given|available)\b",
+        _re.IGNORECASE,
+    )
     _today = datetime.now(_US_EAST).date()
     _month_index = {m: i for i, m in enumerate(calendar.month_name) if m}
 
@@ -1783,6 +1805,13 @@ def _validate_facts(facts: list, source_text: str | None = None) -> list:
         if any(phrase in lower for phrase in _META_PHRASES):
             logger.warning("Dropping meta-fact referencing the coverage itself: %s", fact[:120])
             action_metrics.increment("facts_dropped_meta")
+            continue
+
+        # Second meta-fact shape: reports the ABSENCE of a detail rather
+        # than naming "the article(s)" as subject — see the docstring.
+        if _ABSENCE_NO_SUBJECT_RE.search(fact) or _ABSENCE_NOT_VERB_RE.search(fact):
+            logger.warning("Dropping fact reporting an absence of information: %s", fact[:120])
+            action_metrics.increment("facts_dropped_absence_of_info")
             continue
 
         # Fabricated-statistic check against the articles the LLM was shown.

@@ -1797,6 +1797,38 @@ class TestValidateFactsAuditAdditions:
         assert _validate_facts(facts, source_text=source) == facts
 
 
+class TestValidateFactsAbsenceOfInformation:
+    """2026-08-26 audit: ~30% of a sampled window of issues had a "key
+    fact" that reports what the coverage DIDN'T say, rather than a real
+    event — a second meta-fact shape _META_PHRASES (which only catches
+    "the article(s)" as subject) didn't cover. Live examples below."""
+
+    def test_no_specific_x_was_provided_is_dropped(self):
+        facts = ["No specific date was provided for when the new block may take effect."]
+        assert _validate_facts(facts) == []
+
+    def test_specific_x_were_not_disclosed_is_dropped(self):
+        facts = ["Specific names of officials were not disclosed in the provided articles."]
+        assert _validate_facts(facts) == []
+
+    def test_no_official_x_was_provided_is_dropped(self):
+        facts = ["No official timeline was provided regarding when renovations would proceed."]
+        assert _validate_facts(facts) == []
+
+    def test_a_genuine_positive_fact_with_the_same_verb_is_kept(self):
+        # Must not catch the ordinary positive form just because it shares
+        # a qualifying word and a verb with the absence pattern.
+        facts = ["The official statement was provided to reporters on Tuesday."]
+        assert _validate_facts(facts) == facts
+
+    def test_a_real_absence_fact_without_a_qualifier_is_kept(self):
+        # "No injuries were reported" is a real, substantive fact, not
+        # padding — the qualifier requirement (specific/official/further/
+        # additional) is what keeps facts like this one out of scope.
+        facts = ["No injuries were reported at the scene."]
+        assert _validate_facts(facts) == facts
+
+
 class TestSurnameGuardEdges:
     def test_surname_at_text_start_has_no_owner(self):
         import re
