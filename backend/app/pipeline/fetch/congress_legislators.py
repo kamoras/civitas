@@ -91,6 +91,25 @@ async def fetch_bioguide_to_fec_ids(client: httpx.AsyncClient, db: Session) -> d
     return result
 
 
+def select_all_fec_ids_for_office(fec_ids: list[str], office: str) -> list[str]:
+    """Every id in `fec_ids` matching the given office, in crosswalk
+    order (see select_fec_id_for_office for the office-letter rule).
+
+    A member with two candidacies in the SAME chamber across different
+    cycles — one still active, one a stale/invalid id the crosswalk never
+    dropped — has more than one match here. 2026-08-26 audit: three
+    sitting members (one senator, two representatives) showed $0 raised
+    despite full voting records because select_fec_id_for_office picked
+    the first office-matching id without checking it actually resolves,
+    and for these three the first one happened to be the invalid one.
+    Callers with the means to verify (a live FEC lookup) should try each
+    of these in order rather than trust position in the list; callers
+    that can't should keep using select_fec_id_for_office, whose
+    first-match behavior is unchanged.
+    """
+    return [fec_id for fec_id in fec_ids if fec_id[:1].upper() == office.upper()]
+
+
 def select_fec_id_for_office(fec_ids: list[str], office: str) -> str | None:
     """Each real FEC candidate ID encodes its office as its first
     character (H=House, S=Senate, P=President) — picks the id matching
@@ -98,7 +117,6 @@ def select_fec_id_for_office(fec_ids: list[str], office: str) -> str | None:
     chamber (e.g. a House member later elected to the Senate) has one id
     per chamber in the crosswalk's list; this picks theirs for THIS
     office, not just the first/most recent entry."""
-    for fec_id in fec_ids:
-        if fec_id[:1].upper() == office.upper():
-            return fec_id
+    matches = select_all_fec_ids_for_office(fec_ids, office)
+    return matches[0] if matches else None
     return None
