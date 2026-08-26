@@ -114,6 +114,39 @@ _CONSISTENCY_CHECKS: list[tuple[str, str, int, str]] = [
 ]
 
 
+def _tie_extended_extreme(
+    ordered: list[tuple], k: int, from_start: bool,
+) -> tuple[list, list]:
+    """Split `ordered` (sorted ascending by raw metric) into (extreme
+    group, rest), extending the nominal k-sized cut so a metric value
+    tied across the boundary lands entirely on one side.
+
+    2026-08-26 audit: the Senate Independence check was failing
+    (p=0.237, needs <0.05) for a real reason — party_break_rate has a
+    hard floor at 0.0 shared by 16+ of 100 senators (many simply never
+    break with party on labeled votes; this isn't rare noise for this
+    metric the way it would be for a continuous financial ratio). A
+    plain `ordered[:k]`/`ordered[-k:]` slice at k=10 split that 16-way
+    tie arbitrarily — whichever 10 of the 16 the DB query happened to
+    return first landed "in" the least-independent decile, the other 6
+    landed in "the rest", contaminating the comparison group with
+    members equally low on the raw metric and diluting the test's
+    ability to find a real separation.
+    """
+    n = len(ordered)
+    if from_start:
+        idx = k
+        boundary = ordered[idx - 1][0]
+        while idx < n and ordered[idx][0] == boundary:
+            idx += 1
+        return ordered[:idx], ordered[idx:]
+    idx = n - k
+    boundary = ordered[idx][0]
+    while idx > 0 and ordered[idx - 1][0] == boundary:
+        idx -= 1
+    return ordered[idx:], ordered[:idx]
+
+
 def evaluate_derived_checks(members: list[dict], entity_label: str = "senators") -> dict:
     """Run the integrity + consistency checks over plain member records.
 
@@ -263,14 +296,8 @@ def evaluate_derived_checks(members: list[dict], entity_label: str = "senators")
         # the metric says should be scored most independent.
         k = max(int(n * EXTREME_FRACTION), MIN_POPULATION // 2)
         ordered = sorted(pairs, key=lambda p: p[0])
-        most, most_rest = (
-            (ordered[-k:], ordered[:-k]) if direction > 0
-            else (ordered[:k], ordered[k:])
-        )
-        least, least_rest = (
-            (ordered[:k], ordered[k:]) if direction > 0
-            else (ordered[-k:], ordered[:-k])
-        )
+        most, most_rest = _tie_extended_extreme(ordered, k, from_start=direction <= 0)
+        least, least_rest = _tie_extended_extreme(ordered, k, from_start=direction > 0)
         for group, rest, alternative, side in (
             (most, most_rest, "greater", "most-independent"),
             (least, least_rest, "less", "least-independent"),
@@ -284,7 +311,7 @@ def evaluate_derived_checks(members: list[dict], entity_label: str = "senators")
             if math.isnan(mw.pvalue) or mw.pvalue > ALPHA:
                 names = ", ".join(nm for _, _, nm in group)
                 failures.append({
-                    "senator": f"{side} decile by {metric} ({k} of {n} {entity_label})",
+                    "senator": f"{side} decile by {metric} ({len(group)} of {n} {entity_label})",
                     "dimension": label,
                     "score": round(float(statistics.median(group_scores)), 1),
                     "expected": [

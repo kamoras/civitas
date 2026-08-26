@@ -7,8 +7,10 @@ raw data, mirroring how the gate works in production (AGENTS.md 1/3a).
 
 from app.models import KeyVote, RepKeyVote, Representative, ScoreSnapshot, Senator
 from app.pipeline.analyze.ground_truth import (
+    _tie_extended_extreme,
     check_ground_truth,
     check_score_distribution,
+    evaluate_derived_checks,
 )
 from app.pipeline.analyze.score_calculator import ALGORITHM_VERSION
 
@@ -217,6 +219,83 @@ class TestDerivedConsistency:
             and "representatives" in f["senator"]
             for f in failures
         )
+
+
+class TestTieExtendedExtreme:
+    """2026-08-26 audit: the Senate Independence check was failing
+    (p=0.237, needs <0.05) because party_break_rate has a hard floor at
+    0.0 shared by 16+ of 100 senators, and a plain ordered[:k]/ordered[-k:]
+    slice split that tie arbitrarily — whichever k of the tied members
+    happened to sort first landed in the extreme group, the rest leaked
+    into the comparison group. _tie_extended_extreme must put every
+    member tied at the boundary value on the same side."""
+
+    def test_no_tie_at_boundary_behaves_like_a_plain_slice(self):
+        ordered = [(float(i), 0.0, f"m{i}") for i in range(20)]
+        group, rest = _tie_extended_extreme(ordered, k=5, from_start=True)
+        assert [nm for _, _, nm in group] == [f"m{i}" for i in range(5)]
+        assert len(rest) == 15
+
+    def test_tie_straddling_the_start_boundary_is_extended(self):
+        # Six members tied at 0.0 — a plain [:5] slice would arbitrarily
+        # leave one of them in "rest".
+        ordered = [(0.0, 0.0, f"tied{i}") for i in range(6)] + [
+            (float(i), 0.0, f"m{i}") for i in range(1, 15)
+        ]
+        group, rest = _tie_extended_extreme(ordered, k=5, from_start=True)
+        assert {nm for _, _, nm in group} == {f"tied{i}" for i in range(6)}
+        assert all(nm.startswith("m") for _, _, nm in rest)
+
+    def test_tie_straddling_the_end_boundary_is_extended(self):
+        ordered = [(float(i), 0.0, f"m{i}") for i in range(14)] + [
+            (99.0, 0.0, f"tied{i}") for i in range(6)
+        ]
+        group, rest = _tie_extended_extreme(ordered, k=5, from_start=False)
+        assert {nm for _, _, nm in group} == {f"tied{i}" for i in range(6)}
+        assert all(nm.startswith("m") for _, _, nm in rest)
+
+    def test_tie_entirely_inside_the_group_needs_no_extension(self):
+        # Ties that don't touch the cut point are harmless either way.
+        ordered = [(1.0, 0.0, "a"), (1.0, 0.0, "b"), (2.0, 0.0, "c"),
+                   (3.0, 0.0, "d"), (4.0, 0.0, "e")]
+        group, rest = _tie_extended_extreme(ordered, k=2, from_start=True)
+        assert {nm for _, _, nm in group} == {"a", "b"}
+        assert len(rest) == 3
+
+    def test_least_independent_decile_reports_the_full_tied_group_size(self):
+        # End-to-end reproduction of the live shape: 100 senators, 16 tied
+        # at the party_break_rate floor (0.0) with IV scores sitting right
+        # at the chamber median (matching the real diagnosis — "IV scores
+        # for the zero-rate group cluster tightly around the chamber
+        # median"), so the other 84 spread evenly around that same median
+        # and the check deterministically fails to find separation. A
+        # nominal k=10 decile must report all 16 tied members, never an
+        # arbitrary 10 of them.
+        members = []
+        for i in range(16):
+            members.append({
+                "name": f"tied{i}",
+                "scores": {"score_independent_voting": 50.0},
+                "metrics": {"party_break_rate": 0.0, "pac_ratio": 0.3, "small_donor_pct": 20.0},
+                "raw": {"total_raised": 1_000_000, "total_from_pacs": 100_000,
+                        "labeled_votes": 50},
+            })
+        for i in range(84):
+            members.append({
+                "name": f"m{i}",
+                "scores": {"score_independent_voting": 10.0 + i * (80.0 / 83)},
+                "metrics": {"party_break_rate": float(i + 1), "pac_ratio": 0.3, "small_donor_pct": 20.0},
+                "raw": {"total_raised": 1_000_000, "total_from_pacs": 100_000,
+                        "labeled_votes": 50},
+            })
+
+        report = evaluate_derived_checks(members)
+        least_failures = [
+            f for f in report["failures"]
+            if f["dimension"] == "IV" and "least-independent decile" in f["senator"]
+        ]
+        assert least_failures, "expected this deliberately-ambiguous population to fail the check"
+        assert "(16 of 100" in least_failures[0]["senator"]
 
 
 def _add_snapshot_history(db, dates, values_fn, version=ALGORITHM_VERSION):
