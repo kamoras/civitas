@@ -11,7 +11,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.pipeline.fetch.fec import find_candidate
+from app.pipeline.cache import api_cache_get
+from app.pipeline.fetch.fec import _candidate_exists, find_candidate
 
 
 def _candidate(name: str, candidate_id: str, district: str) -> dict:
@@ -117,17 +118,67 @@ class TestBioguideCrosswalkTakesPriority:
 
     @pytest.mark.asyncio
     async def test_crosswalk_match_skips_name_search_entirely(self, db_session):
+        # 2026-08-26: a verified crosswalk match still costs one cheap
+        # existence lookup, but never the full name-search flow (which
+        # would be several calls: a name query, possibly a no-district
+        # retry).
         with patch(
             "app.pipeline.fetch.fec.fetch_bioguide_to_fec_ids",
             new=AsyncMock(return_value={"C001075": ["H8LA00017", "S4LA00107"]}),
         ), patch(
-            "app.pipeline.fetch.fec._fetch_with_retry", new_callable=AsyncMock
+            "app.pipeline.fetch.fec._fetch_with_retry", new_callable=AsyncMock,
+            return_value={"results": [{"candidate_id": "S4LA00107"}]},
         ) as mock_fetch:
             result = await find_candidate(
                 None, db_session, "Bill Cassidy", "LA", office="S", bioguide_id="C001075",
             )
         assert result == {"candidate_id": "S4LA00107"}
-        mock_fetch.assert_not_called()  # crosswalk resolved it — no FEC search needed
+        mock_fetch.assert_called_once()
+        assert "S4LA00107" in mock_fetch.call_args.args[1]
+
+    @pytest.mark.asyncio
+    async def test_stale_crosswalk_id_falls_through_to_the_next_valid_one(self, db_session):
+        # 2026-08-26 audit: three sitting members (Gillen/NY, Self/TX,
+        # Ivey/MD) showed $0 raised because the crosswalk carried TWO
+        # ids for the same office — one stale/invalid, one real — and
+        # the unverified first match happened to be the invalid one in
+        # all three cases. The first id here 404s on FEC; the second is
+        # real and must be the one returned.
+        async def fake_fetch(client, url, *a, **kw):
+            if "H4NY04158" in url:
+                return {"results": []}  # doesn't resolve — the stale one
+            if "H2NY04244" in url:
+                return {"results": [{"candidate_id": "H2NY04244"}]}  # the real one
+            raise AssertionError(f"unexpected FEC lookup: {url}")
+
+        with patch(
+            "app.pipeline.fetch.fec.fetch_bioguide_to_fec_ids",
+            new=AsyncMock(return_value={"G000598": ["H4NY04158", "H2NY04244"]}),
+        ), patch(
+            "app.pipeline.fetch.fec._fetch_with_retry", side_effect=fake_fetch,
+        ):
+            result = await find_candidate(
+                None, db_session, "Laura Gillen", "NY", office="H", bioguide_id="G000598",
+            )
+        assert result == {"candidate_id": "H2NY04244"}
+
+    @pytest.mark.asyncio
+    async def test_all_crosswalk_ids_invalid_falls_back_to_name_search(self, db_session):
+        with patch(
+            "app.pipeline.fetch.fec.fetch_bioguide_to_fec_ids",
+            new=AsyncMock(return_value={"C001075": ["S4LA00107"]}),
+        ), patch(
+            "app.pipeline.fetch.fec._fetch_with_retry", new_callable=AsyncMock,
+        ) as mock_fetch:
+            mock_fetch.side_effect = [
+                {"results": []},  # the one crosswalk id doesn't resolve
+                {"results": [_candidate("CASSIDY, BILL", "S6LA00201", "")]},  # name search
+            ]
+            result = await find_candidate(
+                None, db_session, "Bill Cassidy", "LA", office="S", bioguide_id="C001075",
+            )
+        assert result["candidate_id"] == "S6LA00201"
+        assert mock_fetch.call_count == 2
 
     @pytest.mark.asyncio
     async def test_member_missing_from_crosswalk_falls_back_to_name_search(self, db_session):
@@ -257,3 +308,32 @@ async def test_both_searches_empty_returns_none(db_session):
         )
         assert result is None
         assert mock_fetch.call_count == 2  # district attempt, then fallback
+
+
+class TestCandidateExistsCaching:
+    """Only a confirmed-real result is cached — a False result can't be
+    told apart from _fetch_with_retry exhausting its own retries on a
+    transient FEC outage, and caching that negatively would permanently
+    blacklist a genuinely valid id over a one-time network blip."""
+
+    @pytest.mark.asyncio
+    async def test_a_real_candidate_is_cached(self, db_session):
+        with patch(
+            "app.pipeline.fetch.fec._fetch_with_retry", new_callable=AsyncMock,
+            return_value={"results": [{"candidate_id": "S4LA00107"}]},
+        ) as mock_fetch:
+            assert await _candidate_exists(None, db_session, "S4LA00107") is True
+            assert await _candidate_exists(None, db_session, "S4LA00107") is True
+        mock_fetch.assert_called_once()  # second call served from cache
+        assert api_cache_get(db_session, "fec", "candidate-exists-S4LA00107") == {"exists": True}
+
+    @pytest.mark.asyncio
+    async def test_a_nonexistent_candidate_is_not_cached(self, db_session):
+        with patch(
+            "app.pipeline.fetch.fec._fetch_with_retry", new_callable=AsyncMock,
+            return_value={"results": []},
+        ) as mock_fetch:
+            assert await _candidate_exists(None, db_session, "H4NY04158") is False
+            assert await _candidate_exists(None, db_session, "H4NY04158") is False
+        assert mock_fetch.call_count == 2  # re-checked both times, nothing cached
+        assert api_cache_get(db_session, "fec", "candidate-exists-H4NY04158") is None

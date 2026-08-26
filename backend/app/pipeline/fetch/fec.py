@@ -11,7 +11,7 @@ from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.congress_legislators import (
     fetch_bioguide_to_fec_ids,
-    select_fec_id_for_office,
+    select_all_fec_ids_for_office,
 )
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S, fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
@@ -64,6 +64,32 @@ async def _fetch_with_retry(
     return resp.json() if resp is not None else None
 
 
+async def _candidate_exists(client: httpx.AsyncClient, db: Session, candidate_id: str) -> bool:
+    """Whether `candidate_id` resolves to a real FEC candidate at all.
+
+    Checks the bare /candidate/{id}/ profile endpoint, not /totals/ — a
+    real but financially inactive candidate can have zero totals rows,
+    which would make /totals/ a false "doesn't exist" for someone who
+    does. Only a confirmed-real result is cached (permanently — a
+    candidate id's existence doesn't change once assigned): a False
+    result here can't be told apart from _fetch_with_retry exhausting
+    its own retries on a transient FEC outage, and caching THAT
+    negatively would permanently blacklist a genuinely valid id over a
+    one-time network blip. An uncached False just means the next run
+    checks again.
+    """
+    cache_key = f"candidate-exists-{candidate_id}"
+    cached = api_cache_get(db, "fec", cache_key)
+    if cached is not None:
+        return bool(cached.get("exists"))
+
+    data = await _fetch_with_retry(client, f"{FEC_API_BASE}/candidate/{candidate_id}/")
+    exists = bool((data or {}).get("results"))
+    if exists:
+        api_cache_set(db, "fec", cache_key, {"exists": True})
+    return exists
+
+
 def _fec_first_name(c_name: str) -> str:
     """FEC's `name` field is formatted "LAST, FIRST MIDDLE ..." — returns
     just the first-name token, or "" if the field has no comma at all
@@ -91,10 +117,17 @@ async def find_candidate(
             congress_legislators.py) — an authoritative ID match with no
             name-matching guesswork at all, immune to the next nickname
             or legal-name variant nobody's added to the fallback table
-            below yet. The name-based search only runs when this misses
-            (no bioguide_id given, or the member isn't in that crosswalk
-            — e.g. a brand-new special-election winner not yet added
-            upstream).
+            below yet. A crosswalk entry is verified against a live FEC
+            lookup before being trusted (2026-08-26 audit: three sitting
+            members showed $0 raised because the crosswalk carried a
+            second, stale/invalid id for the same chamber and the
+            unverified first match happened to be the bad one) — if the
+            first office-matching id doesn't resolve, the next one is
+            tried, in crosswalk order. The name-based search only runs
+            when nothing in the crosswalk verifies (no bioguide_id given,
+            the member isn't in that crosswalk — e.g. a brand-new
+            special-election winner not yet added upstream — or every
+            crosswalk id for this office turns out invalid).
 
     Returns:
         Best matching candidate record, or None.
@@ -108,11 +141,16 @@ async def find_candidate(
     if bioguide_id:
         crosswalk = await fetch_bioguide_to_fec_ids(client, db)
         fec_ids = crosswalk.get(bioguide_id)
-        fec_id = select_fec_id_for_office(fec_ids, office) if fec_ids else None
-        if fec_id:
-            match = {"candidate_id": fec_id}
-            api_cache_set(db, "fec", cache_key, match)
-            return match
+        for fec_id in select_all_fec_ids_for_office(fec_ids, office) if fec_ids else []:
+            if await _candidate_exists(client, db, fec_id):
+                match = {"candidate_id": fec_id}
+                api_cache_set(db, "fec", cache_key, match)
+                return match
+            logger.warning(
+                "Bioguide->FEC crosswalk id %s for %s (%s) does not resolve "
+                "on FEC — trying the next candidate for this office, if any",
+                fec_id, bioguide_id, office,
+            )
 
     name_parts = name.split()
     last_name = name_parts[-1] if name_parts else name

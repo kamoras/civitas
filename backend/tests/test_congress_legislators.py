@@ -10,6 +10,7 @@ import pytest
 
 from app.pipeline.fetch.congress_legislators import (
     fetch_bioguide_to_fec_ids,
+    select_all_fec_ids_for_office,
     select_fec_id_for_office,
 )
 
@@ -97,3 +98,27 @@ class TestSelectFecIdForOffice:
 
     def test_empty_list_returns_none(self):
         assert select_fec_id_for_office([], "S") is None
+
+
+class TestSelectAllFecIdsForOffice:
+    """2026-08-26 audit: three sitting members showed $0 raised because a
+    crosswalk entry carried two ids for the same office — one stale/
+    invalid, one real — and select_fec_id_for_office's first-match
+    behavior isn't enough on its own to recover from that; a caller that
+    can verify needs every candidate, not just the first."""
+
+    def test_returns_every_match_in_crosswalk_order(self):
+        assert select_all_fec_ids_for_office(
+            ["H4NY04158", "S4LA00107", "H2NY04244"], "H",
+        ) == ["H4NY04158", "H2NY04244"]
+
+    def test_single_match_returns_a_one_item_list(self):
+        assert select_all_fec_ids_for_office(["H8LA00017", "S4LA00107"], "S") == ["S4LA00107"]
+
+    def test_no_matching_office_returns_empty_list(self):
+        assert select_all_fec_ids_for_office(["H8LA00017"], "S") == []
+
+    def test_select_fec_id_for_office_still_returns_only_the_first(self):
+        # The simple single-match helper is unchanged for callers that
+        # can't verify — first-match-in-crosswalk-order behavior.
+        assert select_fec_id_for_office(["H4NY04158", "H2NY04244"], "H") == "H4NY04158"
