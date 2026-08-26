@@ -1754,6 +1754,29 @@ class TestBskyRepostHasNewInformation:
         ]
         assert _bsky_repost_has_new_information(old_facts, new_facts) is False
 
+    def test_a_new_lawsuit_being_filed_counts_as_new_information(self):
+        # Prompted by a live 2026-08-26 issue (id 615) whose real facts
+        # included "Democratic-controlled states filed a new lawsuit
+        # challenging the executive order" as a genuinely new
+        # development — "filed" wasn't a tracked marker at all. That
+        # exact sentence happens to ALSO add a new signature token via a
+        # hyphenated-compound quirk ("Democratic-controlled" isn't
+        # stripped the way bare "Democratic" is), so this uses a
+        # deliberately cleaner example ("State officials", both stripped
+        # as generic civic vocabulary) to isolate the marker path itself.
+        old_facts = ["A court order had blocked the agency's new rule."]
+        new_facts = old_facts + ["State officials filed a new lawsuit against the rule."]
+        assert _issue_signature("", new_facts) - _issue_signature("", old_facts) == set()
+        assert _bsky_repost_has_new_information(json.dumps(old_facts), new_facts) is True
+
+    def test_a_court_lifting_an_order_counts_as_new_information(self):
+        # "lifted" added the same day, same real issue, alongside "filed" —
+        # both real judicial-outcome verbs missing from the tracked list.
+        old_facts = ["A court order had blocked the agency's new rule."]
+        new_facts = old_facts + ["A judge lifted the order blocking the rule."]
+        assert _issue_signature("", new_facts) - _issue_signature("", old_facts) == set()
+        assert _bsky_repost_has_new_information(json.dumps(old_facts), new_facts) is True
+
 
 class TestValidateFactsAuditAdditions:
     """2026-07 audit: placeholder tokens, subject-form meta-facts, and
