@@ -248,6 +248,15 @@ def _issue_signature(title: str, facts: list[str]) -> set[str]:
 # Checked differentially — a reword that says "passed" both times adds nothing
 # — and the near-duplicate text gate in bluesky_poster.py is the backstop if a
 # synonym swap ("approved" for "passed") slips one through here.
+#
+# 2026-08-26 live miss: "Democratic-controlled states filed a new lawsuit
+# challenging the executive order" was genuinely new information (no prior
+# fact mentioned a new suit) but added no new signature token ("Democratic"
+# is stripped as generic civic vocabulary) and "filed" wasn't tracked here
+# either — the repost gate saw nothing new and suppressed an update a
+# reader should have seen. "lifted" added the same day from the same
+# issue's real text ("a federal judge... lifted the nationwide blocking
+# order"), a real judicial-outcome verb missing for the same reason.
 _DEVELOPMENT_MARKERS = frozenset({
     # Executive and administrative action
     "veto", "vetoed", "vetoes", "override", "overrode", "overridden",
@@ -259,7 +268,7 @@ _DEVELOPMENT_MARKERS = frozenset({
     # Judicial
     "blocked", "enjoined", "upheld", "overturned", "reversed", "struck",
     "dismissed", "ruled", "indicted", "charged", "convicted", "acquitted",
-    "sentenced", "settled", "appealed", "subpoenaed",
+    "sentenced", "settled", "appealed", "subpoenaed", "lifted", "filed", "sued",
     # Personnel and status
     "resigned", "fired", "ousted", "nominated", "sworn", "replaced",
     # Story resolution
