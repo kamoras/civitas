@@ -43,6 +43,7 @@ from app.election_calendar import (
 )
 from app.http_client import make_async_client
 from app.models import Candidate, ElectionPipelineRun, PipelineStatus, Race, RaceCoverageItem, ScoreSnapshot
+from app.pipeline.analyze.score_calculator import get_district_pvi_map
 from app.pipeline.fetch.fec import fetch_all_candidates, fetch_candidate_financials
 from app.pipeline.progress_tracker import ProgressTracker
 from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock
@@ -125,9 +126,18 @@ def _sync_roster(db: Session, cycle: int, candidates_raw: list[dict]) -> int:
     """Upsert Race + Candidate rows from raw FEC candidate records.
 
     Validation per record: must confirm an election in `cycle`
-    (_on_ballot_in), and must be in one of the 50 states
+    (_on_ballot_in), must be in one of the 50 states
     (STATES_WITH_FEDERAL_RACES — DC/territorial delegate filings excluded,
-    see that constant's comment).
+    see that constant's comment), and for House records, the district must
+    exist in the real 435-seat apportionment (district_pvi.json's own
+    "ST-N" keys, already the authoritative real-district map used
+    elsewhere in scoring — see get_district_pvi_map). FEC's own district
+    field carries paper-filer/placeholder noise straight through
+    otherwise: 2026-08-26 audit found four phantom districts live
+    (FL-59, GA-23, IL-51, NY-28 — none exist for those states) plus
+    several states carrying a spurious null/0-district House row, each
+    populated with garbage-looking filings (empty candidate name, party
+    "UNK"). Senate records have no district to validate.
 
     Special elections: a Senate candidate on the `cycle` ballot in a state
     whose class seat is NOT up that year (election_calendar's rotation) can
@@ -153,7 +163,9 @@ def _sync_roster(db: Session, cycle: int, candidates_raw: list[dict]) -> int:
     synced = 0
     skipped_off_ballot = 0
     skipped_non_state = 0
+    skipped_bad_district = 0
     regular_senate_states = seats_up_for_year(cycle)
+    real_districts = set(get_district_pvi_map())
     for raw in candidates_raw:
         try:
             candidate_id = raw.get("candidate_id")
@@ -168,6 +180,9 @@ def _sync_roster(db: Session, cycle: int, candidates_raw: list[dict]) -> int:
                 skipped_off_ballot += 1
                 continue
             district = raw.get("district_number") if office == "H" else None
+            if office == "H" and f"{state}-{district}" not in real_districts:
+                skipped_bad_district += 1
+                continue
             is_special = office == "S" and state not in regular_senate_states
             race_id = _race_id(cycle, office, state, district, is_special)
 
@@ -196,11 +211,12 @@ def _sync_roster(db: Session, cycle: int, candidates_raw: list[dict]) -> int:
             logger.exception(
                 "Failed to sync candidate %s — skipping", raw.get("candidate_id"),
             )
-    if skipped_off_ballot or skipped_non_state:
+    if skipped_off_ballot or skipped_non_state or skipped_bad_district:
         logger.info(
-            "Roster sync skipped %d records without a confirmed %d election "
-            "and %d non-state (DC/territory) filings",
-            skipped_off_ballot, cycle, skipped_non_state,
+            "Roster sync skipped %d records without a confirmed %d election, "
+            "%d non-state (DC/territory) filings, and %d House records with "
+            "a district outside the real 435-seat apportionment",
+            skipped_off_ballot, cycle, skipped_non_state, skipped_bad_district,
         )
     return synced
 

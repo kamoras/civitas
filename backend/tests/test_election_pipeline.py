@@ -191,6 +191,38 @@ class TestSyncRoster:
         race = db_session.query(Race).filter(Race.id == "2026-HOUSE-CA-12").one()
         assert race.district == 12
 
+    def test_house_at_large_district_zero_is_accepted(self, db_session):
+        # FEC's own "00" convention for a single-district state — a real
+        # seat, not the missing-district case below.
+        synced = election_pipeline._sync_roster(db_session, 2026, [self._raw(
+            candidate_id="H6WY001", state="WY", office="H", district_number=0,
+        )])
+        assert synced == 1
+        race = db_session.query(Race).filter(Race.id == "2026-HOUSE-WY-0").one()
+        assert race.district == 0
+
+    def test_house_candidate_with_out_of_range_district_is_rejected(self, db_session):
+        # 2026-08-26 audit: phantom Race rows for districts that don't
+        # exist (FL-59, GA-23, IL-51, NY-28 — real max for GA is 14),
+        # populated with garbage-looking FEC filings. GA-23 has no
+        # entry in district_pvi.json's real 435-seat map.
+        synced = election_pipeline._sync_roster(db_session, 2026, [self._raw(
+            candidate_id="H6GA023001", state="GA", office="H", district_number=23,
+        )])
+        assert synced == 0
+        assert db_session.query(Race).count() == 0
+        assert db_session.query(Candidate).count() == 0
+
+    def test_house_candidate_with_missing_district_is_rejected(self, db_session):
+        # Same audit: a null-district House row with an empty candidate
+        # name and party "UNK" — clearly garbage, not a real at-large
+        # filing (those carry district_number=0, not a missing field).
+        synced = election_pipeline._sync_roster(db_session, 2026, [self._raw(
+            candidate_id="H6AZ000001", state="AZ", office="H",
+        )])
+        assert synced == 0
+        assert db_session.query(Race).count() == 0
+
     def test_updates_existing_candidate_without_duplicating(self, db_session):
         election_pipeline._sync_roster(db_session, 2026, [self._raw(has_raised_funds=False)])
         election_pipeline._sync_roster(db_session, 2026, [self._raw(has_raised_funds=True)])
