@@ -3,15 +3,15 @@
 Network is mocked (no live requests); the 278-T transaction table parse
 itself is ptr_common.py's, covered by test_ptr_common.py. What's tested
 here is everything specific to the presidential path: picking this
-president's periodic transaction reports out of an index that also lists
-hundreds of other appointees' filings, refusing to follow a scraped link
-off-host, and the ingest's dedupe/classification wiring.
+president's periodic transaction reports out of an API response that also
+lists hundreds of other appointees' filings, refusing to follow a scraped
+link off-host, and the ingest's dedupe/classification wiring.
 
-The OGE index markup these fixtures imitate could not be verified against
-the live page from the environment this was written in (see the module
-docstring's NOT LIVE-VERIFIED note) — the parse is deliberately written
-against structure that survives a layout change (anchors plus row text),
-and these tests pin that behavior rather than a specific column order.
+The row shape these fixtures imitate was confirmed live on 2026-08-26 via a
+Playwright network trace of OGE's public disclosure-search page (see the
+module docstring's LIVE-VERIFIED note) — real field names, real anchor
+markup inside `type`, real "Request this Document" rows for filings with no
+direct PDF.
 """
 
 import json
@@ -30,122 +30,102 @@ from app.pipeline.fetch.president_ptr import (
 )
 from app.pipeline.fetch.ptr_common import TradeRow
 
-_BASE = "https://extapps2.oge.gov/201/Presiden.nsf/PAS%20Index?OpenView"
 
-_SAMPLE_INDEX = """
-<html><body><table>
-  <tr>
-    <td>Trump, Donald J.</td><td>President</td>
-    <td>Periodic Transaction Report</td><td>11/14/2025</td>
-    <td><a href="/201/Presiden.nsf/files/trump-278t-111425.pdf">Download</a></td>
-  </tr>
-  <tr>
-    <td>Trump, Donald J.</td><td>President</td>
-    <td>Annual Report (OGE Form 278e)</td><td>06/30/2026</td>
-    <td><a href="/201/Presiden.nsf/files/trump-278e-2026.pdf">Download</a></td>
-  </tr>
-  <tr>
-    <td>Zinberg, Joel</td><td>Special Government Employee</td>
-    <td>Periodic Transaction Report</td><td>09/03/2025</td>
-    <td><a href="/201/Presiden.nsf/files/zinberg-278t-090325.pdf">Download</a></td>
-  </tr>
-  <tr>
-    <td>Trump, Eric F.</td><td>Advisor</td>
-    <td>Periodic Transaction Report</td><td>07/01/2025</td>
-    <td><a href="/201/Presiden.nsf/files/etrump-278t-070125.pdf">Download</a></td>
-  </tr>
-  <tr>
-    <td>Vance, James D.</td><td>Vice President</td>
-    <td>Periodic Transaction Report</td><td>08/12/2025</td>
-    <td><a href="/201/Presiden.nsf/files/vance-278t-081225.pdf">Download</a></td>
-  </tr>
-</table></body></html>
-"""
+def _row(name, title, type_html, doc_date="2026-08-12T04:20:00"):
+    return {"name": name, "title": title, "type": type_html, "docDate": doc_date, "agency": "", "level": ""}
+
+
+_SAMPLE_ROWS = [
+    _row(
+        "Trump, Donald J.", "President",
+        "<a href='https://extapps2.oge.gov/201/Presiden.nsf/PAS+Index/AAA/$FILE/trump-278t-111425.pdf'>"
+        "278 Transaction</a>",
+        doc_date="2025-11-14T04:20:00",
+    ),
+    _row(
+        "Trump, Donald J.", "President",
+        "<a href='https://extapps2.oge.gov/201/Presiden.nsf/PAS+Index/BBB/$FILE/trump-2026-278annual.pdf'>"
+        "Annual (2026)</a>",
+        doc_date="2026-06-30T04:20:00",
+    ),
+    _row(
+        "Zinberg, Joel", "Special Government Employee",
+        "<a href='https://extapps2.oge.gov/201/Presiden.nsf/PAS+Index/CCC/$FILE/zinberg-278t-090325.pdf'>"
+        "278 Transaction</a>",
+    ),
+    _row(
+        "Trump, Eric F.", "Advisor",
+        "<a href='https://extapps2.oge.gov/201/Presiden.nsf/PAS+Index/DDD/$FILE/etrump-278t-070125.pdf'>"
+        "278 Transaction</a>",
+    ),
+    _row(
+        "Vance, James D.", "Vice President",
+        "<a href='https://extapps2.oge.gov/201/Presiden.nsf/PAS+Index/EEE/$FILE/vance-278t-081225.pdf'>"
+        "278 Transaction</a>",
+    ),
+    _row(
+        "Weaver, Douglas", "Commissioner",
+        "278 Transaction (<a href='https://extapps2.oge.gov/201/Presiden.nsf/201%20Request?OpenForm"
+        "&Filer=Weaver'>Request this Document</a>)",
+    ),
+]
 
 
 class TestIndexParsing:
     def test_keeps_only_this_presidents_periodic_transaction_reports(self):
-        filings = _parse_index(_SAMPLE_INDEX, _BASE, "Donald Trump")
+        filings = _parse_index(_SAMPLE_ROWS, "Donald Trump")
 
         assert len(filings) == 1
         assert filings[0]["doc_id"].startswith("trump-278t-111425-")
         assert filings[0]["filing_date"] == "2025-11-14"
         assert filings[0]["pdf_url"] == (
-            "https://extapps2.oge.gov/201/Presiden.nsf/files/trump-278t-111425.pdf"
+            "https://extapps2.oge.gov/201/Presiden.nsf/PAS+Index/AAA/$FILE/trump-278t-111425.pdf"
         )
 
-    def test_annual_278e_is_not_ingested_as_transactions(self):
+    def test_annual_report_is_not_ingested_as_transactions(self):
         """The annual report lists holdings and income in ranges, not
         buy/sell transactions — parsing it into this table would invent
         transactions that were never disclosed."""
-        filings = _parse_index(_SAMPLE_INDEX, _BASE, "Donald Trump")
-        assert all("278e" not in f["doc_id"] for f in filings)
+        filings = _parse_index(_SAMPLE_ROWS, "Donald Trump")
+        assert all("annual" not in f["doc_id"] for f in filings)
 
     def test_another_officials_filing_is_not_attributed_to_the_president(self):
-        filings = _parse_index(_SAMPLE_INDEX, _BASE, "Donald Trump")
+        filings = _parse_index(_SAMPLE_ROWS, "Donald Trump")
         assert all("zinberg" not in f["pdf_url"] for f in filings)
 
     def test_a_different_president_matches_nothing_here(self):
-        assert _parse_index(_SAMPLE_INDEX, _BASE, "Joseph Biden") == []
+        assert _parse_index(_SAMPLE_ROWS, "Joseph Biden") == []
 
-    def test_an_iso_dated_row_is_parsed_and_a_nonsense_date_is_not(self):
-        """The ISO branch is a separate code path from the M/D/YYYY one and
-        went untested at first — it referenced a name the module never
-        imported, so any index printing ISO dates would have raised."""
-        html = (
-            '<table><tr><td>Trump, Donald J.</td><td>President</td>'
-            '<td>Periodic Transaction Report</td><td>2025-11-14</td>'
-            '<td><a href="https://extapps2.oge.gov/f/ptr-iso.pdf">D</a></td></tr></table>'
-        )
-        assert _parse_index(html, _BASE, "Donald Trump")[0]["filing_date"] == "2025-11-14"
-
-        nonsense = html.replace("2025-11-14", "2025-13-45")
-        assert _parse_index(nonsense, _BASE, "Donald Trump")[0]["filing_date"] is None
-
-    def test_a_malformed_date_does_not_hide_a_real_one_elsewhere_in_the_row(self):
-        html = (
-            '<table><tr><td>Trump, Donald J.</td><td>President</td>'
-            '<td>Periodic Transaction Report</td><td>99/99/9999</td><td>2025-11-14</td>'
-            '<td><a href="https://extapps2.oge.gov/f/ptr-mixed.pdf">D</a></td></tr></table>'
-        )
-        assert _parse_index(html, _BASE, "Donald Trump")[0]["filing_date"] == "2025-11-14"
+    def test_a_row_with_no_direct_pdf_link_is_not_counted_as_a_filing(self):
+        """A filing that isn't directly downloadable renders its `type` cell
+        as a link to a "Request this Document" form instead of a PDF —
+        the same shape as a row genuinely missing a link would have."""
+        filings = _parse_index([_row(
+            "Trump, Donald J.", "President",
+            "278 Transaction (<a href='https://extapps2.oge.gov/201/Presiden.nsf/201%20Request?OpenForm"
+            "&Filer=Trump'>Request this Document</a>)",
+        )], "Donald Trump")
+        assert filings == []
 
     def test_a_link_pointing_off_the_allowed_hosts_is_not_counted_as_a_filing(self):
-        html = (
-            '<table><tr><td>Trump, Donald J.</td><td>President</td>'
-            '<td>Periodic Transaction Report</td><td>11/14/2025</td>'
-            '<td><a href="https://evil.example.com/ptr.pdf">D</a></td></tr></table>'
-        )
-        assert _parse_index(html, _BASE, "Donald Trump") == []
+        filings = _parse_index([_row(
+            "Trump, Donald J.", "President",
+            "<a href='https://evil.example.com/ptr.pdf'>278 Transaction</a>",
+        )], "Donald Trump")
+        assert filings == []
 
-    def test_a_non_table_layout_does_not_attribute_every_link_to_one_filer(self):
-        """Climbing to a shared ancestor would hand every anchor the same
-        text — one row naming the president would then claim every PDF on
-        the page."""
-        html = (
-            '<div>'
-            '<div><a href="https://extapps2.oge.gov/f/trump-278t.pdf">'
-            'Trump, Donald J. President Periodic Transaction Report</a></div>'
-            '<div><a href="https://extapps2.oge.gov/f/other-278t.pdf">'
-            'Zinberg, Joel Periodic Transaction Report</a></div>'
-            '</div>'
-        )
-        filings = _parse_index(html, _BASE, "Donald Trump")
-        assert len(filings) == 1
-        assert "trump-278t" in filings[0]["pdf_url"]
-
-    def test_index_without_the_expected_markup_parses_to_nothing(self):
-        assert _parse_index("<html><body>Site under maintenance</body></html>", _BASE, "Donald Trump") == []
+    def test_a_row_with_no_type_markup_parses_to_nothing(self):
+        assert _parse_index([_row("Trump, Donald J.", "President", "")], "Donald Trump") == []
 
     def test_a_relative_sharing_the_surname_is_not_the_president(self):
         """Presidential relatives hold appointed positions and file their
         own 278-Ts. Attributing one to the president would be a factual
         claim about who traded what, not a near miss."""
-        filings = _parse_index(_SAMPLE_INDEX, _BASE, "Donald Trump")
+        filings = _parse_index(_SAMPLE_ROWS, "Donald Trump")
         assert all("etrump" not in f["pdf_url"] for f in filings)
 
     def test_the_vice_presidents_filing_is_not_the_presidents(self):
-        filings = _parse_index(_SAMPLE_INDEX, _BASE, "James Vance")
+        filings = _parse_index(_SAMPLE_ROWS, "James Vance")
         # Surname matches and the position cell contains the word
         # "President" — but "Vice President" is not the office, so only the
         # given-name match can qualify this row, and here it does.
@@ -153,7 +133,7 @@ class TestIndexParsing:
         assert "vance" in filings[0]["pdf_url"]
 
         # ...and it is never picked up for the president himself.
-        assert all("vance" not in f["pdf_url"] for f in _parse_index(_SAMPLE_INDEX, _BASE, "Donald Trump"))
+        assert all("vance" not in f["pdf_url"] for f in _parse_index(_SAMPLE_ROWS, "Donald Trump"))
 
 
 class TestFilerMatching:
@@ -202,8 +182,9 @@ class TestFetchIndex:
     @pytest.mark.asyncio
     async def test_zero_parsed_filings_is_not_cached_as_a_real_result(self, db_session):
         """A structural break must not be frozen in as 'no filings' for a
-        day — the next run has to try the live page again."""
-        resp = MagicMock(status_code=200, text="<html><body>nothing here</body></html>")
+        day — the next run has to try the live API again."""
+        resp = MagicMock(status_code=200)
+        resp.json.return_value = {"data": []}
         with patch(
             "app.pipeline.fetch.president_ptr.fetch_with_retry_requests",
             new_callable=AsyncMock, return_value=resp,
@@ -220,6 +201,23 @@ class TestFetchIndex:
             new_callable=AsyncMock, return_value=None,
         ):
             assert await fetch_ptr_filing_index(db_session, "Donald Trump") == []
+
+    @pytest.mark.asyncio
+    async def test_a_successful_fetch_is_parsed_and_cached(self, db_session):
+        resp = MagicMock(status_code=200)
+        resp.json.return_value = {"data": _SAMPLE_ROWS}
+        with patch(
+            "app.pipeline.fetch.president_ptr.fetch_with_retry_requests",
+            new_callable=AsyncMock, return_value=resp,
+        ) as mock_fetch, patch("app.pipeline.fetch.president_ptr.api_cache_set") as mock_cache_set:
+            filings = await fetch_ptr_filing_index(db_session, "Donald Trump")
+
+        assert len(filings) == 1
+        assert "trump-278t-111425" in filings[0]["pdf_url"]
+        mock_cache_set.assert_called_once()
+        # Server-side filtered on surname so the ~16k-row full index is
+        # never pulled down for one president.
+        assert mock_fetch.call_args.kwargs["params"]["columns[3][search][value]"] == "trump"
 
 
 class TestFetchAndParseFiling:
