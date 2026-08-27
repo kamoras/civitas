@@ -7,7 +7,15 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from app.models import ActionIssue, ExploreDocument, Justice, NationalMonitor, Representative, Senator
+from app.models import (
+    ActionIssue,
+    ExploreDocument,
+    Justice,
+    LlmGenerationSample,
+    NationalMonitor,
+    Representative,
+    Senator,
+)
 from app.time_utils import utcnow
 from app.pipeline.fetch.news_feeds import NewsArticle
 from app.pipeline.analyze.action_center import (
@@ -26,6 +34,7 @@ from app.pipeline.analyze.action_center import (
     _apply_matched_issue_update,
     _retire_untouched_issues,
     _retry_until_grounded,
+    _record_generation_sample,
     _bsky_repost_has_new_information,
     _fix_impossible_senate_vote_counts,
     _is_exact_content_duplicate,
@@ -1420,6 +1429,76 @@ class TestRetryUntilGrounded:
 
         assert result is not None
         assert mock_call_llm.call_count == 2
+
+
+class TestRecordGenerationSample:
+    """_record_generation_sample: the fine-tuning data-capture helper. It
+    must never let a persistence failure break issue generation, since the
+    table only feeds a future training run, not anything the site serves."""
+
+    def test_passed_attempt_is_recorded_with_no_violations(self, db_session):
+        _record_generation_sample(
+            db_session, "action_center_issue", rank=1, attempt=1,
+            input_text="generate the issue",
+            output={"title": "T", "summary": "S", "facts": ["F"]},
+            passed=True,
+        )
+        db_session.commit()
+
+        rows = db_session.query(LlmGenerationSample).all()
+        assert len(rows) == 1
+        assert rows[0].task == "action_center_issue"
+        assert rows[0].passed is True
+        assert rows[0].violations is None
+        assert json.loads(rows[0].output_json) == {"title": "T", "summary": "S", "facts": ["F"]}
+
+    def test_failed_attempt_records_violations(self, db_session):
+        _record_generation_sample(
+            db_session, "action_center_issue", rank=2, attempt=1,
+            input_text="generate the issue",
+            output={"title": "T", "summary": "Reports say X", "facts": []},
+            passed=False, violations=["hedging attribution phrases (reports say)"],
+        )
+        db_session.commit()
+
+        row = db_session.query(LlmGenerationSample).one()
+        assert row.passed is False
+        assert json.loads(row.violations) == ["hedging attribution phrases (reports say)"]
+
+    def test_db_error_is_swallowed_not_raised(self, db_session):
+        broken_db = MagicMock()
+        broken_db.add.side_effect = RuntimeError("db is down")
+
+        _record_generation_sample(
+            broken_db, "action_center_issue", rank=1, attempt=1,
+            input_text="x", output={"summary": "y"}, passed=True,
+        )  # must not raise
+
+    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    def test_retry_until_grounded_records_every_attempt(self, mock_call_llm, db_session):
+        mock_call_llm.side_effect = [
+            json.dumps({
+                "summary": "Recent reports highlight the administration's plans.",
+                "facts": ["The plan was discussed."],
+            }),
+            json.dumps({
+                "summary": "The administration announced its plans.",
+                "facts": ["The plan was discussed."],
+            }),
+        ]
+
+        _retry_until_grounded(
+            user_prompt="generate the issue",
+            reasons=["hedging attribution phrases (reports say)"],
+            rank=1, db=db_session, issue_source_text="source article text",
+            title="Original Title",
+        )
+        db_session.commit()
+
+        rows = db_session.query(LlmGenerationSample).order_by(LlmGenerationSample.attempt).all()
+        assert [r.attempt for r in rows] == [2, 3]
+        assert rows[0].passed is False
+        assert rows[1].passed is True
 
 
 class TestApplyMatchedIssueUpdate:
