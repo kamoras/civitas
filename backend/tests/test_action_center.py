@@ -1695,6 +1695,34 @@ class TestBskyRepostHasNewInformation:
         new_facts = ["A defense policy bill was passed with a narrow 216-212 vote, costing $95 billion."]
         assert _bsky_repost_has_new_information(old_facts, new_facts) is True
 
+    def test_expanding_a_known_entity_to_its_full_name_is_not_new_information(self):
+        # Live 2026-08-27 case (issue 624): old facts named "Saudi" (from
+        # "The Saudi delegation referenced the agreement"); new facts
+        # spelled the same country out as "Saudi Arabia". The signature
+        # diff was the lone token "arabia" — read as a brand-new entity
+        # when it's the same country already known.
+        old_facts = json.dumps([
+            "A nuclear cooperation agreement was presented to Congress this week.",
+            "The agreement includes provisions for uranium enrichment activities.",
+            "The Saudi delegation referenced the agreement in a recent briefing.",
+        ])
+        new_facts = [
+            "A nuclear cooperation agreement was presented to Congress this week.",
+            "The agreement allows Saudi Arabia to enrich uranium under specific conditions.",
+        ]
+        assert _bsky_repost_has_new_information(old_facts, new_facts) is False
+
+    def test_a_genuinely_new_entity_still_counts_even_beside_a_known_one(self):
+        # The entity-expansion filter must not swallow an unrelated new
+        # entity just because it also appears in a two-word capitalized
+        # phrase alongside an already-known word.
+        old_facts = json.dumps(["The Saudi delegation attended the summit."])
+        new_facts = [
+            "The Saudi delegation attended the summit.",
+            "Qatar Airways provided the delegation's transportation.",
+        ]
+        assert _bsky_repost_has_new_information(old_facts, new_facts) is True
+
     def test_missing_old_facts_json_treated_as_empty(self):
         assert _bsky_repost_has_new_information(
             "", ["Senator Susan Collins commented on the bill."],
