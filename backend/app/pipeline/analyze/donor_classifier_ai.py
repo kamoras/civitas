@@ -70,7 +70,6 @@ from app.pipeline.analyze.nn_classifier import (
 from app.pipeline.transform.industry_classifier import (
     classify_industries_batch_scored,
     INDUSTRY_DESCRIPTIONS,
-    store_llm_classifications,
 )
 from app.time_utils import utcnow
 
@@ -795,7 +794,6 @@ def _classify_remaining_via_nn(
     )
 
     all_results: dict[str, dict] = {}
-    industry_learnings: dict[str, str] = {}
 
     last_commit = time.monotonic()
     for donor in unique_donors:
@@ -810,15 +808,9 @@ def _classify_remaining_via_nn(
 
         all_results[name_upper] = {"type": dtype, "industry": industry}
 
-        if industry != "OTHER":
-            industry_learnings[name_upper] = industry
-
         _store_donor_learning(db_session, name_upper, dtype, industry, "nn")
 
     logger.info("kNN classification complete: %d donors classified", len(all_results))
-
-    if industry_learnings:
-        store_llm_classifications(industry_learnings, db_session)
 
     if on_progress is not None:
         try:
@@ -831,7 +823,7 @@ def _classify_remaining_via_nn(
 
 _CONFIDENCE_MAP = {
     "fec": 1.0, "rules": 0.95, "embedding_correction": 0.92,
-    "semantic": 0.9, "embedding": 0.9, "nn": 0.75, "llm": 0.7,
+    "semantic": 0.9, "embedding": 0.9, "nn": 0.75,
 }
 
 # Tracks writes this run to skip redundant SQL queries for the same entity
