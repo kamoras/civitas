@@ -384,3 +384,37 @@ class TestLearningStoreCorrectionThreshold:
         ):
             result = await classify_donors_hybrid(donors, db_session=db_session)
         assert result["STALE CO"]["industry"] == "FINANCE"
+
+
+class TestClassifyRemainingViaNn:
+    """A kNN-resolved industry used to get a second, redundant write
+    immediately after the correct one — store_llm_classifications(),
+    despite its name, was fed the kNN result and mislabeled it
+    source="llm" at confidence 0.7, downgrading the correct source="nn"/
+    0.75 row _store_donor_learning had just written. No LLM is ever
+    called in this pipeline (donor_classifier_ai.py imports no call_llm),
+    so that second write was never anything but wrong provenance —
+    removed entirely rather than fixed to say "nn" twice."""
+
+    def test_a_knn_resolved_industry_keeps_its_nn_provenance(self, db_session):
+        from app.pipeline.analyze.donor_classifier_ai import _classify_remaining_via_nn
+
+        with patch(
+            "app.pipeline.analyze.donor_classifier_ai.classify_batch_nn",
+            side_effect=[
+                {"Acme Corp": "MANUFACTURING"},  # industry pass
+                {"Acme Corp": "Org/Employees"},  # donor_type pass
+            ],
+        ):
+            _classify_remaining_via_nn([{"name": "Acme Corp", "amount": 5000}], db_session)
+
+        stored = (
+            db_session.query(LearnedClassification)
+            .filter(
+                LearnedClassification.entity_name == "ACME CORP",
+                LearnedClassification.entity_type == "industry",
+            )
+            .one()
+        )
+        assert stored.source == "nn"
+        assert stored.confidence == 0.75

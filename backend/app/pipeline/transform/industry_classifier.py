@@ -504,21 +504,6 @@ def classify_batch_with_learning(
     return results, unknowns
 
 
-def store_llm_classifications(
-    classifications: dict[str, str],
-    db_session: Session,
-) -> None:
-    """Store LLM-derived classifications in the learning store.
-
-    Called after the LLM reclassifier processes unknowns.
-    Next pipeline run will find these via the learning store (tier 1).
-    """
-    for name, industry in classifications.items():
-        normalized = name.upper().strip()
-        _store_classification(db_session, normalized, "industry", industry, 0.7, "llm")
-    db_session.flush()
-
-
 def _store_classification(
     db_session: Session,
     entity_name: str,
