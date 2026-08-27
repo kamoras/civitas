@@ -4198,6 +4198,7 @@ def _find_matching_issue(
     recent_embs: "np.ndarray | None",
     title_emb: "np.ndarray",
     matched_issue_ids: set,
+    source_urls: list | None = None,
 ):
     """Find the existing issue (if any) this new cluster's title/facts
     should update instead of becoming a new row — extracted from
@@ -4219,7 +4220,31 @@ def _find_matching_issue(
     copy of itself (live 2026-07-23 bug, ids 420/421). Signature-less rows
     (no facts stored) fall back to the old >= TOPIC_CHANGE_THRESHOLD
     title-only behavior rather than being unmatchable.
+
+    2026-08 audit: a shared source URL is checked BEFORE the title-cosine
+    candidate floor, not inside that loop — three real production pairs
+    (e.g. "DHS data claims and think tank connections" vs "DHS data
+    claims and state ballot measures", a day apart, both citing the same
+    single NPR URL) reworded titles enough between LLM generations that
+    they may not even clear _TOPIC_MATCH_CANDIDATE_FLOOR, so a check
+    nested inside that loop could never reach them. The same article
+    cited twice is stronger, independent evidence of one real-world
+    story than any text-similarity measure of what an LLM chose to call
+    it — same tier of conclusive as _is_exact_content_duplicate.
     """
+    if source_urls:
+        new_urls = {u for u in source_urls if u}
+        if new_urls:
+            for candidate in recent_issues:
+                if candidate.id in matched_issue_ids:
+                    continue
+                try:
+                    cand_urls = set(json.loads(candidate.source_urls or "[]"))
+                except (ValueError, TypeError):
+                    continue
+                if new_urls & cand_urls:
+                    return candidate
+
     if recent_embs is None:
         return None
     new_sig = _issue_signature(title, facts)
@@ -4686,6 +4711,7 @@ def _run_refresh(db: Session) -> int:
         # docstring for the matching rules and their history.
         match = _find_matching_issue(
             title, facts, _recent_issues, _recent_embs, title_emb, _matched_issue_ids,
+            source_urls=source_urls,
         )
 
         _new_values: dict = {

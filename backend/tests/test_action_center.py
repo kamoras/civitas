@@ -1142,6 +1142,64 @@ class TestIssueSignatureMatching:
         match = _find_matching_issue(title, facts, [existing], recent_embs, title_emb, {420})
         assert match is None
 
+    def test_find_matching_issue_catches_a_shared_source_url_despite_a_reworded_title(self):
+        # Live 2026-08-26 bug: "DHS data claims and think tank connections"
+        # and "DHS data claims and state ballot measures", a day apart,
+        # both cited the exact same single NPR URL — different enough
+        # secondary framing that title cosine and signature overlap both
+        # missed it, so it became a second row instead of an update.
+        existing = ActionIssue(
+            id=621, date="2026-08-25", rank=3,
+            title="DHS data claims and think tank connections",
+            facts=json.dumps(["DHS cited a report from a conservative think tank."]),
+            source_urls=json.dumps(["https://npr.org/nx-s1-5940807"]),
+        )
+        # Deliberately dissimilar title embedding — this pair must match
+        # on source URL alone, not by accidentally clearing the title
+        # cosine floor.
+        recent_embs = np.array([[1.0, 0.0]])
+        title_emb = np.array([0.0, 1.0])
+
+        match = _find_matching_issue(
+            "DHS data claims and state ballot measures",
+            ["DHS data was cited in a state ballot measure debate."],
+            [existing], recent_embs, title_emb, set(),
+            source_urls=["https://npr.org/nx-s1-5940807"],
+        )
+        assert match is existing
+
+    def test_find_matching_issue_does_not_match_on_url_when_none_are_shared(self):
+        existing = ActionIssue(
+            id=622, date="2026-08-25", rank=3, title="Unrelated story",
+            facts=json.dumps(["Some other fact."]),
+            source_urls=json.dumps(["https://apnews.com/other-story"]),
+        )
+        recent_embs = np.array([[1.0, 0.0]])
+        title_emb = np.array([0.0, 1.0])
+
+        match = _find_matching_issue(
+            "A totally different headline", ["A totally different fact."],
+            [existing], recent_embs, title_emb, set(),
+            source_urls=["https://npr.org/nx-s1-5940807"],
+        )
+        assert match is None
+
+    def test_find_matching_issue_skips_a_shared_url_already_claimed_this_run(self):
+        existing = ActionIssue(
+            id=623, date="2026-08-25", rank=3, title="Some story",
+            facts=json.dumps(["Some fact."]),
+            source_urls=json.dumps(["https://npr.org/nx-s1-5940807"]),
+        )
+        recent_embs = np.array([[1.0, 0.0]])
+        title_emb = np.array([0.0, 1.0])
+
+        match = _find_matching_issue(
+            "Some story", ["Some fact."],
+            [existing], recent_embs, title_emb, {623},
+            source_urls=["https://npr.org/nx-s1-5940807"],
+        )
+        assert match is None
+
 
 class TestDedupeNearIdenticalIssues:
     """The homepage's recent-issues endpoint deliberately shows issues
