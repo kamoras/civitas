@@ -35,6 +35,7 @@ from app.models import (
     ActionIssue,
     ExploreDocument,
     Justice,
+    LlmGenerationSample,
     MonitorStatus,
     MonitorUpdate,
     NationalMonitor,
@@ -370,6 +371,43 @@ def _retire_untouched_issues(
     return n_retired, n_graced
 
 
+def _record_generation_sample(
+    db: "Session",
+    task: str,
+    rank: int,
+    attempt: int,
+    input_text: str,
+    output: dict,
+    passed: bool,
+    violations: list[str] | None = None,
+) -> None:
+    """Persist one LLM generation attempt as future fine-tuning data.
+
+    2026-08 research finding: this pipeline's mechanical grounding/role
+    checks already work as a free, automatic labeling function — every
+    (input, output, pass/fail, why) triple they produce was previously
+    computed fresh on every run and thrown away, only ever
+    `logger.warning`'d. A rejected-then-corrected pair is the single most
+    valuable training signal this pipeline generates; a first-try pass is
+    a positive example. Best-effort: a failure here must never break
+    issue generation itself, since this table only feeds a future
+    training run, not anything the site serves today.
+    """
+    try:
+        db.add(LlmGenerationSample(
+            task=task,
+            rank=rank,
+            attempt=attempt,
+            input_text=input_text,
+            output_json=json.dumps(output),
+            passed=passed,
+            violations=json.dumps(violations) if violations else None,
+        ))
+        db.flush()
+    except Exception:
+        logger.exception("Failed to record LLM generation sample (task=%s, rank=%d)", task, rank)
+
+
 def _retry_until_grounded(
     user_prompt: str, reasons: list[str], rank: int, db: "Session",
     issue_source_text: str, title: str,
@@ -440,6 +478,15 @@ def _retry_until_grounded(
             retry_combined = retry_summary + " " + " ".join(retry_facts)
             retry_reasons = hedge_and_editorializing_violations(retry_combined)
             retry_former = ungrounded_former_official_claims(retry_combined, issue_source_text)
+            retry_all_reasons = retry_reasons + (
+                [f"'former' office-holder status the articles never state ({', '.join(retry_former)})"]
+                if retry_former else []
+            )
+            _record_generation_sample(
+                db, "action_center_issue", rank, attempt + 1, user_prompt + correction,
+                {"title": title, "summary": retry_summary, "facts": retry_facts},
+                passed=not retry_all_reasons, violations=retry_all_reasons or None,
+            )
             if retry_summary and not retry_reasons and not retry_former:
                 fixed_title, fixed_summary, fixed_facts = _validate_politician_roles(
                     title, retry_summary, retry_facts, db,
@@ -4542,6 +4589,11 @@ def _run_refresh(db: Session) -> int:
                 "'former' office-holder status the articles never state "
                 f"({', '.join(summary_former)})"
             )
+        _record_generation_sample(
+            db, "action_center_issue", rank, 1, user_prompt,
+            {"title": title, "summary": summary, "facts": facts},
+            passed=not reasons, violations=reasons or None,
+        )
         if reasons:
             retried = _retry_until_grounded(
                 user_prompt, reasons, rank, db, issue_source_text, title,
@@ -4585,6 +4637,11 @@ def _run_refresh(db: Session) -> int:
                 if accurate:
                     summary = str(retry_summary)
 
+            _record_generation_sample(
+                db, "action_center_role_check", rank, 2, user_prompt,
+                {"summary": retry_summary}, passed=accurate,
+                violations=[reason] if not accurate else None,
+            )
             if not accurate:
                 logger.error(
                     "Summary role-check failed twice for rank %d ('%s') — "
