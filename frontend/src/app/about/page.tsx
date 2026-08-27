@@ -204,11 +204,14 @@ export default function AboutPage() {
               filtering to navigate the larger membership.
             </P>
             <P>
-              Campaign-promise tracking (kept/broken/partial) is still collected and shown on each
-              member&apos;s profile, but is not folded into the weighted score below. For the audit
-              history behind the current weights and dimensions — including why Promise Persistence
-              was removed, why Funding Diversity was folded into Funding Independence, and why Donor
-              Independence was removed from Constituent Alignment — see the{" "}
+              Campaign-promise extraction was removed entirely (2026-07), not just excluded from
+              the weighted score below — four attempts at matching generic platform language
+              against specific vote/bill text never got real promise data past a handful of
+              evaluable cases per member, and no profile page shows kept/broken/partial data
+              anymore. For the audit history behind the current weights and dimensions —
+              including why Promise Persistence was removed, why Funding Diversity was folded
+              into Funding Independence, and why Donor Independence was removed from Constituent
+              Alignment — see the{" "}
               <a href="/changelog" className="underline underline-offset-2 hover:text-phos">
                 scoring changelog
               </a>
@@ -1509,10 +1512,6 @@ export default function AboutPage() {
                 </P>
                 <div className="space-y-2 mt-2">
                   <Row
-                    label="Campaign promise extraction"
-                    value="Parses platform text from senator websites to identify specific policy commitments and assess whether votes support or contradict them. House positions never touch the LLM: they are derived from sponsored bills and evaluated with deterministic embedding similarity only."
-                  />
-                  <Row
                     label="Voting pattern narrative"
                     value="Generates human-readable summaries of a senator's voting patterns across policy areas"
                   />
@@ -1676,7 +1675,7 @@ export default function AboutPage() {
               />
               <Row
                 label="Senate.gov"
-                value="Official senator websites scraped for platform text and campaign promises, roll-call vote records with per-member votes — Senate only; House campaign promises are instead derived from sponsored legislation (see AI Usage above), since House platform text isn't available the same way"
+                value="Official senator websites scraped for platform text (used for the platform summary) and roll-call vote records with per-member votes — Senate only. Campaign-promise extraction from this same platform text was tried four times and removed entirely in 2026-07 (see AI Usage above), for both chambers"
               />
             </div>
 
@@ -1846,7 +1845,7 @@ export default function AboutPage() {
                     <span className="text-signal-amber shrink-0">-</span>
                     <span>
                       A 1.2B parameter model is less capable than larger models. It occasionally
-                      produces imprecise promise analysis. We mitigate this with caching,
+                      produces imprecise key-vote reasoning. We mitigate this with caching,
                       post-processing heuristics, and deterministic overrides where the model output
                       can be verified against structured data.
                     </span>
