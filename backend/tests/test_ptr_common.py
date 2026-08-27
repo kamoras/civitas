@@ -4,7 +4,9 @@ no network, no DB, deterministic.
 
 from app.pipeline.fetch.ptr_common import (
     TradeRow,
+    _parse_ocr_line,
     classify_transaction_type,
+    extract_ticker,
     normalize_date,
     parse_amount_range,
     parse_table_rows,
@@ -152,3 +154,97 @@ def test_parse_table_rows_asset_type_column_does_not_shadow_type():
     assert len(rows) == 1
     assert rows[0].transaction_type == "purchase"
     assert rows[0].ticker == "AAPL"
+
+
+def test_extract_ticker_finds_a_real_ticker():
+    assert extract_ticker("Apple Inc. (AAPL)") == "AAPL"
+
+
+def test_extract_ticker_rejects_the_word_the():
+    """"Kroger Co (The)"/"Cigna Group (The)" are real company names whose
+    trailing parenthetical isn't a ticker — confirmed live on a
+    presidential 278-T (2026-08 audit): both stored ticker="THE" before
+    this fix. No real US equity ticker is the word "the"."""
+    assert extract_ticker("KROGER CO (THE)") is None
+    assert extract_ticker("Some Municipal Bond Fund") is None
+
+
+class TestParseOcrLine:
+    """_parse_ocr_line — the per-line parser behind ocr_extract_rows.
+    Every line here is real tesseract output from a live presidential
+    278-T (2026-08 audit), not a hand-written idealized sample: OCR noise
+    on this form is a fairly unpredictable mix of stray brackets, glued
+    punctuation, and misread characters."""
+
+    def test_a_clean_line_parses_correctly(self):
+        row = _parse_ocr_line("2 |Ametek Inc purchase 6/23/2026, No|$15,001 - $50,000")
+        assert row is not None
+        assert row.asset_name == "Ametek Inc"
+        assert row.transaction_type == "purchase"
+        assert row.transaction_date == "2026-06-23"
+        assert row.amount_low == 15001.0
+        assert row.amount_high == 50000.0
+
+    def test_leading_row_number_does_not_pollute_the_amount(self):
+        """The confirmed live bug: the fallback-only version of this
+        parser extracted (1, 6) as the amount pair — the leading row
+        number and a digit from the date — instead of ($1,001, $15,000)."""
+        row = _parse_ocr_line("1 Goldman Sachs Group Inc purchase 6/23/2026) No] $1,001 - $15,000")
+        assert row is not None
+        assert row.amount_low == 1001.0
+        assert row.amount_high == 15000.0
+
+    def test_a_misread_row_number_does_not_prevent_parsing(self):
+        # "s" instead of a digit — OCR misreading a cramped row-number
+        # column as a stray letter.
+        row = _parse_ocr_line("s Howmet Aerospace Inc purchase 6/23/2026 No| $15,003 - $50,000")
+        assert row is not None
+        assert "Howmet Aerospace" in row.asset_name
+        assert row.amount_low == 15003.0
+        assert row.amount_high == 50000.0
+
+    def test_a_bracket_glued_directly_onto_the_type_keyword_still_parses(self):
+        row = _parse_ocr_line("7 KIMBERLY CLARK CORPORATION [purchase 6/12/2026 Yes |$15,001 - $50,000")
+        assert row is not None
+        assert row.asset_name.strip() == "KIMBERLY CLARK CORPORATION"
+        assert row.amount_low == 15001.0
+        assert row.amount_high == 50000.0
+
+    def test_a_double_hyphen_amount_separator_still_parses(self):
+        row = _parse_ocr_line("853 MAXLINEAR INC CLASS CLASS A purchase 6/22/2026 No|$15,001-- $50,000")
+        assert row is not None
+        assert row.amount_low == 15001.0
+        assert row.amount_high == 50000.0
+
+    def test_a_ticker_never_printed_on_this_form_is_none_not_required(self):
+        """The old parser required a ticker match to accept ANY row,
+        silently dropping ~95% of a real filing's transactions because
+        this form prints none at all — see extract_ticker's docstring."""
+        row = _parse_ocr_line("2 |Ametek Inc purchase 6/23/2026, No|$15,001 - $50,000")
+        assert row is not None
+        assert row.ticker is None
+
+    def test_a_reversed_amount_bracket_is_dropped_not_stored(self):
+        """A misread digit produced a real, live "$31,001 - $15,000" —
+        low > high is never a valid disclosed bracket on this form, so
+        this is dropped rather than stored as a range it never was."""
+        row = _parse_ocr_line("535 EXXON MOBIL CORP [purchase 6/23/2026 No|$31,001 - $15,000")
+        assert row is None
+
+    def test_a_missing_amount_is_dropped_not_fabricated(self):
+        # This exact row's dollar bracket did not survive OCR at all —
+        # nothing to extract, so no row rather than a guessed one.
+        row = _parse_ocr_line("36 Federated Hermes Government Obligations Fund purchase 6/3/2026")
+        assert row is None
+
+    def test_an_ocr_garbled_type_keyword_is_dropped_not_guessed(self):
+        # "yurchase" for "purchase" — an OCR misread this parser can't
+        # recover from, and shouldn't guess at.
+        row = _parse_ocr_line(
+            "3 International Flavors & Fragrances Inc yurchase 6/23/2026 No] $1,001 - $15,000"
+        )
+        assert row is None
+
+    def test_a_line_with_no_transaction_data_is_dropped(self):
+        assert _parse_ocr_line("OGE Form 278-T (Updated February 2024)") is None
+        assert _parse_ocr_line("") is None
