@@ -188,7 +188,7 @@ export default function MonitorsTab() {
                 >
                   {selected.status.toUpperCase()}
                 </span>
-                {selected.policyAreas.map((area) => (
+                {selected.policyAreas.slice(0, 4).map((area) => (
                   <span
                     key={area}
                     className="text-xs font-mono px-2 py-0.5 border border-signal-amber/40 text-signal-amber"
@@ -196,6 +196,16 @@ export default function MonitorsTab() {
                     {area}
                   </span>
                 ))}
+                {/* A long-running monitor accumulates one policy area per
+                    smaller monitor merged into it over time (see backend's
+                    _merge_monitors) — a real multi-month story can end up
+                    tagged with most of the taxonomy, which reads as noise
+                    rather than signal past a handful of badges. */}
+                {selected.policyAreas.length > 4 && (
+                  <span className="text-xs font-mono px-2 py-0.5 text-ink-min">
+                    +{selected.policyAreas.length - 4} more
+                  </span>
+                )}
               </div>
             </div>
             <button

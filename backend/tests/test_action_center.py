@@ -7,7 +7,15 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from app.models import ActionIssue, ExploreDocument, Justice, NationalMonitor, Representative, Senator
+from app.models import (
+    ActionIssue,
+    ExploreDocument,
+    Justice,
+    LlmGenerationSample,
+    NationalMonitor,
+    Representative,
+    Senator,
+)
 from app.time_utils import utcnow
 from app.pipeline.fetch.news_feeds import NewsArticle
 from app.pipeline.analyze.action_center import (
@@ -26,6 +34,7 @@ from app.pipeline.analyze.action_center import (
     _apply_matched_issue_update,
     _retire_untouched_issues,
     _retry_until_grounded,
+    _record_generation_sample,
     _bsky_repost_has_new_information,
     _fix_impossible_senate_vote_counts,
     _is_exact_content_duplicate,
@@ -1480,6 +1489,76 @@ class TestRetryUntilGrounded:
         assert mock_call_llm.call_count == 2
 
 
+class TestRecordGenerationSample:
+    """_record_generation_sample: the fine-tuning data-capture helper. It
+    must never let a persistence failure break issue generation, since the
+    table only feeds a future training run, not anything the site serves."""
+
+    def test_passed_attempt_is_recorded_with_no_violations(self, db_session):
+        _record_generation_sample(
+            db_session, "action_center_issue", rank=1, attempt=1,
+            input_text="generate the issue",
+            output={"title": "T", "summary": "S", "facts": ["F"]},
+            passed=True,
+        )
+        db_session.commit()
+
+        rows = db_session.query(LlmGenerationSample).all()
+        assert len(rows) == 1
+        assert rows[0].task == "action_center_issue"
+        assert rows[0].passed is True
+        assert rows[0].violations is None
+        assert json.loads(rows[0].output_json) == {"title": "T", "summary": "S", "facts": ["F"]}
+
+    def test_failed_attempt_records_violations(self, db_session):
+        _record_generation_sample(
+            db_session, "action_center_issue", rank=2, attempt=1,
+            input_text="generate the issue",
+            output={"title": "T", "summary": "Reports say X", "facts": []},
+            passed=False, violations=["hedging attribution phrases (reports say)"],
+        )
+        db_session.commit()
+
+        row = db_session.query(LlmGenerationSample).one()
+        assert row.passed is False
+        assert json.loads(row.violations) == ["hedging attribution phrases (reports say)"]
+
+    def test_db_error_is_swallowed_not_raised(self, db_session):
+        broken_db = MagicMock()
+        broken_db.add.side_effect = RuntimeError("db is down")
+
+        _record_generation_sample(
+            broken_db, "action_center_issue", rank=1, attempt=1,
+            input_text="x", output={"summary": "y"}, passed=True,
+        )  # must not raise
+
+    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    def test_retry_until_grounded_records_every_attempt(self, mock_call_llm, db_session):
+        mock_call_llm.side_effect = [
+            json.dumps({
+                "summary": "Recent reports highlight the administration's plans.",
+                "facts": ["The plan was discussed."],
+            }),
+            json.dumps({
+                "summary": "The administration announced its plans.",
+                "facts": ["The plan was discussed."],
+            }),
+        ]
+
+        _retry_until_grounded(
+            user_prompt="generate the issue",
+            reasons=["hedging attribution phrases (reports say)"],
+            rank=1, db=db_session, issue_source_text="source article text",
+            title="Original Title",
+        )
+        db_session.commit()
+
+        rows = db_session.query(LlmGenerationSample).order_by(LlmGenerationSample.attempt).all()
+        assert [r.attempt for r in rows] == [2, 3]
+        assert rows[0].passed is False
+        assert rows[1].passed is True
+
+
 class TestApplyMatchedIssueUpdate:
     """_apply_matched_issue_update, extracted from _run_refresh (2026-07)
     for direct testability — _run_refresh as a whole fetches real
@@ -1751,6 +1830,34 @@ class TestBskyRepostHasNewInformation:
     def test_a_new_figure_counts_as_new_information(self):
         old_facts = json.dumps(["A defense policy bill was passed with a narrow 216-212 vote."])
         new_facts = ["A defense policy bill was passed with a narrow 216-212 vote, costing $95 billion."]
+        assert _bsky_repost_has_new_information(old_facts, new_facts) is True
+
+    def test_expanding_a_known_entity_to_its_full_name_is_not_new_information(self):
+        # Live 2026-08-27 case (issue 624): old facts named "Saudi" (from
+        # "The Saudi delegation referenced the agreement"); new facts
+        # spelled the same country out as "Saudi Arabia". The signature
+        # diff was the lone token "arabia" — read as a brand-new entity
+        # when it's the same country already known.
+        old_facts = json.dumps([
+            "A nuclear cooperation agreement was presented to Congress this week.",
+            "The agreement includes provisions for uranium enrichment activities.",
+            "The Saudi delegation referenced the agreement in a recent briefing.",
+        ])
+        new_facts = [
+            "A nuclear cooperation agreement was presented to Congress this week.",
+            "The agreement allows Saudi Arabia to enrich uranium under specific conditions.",
+        ]
+        assert _bsky_repost_has_new_information(old_facts, new_facts) is False
+
+    def test_a_genuinely_new_entity_still_counts_even_beside_a_known_one(self):
+        # The entity-expansion filter must not swallow an unrelated new
+        # entity just because it also appears in a two-word capitalized
+        # phrase alongside an already-known word.
+        old_facts = json.dumps(["The Saudi delegation attended the summit."])
+        new_facts = [
+            "The Saudi delegation attended the summit.",
+            "Qatar Airways provided the delegation's transportation.",
+        ]
         assert _bsky_repost_has_new_information(old_facts, new_facts) is True
 
     def test_missing_old_facts_json_treated_as_empty(self):

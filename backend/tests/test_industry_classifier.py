@@ -3,7 +3,8 @@
 Tests the three classification tiers:
 1. Learning store lookup (DB-backed)
 2. Embedding cosine similarity (sentence-transformers)
-3. Fallback to OTHER (for LLM reclassification)
+3. Fallback to OTHER, resolved later by the kNN classifier
+   (nn_classifier.py) — this module has no LLM tier of its own.
 """
 
 import pytest
@@ -14,7 +15,6 @@ from app.pipeline.transform.industry_classifier import (
     classify_batch_with_learning,
     classify_industry,
     classify_with_learning,
-    store_llm_classifications,
 )
 
 
@@ -105,19 +105,6 @@ class TestLearningStore:
         assert stored is not None
         assert stored.value == "FINANCE"
         assert stored.source == "embedding"
-
-    def test_store_llm_classifications(self, db_session):
-        store_llm_classifications({"ACME CORP": "MANUFACTURING", "BETA INC": "TECH"}, db_session)
-
-        acme = (
-            db_session.query(LearnedClassification)
-            .filter(LearnedClassification.entity_name == "ACME CORP")
-            .first()
-        )
-        assert acme is not None
-        assert acme.value == "MANUFACTURING"
-        assert acme.source == "llm"
-        assert acme.confidence == 0.7
 
     def test_higher_confidence_overwrites(self, db_session):
         db_session.add(LearnedClassification(

@@ -507,6 +507,31 @@ def _ensure_indexes() -> None:
                 "ON race_coverage_items (race_id, url)"
             ))
 
+        # One vote per (justice, case), enforced by the database (2026-08
+        # audit): upsert_justice's delete-then-recreate had no protection
+        # against a single Oyez case carrying more than one `decisions`
+        # entry (justice_votes.fetch_case_votes flattened all of them),
+        # so an affected case wrote 2 rows per justice — see JusticeVote's
+        # docstring. The model declares the same UniqueConstraint for
+        # fresh installs; this covers a database whose table predates it.
+        if inspector.has_table("justice_votes"):
+            # Dedupe first — a pre-constraint database may hold duplicate
+            # rows from exactly this bug, and CREATE UNIQUE INDEX on a
+            # table with duplicates fails, which would wedge startup.
+            # Keep MIN(id) (arbitrary but consistent): the two rows can
+            # correspond to genuinely different real decisions in the
+            # same case (e.g. a "dismissal - improvidently granted" and a
+            # separate "per curiam" order), and this schema has no way to
+            # keep both, so there is no objectively "correct" survivor.
+            conn.execute(text(
+                "DELETE FROM justice_votes WHERE id NOT IN "
+                "(SELECT MIN(id) FROM justice_votes GROUP BY justice_id, case_id)"
+            ))
+            conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_justice_vote_justice_case "
+                "ON justice_votes (justice_id, case_id)"
+            ))
+
 
 def _migrate_visits_data_to_own_db() -> None:
     """One-time copy of any pre-split SiteVisit/PageView rows out of the

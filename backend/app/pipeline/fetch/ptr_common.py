@@ -68,6 +68,20 @@ TXN_TYPE_PATTERNS = [
 TICKER_RE = re.compile(r"\(([A-Z]{1,5})\)")
 AMOUNT_RE = re.compile(r"\$?([\d,]+)")
 
+# Parenthetical suffixes real company names carry ("Kroger Co (The)",
+# "Cigna Group (The)") that TICKER_RE's own shape can't distinguish from
+# a genuine 1-5 letter ticker — confirmed live on a presidential 278-T
+# (2026-08 audit): "KROGER CO (THE)" and "CIGNA GROUP (THE)" both stored
+# ticker="THE". No real US equity ticker is the word "the".
+_NON_TICKER_PARENS = {"THE"}
+
+
+def extract_ticker(text: str) -> str | None:
+    match = TICKER_RE.search(text or "")
+    if not match or match.group(1) in _NON_TICKER_PARENS:
+        return None
+    return match.group(1)
+
 # The highest bracket on every one of these forms is open-ended — printed
 # as "Over $50,000,000", "$50,000,001 +", or "$50,000,001 or more" — so it
 # carries one figure where every other bracket carries two. Form vocabulary,
@@ -185,9 +199,8 @@ def parse_table_rows(table: list[list[str | None]]) -> list[TradeRow]:
         notify_cell = (raw_row[col_notify] or "").strip() if col_notify is not None else ""
         notify_date = normalize_date(notify_cell) or txn_date
 
-        ticker_match = TICKER_RE.search(asset_cell)
         rows.append(TradeRow(
-            ticker=ticker_match.group(1) if ticker_match else None,
+            ticker=extract_ticker(asset_cell),
             asset_name=asset_cell,
             owner=OWNER_CODES.get(owner_cell, "self"),
             transaction_type=txn_type,
@@ -197,6 +210,103 @@ def parse_table_rows(table: list[list[str | None]]) -> list[TradeRow]:
             amount_high=amount_range[1],
         ))
     return rows
+
+
+# Matches one OCR'd transaction line on a scanned 278-T form: the asset
+# name, the transaction type, the date, then the $low - $high bracket.
+# Verified against real tesseract output on a live presidential filing
+# (2026-08 audit) rather than an assumed-clean layout — real OCR noise
+# is much messier than the form's own printed structure: a leading row
+# number just as often OCRs as a stray letter/symbol ("s Howmet...",
+# "« (es Centerpoint...") as a digit, and table gridlines and the
+# "Yes/No" notified-within-30-days column OCR as an inconsistent mix of
+# "|", "]", "}", ":", "." in no fixed position. Two design choices follow
+# from that:
+#   - `asset` isn't anchored to a leading row number at all — it's left
+#     unconstrained on the left and required to START with a letter, so
+#     a leading digit/symbol token (real or misread) is simply outside
+#     the match rather than needing to be recognized and stripped.
+#   - Everything between the asset and the type keyword, and again
+#     between the date and the amount, is skipped rather than matched
+#     against an enumerated set of expected characters — a bracket can
+#     OCR glued directly onto the next word with no space at all
+#     ("CORPORATION [purchase"), and the amount separator itself isn't
+#     always a single "-" ("$15,001-- $50,000").
+# Anchoring the amount pair to this trailing segment (rather than
+# scanning the whole line, as the old fallback below still does) is what
+# keeps a leading row number from being read as part of the dollar
+# amount — confirmed live: "1 Goldman Sachs Group Inc purchase
+# 6/23/2026) No] $1,001 - $15,000" first extracted (1, 6) as the amount
+# pair (from the row number and the date) before this fix.
+_OCR_LINE_RE = re.compile(
+    r"(?P<asset>[A-Za-z].*?)(?:\s|[\[\]{}|:.,])*(?P<type>purchase|sale(?:\s*\(partial\))?|exchange)\b[^\d$]*"
+    r"(?P<date>\d{1,2}/\d{1,2}/\d{2,4})[^\d$]*"
+    r"\$?(?P<low>[\d,]+)\s*[-~]+\s*\$?(?P<high>[\d,]+)",
+    re.IGNORECASE,
+)
+
+
+def _parse_ocr_line(line: str) -> TradeRow | None:
+    """One structured attempt, then one loose fallback, at parsing a
+    single OCR'd line into a trade row. Never guesses a row boundary —
+    both paths still require a real date and a real amount pair before
+    accepting anything."""
+    match = _OCR_LINE_RE.search(line)
+    if match:
+        txn_type = classify_transaction_type(match.group("type"))
+        txn_date = normalize_date(match.group("date"))
+        if txn_type is None or txn_date is None:
+            return None
+        asset_name = match.group("asset").strip(" |")
+        try:
+            low, high = float(match.group("low").replace(",", "")), float(match.group("high").replace(",", ""))
+        except ValueError:
+            return None
+        if low > high:
+            # A misread digit in one bound (confirmed live: "$31,001 -
+            # $15,000") is a fact about tesseract, not about the filing —
+            # every real bracket on this form has low <= high, so this
+            # is dropped rather than stored as a disclosed range it
+            # never was.
+            return None
+        return TradeRow(
+            ticker=extract_ticker(asset_name),
+            asset_name=asset_name,
+            owner="self",
+            transaction_type=txn_type,
+            transaction_date=txn_date,
+            disclosure_date=txn_date,
+            amount_low=low,
+            amount_high=high,
+        )
+
+    # Loose fallback for a differently-formatted scan (older years, a
+    # different agency scanner) that doesn't match this form's exact
+    # column order — something is better than nothing, but a ticker is
+    # no longer required to accept the row (see extract_ticker: this
+    # form prints no ticker at all, so requiring one silently dropped
+    # nearly every real row rather than corrupting a few).
+    amount_range = parse_amount_range(line)
+    txn_type = classify_transaction_type(line)
+    dates = re.findall(r"\d{1,2}/\d{1,2}/\d{2,4}", line)
+    if not (amount_range and txn_type and dates):
+        return None
+    if amount_range[0] > amount_range[1]:
+        return None
+    txn_date = normalize_date(dates[0])
+    if txn_date is None:
+        return None
+    disclosure_date = normalize_date(dates[1]) if len(dates) > 1 else txn_date
+    return TradeRow(
+        ticker=extract_ticker(line),
+        asset_name=line.strip(),
+        owner="self",
+        transaction_type=txn_type,
+        transaction_date=txn_date,
+        disclosure_date=disclosure_date or txn_date,
+        amount_low=amount_range[0],
+        amount_high=amount_range[1],
+    )
 
 
 def ocr_extract_rows(pdf: object) -> list[TradeRow]:
@@ -221,31 +331,10 @@ def ocr_extract_rows(pdf: object) -> list[TradeRow]:
         except Exception as e:
             logger.warning("OCR failed on PTR page: %s", e)
             continue
-        # OCR output has no reliable table structure — extract only what
-        # can be matched with reasonable confidence (ticker + amount range
-        # pairs on the same line), and drop anything else rather than
-        # guess at row boundaries.
         for line in text.splitlines():
-            ticker_match = TICKER_RE.search(line)
-            amount_range = parse_amount_range(line)
-            txn_type = classify_transaction_type(line)
-            dates = re.findall(r"\d{1,2}/\d{1,2}/\d{2,4}", line)
-            if not (ticker_match and amount_range and txn_type and dates):
-                continue
-            txn_date = normalize_date(dates[0])
-            if txn_date is None:
-                continue
-            disclosure_date = normalize_date(dates[1]) if len(dates) > 1 else txn_date
-            rows.append(TradeRow(
-                ticker=ticker_match.group(1),
-                asset_name=line.strip(),
-                owner="self",
-                transaction_type=txn_type,
-                transaction_date=txn_date,
-                disclosure_date=disclosure_date or txn_date,
-                amount_low=amount_range[0],
-                amount_high=amount_range[1],
-            ))
+            row = _parse_ocr_line(line)
+            if row is not None:
+                rows.append(row)
     return rows
 
 

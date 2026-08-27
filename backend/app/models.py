@@ -822,8 +822,22 @@ class Justice(Base):
 
 
 class JusticeVote(Base):
-    """Per-case vote record for a justice."""
+    """Per-case vote record for a justice.
+
+    One row per (justice, case): a 2026-08 audit found upsert_justice's
+    delete-then-recreate had no protection against a single Oyez case
+    carrying more than one `decisions` entry (a real Oyez data shape —
+    e.g. Moyle v. United States has both a "dismissal - improvidently
+    granted" decision and a separate "per curiam" decision for the same
+    docket) — justice_votes.fetch_case_votes flattened every decision's
+    votes into one list, so an affected case wrote 2 rows per justice,
+    sometimes with contradictory vote values. See fetch_case_votes'
+    docstring for which decision it now keeps.
+    """
     __tablename__ = "justice_votes"
+    __table_args__ = (
+        UniqueConstraint("justice_id", "case_id", name="uq_justice_vote_justice_case"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     justice_id: Mapped[str] = mapped_column(String, ForeignKey("justices.id"), index=True)
@@ -979,6 +993,42 @@ class LearnedClassification(Base):
     model_version: Mapped[str | None] = mapped_column(String, nullable=True)  # embedding model that produced this
     match_metadata: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON: top scores, matched anchors
     learned_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
+class LlmGenerationSample(Base):
+    """One LLM generation attempt for a narrow, high-volume task, captured
+    as training data for eventually fine-tuning a small local model to be
+    a domain expert at that task (2026-08 research: the local 1.2B model's
+    dominant failure on Action Center issue generation is a behavior/style
+    problem — hedging, editorializing, ungrounded "former"-status claims —
+    not a knowledge gap, which is exactly the class of problem a modest
+    LoRA fine-tune on a few hundred real examples can fix, cheaply, with
+    no change to inference cost on the Pi).
+
+    Every attempt is recorded, not just failures: a first-try pass is a
+    positive example, and a rejected-then-corrected pair is the single
+    most valuable training signal this pipeline produces, since the
+    mechanical grounding/role checks already work as a free, automatic
+    labeling function. Before this table existed, every one of these
+    triples was computed fresh on every pipeline run and thrown away —
+    only ever `logger.warning`'d, never persisted (see
+    action_center.py's _retry_until_grounded).
+    """
+    __tablename__ = "llm_generation_samples"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    task: Mapped[str] = mapped_column(String(50), nullable=False, index=True)  # "action_center_issue"
+    rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False)  # 1 = first try, 2/3 = retries
+    input_text: Mapped[str] = mapped_column(Text, nullable=False)  # the user_prompt actually sent
+    output_json: Mapped[str] = mapped_column(Text, nullable=False)  # {"title","summary","facts"} as generated
+    passed: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    # Why this attempt was rejected — null when passed. Free-text reasons
+    # from the same mechanical checks the pipeline already gates on
+    # (hedge_and_editorializing_violations, ungrounded_former_official_
+    # claims, _check_summary_roles), not a separate judgment call.
+    violations: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
 
 class TimelineEntry(Base):
