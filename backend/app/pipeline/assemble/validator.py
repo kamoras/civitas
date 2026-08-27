@@ -49,7 +49,6 @@ def _validate_vote(v: dict, default_category: str = "recent") -> dict:
         ),
         "votedWithParty": v.get("votedWithParty"),
         "voteCategory": v.get("voteCategory", default_category),
-        "keyVoteReasoning": v.get("keyVoteReasoning"),
     }
 
 
@@ -171,7 +170,6 @@ def validate_senator(senator: dict) -> dict:
     vr = senator.get("votingRecord") or {}
     senator["votingRecord"] = {
         "totalVotes": max(0, vr.get("totalVotes", 0)),
-        "votingSummary": vr.get("votingSummary", ""),
         "votedWithPartyCount": max(0, vr.get("votedWithPartyCount", 0)),
         "votedAgainstPartyCount": max(0, vr.get("votedAgainstPartyCount", 0)),
         "partyLoyaltyPct": max(0.0, vr.get("partyLoyaltyPct", 0.0)),

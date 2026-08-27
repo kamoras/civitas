@@ -234,8 +234,6 @@ def upsert_senator(db: Session, data: dict) -> None:
         "total_from_pacs": funding.get("totalFromPACs") or 0,
         "small_donor_percentage": funding.get("smallDonorPercentage") or 0,
         "outside_spending_for": funding.get("outsideSpendingFor"),
-        "voting_summary": (data.get("votingRecord") or {}).get("votingSummary") or "",
-        "platform_summary": data.get("platformSummary") or "",
         "website_url": data.get("officialWebsiteUrl") or "",
         "contact_form_url": data.get("contactFormUrl") or "",
         "office_phone": data.get("officePhone") or "",
@@ -313,7 +311,6 @@ def upsert_senator(db: Session, data: dict) -> None:
                 opposing_party_unity_pct=vote_data.get("opposingPartyUnityPct"),
                 voted_with_party=vote_data.get("votedWithParty"),
                 vote_category=vote_data.get("voteCategory") or category,
-                key_vote_reasoning=vote_data.get("keyVoteReasoning"),
             )
         )
 
@@ -1813,11 +1810,9 @@ async def run_senate_pipeline(
                         "campaignPromises": clean_promises(
                             analysis.get("campaignPromises", [])
                         ),
-                        "platformSummary": analysis.get("platformSummary", ""),
                     }
                     all_key_votes = analysis.get("keyVotes") or voting_record["keyVotes"]
                     key_vote_ids = set(analysis.get("keyVoteIds", []))
-                    reasoning_map = analysis.get("reasoning", {})
 
                     final_key_votes = []
                     final_recent_votes = []
@@ -1825,7 +1820,6 @@ async def run_senate_pipeline(
                     for v in all_key_votes:
                         if v["billId"] in key_vote_ids:
                             v["voteCategory"] = "key"
-                            v["keyVoteReasoning"] = reasoning_map.get(v["billId"])
                             final_key_votes.append(v)
                         else:
                             v["voteCategory"] = "recent"
@@ -1851,7 +1845,6 @@ async def run_senate_pipeline(
                         v for v in actual_recent if v["billId"] not in leftover_ids
                     ]
                     voting_record["recentVotes"] = merged_recent
-                    voting_record["votingSummary"] = analysis.get("votingSummary", "")
 
                     lobbying_matches = analysis.get("lobbyingMatches", [])
 
@@ -1880,21 +1873,6 @@ async def run_senate_pipeline(
                     corruption_score = calculate_scores(temp_senator)
                     corruption_score["confidence"] = calculate_confidence(temp_senator)
 
-                    # Enrich donors with PAC details from combined analysis
-                    pac_detail_map = {
-                        d["name"].upper().strip(): d
-                        for d in analysis.get("pacDetails", [])
-                    }
-                    if pac_detail_map:
-                        enriched_donors = []
-                        for d in funding.get("topDonors", []):
-                            key = d["name"].upper().strip()
-                            if key in pac_detail_map:
-                                enriched_donors.append({**d, **pac_detail_map[key]})
-                            else:
-                                enriched_donors.append(d)
-                        funding["topDonors"] = enriched_donors
-
                     result = build_senator(
                         senator,
                         funding,
@@ -1904,7 +1882,6 @@ async def run_senate_pipeline(
                     )
 
                     result["campaignPromises"] = platform_data.get("campaignPromises", [])
-                    result["platformSummary"] = platform_data.get("platformSummary", "")
 
                     from app.pipeline.analyze.party_platform import analyze_partisan_depth
                     senator_ideology = ideology_scores.get(senator.get("bioguideId", ""))

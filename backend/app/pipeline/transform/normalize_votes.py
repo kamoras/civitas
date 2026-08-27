@@ -278,7 +278,6 @@ def normalize_votes(
             "opposingPartyUnityPct": bill.get("opposingPartyUnityPct"),
             "votedWithParty": party_aligned,
             "voteCategory": "recent",
-            "keyVoteReasoning": None,
         })
 
     party_total = voted_with_party + voted_against_party
@@ -294,7 +293,6 @@ def normalize_votes(
         "votedAgainstPartyCount": voted_against_party,
         "partyLoyaltyPct": party_loyalty_pct,
         "effectiveParty": effective_party,
-        "votingSummary": "",
         "recentVotes": [],
         "keyVotes": key_votes,
     }
@@ -368,7 +366,6 @@ def normalize_recent_votes(
             "opposingPartyUnityPct": bill.get("opposingPartyUnityPct"),
             "votedWithParty": party_aligned,
             "voteCategory": "recent",
-            "keyVoteReasoning": None,
         })
 
     return votes

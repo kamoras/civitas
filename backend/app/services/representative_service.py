@@ -34,7 +34,6 @@ from app.services.senator_service import (
     STATE_NAMES,
     _USELESS_SPONSOR,
     _clean_pac_sponsor,
-    _clean_platform_summary,
     _compute_initials,
     _fixup_donor_type,
 )
@@ -137,7 +136,6 @@ def build_rep_response(rep: Representative, _db: Session = None) -> Representati
             "votedWithPartyCount": voted_with,
             "votedAgainstPartyCount": voted_against,
             "partyLoyaltyPct": party_loyalty_pct,
-            "votingSummary": rep.voting_summary or "",
             "recentVoteCount": len(recent_votes_db),
             "keyVoteCount": len(key_votes_db),
         },
@@ -165,7 +163,6 @@ def build_rep_response(rep: Representative, _db: Session = None) -> Representati
             }
             for cp in campaign_promises
         ],
-        platform_summary=_clean_platform_summary(rep.platform_summary),
         partisan_depth=json.loads(rep.partisan_depth) if rep.partisan_depth else None,
         sponsored_bills=[
             {
@@ -406,8 +403,6 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
     existing.small_donor_percentage = funding.get("smallDonorPercentage", 0)
     existing.outside_spending_for = funding.get("outsideSpendingFor")
     voting_record = rep_data.get("votingRecord", {})
-    existing.voting_summary = voting_record.get("votingSummary", "")
-    existing.platform_summary = rep_data.get("platformSummary", "")
     existing.website_url = rep_data.get("officialWebsiteUrl") or ""
     existing.contact_form_url = rep_data.get("contactFormUrl") or ""
     existing.office_phone = rep_data.get("officePhone") or ""
@@ -463,7 +458,6 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
             opposing_party_unity_pct=v.get("opposingPartyUnityPct"),
             voted_with_party=v.get("votedWithParty"),
             vote_category=category,
-            key_vote_reasoning=v.get("keyVoteReasoning"),
         ))
 
     db.query(RepLobbyingMatch).filter(RepLobbyingMatch.representative_id == rid).delete()
@@ -581,7 +575,6 @@ def get_rep_votes(
                 "partyLeaning": v.party_leaning,
                 "votedWithParty": v.voted_with_party,
                 "voteCategory": v.vote_category or "key",
-                "keyVoteReasoning": v.key_vote_reasoning,
             }
             for v in votes_db
         ],

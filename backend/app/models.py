@@ -114,8 +114,6 @@ class Senator(Base):
     # discarded once folded into score_funding_independence.
     outside_spending_for: Mapped[float | None] = mapped_column(Float, nullable=True)
 
-    voting_summary: Mapped[str] = mapped_column(Text, default="")
-    platform_summary: Mapped[str] = mapped_column(Text, default="")
     partisan_depth: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     leadership_score: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -208,7 +206,6 @@ class KeyVote(Base):
     opposing_party_unity_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     voted_with_party: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     vote_category: Mapped[str] = mapped_column(String, default="key")  # "recent" or "key"
-    key_vote_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     senator: Mapped["Senator"] = relationship(back_populates="key_votes")
 
@@ -339,8 +336,6 @@ class Representative(Base):
     # discarded once folded into score_funding_independence.
     outside_spending_for: Mapped[float | None] = mapped_column(Float, nullable=True)
 
-    voting_summary: Mapped[str] = mapped_column(Text, default="")
-    platform_summary: Mapped[str] = mapped_column(Text, default="")
     partisan_depth: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     leadership_score: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -431,7 +426,6 @@ class RepKeyVote(Base):
     opposing_party_unity_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     voted_with_party: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     vote_category: Mapped[str] = mapped_column(String, default="key")
-    key_vote_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     representative: Mapped["Representative"] = relationship(back_populates="key_votes")
 

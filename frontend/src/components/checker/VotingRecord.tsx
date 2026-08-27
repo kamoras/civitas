@@ -179,13 +179,6 @@ function VoteCard({ vote, expandable = false }: { vote: KeyVote; expandable?: bo
             <p className="text-ink">{vote.description}</p>
           )}
 
-          {vote.keyVoteReasoning && (
-            <div className="bg-white/[0.03] border border-white/[0.07] p-2">
-              <div className="text-xs text-ink-lo mb-1">WHY THIS VOTE MATTERS</div>
-              <div className="text-xs text-ink">{vote.keyVoteReasoning}</div>
-            </div>
-          )}
-
           {vote.policyArea && vote.policyArea !== "PROCEDURAL" && (
             <div className="bg-signal-amber/10 border border-signal-amber/40 p-2">
               <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -450,7 +443,6 @@ export default function VotingRecord({
   const {
     totalVotes,
     partyLoyaltyPct,
-    votingSummary,
     recentVoteCount,
     keyVoteCount,
     votedWithPartyCount = 0,
@@ -529,11 +521,6 @@ export default function VotingRecord({
             <div className="text-xs text-ink-lo mb-2 font-mono tracking-widest">
               KEY VOTES — LONG-TERM SUMMARY
             </div>
-            {votingSummary && (
-              <div className="panel p-3 mb-3">
-                <p className="text-base text-ink leading-relaxed">{votingSummary}</p>
-              </div>
-            )}
             <PaginatedVoteList
               senatorId={senatorId}
               category="key"

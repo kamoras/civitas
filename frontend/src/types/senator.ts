@@ -41,7 +41,6 @@ export interface Senator {
   votingRecord: VotingRecord;
   lobbyingMatches: LobbyingMatch[];
   campaignPromises: CampaignPromise[];
-  platformSummary: string;
   partisanDepth: PartisanDepth | null;
   sponsoredBills: SponsoredBill[];
   leadershipScore: number | null;
@@ -82,7 +81,6 @@ export interface VotingRecord {
   votedWithPartyCount: number;
   votedAgainstPartyCount: number;
   partyLoyaltyPct: number;
-  votingSummary: string;
   recentVoteCount: number;
   keyVoteCount: number;
 }
@@ -153,7 +151,6 @@ export interface KeyVote {
   partyLeaning: "R" | "D" | "bipartisan" | null;
   votedWithParty: boolean | null;
   voteCategory: "recent" | "key";
-  keyVoteReasoning: string | null;
 }
 
 export interface LobbyingMatch {

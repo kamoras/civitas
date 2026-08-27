@@ -1503,25 +1503,24 @@ export default function AboutPage() {
 
               <div>
                 <h3 className="text-xs text-ink-lo tracking-widest mb-2">
-                  LLM (NARRATIVE SYNTHESIS)
+                  LLM (NATURAL LANGUAGE SYNTHESIS)
                 </h3>
                 <P>
                   <Label>LFM2.5-1.2B-Instruct</Label> via llama.cpp
                   <Cite id="16">Gerganov 2023</Cite> handles tasks requiring natural language
-                  understanding and multi-step reasoning:
+                  understanding and multi-step reasoning. Per-senator/rep voting-pattern
+                  narratives, key-vote reasoning, and LLM-based PAC identification used to run
+                  here too — all three were removed in 2026-07 after live audits found the
+                  output unreliable regardless of prompting approach:
                 </P>
                 <div className="space-y-2 mt-2">
                   <Row
-                    label="Voting pattern narrative"
-                    value="Generates human-readable summaries of a senator's voting patterns across policy areas"
+                    label="Action Center issues"
+                    value="Synthesizes clustered news coverage into a structured issue: title, summary, and grounded facts"
                   />
                   <Row
-                    label="Key vote reasoning"
-                    value="Explains why specific votes were flagged as significant given a senator's donor profile and party dynamics"
-                  />
-                  <Row
-                    label="PAC identification"
-                    value="Identifies the parent organization and industry behind opaque PAC names using world knowledge"
+                    label="Justice profile summary"
+                    value="Writes a short jurisprudential profile for each of the 9 Supreme Court justices from pre-computed voting statistics"
                   />
                   <Row
                     label="Explore summaries"
@@ -1617,8 +1616,8 @@ export default function AboutPage() {
                   <Cite id="31">Laver, Benoit &amp; Garry 2003</Cite>
                 </P>
                 <P>
-                  LLM for narrative synthesis: tasks like promise-vote cross-referencing and PAC
-                  identification require world knowledge and multi-step reasoning that embeddings
+                  LLM for natural language synthesis: tasks like clustering same-story news
+                  coverage into a structured issue require multi-step reasoning that embeddings
                   alone cannot provide. These are inherently generative tasks suited to language
                   models.
                   <Cite id="15">Wei et al. 2022</Cite>

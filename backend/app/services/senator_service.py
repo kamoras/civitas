@@ -1,5 +1,4 @@
 import json
-import re
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
@@ -10,7 +9,6 @@ from app.models import CampaignPromise, Donor, IndustryDonation, KeyVote, Lobbyi
 # promises before scoring/persisting); the read path keeps applying them
 # only as a safety net for rows persisted before 2026-07.
 from app.pipeline.analyze.promise_quality import (
-    _ERROR_PAGE_RE,
     _FILLER_RE,
     clean_promises,
 )
@@ -87,25 +85,6 @@ def _compute_initials(name: str) -> str:
     if parts:
         return parts[0][0].upper()
     return ""
-
-
-_NAV_ARTIFACT_RE = re.compile(
-    r"skip to (?:main )?content|menu\s+menu\s+menu|"
-    r"toggle navigation|hamburger|breadcrumb",
-    re.IGNORECASE,
-)
-
-
-def _clean_platform_summary(text: str | None) -> str:
-    """Strip error pages and navigation artifacts from platform text."""
-    if not text:
-        return ""
-    if _ERROR_PAGE_RE.search(text):
-        return ""
-    text = _NAV_ARTIFACT_RE.sub("", text).strip()
-    if text.startswith(". ") or text.startswith(", "):
-        text = text[2:].strip()
-    return text
 
 
 def _fixup_donor_type(donor_name: str, donor_type: str, senator_name: str) -> str:
@@ -318,7 +297,6 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
             voted_with_party_count=voted_with,
             voted_against_party_count=voted_against,
             party_loyalty_pct=party_loyalty_pct,
-            voting_summary=senator.voting_summary or "",
             recent_vote_count=len(recent_votes_db),
             key_vote_count=len(key_votes_db),
         ),
@@ -335,7 +313,6 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
             for lm in lobbying_matches
         ],
         campaign_promises=_filter_promises(campaign_promises),
-        platform_summary=_clean_platform_summary(senator.platform_summary),
         partisan_depth=_parse_partisan_depth(senator.partisan_depth),
         sponsored_bills=_build_sponsored_bills(senator.sponsored_bills),
         leadership_score=senator.leadership_score,
@@ -550,8 +527,6 @@ def upsert_senator(db: Session, senator_data: dict) -> Senator:
     existing.total_from_pacs = funding.get("totalFromPACs", 0)
     existing.small_donor_percentage = funding.get("smallDonorPercentage", 0)
     voting_record = senator_data.get("votingRecord", {})
-    existing.voting_summary = voting_record.get("votingSummary", "")
-    existing.platform_summary = senator_data.get("platformSummary", "")
 
     db.flush()
 
@@ -601,7 +576,6 @@ def upsert_senator(db: Session, senator_data: dict) -> Senator:
             party_leaning=v.get("partyLeaning"),
             voted_with_party=v.get("votedWithParty"),
             vote_category=category,
-            key_vote_reasoning=v.get("keyVoteReasoning"),
         ))
 
     db.query(LobbyingMatch).filter(LobbyingMatch.senator_id == sid).delete()
@@ -710,7 +684,6 @@ def get_senator_votes(
             party_leaning=v.party_leaning,
             voted_with_party=v.voted_with_party,
             vote_category=v.vote_category or "key",
-            key_vote_reasoning=v.key_vote_reasoning,
         )
 
     return PaginatedVotesSchema(

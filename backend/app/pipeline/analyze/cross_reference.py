@@ -135,11 +135,11 @@ async def analyze_senator_batch(
       - Lobbying matches via donor↔vote similarity
       - Key vote selection via donor↔policy similarity
 
-    votingSummary, reasoning, pacDetails, and platformSummary are always
-    empty: the narrative-generation LLM call was removed entirely
-    (2026-07) after a real measurement (63s/call, ~1.7h across the full
-    Senate) combined with sampled production output that was either
-    generic boilerplate or, for per-vote reasoning, occasionally
+    votingSummary, per-vote reasoning, and pacDetails are no longer part
+    of the output: the narrative-generation LLM call was removed
+    entirely (2026-07) after a real measurement (63s/call, ~1.7h across
+    the full Senate) combined with sampled production output that was
+    either generic boilerplate or, for per-vote reasoning, occasionally
     fabricated/wrong (e.g. a defense bill's fiscal year misstated by a
     year; a veterans-affairs bill's "reasoning" describing an unrelated
     health-savings-account policy). House has shipped without this
@@ -175,10 +175,6 @@ async def analyze_senator_batch(
             "keyVotes": key_votes,
             "lobbyingMatches": lobbying_matches,
             "keyVoteIds": key_vote_ids,
-            "reasoning": {},
-            "votingSummary": "",
-            "pacDetails": [],
-            "platformSummary": "",
             "campaignPromises": [],
         })
 

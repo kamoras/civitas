@@ -524,9 +524,8 @@ export default function SenatorCard({
             <SponsoredBills bills={senator.sponsoredBills} />
           )}
 
-          {(hasPartisan || senator.platformSummary) && (
+          {hasPartisan && (
             <PlatformTracker
-              platformSummary={senator.platformSummary || ""}
               partisanDepth={senator.partisanDepth}
               senatorParty={senator.party}
             />

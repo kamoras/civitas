@@ -49,7 +49,6 @@ def _make_senator(**overrides) -> dict:
             voted_with_party_count=30,
             voted_against_party_count=20,
             party_loyalty_pct=60.0,
-            voting_summary="",
             recent_vote_count=25,
             key_vote_count=25,
         ),

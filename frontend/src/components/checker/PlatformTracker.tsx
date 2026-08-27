@@ -4,7 +4,6 @@ import CollapsibleSection from "../shared/CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
 
 interface PlatformTrackerProps {
-  platformSummary: string;
   partisanDepth: PartisanDepth | null;
   senatorParty: "D" | "R" | "I";
 }
@@ -180,12 +179,11 @@ function PartisanDepthPanel({
 }
 
 export default function PlatformTracker({
-  platformSummary,
   partisanDepth,
   senatorParty,
 }: PlatformTrackerProps) {
   const hasPartisan = partisanDepth && partisanDepth.totalPositions > 0;
-  if (!hasPartisan && !platformSummary) return null;
+  if (!hasPartisan) return null;
 
   const summaryParts: string[] = [];
   if (hasPartisan) {
@@ -199,11 +197,6 @@ export default function PlatformTracker({
       source="Derived from roll-call votes"
     >
       {hasPartisan && <PartisanDepthPanel depth={partisanDepth} senatorParty={senatorParty} />}
-      {platformSummary && (
-        <div className="panel p-3">
-          <p className="text-base text-ink leading-relaxed">{platformSummary}</p>
-        </div>
-      )}
     </CollapsibleSection>
   );
 }

@@ -41,13 +41,13 @@ external API calls to cloud AI services.
 │  │ 1.FETCH │──▶│2.TRANSFORM│──▶│            3. ANALYZE                 │     │
 │  └─────────┘   └───────────┘   │                                       │     │
 │                                │  ┌─────────────────┬────────────────┐ │     │
-│                                │  │ Librarian thread│ Analyst thread │ │     │
-│                                │  │ (batch embed)   │ (LLM + score)  │ │     │
+│                                │  │ Librarian thread│ Score thread   │ │     │
+│                                │  │ (batch embed)   │ (deterministic)│ │     │
 │                                │  │                 │                │ │     │
-│                                │  │ bill embeddings │ ◄── blocks on  │ │     │
-│                                │  │ donor kNN       │   LLM response │ │     │
+│                                │  │ bill embeddings │ score + persist│ │     │
+│                                │  │ donor kNN       │ (no LLM call)  │ │     │
 │                                │  │ lobbying match  │                │ │     │
-│                                │  │ promise align   │ narrative synth│ │     │
+│                                │  │ promise align   │                │ │     │
 │                                │  └─────────────────┴────────────────┘ │     │
 │                                └───────────────────────────────────────┘     │
 │                                                │                             │
@@ -148,22 +148,20 @@ Normalizes raw API payloads into typed domain objects. Key operations:
 
 ### Phase 3 — ANALYZE
 
-The heaviest phase. Runs the producer-consumer pipeline (Librarian + Analyst threads) for each member:
+The heaviest phase, run per member. Fully deterministic — no LLM call. (Two
+LLM-based steps used to live here: PAC-donor classification and narrative
+summary generation. Both were removed in 2026-07 after live audits found
+their output unreliable — generic boilerplate, occasionally fabricated
+per-vote reasoning — regardless of prompting approach. See
+`cross_reference.py`'s module docstring.)
 
-**Librarian thread (batch embedding, runs one member ahead):**
 1. Embed all sponsored/cosponsored bill titles → classify policy areas (nearest centroid, 18 prototypes)
 2. Embed all donor employer names → classify industries (tiered: exact match → embedding → kNN)
 3. Compute lobbying conflicts: cosine similarity between donor industries and bill policy areas
 4. Select key votes: composite score = party deviation + donor industry overlap
 5. Embed platform text → extract policy topics (sentence-transformer, not LLM)
 6. Embed floor speeches → compute party alignment (nearest centroid vs. party platform corpora)
-
-**Analyst thread (LLM, one call at a time):**
-1. Classify PAC donors that evaded the embedding classifier (LLM PAC identification)
-2. Evaluate campaign promises: compare platform commitments vs. voting record (LLM, compressed context)
-3. Generate narrative summary: synthesize key votes, donor conflicts, promise status (LLM, ~500 tokens out)
-
-The Librarian runs one member ahead of the Analyst. While the Analyst blocks on LLM I/O (~15–30s), the Librarian completes the embedding batch for the next member. Results are passed via a `threading.Event` + shared dict — no queue needed since lookahead is exactly 1.
+7. Compute corruption/representation sub-scores and persist the member's scorecard
 
 ### Phase 4 — EXPLORE
 
@@ -256,24 +254,22 @@ Government data sources are not designed for machine consumption. Congress.gov r
 
 Rate limits are enforced at the source level (Congress.gov: 1.2 RPS, FEC: 0.25 RPS, GovInfo: 1.0 RPS) with per-API backoff, not global throttling. This prevents a slow FEC response from stalling the Congress.gov queue.
 
-### Why a Producer-Consumer Analyze Phase?
-
-The analyze phase uses a **producer-consumer pattern** to overlap embedding work with LLM inference:
-
-- **Librarian thread** (producer): Runs ahead of the current senator, pre-computing all embedding-based analyses (lobbying matches, key vote selection, promise alignment, platform topic extraction) for the *next* senator in batches of 64.
-- **Analyst thread** (consumer): Blocks on LLM HTTP responses (~15–30s each), then immediately consumes the pre-computed results from the Librarian.
-
-On a Pi 5, this overlaps 2–4s of embedding work per senator with the LLM wait, saving 200–400s across 100 senators — a ~10–15% wall-clock reduction at zero additional peak memory cost, since the Librarian only runs one senator ahead.
-
-LLM prompts use **context compression**: platform text is distilled into concise policy-topic bullets rather than raw scraped HTML, keeping prompts within the 2,048-token context budget of the 1.2B model.
-
 ### Why Embedding-First, LLM-Sparingly?
 
 The most important architectural decision is what *not* to use the LLM for.
 
-The LLM is called only when the output requires:
-- Natural language synthesis (per-senator narrative summaries, promise analysis text)
-- Irreducibly context-dependent reasoning (reading the senator's full platform against their votes)
+Per-senator/rep analysis (Phase 3) is fully deterministic — no LLM call at
+all. Two LLM-based steps used to live there (PAC-donor classification,
+narrative summary generation, plus a separate campaign-promise-tracking
+feature); all were removed in 2026-07 after live audits found their output
+unreliable regardless of prompting approach. See `cross_reference.py`'s
+module docstring for the measured cost/quality numbers that motivated the
+removal.
+
+The LLM is still used where the output genuinely requires natural-language
+synthesis from unstructured input: Action Center issue generation (daily
+news clustering → structured facts/summary) and Supreme Court justice
+profile summaries (9 justices, from pre-computed voting statistics).
 
 Everything else uses geometric methods in sentence-embedding space:
 
@@ -288,12 +284,12 @@ Everything else uses geometric methods in sentence-embedding space:
 | Issue deduplication | Post-LLM title embedding similarity | Catches LLM-generated near-duplicates missed by pre-filtering |
 | Issue topic continuity | Cosine similarity across 2-day lookback | Ensures same story maps to same DB row across runs and rank changes |
 
-LLM calls per full run: ~100–400 (one narrative per senator/rep, plus daily action issues). Embedding operations per run: ~50,000. The pipeline is a **semantic classification and retrieval system** that uses a language model only at the final synthesis step.
+LLM calls per full nightly run: 0 (Phase 3 is fully deterministic, see above). The LLM runs on its own schedule for Action Center issue generation (hourly, a handful of calls per run) and the Supreme Court justice pipeline (9 calls, once per nightly run). Embedding operations per full nightly run: ~50,000. The pipeline is a **semantic classification and retrieval system** that uses a language model only where natural-language synthesis is unavoidable.
 
 ### Why Local Inference?
 
-1. **No data exfiltration.** Senator donor records, promise evaluations, and issue analyses never leave the local network.
-2. **Cost at scale.** ~500 LLM calls/day × 365 = ~180,000 calls/year. At cloud API pricing, hundreds of dollars annually. At 0 marginal cost on the Pi.
+1. **No data exfiltration.** Senator donor records and issue analyses never leave the local network.
+2. **Cost at scale.** Cloud API pricing for even a modest daily call volume runs to hundreds of dollars annually. At 0 marginal cost on the Pi.
 3. **Reproducibility.** Model weights are pinned. An analysis run today produces identical output to one run six months ago on the same input. Cloud-hosted models update without notice.
 4. **Latency independence.** No rate limits, no network jitter, no API quota.
 
@@ -311,7 +307,7 @@ Classification decisions — what industry a donor belongs to, which direction a
 | 2 | Sentence-transformer embeddings (cosine similarity) | Fast | Bill policy areas, industry, party alignment, donor types, stance direction, procedural detection, skip entity detection, employer filtering, memo transfer detection |
 | 2b | SVD / PageRank on cosponsorship matrix | Fast | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
 | 3 | k-Nearest Neighbor in embedding space | Fast | Remaining unclassified donors (~5%), bill classification from reference corpus |
-| 4 | LLM (LFM2.5-1.2B-Instruct via llama.cpp) | Slow | Narrative synthesis, promise analysis, PAC identification |
+| 4 | LLM (LFM2.5-1.2B-Instruct via llama.cpp) | Slow | Action Center issue synthesis, justice profile summaries |
 
 Key embedding-based classification features:
 - **Semantic prototypes** define each category via natural-language descriptions, not keyword lists. The embedding model matches entities to the nearest prototype by cosine similarity.
@@ -914,7 +910,7 @@ civitas/
 │   │   │   │   ├── donor_classifier_ai.py    # Tiered donor classification + batch skip
 │   │   │   │   ├── sponsorship_analysis.py   # PageRank leadership + SVD ideology
 │   │   │   │   ├── policy_alignment.py       # Industry↔policy area mapping
-│   │   │   │   ├── cross_reference.py        # Per-senator LLM narrative
+│   │   │   │   ├── cross_reference.py        # Per-senator lobbying/key-vote analysis
 │   │   │   │   ├── action_center.py          # News clustering, LLM summarization,
 │   │   │   │   │                             #   national monitors, timeline
 │   │   │   │   ├── score_calculator.py       # Deterministic scoring formulas
