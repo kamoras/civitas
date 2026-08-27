@@ -656,7 +656,6 @@ async def run_house_pipeline() -> dict:
                             "opposingPartyUnityPct": rv.get("opposingPartyUnityPct"),
                             "votedWithParty": voted_with_party,
                             "voteCategory": "recent",
-                            "keyVoteReasoning": None,
                         })
 
                     rep["votingRecord"] = voting_data

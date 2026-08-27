@@ -78,7 +78,7 @@ civitas/
 │   │   │   ├── fetch/           # API clients (Congress.gov, FEC, GovInfo, Senate.gov, Oyez, BLS, Federal Register,
 │   │   │   │                    #   Vote Smart ballot measures)
 │   │   │   ├── transform/       # Data normalization, embedding-based industry classification
-│   │   │   ├── analyze/         # Bill analysis, scoring, cross-referencing, LLM narratives, justice scoring
+│   │   │   ├── analyze/         # Bill analysis, scoring, cross-referencing, action center LLM synthesis, justice scoring
 │   │   │   ├── assemble/        # Scorecard builder + validator
 │   │   │   ├── senate_pipeline.py, house_pipeline.py  # FETCH→TRANSFORM→ANALYZE→ASSEMBLE+SAVE per chamber
 │   │   │   ├── member_lifecycle.py  # Roster reconciliation + removal of departed members (never presidents)
@@ -146,8 +146,12 @@ of these approaches:
 - **Self-training** via the learning store (Yarowsky 1995): high-confidence
   classifications become labeled examples for future runs
 - **Statistical formulas** with Bayesian shrinkage for scoring metrics
-- **LLM inference** for narrative generation, summarization, and promise
-  evaluation — tasks that require natural language understanding
+- **LLM inference** for tasks that require natural language synthesis from
+  unstructured input: Action Center issue generation and justice profile
+  summaries. (Per-senator/rep narrative generation and promise evaluation
+  used to be LLM-based; both were removed in 2026-07 after live audits
+  found the output unreliable regardless of prompting approach — see
+  `cross_reference.py`'s and `policy_alignment.py`'s module docstrings.)
 
 **Never add hardcoded keyword lists, regex patterns, suffix checks, or
 if/else string-matching heuristics to make classification decisions.** If you
@@ -197,7 +201,7 @@ the residual.
 | 2 | Sentence-transformer cosine similarity | Industry, donor type, bill policy, party alignment, stance direction, procedural detection, skip entity detection, employer filtering, memo transfer detection, category normalization |
 | 2b | SVD / PageRank on cosponsorship matrix | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
 | 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills |
-| 4 | LLM (LFM2.5-1.2B-Instruct) | Narrative synthesis, promise analysis, summaries, action center issue summarization |
+| 4 | LLM (LFM2.5-1.2B-Instruct) | Action center issue summarization, justice profile summaries |
 
 When FEC metadata is ambiguous (e.g., entity_type "COM" could be a corporate
 employee PAC or a purely political PAC), the system defers to tier 2
@@ -483,9 +487,12 @@ invoked by `scheduler.py`'s `_nightly_pipeline()`:
    alignment via embeddings; detect procedural bills via embedding similarity;
    compute legislative leadership (PageRank) and ideology (SVD) from
    cosponsorship networks; classify remaining donors via kNN; cross-reference
-   donors with votes; analyze campaign promises (LLM); generate per-senator
-   narratives (LLM); compute representation sub-scores; score Supreme Court
-   justice impartiality
+   donors with votes; compute representation sub-scores. Fully deterministic
+   — no LLM call (campaign-promise analysis and per-senator narrative
+   generation were both LLM-based here until removed in 2026-07 for
+   unreliable output; see `cross_reference.py` and `policy_alignment.py`).
+   Justice impartiality scoring (separate phase) still uses the LLM for a
+   9-justice profile summary.
 4. **ASSEMBLE + SAVE** — Build scorecards for senators, presidents, and
    justices; validate via `assemble/validator.py`; persist to SQLite
 
@@ -682,8 +689,9 @@ SQLAlchemy ORM models are in `backend/app/models.py`. Key tables: `senators`,
 | kNN classifier + inverse-freq balancing | `backend/app/pipeline/analyze/nn_classifier.py` |
 | Sponsorship analysis (PageRank leadership + SVD ideology) | `backend/app/pipeline/analyze/sponsorship_analysis.py` |
 | Multi-word last name extraction + vote matching | `backend/app/pipeline/transform/normalize_members.py` |
-| LLM narrative generation | `backend/app/pipeline/analyze/cross_reference.py` |
+| Lobbying match + key vote selection (deterministic, no LLM) | `backend/app/pipeline/analyze/cross_reference.py` |
 | Action Center analysis (news → issues → monitors → timeline) | `backend/app/pipeline/analyze/action_center.py` |
+| Justice profile summary (LLM, from pre-computed statistics) | `backend/app/pipeline/justice_pipeline.py` |
 | Election cycle pipeline (candidates, financials, ballot measures, coverage) | `backend/app/pipeline/election_pipeline.py` |
 | Statewide ballot-measure ingestion (verbatim, no LLM) | `backend/app/pipeline/fetch/ballot_measures.py` |
 | Official-ballot link table + liveness gating | `backend/app/pipeline/fetch/ballot_lookup.py` |

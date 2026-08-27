@@ -21,11 +21,9 @@ flowchart TB
     P2B["<b>2b. ROSTER LIFECYCLE</b><br/>in DB but off the roster → seat vacant<br/>back on the roster → restored<br/>gone > 180 days → deleted with child rows<br/><i>skipped if the roster looks truncated</i><br/><i>presidents and justices never touched</i>"]
     P1 --> P2 --> P2B --> P3
 
-    subgraph P3["3. ANALYZE — producer/consumer, per member"]
+    subgraph P3["3. ANALYZE — fully deterministic, no LLM call, per member"]
         direction LR
-        LIB["<b>Librarian thread</b><br/>runs one member ahead<br/>batches of 64<br/><br/>bill titles → policy areas<br/>employers → industries<br/>donor↔bill cosine conflicts<br/>key-vote selection<br/>platform topic extraction<br/>speech → party alignment"]
-        ANA["<b>Analyst thread</b><br/>one LLM call at a time<br/>blocks 15-30s per call<br/><br/>PAC identification<br/>promise evaluation<br/>narrative synthesis"]
-        LIB -->|"threading.Event + shared dict<br/>(lookahead is exactly 1, so no queue)"| ANA
+        LIB["<b>Embedding + scoring</b><br/>batches of 64<br/><br/>bill titles → policy areas<br/>employers → industries<br/>donor↔bill cosine conflicts<br/>key-vote selection<br/>platform topic extraction<br/>speech → party alignment<br/>compute + persist scorecard"]
     end
 
     P3 --> P4["<b>4. EXPLORE</b><br/>embed speeches, presidential actions,<br/>SCOTUS opinions, FR rulemaking<br/>→ sqlite-vec upsert"]

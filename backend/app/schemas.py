@@ -77,7 +77,6 @@ class KeyVoteSchema(CamelModel):
     party_leaning: Literal["R", "D", "bipartisan"] | None = None
     voted_with_party: bool | None = None
     vote_category: Literal["recent", "key"] = "key"
-    key_vote_reasoning: str | None = None
 
 
 class FundingSchema(CamelModel):
@@ -93,7 +92,6 @@ class VotingRecordSchema(CamelModel):
     voted_with_party_count: int = 0
     voted_against_party_count: int = 0
     party_loyalty_pct: float = 0.0
-    voting_summary: str = ""
     recent_vote_count: int = 0
     key_vote_count: int = 0
 
@@ -284,7 +282,6 @@ class _PersonDetailBase(CamelModel):
     voting_record: VotingRecordSchema
     lobbying_matches: list[LobbyingMatchSchema]
     campaign_promises: list[CampaignPromiseSchema] = []
-    platform_summary: str = ""
     partisan_depth: PartisanDepthSchema | None = None
     sponsored_bills: list[SponsoredBillSchema] = []
     leadership_score: float | None = None

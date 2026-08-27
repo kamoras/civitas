@@ -52,7 +52,7 @@ flowchart TB
 | 2 | Sentence-transformer cosine vs prototypes | fast | Bill policy areas, industry, party alignment, donor types, stance direction, procedural detection, skip-entity detection, employer filtering, memo-transfer detection |
 | 2b | SVD / PageRank on cosponsorship matrix | fast | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
 | 3 | k-Nearest Neighbour in embedding space | fast | Remaining unclassified donors (~5%), bill classification from the reference corpus |
-| 4 | LLM | slow | Narrative synthesis, promise analysis, PAC identification |
+| 4 | LLM | slow | Action Center issue synthesis, justice profile summaries |
 
 kNN was chosen over an LLM for donor classification after testing: the LLM
 hallucinated categories outside the taxonomy (`SPORTS`, `RESTAURANT`) and took
