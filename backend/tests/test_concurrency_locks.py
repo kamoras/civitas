@@ -110,6 +110,52 @@ class TestEnsureIndexesCreatesPartialUnique:
         assert "ux_pipeline_runs_one_running" in names
 
 
+class TestEnsureIndexesDedupesJusticeVotes:
+    """2026-08 audit: fetch_case_votes flattening every decision in a
+    multi-decision Oyez case wrote 2 rows per (justice, case). Covers the
+    startup migration that both cleans up an existing database carrying
+    those duplicates and adds the unique index so it can't recur."""
+
+    def test_duplicate_rows_are_pruned_and_index_added(self, monkeypatch):
+        import os
+        import tempfile
+
+        from sqlalchemy import create_engine, inspect, text
+
+        from app import database
+
+        fd, path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        eng = create_engine(f"sqlite:///{path}", connect_args={"check_same_thread": False})
+        monkeypatch.setattr(database, "engine", eng)
+
+        # Simulate a pre-migration table: created without the model's
+        # UniqueConstraint, same as a database that predates this fix.
+        with eng.begin() as conn:
+            conn.execute(text(
+                "CREATE TABLE justice_votes ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "justice_id VARCHAR, case_id VARCHAR, vote VARCHAR)"
+            ))
+            conn.execute(text(
+                "INSERT INTO justice_votes (justice_id, case_id, vote) VALUES "
+                "('jackson', 'scotus-2023-23-726', 'majority'), "
+                "('jackson', 'scotus-2023-23-726', 'minority'), "
+                "('roberts', 'scotus-2023-23-726', 'majority')"
+            ))
+
+        database._ensure_indexes()
+
+        with eng.begin() as conn:
+            rows = conn.execute(text(
+                "SELECT justice_id, case_id FROM justice_votes ORDER BY justice_id"
+            )).fetchall()
+        assert rows == [("jackson", "scotus-2023-23-726"), ("roberts", "scotus-2023-23-726")]
+
+        names = {i["name"] for i in inspect(eng).get_indexes("justice_votes")}
+        assert "uq_justice_vote_justice_case" in names
+
+
 class TestAcquirePipelineLock:
     def test_acquires_when_free_and_blocks_second_caller(self, db_session):
         from app.pipeline.senate_pipeline import _acquire_pipeline_lock

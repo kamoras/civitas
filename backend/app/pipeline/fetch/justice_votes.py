@@ -129,6 +129,17 @@ async def fetch_case_votes(
 ) -> list[dict]:
     """Fetch per-justice vote data for cases in the given SCOTUS terms.
 
+    A case's `decisions` array can legitimately hold more than one entry —
+    e.g. Moyle v. United States (2023-23-726) carries both a "dismissal -
+    improvidently granted" decision (5-4) and a separate "per curiam"
+    decision (6-3) for the same docket, with different vote splits and, for
+    some justices, different vote sides. Flattening every decision's votes
+    (2026-08 audit) wrote 2 rows per justice for cases like this, one of
+    them not uncommonly the opposite of the other. JusticeVote has no way
+    to represent two decisions for one case, so only the LAST decision is
+    kept — same "final/most recent event wins" convention this function
+    already uses for decided_date below (`dates[-1]`).
+
     Returns a list of vote records:
     {
         "case_id": str,
@@ -197,35 +208,37 @@ async def fetch_case_votes(
 
             case_id = f"scotus-{ref['term']}-{ref['docket']}"
 
-            for decision in decisions:
-                votes = decision.get("votes") or []
-                maj_count = decision.get("majority_vote") or 0
-                min_count = decision.get("minority_vote") or 0
-                is_unanimous = min_count == 0 and maj_count > 0
-                is_close = (maj_count - min_count) <= 1 and min_count > 0
+            # Only the last decision — see this function's docstring on why
+            # a case can carry more than one and why "last" is the tie-break.
+            decision = decisions[-1]
+            votes = decision.get("votes") or []
+            maj_count = decision.get("majority_vote") or 0
+            min_count = decision.get("minority_vote") or 0
+            is_unanimous = min_count == 0 and maj_count > 0
+            is_close = (maj_count - min_count) <= 1 and min_count > 0
 
-                for v in votes:
-                    member = v.get("member") or {}
-                    justice_id = member.get("identifier", "")
-                    if not justice_id:
-                        continue
+            for v in votes:
+                member = v.get("member") or {}
+                justice_id = member.get("identifier", "")
+                if not justice_id:
+                    continue
 
-                    vote_side = v.get("vote", "")
-                    opinion = v.get("opinion_type", "none") or "none"
+                vote_side = v.get("vote", "")
+                opinion = v.get("opinion_type", "none") or "none"
 
-                    all_votes.append({
-                        "case_id": case_id,
-                        "case_name": case_name,
-                        "case_term": ref["term"],
-                        "decided_date": decided_date,
-                        "justice_id": justice_id,
-                        "vote": vote_side,
-                        "opinion_type": opinion,
-                        "is_unanimous": is_unanimous,
-                        "is_close": is_close,
-                        "majority_votes": maj_count,
-                        "minority_votes": min_count,
-                    })
+                all_votes.append({
+                    "case_id": case_id,
+                    "case_name": case_name,
+                    "case_term": ref["term"],
+                    "decided_date": decided_date,
+                    "justice_id": justice_id,
+                    "vote": vote_side,
+                    "opinion_type": opinion,
+                    "is_unanimous": is_unanimous,
+                    "is_close": is_close,
+                    "majority_votes": maj_count,
+                    "minority_votes": min_count,
+                })
 
         except httpx.TimeoutException:
             logger.warning("Oyez case detail timed out for %s", ref["docket"])
