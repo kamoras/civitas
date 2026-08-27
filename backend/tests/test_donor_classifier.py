@@ -90,6 +90,29 @@ class TestSemanticClassification:
         assert classify_donor_type_semantic("") is None
         assert classify_donor_type_semantic("AB") is None
 
+    def test_a_victory_fund_committee_is_not_self_funded(self):
+        """A 2026-08 audit found "Rutherford Victory Fund" (and similar
+        candidate-surname committee names) classified Self-Funded — the
+        SequenceMatcher ratio between a short committee name and the
+        candidate's own name can clear the self-funded threshold purely
+        because the surname dominates the string, even though a joint
+        fundraising committee's money is split with party/PAC committees
+        and is never the candidate's own. This must land as
+        CandidateAffiliated instead (the same bucket a "Friends of X" or
+        "X for Senate" committee lands in), never Self-Funded."""
+        result = classify_donor_type_semantic(
+            "RUTHERFORD VICTORY FUND",
+            candidate_name="RUTHERFORD, JOHN",
+        )
+        assert result != "Self-Funded"
+
+    def test_a_leadership_pac_named_for_the_candidate_is_not_self_funded(self):
+        result = classify_donor_type_semantic(
+            "SMITH LEADERSHIP PAC",
+            candidate_name="SMITH, JANE",
+        )
+        assert result != "Self-Funded"
+
 
 @pytest.mark.slow
 class TestHybridClassification:
