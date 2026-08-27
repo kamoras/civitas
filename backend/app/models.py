@@ -822,8 +822,22 @@ class Justice(Base):
 
 
 class JusticeVote(Base):
-    """Per-case vote record for a justice."""
+    """Per-case vote record for a justice.
+
+    One row per (justice, case): a 2026-08 audit found upsert_justice's
+    delete-then-recreate had no protection against a single Oyez case
+    carrying more than one `decisions` entry (a real Oyez data shape —
+    e.g. Moyle v. United States has both a "dismissal - improvidently
+    granted" decision and a separate "per curiam" decision for the same
+    docket) — justice_votes.fetch_case_votes flattened every decision's
+    votes into one list, so an affected case wrote 2 rows per justice,
+    sometimes with contradictory vote values. See fetch_case_votes'
+    docstring for which decision it now keeps.
+    """
     __tablename__ = "justice_votes"
+    __table_args__ = (
+        UniqueConstraint("justice_id", "case_id", name="uq_justice_vote_justice_case"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     justice_id: Mapped[str] = mapped_column(String, ForeignKey("justices.id"), index=True)
