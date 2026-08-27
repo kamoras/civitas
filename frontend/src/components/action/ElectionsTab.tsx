@@ -7,6 +7,7 @@ import type { ElectionInfo, ElectionState, ElectionSenator } from "@/lib/api";
 import { PARTY_COLORS, PARTY_BORDER } from "@/lib/partyStyles";
 import RaceMap, { FIPS_TO_STATE } from "@/components/elections/RaceMap";
 import { BOXED_CONTROL } from "@/lib/controlStyles";
+import { stateBallotHref } from "@/lib/elections";
 
 function formatCountdown(days: number): { value: string; unit: string }[] {
   if (days <= 0) return [{ value: "TODAY", unit: "" }];
@@ -123,10 +124,10 @@ function StatePanel({ stateData, onClose }: { stateData: ElectionState; onClose:
 
       {(stateData.hasSenateRace || stateData.hasHouseRace) && (
         <Link
-          href={`/elections?state=${stateData.state}`}
+          href={stateBallotHref(stateData.state)}
           className="inline-block mt-4 text-xs font-mono text-signal-cyan hover:text-phos"
         >
-          View full race coverage →
+          View {stateData.state} ballot &amp; races →
         </Link>
       )}
     </div>

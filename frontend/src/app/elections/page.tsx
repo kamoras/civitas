@@ -100,8 +100,8 @@ export default function ElectionsPage() {
             eyebrow="Elections · partisan lean by state"
             title={pvi?.cycleYear ? `${pvi.cycleYear} midterm ballot` : "Midterm ballot"}
           >
-            Pick a state for its candidates, their filings and the coverage we have ingested.
-            Shading is partisan lean, not a forecast.
+            Pick a state for its candidates, their filings, statewide ballot measures, and the
+            coverage we have ingested. Shading is partisan lean, not a forecast.
           </PageMasthead>
 
           {error && (

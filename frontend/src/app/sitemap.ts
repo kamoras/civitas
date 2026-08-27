@@ -1,10 +1,22 @@
 import type { MetadataRoute } from "next";
+import { STATE_CODES } from "@/lib/stateCodes";
 
 const BASE = "https://civitas-research.org";
+
+// STATE_CODES comes from lib/stateCodes.ts, NOT from RaceMap: importing it
+// from that "use client" module gave this server module a client reference
+// instead of the object, and the sitemap silently shipped with no state
+// URLs at all. See that file's comment.
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
   return [
+    ...STATE_CODES.map((code) => ({
+      url: `${BASE}/elections/states/${code}`,
+      lastModified: now,
+      changeFrequency: "daily" as const,
+      priority: 0.7,
+    })),
     { url: BASE, lastModified: now, changeFrequency: "daily", priority: 1 },
     { url: `${BASE}/action`, lastModified: now, changeFrequency: "hourly", priority: 0.9 },
     { url: `${BASE}/politicians`, lastModified: now, changeFrequency: "daily", priority: 0.9 },

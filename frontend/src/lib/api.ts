@@ -4,7 +4,7 @@ import type { Justice, JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssue, ActionIssuesResponse, MyRepsResponse } from "@/types/action";
 import type { PoliticianCard } from "@/types/politicians";
 import type { BillDetail, PaginatedBills } from "@/types/bill";
-import type { GeocodeResult, PviMap, RaceSummary } from "@/types/election";
+import type { GeocodeResult, PviMap, RaceSummary, TownBallot, TownEntry } from "@/types/election";
 import type {
   JusticeScoreBreakdown,
   PresidentScoreBreakdown,
@@ -1500,6 +1500,30 @@ export async function fetchDistrictForAddress(address: string): Promise<GeocodeR
   const res = await fetch(`${API_BASE}/elections/geocode?address=${encodeURIComponent(address)}`);
   if (!res.ok) throw new Error(`Failed to resolve address: ${res.status}`);
   return res.json();
+}
+
+/** The curated town list for a state — empty when the town-lookup feature
+ * isn't configured or no town has been added for this state yet. Empty
+ * is a normal, expected response, not an error; the UI hides the town
+ * selector rather than showing one with nothing in it. */
+export async function fetchTownsForState(state: string): Promise<TownEntry[]> {
+  const data = await cachedFetch<{ towns: TownEntry[] }>(
+    `${API_BASE}/elections/states/${encodeURIComponent(state)}/towns`,
+    TTL.LONG,
+  );
+  return data.towns;
+}
+
+/** One curated town's local ballot content — see TownBallot's docstring
+ * for the tri-state `status`. Deliberately TTL.SHORT, not the LONG tier
+ * this would otherwise fall into as "reference data": local races and
+ * measures are certified and struck continuously through a cycle, same
+ * as the statewide ones on the ballot page above. */
+export async function fetchTownBallot(state: string, town: string): Promise<TownBallot> {
+  return cachedFetch(
+    `${API_BASE}/elections/states/${encodeURIComponent(state)}/towns/${encodeURIComponent(town)}/ballot`,
+    TTL.SHORT,
+  );
 }
 
 export interface MonitorUpdate {

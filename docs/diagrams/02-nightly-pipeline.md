@@ -101,3 +101,4 @@ become wrong because analysis code changed. See [06 — Caching](06-caching.md).
 | Analyze | `backend/app/pipeline/analyze/` |
 | Assemble + validate | `backend/app/pipeline/assemble/` |
 | Run bookkeeping | `backend/app/pipeline/run_tracker.py`, `progress_tracker.py` |
+| Election cycle (separate pipeline) | `backend/app/pipeline/election_pipeline.py` — roster → financials → ballot measures → coverage → Bluesky → snapshot |

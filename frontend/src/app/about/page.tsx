@@ -617,6 +617,39 @@ export default function AboutPage() {
               </a>{" "}
               for the full account.
             </P>
+
+            <Gist>
+              State ballot pages show the statewide slice of a ballot — Senate and House
+              contests and statewide measures. They do not show your governor&apos;s race,
+              your state legislature, your county and city offices, or local measures.
+            </Gist>
+            <P>
+              Two separate causes, one fixable and one not. The governor&apos;s race and other
+              statewide executive contests — 36 governorships, 30 attorneys general and
+              more in 2026 — are missing because this platform has no state-office data
+              source at all yet. That is an ingestion gap, and it is fixable. Everything
+              below the state level is missing for a structural reason: ballots are printed
+              per precinct, so there is no such artifact as &ldquo;the ballot&rdquo; for a
+              whole state, and the only way to show your actual ballot is to take your home
+              address and send it to a third-party lookup service. We are not going to do
+              that, so instead every page enumerates what it omits and links you to your own
+              election office. See{" "}
+              <a href="#state-ballots" className="underline underline-offset-2 hover:text-phos">State Ballots &amp; Ballot Measures</a>.
+            </P>
+            <Gist>
+              Ballot-measure coverage depends on an optional third-party source, and some
+              states may show as not yet covered.
+            </Gist>
+            <P>
+              Measures come from Vote Smart&apos;s public API. Where a state has not been
+              ingested, or an ingest failed, the page says exactly that rather than showing
+              an empty section — an empty section would read as &ldquo;this state has no
+              measures&rdquo;, which is a materially different and potentially damaging claim.
+              The fix is per-state ingestion directly from Secretary of State offices, which
+              is authoritative but needs roughly fifty separate adapters against fifty
+              independently-redesigned government sites. Until then, the official lookup link
+              on every state page is the complete answer and the measures are a convenience.
+            </P>
           </Section>
 
           {/* ── Sponsorship Analysis ── */}
@@ -910,6 +943,143 @@ export default function AboutPage() {
             </P>
           </Section>
 
+          {/* ── State ballots ── */}
+          <Section title="STATE BALLOTS &amp; BALLOT MEASURES" id="state-ballots">
+            <P>
+              Each state has a ballot page at <span className="text-signal-cyan">/elections/states/&lt;ST&gt;</span> showing
+              the federal contests on that state&apos;s ballot and its statewide ballot
+              measures. Every candidate race links through to full candidate detail —
+              FEC fundraising totals, filing status, and live news coverage.
+            </P>
+
+            <div className="space-y-4 mt-4">
+              <div>
+                <h3 className="text-xs text-ink-lo tracking-widest mb-2">
+                  WHY IT IS NOT &ldquo;YOUR BALLOT&rdquo;
+                </h3>
+                <P>
+                  A U.S. ballot is defined per <em>ballot style</em> — the exact combination
+                  of contests you personally are eligible to vote on. Precincts split by
+                  district boundaries carry several styles, and a single county can print
+                  dozens. Nationally there are tens of thousands. Only a few things are
+                  genuinely uniform across an entire state: the U.S. Senate contest,
+                  statewide ballot measures, and statewide offices.
+                </P>
+                <P>
+                  So these pages cover the statewide slice and say so plainly, at the top
+                  of the page rather than in a footnote. Your U.S. House district, state
+                  legislative districts, county and city offices, judicial questions, and
+                  local measures are not shown, and each page links you to your own
+                  election office for the rest. We could show a true personal ballot only
+                  by asking for your home address and sending it to a third-party service —
+                  which is exactly what this platform is built not to do.
+                </P>
+              </div>
+
+              <div>
+                <h3 className="text-xs text-ink-lo tracking-widest mb-2">
+                  AN OPTIONAL TOWN SELECTOR — WITHOUT YOUR ADDRESS
+                </h3>
+                <P>
+                  Each state page also offers an optional town selector for a small,
+                  hand-picked list of towns, showing local races (city council, school
+                  board, local measures) the statewide content above cannot. This is
+                  NOT the address-based personal ballot the paragraph above rules out.
+                  It never asks for or sends your address anywhere. Instead it looks up
+                  a fixed, public address we chose for that town — its own town hall —
+                  so every visitor who picks the same town gets the identical lookup.
+                  Nothing about you or your visit ever leaves this server.
+                </P>
+                <P>
+                  It is still an approximation, and we say so next to the selector: a
+                  town can contain more than one precinct, so a race tied to your
+                  specific street may not appear, or a race tied to a different part of
+                  town might. Town, not county or state, is the level chosen to keep
+                  that error small — precinct results are resolved to the exact address
+                  looked up, so a wider &ldquo;representative&rdquo; address would have
+                  been a substantially larger error. Unset the town selector, or use
+                  the official lookup link above, for the real thing.
+                </P>
+                <P>
+                  This source also only carries data close to an election&apos;s own
+                  date — a general election months out is not yet indexed anywhere in
+                  it, for any town, in any state. If a town shows &ldquo;could not load
+                  local races right now&rdquo;, that is very likely why, not a wrong
+                  address or a broken selector; local races for the current general
+                  should appear as Election Day approaches.
+                </P>
+              </div>
+
+              <div>
+                <h3 className="text-xs text-ink-lo tracking-widest mb-2">
+                  MEASURES ARE QUOTED, NEVER REWRITTEN
+                </h3>
+                <P>
+                  Each measure shows its official ballot title, official summary, fiscal
+                  impact statement, and the state&apos;s own description of what a YES and a
+                  NO vote do — all reproduced verbatim, with a link to the source. Nothing
+                  on these pages is written by an AI model, and there is no plain-language
+                  rewrite. See <span className="text-signal-cyan">HOW AI IS USED</span> below
+                  for why we ruled that out rather than shipping it.
+                </P>
+                <P>
+                  Where a state publishes no yes/no description, we show none. We never
+                  infer it: the intuitive reading (&ldquo;yes enacts the thing&rdquo;) is
+                  exactly backwards on a veto referendum, where approving <em>retains</em> the
+                  law being challenged.
+                </P>
+              </div>
+
+              <div>
+                <h3 className="text-xs text-ink-lo tracking-widest mb-2">
+                  WHO WROTE THE WORDS YOU ARE READING
+                </h3>
+                <P>
+                  Ballot titles are among the most litigated documents in American election
+                  law, precisely because their wording is contested — courts have voided
+                  measures over language a legislature wrote. So each quote names its
+                  author (&ldquo;Drafted by the Georgia General Assembly&rdquo;, &ldquo;Prepared
+                  by the Legislative Analyst&rsquo;s Office&rdquo;). Naming the drafter is more
+                  neutral than presenting the quote bare, because who wrote it is what tells
+                  you how to weigh it.
+                </P>
+                <P>
+                  We do not reproduce the arguments for and against printed in official voter
+                  guides. Those are written by campaign committees, not the state, and in some
+                  states the slots are purchased — presenting them as a matched pair would
+                  manufacture a balance that may not exist.
+                </P>
+              </div>
+
+              <div>
+                <h3 className="text-xs text-ink-lo tracking-widest mb-2">
+                  &ldquo;NO MEASURES&rdquo; VS. &ldquo;WE DON&rsquo;T KNOW YET&rdquo;
+                </h3>
+                <P>
+                  An empty section on a page about your ballot reads as &ldquo;there is
+                  nothing to research&rdquo; — which would be a damaging thing to imply about
+                  a state that has seventeen amendments pending. So the two cases are tracked
+                  separately and displayed differently: a state where our source explicitly
+                  reports no statewide measures says so, and a state we have not yet ingested
+                  says <em>that</em>, and points you at the official lookup instead.
+                </P>
+              </div>
+
+              <div>
+                <h3 className="text-xs text-ink-lo tracking-widest mb-2">
+                  MEASURES REMOVED FROM THE BALLOT
+                </h3>
+                <P>
+                  Measures are certified and struck continuously through a cycle — courts have
+                  overturned roughly 2.3% of state ballot measures since 1995. When a measure
+                  leaves the ballot we mark it removed and keep showing it for a period, rather
+                  than deleting it. If you read about a measure here last month, you need to be
+                  told it is gone; a card that silently disappears cannot tell you anything.
+                </P>
+              </div>
+            </div>
+          </Section>
+
           {/* ── Action Center ── */}
           <Section title="ACTION CENTER">
             <P>
@@ -1018,8 +1188,7 @@ export default function AboutPage() {
                 <P>
                   The Elections tab displays upcoming election dates, Senate races with incumbent
                   scores linked to their scorecards, and an interactive U.S. map for selecting
-                  states. State-specific information helps users understand their local races in the
-                  context of national trends.
+                  states. Selecting a state opens that state&apos;s ballot page (below).
                 </P>
               </div>
 
@@ -1385,7 +1554,36 @@ export default function AboutPage() {
                     label="Partisan framing"
                     value="Prompts are explicitly structured to avoid editorial framing. The LLM analyzes behavior, not ideology."
                   />
+                  <Row
+                    label="Ballot measures"
+                    value="No AI touches ballot content at any stage. Titles, summaries, fiscal statements and yes/no descriptions are reproduced verbatim from official sources — see below for why we ruled out a plain-language rewrite."
+                  />
                 </div>
+              </div>
+
+              <div>
+                <h3 className="text-xs text-ink-lo tracking-widest mb-2">
+                  WHY BALLOT MEASURES GET NO AI SUMMARY
+                </h3>
+                <P>
+                  Ballot language is genuinely hard to read — statewide measures averaged a
+                  grade-21 reading level in 2025, the highest since Ballotpedia began
+                  tracking, and research finds voters skip measures whose titles read harder.
+                  A plain-language layer would be genuinely useful. We built the rest of the
+                  feature and left that part out anyway.
+                </P>
+                <P>
+                  The reason is that the one error that matters most here is undetectable by
+                  the checks we run. Our safeguards verify that every number, name and claim
+                  in generated text appears in the source material. A model that writes
+                  &ldquo;a YES vote repeals this tax&rdquo; when the official text says approval
+                  <em> retains</em> it passes every one of those checks, because every word it
+                  used <em>is</em> in the source — the checks confirm where words came from,
+                  not that a statement points the same direction as its source. On a page that
+                  can change how somebody votes, an error class we cannot detect is not one we
+                  are willing to ship, so the official words stand on their own with the
+                  drafter named.
+                </P>
               </div>
 
               <div>
@@ -1527,6 +1725,34 @@ export default function AboutPage() {
               <Row
                 label="Semantic Search"
                 value="Documents embedded with all-MiniLM-L6-v2 into a sqlite-vec table for dense passage retrieval — one embedding per document, no chunking"
+              />
+            </div>
+
+            <div className="space-y-2 mt-6">
+              <h3 className="text-xs text-ink-lo tracking-widest">ELECTIONS &amp; BALLOT MEASURES</h3>
+              <Row
+                label="FEC API (fec.gov)"
+                value="Declared candidates for every federal race in the cycle, plus per-candidate fundraising totals, cash on hand, and disbursements"
+              />
+              <Row
+                label="Vote Smart (votesmart.org)"
+                value="Statewide ballot measures — official ballot title, official summary, fiscal impact, and the state's own yes/no descriptions, stored and displayed verbatim. Free API from a nonpartisan nonprofit; optional, and the feature reports which states it lacks rather than implying they have no measures"
+              />
+              <Row
+                label="Secretary of State offices"
+                value="The authoritative source for ballot text, linked from every measure. Direct per-state ingestion is the intended upgrade to Vote Smart"
+              />
+              <Row
+                label="Google Civic Information API"
+                value="Powers the optional town-level local-races selector on a small, hand-picked list of towns. Called with a fixed, public address we chose for that town (its own town hall), never a visitor's own address — see State Ballots &amp; Ballot Measures above. Free API; optional, and unset means the selector doesn't appear"
+              />
+              <Row
+                label="USAGov election office directory"
+                value="Where each state ballot page sends you for the parts of your ballot that are not statewide. Per-state deep links are only shown after an automated check confirms the URL still resolves"
+              />
+              <Row
+                label="MIT Election Lab / county canvasses"
+                value="Presidential returns behind the Cook-PVI-style partisan lean shown per state and district (see the methodology note on the elections pages)"
               />
             </div>
 

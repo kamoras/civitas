@@ -1,6 +1,6 @@
 # Data model
 
-42 tables in one SQLite file (`/data/civitas.db`), plus a separate sqlite-vec
+45 tables in one SQLite file (`/data/civitas.db`), plus a separate sqlite-vec
 file (`/data/vectors.db`) holding the `vec_explore` and `vec_bills` vector
 tables — split out for writer-lock isolation, not just tidiness. Shown here in clusters; infrastructure tables are listed rather
 than drawn.
@@ -78,8 +78,6 @@ erDiagram
 
 ```mermaid
 erDiagram
-    RACES ||--o{ CANDIDATES : "race_id"
-    RACES ||--o{ RACE_COVERAGE_ITEMS : "race_id"
     JUSTICES ||--o{ JUSTICE_VOTES : "justice_id"
     PRESIDENTS ||--o{ PRESIDENT_TRADES : "president_id"
 
@@ -122,15 +120,6 @@ erDiagram
         float score_bipartisan_agreement "15%"
         int cases_decided
         json agreement_matrix
-    }
-
-    RACES {
-        int id PK
-        int cycle_year
-        string office
-        string state
-        string district
-        bool is_special
     }
 ```
 
@@ -200,6 +189,78 @@ old issues therefore keys on `bsky_last_post_text`, which is only ever written
 on a successful publish and never cleared — the honest record of "readers have a
 URL for this". Near-duplicate suppression leaves it NULL on purpose: nothing was
 published, so there is no permalink to protect and the row is free to age out.
+
+## Elections and ballots
+
+```mermaid
+erDiagram
+    RACES ||--o{ CANDIDATES : "race_id"
+    RACES ||--o{ RACE_COVERAGE_ITEMS : "race_id"
+
+    RACES {
+        string id PK "2026-SEN-GA · 2026-HOUSE-CA-12"
+        int cycle_year
+        string office "S | H — FEC codes"
+        string state
+        int district "NULL for Senate, 0 = at-large"
+        bool is_special
+    }
+    CANDIDATES {
+        string id PK "FEC candidate_id"
+        string race_id FK
+        string name
+        string party
+        string incumbent_challenge "I | C | O"
+        float contributions "NULL = not yet synced, never 0"
+        float cash_on_hand "NULL = not yet synced, never 0"
+        datetime last_financials_sync "watermark for the rotating refresh"
+    }
+    RACE_COVERAGE_ITEMS {
+        int id PK
+        string race_id FK
+        string source_type "news | bluesky"
+        string title "verbatim — never model-generated"
+        string url
+        string match_basis "full_name | surname_context"
+    }
+    BALLOT_MEASURES {
+        string id PK "source's own stable id"
+        string state
+        string election_date "part of identity, not cycle_year"
+        string election_type "primary | general | runoff | special"
+        string number "mutable — measures get renumbered"
+        string official_title "verbatim"
+        string official_summary "verbatim"
+        string fiscal_impact "verbatim"
+        string yes_means "verbatim or NULL — never derived"
+        string no_means "verbatim or NULL — never derived"
+        string title_authority "who drafted the title"
+        string status "certified | removed | withdrawn | under_appeal"
+        datetime last_seen_at "drives the removal grace window"
+    }
+    MEASURE_COVERAGE {
+        int id PK
+        string state
+        string election_date
+        string status "covered | confirmed_none | not_yet_covered | ingest_failed"
+        int measure_count
+        datetime checked_at
+    }
+```
+
+Three modelling decisions here are load-bearing rather than incidental:
+
+- **`BALLOT_MEASURES` has no relationship to `RACES`.** Measures and candidate
+  contests are independent things that happen to share a ballot, and the state
+  ballot endpoint assembles both by `state` rather than joining them.
+- **The key is `(state, election_date, number)`, not cycle year.** Ohio can run
+  an "Issue 1" in a May primary and a different "Issue 1" in November; a
+  cycle-year key collides them and the later sync overwrites the earlier
+  measure's text.
+- **`MEASURE_COVERAGE` exists so absence can explain itself.** Without it, "this
+  state has no statewide measures" and "we have not ingested this state" are the
+  same empty list — and on a page about somebody's ballot those are very
+  different claims. See AGENTS.md principle 7.
 
 ## Score history
 
