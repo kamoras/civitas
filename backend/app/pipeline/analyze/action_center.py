@@ -308,9 +308,27 @@ def _bsky_repost_has_new_information(old_facts_json: str, new_facts: list[str]) 
     when the question is "did anything HAPPEN?", so state changes that name
     nobody new (a veto, a court blocking an order, a failed override) read as
     pure rewords and suppressed the update. See _DEVELOPMENT_MARKERS.
+
+    2026-08-27 live case: old facts named "Saudi" (from "The Saudi
+    delegation referenced the agreement"); new facts spelled the same
+    country out as "Saudi Arabia". _issue_signature tokenizes word-by-word,
+    so the diff was the single token "arabia" — read as a brand-new named
+    entity when it's the same country already known, just referenced more
+    fully. A "new" token adjacent to an already-known token in a two-word
+    capitalized phrase in the new text is filtered out before deciding —
+    it's an expansion of an existing entity's name, not a new participant.
     """
     old_facts = json.loads(old_facts_json or "[]")
-    if _issue_signature("", new_facts) - _issue_signature("", old_facts):
+    old_sig = _issue_signature("", old_facts)
+    new_tokens = _issue_signature("", new_facts) - old_sig
+    if new_tokens:
+        for m in re.finditer(r"\b([A-Z][a-zA-Z'\-]{2,})\s+([A-Z][a-zA-Z'\-]{2,})\b", " ".join(new_facts)):
+            w1, w2 = m.group(1).lower(), m.group(2).lower()
+            if w1 in new_tokens and w2 in old_sig:
+                new_tokens.discard(w1)
+            if w2 in new_tokens and w1 in old_sig:
+                new_tokens.discard(w2)
+    if new_tokens:
         return True
     return bool(_development_markers(new_facts) - _development_markers(old_facts))
 
