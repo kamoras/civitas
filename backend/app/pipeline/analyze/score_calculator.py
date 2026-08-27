@@ -319,9 +319,11 @@ promises are generic platform language ("Expand Medicare coverage"), and
 embedding-based matching against specific vote/bill text structurally
 can't bridge that register — see policy_alignment.compute_promise_vote_
 alignment's docstring. _calc_promise_persistence keeps running and
-score_promise_persistence keeps being stored (still real, still displayed
-as raw promise kept/broken/partial data on profile pages) — it's just
-excluded from SCORE_WEIGHTS and the weighted overall score. Its 25%
+score_promise_persistence keeps being stored — not deleted outright,
+matching how the scored-dimension removal was handled elsewhere — but
+with campaign_promises always empty there is no kept/broken/partial
+data left to show, so no profile page displays one; it's excluded from
+SCORE_WEIGHTS and the weighted overall score. Its 25%
 weight redistributed proportionally across the other four (see
 config_definitions.SCORE_WEIGHTS's docstring for the exact numbers).
 
