@@ -9,7 +9,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.api import elections
-from app.models import Candidate, Race, RaceCoverageItem, Representative, Senator
+from app.models import BallotMeasure, Candidate, MeasureCoverage, Race, RaceCoverageItem, Representative, Senator
 
 
 def _body(response):
@@ -460,3 +460,75 @@ class TestStateCoverage:
         assert [item["url"] for item in data["coverage"]] == [
             "https://apnews.com/newer", "https://apnews.com/older",
         ]
+
+
+class TestBallotMeasures:
+    """The statewide-ballot-measures fields folded into this endpoint
+    from the ballot-measures feature — measures, measureCoverage,
+    officialLookup, omits."""
+
+    @staticmethod
+    def _election_day():
+        return elections.next_election_day(elections.utcnow().date()).isoformat()
+
+    def test_measures_are_included_verbatim(self, db_session):
+        _race(db_session, "2026-SEN-GA", "GA")
+        db_session.add(BallotMeasure(
+            id="ga-measure-1", state="GA", election_date=self._election_day(),
+            number="Amendment 1", title="Property tax exemption",
+            official_title="An act relating to property tax exemptions.",
+            source_name="Vote Smart",
+        ))
+        db_session.commit()
+
+        data = _body(elections.state_ballot("GA", db_session))
+        assert len(data["measures"]) == 1
+        assert data["measures"][0]["number"] == "Amendment 1"
+        assert data["measures"][0]["officialTitle"] == (
+            "An act relating to property tax exemptions."
+        )
+
+    def test_no_coverage_row_defaults_to_not_yet_covered(self, db_session):
+        _race(db_session, "2026-SEN-GA", "GA")
+        db_session.commit()
+
+        data = _body(elections.state_ballot("GA", db_session))
+        assert data["measures"] == []
+        assert data["measureCoverage"]["status"] == MeasureCoverage.NOT_YET_COVERED
+
+    def test_confirmed_none_is_reported_not_conflated_with_not_yet_covered(self, db_session):
+        """A state with genuinely zero measures must not render like a
+        state Civitas simply hasn't ingested yet."""
+        _race(db_session, "2026-SEN-GA", "GA")
+        db_session.add(MeasureCoverage(
+            state="GA", election_date=self._election_day(),
+            status=MeasureCoverage.CONFIRMED_NONE, source_name="Vote Smart",
+        ))
+        db_session.commit()
+
+        data = _body(elections.state_ballot("GA", db_session))
+        assert data["measures"] == []
+        assert data["measureCoverage"]["status"] == MeasureCoverage.CONFIRMED_NONE
+        assert data["measureCoverage"]["sourceName"] == "Vote Smart"
+
+    def test_official_lookup_and_omits_are_always_present(self, db_session):
+        _race(db_session, "2026-SEN-GA", "GA")
+        db_session.commit()
+
+        data = _body(elections.state_ballot("GA", db_session))
+        assert data["officialLookup"]["url"]
+        assert isinstance(data["omits"], list) and len(data["omits"]) > 0
+
+    def test_dc_is_a_valid_ballot_jurisdiction_despite_no_federal_race(self, db_session):
+        """DC has no voting House/Senate race and is absent from
+        STATES_WITH_FEDERAL_RACES, but it does vote on statewide
+        initiatives — the ballot page must not 404 it."""
+        data = _body(elections.state_ballot("DC", db_session))
+        assert data["senateRaces"] == []
+        assert data["houseRaces"] == []
+        assert any("Delegate" in item for item in data["omits"])
+
+    def test_a_territory_with_no_ballot_jurisdiction_still_404s(self, db_session):
+        with pytest.raises(HTTPException) as exc_info:
+            elections.state_ballot("GU", db_session)
+        assert exc_info.value.status_code == 404
