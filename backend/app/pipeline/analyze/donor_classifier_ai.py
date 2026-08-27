@@ -91,6 +91,23 @@ FEC_ENTITY_TYPE_MAP = {
 
 AFFILIATED_RECEIPT_TYPES = {"18G", "18H", "18K", "18J", "22G", "22H"}
 
+# FEC filing-convention markers that mean "this name is a committee/fund
+# entity", never a person. A genuine self-funded contribution is FEC
+# entity_type IND or CAN and its contributor_name is the candidate's own
+# name as filed — it is never itself phrased as a fund or committee. A
+# 2026-08 audit found "Rutherford Victory Fund" (and siblings) classified
+# Self-Funded off the SequenceMatcher ratio below, purely because the
+# candidate's own surname dominates a short committee name — a joint
+# fundraising committee's money is split with party/PAC committees and is
+# categorically not personal money, no matter how the string compares.
+# Checked before the ratio test so this shape falls through to the
+# CandidateAffiliated check instead, whose own template already names
+# "victory fund committee" as exactly this pattern.
+_COMMITTEE_ENTITY_MARKERS = (
+    "VICTORY FUND", "VICTORY COMMITTEE", "JOINT FUNDRAISING",
+    "LEADERSHIP PAC", "FOR CONGRESS", "FOR SENATE", "COMMITTEE",
+)
+
 _PAYMENT_PROCESSOR_PROTOTYPE = (
     "ActBlue is a Democratic fundraising payment processor. "
     "WinRed is a Republican fundraising payment processor. "
@@ -317,8 +334,9 @@ def classify_donor_type_semantic(
         cand_norm = candidate_name.upper().strip()
         name_upper = name.upper().strip()
 
+        is_committee_entity = any(marker in name_upper for marker in _COMMITTEE_ENTITY_MARKERS)
         name_sim = SequenceMatcher(None, name_upper, cand_norm).ratio()
-        if name_sim >= 0.60:
+        if name_sim >= 0.60 and not is_committee_entity:
             return "Self-Funded"
 
         last_name = candidate_name.split(",")[0].strip().upper()
