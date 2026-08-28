@@ -136,6 +136,36 @@ def get_similarity_model() -> SentenceTransformer:
     return _similarity_model
 
 
+def encode_normalized(
+    model: SentenceTransformer,
+    texts: list,
+    prompt_name: str | None = None,
+    chunk_size: int = 256,
+):
+    """Encode texts in chunks and L2-normalize the result.
+
+    2026-08 cleanup: this exact batch-encode-then-normalize idiom
+    (chunk to bound memory, encode, stack, divide by row norms with a
+    zero-norm guard) was duplicated at 4 call sites across
+    nn_classifier.py and industry_classifier.py. chunk_size only bounds
+    how many texts are handed to the model per call — sentence-
+    transformers' own internal batching (batch_size=min(64, len(chunk)))
+    is unaffected.
+    """
+    import numpy as np
+
+    parts = []
+    kwargs = {"prompt_name": prompt_name} if prompt_name else {}
+    for start in range(0, len(texts), chunk_size):
+        chunk = texts[start:start + chunk_size]
+        embs = model.encode(chunk, show_progress_bar=False, batch_size=min(64, len(chunk)), **kwargs)
+        parts.append(embs)
+    result = np.vstack(parts)
+    norms = np.linalg.norm(result, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    return result / norms
+
+
 # ── sqlite-vec connection & schema ───────────────────────────────
 
 def _serialize(vec) -> bytes:

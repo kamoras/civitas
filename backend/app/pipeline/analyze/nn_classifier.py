@@ -263,26 +263,10 @@ def classify_batch_nn(
 
     model = _get_model()
 
-    _BATCH = 256
-    ref_embs_parts = []
-    for start in range(0, len(ref_names), _BATCH):
-        batch = ref_names[start:start + _BATCH]
-        embs = model.encode(batch, show_progress_bar=False, batch_size=min(64, len(batch)))
-        ref_embs_parts.append(embs)
-    ref_embs = np.vstack(ref_embs_parts)
-    norms = np.linalg.norm(ref_embs, axis=1, keepdims=True)
-    norms[norms == 0] = 1.0
-    ref_embs /= norms
+    from app.pipeline.vector_store import encode_normalized
 
-    query_embs_parts = []
-    for start in range(0, len(query_names), _BATCH):
-        batch = query_names[start:start + _BATCH]
-        embs = model.encode(batch, show_progress_bar=False, batch_size=min(64, len(batch)))
-        query_embs_parts.append(embs)
-    query_embs = np.vstack(query_embs_parts)
-    norms = np.linalg.norm(query_embs, axis=1, keepdims=True)
-    norms[norms == 0] = 1.0
-    query_embs /= norms
+    ref_embs = encode_normalized(model, ref_names)
+    query_embs = encode_normalized(model, query_names)
 
     similarities = query_embs @ ref_embs.T
 
@@ -416,7 +400,7 @@ def cross_validate_donor_types(db_session: Session) -> int:
     from app.pipeline.analyze.donor_classifier_ai import (
         _get_semantic_type_embeddings,
     )
-    from app.pipeline.vector_store import get_embedding_model
+    from app.pipeline.vector_store import encode_normalized, get_embedding_model
 
     pac_rows = (
         db_session.query(LearnedClassification)
@@ -439,17 +423,7 @@ def cross_validate_donor_types(db_session: Session) -> int:
         return 0
 
     names = [r.entity_name for r in pac_rows]
-    _BATCH = 256
-    all_embs = []
-    for start in range(0, len(names), _BATCH):
-        batch = names[start:start + _BATCH]
-        embs = model.encode(batch, show_progress_bar=False, batch_size=min(64, len(batch)))
-        all_embs.append(embs)
-
-    query_embs = np.vstack(all_embs)
-    norms = np.linalg.norm(query_embs, axis=1, keepdims=True)
-    norms[norms == 0] = 1.0
-    query_embs /= norms
+    query_embs = encode_normalized(model, names)
 
     org_scores = query_embs @ org_emb
     pac_scores = query_embs @ pac_emb

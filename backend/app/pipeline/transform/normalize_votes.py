@@ -497,9 +497,8 @@ def extract_senator_vote(
 
 def _normalize_for_match(text: str) -> str:
     """Normalize a name for comparison: strip accents and uppercase."""
-    import unicodedata
-    nfkd = unicodedata.normalize("NFKD", text)
-    return "".join(c for c in nfkd if not unicodedata.combining(c)).upper()
+    from app.pipeline.transform.normalize_members import strip_accents
+    return strip_accents(text).upper()
 
 
 def extract_representative_vote(

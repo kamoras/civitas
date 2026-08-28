@@ -449,7 +449,13 @@ def classify_skip_names_batch(
         names: List of names to check.
         prototype_key: Cache key for the prototype embedding.
         prototype_text: Natural-language prototype (defaults to payment processor).
-        threshold: Minimum cosine similarity to classify as skip.
+        threshold: Minimum cosine similarity to classify as skip. The 0.50
+            default here is NOT measured/safe on its own (2026-08 cleanup:
+            found generic company names scoring above it against the
+            payment-processor prototype) — both real callers
+            (classify_employer_skips_batch, classify_transfer_memos_batch)
+            always pass their own measured 0.78 explicitly. Always pass
+            threshold explicitly for a new caller; don't rely on this default.
 
     Returns:
         Set of names (uppercased) that should be skipped.
@@ -460,22 +466,11 @@ def classify_skip_names_batch(
     if prototype_text is None:
         prototype_text = _PAYMENT_PROCESSOR_PROTOTYPE
 
-    from app.pipeline.vector_store import get_embedding_model
+    from app.pipeline.vector_store import encode_normalized, get_embedding_model
     model = get_embedding_model()
     proto_emb = _get_skip_prototype_embedding(prototype_key, prototype_text)
 
-    _BATCH = 256
-    all_embs = []
-    for start in range(0, len(names), _BATCH):
-        batch = names[start:start + _BATCH]
-        embs = model.encode(batch, show_progress_bar=False, batch_size=min(64, len(batch)))
-        all_embs.append(embs)
-
-    query_embs = np.vstack(all_embs)
-    norms = np.linalg.norm(query_embs, axis=1, keepdims=True)
-    norms[norms == 0] = 1.0
-    query_embs = query_embs / norms
-
+    query_embs = encode_normalized(model, names)
     scores = query_embs @ proto_emb
     return {
         names[i].upper().strip()
