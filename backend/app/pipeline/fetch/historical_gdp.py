@@ -64,9 +64,8 @@ async def fetch_historical_real_gdp(
     client: httpx.AsyncClient, db: Session, start_year: int = 1790, end_year: int = 2025,
 ) -> dict[int, float]:
     """Fetch the full annual real-GDP series once; callers compute each
-    president's own term growth rate from the shared series (same pattern
-    as economic_data.fetch_gdp_by_year, reused per-president rather than
-    re-fetched).
+    president's own term growth rate from the shared series, reused
+    per-president rather than re-fetched.
 
     Returns an empty dict (never None) on failure."""
     cached = api_cache_get(db, _CACHE_TIER, _CACHE_KEY, max_age_hours=_CACHE_MAX_AGE_HOURS)
@@ -137,10 +136,13 @@ def compute_term_gdp_growth(
     historians measure a recession by time-to-regain-previous-peak)
     rather than crediting the rebound's own arithmetic.
 
-    Standard average (the normal case): mirrors economic_data.
-    calculate_gdp_adjusted's year-1-exclusion reasoning (Blinder & Watson
-    2016) where enough years are available — a term shorter than 3
-    calendar years (e.g. a partial/ongoing term) just uses the years it
+    Standard average (the normal case): excludes the term's first
+    calendar year, which largely reflects the preceding administration's
+    fiscal policy and economic conditions rather than the sitting
+    president's own (Blinder & Watson 2016, AER 106(4), 1015-1045; the
+    policy transmission lag is ~6-18 months per Romer & Romer 2010, AER
+    100(3), 763-801) — where enough years are available; a term shorter
+    than 3 calendar years (e.g. a partial/ongoing term) just uses the years it
     has rather than excluding down to nothing.
     """
     peak = _recent_peak(gdp_by_year, term_start_year)
