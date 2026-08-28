@@ -418,3 +418,90 @@ class TestClassifyRemainingViaNn:
         )
         assert stored.source == "nn"
         assert stored.confidence == 0.75
+
+
+class TestOtherPlaceholderDoesNotBlockKnn:
+    """2026-08 audit: a donor with a known donor_type (e.g. FEC tier) but
+    an unresolved industry writes donor_type immediately and queues the
+    donor for kNN to resolve industry in the same run. That write used to
+    also persist a placeholder industry="OTHER" at the donor_type tier's
+    confidence (e.g. "fec" -> 1.0), which set _seen_this_run's industry
+    entry high enough to make _store_donor_learning's in-run confidence
+    guard silently skip kNN's real answer (source="nn", confidence 0.75)
+    a few lines later — stranding the industry at "OTHER" forever. The
+    same merge step also let kNN's own, independently re-guessed
+    donor_type silently replace the already-correct FEC-derived one in
+    the function's *returned* dict (the DB stayed correct only because
+    the placeholder write happened to protect donor_type too)."""
+
+    @pytest.mark.asyncio
+    async def test_knn_resolved_industry_persists_past_the_other_placeholder(self, db_session):
+        donors = [{
+            "name": "Acme Corp",
+            "amount": 5000,
+            "fec_receipt": {"entity_type": "PAC"},
+        }]
+        with patch(
+            "app.pipeline.analyze.donor_classifier_ai.classify_industries_batch_scored",
+            return_value={},  # industry unresolved by the embedding tier -> "OTHER" -> needs_nn
+        ), patch(
+            "app.pipeline.analyze.donor_classifier_ai.classify_batch_nn",
+            side_effect=[
+                {"Acme Corp": "MANUFACTURING"},  # industry pass
+                {"Acme Corp": "Org/Employees"},  # donor_type pass
+            ],
+        ):
+            result = await classify_donors_hybrid(donors, db_session=db_session)
+
+        assert result["ACME CORP"]["industry"] == "MANUFACTURING"
+
+        stored = (
+            db_session.query(LearnedClassification)
+            .filter(
+                LearnedClassification.entity_name == "ACME CORP",
+                LearnedClassification.entity_type == "industry",
+            )
+            .one()
+        )
+        assert stored.value == "MANUFACTURING"
+        assert stored.source == "nn"
+
+    @pytest.mark.asyncio
+    async def test_knn_industry_pass_does_not_downgrade_the_known_donor_type(self, db_session):
+        # entity_type "ORG" (not "PAC") deliberately avoids
+        # cross_validate_donor_types, which independently reclassifies
+        # PAC-labeled *company* names to Org/Employees via its own
+        # embedding check — a real, separate mechanism that would
+        # otherwise produce the same-looking result and mask this test's
+        # actual target (the raw `{**existing, **classification}` merge).
+        donors = [{
+            "name": "Acme Corp",
+            "amount": 5000,
+            "fec_receipt": {"entity_type": "ORG"},
+        }]
+        with patch(
+            "app.pipeline.analyze.donor_classifier_ai.classify_industries_batch_scored",
+            return_value={},
+        ), patch(
+            "app.pipeline.analyze.donor_classifier_ai.classify_batch_nn",
+            side_effect=[
+                {"Acme Corp": "MANUFACTURING"},
+                # kNN's own re-guess deliberately disagrees with the real,
+                # already-established FEC donor_type ("Org/Employees").
+                {"Acme Corp": "PAC"},
+            ],
+        ):
+            result = await classify_donors_hybrid(donors, db_session=db_session)
+
+        assert result["ACME CORP"]["type"] == "Org/Employees"
+
+        stored = (
+            db_session.query(LearnedClassification)
+            .filter(
+                LearnedClassification.entity_name == "ACME CORP",
+                LearnedClassification.entity_type == "donor_type",
+            )
+            .one()
+        )
+        assert stored.value == "Org/Employees"
+        assert stored.source == "fec"
