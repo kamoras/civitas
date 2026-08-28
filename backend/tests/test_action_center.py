@@ -44,6 +44,7 @@ from app.pipeline.analyze.action_center import (
     _signatures_match,
     _surname_owned_by_other_name,
     _validate_facts,
+    _log_summary_source_consistency,
 )
 
 
@@ -118,6 +119,30 @@ class TestDeduplicateTopClusters:
         titles = [r[0].title for r in result]
         assert "Trade war tariffs increase on Chinese goods" in titles
         assert "Healthcare bill passes Senate committee" in titles
+
+    @pytest.mark.slow
+    def test_merge_decisions_are_logged_for_future_threshold_calibration(self):
+        # 2026-08 audit: DEDUP_THRESHOLD has never been measured against a
+        # real same-story/different-story sample (unlike this file's other
+        # similarity gates) — every merge/keep decision must record a
+        # bucketed action_metrics counter so that data accumulates
+        # automatically instead of needing a one-off manual production pull.
+        from app.pipeline.analyze import action_metrics
+
+        action_metrics.reset()
+        c1 = [_make_article("Trade war tariffs increase on Chinese goods")]
+        c2 = [_make_article("Trade war tariffs rise for Chinese imports")]
+        c3 = [_make_article("Healthcare bill passes Senate committee")]
+
+        _deduplicate_top_clusters([c1, c2, c3], max_issues=4)
+
+        counts = action_metrics.snapshot()
+        merged = sum(v for k, v in counts.items() if k.startswith("cluster_dedup_merged_sim_bucket_"))
+        kept = sum(v for k, v in counts.items() if k.startswith("cluster_dedup_kept_sim_bucket_"))
+        # 3 candidates, first has nothing to compare against yet (no counter),
+        # so exactly 2 decisions get logged: one merge, one keep.
+        assert merged == 1
+        assert kept == 1
 
 
 class TestNationalMonitorCreation:
@@ -455,31 +480,60 @@ class TestCheckSummaryRoles:
     @patch("app.pipeline.analyze.ollama_client.call_llm")
     def test_unparseable_response_fails_open(self, mock_call_llm):
         # A broken verification call must not block issue creation — only a
-        # confirmed reversal should trigger a retry.
+        # confirmed reversal should trigger a retry. It must, however,
+        # become visible (2026-08 AI/ML audit): this fails open silently
+        # otherwise, the opposite posture of every other gate in this file.
+        from app.pipeline.analyze import action_metrics
+
+        action_metrics.reset()
         mock_call_llm.return_value = "not valid json and no accurate key"
         mock_db = MagicMock()
 
         accurate, reason = _check_summary_roles("Some summary.", "source text", mock_db)
 
         assert accurate is True
+        assert action_metrics.snapshot().get("role_check_inconclusive_published") == 1
 
     @patch("app.pipeline.analyze.ollama_client.call_llm")
     def test_empty_response_fails_open(self, mock_call_llm):
+        from app.pipeline.analyze import action_metrics
+
+        action_metrics.reset()
         mock_call_llm.return_value = None
         mock_db = MagicMock()
 
         accurate, reason = _check_summary_roles("Some summary.", "source text", mock_db)
 
         assert accurate is True
+        assert action_metrics.snapshot().get("role_check_inconclusive_published") == 1
 
     @patch("app.pipeline.analyze.ollama_client.call_llm")
     def test_llm_exception_fails_open(self, mock_call_llm):
+        from app.pipeline.analyze import action_metrics
+
+        action_metrics.reset()
         mock_call_llm.side_effect = RuntimeError("LLM backend unreachable")
         mock_db = MagicMock()
 
         accurate, reason = _check_summary_roles("Some summary.", "source text", mock_db)
 
         assert accurate is True
+        assert action_metrics.snapshot().get("role_check_inconclusive_published") == 1
+
+    @patch("app.pipeline.analyze.ollama_client.call_llm")
+    def test_genuinely_accurate_result_does_not_count_as_inconclusive(self, mock_call_llm):
+        # A real accurate:true verdict is a successful check, not a failure
+        # to check — it must not pollute the fail-open counter.
+        from app.pipeline.analyze import action_metrics
+
+        action_metrics.reset()
+        mock_call_llm.return_value = json.dumps({"accurate": True})
+        mock_db = MagicMock()
+
+        accurate, reason = _check_summary_roles("A correct summary.", "source text", mock_db)
+
+        assert accurate is True
+        assert "role_check_inconclusive_published" not in action_metrics.snapshot()
 
     @patch("app.pipeline.analyze.ollama_client.call_llm")
     def test_missing_accurate_key_defaults_to_true(self, mock_call_llm):
@@ -491,6 +545,39 @@ class TestCheckSummaryRoles:
         accurate, reason = _check_summary_roles("Some summary.", "source text", mock_db)
 
         assert accurate is True
+
+
+class TestLogSummarySourceConsistency:
+    """Automated, non-blocking semantic-consistency signal (2026-08 AI/ML
+    audit): grounding.py's checks are all regex-based and only catch a
+    failure class after a human has already seen it live. This starts
+    collecting a real distribution instead — bucketed decile counters via
+    the same action_metrics pattern every other validator uses — so a
+    threshold can eventually be derived the way every other one in this
+    codebase was. Never rejects or retries."""
+
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    def test_records_the_correct_similarity_decile_bucket(self, mock_embed):
+        from app.pipeline.analyze import action_metrics
+
+        action_metrics.reset()
+        # cosine 0.7 between the two (already-normalized) mock vectors.
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.7, (1 - 0.7 ** 2) ** 0.5]])
+
+        _log_summary_source_consistency("a generated summary", "the source article text")
+
+        assert action_metrics.snapshot() == {"summary_source_similarity_bucket_70": 1}
+
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    def test_never_blocks_on_embedding_failure(self, mock_embed):
+        from app.pipeline.analyze import action_metrics
+
+        action_metrics.reset()
+        mock_embed.side_effect = RuntimeError("model not loaded")
+
+        _log_summary_source_consistency("a generated summary", "the source article text")
+
+        assert action_metrics.snapshot() == {}
 
 
 class TestFixImpossibleSenateVoteCounts:
@@ -1269,6 +1356,82 @@ class TestDedupeNearIdenticalIssues:
         result = dedupe_near_identical_issues([a, b, c])
 
         assert result == [a, b]
+
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    def test_shared_source_url_collapses_regardless_of_title_similarity(self, mock_embed):
+        # Same underlying article, LLM reworded the headline enough that the
+        # titles are orthogonal in embedding space — same real-world case
+        # _find_matching_issue's #434 fix handles (checked before title
+        # cosine at all). The read-time pass must catch it too.
+        a = self._issue(1, "DHS data claims and think tank connections", datetime(2026, 8, 21))
+        b = self._issue(2, "DHS data claims and state ballot measures", datetime(2026, 8, 22))
+        a.source_urls = json.dumps(["https://npr.org/dhs-story"])
+        b.source_urls = json.dumps(["https://npr.org/dhs-story"])
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.0, 1.0]])
+
+        result = dedupe_near_identical_issues([a, b])
+
+        assert result == [b]
+
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    def test_signature_overlap_collapses_below_near_identical_title_threshold(self, mock_embed):
+        # Same entities/numbers, title cosine sits in the gap between
+        # TOPIC_CHANGE_THRESHOLD (0.65) and _NEAR_IDENTICAL_TITLE_THRESHOLD
+        # (0.92) — only signature overlap should decide this one, same as
+        # _find_matching_issue.
+        a = self._issue(1, "Trump attorney general nominee advances 54-45", datetime(2026, 8, 21))
+        b = self._issue(2, "Senate advances Trump attorney general pick 54-45", datetime(2026, 8, 22))
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.7, (1 - 0.7 ** 2) ** 0.5]])
+
+        result = dedupe_near_identical_issues([a, b])
+
+        assert result == [b]
+
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    def test_different_signatures_below_near_identical_stay_separate(self, mock_embed):
+        # Sanity check for the new branches: a shared-vocabulary pair with
+        # NO shared entities/numbers and no shared source URL must not
+        # collapse just because title cosine clears TOPIC_CHANGE_THRESHOLD.
+        a = self._issue(1, "Trump attorney general nominee advances 54-45", datetime(2026, 8, 21))
+        b = self._issue(2, "Biden EPA administrator confirmed 60-38", datetime(2026, 8, 22))
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.7, (1 - 0.7 ** 2) ** 0.5]])
+
+        result = dedupe_near_identical_issues([a, b])
+
+        assert result == [a, b]
+
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    def test_a_weak_link_cannot_transitively_merge_an_unrelated_third_issue(self, mock_embed):
+        # 2026-08 audit (independent review): single-linkage union-find let
+        # a strong match (A-B, shared source URL) and an unrelated weak
+        # match (B-C, signature overlap only) transitively merge A and C
+        # even though A and C never matched anything directly — silently
+        # dropping a legitimately separate issue. Clustering must be
+        # complete-linkage: A-B merge (shared URL), but C stays on its own
+        # since A-C shares neither a URL, a signature, nor meaningful
+        # title similarity, regardless of C's link to B.
+        a = self._issue(1, "DHS data claims and think tank connections", datetime(2026, 8, 21, 21))
+        b = self._issue(2, "Trump attorney general nominee advances 54-45", datetime(2026, 8, 21, 22))
+        c = self._issue(3, "Senate advances Trump attorney general pick 54-45", datetime(2026, 8, 22, 2))
+        a.source_urls = json.dumps(["https://npr.org/dhs-story"])
+        b.source_urls = json.dumps(["https://npr.org/dhs-story"])
+        # A-B: orthogonal (merge is via shared URL alone, not cosine).
+        # B-C: cosine 0.7, same gap that collapses via signature overlap
+        # in test_signature_overlap_collapses_below_near_identical_title_threshold.
+        # A-C: orthogonal — no shared URL, no shared signature either.
+        mock_embed.return_value = np.array([
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.7, (1 - 0.7 ** 2) ** 0.5],
+        ])
+
+        result = dedupe_near_identical_issues([a, b, c])
+
+        # {a, b} collapse to the fresher of the two (b); c stays separate.
+        # A buggy single-linkage pass would chain a-b-c into one cluster
+        # and keep only c (the overall freshest), losing b's URL-verified
+        # story entirely.
+        assert result == [b, c]
 
 
 def _new_values_for(title: str, facts: list[str], primary_article_date: str) -> dict:

@@ -655,6 +655,43 @@ def _is_exact_content_duplicate(
     return title == cand_title and facts == cand_facts
 
 
+def _same_story(
+    sim: float,
+    title: str,
+    facts: list,
+    cand_title: str,
+    cand_facts: list,
+    sig: set | None = None,
+    cand_sig: set | None = None,
+) -> bool:
+    """The single "is this the same real-world story" decision, shared by
+    _find_matching_issue (write-time) and dedupe_near_identical_issues
+    (read-time) — 2026-08 audit: these two call sites used to hand-write
+    the same 4-condition boolean independently (on top of already sharing
+    _issue_signature/_signatures_match), which is exactly how they could
+    drift apart again. `sig`/`cand_sig` may be passed in precomputed
+    (dedupe_near_identical_issues does this for all issues up front to
+    avoid recomputing a signature per pair); left as None they're computed
+    lazily here, only if the cheaper checks above don't already decide it —
+    same laziness _find_matching_issue relied on before this was extracted.
+    Shared source-URL matching is NOT part of this predicate: it isn't
+    pairwise-local the same way (write-time checks it against every
+    candidate before the embedding-based loop even starts), so each caller
+    still checks it separately.
+    """
+    if _is_exact_content_duplicate(title, facts, cand_title, cand_facts):
+        return True
+    if sim >= _NEAR_IDENTICAL_TITLE_THRESHOLD:
+        return True
+    if sig is None:
+        sig = _issue_signature(title, facts)
+    if cand_sig is None:
+        cand_sig = _issue_signature(cand_title, cand_facts)
+    if _signatures_match(sig, cand_sig):
+        return True
+    return bool((not sig or not cand_sig) and sim >= TOPIC_CHANGE_THRESHOLD)
+
+
 def dedupe_near_identical_issues(issues: list["ActionIssue"]) -> list["ActionIssue"]:
     """One representative per cluster of near-identical titles (same
     _NEAR_IDENTICAL_TITLE_THRESHOLD/_is_exact_content_duplicate logic
@@ -671,6 +708,29 @@ def dedupe_near_identical_issues(issues: list["ActionIssue"]) -> list["ActionIss
     "duplicate of something else" and "no longer current" are different
     facts about a row and conflating them into one flag is exactly what
     caused this.
+
+    2026-08 audit: this pass only checked near-identical title / exact
+    content, missing the shared-source-URL and signature-overlap signals
+    _find_matching_issue gained from the #434 fix — so two rows that
+    write-time matching would treat as one story (same cited article,
+    reworded headline; or matching entities/numbers under a title cosine
+    too low to clear _NEAR_IDENTICAL_TITLE_THRESHOLD) could both survive
+    here as separate current rows. Calls the same _same_story predicate
+    _find_matching_issue calls (both were previously hand-writing the same
+    boolean independently, which is how they drifted apart in the first
+    place) rather than re-implementing the decision, so the two passes
+    cannot drift apart again.
+
+    2026-08 audit (independent review): clustering is complete-linkage
+    (a cluster only forms when every pair inside it matches directly),
+    not single-linkage union-find. Union-find would let one strong match
+    (A-B, e.g. shared URL) and one unrelated weak match (B-C, e.g. a
+    2-token signature overlap) transitively merge A and C even though
+    A-C never matched anything — silently dropping A (or C) from the
+    feed as a "duplicate" of a story it was never actually shown to
+    resemble. _find_matching_issue doesn't have this risk (it matches
+    one new issue against existing rows one at a time, never clusters
+    several issues against each other), so only this pass needed it.
     """
     if len(issues) < 2:
         return list(issues)
@@ -678,39 +738,57 @@ def dedupe_near_identical_issues(issues: list["ActionIssue"]) -> list["ActionIss
     embs = np.array(_embed_texts_sim([i.title or "" for i in issues]))
     sims = embs @ embs.T
 
-    parent = list(range(len(issues)))
+    # Precomputed once per issue (not per pair, O(n) not O(n^2)) — facts,
+    # source_urls and _issue_signature only depend on one issue each.
+    facts_list: list[list] = []
+    urls_list: list[set] = []
+    sigs: list[set] = []
+    for issue in issues:
+        try:
+            facts = json.loads(issue.facts or "[]")
+        except (ValueError, TypeError):
+            facts = []
+        try:
+            urls = set(json.loads(issue.source_urls or "[]"))
+        except (ValueError, TypeError):
+            urls = set()
+        facts_list.append(facts)
+        urls_list.append(urls)
+        sigs.append(_issue_signature(issue.title or "", facts))
 
-    def find(i: int) -> int:
-        while parent[i] != i:
-            parent[i] = parent[parent[i]]
-            i = parent[i]
-        return i
-
-    def union(i: int, j: int) -> None:
-        ri, rj = find(i), find(j)
-        if ri != rj:
-            parent[ri] = rj
-
-    for i in range(len(issues)):
-        for j in range(i + 1, len(issues)):
+    n = len(issues)
+    same_story = [[False] * n for _ in range(n)]
+    for i in range(n):
+        for j in range(i + 1, n):
             a, b = issues[i], issues[j]
-            try:
-                a_facts = json.loads(a.facts or "[]")
-                b_facts = json.loads(b.facts or "[]")
-            except (ValueError, TypeError):
-                a_facts, b_facts = [], []
             sim = float(sims[i, j])
-            if sim >= _NEAR_IDENTICAL_TITLE_THRESHOLD or _is_exact_content_duplicate(
-                a.title or "", a_facts, b.title or "", b_facts,
-            ):
-                union(i, j)
+            m = bool(urls_list[i] & urls_list[j]) or _same_story(
+                sim, a.title or "", facts_list[i], b.title or "", facts_list[j],
+                sig=sigs[i], cand_sig=sigs[j],
+            )
+            same_story[i][j] = same_story[j][i] = m
 
-    clusters: dict[int, list[int]] = {}
-    for idx in range(len(issues)):
-        clusters.setdefault(find(idx), []).append(idx)
+    # Complete-linkage: only merge two clusters when every issue in one
+    # matches every issue in the other, so a single weak edge can never
+    # bridge an unrelated cluster in (see docstring above). Cluster
+    # counts here are small (one pipeline batch), so the O(n^3)-ish
+    # worst case is fine for a background job.
+    clusters: list[list[int]] = [[i] for i in range(n)]
+    merged = True
+    while merged:
+        merged = False
+        for a in range(len(clusters)):
+            for b in range(a + 1, len(clusters)):
+                if all(same_story[x][y] for x in clusters[a] for y in clusters[b]):
+                    clusters[a] = clusters[a] + clusters[b]
+                    del clusters[b]
+                    merged = True
+                    break
+            if merged:
+                break
 
     keep_idx = set()
-    for members in clusters.values():
+    for members in clusters:
         # (has a real timestamp, the timestamp itself, id) — a plain
         # `created_at or id` fallback would compare a datetime against an
         # int the moment one cluster member lacks a timestamp and another
@@ -848,6 +926,35 @@ def _embed_texts_sim(texts: list[str]) -> np.ndarray:
 
     model = get_similarity_model()
     return model.encode(texts, show_progress_bar=False, normalize_embeddings=True)
+
+
+def _log_summary_source_consistency(summary: str, source_text: str) -> None:
+    """Automated, non-blocking semantic-consistency signal (2026-08 AI/ML
+    audit): every check in grounding.py is regex/keyword-based and only
+    catches a failure class after a human has already seen it in
+    production. This adds one automated second opinion — cosine
+    similarity between the generated summary and its source cluster text
+    on the similarity model (see _embed_texts_sim) — for every generated
+    issue, with no reject/retry attached.
+
+    Bucketed into deciles (not a single low/high split) and recorded via
+    the same action_metrics counter every other validator uses, so the
+    persisted per-run history builds a real distribution over time. Every
+    other similarity threshold in this codebase (_NEAR_IDENTICAL_TITLE_THRESHOLD,
+    TOPIC_CHANGE_THRESHOLD, etc.) was set only after measuring that
+    distribution against real failure cases — this collects the
+    equivalent data for summary/source consistency instead of guessing a
+    cutoff today. Never blocks publishing; failures here are swallowed.
+    """
+    from app.pipeline.analyze import action_metrics
+
+    try:
+        summary_emb, source_emb = _embed_texts_sim([summary, source_text[:3000]])
+        similarity = float(summary_emb @ source_emb)
+    except Exception:
+        logger.exception("Summary/source consistency check failed (non-blocking)")
+        return
+    action_metrics.increment_bucket("summary_source_similarity_bucket", similarity)
 
 
 def _resolve_url(url: str, timeout: float = 6.0) -> str:
@@ -1688,9 +1795,16 @@ def _deduplicate_top_clusters(
     if len(ranked_clusters) <= 1:
         return ranked_clusters[:max_issues]
 
+    from app.pipeline.analyze import action_metrics
+
     # Threshold in normalized-centered-embedding space. Must be high enough that
     # only genuinely same-story clusters are merged; 0.15 was too loose and caused
     # unrelated clusters (e.g. abortion, World Cup) to be merged into Ukraine.
+    # 2026-08 audit: unlike this file's other similarity gates, this one was
+    # never re-measured against a real same-story/different-story sample —
+    # the merge/keep decision below is now logged as a bucketed action_metrics
+    # counter every run so that data accumulates automatically (no manual
+    # production pull needed) until there's enough of it to calibrate for real.
     DEDUP_THRESHOLD = 0.50
 
     cluster_texts = [
@@ -1709,11 +1823,17 @@ def _deduplicate_top_clusters(
             break
 
         merged_into = None
+        best_sim = -1.0
         for j in selected:
             sim = float(embeddings[i] @ embeddings[j])
+            best_sim = max(best_sim, sim)
             if sim >= DEDUP_THRESHOLD:
                 merged_into = j
                 break
+
+        if selected:
+            outcome = "merged" if merged_into is not None else "kept"
+            action_metrics.increment_bucket(f"cluster_dedup_{outcome}_sim_bucket", best_sim)
 
         if merged_into is not None:
             ranked_clusters[merged_into].extend(ranked_clusters[i])
@@ -4141,8 +4261,15 @@ def _check_summary_roles(summary: str, articles_text: str, db: Session) -> tuple
 
     Fails open (returns accurate=True) on any error or unparseable response
     — a broken verification call should not block issue creation, only a
-    confirmed reversal should trigger a retry.
+    confirmed reversal should trigger a retry. That's the opposite posture
+    from every other gate in this file, and until the 2026-08 AI/ML audit
+    it was also invisible: nothing distinguished "verified accurate" from
+    "the check itself broke, published anyway." Both fail-open branches
+    below now increment role_check_inconclusive_published (same counter
+    pattern as every other validator, see action_metrics.py) so that rate
+    is queryable instead of silent.
     """
+    from app.pipeline.analyze import action_metrics
     from app.pipeline.analyze.ollama_client import call_llm, extract_json
 
     try:
@@ -4157,11 +4284,13 @@ def _check_summary_roles(summary: str, articles_text: str, db: Session) -> tuple
         )
     except Exception:
         logger.exception("Summary role-check LLM call failed")
+        action_metrics.increment("role_check_inconclusive_published")
         return True, ""
 
     if isinstance(result, str):
         result = extract_json(result)
     if not isinstance(result, dict):
+        action_metrics.increment("role_check_inconclusive_published")
         return True, ""
     if result.get("accurate", True):
         return True, ""
@@ -4325,28 +4454,17 @@ def _find_matching_issue(
             cand_facts = json.loads(candidate.facts or "[]")
         except (ValueError, TypeError):
             cand_facts = []
-        if _is_exact_content_duplicate(title, facts, candidate.title, cand_facts):
-            return candidate
-        # A near-identical (or byte-identical) title is already conclusive
-        # on its own — the facts are FREE to differ (that's a real update,
-        # not a mismatch) but _is_exact_content_duplicate above requires
-        # facts to match too, so a same-headline story whose facts got
-        # reworded slightly between generations (live 2026-08 bug: "Trump
-        # defends beef import plan amid GOP criticism" regenerated an hour
-        # apart with "cattle producers" vs "producers"/"ranchers" —
-        # different enough to sink _issue_signature's sparse entity
-        # overlap below _signatures_match's floor) fell through every
-        # check below and became a duplicate row with a duplicate Bluesky
-        # post. The prompt already tells the model each issue is a
-        # separate topic, so two rows can't legitimately share a title
-        # this close (see _NEAR_IDENTICAL_TITLE_THRESHOLD for the data
-        # behind that number).
-        if sim >= _NEAR_IDENTICAL_TITLE_THRESHOLD:
-            return candidate
-        cand_sig = _issue_signature(candidate.title or "", cand_facts)
-        if _signatures_match(new_sig, cand_sig):
-            return candidate
-        if (not new_sig or not cand_sig) and sim >= TOPIC_CHANGE_THRESHOLD:
+        # See _same_story for the exact-content / near-identical-title /
+        # signature-overlap / low-signature-fallback decision (a
+        # near-identical title is conclusive on its own — facts are FREE to
+        # differ, that's a real update, not a mismatch — while a same-
+        # headline story whose facts got reworded slightly between
+        # generations, live 2026-08 bug: "Trump defends beef import plan
+        # amid GOP criticism" regenerated an hour apart with "cattle
+        # producers" vs "producers"/"ranchers", needs the near-identical-
+        # title check to still catch it since that sinks signature overlap
+        # below _signatures_match's floor).
+        if _same_story(sim, title, facts, candidate.title, cand_facts, sig=new_sig):
             return candidate
     return None
 
@@ -4514,7 +4632,14 @@ def _run_refresh(db: Session) -> int:
         # contains articles about different sub-topics that share one broad
         # dimension (e.g. "Trump administration") — they all score positive.
         # 0.25 requires a meaningful alignment with the cluster's specific topic.
+        # 2026-08 audit: also never re-measured against a real on-topic/
+        # off-topic sample. Logged the same way as DEDUP_THRESHOLD above —
+        # a bucketed counter per article decision, accumulating automatically
+        # run over run rather than needing a one-off manual production pull.
         SOURCE_SIM_FLOOR = 0.25
+        for s in centered_sims:
+            outcome = "kept" if float(s) >= SOURCE_SIM_FLOOR else "dropped"
+            action_metrics.increment_bucket(f"source_coherence_{outcome}_sim_bucket", float(s))
         on_topic = [(a, float(s)) for a, s in zip(cluster, centered_sims) if float(s) >= SOURCE_SIM_FLOOR]
         if not on_topic:
             on_topic = [(cluster[0], 1.0)]
@@ -4675,6 +4800,8 @@ def _run_refresh(db: Session) -> int:
                 )
                 action_metrics.increment("issues_skipped_role_check")
                 continue
+
+        _log_summary_source_consistency(summary, source_text_for_check)
 
         # Minimum-substance gate (2026-07 audit): fewer than 2 facts
         # surviving validation means there isn't a publishable issue here —
