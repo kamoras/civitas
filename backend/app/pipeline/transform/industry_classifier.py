@@ -192,6 +192,15 @@ _pac_naming_emb: np.ndarray | None = None
 SPREAD_THRESHOLD = 0.070
 POLITICAL_MARGIN = 0.06
 
+# How strongly an entity's name must resemble "[X] PAC" naming (cosine
+# against the PAC-naming prototype) before decontextualization even
+# considers overriding a POLITICAL top score. Below this, POLITICAL wins
+# outright without paying for a full sort of the industry scores — used
+# by both the single-entity and batch classifiers (2026-08 cleanup:
+# previously duplicated as a bare 0.35 literal in two places, and briefly
+# checked only inside the sort instead of before it during consolidation).
+PAC_CONTEXT_THRESHOLD = 0.35
+
 
 def clear_industry_embedding_cache() -> None:
     """Clear cached industry embeddings (call between pipeline runs)."""
@@ -252,7 +261,7 @@ def _decontextualize_political(
 
     political_score = scored[0][1]
 
-    if pac_context_score < 0.35:
+    if pac_context_score < PAC_CONTEXT_THRESHOLD:
         return scored[0]
 
     for industry, score in scored[1:]:
@@ -396,8 +405,13 @@ def classify_industries_batch_scored(org_names: list[str]) -> dict[str, tuple[st
 
         # Full sort (and the decontextualization decision itself, shared
         # with the single-entity path above) only when the cheap argmax
-        # picked POLITICAL — the common case never pays for it.
-        if best_industry == "POLITICAL":
+        # picked POLITICAL *and* PAC-naming context is high enough for
+        # _decontextualize_political to do anything but immediately
+        # return scored[0] anyway — same gate the pre-consolidation code
+        # checked before sorting (2026-08 cleanup review: had drifted to
+        # checking this only inside the sorted call, paying for a sort
+        # every time regardless of whether it could change the outcome).
+        if best_industry == "POLITICAL" and pac_ctx_scores[j] >= PAC_CONTEXT_THRESHOLD:
             scored_row = sorted(zip(ind_keys, row_scores.tolist()), key=lambda x: x[1], reverse=True)
             best_industry, best_score = _decontextualize_political(
                 scored_row, mean_s, float(pac_ctx_scores[j]),
