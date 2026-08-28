@@ -2486,7 +2486,7 @@ def _classify_issue_policy_areas(title: str, summary: str) -> list[str]:
 
 
 # Calibrated 2026-07 against live production data: sampled ~15 real
-# Action Center issues, computed both ChromaDB L2 distance (gate 1, full
+# Action Center issues, computed both sqlite-vec L2 distance (gate 1, full
 # document text) and title-only cosine similarity (gate 2, see below)
 # against their retrieved candidates, and hand-labeled each as a genuine
 # topical match or not. At the prior 1.10/0.40, essentially every issue
@@ -2544,7 +2544,7 @@ def _find_related_explore_docs(
     """Find explore documents genuinely related to this issue.
 
     Uses a two-gate approach:
-      1. ChromaDB L2 distance must be below ``_EXPLORE_DOC_MAX_DISTANCE``
+      1. sqlite-vec L2 distance must be below ``_EXPLORE_DOC_MAX_DISTANCE``
       2. Reciprocal similarity: the candidate doc title is embedded against
          the issue title alone (not summary), and only kept if it clears the
          fixed ``min_sim`` bar below and lands in the top ``max_docs``. (This
