@@ -26,6 +26,7 @@ CACHEABLE_PREFIXES for why each.
 """
 
 import logging
+import re
 import threading
 import time
 
@@ -166,6 +167,35 @@ def _is_cacheable_path(path: str) -> bool:
     return any(path.startswith(prefix) for prefix in CACHEABLE_PREFIXES)
 
 
+# Routes whose Cache-Control differs from this middleware's own default
+# (see action.py's per-route "public, max-age=N" lines). Only needed for
+# DataVersionCacheMiddleware's 304 short-circuit, which runs before the
+# route handler and so has no response to read a value off of — the 200
+# path just reads whatever the route already set. Values here MUST match
+# the corresponding route's own header exactly; test_cache_headers.py's
+# TestRouteOverrideRegistryMatchesLiveRoutes enforces that automatically
+# by hitting each pattern's real endpoint and diffing its 200 response
+# against this table, so a value edited in one place and not the other
+# fails CI instead of silently drifting the way this whole bug started.
+_ROUTE_CACHE_CONTROL_OVERRIDES: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"^/api/action/issues(/.*)?$"), "public, max-age=30"),
+    (re.compile(r"^/api/action/recent/[^/]+$"), "public, max-age=120"),
+    (re.compile(r"^/api/action/country-news$"), "public, max-age=600"),
+    (re.compile(r"^/api/action/my-reps$"), "public, max-age=300"),
+    (re.compile(r"^/api/action/open-comments$"), "public, max-age=3600"),
+    (re.compile(r"^/api/action/elections$"), "public, max-age=3600"),
+    (re.compile(r"^/api/action/monitors(/.*)?$"), "public, max-age=300"),
+    (re.compile(r"^/api/action/timeline$"), "public, max-age=300"),
+]
+
+
+def _route_cache_control_override(path: str) -> str | None:
+    for pattern, value in _ROUTE_CACHE_CONTROL_OVERRIDES:
+        if pattern.match(path):
+            return value
+    return None
+
+
 class DataVersionCacheMiddleware(BaseHTTPMiddleware):
     """Attach ETag/Cache-Control keyed to the pipeline's data version, and
     answer matching conditional requests with 304.
@@ -197,12 +227,24 @@ class DataVersionCacheMiddleware(BaseHTTPMiddleware):
 
         # Short-circuit before doing any query work. This is the whole
         # point: a revalidation costs a memoised string comparison.
+        #
+        # 2026-08 audit: the 200 path below can just read a route's own
+        # Cache-Control off the real response, because the route actually
+        # ran. This path can't — running the route to find out would
+        # defeat the entire optimization. So a route with its own shorter
+        # TTL (see _ROUTE_CACHE_CONTROL_OVERRIDES) needs a second lookup
+        # here, or 304s silently hand it back this middleware's longer
+        # default, re-extending a client's cache lifetime on every
+        # revalidation — the same staleness bug the 200-path fix closed,
+        # reopened through the other response path. test_cache_headers.py
+        # verifies every override's 304 value against its real route.
         if _if_none_match_matches(request.headers.get("if-none-match"), etag):
+            override = _route_cache_control_override(request.url.path)
             return Response(
                 status_code=304,
                 headers={
                     "ETag": etag,
-                    "Cache-Control": _cache_control(),
+                    "Cache-Control": override if override is not None else _cache_control(),
                     "Vary": "Accept-Encoding",
                 },
             )

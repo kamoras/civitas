@@ -61,6 +61,15 @@ def client(monkeypatch):
         response.headers["Cache-Control"] = "public, max-age=30"
         return {"ok": True}
 
+    @app.get("/api/action/timeline")
+    def timeline(response: Response):
+        # A real path from _ROUTE_CACHE_CONTROL_OVERRIDES — registered
+        # here (not under /api/senators) specifically so the 304
+        # short-circuit's override lookup, which matches on path, has
+        # something real to match against.
+        response.headers["Cache-Control"] = "public, max-age=300"
+        return {"ok": True}
+
     monkeypatch.setattr(ch, "data_version", lambda: "run-v1")
     return TestClient(app)
 
@@ -172,6 +181,22 @@ def test_middleware_does_not_override_a_route_own_cache_control(client):
     # independent concerns.
     assert resp.headers["ETag"].startswith('W/"')
     assert "Accept-Encoding" in resp.headers["Vary"]
+
+
+def test_matching_conditional_request_also_respects_route_own_cache_control(client):
+    # 2026-08 audit (independent review, follow-up): the fix above only
+    # covered the 200 path. The 304 short-circuit runs BEFORE the route,
+    # so it can't read what the route would have set — it always emitted
+    # this middleware's own (longer) default instead, reopening the exact
+    # staleness bug via revalidation. /api/action/timeline's real literal
+    # ("public, max-age=300", no stale-while-revalidate) is deliberately
+    # distinct in string form from the middleware default despite sharing
+    # the number 300, so this can't pass by coincidence.
+    etag = client.get("/api/action/timeline").headers["ETag"]
+    resp = client.get("/api/action/timeline", headers={"If-None-Match": etag})
+    assert resp.status_code == 304
+    assert resp.headers["Cache-Control"] == "public, max-age=300"
+    assert resp.headers["Cache-Control"] != ch._cache_control()
 
 
 def test_matching_conditional_request_gets_304_with_no_body(client):
@@ -355,3 +380,69 @@ def test_real_app_emits_headers_through_the_gzip_stack(monkeypatch, real_client)
 def test_real_app_leaves_health_uncached(monkeypatch, real_client):
     monkeypatch.setattr(ch, "data_version", lambda: "run-v1")
     assert "ETag" not in real_client.get("/api/health").headers
+
+
+class TestRouteOverrideRegistryMatchesLiveRoutes:
+    """cache_headers._ROUTE_CACHE_CONTROL_OVERRIDES exists only so the 304
+    short-circuit (which never runs the route, so can't read its response)
+    can still answer with the *same* Cache-Control the route would have
+    set on a 200. If a route's own literal ever changes without this table
+    changing too, 304s silently go back to serving the middleware's longer
+    default — reopening the exact staleness bug this table exists to
+    close, undetected, because nothing else exercises this path. Calling
+    each route's handler function directly (not through the full app,
+    which has no DB schema in this environment) and reading the header it
+    actually sets is the automated guardrail: no one has to remember to
+    keep two places in sync, CI fails the moment they disagree.
+    """
+
+    @pytest.mark.asyncio
+    async def test_every_override_matches_its_real_route(self, db_session):
+        from app.api import action as action_api
+
+        cases = [
+            ("/api/action/issues", action_api.get_action_issues,
+             dict(response=Response(), date=None, db=db_session, db_visits=db_session)),
+            ("/api/action/issues/recent", action_api.get_recent_action_issues,
+             dict(response=Response(), db=db_session)),
+            ("/api/action/issues/some-id", action_api.get_action_issue,
+             dict(issue_id="some-id", response=Response(), db=db_session)),
+            ("/api/action/recent/senate", action_api.get_recent_by_branch,
+             dict(response=Response(), branch="senate", db=db_session)),
+            ("/api/action/country-news", action_api.get_country_news,
+             dict(response=Response())),
+            ("/api/action/my-reps", action_api.get_my_reps,
+             dict(response=Response(), state="CA", db=db_session)),
+            ("/api/action/open-comments", action_api.get_open_comments,
+             dict(response=Response(), db=db_session)),
+            ("/api/action/elections", action_api.get_election_info,
+             dict(response=Response(), db=db_session)),
+            ("/api/action/monitors", action_api.list_monitors,
+             dict(response=Response(), db=db_session)),
+            ("/api/action/monitors/some-slug", action_api.get_monitor,
+             dict(response=Response(), slug="some-slug", db=db_session)),
+            ("/api/action/timeline", action_api.get_timeline,
+             dict(response=Response(), db=db_session)),
+        ]
+
+        for path, handler, kwargs in cases:
+            response = kwargs["response"]
+            try:
+                result = handler(**kwargs)
+                if hasattr(result, "__await__"):
+                    await result
+            except Exception:
+                # The route sets its Cache-Control header as its very
+                # first statement, before touching the DB — anything
+                # downstream failing on an empty test DB doesn't matter,
+                # the header is already on `response` by then.
+                pass
+
+            live_value = response.headers.get("Cache-Control")
+            table_value = ch._route_cache_control_override(path)
+            assert live_value is not None, f"{path} never set its own Cache-Control"
+            assert table_value == live_value, (
+                f"{path}: override table says {table_value!r}, "
+                f"route actually sets {live_value!r} — update "
+                f"_ROUTE_CACHE_CONTROL_OVERRIDES in cache_headers.py"
+            )
