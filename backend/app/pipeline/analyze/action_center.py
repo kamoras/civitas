@@ -770,9 +770,14 @@ def dedupe_near_identical_issues(issues: list["ActionIssue"]) -> list["ActionIss
 
     # Complete-linkage: only merge two clusters when every issue in one
     # matches every issue in the other, so a single weak edge can never
-    # bridge an unrelated cluster in (see docstring above). Cluster
-    # counts here are small (one pipeline batch), so the O(n^3)-ish
-    # worst case is fine for a background job.
+    # bridge an unrelated cluster in (see docstring above). This runs on
+    # the live GET recent-issues path (app/api/action.py), not a
+    # background job — but n is the raw pool size, hard-capped at
+    # limit * _RECENT_ISSUES_RAW_POOL_MULTIPLIER (<= 90 today via the
+    # endpoint's own query validation), and real news-cluster match
+    # graphs are sparse (most issues share no signal with most others),
+    # so the polynomial worst case doesn't bite in practice. Revisit if
+    # the pool size cap ever grows substantially.
     clusters: list[list[int]] = [[i] for i in range(n)]
     merged = True
     while merged:
