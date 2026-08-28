@@ -40,6 +40,7 @@ from app.services.senator_service import (
 
 
 def _rep_eager_options() -> list:
+    """SQLAlchemy options to eager-load all representative relationships in one round-trip."""
     return [
         selectinload(Representative.donors),
         selectinload(Representative.industry_donations),
@@ -51,6 +52,8 @@ def _rep_eager_options() -> list:
 
 
 def _build_areas(raw_str: str | None) -> list[dict]:
+    """Parse a representative's stored JSON policy-areas blob into a
+    normalized list, dropping malformed or area-less entries."""
     try:
         raw = json.loads(raw_str) if raw_str else []
     except (json.JSONDecodeError, TypeError):
@@ -199,6 +202,8 @@ def get_representatives_by_state(
     per_page: int = 10,
     party: str | None = None,
 ) -> PaginatedRepresentativesSchema:
+    """Return a paginated, optionally party-filtered list of representatives
+    for a given state (unlike senators, a state can have many)."""
     base_q = (
         db.query(Representative)
         .options(*_rep_eager_options())
@@ -225,6 +230,7 @@ def get_representatives_by_state(
 
 
 def get_representative_by_id(db: Session, rep_id: str) -> RepresentativeSchema | None:
+    """Return a single representative by ID, or None if not found."""
     rep = (
         db.query(Representative)
         .options(*_rep_eager_options())
@@ -261,6 +267,7 @@ def get_representative_score_breakdown(db: Session, rep_id: str) -> dict | None:
 
 
 def get_rep_states_with_counts(db: Session) -> list[dict]:
+    """Return a list of states that have representatives, with counts."""
     rows = (
         db.query(Representative.state, func.count(Representative.id).label("cnt"))
         .group_by(Representative.state)
@@ -274,6 +281,8 @@ def get_rep_states_with_counts(db: Session) -> list[dict]:
 
 
 def _compute_rep_trend_map(db: Session) -> dict[str, dict]:
+    """Representative counterpart to senator_service._compute_trend_map —
+    see compute_score_trend_map for the actual comparison logic."""
     return compute_score_trend_map(db, "representative")
 
 
@@ -532,6 +541,7 @@ def get_rep_votes(
     per_page: int = 15,
     vote_filter: str = "all",
 ) -> dict | None:
+    """Return paginated, filterable votes for a representative."""
     rep = db.query(Representative).filter(Representative.id == rep_id).first()
     if rep is None:
         return None
