@@ -201,7 +201,7 @@ def validate_senator(senator: dict) -> dict:
                 if isinstance(m.get("billsInfluenced"), list)
                 else []
             ),
-            "senatorVoteAligned": m.get("senatorVoteAligned") if m.get("senatorVoteAligned") is not None else None,
+            "senatorVoteAligned": m.get("senatorVoteAligned"),
             "description": m.get("description", ""),
         }
         for m in (senator.get("lobbyingMatches") or [])

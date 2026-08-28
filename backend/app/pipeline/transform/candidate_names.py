@@ -16,7 +16,8 @@ Congress") don't match because "for"/"congress" are incompatible tokens.
 """
 
 import re
-import unicodedata
+
+from app.pipeline.transform.normalize_members import strip_accents
 
 # Common given-name/nickname equivalences among current members.
 # Bidirectional: lookup normalizes both sides.
@@ -74,8 +75,7 @@ _HONORIFICS = {
 
 def _norm_tokens(name: str) -> list[str]:
     """Lowercase, strip accents/punctuation, drop honorifics and suffixes."""
-    nfkd = unicodedata.normalize("NFKD", name or "")
-    ascii_name = "".join(c for c in nfkd if not unicodedata.combining(c))
+    ascii_name = strip_accents(name or "")
     tokens = re.split(r"[^a-z]+", ascii_name.lower())
     return [t for t in tokens if t and t not in _HONORIFICS]
 

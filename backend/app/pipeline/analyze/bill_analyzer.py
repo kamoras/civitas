@@ -2,9 +2,10 @@
 Bill analyzer — adaptive embedding-based classification (zero LLM calls).
 
 Uses retrieval-augmented few-shot learning: each pipeline run builds a
-reference corpus of classified bills in ChromaDB. Subsequent runs classify
-new bills by kNN against that corpus, with embedding similarity against
-seed policy descriptions as a cold-start fallback.
+reference corpus of classified bills in the vector store (sqlite-vec).
+Subsequent runs classify new bills by kNN against that corpus, with
+embedding similarity against seed policy descriptions as a cold-start
+fallback.
 
 Topic/policy-area classification tiers (in priority order):
   1. Reference corpus kNN (most accurate, uses accumulated examples)
@@ -351,8 +352,8 @@ def classify_policy_area(
       3. Augmented re-embed for low-confidence cases
 
     When db_session is provided, results are stored in the learning store
-    for future exact-match lookups. The ChromaDB reference corpus is
-    populated separately by embed_bills() in the orchestrator.
+    for future exact-match lookups. The vector store's reference corpus
+    is populated separately by embed_bills() in the orchestrator.
     """
     if not text or len(text.strip()) < 5:
         return "PROCEDURAL", 0.0

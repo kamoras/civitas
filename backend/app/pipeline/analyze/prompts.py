@@ -7,11 +7,12 @@ Each function returns a dict with promptVersion, systemPrompt, userPrompt.
 # Section markers for explore_document_summary_prompt's plain-text output.
 # Streaming this generation to the browser (github issue: "explore doc ai
 # summary should stream") ruled out JSON: a client can't render partial
-# JSON — {"summary": "The bill est is neither valid JSON nor readable
-# text — so the whole response would still have to be buffered before
-# anything appears, defeating the point. Plain text with markers streams
-# character-by-character as-is; the reader (explore.py) and frontend both
-# split on these same two constants instead of parsing structured output.
+# JSON — a chunk like `{"summary": "The bill est` is neither valid JSON
+# nor readable text, so the whole response would still have to be
+# buffered before anything appears, defeating the point. Plain text with
+# markers streams character-by-character as-is; the reader (explore.py)
+# and frontend both split on these same two constants instead of parsing
+# structured output.
 SUMMARY_KEY_POINTS_MARKER = "KEY POINTS:"
 SUMMARY_IMPACT_MARKER = "IMPACT:"
 

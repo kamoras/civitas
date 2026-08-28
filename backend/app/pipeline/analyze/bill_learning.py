@@ -2,12 +2,14 @@
 Adaptive bill classifier using retrieval-augmented few-shot learning.
 
 Replaces hardcoded keyword lists with a growing reference corpus of
-labeled examples. Each pipeline run adds classified bills to ChromaDB;
-subsequent runs use those as kNN reference examples.
+labeled examples. Each pipeline run adds classified bills to the vector
+store (sqlite-vec, see app/pipeline/vector_store.py — this module
+tracked bills in ChromaDB before the 2026-07 migration); subsequent runs
+use those as kNN reference examples.
 
 Classification tiers (mirroring donor_classifier_ai.py):
   1. Learning store exact match (by bill_id — instant, highest confidence)
-  2. kNN against reference corpus in ChromaDB (fast, generalizes)
+  2. kNN against the vector store's reference corpus (fast, generalizes)
   3. Embedding similarity against seed policy descriptions (cold-start fallback)
   4. Every result stored for future reference
 
@@ -64,7 +66,7 @@ ENTITY_BILL_POLICY = "bill_policy"
 ENTITY_MOTION_TYPE = "motion_type"
 
 class _ReferenceCorpusCache:
-    """In-memory cache of the ChromaDB reference corpus (embeddings +
+    """In-memory cache of the vector store's reference corpus (embeddings +
     labels, parallel arrays), loaded once per pipeline run and cleared
     between runs. embeddings/labels are always loaded and cleared
     together, never independently — a class makes that invariant
@@ -88,8 +90,8 @@ class _ReferenceCorpusCache:
         self.labels = []
 
     def load(self) -> tuple[np.ndarray | None, list[str]]:
-        """Load the reference corpus from ChromaDB (previously classified
-        bills) if not already cached.
+        """Load the reference corpus from the vector store (previously
+        classified bills) if not already cached.
 
         Returns (embedding_matrix, label_list) or (None, []) if empty.
         The "bills" collection is populated by embed_bills() at the end of
@@ -233,7 +235,7 @@ def record_classification(
 ) -> None:
     """Store a bill classification in the learning store for tracking.
 
-    The ChromaDB reference corpus is populated separately by embed_bills().
+    The vector store's reference corpus is populated separately by embed_bills().
     This stores metadata for exact-match lookups and audit trail.
     """
     from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -275,7 +277,7 @@ def invalidate_thin_classifications(db: Session, min_text_length: int = 40) -> i
     policy areas, these stale entries should be removed so the enriched
     text gets a fresh classification.
 
-    Also purges corresponding entries from the ChromaDB reference corpus
+    Also purges corresponding entries from the vector store's reference corpus
     so the kNN classifier doesn't return stale labels.
 
     Returns the number of invalidated entries.
@@ -317,7 +319,7 @@ def invalidate_thin_classifications(db: Session, min_text_length: int = 40) -> i
 
 
 def _purge_reference_entries(bill_ids: list[str]) -> None:
-    """Remove specific entries from the ChromaDB reference corpus."""
+    """Remove specific entries from the vector store's reference corpus."""
     if not bill_ids:
         return
     try:

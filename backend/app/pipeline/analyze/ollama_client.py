@@ -150,16 +150,6 @@ def extract_json(text: str) -> Any | None:
     return None
 
 
-def unwrap_list(data: Any) -> list | None:
-    if isinstance(data, list):
-        return data
-    if isinstance(data, dict):
-        for v in data.values():
-            if isinstance(v, list):
-                return v
-    return None
-
-
 def _cache_get_with_own_session(version: str, input_hash: str) -> Any | None:
     db = SessionLocal()
     try:

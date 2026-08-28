@@ -13,7 +13,9 @@ from app.models import LearnedClassification
 from app.pipeline.transform.industry_classifier import (
     INDUSTRY_DESCRIPTIONS,
     classify_batch_with_learning,
+    classify_industries_batch_scored,
     classify_industry,
+    classify_industry_with_provenance,
     classify_with_learning,
 )
 
@@ -177,3 +179,38 @@ class TestBatchClassification:
         )
         assert results["MYSTERY CORP"] == "RETAIL"
         assert "MYSTERY CORP" not in unknowns
+
+
+@pytest.mark.slow
+class TestBatchScoredAgreesWithSingleEntity:
+    """classify_industries_batch_scored used to re-implement the POLITICAL/
+    PAC-naming decontextualization decision independently (numpy arrays,
+    same SPREAD_THRESHOLD/POLITICAL_MARGIN logic as _decontextualize_political)
+    — two places a threshold change could go out of sync. Both paths now
+    call the same helper; these prove they still agree, including on the
+    PAC-naming case the decontextualization exists for."""
+
+    @pytest.mark.parametrize("org_name", [
+        "Goldman Sachs Investment Banking",
+        "Teamsters Political Action Committee",  # PAC-naming decontextualization case
+        "Xylophone Kumquat Zephyr",  # OTHER
+    ])
+    def test_batch_and_single_entity_agree(self, org_name):
+        single_industry, _ = classify_industry_with_provenance(org_name)
+        batch_result = classify_industries_batch_scored([org_name])
+
+        if single_industry == "OTHER":
+            assert org_name not in batch_result
+        else:
+            assert batch_result[org_name][0] == single_industry
+
+    def test_pac_naming_decontextualizes_away_from_political(self):
+        # "Political Action Committee" alone scores highest on POLITICAL
+        # (confirmed via meta below) — the exact case decontextualization
+        # exists for. Asserting the mechanism fired (final result differs
+        # from the raw top match) rather than a specific target industry,
+        # since the runner-up depends on embedding-space specifics.
+        result, meta = classify_industry_with_provenance("Teamsters Political Action Committee")
+        assert meta["top_match"] == "POLITICAL"
+        assert result != "POLITICAL"
+        assert result != "OTHER"

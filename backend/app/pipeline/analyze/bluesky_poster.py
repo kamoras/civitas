@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.issue_ids import to_public_id
-from app.pipeline.analyze.bluesky_utils import publish_post
+from app.pipeline.analyze.bluesky_utils import publish_post, strip_hashtags, strip_hashtags_and_truncate
 from app.pipeline.analyze.grounding import (
     grounding_violations,
     hedge_and_editorializing_violations,
@@ -44,26 +44,6 @@ _SYSTEM_PROMPT = (
     "Your posts are non-partisan, data-grounded, and written for citizens who "
     "want to understand what their representatives are actually doing."
 )
-
-
-def _sanitize(text: str, budget: int) -> str:
-    """Convert hashtags to plain text, enforce sentence-boundary character limit."""
-    # Replace #word with word so inline hashtags don't break sentence grammar
-    text = re.sub(r"#(\w+)", r"\1", text).strip()
-    if len(text) > budget:
-        trimmed = text[:budget]
-        # Find the last sentence-ending punctuation anywhere in the trimmed text
-        cut = -1
-        for punct in (".", "!", "?"):
-            idx = trimmed.rfind(punct)
-            if idx > 0:
-                cut = max(cut, idx + 1)
-        if cut > 0:
-            text = trimmed[:cut]
-        else:
-            last_space = trimmed.rfind(" ")
-            text = trimmed[:last_space] if last_space > 0 else trimmed
-    return text.strip()
 
 
 # A repost whose body shares at least this fraction of its words with an
@@ -206,7 +186,7 @@ Return JSON: {{"post": "<your post text>"}}"""
         )
         if not result or not isinstance(result.get("post"), str):
             return None
-        post = _sanitize(result["post"], MAX_POST_CHARS)
+        post = strip_hashtags_and_truncate(result["post"], MAX_POST_CHARS)
 
         # Posts publish publicly under the platform's name — verify rules
         # mechanically instead of trusting them. Any number or titled-official
@@ -245,7 +225,7 @@ Return JSON: {{"post": "<your post text>"}}"""
 
 def _publish(text: str, issue) -> bool:
     """Post to Bluesky. Returns True on success."""
-    text = re.sub(r"#(\w+)", r"\1", text).strip()  # final hashtag guard
+    text = strip_hashtags(text)  # final guard, independent of what ran upstream
     url = f"https://civitas-research.org/issue/{to_public_id(issue.id)}"
     return publish_post(
         text, url,

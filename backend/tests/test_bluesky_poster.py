@@ -1,6 +1,6 @@
 """Unit tests for bluesky_poster helpers.
 
-All tests are fast (no LLM, no network) — they exercise _sanitize and
+All tests are fast (no LLM, no network) — they exercise strip_hashtags_and_truncate and
 _validate_facts which are pure functions with no external dependencies.
 """
 
@@ -9,28 +9,29 @@ import pytest
 
 from unittest.mock import patch
 
-from app.pipeline.analyze.bluesky_poster import _is_near_duplicate, _sanitize
+from app.pipeline.analyze.bluesky_poster import _is_near_duplicate
+from app.pipeline.analyze.bluesky_utils import strip_hashtags_and_truncate
 from app.pipeline.analyze.action_center import _validate_facts
 
 
 # ---------------------------------------------------------------------------
-# _sanitize
+# strip_hashtags_and_truncate
 # ---------------------------------------------------------------------------
 
-class TestSanitize:
+class TestStripHashtagsAndTruncate:
     def test_clean_text_unchanged(self):
         text = "Senate passes major healthcare bill. Provisions take effect next year."
-        assert _sanitize(text, 240) == text
+        assert strip_hashtags_and_truncate(text, 240) == text
 
     def test_trailing_hashtags_converted(self):
-        result = _sanitize("Ukraine intensifies campaign. #Ukraine #War", 240)
+        result = strip_hashtags_and_truncate("Ukraine intensifies campaign. #Ukraine #War", 240)
         assert "#" not in result
         assert "Ukraine" in result
         assert "War" in result
 
     def test_inline_hashtags_keep_word(self):
         # #rates and #inflation should become plain words, not vanish
-        result = _sanitize("Fed pauses #rates hikes as #inflation cools.", 240)
+        result = strip_hashtags_and_truncate("Fed pauses #rates hikes as #inflation cools.", 240)
         assert "#" not in result
         assert "rates" in result
         assert "inflation" in result
@@ -38,38 +39,48 @@ class TestSanitize:
 
     def test_truncates_at_sentence_boundary(self):
         text = "Senate passes major climate bill. The legislation includes new emissions targets for industrial facilities. Additional provisions address renewable energy subsidies."
-        result = _sanitize(text, 80)
+        result = strip_hashtags_and_truncate(text, 80)
         assert result == "Senate passes major climate bill."
         assert len(result) <= 80
 
     def test_falls_back_to_word_boundary_when_no_sentence(self):
         # No period anywhere — should trim to last space
         text = "A very long run-on sentence that never ends and keeps going and going and going past the budget"
-        result = _sanitize(text, 40)
+        result = strip_hashtags_and_truncate(text, 40)
         assert len(result) <= 40
         assert not result.endswith(" ")  # no trailing space
         assert " " not in result[result.rfind(" ") + 1:]  # ends on a complete word
 
     def test_under_budget_no_truncation(self):
         text = "Short sentence."
-        assert _sanitize(text, 240) == "Short sentence."
+        assert strip_hashtags_and_truncate(text, 240) == "Short sentence."
 
     def test_hashtag_then_truncation(self):
         # Hashtags stripped first, then length enforced
         text = "Fed signals rate pause. #Fed #Rates The economy continues to adjust to prior hikes."
-        result = _sanitize(text, 50)
+        result = strip_hashtags_and_truncate(text, 50)
         assert "#" not in result
         assert len(result) <= 50
         assert result.endswith(".")
 
     def test_empty_string(self):
-        assert _sanitize("", 240) == ""
+        assert strip_hashtags_and_truncate("", 240) == ""
 
     def test_only_hashtags(self):
-        result = _sanitize("#Ukraine #War #Politics", 240)
+        result = strip_hashtags_and_truncate("#Ukraine #War #Politics", 240)
         assert "#" not in result
         # Words are preserved
         assert "Ukraine" in result
+
+    def test_no_space_or_punctuation_in_range_keeps_full_trim(self):
+        # 2026-08 cleanup: this consolidates two inline copies (in
+        # bluesky_spotlight.py) that computed this fallback as
+        # `trimmed[:trimmed.rfind(" ")]` — when there's no space at all,
+        # rfind returns -1, so that silently evaluated to `trimmed[:-1]`,
+        # dropping the last character instead of keeping the whole trim.
+        text = "a" * 50
+        result = strip_hashtags_and_truncate(text, 40)
+        assert result == "a" * 40
 
 
 # ---------------------------------------------------------------------------

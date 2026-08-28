@@ -85,6 +85,26 @@ function rankColor(rank: number): string {
   return "text-ink-min";
 }
 
+// Shared by PresidentLeaderboard, JusticeLeaderboard and LeaderboardContent's
+// congressional table — same loading/error markup, only the label differs.
+function LeaderboardLoading({ label }: { label: string }) {
+  return (
+    <div className="panel p-8 text-center" role="status" aria-live="polite">
+      <p className="text-ink-lo font-mono text-xs tracking-widest animate-pulse">{label}</p>
+    </div>
+  );
+}
+
+function LeaderboardError({ message }: { message: string }) {
+  return (
+    <div className="panel p-8 text-center border-signal-red/40" role="alert">
+      <p className="text-signal-red">
+        {">"} ERROR: {message}
+      </p>
+    </div>
+  );
+}
+
 function ScoreBar({ score }: { score: number }) {
   const color = getScoreBgColor(score);
 
@@ -282,24 +302,8 @@ function PresidentLeaderboard({
   error: string | null;
 }) {
   const router = useRouter();
-  if (loading) {
-    return (
-      <div className="panel p-8 text-center" role="status" aria-live="polite">
-        <p className="text-ink-lo font-mono text-xs tracking-widest animate-pulse">
-          LOADING PRESIDENTIAL DATA...
-        </p>
-      </div>
-    );
-  }
-  if (error) {
-    return (
-      <div className="panel p-8 text-center border-signal-red/40" role="alert">
-        <p className="text-signal-red">
-          {">"} ERROR: {error}
-        </p>
-      </div>
-    );
-  }
+  if (loading) return <LeaderboardLoading label="LOADING PRESIDENTIAL DATA..." />;
+  if (error) return <LeaderboardError message={error} />;
 
   return (
     <>
@@ -475,24 +479,8 @@ function JusticeLeaderboard({
   error: string | null;
 }) {
   const router = useRouter();
-  if (loading) {
-    return (
-      <div className="panel p-8 text-center" role="status" aria-live="polite">
-        <p className="text-ink-lo font-mono text-xs tracking-widest animate-pulse">
-          LOADING SCOTUS DATA...
-        </p>
-      </div>
-    );
-  }
-  if (error) {
-    return (
-      <div className="panel p-8 text-center border-signal-red/40" role="alert">
-        <p className="text-signal-red">
-          {">"} ERROR: {error}
-        </p>
-      </div>
-    );
-  }
+  if (loading) return <LeaderboardLoading label="LOADING SCOTUS DATA..." />;
+  if (error) return <LeaderboardError message={error} />;
 
   return (
     <>
@@ -940,19 +928,11 @@ function LeaderboardContent() {
 
               {/* Loading / Error */}
               {activeLoading && (
-                <div className="panel p-8 text-center" role="status" aria-live="polite">
-                  <p className="text-ink-lo font-mono text-xs tracking-widest animate-pulse">
-                    LOADING {branch === "house" ? "REPRESENTATIVE" : "SENATOR"} DATA...
-                  </p>
-                </div>
+                <LeaderboardLoading
+                  label={`LOADING ${branch === "house" ? "REPRESENTATIVE" : "SENATOR"} DATA...`}
+                />
               )}
-              {activeError && (
-                <div className="panel p-8 text-center border-signal-red/40" role="alert">
-                  <p className="text-signal-red">
-                    {">"} ERROR: {activeError}
-                  </p>
-                </div>
-              )}
+              {activeError && <LeaderboardError message={activeError} />}
 
               {/* Table */}
               {!activeLoading && !activeError && (

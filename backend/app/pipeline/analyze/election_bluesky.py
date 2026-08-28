@@ -33,14 +33,13 @@ conservative at the 15-minute election-season cadence, 96 runs/day):
 """
 
 import logging
-import re
 from datetime import timedelta
 
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import Candidate, Race, RaceCoverageItem
-from app.pipeline.analyze.bluesky_utils import publish_post
+from app.pipeline.analyze.bluesky_utils import publish_post, strip_hashtags_and_truncate
 from app.pipeline.analyze.grounding import (
     grounding_violations,
     hedge_and_editorializing_violations,
@@ -145,7 +144,7 @@ Return JSON: {{"post": "<your sentence>"}}"""
         )
         if not result or not isinstance(result.get("post"), str):
             return None
-        post = re.sub(r"#(\w+)", r"\1", result["post"]).strip()[:MAX_POST_CHARS]
+        post = strip_hashtags_and_truncate(result["post"], MAX_POST_CHARS)
 
         reasons = grounding_violations(post, source_material) + hedge_and_editorializing_violations(post)
         if not reasons:

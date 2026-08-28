@@ -280,15 +280,58 @@ def normalize_house_members(
     return results
 
 
-def _extract_district(member: dict, detail: dict) -> int:
-    """Extract the congressional district number from member data."""
+def _extract_terms(member: dict, detail: dict) -> list[dict]:
+    """Combine detail.terms and member.terms into one list (2026-08
+    cleanup: this Congress.gov term-list unwrapping was duplicated
+    verbatim in _extract_district, _calculate_house_years, and
+    _calculate_years_in_office). Both sources are needed — the
+    detail-endpoint terms are fuller, but the member-list response
+    sometimes carries a term the detail endpoint doesn't."""
     detail_terms_obj = detail.get("terms") or {}
     detail_terms = detail_terms_obj.get("item", []) if isinstance(detail_terms_obj, dict) else (
         detail_terms_obj if isinstance(detail_terms_obj, list) else []
     )
     member_terms_obj = member.get("terms") or {}
     member_terms = member_terms_obj.get("item", []) if isinstance(member_terms_obj, dict) else []
-    terms = detail_terms + member_terms
+    return detail_terms + member_terms
+
+
+def _years_since_first_term(
+    terms: list[dict], chamber: str, member: dict, warn_if_not_found: bool = False,
+) -> int:
+    """Years since the earliest `chamber` term's startYear, falling back
+    to a "since YYYY" year parsed from the member's depiction attribution
+    when no matching term has one. Shared by _calculate_house_years and
+    _calculate_years_in_office (2026-08 cleanup: identical logic, only
+    the chamber name — and whether the not-found case logs — differed).
+    `first_year` is only ever falsy here when truly absent (a real term
+    can't start in year 0), so the final `return 0` is an unambiguous
+    not-found sentinel, safe to gate a warning on."""
+    chamber_terms = [t for t in terms if t.get("chamber") == chamber]
+    if chamber_terms:
+        sorted_terms = sorted(chamber_terms, key=lambda t: t.get("startYear", 9999))
+        first_year = sorted_terms[0].get("startYear")
+        if first_year:
+            return utcnow().year - first_year
+
+    depiction = member.get("depiction") or {}
+    attribution = depiction.get("attribution", "")
+    if attribution:
+        match = re.search(r"since (\d{4})", attribution)
+        if match:
+            return utcnow().year - int(match.group(1))
+
+    if warn_if_not_found:
+        logger.warning(
+            "Could not determine years in office for %s",
+            member.get("name") or member.get("bioguideId"),
+        )
+    return 0
+
+
+def _extract_district(member: dict, detail: dict) -> int:
+    """Extract the congressional district number from member data."""
+    terms = _extract_terms(member, detail)
     house_terms = [t for t in terms if t.get("chamber") == "House of Representatives"]
     if house_terms:
         sorted_terms = sorted(house_terms, key=lambda t: t.get("startYear", 0), reverse=True)
@@ -309,29 +352,7 @@ def _extract_district(member: dict, detail: dict) -> int:
 
 def _calculate_house_years(member: dict, detail: dict) -> int:
     """Calculate years in office from House term data."""
-    detail_terms_obj = detail.get("terms") or {}
-    detail_terms_items = detail_terms_obj.get("item", []) if isinstance(detail_terms_obj, dict) else (
-        detail_terms_obj if isinstance(detail_terms_obj, list) else []
-    )
-    member_terms_obj = member.get("terms") or {}
-    member_terms_items = member_terms_obj.get("item", []) if isinstance(member_terms_obj, dict) else []
-    terms = detail_terms_items + member_terms_items
-    house_terms = [t for t in terms if t.get("chamber") == "House of Representatives"]
-
-    if house_terms:
-        sorted_terms = sorted(house_terms, key=lambda t: t.get("startYear", 9999))
-        first_year = sorted_terms[0].get("startYear")
-        if first_year:
-            return utcnow().year - first_year
-
-    depiction = member.get("depiction") or {}
-    attribution = depiction.get("attribution", "")
-    if attribution:
-        match = re.search(r"since (\d{4})", attribution)
-        if match:
-            return utcnow().year - int(match.group(1))
-
-    return 0
+    return _years_since_first_term(_extract_terms(member, detail), "House of Representatives", member)
 
 
 def _extract_last_name(name: str) -> str:
@@ -349,11 +370,17 @@ def _extract_last_name(name: str) -> str:
         parts = name.split()
         last = parts[-1] if parts else name
 
-    return _strip_accents(last)
+    return strip_accents(last)
 
 
-def _strip_accents(text: str) -> str:
-    """Remove diacritical marks (NFD decomposition, strip combining chars)."""
+def strip_accents(text: str) -> str:
+    """Remove diacritical marks (NFD decomposition, strip combining chars).
+
+    Shared by candidate_names.py and normalize_votes.py (2026-08 cleanup:
+    the same two-line NFKD idiom was duplicated in all three modules) —
+    lives here rather than a new module since this is where it already
+    existed with real callers.
+    """
     nfkd = unicodedata.normalize("NFKD", text)
     return "".join(c for c in nfkd if not unicodedata.combining(c))
 
@@ -424,36 +451,7 @@ def _extract_state_code(member: dict, detail: dict) -> str:
 
 
 def _calculate_years_in_office(member: dict, detail: dict) -> int:
-    """Calculate years in office from term data."""
-    # Try to get the earliest Senate start date
-    detail_terms_obj = detail.get("terms") or {}
-    detail_terms_items = detail_terms_obj.get("item", []) if isinstance(detail_terms_obj, dict) else (
-        detail_terms_obj if isinstance(detail_terms_obj, list) else []
+    """Calculate years in office from Senate term data."""
+    return _years_since_first_term(
+        _extract_terms(member, detail), "Senate", member, warn_if_not_found=True,
     )
-    member_terms_obj = member.get("terms") or {}
-    member_terms_items = member_terms_obj.get("item", []) if isinstance(member_terms_obj, dict) else []
-    terms = detail_terms_items + member_terms_items
-    senate_terms = [t for t in terms if t.get("chamber") == "Senate"]
-
-    if senate_terms:
-        # Sort by start year
-        sorted_terms = sorted(
-            senate_terms, key=lambda t: t.get("startYear", 9999)
-        )
-        first_year = sorted_terms[0].get("startYear")
-        if first_year:
-            return utcnow().year - first_year
-
-    # Fallback: check depiction/service info
-    depiction = member.get("depiction") or {}
-    attribution = depiction.get("attribution", "")
-    if attribution:
-        match = re.search(r"since (\d{4})", attribution)
-        if match:
-            return utcnow().year - int(match.group(1))
-
-    logger.warning(
-        "Could not determine years in office for %s",
-        member.get("name") or member.get("bioguideId"),
-    )
-    return 0

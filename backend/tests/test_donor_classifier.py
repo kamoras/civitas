@@ -15,6 +15,9 @@ from app.pipeline.analyze.donor_classifier_ai import (
     FEC_ENTITY_TYPE_MAP,
     classify_donor_type_from_fec,
     classify_donor_type_semantic,
+    classify_employer_skips_batch,
+    classify_skip_names_batch,
+    classify_transfer_memos_batch,
     is_skip_entity,
     classify_donors_hybrid,
 )
@@ -505,3 +508,32 @@ class TestOtherPlaceholderDoesNotBlockKnn:
         )
         assert stored.value == "Org/Employees"
         assert stored.source == "fec"
+
+
+@pytest.mark.slow
+class TestSkipNamesBatch:
+    """No prior coverage existed for these batch skip-detection functions
+    (2026-08 cleanup: their batch-encode-then-normalize internals were
+    consolidated into vector_store.encode_normalized) — these prove basic
+    behavior still holds. Testing the two real entry points at their own
+    measured 0.78 threshold, not the shared classify_skip_names_batch
+    helper's own default (0.50 — verified too loose to be safe on its
+    own; see that function's docstring) directly."""
+
+    def test_employer_skip_detects_non_organizations(self):
+        result = classify_employer_skips_batch(["RETIRED", "SELF-EMPLOYED", "Acme Manufacturing Corp"])
+        assert "RETIRED" in result
+        assert "SELF-EMPLOYED" in result
+        assert "ACME MANUFACTURING CORP" not in result
+
+    def test_transfer_memo_detects_fund_transfers(self):
+        result = classify_transfer_memos_batch([
+            "Earmarked contribution transfer", "Lunch reimbursement for staff",
+        ])
+        assert "EARMARKED CONTRIBUTION TRANSFER" in result
+        assert "LUNCH REIMBURSEMENT FOR STAFF" not in result
+
+    def test_empty_input_returns_empty_set(self):
+        assert classify_skip_names_batch([]) == set()
+        assert classify_employer_skips_batch([]) == set()
+        assert classify_transfer_memos_batch([]) == set()

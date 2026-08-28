@@ -119,4 +119,3 @@ def select_fec_id_for_office(fec_ids: list[str], office: str) -> str | None:
     office, not just the first/most recent entry."""
     matches = select_all_fec_ids_for_office(fec_ids, office)
     return matches[0] if matches else None
-    return None

@@ -192,6 +192,15 @@ _pac_naming_emb: np.ndarray | None = None
 SPREAD_THRESHOLD = 0.070
 POLITICAL_MARGIN = 0.06
 
+# How strongly an entity's name must resemble "[X] PAC" naming (cosine
+# against the PAC-naming prototype) before decontextualization even
+# considers overriding a POLITICAL top score. Below this, POLITICAL wins
+# outright without paying for a full sort of the industry scores — used
+# by both the single-entity and batch classifiers (2026-08 cleanup:
+# previously duplicated as a bare 0.35 literal in two places, and briefly
+# checked only inside the sort instead of before it during consolidation).
+PAC_CONTEXT_THRESHOLD = 0.35
+
 
 def clear_industry_embedding_cache() -> None:
     """Clear cached industry embeddings (call between pipeline runs)."""
@@ -227,9 +236,9 @@ def _get_pac_naming_embedding() -> np.ndarray:
 
 
 def _decontextualize_political(
-    query_emb: np.ndarray,
     scored: list[tuple[str, float]],
     mean_score: float,
+    pac_context_score: float,
 ) -> tuple[str, float]:
     """If POLITICAL wins, check whether the entity is an industry-PAC.
 
@@ -238,16 +247,21 @@ def _decontextualize_political(
     similarity to the PAC naming context prototype AND a non-POLITICAL
     runner-up has sufficient spread (score - mean > SPREAD_THRESHOLD)
     and is within margin, prefer the runner-up.
+
+    Shared by the single-entity and batch classifiers (2026-08 cleanup:
+    the batch path used to re-implement this decision independently over
+    numpy arrays — same SPREAD_THRESHOLD/POLITICAL_MARGIN logic, two
+    places to keep in sync). Callers precompute pac_context_score (a dot
+    product against the PAC naming prototype) since both already have a
+    query embedding in hand — the batch path computes it once, vectorized,
+    for the whole batch rather than per row.
     """
     if not scored or scored[0][0] != "POLITICAL":
         return scored[0] if scored else ("OTHER", 0.0)
 
     political_score = scored[0][1]
 
-    pac_emb = _get_pac_naming_embedding()
-    pac_context_score = float(np.dot(query_emb, pac_emb))
-
-    if pac_context_score < 0.35:
+    if pac_context_score < PAC_CONTEXT_THRESHOLD:
         return scored[0]
 
     for industry, score in scored[1:]:
@@ -325,7 +339,10 @@ def classify_industry_with_provenance(org_name: str | None) -> tuple[str, dict]:
     scored.sort(key=lambda x: x[1], reverse=True)
 
     mean_score = sum(s for _, s in scored) / len(scored) if scored else 0.0
-    best_industry, best_score = _decontextualize_political(query_emb, scored, mean_score)
+    pac_context_score = 0.0
+    if scored and scored[0][0] == "POLITICAL":
+        pac_context_score = float(np.dot(query_emb, _get_pac_naming_embedding()))
+    best_industry, best_score = _decontextualize_political(scored, mean_score, pac_context_score)
     if best_score - mean_score < SPREAD_THRESHOLD:
         best_industry = "OTHER"
 
@@ -362,7 +379,7 @@ def classify_industries_batch_scored(org_names: list[str]) -> dict[str, tuple[st
     if not needs_embedding:
         return results
 
-    from app.pipeline.vector_store import get_embedding_model
+    from app.pipeline.vector_store import encode_normalized, get_embedding_model
 
     raw_embs_cache = _get_industry_embeddings()
     ind_keys = list(raw_embs_cache.keys())
@@ -372,23 +389,12 @@ def classify_industries_batch_scored(org_names: list[str]) -> dict[str, tuple[st
     model = get_embedding_model()
     raw_names = [name for _, name in needs_embedding]
 
-    _ENCODE_BATCH = 256
-    all_embeddings = []
-    for start in range(0, len(raw_names), _ENCODE_BATCH):
-        batch = raw_names[start : start + _ENCODE_BATCH]
-        # Entity names are queries; encode with the retrieval query prompt.
-        embs = model.encode(batch, prompt_name="query", show_progress_bar=False, batch_size=min(64, len(batch)))
-        all_embeddings.append(embs)
-    raw_embs = np.vstack(all_embeddings)
-    norms = np.linalg.norm(raw_embs, axis=1, keepdims=True)
-    norms[norms == 0] = 1.0
-    raw_embs = raw_embs / norms
+    # Entity names are queries; encode with the retrieval query prompt.
+    raw_embs = encode_normalized(model, raw_names, prompt_name="query")
 
     scores = raw_embs @ ind_matrix.T
     mean_scores = scores.mean(axis=1)  # (n_queries,) — baseline per query
     pac_ctx_scores = raw_embs @ pac_emb
-
-    political_idx = ind_keys.index("POLITICAL") if "POLITICAL" in ind_keys else -1
 
     for j, (_, name) in enumerate(needs_embedding):
         row_scores = scores[j]
@@ -397,14 +403,19 @@ def classify_industries_batch_scored(org_names: list[str]) -> dict[str, tuple[st
         best_score = float(row_scores[best_idx])
         best_industry = ind_keys[best_idx]
 
-        if best_industry == "POLITICAL" and political_idx >= 0 and pac_ctx_scores[j] >= 0.35:
-            sorted_idx = np.argsort(row_scores)[::-1]
-            for k in sorted_idx[1:]:
-                runner_score = float(row_scores[k])
-                if runner_score - mean_s >= SPREAD_THRESHOLD and best_score - runner_score < POLITICAL_MARGIN:
-                    best_industry = ind_keys[k]
-                    best_score = runner_score
-                    break
+        # Full sort (and the decontextualization decision itself, shared
+        # with the single-entity path above) only when the cheap argmax
+        # picked POLITICAL *and* PAC-naming context is high enough for
+        # _decontextualize_political to do anything but immediately
+        # return scored[0] anyway — same gate the pre-consolidation code
+        # checked before sorting (2026-08 cleanup review: had drifted to
+        # checking this only inside the sorted call, paying for a sort
+        # every time regardless of whether it could change the outcome).
+        if best_industry == "POLITICAL" and pac_ctx_scores[j] >= PAC_CONTEXT_THRESHOLD:
+            scored_row = sorted(zip(ind_keys, row_scores.tolist()), key=lambda x: x[1], reverse=True)
+            best_industry, best_score = _decontextualize_political(
+                scored_row, mean_s, float(pac_ctx_scores[j]),
+            )
 
         if best_score - mean_s >= SPREAD_THRESHOLD:
             results[name] = (best_industry, best_score)
